@@ -29,3 +29,4 @@ logs/*.md
 # Status tracking
 status.json
 .coverage
+worker/.wrangler/
