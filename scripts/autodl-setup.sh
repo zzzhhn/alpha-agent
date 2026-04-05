@@ -5,6 +5,8 @@ set -euo pipefail
 
 # Ensure miniconda is in PATH (AutoDL uses conda, not system python)
 export PATH="/root/miniconda3/bin:$PATH"
+# Ensure alpha_agent package is importable without pip install -e
+export PYTHONPATH="/root/alpha-agent:${PYTHONPATH:-}"
 
 PROJ_DIR="/root/alpha-agent"
 LOG_DIR="/root/alpha-agent/logs"

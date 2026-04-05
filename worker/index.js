@@ -1,14 +1,15 @@
 /**
- * Cloudflare Worker — smart router for alpha.bobbyzhong.com
+ * Cloudflare Worker — smart fallback for alpha.bobbyzhong.com
  *
- * When the Cloudflare Tunnel is alive (AutoDL running):
- *   → proxy to live Streamlit dashboard
- * When the tunnel is down (AutoDL off):
- *   → serve pre-generated static HTML report from KV
+ * Strategy:
+ *   - WebSocket upgrades: pass through directly to tunnel origin (never intercept)
+ *   - HTTP requests: try tunnel origin first, fall back to static HTML from KV
+ *
+ * This ensures Streamlit's WebSocket connections work natively through the
+ * Cloudflare Tunnel while still providing a static fallback when the tunnel is down.
  */
 
-const TUNNEL_ORIGIN = "https://alpha-tunnel.bobbyzhong.com";
-const TUNNEL_TIMEOUT_MS = 2000;
+const TUNNEL_TIMEOUT_MS = 3000;
 
 export default {
   async fetch(request, env) {
@@ -21,49 +22,49 @@ export default {
       });
     }
 
-    // Try live Streamlit via tunnel
+    // WebSocket upgrade requests: pass through to origin (tunnel) directly.
+    // Workers cannot proxy WebSocket via fetch(), so we let Cloudflare's
+    // tunnel handle it natively by NOT intercepting.
+    const upgradeHeader = request.headers.get("Upgrade") || "";
+    if (upgradeHeader.toLowerCase() === "websocket") {
+      // Return fetch to origin — Cloudflare will route to the tunnel CNAME
+      return fetch(request);
+    }
+
+    // For Streamlit's static assets and API calls, try origin first
     try {
-      const tunnelUrl = TUNNEL_ORIGIN + url.pathname + url.search;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), TUNNEL_TIMEOUT_MS);
 
-      const resp = await fetch(tunnelUrl, {
-        method: request.method,
-        headers: request.headers,
-        body: request.method !== "GET" ? request.body : undefined,
-        signal: controller.signal,
-      });
+      const resp = await fetch(request, { signal: controller.signal });
       clearTimeout(timeout);
 
-      // Tunnel returned an error (502/530 = tunnel down) — fall through to static
-      if (resp.status >= 500) {
-        throw new Error(`tunnel returned ${resp.status}`);
+      // Tunnel-down errors (502, 530) → fall through to static
+      if (resp.status === 530 || resp.status === 502) {
+        throw new Error(`origin returned ${resp.status}`);
       }
 
-      // Live response from Streamlit
-      const headers = new Headers(resp.headers);
-      headers.set("X-Alpha-Mode", "live");
-      return new Response(resp.body, {
-        status: resp.status,
-        headers,
-      });
+      return resp;
     } catch (_err) {
-      // Tunnel unreachable or errored — serve static fallback
+      // Origin unreachable or errored
     }
 
-    // Fallback: static HTML from KV
-    const staticHtml = await env.STATIC_SITE.get("report.html");
-    if (staticHtml) {
-      return new Response(staticHtml, {
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "X-Alpha-Mode": "static",
-          "Cache-Control": "public, max-age=300",
-        },
-      });
+    // Fallback: static HTML from KV (only for HTML page requests)
+    const accept = request.headers.get("Accept") || "";
+    if (accept.includes("text/html") || url.pathname === "/") {
+      const staticHtml = await env.STATIC_SITE.get("report.html");
+      if (staticHtml) {
+        return new Response(staticHtml, {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "X-Alpha-Mode": "static",
+            "Cache-Control": "public, max-age=300",
+          },
+        });
+      }
     }
 
-    // No static content either
+    // No static content or non-HTML request
     return new Response(
       "<h1>Alpha Agent</h1><p>Demo is currently offline. Visit <a href='https://github.com/zzzhhn/alpha-agent'>GitHub</a> for details.</p>",
       {
