@@ -27,7 +27,7 @@ case "${1:-help}" in
         echo "=== Starting Alpha Agent Demo ==="
         echo ""
         echo "[1/3] Syncing code to AutoDL..."
-        rsync -avz --exclude='data/' --exclude='*.pyc' --exclude='__pycache__' \
+        rsync -avz --exclude='data/parquet/' --exclude='*.pyc' --exclude='__pycache__' --exclude='.git/' --exclude='.wrangler/' \
             -e "sshpass -p cUermfx6OOrg ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -p 38394" \
             "$PROJ_DIR/" root@connect.westd.seetacloud.com:/root/alpha-agent/
 
