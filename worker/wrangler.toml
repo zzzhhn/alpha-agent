@@ -1,0 +1,16 @@
+name = "alpha-agent-router"
+main = "index.js"
+compatibility_date = "2024-12-01"
+
+# Route: intercepts requests to alpha.bobbyzhong.com before they hit the tunnel
+routes = [{ pattern = "alpha.bobbyzhong.com/*", zone_name = "bobbyzhong.com" }]
+
+[vars]
+TUNNEL_ORIGIN = "https://alpha-tunnel.bobbyzhong.com"
+
+# KV namespace for static HTML fallback
+# After creating: npx wrangler kv:namespace create STATIC_SITE
+# Then paste the id below
+[[kv_namespaces]]
+binding = "STATIC_SITE"
+id = "4ffa8dcf1100477caa00f5163c3a71ae"
