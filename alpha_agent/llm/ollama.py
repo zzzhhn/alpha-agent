@@ -38,12 +38,41 @@ class OllamaClient(LLMClient):
         response.raise_for_status()
         data = response.json()
 
+        msg = data["message"]
+        content = msg.get("content", "")
+
+        # Gemma 4 thinking models may put output in "thinking" when content is empty
+        if not content.strip() and msg.get("thinking"):
+            content = self._extract_from_thinking(msg["thinking"])
+
         return LLMResponse(
-            content=data["message"]["content"],
+            content=content,
             model=data.get("model", self._model),
             prompt_tokens=data.get("prompt_eval_count", 0),
             completion_tokens=data.get("eval_count", 0),
         )
+
+    @staticmethod
+    def _extract_from_thinking(thinking: str) -> str:
+        """Extract usable content from thinking field when content is empty.
+
+        Gemma 4 sometimes places the final answer inside a ```json block
+        within the thinking field.  We try to find the last such block.
+        Falls back to returning the full thinking text.
+        """
+        import re
+
+        # Look for the last ```json ... ``` block
+        blocks = re.findall(r"```(?:json)?\s*\n(.*?)```", thinking, re.DOTALL)
+        if blocks:
+            return blocks[-1].strip()
+
+        # Look for raw JSON object
+        json_match = re.search(r"\{[\s\S]*\}", thinking)
+        if json_match:
+            return json_match.group(0).strip()
+
+        return thinking.strip()
 
     async def is_available(self) -> bool:
         try:
