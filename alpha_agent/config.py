@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     backtest_end: str = "20241231"
 
     model_config = {
-        "env_file": ".env",
+        "env_file": (Path(__file__).resolve().parent.parent / ".env", ".env"),
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }
