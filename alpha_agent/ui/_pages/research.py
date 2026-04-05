@@ -15,6 +15,10 @@ def render() -> None:
     st.header("Factor Research")
     st.markdown("Enter a research query to generate and evaluate alpha factors.")
 
+    # Prerequisites check
+    with st.expander("System Status", expanded=False):
+        _show_status()
+
     query = st.text_input(
         "Research Query",
         placeholder="e.g., short-term reversal factors for CSI300",
@@ -29,6 +33,45 @@ def render() -> None:
 
     if st.button("Run Pipeline", type="primary", disabled=not query):
         _run_pipeline(query, max_iter)
+
+
+def _show_status() -> None:
+    """Show system prerequisites status."""
+    from alpha_agent.config import Settings
+    import httpx
+    from pathlib import Path
+
+    settings = Settings()
+
+    # LLM check
+    try:
+        url = settings.ollama_base_url.rstrip("/") + "/api/version"
+        resp = httpx.get(url, timeout=3.0)
+        resp.raise_for_status()
+        ver = resp.json().get("version", "?")
+        st.markdown(f"LLM: **Connected** (Ollama {ver} at `{settings.ollama_base_url}`)")
+    except Exception:
+        st.markdown(f"LLM: **Not connected** — start SSH tunnel to `{settings.ollama_base_url}`")
+
+    # Data check
+    cache_dir = Path("data")
+    parquet_files = list(cache_dir.glob("*.parquet")) if cache_dir.exists() else []
+    if parquet_files:
+        st.markdown(f"Data: **{len(parquet_files)} cached files** in `data/`")
+    else:
+        try:
+            import akshare  # noqa: F401
+            st.markdown("Data: No cache — will fetch from AKShare on first run (may take 1-2 min)")
+        except ImportError:
+            st.markdown("Data: **akshare not installed** — run `pip install akshare`")
+
+    # Registry check
+    try:
+        from alpha_agent.pipeline.registry import FactorRegistry
+        count = FactorRegistry().count()
+        st.markdown(f"Registry: **{count} factors** stored")
+    except Exception:
+        st.markdown("Registry: Empty (will be created on first run)")
 
 
 def _run_pipeline(query: str, max_iterations: int) -> None:
@@ -50,7 +93,12 @@ def _run_pipeline(query: str, max_iterations: int) -> None:
         data = _load_data(settings)
 
         if data is None or data.empty:
-            st.error("Failed to load market data. Check data cache or AKShare connection.")
+            st.error(
+                "Failed to load market data. Possible causes:\n"
+                "- `akshare` not installed (`pip install akshare`)\n"
+                "- No cached Parquet files in `data/` directory\n"
+                "- Network issue connecting to AKShare API"
+            )
             return
 
         # Create pipeline
@@ -119,13 +167,20 @@ def _load_data(settings):
     try:
         from alpha_agent.data.provider import AKShareProvider
         from alpha_agent.data.universe import CSI300Universe
+        from alpha_agent.data.cache import ParquetCache
 
-        provider = AKShareProvider()
+        cache = ParquetCache()
+        provider = AKShareProvider(cache=cache)
         universe = CSI300Universe()
-        codes = universe.get_codes()[:10]  # Start with 10 stocks for speed
+        codes = universe.stock_codes[:10]  # Start with 10 stocks for speed
+        st.info(f"Fetching data for {len(codes)} stocks via AKShare (first run may be slow)...")
         data = provider.fetch(codes, "20240101", "20250401")
         return data
+    except ImportError as e:
+        st.error(f"Missing dependency: {e}. Run `pip install akshare` first.")
+        return None
     except Exception as e:
+        st.error(f"Data fetch failed: {e}")
         logger.warning("Failed to fetch data: %s", e)
         return None
 

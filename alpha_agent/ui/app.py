@@ -21,14 +21,14 @@ page = st.sidebar.radio(
 )
 
 if page == "Research":
-    from alpha_agent.ui.pages.research import render
+    from alpha_agent.ui._pages.research import render
     render()
 elif page == "Results":
-    from alpha_agent.ui.pages.results import render
+    from alpha_agent.ui._pages.results import render
     render()
 elif page == "Registry":
-    from alpha_agent.ui.pages.registry import render
+    from alpha_agent.ui._pages.registry import render
     render()
 elif page == "History":
-    from alpha_agent.ui.pages.history import render
+    from alpha_agent.ui._pages.history import render
     render()
