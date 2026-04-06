@@ -3,7 +3,12 @@
 # Usage: bash scripts/upload-report.sh
 set -euo pipefail
 
+# Ensure miniconda + alpha_agent are available (needed on AutoDL)
+export PATH="/root/miniconda3/bin:${PATH}"
+export PYTHONPATH="${PYTHONPATH:-}"
+
 PROJ_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$PROJ_DIR:$PYTHONPATH"
 WORKER_DIR="$PROJ_DIR/worker"
 REPORT_FILE="$PROJ_DIR/alpha_agent_report.html"
 

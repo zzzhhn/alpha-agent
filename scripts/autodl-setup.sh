@@ -3,18 +3,21 @@
 # Usage: bash autodl-setup.sh
 set -euo pipefail
 
-# Ensure miniconda is in PATH (AutoDL uses conda, not system python)
+# ── Environment ──────────────────────────────────────────────────
 export PATH="/root/miniconda3/bin:$PATH"
-# Ensure alpha_agent package is importable without pip install -e
 export PYTHONPATH="/root/alpha-agent:${PYTHONPATH:-}"
+# CRITICAL: Override .env so Streamlit/pydantic-settings uses port 6006
+export OLLAMA_BASE_URL="http://localhost:6006"
 
 PROJ_DIR="/root/alpha-agent"
-LOG_DIR="/root/alpha-agent/logs"
+LOG_DIR="$PROJ_DIR/logs"
 mkdir -p "$LOG_DIR"
 
 echo "=== Alpha Agent AutoDL Setup ==="
+echo "  OLLAMA_BASE_URL=$OLLAMA_BASE_URL"
+echo ""
 
-# 1. Start Ollama (if not already running)
+# ── 1. Ollama ────────────────────────────────────────────────────
 if ! pgrep -x ollama > /dev/null 2>&1; then
     echo "[1/3] Starting Ollama..."
     export OLLAMA_HOST=0.0.0.0:6006
@@ -25,19 +28,15 @@ if ! pgrep -x ollama > /dev/null 2>&1; then
 else
     echo "[1/3] Ollama already running"
 fi
+curl -sf http://localhost:6006/api/version > /dev/null 2>&1 \
+    && echo "  Ollama OK" \
+    || echo "  WARNING: Ollama not responding on :6006"
 
-# Verify Ollama
-if curl -sf http://localhost:6006/api/version > /dev/null 2>&1; then
-    echo "  Ollama OK"
-else
-    echo "  WARNING: Ollama not responding on :6006"
-fi
-
-# 2. Start Streamlit
+# ── 2. Streamlit ─────────────────────────────────────────────────
 if ! pgrep -f "streamlit run" > /dev/null 2>&1; then
     echo "[2/3] Starting Streamlit..."
     cd "$PROJ_DIR"
-    nohup python -m streamlit run alpha_agent/ui/app.py \
+    nohup /root/miniconda3/bin/python -m streamlit run alpha_agent/ui/app.py \
         --server.port 8501 \
         --server.address 0.0.0.0 \
         --server.headless true \
@@ -48,7 +47,7 @@ else
     echo "[2/3] Streamlit already running"
 fi
 
-# 3. Start Cloudflare Tunnel
+# ── 3. Cloudflare Tunnel ─────────────────────────────────────────
 if ! pgrep -x cloudflared > /dev/null 2>&1; then
     echo "[3/3] Starting Cloudflare Tunnel..."
     nohup cloudflared tunnel run alpha-agent \
@@ -61,7 +60,7 @@ fi
 
 echo ""
 echo "=== All services started ==="
-echo "  Ollama:     http://localhost:6006"
+echo "  OLLAMA_BASE_URL=$OLLAMA_BASE_URL"
 echo "  Streamlit:  http://localhost:8501"
 echo "  Tunnel:     alpha.bobbyzhong.com (via Cloudflare)"
 echo ""
