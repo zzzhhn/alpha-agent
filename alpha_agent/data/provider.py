@@ -58,7 +58,14 @@ class DataProvider(ABC):
 
 
 class AKShareProvider(DataProvider):
-    """Fetches forward-adjusted daily data from AKShare (one stock at a time)."""
+    """Fetches forward-adjusted daily data from AKShare (one stock at a time).
+
+    Accepts an optional ``ParquetCache`` — when provided, each stock is
+    looked up in cache first and API results are written back after fetch.
+    """
+
+    def __init__(self, cache: "ParquetCache | None" = None) -> None:
+        self._cache = cache
 
     def fetch(
         self,
@@ -72,6 +79,14 @@ class AKShareProvider(DataProvider):
         frames: list[pd.DataFrame] = []
 
         for i, code in enumerate(stock_codes):
+            # Try cache first
+            if self._cache is not None:
+                cached = self._cache.get(code, start_date, end_date)
+                if cached is not None and not cached.empty:
+                    logger.debug("Cache hit for %s (%d rows).", code, len(cached))
+                    frames.append(cached)
+                    continue
+
             if i > 0:
                 time.sleep(_REQUEST_INTERVAL)
 
@@ -93,6 +108,10 @@ class AKShareProvider(DataProvider):
 
             df = _normalize_akshare_df(raw, code)
             frames.append(df)
+
+            # Write back to cache
+            if self._cache is not None:
+                self._cache.put(code, df)
 
         if not frames:
             return _empty_ohlcv_frame()
