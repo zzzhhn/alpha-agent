@@ -32,20 +32,22 @@ curl -sf http://localhost:6006/api/version > /dev/null 2>&1 \
     && echo "  Ollama OK" \
     || echo "  WARNING: Ollama not responding on :6006"
 
-# ── 2. Streamlit ─────────────────────────────────────────────────
-if ! pgrep -f "streamlit run" > /dev/null 2>&1; then
-    echo "[2/3] Starting Streamlit..."
-    cd "$PROJ_DIR"
-    nohup /root/miniconda3/bin/python -m streamlit run alpha_agent/ui/app.py \
-        --server.port 8501 \
-        --server.address 0.0.0.0 \
-        --server.headless true \
-        > "$LOG_DIR/streamlit.log" 2>&1 &
+# ── 2. Streamlit (always restart to pick up new code) ────────────
+if pgrep -f "streamlit run" > /dev/null 2>&1; then
+    echo "[2/3] Restarting Streamlit (picking up new code)..."
+    pkill -f "streamlit run" 2>/dev/null || true
     sleep 2
-    echo "  Streamlit PID: $!"
 else
-    echo "[2/3] Streamlit already running"
+    echo "[2/3] Starting Streamlit..."
 fi
+cd "$PROJ_DIR"
+nohup /root/miniconda3/bin/python -m streamlit run alpha_agent/ui/app.py \
+    --server.port 8501 \
+    --server.address 0.0.0.0 \
+    --server.headless true \
+    > "$LOG_DIR/streamlit.log" 2>&1 &
+sleep 2
+echo "  Streamlit PID: $!"
 
 # ── 3. Cloudflare Tunnel ─────────────────────────────────────────
 if ! pgrep -x cloudflared > /dev/null 2>&1; then
