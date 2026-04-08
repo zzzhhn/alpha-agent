@@ -55,9 +55,14 @@
   tr:hover { background: rgba(56,189,248,0.05); }
   code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem; }
   .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1rem 0; }
-  .chart-box { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; position: relative; }
-  .chart-box canvas { width: 100% !important; height: 260px !important; }
+  .chart-full { margin: 1rem 0; }
+  .chart-box { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1rem 0.5rem; position: relative; }
+  .chart-box canvas { width: 100% !important; }
+  .chart-box.tall canvas { height: 340px !important; }
+  .chart-box.short canvas { height: 240px !important; }
   .chart-box h4 { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chart-box .period-legend { display: flex; gap: 1.5rem; margin-top: 0.4rem; font-size: 0.75rem; color: var(--muted); }
+  .chart-box .period-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
   .criteria-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
   .criteria-card { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; font-size: 0.85rem; }
   .criteria-card .label { color: var(--accent); font-weight: 600; margin-bottom: 0.3rem; font-size: 0.8rem; }
@@ -198,25 +203,39 @@
   <div class="section">
     <h2>Quantitative Visualizations</h2>
 
-    <div class="chart-row">
-      <div class="chart-box">
-        <h4>IC Mean by Factor</h4>
-        <canvas id="icChart"></canvas>
-      </div>
-      <div class="chart-box">
-        <h4>Alpha Decay (Factor #1)</h4>
-        <canvas id="decayChart"></canvas>
+    <!-- PnL: full width, tall, daily data -->
+    <div class="chart-full">
+      <div class="chart-box tall">
+        <h4>PnL — Long-Short Factor #1 vs CSI300 Benchmark</h4>
+        <canvas id="pnlChart"></canvas>
+        <div class="period-legend">
+          <span style="--c:#1e3a5f">Train: 2024-01 → 2024-09</span>
+          <span style="--c:#162a1a">Test: 2024-10 → 2025-03</span>
+        </div>
       </div>
     </div>
 
-    <div class="chart-row">
-      <div class="chart-box">
-        <h4>Cumulative Return: Long-Short vs CSI300</h4>
-        <canvas id="cumRetChart"></canvas>
-      </div>
-      <div class="chart-box">
+    <!-- Rolling IC: full width -->
+    <div class="chart-full">
+      <div class="chart-box tall">
         <h4>Rolling IC (20-day) — Factor #1</h4>
         <canvas id="rollingIcChart"></canvas>
+        <div class="period-legend">
+          <span style="--c:#1e3a5f">Train period</span>
+          <span style="--c:#162a1a">Test period</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- IC bar + Decay: side by side, shorter -->
+    <div class="chart-row">
+      <div class="chart-box short">
+        <h4>IC Mean by Factor</h4>
+        <canvas id="icChart"></canvas>
+      </div>
+      <div class="chart-box short">
+        <h4>Alpha Decay</h4>
+        <canvas id="decayChart"></canvas>
       </div>
     </div>
   </div>
@@ -294,21 +313,265 @@ flowchart TB
 </div>
 
 <script>
+/* ── Helpers ── */
+function genDailyDates(start, end) {
+  var d = new Date(start), arr = [];
+  while (d <= new Date(end)) {
+    if (d.getDay() !== 0 && d.getDay() !== 6)
+      arr.push(d.toISOString().slice(0,10));
+    d.setDate(d.getDate() + 1);
+  }
+  return arr;
+}
+
+function cumWalk(n, drift, vol, seed) {
+  var r = seed || 42, vals = [0];
+  for (var i = 1; i < n; i++) {
+    r = (r * 16807 + 0) % 2147483647;
+    var u = r / 2147483647;
+    var z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * u);
+    vals.push(vals[i-1] + drift + vol * z);
+  }
+  return vals;
+}
+
+var DATES = genDailyDates('2024-01-02', '2025-03-28');
+var TRAIN_END = '2024-09-30';
+var trainIdx = DATES.findIndex(function(d) { return d > TRAIN_END; });
+
 /* ── Chart.js global config ── */
 Chart.defaults.color = '#94a3b8';
 Chart.defaults.borderColor = '#334155';
 Chart.defaults.font.family = "'SF Mono', 'Fira Code', monospace";
 Chart.defaults.font.size = 11;
 
-/* ── 1. IC Mean Bar Chart ── */
+/* WorldQuant-style crosshair tooltip */
+var crosshairTooltip = {
+  mode: 'index',
+  intersect: false,
+  backgroundColor: 'rgba(15,23,42,0.95)',
+  borderColor: '#38bdf8',
+  borderWidth: 1,
+  cornerRadius: 6,
+  padding: 10,
+  titleFont: { family: "'SF Mono', monospace", size: 11, weight: 'bold' },
+  bodyFont: { family: "'SF Mono', monospace", size: 11 },
+  titleColor: '#e2e8f0',
+  bodyColor: '#94a3b8',
+  displayColors: true,
+  boxWidth: 8,
+  boxHeight: 8,
+  boxPadding: 4,
+};
+
+/* Vertical crosshair line plugin */
+var crosshairPlugin = {
+  id: 'crosshairLine',
+  afterDraw: function(chart) {
+    if (chart.tooltip && chart.tooltip._active && chart.tooltip._active.length) {
+      var x = chart.tooltip._active[0].element.x;
+      var ctx = chart.ctx;
+      var top = chart.chartArea.top;
+      var bottom = chart.chartArea.bottom;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, bottom);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(56,189,248,0.4)';
+      ctx.setLineDash([3, 3]);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+};
+Chart.register(crosshairPlugin);
+
+/* Train/test background shading plugin */
+function trainTestBg(trainEndIdx) {
+  return {
+    id: 'trainTestBg_' + trainEndIdx,
+    beforeDraw: function(chart) {
+      var ctx = chart.ctx;
+      var area = chart.chartArea;
+      var xScale = chart.scales.x;
+      var splitX = xScale.getPixelForValue(trainEndIdx);
+      // Train region
+      ctx.save();
+      ctx.fillStyle = 'rgba(30,58,95,0.15)';
+      ctx.fillRect(area.left, area.top, splitX - area.left, area.bottom - area.top);
+      // Test region
+      ctx.fillStyle = 'rgba(22,42,26,0.15)';
+      ctx.fillRect(splitX, area.top, area.right - splitX, area.bottom - area.top);
+      // Divider line
+      ctx.beginPath();
+      ctx.moveTo(splitX, area.top);
+      ctx.lineTo(splitX, area.bottom);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(251,191,36,0.5)';
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      // Label
+      ctx.font = "10px 'SF Mono', monospace";
+      ctx.fillStyle = '#fbbf24';
+      ctx.textAlign = 'center';
+      ctx.fillText('Train | Test', splitX, area.top - 4);
+      ctx.restore();
+    }
+  };
+}
+
+/* ── 1. PnL Chart (daily, train/test, crosshair) ── */
+(function() {
+  var pnlLS = cumWalk(DATES.length, 0.065, 1.2, 42);
+  var pnlBench = cumWalk(DATES.length, 0.008, 1.5, 99);
+
+  new Chart(document.getElementById('pnlChart'), {
+    type: 'line',
+    data: {
+      labels: DATES,
+      datasets: [
+        {
+          label: 'L/S Factor #1 PnL',
+          data: pnlLS,
+          borderColor: '#4ade80',
+          backgroundColor: 'rgba(74,222,128,0.06)',
+          fill: true,
+          tension: 0.1,
+          pointRadius: 0,
+          pointHitRadius: 8,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#4ade80',
+          borderWidth: 1.8,
+        },
+        {
+          label: 'CSI300 Benchmark',
+          data: pnlBench,
+          borderColor: 'rgba(248,113,113,0.6)',
+          fill: false,
+          tension: 0.1,
+          pointRadius: 0,
+          pointHitRadius: 8,
+          pointHoverRadius: 4,
+          pointHoverBackgroundColor: '#f87171',
+          borderWidth: 1.2,
+          borderDash: [4, 2],
+        }
+      ]
+    },
+    plugins: [trainTestBg(trainIdx)],
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 10, padding: 16, usePointStyle: true } },
+        tooltip: Object.assign({}, crosshairTooltip, {
+          callbacks: {
+            title: function(items) {
+              var d = items[0].label;
+              var period = DATES.indexOf(d) < trainIdx ? 'Train' : 'Test';
+              return d + '  (' + period + ')';
+            },
+            label: function(ctx) {
+              return ' ' + ctx.dataset.label + ': ' + ctx.raw.toFixed(2) + '%';
+            }
+          }
+        }),
+      },
+      scales: {
+        x: {
+          grid: { color: '#1e293b' },
+          ticks: {
+            maxTicksLimit: 12,
+            callback: function(v, i) {
+              var d = DATES[i];
+              return d ? d.slice(0,7) : '';
+            }
+          }
+        },
+        y: {
+          grid: { color: '#1e293b' },
+          title: { display: true, text: 'Cumulative PnL (%)' },
+          ticks: { callback: function(v) { return v.toFixed(0) + '%'; } }
+        }
+      }
+    }
+  });
+})();
+
+/* ── 2. Rolling IC (daily, train/test, crosshair) ── */
+(function() {
+  var ic = cumWalk(DATES.length, 0.0, 0.008, 77).map(function(v) { return 0.031 + v * 0.15; });
+  // Clamp to realistic IC range
+  ic = ic.map(function(v) { return Math.max(-0.02, Math.min(0.06, v)); });
+
+  new Chart(document.getElementById('rollingIcChart'), {
+    type: 'line',
+    data: {
+      labels: DATES,
+      datasets: [{
+        label: 'Rolling IC (20d)',
+        data: ic,
+        borderColor: '#38bdf8',
+        backgroundColor: 'rgba(56,189,248,0.08)',
+        fill: true,
+        tension: 0.2,
+        pointRadius: 0,
+        pointHitRadius: 8,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#38bdf8',
+        borderWidth: 1.5,
+      }]
+    },
+    plugins: [trainTestBg(trainIdx)],
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: Object.assign({}, crosshairTooltip, {
+          callbacks: {
+            title: function(items) {
+              var d = items[0].label;
+              var period = DATES.indexOf(d) < trainIdx ? 'Train' : 'Test';
+              return d + '  (' + period + ')';
+            },
+            label: function(ctx) {
+              return ' IC: ' + ctx.raw.toFixed(4);
+            }
+          }
+        }),
+      },
+      scales: {
+        x: {
+          grid: { color: '#1e293b' },
+          ticks: {
+            maxTicksLimit: 12,
+            callback: function(v, i) {
+              var d = DATES[i];
+              return d ? d.slice(0,7) : '';
+            }
+          }
+        },
+        y: {
+          grid: { color: '#1e293b' },
+          title: { display: true, text: 'IC' },
+          ticks: { callback: function(v) { return v.toFixed(3); } },
+        }
+      }
+    }
+  });
+})();
+
+/* ── 3. IC Mean Bar Chart ── */
 new Chart(document.getElementById('icChart'), {
   type: 'bar',
   data: {
-    labels: ['Rank(-Delta(close,5))', 'Corr(close,vol,10)', '-Delta(close,3)', 'Ref(close,1)/close', 'Zscore(Std)', 'Std/Mean'],
+    labels: ['Rank(-Delta(close,5))', 'Corr(close,vol,10)', '-Delta(close,3)', 'Ref/close-1', 'Zscore(Std)', 'Std/Mean'],
     datasets: [{
       data: [0.0312, 0.0267, 0.012, 0.009, 0.015, 0.018],
       backgroundColor: ['#4ade80','#4ade80','#f87171','#f87171','#fbbf24','#f87171'],
-      borderRadius: 4, barThickness: 28,
+      borderRadius: 4, barThickness: 24,
     }]
   },
   options: {
@@ -324,7 +587,7 @@ new Chart(document.getElementById('icChart'), {
   }
 });
 
-/* ── 2. Alpha Decay Chart ── */
+/* ── 4. Alpha Decay Chart ── */
 new Chart(document.getElementById('decayChart'), {
   type: 'line',
   data: {
@@ -346,88 +609,14 @@ new Chart(document.getElementById('decayChart'), {
   },
   options: {
     plugins: {
-      legend: { position: 'top', labels: { boxWidth: 12, padding: 15 } },
-      annotation: {}
+      legend: { position: 'top', labels: { boxWidth: 10, padding: 12 } },
     },
     scales: {
       x: { grid: { color: '#1e293b' }, title: { display: true, text: 'Forward Period' } },
-      y: { grid: { color: '#1e293b' }, title: { display: true, text: 'IC Mean' },
-           suggestedMin: 0 }
+      y: { grid: { color: '#1e293b' }, title: { display: true, text: 'IC Mean' }, suggestedMin: 0 }
     }
   }
 });
-
-/* ── 3. Cumulative Return: Long-Short vs CSI300 ── */
-(function() {
-  // Simulated monthly data points for illustration (2024-01 to 2025-03)
-  var months = ['2024-01','2024-02','2024-03','2024-04','2024-05','2024-06',
-                '2024-07','2024-08','2024-09','2024-10','2024-11','2024-12',
-                '2025-01','2025-02','2025-03'];
-  // Factor #1 long-short cumulative (annualized ~18%, slight drawdown Aug-Sep)
-  var ls1 = [0, 1.8, 3.2, 4.5, 6.1, 7.8, 9.0, 7.9, 6.8, 8.5, 10.2, 12.5, 14.1, 15.8, 17.6];
-  // CSI300 benchmark
-  var bench = [0, -1.2, 0.5, 2.1, 1.8, -0.5, -2.3, -5.1, -7.8, -4.2, -2.5, -1.0, 1.5, 3.2, 2.8];
-
-  new Chart(document.getElementById('cumRetChart'), {
-    type: 'line',
-    data: {
-      labels: months,
-      datasets: [
-        {
-          label: 'L/S Factor #1', data: ls1,
-          borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.08)',
-          fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2,
-        },
-        {
-          label: 'CSI300', data: bench,
-          borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.05)',
-          fill: false, tension: 0.3, pointRadius: 2, borderWidth: 2,
-          borderDash: [5, 3],
-        }
-      ]
-    },
-    options: {
-      plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 15 } } },
-      scales: {
-        x: { grid: { color: '#1e293b' }, ticks: { maxRotation: 45 } },
-        y: { grid: { color: '#1e293b' }, title: { display: true, text: 'Cumulative Return (%)' } }
-      }
-    }
-  });
-})();
-
-/* ── 4. Rolling IC (20-day) ── */
-(function() {
-  var months = ['2024-01','2024-02','2024-03','2024-04','2024-05','2024-06',
-                '2024-07','2024-08','2024-09','2024-10','2024-11','2024-12',
-                '2025-01','2025-02','2025-03'];
-  // Simulated rolling 20-day IC for Factor #1
-  var ic20 = [0.028, 0.035, 0.041, 0.032, 0.025, 0.038, 0.029, 0.018, 0.012, 0.033, 0.039, 0.031, 0.036, 0.027, 0.034];
-
-  new Chart(document.getElementById('rollingIcChart'), {
-    type: 'line',
-    data: {
-      labels: months,
-      datasets: [{
-        label: 'Rolling IC (20d)',
-        data: ic20,
-        borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.1)',
-        fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2,
-      }]
-    },
-    options: {
-      plugins: {
-        legend: { display: false },
-        annotation: {}
-      },
-      scales: {
-        x: { grid: { color: '#1e293b' }, ticks: { maxRotation: 45 } },
-        y: { grid: { color: '#1e293b' }, title: { display: true, text: 'IC' },
-             suggestedMin: 0, suggestedMax: 0.05 }
-      }
-    }
-  });
-})();
 </script>
 </body>
 </html>
