@@ -337,44 +337,60 @@ function normalVariate(rng) {
 }
 
 /**
- * Trend-anchored PnL: deterministic growth backbone + mean-reverting noise.
- * Guarantees the curve reaches `targetEnd` regardless of seed.
- *
- * How it works (Qlib-inspired Ornstein-Uhlenbeck around a trend):
- *   trend[i] = targetEnd * (i/n)^curveShape
- *   deviation[i] = revert * (trend[i] - actual[i-1]) + noise
- *   actual[i] = actual[i-1] + daily_trend_step + deviation[i]
+ * Trend-anchored PnL: OU process around a power-law backbone, then
+ * linearly rescaled so vals[n-1] === targetEnd exactly.
  *
  * curveShape < 1 → concave (early gains), > 1 → convex (late gains)
+ * revert = 0.15 → half-life ~4.6 days, keeps deviation tight
  */
 function trendPnL(n, targetEnd, noiseVol, curveShape, seed) {
   var rng = seededRNG(seed);
+  var REVERT = 0.15;
   var vals = [0];
   for (var i = 1; i < n; i++) {
     var frac = i / (n - 1);
     var trend = targetEnd * Math.pow(frac, curveShape);
     var prevTrend = targetEnd * Math.pow((i - 1) / (n - 1), curveShape);
     var trendStep = trend - prevTrend;
-    /* Mean-revert toward trend line — keeps curve close to backbone */
-    var revertForce = 0.08 * (trend - vals[i - 1]);
+    var revertForce = REVERT * (trend - vals[i - 1]);
     var noise = normalVariate(rng) * noiseVol;
     vals.push(vals[i - 1] + trendStep + revertForce + noise);
+  }
+  /* Pin terminal value exactly — eliminates seed-dependent drift */
+  var rawEnd = vals[n - 1];
+  if (Math.abs(rawEnd) > 0.01) {
+    var scale = targetEnd / rawEnd;
+    for (var j = 1; j < n; j++) vals[j] *= scale;
   }
   return vals;
 }
 
 /**
- * Rolling IC series: mean + bounded noise (Qlib empirical ranges).
- * Good factor: IC_mean 0.03-0.05, daily IC_std 0.05-0.08.
- * Train IC > Test IC to show realistic OOS decay.
+ * Generate daily IC values, then apply a 20-day simple moving average
+ * to produce a true rolling IC series (matches the chart label).
+ *
+ * Qlib empirical: good factor IC_mean 0.03-0.05, daily IC_std 0.05-0.08.
+ * After 20d SMA, series std ≈ dailyStd / sqrt(20) ≈ 0.01-0.018.
  */
-function rollingIC(n, trainN, icMeanTrain, icMeanTest, icVol, seed) {
-  var rng = seededRNG(seed), vals = [];
+function rollingIC(n, trainN, icMeanTrain, icMeanTest, dailyIcVol, seed) {
+  var rng = seededRNG(seed);
+  /* Step 1: generate raw daily IC */
+  var raw = [];
   for (var i = 0; i < n; i++) {
     var mean = i < trainN ? icMeanTrain : icMeanTest;
-    vals.push(mean + normalVariate(rng) * icVol);
+    raw.push(mean + normalVariate(rng) * dailyIcVol);
   }
-  return vals;
+  /* Step 2: 20-day simple moving average */
+  var WINDOW = 20;
+  var smoothed = [];
+  var sum = 0;
+  for (var i = 0; i < n; i++) {
+    sum += raw[i];
+    if (i >= WINDOW) sum -= raw[i - WINDOW];
+    var count = Math.min(i + 1, WINDOW);
+    smoothed.push(sum / count);
+  }
+  return smoothed;
 }
 
 var DATES = genDailyDates('2024-01-02', '2025-03-28');
@@ -474,12 +490,12 @@ function trainTestBg(trainEndIdx) {
 
 /* ── 1. PnL Chart (daily, train/test, crosshair) ── */
 (function() {
-  /* L/S factor: ends ~+28%, concave growth (early alpha capture), moderate noise.
-     Annualized ~22%, Sharpe ~1.8 — consistent with Qlib top-quintile accepted factors. */
-  var pnlLS = trendPnL(DATES.length, 28, 0.35, 0.7, 42);
-  /* CSI300 benchmark: ends ~+8%, convex growth (late rally), higher noise.
-     Realistic A-share index: ~6-10% annual return, ~20% annual vol. */
-  var pnlBench = trendPnL(DATES.length, 8, 0.55, 1.3, 99);
+  /* L/S factor: ends exactly +28%, concave growth (early alpha capture).
+     Annualized ~22%, Sharpe ~1.8 — Qlib top-quintile accepted factor range. */
+  var pnlLS = trendPnL(DATES.length, 28, 0.35, 0.7, 37);
+  /* CSI300 benchmark: ends exactly +8%, convex growth (late rally).
+     noiseVol=0.40 (not 0.55) — tighter to prevent crossing factor line. */
+  var pnlBench = trendPnL(DATES.length, 8, 0.40, 1.3, 99);
 
   new Chart(document.getElementById('pnlChart'), {
     type: 'line',
@@ -557,9 +573,9 @@ function trainTestBg(trainEndIdx) {
 
 /* ── 2. Rolling IC (daily, train/test, crosshair) ── */
 (function() {
-  /* Qlib empirical: accepted factor IC_mean ~0.038 (train), ~0.024 (test).
-     Daily IC_std ~0.04 — 20-day rolling IC stays in [-0.05, +0.12] range. */
-  var ic = rollingIC(DATES.length, trainIdx, 0.038, 0.024, 0.04, 77);
+  /* Qlib empirical: daily IC_mean ~0.038 (train), ~0.024 (test), daily std ~0.07.
+     After 20-day SMA: std ≈ 0.07/sqrt(20) ≈ 0.016, range [-0.01, +0.08]. */
+  var ic = rollingIC(DATES.length, trainIdx, 0.038, 0.024, 0.07, 77);
 
   new Chart(document.getElementById('rollingIcChart'), {
     type: 'line',
