@@ -364,25 +364,32 @@ var crosshairTooltip = {
   boxPadding: 4,
 };
 
-/* Vertical crosshair line plugin */
+/* Vertical crosshair line plugin — tracks raw mouse position */
 var crosshairPlugin = {
   id: 'crosshairLine',
-  afterDraw: function(chart) {
-    if (chart.tooltip && chart.tooltip._active && chart.tooltip._active.length) {
-      var x = chart.tooltip._active[0].element.x;
-      var ctx = chart.ctx;
-      var top = chart.chartArea.top;
-      var bottom = chart.chartArea.bottom;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(x, top);
-      ctx.lineTo(x, bottom);
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(56,189,248,0.4)';
-      ctx.setLineDash([3, 3]);
-      ctx.stroke();
-      ctx.restore();
+  afterEvent: function(chart, args) {
+    var evt = args.event;
+    if (evt.type === 'mousemove' && evt.x >= chart.chartArea.left && evt.x <= chart.chartArea.right) {
+      chart._crosshairX = evt.x;
+    } else if (evt.type === 'mouseout') {
+      chart._crosshairX = null;
     }
+  },
+  afterDraw: function(chart) {
+    var x = chart._crosshairX;
+    if (x == null) return;
+    var ctx = chart.ctx;
+    var top = chart.chartArea.top;
+    var bottom = chart.chartArea.bottom;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(56,189,248,0.4)';
+    ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.restore();
   }
 };
 Chart.register(crosshairPlugin);
