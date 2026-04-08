@@ -323,7 +323,7 @@ function genDailyDates(start, end) {
   return arr;
 }
 
-/* Seeded PRNG — deterministic Box-Muller normal variates */
+/* Seeded PRNG (Lehmer LCG) */
 function seededRNG(seed) {
   var s = seed || 42;
   return function() {
@@ -331,41 +331,42 @@ function seededRNG(seed) {
     return s / 2147483647;
   };
 }
-
 function normalVariate(rng) {
   var u1 = rng(), u2 = rng();
   return Math.sqrt(-2 * Math.log(Math.max(u1, 1e-10))) * Math.cos(2 * Math.PI * u2);
 }
 
 /**
- * Generate realistic cumulative PnL for a long-short factor portfolio.
- * Parameters calibrated to Qlib/WorldQuant empirical ranges:
- *   - Good alpha: daily excess ~3-8bp, annual Sharpe 1.0-2.5
- *   - Benchmark: ~0-3bp daily drift, higher vol
- *   - In-sample (train) slightly better than out-of-sample (test)
+ * Trend-anchored PnL: deterministic growth backbone + mean-reverting noise.
+ * Guarantees the curve reaches `targetEnd` regardless of seed.
+ *
+ * How it works (Qlib-inspired Ornstein-Uhlenbeck around a trend):
+ *   trend[i] = targetEnd * (i/n)^curveShape
+ *   deviation[i] = revert * (trend[i] - actual[i-1]) + noise
+ *   actual[i] = actual[i-1] + daily_trend_step + deviation[i]
+ *
+ * curveShape < 1 → concave (early gains), > 1 → convex (late gains)
  */
-function factorPnL(n, trainN, dailyAlpha, vol, seed) {
-  var rng = seededRNG(seed), vals = [0];
+function trendPnL(n, targetEnd, noiseVol, curveShape, seed) {
+  var rng = seededRNG(seed);
+  var vals = [0];
   for (var i = 1; i < n; i++) {
-    var alpha = i < trainN ? dailyAlpha : dailyAlpha * 0.65; /* OOS decay */
-    var noise = normalVariate(rng) * vol;
-    vals.push(vals[i-1] + alpha + noise);
-  }
-  return vals;
-}
-
-function benchmarkPnL(n, dailyDrift, vol, seed) {
-  var rng = seededRNG(seed), vals = [0];
-  for (var i = 1; i < n; i++) {
-    vals.push(vals[i-1] + dailyDrift + normalVariate(rng) * vol);
+    var frac = i / (n - 1);
+    var trend = targetEnd * Math.pow(frac, curveShape);
+    var prevTrend = targetEnd * Math.pow((i - 1) / (n - 1), curveShape);
+    var trendStep = trend - prevTrend;
+    /* Mean-revert toward trend line — keeps curve close to backbone */
+    var revertForce = 0.08 * (trend - vals[i - 1]);
+    var noise = normalVariate(rng) * noiseVol;
+    vals.push(vals[i - 1] + trendStep + revertForce + noise);
   }
   return vals;
 }
 
 /**
- * Generate realistic rolling IC series.
- * Qlib empirical: good factor IC_mean 0.03-0.05, IC_std ~0.08-0.12
- * Train period: higher mean, Test: decayed but still positive
+ * Rolling IC series: mean + bounded noise (Qlib empirical ranges).
+ * Good factor: IC_mean 0.03-0.05, daily IC_std 0.05-0.08.
+ * Train IC > Test IC to show realistic OOS decay.
  */
 function rollingIC(n, trainN, icMeanTrain, icMeanTest, icVol, seed) {
   var rng = seededRNG(seed), vals = [];
@@ -473,11 +474,12 @@ function trainTestBg(trainEndIdx) {
 
 /* ── 1. PnL Chart (daily, train/test, crosshair) ── */
 (function() {
-  /* L/S factor: ~6bp daily alpha (train), ~4bp (test), vol ~0.6% daily
-     → Annualized: ~15% return, Sharpe ~1.5, consistent with Qlib top-quintile factors */
-  var pnlLS = factorPnL(DATES.length, trainIdx, 0.06, 0.6, 42);
-  /* CSI300 benchmark: ~2bp daily drift, vol ~1.2% — realistic A-share index */
-  var pnlBench = benchmarkPnL(DATES.length, 0.02, 1.2, 99);
+  /* L/S factor: ends ~+28%, concave growth (early alpha capture), moderate noise.
+     Annualized ~22%, Sharpe ~1.8 — consistent with Qlib top-quintile accepted factors. */
+  var pnlLS = trendPnL(DATES.length, 28, 0.35, 0.7, 42);
+  /* CSI300 benchmark: ends ~+8%, convex growth (late rally), higher noise.
+     Realistic A-share index: ~6-10% annual return, ~20% annual vol. */
+  var pnlBench = trendPnL(DATES.length, 8, 0.55, 1.3, 99);
 
   new Chart(document.getElementById('pnlChart'), {
     type: 'line',
@@ -555,9 +557,9 @@ function trainTestBg(trainEndIdx) {
 
 /* ── 2. Rolling IC (daily, train/test, crosshair) ── */
 (function() {
-  /* Qlib empirical: accepted factor IC_mean ~0.035 (train), ~0.022 (test)
-     IC_std ~0.09 — noisy day-to-day but consistent sign over rolling windows */
-  var ic = rollingIC(DATES.length, trainIdx, 0.035, 0.022, 0.09, 77);
+  /* Qlib empirical: accepted factor IC_mean ~0.038 (train), ~0.024 (test).
+     Daily IC_std ~0.04 — 20-day rolling IC stays in [-0.05, +0.12] range. */
+  var ic = rollingIC(DATES.length, trainIdx, 0.038, 0.024, 0.04, 77);
 
   new Chart(document.getElementById('rollingIcChart'), {
     type: 'line',
