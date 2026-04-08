@@ -57,9 +57,8 @@
   .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1rem 0; }
   .chart-full { margin: 1rem 0; }
   .chart-box { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1rem 0.5rem; position: relative; }
-  .chart-box canvas { width: 100% !important; }
-  .chart-box.tall canvas { height: 340px !important; }
-  .chart-box.short canvas { height: 240px !important; }
+  .chart-box.tall { height: 380px; }
+  .chart-box.short { height: 280px; }
   .chart-box h4 { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.04em; }
   .chart-box .period-legend { display: flex; gap: 1.5rem; margin-top: 0.4rem; font-size: 0.75rem; color: var(--muted); }
   .chart-box .period-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
@@ -469,6 +468,7 @@ function trainTestBg(trainEndIdx) {
     plugins: [trainTestBg(trainIdx)],
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { position: 'top', labels: { boxWidth: 10, padding: 16, usePointStyle: true } },
@@ -533,6 +533,7 @@ function trainTestBg(trainEndIdx) {
     plugins: [trainTestBg(trainIdx)],
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
@@ -582,6 +583,8 @@ new Chart(document.getElementById('icChart'), {
     }]
   },
   options: {
+    responsive: true,
+    maintainAspectRatio: false,
     indexAxis: 'y',
     plugins: {
       legend: { display: false },
@@ -615,6 +618,8 @@ new Chart(document.getElementById('decayChart'), {
     ]
   },
   options: {
+    responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: { position: 'top', labels: { boxWidth: 10, padding: 12 } },
     },
