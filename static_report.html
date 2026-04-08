@@ -323,20 +323,64 @@ function genDailyDates(start, end) {
   return arr;
 }
 
-function cumWalk(n, drift, vol, seed) {
-  var r = seed || 42, vals = [0];
+/* Seeded PRNG — deterministic Box-Muller normal variates */
+function seededRNG(seed) {
+  var s = seed || 42;
+  return function() {
+    s = (s * 16807 + 0) % 2147483647;
+    return s / 2147483647;
+  };
+}
+
+function normalVariate(rng) {
+  var u1 = rng(), u2 = rng();
+  return Math.sqrt(-2 * Math.log(Math.max(u1, 1e-10))) * Math.cos(2 * Math.PI * u2);
+}
+
+/**
+ * Generate realistic cumulative PnL for a long-short factor portfolio.
+ * Parameters calibrated to Qlib/WorldQuant empirical ranges:
+ *   - Good alpha: daily excess ~3-8bp, annual Sharpe 1.0-2.5
+ *   - Benchmark: ~0-3bp daily drift, higher vol
+ *   - In-sample (train) slightly better than out-of-sample (test)
+ */
+function factorPnL(n, trainN, dailyAlpha, vol, seed) {
+  var rng = seededRNG(seed), vals = [0];
   for (var i = 1; i < n; i++) {
-    r = (r * 16807 + 0) % 2147483647;
-    var u = r / 2147483647;
-    var z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * u);
-    vals.push(vals[i-1] + drift + vol * z);
+    var alpha = i < trainN ? dailyAlpha : dailyAlpha * 0.65; /* OOS decay */
+    var noise = normalVariate(rng) * vol;
+    vals.push(vals[i-1] + alpha + noise);
+  }
+  return vals;
+}
+
+function benchmarkPnL(n, dailyDrift, vol, seed) {
+  var rng = seededRNG(seed), vals = [0];
+  for (var i = 1; i < n; i++) {
+    vals.push(vals[i-1] + dailyDrift + normalVariate(rng) * vol);
+  }
+  return vals;
+}
+
+/**
+ * Generate realistic rolling IC series.
+ * Qlib empirical: good factor IC_mean 0.03-0.05, IC_std ~0.08-0.12
+ * Train period: higher mean, Test: decayed but still positive
+ */
+function rollingIC(n, trainN, icMeanTrain, icMeanTest, icVol, seed) {
+  var rng = seededRNG(seed), vals = [];
+  for (var i = 0; i < n; i++) {
+    var mean = i < trainN ? icMeanTrain : icMeanTest;
+    vals.push(mean + normalVariate(rng) * icVol);
   }
   return vals;
 }
 
 var DATES = genDailyDates('2024-01-02', '2025-03-28');
-var TRAIN_END = '2024-09-30';
-var trainIdx = DATES.findIndex(function(d) { return d > TRAIN_END; });
+/* 80:20 train:test split — standard in Qlib and production alpha research */
+var TRAIN_RATIO = 0.80;
+var trainIdx = Math.floor(DATES.length * TRAIN_RATIO);
+var TRAIN_END = DATES[trainIdx - 1];
 
 /* ── Chart.js global config ── */
 Chart.defaults.color = '#94a3b8';
@@ -429,8 +473,11 @@ function trainTestBg(trainEndIdx) {
 
 /* ── 1. PnL Chart (daily, train/test, crosshair) ── */
 (function() {
-  var pnlLS = cumWalk(DATES.length, 0.065, 1.2, 42);
-  var pnlBench = cumWalk(DATES.length, 0.008, 1.5, 99);
+  /* L/S factor: ~6bp daily alpha (train), ~4bp (test), vol ~0.6% daily
+     → Annualized: ~15% return, Sharpe ~1.5, consistent with Qlib top-quintile factors */
+  var pnlLS = factorPnL(DATES.length, trainIdx, 0.06, 0.6, 42);
+  /* CSI300 benchmark: ~2bp daily drift, vol ~1.2% — realistic A-share index */
+  var pnlBench = benchmarkPnL(DATES.length, 0.02, 1.2, 99);
 
   new Chart(document.getElementById('pnlChart'), {
     type: 'line',
@@ -476,7 +523,7 @@ function trainTestBg(trainEndIdx) {
           callbacks: {
             title: function(items) {
               var d = items[0].label;
-              var period = DATES.indexOf(d) < trainIdx ? 'Train' : 'Test';
+              var period = items[0].dataIndex < trainIdx ? 'Train' : 'Test';
               return d + '  (' + period + ')';
             },
             label: function(ctx) {
@@ -508,9 +555,9 @@ function trainTestBg(trainEndIdx) {
 
 /* ── 2. Rolling IC (daily, train/test, crosshair) ── */
 (function() {
-  var ic = cumWalk(DATES.length, 0.0, 0.008, 77).map(function(v) { return 0.031 + v * 0.15; });
-  // Clamp to realistic IC range
-  ic = ic.map(function(v) { return Math.max(-0.02, Math.min(0.06, v)); });
+  /* Qlib empirical: accepted factor IC_mean ~0.035 (train), ~0.022 (test)
+     IC_std ~0.09 — noisy day-to-day but consistent sign over rolling windows */
+  var ic = rollingIC(DATES.length, trainIdx, 0.035, 0.022, 0.09, 77);
 
   new Chart(document.getElementById('rollingIcChart'), {
     type: 'line',
@@ -541,7 +588,7 @@ function trainTestBg(trainEndIdx) {
           callbacks: {
             title: function(items) {
               var d = items[0].label;
-              var period = DATES.indexOf(d) < trainIdx ? 'Train' : 'Test';
+              var period = items[0].dataIndex < trainIdx ? 'Train' : 'Test';
               return d + '  (' + period + ')';
             },
             label: function(ctx) {
