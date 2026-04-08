@@ -5,6 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Alpha Agent — Factor Research Report</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#0d1117',
+      primaryColor: '#1e3a5f',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#38bdf8',
+      secondaryColor: '#1e293b',
+      secondaryTextColor: '#94a3b8',
+      secondaryBorderColor: '#334155',
+      tertiaryColor: '#162032',
+      lineColor: '#475569',
+      fontFamily: "'SF Mono', 'Fira Code', monospace",
+      fontSize: '13px',
+      nodeTextColor: '#e2e8f0',
+    }
+  });
+</script>
 <style>
   :root { --bg: #0f172a; --card: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --green: #4ade80; --red: #f87171; --yellow: #fbbf24; --purple: #a78bfa; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,7 +66,8 @@
   .rationale { background: rgba(74,222,128,0.08); border-left: 3px solid var(--green); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; margin: 0.8rem 0; font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
   .rationale.reject { background: rgba(248,113,113,0.08); border-left-color: var(--red); }
   .rationale strong { color: var(--text); }
-  .arch { margin: 1rem 0; font-family: 'SF Mono', monospace; font-size: 0.78rem; color: var(--muted); white-space: pre; line-height: 1.5; overflow-x: auto; }
+  .mermaid-wrapper { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem 1rem; margin: 1rem 0; overflow-x: auto; }
+  .mermaid-wrapper .mermaid { display: flex; justify-content: center; }
   footer { text-align: center; padding: 2rem 0; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 2rem; }
   footer a { color: var(--accent); text-decoration: none; }
   footer a:hover { text-decoration: underline; }
@@ -201,22 +224,47 @@
   <!-- ── Architecture ── -->
   <div class="section">
     <h2>System Architecture</h2>
-    <div class="arch">User Query: "find short-term reversal factors for CSI300"
-    │
-    ▼
-┌──────────────────┐           ┌──────────────────┐
-│ HypothesisAgent  │──────────▶│   FactorAgent    │
-│ (idea generation)│ hypotheses│ (DSL synthesis)  │
-└──────────────────┘           └────────┬─────────┘
-                                        │ factor expressions
-                                        ▼
-┌──────────────────┐  metrics  ┌──────────────────┐
-│    EvalAgent     │◀──────────│  BacktestAgent   │
-│ (judge+iterate)  │           │ (IC, Sharpe, DD) │
-└───────┬──────────┘           └──────────────────┘
-        │ ACCEPT / REFINE / REJECT
-        ▼
-  FactorRegistry (SQLite, tree-hash dedup)</div>
+    <div class="mermaid-wrapper">
+      <pre class="mermaid">
+flowchart TB
+    subgraph INPUT["&nbsp;&nbsp;Input Layer&nbsp;&nbsp;"]
+        Q["User Query\n&lt;i&gt;find short-term reversal\nfactors for CSI300&lt;/i&gt;"]
+        DATA[("Market Data\n&lt;b&gt;AKShare&lt;/b&gt; (A-Share)\n&lt;b&gt;yfinance&lt;/b&gt; (US)")]
+    end
+
+    subgraph AGENTS["&nbsp;&nbsp;Multi-Agent Pipeline&nbsp;&nbsp;"]
+        direction TB
+        HA["&lt;b&gt;HypothesisAgent&lt;/b&gt;\nGenerates 3-5 financial\nhypotheses from query"]
+        FA["&lt;b&gt;FactorAgent&lt;/b&gt;\nSynthesizes DSL expressions\n&lt;code&gt;Rank(-Delta(close, 5))&lt;/code&gt;"]
+        BA["&lt;b&gt;BacktestAgent&lt;/b&gt;\nIC, ICIR, Sharpe, Turnover\nAlpha Decay (1-20d)"]
+        EA["&lt;b&gt;EvalAgent&lt;/b&gt;\nACCEPT / REFINE / REJECT\nbased on gate thresholds"]
+    end
+
+    subgraph OUTPUT["&nbsp;&nbsp;Output Layer&nbsp;&nbsp;"]
+        REG[("FactorRegistry\nSQLite + tree-hash dedup")]
+        RPT["HTML Report\nCharts + Rationale"]
+    end
+
+    Q --> HA
+    DATA --> BA
+    HA -- "hypotheses" --> FA
+    FA -- "factor expressions" --> BA
+    BA -- "metrics" --> EA
+    EA -- "REFINE\n(feedback loop)" --> HA
+    EA -- "ACCEPT" --> REG
+    EA -- "ACCEPT" --> RPT
+
+    classDef inputNode fill:#162032,stroke:#38bdf8,stroke-width:1.5px,color:#e2e8f0
+    classDef agentNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#e2e8f0
+    classDef outputNode fill:#1a2e1a,stroke:#4ade80,stroke-width:1.5px,color:#e2e8f0
+    classDef dataNode fill:#1e293b,stroke:#a78bfa,stroke-width:1.5px,color:#e2e8f0
+
+    class Q inputNode
+    class DATA dataNode
+    class HA,FA,BA,EA agentNode
+    class REG,RPT outputNode
+      </pre>
+    </div>
   </div>
 
   <!-- ── Technical Highlights ── -->
