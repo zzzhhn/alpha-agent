@@ -8,20 +8,31 @@ Grammar (operator precedence low → high):
     unary    := "-" unary | power
     power    := atom ("**" atom)?
     atom     := NUMBER | feature | call | "(" expr ")"
-    feature  := "$" IDENT
+    feature  := "$" IDENT | KNOWN_FEATURE
     call     := IDENT "(" arglist ")"
     arglist  := expr ("," expr)*
 
+Known features (bare identifiers accepted without $ prefix):
+    open, close, high, low, volume, amount
+
 Examples:
+    Rank(-Delta(close, 5))
+    (close - Mean(close, 20)) / Std(close, 20)
+    Rank(close / Ref(close, 5) - 1)
+
+Legacy $ prefix is still accepted for backward compatibility:
     Rank(-Delta($close, 5))
-    ($close - Mean($close, 20)) / Std($close, 20)
-    Rank($close / Ref($close, 5) - 1)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
+
+# Bare identifiers that resolve to FeatureNode (no $ needed)
+KNOWN_FEATURES: frozenset[str] = frozenset({
+    "open", "close", "high", "low", "volume", "amount",
+})
 
 from alpha_agent.factor_engine.ast_nodes import (
     BinaryOpNode,
@@ -180,6 +191,13 @@ class ExprParser:
         self._pos += 1
         return token
 
+    def _peek_type(self) -> TokenType:
+        """Return the type of the NEXT token without advancing."""
+        next_pos = self._pos + 1
+        if next_pos < len(self._tokens):
+            return self._tokens[next_pos].type
+        return TokenType.EOF
+
     def _expect(self, token_type: TokenType) -> Token:
         token = self._current()
         if token.type != token_type:
@@ -245,6 +263,10 @@ class ExprParser:
             return FeatureNode(name=name_token.value)
 
         if token.type == TokenType.IDENT:
+            # Bare feature name (e.g., "close") — no $ prefix needed
+            if token.value in KNOWN_FEATURES and self._peek_type() != TokenType.LPAREN:
+                self._advance()
+                return FeatureNode(name=token.value)
             return self._parse_call()
 
         if token.type == TokenType.LPAREN:

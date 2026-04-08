@@ -7,7 +7,7 @@ Each hypothesis should:
 2. Suggest a clear direction (which stocks should rank higher/lower)
 3. Be testable with daily OHLCV data (open, high, low, close, volume, amount)
 
-Available data features: $open, $close, $high, $low, $volume, $amount
+Available data features: open, close, high, low, volume, amount
 Available time-series operators: Ref, Mean, Sum, Std, Var, Max, Min, Delta, EMA, WMA, Corr, Cov, Skew, Kurt, Med, Slope, Count
 Available cross-sectional operators: Rank, Zscore
 Available element-wise operators: Abs, Sign, Log, If

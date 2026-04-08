@@ -288,10 +288,16 @@ class TestErrors:
         with pytest.raises(ParseError):
             parser.parse("$close @ $open")
 
-    def test_missing_dollar_for_feature(self, parser: ExprParser) -> None:
-        # bare "close" is treated as a function call, which needs parens
+    def test_bare_feature_is_valid(self, parser: ExprParser) -> None:
+        # bare "close" is now a valid feature (no $ needed)
+        result = parser.parse("close")
+        assert isinstance(result, FeatureNode)
+        assert result.name == "close"
+
+    def test_unknown_bare_ident_requires_parens(self, parser: ExprParser) -> None:
+        # bare "foo" is not a known feature, so it's treated as a function call
         with pytest.raises(ParseError):
-            parser.parse("close")
+            parser.parse("foo")
 
     def test_trailing_comma(self, parser: ExprParser) -> None:
         with pytest.raises(ParseError):
