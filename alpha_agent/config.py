@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     backtest_end: str = "20241231"
 
     # Dashboard / API settings
-    fastapi_port: int = 8000
+    fastapi_port: int = 6008
     dashboard_tickers: list[str] = ["NVDA", "AAPL", "TSLA"]
     dashboard_cache_ttl_seconds: int = 300
     model_dir: Path = Path("data/models")
