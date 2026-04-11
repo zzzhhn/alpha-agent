@@ -191,6 +191,20 @@ body {
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 20px; font-size: 13px; color: var(--text-secondary); z-index: 100; opacity: 0; transition: all 0.3s; pointer-events: none; }
 .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 
+/* ═══════════════════ Data Tables (new pages) ═══════════════════ */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th { text-align: left; padding: 8px 10px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 600; }
+.data-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-family: 'SF Mono', 'Fira Code', monospace; }
+.data-table tr:last-child td { border-bottom: none; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.status-dot.up { background: var(--green); }
+.status-dot.down { background: var(--red); }
+.status-dot.unknown { background: var(--yellow); }
+.info-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+.info-row .info-label { color: var(--muted); }
+.info-row .info-value { font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace; }
+.empty-state { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 13px; }
+
 /* ═══════════════════ Responsive ═══════════════════ */
 @media (max-width: 1100px) {
   .content-grid { grid-template-columns: 1fr; }
@@ -484,11 +498,128 @@ body {
 </div><!-- /content-grid -->
 </div><!-- /page-inference -->
 
-<!-- Coming Soon Page -->
+<!-- Coming Soon Page (fallback) -->
 <div class="coming-soon" id="page-coming-soon">
   <div class="cs-icon">🚧</div>
   <div class="cs-title" data-i18n="coming.title">模块开发中</div>
   <div class="cs-sub" data-i18n="coming.sub">Coming Soon — 该模块正在构建中</div>
+</div>
+
+<!-- ═══════════════════ Page: System Monitor ═══════════════════ -->
+<div id="page-monitor" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">⊞</span><span data-i18n="mon.services">服务状态</span></div>
+    </div>
+    <div id="monitor-services">
+      <div class="info-row"><span class="info-label">Ollama</span><span class="info-value"><span class="status-dot unknown"></span>--</span></div>
+      <div class="info-row"><span class="info-label">FastAPI</span><span class="info-value"><span class="status-dot unknown"></span>--</span></div>
+      <div class="info-row"><span class="info-label">Tunnel</span><span class="info-value"><span class="status-dot unknown"></span>--</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">🔧</span><span data-i18n="mon.training">模型训练状态</span></div>
+    </div>
+    <div id="monitor-training" class="empty-state" data-i18n="mon.no_training">暂无训练任务</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">💻</span><span data-i18n="mon.system">系统信息</span></div>
+    </div>
+    <div id="monitor-sysinfo">
+      <div class="info-row"><span class="info-label">Python</span><span class="info-value" id="mon-python">--</span></div>
+      <div class="info-row"><span class="info-label" data-i18n="mon.uptime">运行时间</span><span class="info-value" id="mon-uptime">--</span></div>
+      <div class="info-row"><span class="info-label">Cache TTL</span><span class="info-value" id="mon-cache">--</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Page: Market Data ═══════════════════ -->
+<div id="page-market" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">↻</span><span data-i18n="mkt.ohlcv">OHLCV 行情数据</span></div>
+    </div>
+    <div id="market-ohlcv" class="empty-state" data-i18n="mkt.loading">加载中...</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">📐</span><span data-i18n="mkt.features">特征矩阵</span></div>
+    </div>
+    <div id="market-features" class="empty-state" data-i18n="mkt.loading">加载中...</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Page: Alpha Strategy ═══════════════════ -->
+<div id="page-alpha" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">⚗</span><span data-i18n="alp.factors">因子注册表</span></div>
+    </div>
+    <div id="alpha-factors" class="empty-state" data-i18n="alp.no_factors">暂无发现的因子</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">⚙</span><span data-i18n="alp.pipeline">策略管线配置</span></div>
+    </div>
+    <div id="alpha-pipeline" class="empty-state" data-i18n="alp.no_pipeline">暂无管线数据</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Page: Portfolio & Risk ═══════════════════ -->
+<div id="page-risk" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">📊</span><span data-i18n="rsk.positions">持仓明细</span></div>
+    </div>
+    <div id="risk-positions" class="empty-state" data-i18n="rsk.no_positions">暂无持仓</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">🛡</span><span data-i18n="rsk.metrics">风控指标</span></div>
+    </div>
+    <div id="risk-metrics">
+      <div class="info-row"><span class="info-label" data-i18n="rsk.exposure">总敞口</span><span class="info-value" id="rsk-exposure">--</span></div>
+      <div class="info-row"><span class="info-label" data-i18n="rsk.diversification">分散度</span><span class="info-value" id="rsk-diversification">--</span></div>
+      <div class="info-row"><span class="info-label" data-i18n="rsk.max_drawdown">最大回撤</span><span class="info-value" id="rsk-drawdown">--</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Page: Order Execution ═══════════════════ -->
+<div id="page-gateway" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">⏱</span><span data-i18n="gw.gate_eval">门控评估详情</span></div>
+    </div>
+    <div id="gw-gate-detail" class="empty-state" data-i18n="gw.loading">加载中...</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">⚙</span><span data-i18n="gw.exec_config">执行配置</span></div>
+    </div>
+    <div id="gw-config">
+      <div class="info-row"><span class="info-label" data-i18n="gw.mode">交易模式</span><span class="info-value badge badge-purple" data-i18n="gw.paper">模拟盘</span></div>
+      <div class="info-row"><span class="info-label" data-i18n="gw.broker">券商连接</span><span class="info-value" data-i18n="gw.no_broker">未接入</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">📋</span><span data-i18n="gw.pending">待执行订单</span></div>
+    </div>
+    <div id="gw-orders" class="empty-state" data-i18n="gw.no_orders">暂无待执行订单</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Page: Trade Audit ═══════════════════ -->
+<div id="page-audit" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">≡</span><span data-i18n="aud.log">交易审计日志</span></div>
+    </div>
+    <div id="audit-log" class="empty-state" data-i18n="aud.no_entries">暂无审计记录</div>
+  </div>
 </div>
 
 </main>
@@ -537,7 +668,24 @@ var I18N = {
     'vote.xgb_desc': '方向向上概率 35.7%', 'vote.lstm_desc': '捕捉时序向上概率 44.7%',
     'vote.fusion': '融合结果', 'vote.fusion_desc': '融合概率 38.0%',
     'vote.score': '评分', 'vote.real_output': '真实模型输出',
-    'coming.title': '模块开发中', 'coming.sub': 'Coming Soon — 该模块正在构建中'
+    'coming.title': '模块开发中', 'coming.sub': 'Coming Soon — 该模块正在构建中',
+    'mon.services': '服务状态', 'mon.training': '模型训练状态', 'mon.system': '系统信息',
+    'mon.uptime': '运行时间', 'mon.no_training': '暂无训练任务',
+    'mon.train_status': '状态', 'mon.train_model': '模型',
+    'mkt.ohlcv': 'OHLCV 行情数据', 'mkt.features': '特征矩阵', 'mkt.loading': '加载中...',
+    'alp.factors': '因子注册表', 'alp.pipeline': '策略管线配置',
+    'alp.no_factors': '暂无发现的因子', 'alp.no_pipeline': '暂无管线数据',
+    'alp.name': '名称', 'alp.sharpe': 'Sharpe', 'alp.status': '状态',
+    'rsk.positions': '持仓明细', 'rsk.metrics': '风控指标',
+    'rsk.exposure': '总敞口', 'rsk.diversification': '分散度', 'rsk.max_drawdown': '最大回撤',
+    'rsk.no_positions': '暂无持仓', 'rsk.ticker': '标的', 'rsk.direction': '方向',
+    'rsk.weight': '权重', 'rsk.score': '评分',
+    'gw.gate_eval': '门控评估详情', 'gw.exec_config': '执行配置', 'gw.pending': '待执行订单',
+    'gw.mode': '交易模式', 'gw.paper': '模拟盘', 'gw.broker': '券商连接',
+    'gw.no_broker': '未接入', 'gw.no_orders': '暂无待执行订单', 'gw.loading': '加载中...',
+    'gw.dir': '方向', 'gw.qty': '数量', 'gw.status_col': '状态',
+    'aud.log': '交易审计日志', 'aud.no_entries': '暂无审计记录',
+    'aud.time': '时间', 'aud.dir': '方向', 'aud.conf': '置信度', 'aud.source': '来源'
   },
   en: {
     'logo.tag': 'Core',
@@ -576,7 +724,24 @@ var I18N = {
     'vote.xgb_desc': 'Upward prob 35.7%', 'vote.lstm_desc': 'Temporal upward prob 44.7%',
     'vote.fusion': 'Fusion', 'vote.fusion_desc': 'Fusion prob 38.0%',
     'vote.score': 'Score', 'vote.real_output': 'Real Model Output',
-    'coming.title': 'Under Development', 'coming.sub': 'Coming Soon — This module is being built'
+    'coming.title': 'Under Development', 'coming.sub': 'Coming Soon — This module is being built',
+    'mon.services': 'Service Status', 'mon.training': 'Model Training Status', 'mon.system': 'System Info',
+    'mon.uptime': 'Uptime', 'mon.no_training': 'No training tasks',
+    'mon.train_status': 'Status', 'mon.train_model': 'Model',
+    'mkt.ohlcv': 'OHLCV Market Data', 'mkt.features': 'Feature Matrix', 'mkt.loading': 'Loading...',
+    'alp.factors': 'Factor Registry', 'alp.pipeline': 'Pipeline Configuration',
+    'alp.no_factors': 'No factors discovered yet', 'alp.no_pipeline': 'No pipeline data',
+    'alp.name': 'Name', 'alp.sharpe': 'Sharpe', 'alp.status': 'Status',
+    'rsk.positions': 'Positions', 'rsk.metrics': 'Risk Metrics',
+    'rsk.exposure': 'Total Exposure', 'rsk.diversification': 'Diversification', 'rsk.max_drawdown': 'Max Drawdown',
+    'rsk.no_positions': 'No positions', 'rsk.ticker': 'Ticker', 'rsk.direction': 'Direction',
+    'rsk.weight': 'Weight', 'rsk.score': 'Score',
+    'gw.gate_eval': 'Gate Evaluation Details', 'gw.exec_config': 'Execution Config', 'gw.pending': 'Pending Orders',
+    'gw.mode': 'Trading Mode', 'gw.paper': 'Paper', 'gw.broker': 'Broker',
+    'gw.no_broker': 'Not Connected', 'gw.no_orders': 'No pending orders', 'gw.loading': 'Loading...',
+    'gw.dir': 'Direction', 'gw.qty': 'Qty', 'gw.status_col': 'Status',
+    'aud.log': 'Trading Audit Log', 'aud.no_entries': 'No audit entries',
+    'aud.time': 'Time', 'aud.dir': 'Direction', 'aud.conf': 'Confidence', 'aud.source': 'Source'
   }
 };
 
@@ -613,22 +778,21 @@ function toggleTheme() {
 }
 
 /* ═══════════════════ Page Switching ═══════════════════ */
+var allPages = ['inference','monitor','market','alpha','risk','gateway','audit'];
+
 function switchPage(page) {
-  /* Update sidebar active */
   document.querySelectorAll('.sidebar-item').forEach(function(item) {
     item.classList.toggle('active', item.getAttribute('data-page') === page);
   });
   currentPage = page;
-  var inferPage = document.getElementById('page-inference');
-  var comingSoon = document.getElementById('page-coming-soon');
-  if (page === 'inference') {
-    inferPage.style.display = '';
-    comingSoon.classList.remove('visible');
-  } else {
-    inferPage.style.display = 'none';
-    comingSoon.classList.add('visible');
-    showToast(currentLang === 'zh' ? '该模块正在开发中' : 'This module is under development');
-  }
+  /* Hide all pages including coming-soon */
+  allPages.forEach(function(p) {
+    var el = document.getElementById('page-' + p);
+    if (el) el.style.display = (p === page) ? '' : 'none';
+  });
+  document.getElementById('page-coming-soon').classList.remove('visible');
+  /* Fetch data for non-inference pages */
+  if (page !== 'inference') fetchPageData(page);
 }
 
 /* ═══════════════════ Toast ═══════════════════ */
@@ -818,6 +982,220 @@ function renderDashboard(d) {
 
   /* Re-apply i18n after DOM updates */
   setLang(currentLang);
+}
+
+/* ═══════════════════ Page Data Fetching ═══════════════════ */
+var pageEndpoints = {
+  monitor: '/api/system', market: '/api/market', alpha: '/api/alpha',
+  risk: '/api/portfolio', gateway: '/api/orders', audit: '/api/audit'
+};
+
+function fetchPageData(page) {
+  var url = pageEndpoints[page];
+  if (!url) return;
+  fetch(url)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) { renderPage(page, data); })
+    .catch(function(err) {
+      console.warn('Failed to fetch ' + page + ':', err.message);
+    });
+}
+
+function renderPage(page, data) {
+  var renderers = {
+    monitor: renderMonitor, market: renderMarket, alpha: renderAlpha,
+    risk: renderRisk, gateway: renderGateway, audit: renderAudit
+  };
+  if (renderers[page]) renderers[page](data);
+  setLang(currentLang);
+}
+
+function renderMonitor(d) {
+  if (!d) return;
+  var services = d.services || {};
+  var container = document.getElementById('monitor-services');
+  if (container) {
+    var html = '';
+    ['Ollama','FastAPI','Tunnel'].forEach(function(name) {
+      var key = name.toLowerCase();
+      var status = services[key] || 'unknown';
+      var cls = status === 'up' ? 'up' : (status === 'down' ? 'down' : 'unknown');
+      var label = status === 'up' ? (currentLang === 'zh' ? '在线' : 'Online') : (status === 'down' ? (currentLang === 'zh' ? '离线' : 'Offline') : '--');
+      html += '<div class="info-row"><span class="info-label">' + name + '</span><span class="info-value"><span class="status-dot ' + cls + '"></span>' + label + '</span></div>';
+    });
+    container.innerHTML = html;
+  }
+  var training = d.training;
+  var trainEl = document.getElementById('monitor-training');
+  if (trainEl) {
+    if (training && training.status) {
+      trainEl.className = '';
+      trainEl.innerHTML = '<div class="info-row"><span class="info-label" data-i18n="mon.train_status">' + (currentLang === 'zh' ? '状态' : 'Status') + '</span><span class="info-value">' + training.status + '</span></div>'
+        + '<div class="info-row"><span class="info-label" data-i18n="mon.train_model">' + (currentLang === 'zh' ? '模型' : 'Model') + '</span><span class="info-value">' + (training.model || '--') + '</span></div>';
+    } else {
+      trainEl.className = 'empty-state';
+      trainEl.textContent = currentLang === 'zh' ? '暂无训练任务' : 'No training tasks';
+    }
+  }
+  var pyEl = document.getElementById('mon-python');
+  if (pyEl) pyEl.textContent = d.python_version || '--';
+  var upEl = document.getElementById('mon-uptime');
+  if (upEl) upEl.textContent = d.uptime || '--';
+  var cacheEl = document.getElementById('mon-cache');
+  if (cacheEl) cacheEl.textContent = d.cache_ttl || '--';
+}
+
+function renderMarket(d) {
+  if (!d) return;
+  var ohlcvEl = document.getElementById('market-ohlcv');
+  if (ohlcvEl && d.ohlcv) {
+    var tickers = Object.keys(d.ohlcv);
+    if (tickers.length === 0) { ohlcvEl.className = 'empty-state'; ohlcvEl.textContent = currentLang === 'zh' ? '暂无数据' : 'No data'; return; }
+    var html = '';
+    tickers.forEach(function(tk) {
+      var rows = d.ohlcv[tk] || [];
+      html += '<div style="margin-bottom:12px;font-weight:600;font-size:14px">' + tk + '</div>';
+      html += '<table class="data-table"><thead><tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Vol</th></tr></thead><tbody>';
+      rows.slice(-5).forEach(function(r) {
+        html += '<tr><td>' + (r.date || '--') + '</td><td>' + (r.open != null ? r.open.toFixed(2) : '--') + '</td><td>' + (r.high != null ? r.high.toFixed(2) : '--') + '</td><td>' + (r.low != null ? r.low.toFixed(2) : '--') + '</td><td>' + (r.close != null ? r.close.toFixed(2) : '--') + '</td><td>' + (r.volume != null ? r.volume.toLocaleString() : '--') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    });
+    ohlcvEl.className = '';
+    ohlcvEl.innerHTML = html;
+  }
+  var featEl = document.getElementById('market-features');
+  if (featEl && d.features) {
+    var cols = d.features.columns || [];
+    var frows = d.features.rows || [];
+    if (cols.length === 0) { featEl.className = 'empty-state'; featEl.textContent = currentLang === 'zh' ? '暂无特征' : 'No features'; return; }
+    var fhtml = '<table class="data-table"><thead><tr>';
+    cols.forEach(function(c) { fhtml += '<th>' + c + '</th>'; });
+    fhtml += '</tr></thead><tbody>';
+    frows.slice(-5).forEach(function(row) {
+      fhtml += '<tr>';
+      cols.forEach(function(c) {
+        var v = row[c];
+        var style = '';
+        if (typeof v === 'number') { style = v > 0 ? 'color:var(--green)' : (v < 0 ? 'color:var(--red)' : ''); v = v.toFixed(4); }
+        fhtml += '<td style="' + style + '">' + (v != null ? v : '--') + '</td>';
+      });
+      fhtml += '</tr>';
+    });
+    fhtml += '</tbody></table>';
+    featEl.className = '';
+    featEl.innerHTML = fhtml;
+  }
+}
+
+function renderAlpha(d) {
+  if (!d) return;
+  var factEl = document.getElementById('alpha-factors');
+  if (factEl && d.factors) {
+    var factors = d.factors;
+    if (factors.length === 0) { factEl.className = 'empty-state'; factEl.textContent = currentLang === 'zh' ? '暂无发现的因子' : 'No factors discovered yet'; return; }
+    var html = '<table class="data-table"><thead><tr><th data-i18n="alp.name">' + (currentLang === 'zh' ? '名称' : 'Name') + '</th><th>IC</th><th data-i18n="alp.sharpe">Sharpe</th><th data-i18n="alp.status">' + (currentLang === 'zh' ? '状态' : 'Status') + '</th></tr></thead><tbody>';
+    factors.forEach(function(f) {
+      html += '<tr><td>' + f.name + '</td><td>' + (f.ic != null ? f.ic.toFixed(4) : '--') + '</td><td>' + (f.sharpe != null ? f.sharpe.toFixed(2) : '--') + '</td><td><span class="badge ' + (f.active ? 'badge-green' : 'badge-red') + '">' + (f.active ? (currentLang === 'zh' ? '启用' : 'Active') : (currentLang === 'zh' ? '停用' : 'Inactive')) + '</span></td></tr>';
+    });
+    html += '</tbody></table>';
+    factEl.className = '';
+    factEl.innerHTML = html;
+  }
+  var pipeEl = document.getElementById('alpha-pipeline');
+  if (pipeEl && d.pipeline) {
+    var p = d.pipeline;
+    var phtml = '';
+    Object.keys(p).forEach(function(k) {
+      phtml += '<div class="info-row"><span class="info-label">' + k + '</span><span class="info-value">' + p[k] + '</span></div>';
+    });
+    pipeEl.className = '';
+    pipeEl.innerHTML = phtml;
+  }
+}
+
+function renderRisk(d) {
+  if (!d) return;
+  var posEl = document.getElementById('risk-positions');
+  if (posEl && d.positions) {
+    var pos = d.positions;
+    if (pos.length === 0) { posEl.className = 'empty-state'; posEl.textContent = currentLang === 'zh' ? '暂无持仓' : 'No positions'; return; }
+    var html = '<table class="data-table"><thead><tr><th data-i18n="rsk.ticker">' + (currentLang === 'zh' ? '标的' : 'Ticker') + '</th><th data-i18n="rsk.direction">' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th data-i18n="rsk.weight">' + (currentLang === 'zh' ? '权重' : 'Weight') + '</th><th data-i18n="rsk.score">' + (currentLang === 'zh' ? '评分' : 'Score') + '</th></tr></thead><tbody>';
+    pos.forEach(function(p) {
+      var isLong = p.direction === 'Long' || p.direction === 'Bullish';
+      var dirColor = isLong ? 'var(--green)' : 'var(--red)';
+      var dirText = isLong ? (currentLang === 'zh' ? '看多' : 'Long') : (currentLang === 'zh' ? '看空' : 'Short');
+      html += '<tr><td>' + p.ticker + '</td><td style="color:' + dirColor + '">' + dirText + '</td><td>' + (p.weight != null ? (p.weight * 100).toFixed(1) + '%' : '--') + '</td><td>' + (p.score != null ? p.score.toFixed(2) : '--') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    posEl.className = '';
+    posEl.innerHTML = html;
+  }
+  var expEl = document.getElementById('rsk-exposure');
+  if (expEl) expEl.textContent = d.total_exposure != null ? (d.total_exposure * 100).toFixed(1) + '%' : '--';
+  var divEl = document.getElementById('rsk-diversification');
+  if (divEl) divEl.textContent = d.diversification != null ? d.diversification.toFixed(2) : '--';
+  var ddEl = document.getElementById('rsk-drawdown');
+  if (ddEl) ddEl.textContent = d.max_drawdown != null ? (d.max_drawdown * 100).toFixed(1) + '%' : '--';
+}
+
+function renderGateway(d) {
+  if (!d) return;
+  var gateEl = document.getElementById('gw-gate-detail');
+  if (gateEl && d.gate) {
+    var g = d.gate;
+    var html = '<div class="gate-row">';
+    (g.gates || []).forEach(function(gt) {
+      var passed = gt.passed;
+      html += '<div class="gate-card"><div class="gate-label"><span>' + gt.name + '</span><span class="badge ' + (passed ? 'badge-green' : 'badge-red') + '" style="font-size:10px">' + (passed ? (currentLang === 'zh' ? '通过' : 'Pass') : (currentLang === 'zh' ? '未通过' : 'Fail')) + '</span></div><div class="gate-value" style="color:' + (passed ? 'var(--green)' : 'var(--red)') + '">' + (gt.score * 100).toFixed(1) + '%</div><div class="gate-bar"><div class="fill" style="width:' + (gt.score * 100) + '%;background:' + (passed ? 'var(--green)' : 'var(--red)') + '"></div></div></div>';
+    });
+    html += '</div>';
+    if (g.overall_confidence != null) {
+      html += '<div class="gate-footer">' + (currentLang === 'zh' ? '综合置信度' : 'Overall Confidence') + ': <strong>' + g.overall_confidence.toFixed(0) + '%</strong></div>';
+    }
+    gateEl.className = '';
+    gateEl.innerHTML = html;
+  }
+  if (d.config) {
+    var modeEl = document.querySelector('#gw-config [data-i18n="gw.paper"]');
+    if (modeEl) modeEl.textContent = d.config.mode || (currentLang === 'zh' ? '模拟盘' : 'Paper');
+    var brokerEl = document.querySelector('#gw-config [data-i18n="gw.no_broker"]');
+    if (brokerEl) brokerEl.textContent = d.config.broker || (currentLang === 'zh' ? '未接入' : 'Not Connected');
+  }
+  var ordersEl = document.getElementById('gw-orders');
+  if (ordersEl && d.orders) {
+    if (d.orders.length === 0) { ordersEl.className = 'empty-state'; ordersEl.textContent = currentLang === 'zh' ? '暂无待执行订单' : 'No pending orders'; return; }
+    var ohtml = '<table class="data-table"><thead><tr><th>Ticker</th><th data-i18n="gw.dir">' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th data-i18n="gw.qty">' + (currentLang === 'zh' ? '数量' : 'Qty') + '</th><th data-i18n="gw.status_col">' + (currentLang === 'zh' ? '状态' : 'Status') + '</th></tr></thead><tbody>';
+    d.orders.forEach(function(o) {
+      ohtml += '<tr><td>' + o.ticker + '</td><td>' + o.direction + '</td><td>' + o.quantity + '</td><td>' + o.status + '</td></tr>';
+    });
+    ohtml += '</tbody></table>';
+    ordersEl.className = '';
+    ordersEl.innerHTML = ohtml;
+  }
+}
+
+function renderAudit(d) {
+  if (!d) return;
+  var logEl = document.getElementById('audit-log');
+  if (!logEl) return;
+  var entries = d.entries || d || [];
+  if (!Array.isArray(entries) || entries.length === 0) {
+    logEl.className = 'empty-state';
+    logEl.textContent = currentLang === 'zh' ? '暂无审计记录' : 'No audit entries';
+    return;
+  }
+  var html = '<table class="data-table"><thead><tr><th data-i18n="aud.time">' + (currentLang === 'zh' ? '时间' : 'Time') + '</th><th>Ticker</th><th data-i18n="aud.dir">' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th data-i18n="aud.conf">' + (currentLang === 'zh' ? '置信度' : 'Confidence') + '</th><th data-i18n="aud.source">' + (currentLang === 'zh' ? '来源' : 'Source') + '</th></tr></thead><tbody>';
+  entries.forEach(function(e) {
+    var isLong = e.direction === 'Long' || e.direction === 'Bullish';
+    html += '<tr><td>' + (e.timestamp || '--') + '</td><td>' + (e.ticker || '--') + '</td><td style="color:' + (isLong ? 'var(--green)' : 'var(--red)') + '">' + (e.direction || '--') + '</td><td>' + (e.confidence != null ? e.confidence.toFixed(0) + '%' : '--') + '</td><td>' + (e.source || '--') + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  logEl.className = '';
+  logEl.innerHTML = html;
 }
 
 /* ═══════════════════ Init ═══════════════════ */

@@ -60,12 +60,24 @@ def create_app() -> FastAPI:
     from alpha_agent.api.routes.gate import router as gate_router
     from alpha_agent.api.routes.inference import router as inference_router
     from alpha_agent.api.routes.market_state import router as market_state_router
+    from alpha_agent.api.routes.system import router as system_router
+    from alpha_agent.api.routes.market import router as market_router
+    from alpha_agent.api.routes.alpha import router as alpha_router
+    from alpha_agent.api.routes.portfolio import router as portfolio_router
+    from alpha_agent.api.routes.orders import router as orders_router
+    from alpha_agent.api.routes.audit import router as audit_router
 
     application.include_router(dashboard_router)
     application.include_router(market_state_router)
     application.include_router(inference_router)
     application.include_router(gate_router)
     application.include_router(decision_router)
+    application.include_router(system_router)
+    application.include_router(market_router)
+    application.include_router(alpha_router)
+    application.include_router(portfolio_router)
+    application.include_router(orders_router)
+    application.include_router(audit_router)
 
     # --- Health check -----------------------------------------------------
     @application.get("/api/health")
