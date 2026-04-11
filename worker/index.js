@@ -51,8 +51,10 @@ export default {
 
     // Fallback: static HTML from KV (only for HTML page requests)
     const accept = request.headers.get("Accept") || "";
-    if (accept.includes("text/html") || url.pathname === "/") {
-      const staticHtml = await env.STATIC_SITE.get("report.html");
+    if (accept.includes("text/html") || url.pathname === "/" || url.pathname === "/qcore") {
+      // Choose KV key based on path
+      const kvKey = url.pathname === "/qcore" ? "dashboard.html" : "report.html";
+      const staticHtml = await env.STATIC_SITE.get(kvKey);
       if (staticHtml) {
         return new Response(staticHtml, {
           headers: {

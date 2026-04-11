@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlphaCore 量化研究与决策系统</title>
+<style>
+/* ═══════════════════ Theme Variables ═══════════════════ */
+:root, [data-theme="dark"] {
+  --bg: #0a0e1a;
+  --bg-secondary: #0f1420;
+  --card: #141a2a;
+  --card-inner: #0d1220;
+  --sidebar-bg: #0c1018;
+  --sidebar-active: linear-gradient(135deg, rgba(124,110,246,0.18), rgba(99,102,241,0.10));
+  --sidebar-active-border: #7c6ef6;
+  --border: #1e2535;
+  --border-light: #2a3245;
+  --text: #e2e8f0;
+  --text-secondary: #c0c8d8;
+  --muted: #6b7a90;
+  --accent: #7c6ef6;
+  --accent-glow: rgba(124,110,246,0.15);
+  --cyan: #38bdf8;
+  --green: #4ade80;
+  --green-dim: rgba(74,222,128,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --yellow: #fbbf24;
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.15);
+  --topbar-bg: rgba(10,14,26,0.85);
+  --badge-green-bg: rgba(74,222,128,0.12);
+  --badge-green-text: #4ade80;
+  --badge-red-bg: rgba(239,68,68,0.12);
+  --badge-red-text: #ef4444;
+  --badge-purple-bg: rgba(124,110,246,0.15);
+  --badge-purple-text: #a78bfa;
+  --scrollbar-thumb: #2a3245;
+  --toggle-bg: #1e2535;
+  --toggle-active: #7c6ef6;
+}
+[data-theme="light"] {
+  --bg: #f0f2f5;
+  --bg-secondary: #e8ebf0;
+  --card: #ffffff;
+  --card-inner: #f5f7fa;
+  --border: #d8dde5;
+  --border-light: #e2e7ef;
+  --text: #1a2332;
+  --text-secondary: #3a4a5c;
+  --muted: #7a8a9c;
+  --topbar-bg: rgba(240,242,245,0.9);
+  --badge-green-bg: rgba(22,163,74,0.1);
+  --badge-green-text: #16a34a;
+  --badge-red-bg: rgba(220,38,38,0.1);
+  --badge-red-text: #dc2626;
+  --badge-purple-bg: rgba(124,58,237,0.1);
+  --badge-purple-text: #7c3aed;
+  --scrollbar-thumb: #c0c8d8;
+  --toggle-bg: #d8dde5;
+}
+
+/* ═══════════════════ Reset & Base ═══════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+  transition: background 0.3s, color 0.3s;
+}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+
+/* ═══════════════════ Layout ═══════════════════ */
+.app { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 48px 1fr; height: 100vh; }
+.sidebar { grid-row: 1 / -1; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+.topbar { grid-column: 2; background: var(--topbar-bg); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 10; }
+.main { grid-column: 2; overflow-y: auto; padding: 20px 24px 40px; }
+
+/* ═══════════════════ Sidebar ═══════════════════ */
+.sidebar-logo { padding: 16px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+.sidebar-logo .logo-icon { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #7c6ef6, #6366f1); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; }
+.sidebar-logo .logo-text { font-size: 16px; font-weight: 700; color: var(--text); }
+.sidebar-logo .logo-tag { font-size: 10px; color: var(--accent); background: var(--accent-glow); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.sidebar-group { padding: 16px 12px 4px; }
+.sidebar-group-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 0 8px; margin-bottom: 4px; }
+.sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 13px; transition: all 0.2s; border-left: 3px solid transparent; margin-bottom: 2px; }
+.sidebar-item:hover { color: var(--text-secondary); background: rgba(255,255,255,0.03); }
+.sidebar-item.active { background: var(--sidebar-active); color: var(--text); border-left-color: var(--sidebar-active-border); font-weight: 600; }
+.sidebar-item .icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.sidebar-item .badge-core { font-size: 10px; background: var(--accent-glow); color: var(--accent); padding: 1px 6px; border-radius: 4px; margin-left: auto; }
+.sidebar-bottom { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.sidebar-bottom .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ═══════════════════ Topbar ═══════════════════ */
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.topbar-breadcrumb { font-size: 13px; color: var(--muted); }
+.topbar-breadcrumb span { color: var(--text-secondary); }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.toggle-btn { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--toggle-bg); color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+.toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+.toggle-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ═══════════════════ Content Grid ═══════════════════ */
+.content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.col-header { font-size: 12px; color: var(--muted); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+/* ═══════════════════ Cards ═══════════════════ */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.card-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.card-title .card-icon { font-size: 16px; }
+.card-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* ═══════════════════ Badges ═══════════════════ */
+.badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.badge-purple { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+.badge-green { background: var(--badge-green-bg); color: var(--badge-green-text); }
+.badge-red { background: var(--badge-red-bg); color: var(--badge-red-text); }
+.badge-lg { font-size: 22px; padding: 6px 20px; border-radius: 8px; font-weight: 700; }
+
+/* ═══════════════════ State Bar (segmented) ═══════════════════ */
+.state-quote { background: var(--card-inner); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; font-size: 13px; color: var(--text-secondary); }
+.state-quote .source { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.state-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin-bottom: 16px; font-size: 11px; font-weight: 600; }
+.state-bar .seg { display: flex; align-items: center; justify-content: center; color: #fff; white-space: nowrap; padding: 0 6px; min-width: 40px; }
+
+/* ═══════════════════ Score Grid ═══════════════════ */
+.score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.score-item { background: var(--card-inner); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.score-item .label { color: var(--muted); }
+.score-item .value { font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+/* ═══════════════════ Asset Bars ═══════════════════ */
+.asset-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.asset-row:last-child { border-bottom: none; }
+.asset-name { font-weight: 700; font-size: 15px; width: 40px; flex-shrink: 0; }
+.asset-bar-wrap { flex: 1; height: 20px; background: var(--card-inner); border-radius: 4px; overflow: hidden; display: flex; }
+.asset-bar-red { background: linear-gradient(90deg, #dc2626, #ef4444); height: 100%; }
+.asset-bar-green { background: linear-gradient(90deg, #16a34a, #4ade80); height: 100%; }
+.asset-score { width: 50px; text-align: right; font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600; font-size: 13px; }
+.asset-dir { width: 36px; text-align: right; font-size: 12px; font-weight: 600; }
+.card-note { background: var(--card-inner); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+/* ═══════════════════ Gate Cards ═══════════════════ */
+.gate-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.gate-card { background: var(--card-inner); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.gate-card .gate-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
+.gate-card .gate-value { font-size: 16px; font-weight: 700; font-family: 'SF Mono', 'Fira Code', monospace; margin-bottom: 6px; }
+.gate-bar { height: 4px; border-radius: 2px; background: var(--border); }
+.gate-bar .fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+.gate-footer { font-size: 12px; color: var(--muted); }
+
+/* ═══════════════════ Decision Card ═══════════════════ */
+.decision-output { text-align: left; margin-bottom: 8px; }
+.decision-output .dir-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.decision-output .dir-value { font-size: 36px; font-weight: 800; line-height: 1.2; }
+.decision-output .confidence { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.detail-list { font-size: 13px; line-height: 1.8; }
+.detail-list .detail-label { color: var(--muted); font-weight: 600; }
+.detail-list a { color: var(--accent); text-decoration: none; }
+.detail-list a:hover { text-decoration: underline; }
+
+/* ═══════════════════ Action Grid ═══════════════════ */
+.action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.action-cell { background: var(--card-inner); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.action-cell .ac-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.action-cell .ac-value { font-size: 18px; font-weight: 700; }
+
+/* ═══════════════════ Voting Panel ═══════════════════ */
+.vote-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); gap: 12px; }
+.vote-row:last-child { border-bottom: none; }
+.vote-name { font-weight: 700; font-size: 14px; min-width: 80px; }
+.vote-desc { flex: 1; font-size: 12px; color: var(--muted); }
+.vote-stats { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+.vote-stats .v-score { font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600; }
+.vote-stats .v-pct { color: var(--muted); }
+.vote-stats .v-src { font-size: 11px; color: var(--cyan); cursor: pointer; }
+
+/* ═══════════════════ Coming Soon ═══════════════════ */
+.coming-soon { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 400px; color: var(--muted); }
+.coming-soon.visible { display: flex; }
+.coming-soon .cs-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+.coming-soon .cs-title { font-size: 20px; font-weight: 600; color: var(--text-secondary); }
+.coming-soon .cs-sub { font-size: 13px; margin-top: 8px; }
+
+/* ═══════════════════ Toast ═══════════════════ */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 20px; font-size: 13px; color: var(--text-secondary); z-index: 100; opacity: 0; transition: all 0.3s; pointer-events: none; }
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* ═══════════════════ Responsive ═══════════════════ */
+@media (max-width: 1100px) {
+  .content-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .gate-row { grid-template-columns: repeat(2, 1fr); }
+  .score-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div id="loading-overlay" style="display:none;position:fixed;inset:0;background:rgba(10,14,26,0.85);z-index:9999;justify-content:center;align-items:center;">
+  <div style="text-align:center;color:var(--text)">
+    <div style="font-size:24px;margin-bottom:12px;animation:pulse 1.5s infinite">α</div>
+    <div style="font-size:14px;color:var(--muted)">Loading real-time data...</div>
+  </div>
+</div>
+<div class="app">
+
+<!-- ═══════════════════ Sidebar ═══════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">α</div>
+    <div><span class="logo-text">AlphaCore</span><span class="logo-tag" data-i18n="logo.tag">量核版</span></div>
+  </div>
+
+  <div class="sidebar-group">
+    <div class="sidebar-group-label" data-i18n="group.overview">总览</div>
+    <div class="sidebar-item" data-page="monitor" onclick="switchPage('monitor')">
+      <span class="icon">⊞</span><span data-i18n="nav.monitor">系统总线监控</span><span class="badge-core" data-i18n="badge.core">核心</span>
+    </div>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label" data-i18n="group.data">数据与特征</div>
+    <div class="sidebar-item" data-page="market" onclick="switchPage('market')">
+      <span class="icon">↻</span><span data-i18n="nav.market">行情流与特征矩阵</span>
+    </div>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label" data-i18n="group.model">模型层</div>
+    <div class="sidebar-item active" data-page="inference" onclick="switchPage('inference')">
+      <span class="icon">🧠</span><span data-i18n="nav.inference">模型推断与状态识别</span>
+    </div>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label" data-i18n="group.strategy">策略层</div>
+    <div class="sidebar-item" data-page="alpha" onclick="switchPage('alpha')">
+      <span class="icon">⚗</span><span data-i18n="nav.alpha">Alpha策略进化实验室</span>
+    </div>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label" data-i18n="group.portfolio">组合与风控</div>
+    <div class="sidebar-item" data-page="risk" onclick="switchPage('risk')">
+      <span class="icon">📊</span><span data-i18n="nav.risk">投资组合与风控引擎</span>
+    </div>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label" data-i18n="group.execution">执行层</div>
+    <div class="sidebar-item" data-page="gateway" onclick="switchPage('gateway')">
+      <span class="icon">⚙</span><span data-i18n="nav.gateway">算法订单执行网关</span>
+    </div>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label" data-i18n="group.audit">审计</div>
+    <div class="sidebar-item" data-page="audit" onclick="switchPage('audit')">
+      <span class="icon">≡</span><span data-i18n="nav.audit">交易审计日志</span>
+    </div>
+  </div>
+
+  <div class="sidebar-bottom">
+    <span class="dot"></span><span data-i18n="status.aggregation">聚合层状态</span>&nbsp;<span style="color:var(--green)" data-i18n="status.normal">● 正常</span>
+  </div>
+</nav>
+
+<!-- ═══════════════════ Topbar ═══════════════════ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-breadcrumb" id="breadcrumb-left">
+      <span data-i18n="breadcrumb.left">Python 状态识别 → 模型推理 → AI 决策</span>
+    </span>
+  </div>
+  <div class="topbar-right">
+    <button class="toggle-btn" id="btn-theme" onclick="toggleTheme()" title="Toggle theme">☀ / ☾</button>
+    <button class="toggle-btn" id="btn-lang" onclick="toggleLang()">EN / 中</button>
+  </div>
+</header>
+
+<!-- ═══════════════════ Main Content ═══════════════════ -->
+<main class="main" id="main-content">
+
+<!-- Active Page: Model Inference -->
+<div id="page-inference">
+<div class="content-grid">
+
+<!-- ── Left Column: Model Inference ── -->
+<div class="col-left">
+  <div class="col-header" data-i18n="breadcrumb.left">Python 状态识别 → 模型推理 → AI 决策</div>
+
+  <!-- Card 1: Market State Recognition -->
+  <div class="card">
+    <div class="card-header">
+      <span></span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="badge badge-purple badge-lg" data-i18n="state.current">套利</span>
+        <span style="font-size:12px;color:var(--muted)"><span data-i18n="state.transition">迁移概率</span> <strong style="color:var(--text)">96%</strong></span>
+      </div>
+    </div>
+    <div class="state-quote">
+      <span data-i18n="state.desc">市场状态=套利 based on HMM state path and model score fusion.</span>
+      <div class="source"><span data-i18n="state.source">来源：真实模型输出</span></div>
+    </div>
+    <!-- Segmented State Bar -->
+    <div class="state-bar" id="stateBar">
+      <div class="seg" style="flex:9;background:#6366f1" data-i18n="state.trend">趋势 (9%)</div>
+      <div class="seg" style="flex:33;background:#3b82f6" data-i18n="state.oscillation">震荡 (33%)</div>
+      <div class="seg" style="flex:6;background:#f59e0b" data-i18n="state.surge">大涨</div>
+      <div class="seg" style="flex:42;background:#8b5cf6" data-i18n="state.arbitrage">套利 (98%)</div>
+      <div class="seg" style="flex:10;background:#6b7280" data-i18n="state.decline">跌跌 (14%)</div>
+    </div>
+    <!-- Score Grid -->
+    <div class="score-grid" id="scoreGrid">
+      <div class="score-item"><span class="label" data-i18n="score.trend">趋势</span><span class="value">8.72</span></div>
+      <div class="score-item"><span class="label" data-i18n="score.oscillation">震荡</span><span class="value">32.83</span></div>
+      <div class="score-item"><span class="label">VOLATILITY_SPIKE</span><span class="value">4.38</span></div>
+      <div class="score-item"><span class="label" data-i18n="score.arbitrage">套利</span><span class="value" style="color:var(--accent)">98.08</span></div>
+      <div class="score-item"><span class="label">CRASH</span><span class="value">14.24</span></div>
+      <div class="score-item"><span class="label">HMM</span><span class="value" style="color:var(--accent)">98.08</span></div>
+      <div class="score-item"><span class="label">XGBoost</span><span class="value">35.69</span></div>
+      <div class="score-item"><span class="label">LSTM</span><span class="value">44.67</span></div>
+    </div>
+  </div>
+
+  <!-- Card 2: Model Inference Results -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title"><span class="card-icon">📊</span><span data-i18n="infer.title">模型推断结果</span></div>
+        <div class="card-subtitle" data-i18n="infer.subtitle">基于市场识别结果的方向概率推断</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;color:var(--muted)" data-i18n="infer.consensus">共识方向</span>
+        <span class="badge badge-green" data-i18n="dir.long">看多</span>
+      </div>
+    </div>
+    <div id="assetBars">
+      <div class="asset-row">
+        <span class="asset-name">NVDA</span>
+        <div class="asset-bar-wrap"><div class="asset-bar-red" style="width:42%"></div><div class="asset-bar-green" style="width:58%"></div></div>
+        <span class="asset-score" style="color:var(--green)">58.32</span>
+        <span class="asset-dir" style="color:var(--green)" data-i18n="dir.long">看多</span>
+      </div>
+      <div class="asset-row">
+        <span class="asset-name">AAPL</span>
+        <div class="asset-bar-wrap"><div class="asset-bar-red" style="width:55%"></div><div class="asset-bar-green" style="width:45%"></div></div>
+        <span class="asset-score" style="color:var(--red)">45.17</span>
+        <span class="asset-dir" style="color:var(--red)" data-i18n="dir.short">看空</span>
+      </div>
+      <div class="asset-row">
+        <span class="asset-name">TSLA</span>
+        <div class="asset-bar-wrap"><div class="asset-bar-red" style="width:48%"></div><div class="asset-bar-green" style="width:52%"></div></div>
+        <span class="asset-score" style="color:var(--green)">52.61</span>
+        <span class="asset-dir" style="color:var(--green)" data-i18n="dir.long">看多</span>
+      </div>
+    </div>
+    <div class="card-note">
+      <span data-i18n="infer.note">原因：套利 route is 震荡 Bouncer | 失效：当前不满足出手条件，等待下一轮评估。</span>
+    </div>
+  </div>
+
+  <!-- Card 3: Multi-Timeframe Trading Gate -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title"><span class="card-icon">⏱</span><span data-i18n="gate.title">多周期交易门控</span></div>
+        <div class="card-subtitle">4H <span data-i18n="gate.trend">趋势</span> + 1H <span data-i18n="gate.momentum">动量</span> + 15M <span data-i18n="gate.entry">入场</span></div>
+      </div>
+      <span class="badge badge-green" data-i18n="gate.passed">已通过</span>
+    </div>
+    <div class="gate-row">
+      <div class="gate-card">
+        <div class="gate-label"><span>4H <span data-i18n="gate.trend">趋势</span></span><span class="badge badge-green" style="font-size:10px" data-i18n="gate.pass">通过</span></div>
+        <div class="gate-value" style="color:var(--red)">-3.1699%</div>
+        <div class="gate-bar"><div class="fill" style="width:70%;background:var(--green)"></div></div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-label"><span>1H <span data-i18n="gate.momentum">动量</span></span><span class="badge badge-green" style="font-size:10px" data-i18n="gate.pass">通过</span></div>
+        <div class="gate-value" style="color:var(--red)">-0.1011%</div>
+        <div class="gate-bar"><div class="fill" style="width:85%;background:var(--green)"></div></div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-label"><span>15M <span data-i18n="gate.entry">入场</span></span><span class="badge badge-green" style="font-size:10px" data-i18n="gate.pass">通过</span></div>
+        <div class="gate-value" style="color:var(--red)">-0.146%</div>
+        <div class="gate-bar"><div class="fill" style="width:80%;background:var(--green)"></div></div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-label"><span data-i18n="gate.confidence">综合置信度</span><span class="badge badge-green" style="font-size:10px" data-i18n="gate.pass">通过</span></div>
+        <div class="gate-value" style="color:var(--green)">75%</div>
+        <div class="gate-bar"><div class="fill" style="width:75%;background:var(--green)"></div></div>
+      </div>
+    </div>
+    <div class="gate-footer">
+      <span data-i18n="gate.limit">开仓信号上限：2</span><br>
+      <span data-i18n="gate.signal">多周期唯一致信号：4H/1H/15M 全部同向，看多方向，门控主动触发交易。</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Right Column: AI Decision ── -->
+<div class="col-right">
+  <div class="col-header" data-i18n="breadcrumb.right">Python 模型引擎 + AI 大脑交易决策</div>
+
+  <!-- Card 4: Current Model Output -->
+  <div class="card">
+    <div class="decision-output">
+      <div class="dir-label" data-i18n="decision.label">当前模型输出</div>
+      <div class="dir-value" style="color:var(--green)" data-i18n="decision.direction">看多</div>
+      <div class="confidence"><span data-i18n="decision.confidence">置信度：</span><strong>27%</strong></div>
+    </div>
+    <div class="detail-list">
+      <div><span class="detail-label" data-i18n="decision.summary">摘要：</span><span data-i18n="decision.summary_text">主标的 NVDA 方向=看多 评分=58.32 来源=</span><a href="#" data-i18n="decision.source_link">真实模型输出</a></div>
+      <div><span class="detail-label" data-i18n="decision.basis">依据：</span><span data-i18n="decision.basis_text">NVDA 邻居，Top3 平均上行概率 58.3%</span></div>
+      <div><span class="detail-label" data-i18n="decision.provider">提供方：</span><span data-i18n="decision.provider_text">量化计算引擎-model-engine / XGBoost + LSTM 融合</span></div>
+      <div><span class="detail-label" data-i18n="decision.output_source">输出来源：</span><span style="color:var(--green)" data-i18n="decision.real_output">真实模型输出</span></div>
+    </div>
+  </div>
+
+  <!-- Card 5: Trading Action -->
+  <div class="card">
+    <div class="action-grid">
+      <div class="action-cell">
+        <div class="ac-label" data-i18n="action.action">动作</div>
+        <div class="ac-value" style="color:var(--green)" data-i18n="action.long">看多</div>
+      </div>
+      <div class="action-cell">
+        <div class="ac-label" data-i18n="action.target">标的</div>
+        <div class="ac-value">NVDA.US</div>
+      </div>
+      <div class="action-cell">
+        <div class="ac-label" data-i18n="action.position">仓位 / 杠杆</div>
+        <div class="ac-value">9% / 2x</div>
+      </div>
+      <div class="action-cell">
+        <div class="ac-label" data-i18n="action.confidence">置信度</div>
+        <div class="ac-value" style="color:var(--accent)">75</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 6: Model Voting -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title"><span class="card-icon">📈</span><span data-i18n="vote.title">模型投票</span></div>
+        <div class="card-subtitle" data-i18n="vote.subtitle">各子模型独立评分与方向投票</div>
+      </div>
+    </div>
+    <div id="votePanel">
+      <div class="vote-row">
+        <span class="vote-name">XGBoost</span>
+        <span class="vote-desc" data-i18n="vote.xgb_desc">方向向上概率 35.7%</span>
+        <div class="vote-stats">
+          <span class="v-score" data-i18n="vote.score">评分</span> <span class="v-score">35.69</span>
+          <span class="v-pct">29%</span>
+          <span class="v-src" data-i18n="vote.real_output">真实模型输出</span>
+        </div>
+      </div>
+      <div class="vote-row">
+        <span class="vote-name">LSTM</span>
+        <span class="vote-desc" data-i18n="vote.lstm_desc">捕捉时序向上概率 44.7%</span>
+        <div class="vote-stats">
+          <span class="v-score" data-i18n="vote.score">评分</span> <span class="v-score">44.67</span>
+          <span class="v-pct">11%</span>
+          <span class="v-src" data-i18n="vote.real_output">真实模型输出</span>
+        </div>
+      </div>
+      <div class="vote-row" style="border-bottom:none">
+        <span class="vote-name" style="color:var(--accent)" data-i18n="vote.fusion">融合结果</span>
+        <span class="vote-desc" data-i18n="vote.fusion_desc">融合概率 38.0%</span>
+        <div class="vote-stats">
+          <span class="v-score" data-i18n="vote.score">评分</span> <span class="v-score">38.02</span>
+          <span class="v-pct">24%</span>
+          <span class="v-src" data-i18n="vote.real_output">真实模型输出</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content-grid -->
+</div><!-- /page-inference -->
+
+<!-- Coming Soon Page -->
+<div class="coming-soon" id="page-coming-soon">
+  <div class="cs-icon">🚧</div>
+  <div class="cs-title" data-i18n="coming.title">模块开发中</div>
+  <div class="cs-sub" data-i18n="coming.sub">Coming Soon — 该模块正在构建中</div>
+</div>
+
+</main>
+</div><!-- /app -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════ i18n ═══════════════════ */
+var I18N = {
+  zh: {
+    'logo.tag': '量核版',
+    'group.overview': '总览', 'group.data': '数据与特征', 'group.model': '模型层',
+    'group.strategy': '策略层', 'group.portfolio': '组合与风控', 'group.execution': '执行层', 'group.audit': '审计',
+    'nav.monitor': '系统总线监控', 'nav.market': '行情流与特征矩阵', 'nav.inference': '模型推断与状态识别',
+    'nav.alpha': 'Alpha策略进化实验室', 'nav.risk': '投资组合与风控引擎',
+    'nav.gateway': '算法订单执行网关', 'nav.audit': '交易审计日志',
+    'badge.core': '核心',
+    'status.aggregation': '聚合层状态', 'status.normal': '● 正常',
+    'breadcrumb.left': 'Python 状态识别 → 模型推理 → AI 决策',
+    'breadcrumb.right': 'Python 模型引擎 + AI 大脑交易决策',
+    'state.current': '套利', 'state.transition': '迁移概率',
+    'state.desc': '市场状态=套利 based on HMM state path and model score fusion.',
+    'state.source': '来源：真实模型输出',
+    'state.trend': '趋势 (9%)', 'state.oscillation': '震荡 (33%)', 'state.surge': '大涨',
+    'state.arbitrage': '套利 (98%)', 'state.decline': '跌跌 (14%)',
+    'score.trend': '趋势', 'score.oscillation': '震荡', 'score.arbitrage': '套利',
+    'infer.title': '模型推断结果', 'infer.subtitle': '基于市场识别结果的方向概率推断',
+    'infer.consensus': '共识方向',
+    'infer.note': '原因：套利 route is 震荡 Bouncer | 失效：当前不满足出手条件，等待下一轮评估。',
+    'dir.long': '看多', 'dir.short': '看空',
+    'gate.title': '多周期交易门控', 'gate.trend': '趋势', 'gate.momentum': '动量', 'gate.entry': '入场',
+    'gate.passed': '已通过', 'gate.pass': '通过', 'gate.confidence': '综合置信度',
+    'gate.limit': '开仓信号上限：2',
+    'gate.signal': '多周期唯一致信号：4H/1H/15M 全部同向，看多方向，门控主动触发交易。',
+    'decision.label': '当前模型输出', 'decision.direction': '看多', 'decision.confidence': '置信度：',
+    'decision.summary': '摘要：', 'decision.summary_text': '主标的 NVDA 方向=看多 评分=58.32 来源=',
+    'decision.source_link': '真实模型输出',
+    'decision.basis': '依据：', 'decision.basis_text': 'NVDA 邻居，Top3 平均上行概率 58.3%',
+    'decision.provider': '提供方：', 'decision.provider_text': '量化计算引擎-model-engine / XGBoost + LSTM 融合',
+    'decision.output_source': '输出来源：', 'decision.real_output': '真实模型输出',
+    'action.action': '动作', 'action.long': '看多', 'action.target': '标的',
+    'action.position': '仓位 / 杠杆', 'action.confidence': '置信度',
+    'vote.title': '模型投票', 'vote.subtitle': '各子模型独立评分与方向投票',
+    'vote.xgb_desc': '方向向上概率 35.7%', 'vote.lstm_desc': '捕捉时序向上概率 44.7%',
+    'vote.fusion': '融合结果', 'vote.fusion_desc': '融合概率 38.0%',
+    'vote.score': '评分', 'vote.real_output': '真实模型输出',
+    'coming.title': '模块开发中', 'coming.sub': 'Coming Soon — 该模块正在构建中'
+  },
+  en: {
+    'logo.tag': 'Core',
+    'group.overview': 'Overview', 'group.data': 'Data & Features', 'group.model': 'Model Layer',
+    'group.strategy': 'Strategy', 'group.portfolio': 'Portfolio & Risk', 'group.execution': 'Execution', 'group.audit': 'Audit',
+    'nav.monitor': 'System Bus Monitor', 'nav.market': 'Market Feed & Features', 'nav.inference': 'Model Inference & State',
+    'nav.alpha': 'Alpha Strategy Lab', 'nav.risk': 'Portfolio & Risk Engine',
+    'nav.gateway': 'Order Execution Gateway', 'nav.audit': 'Trading Audit Log',
+    'badge.core': 'Core',
+    'status.aggregation': 'Aggregation Status', 'status.normal': '● Normal',
+    'breadcrumb.left': 'Python State Recognition → Model Inference → AI Decision',
+    'breadcrumb.right': 'Python Model Engine + AI Trading Decision',
+    'state.current': 'Arbitrage', 'state.transition': 'Transition Prob',
+    'state.desc': 'Market state = Arbitrage based on HMM state path and model score fusion.',
+    'state.source': 'Source: Real model output',
+    'state.trend': 'Trend (9%)', 'state.oscillation': 'Oscillation (33%)', 'state.surge': 'Surge',
+    'state.arbitrage': 'Arbitrage (98%)', 'state.decline': 'Decline (14%)',
+    'score.trend': 'Trend', 'score.oscillation': 'Oscillation', 'score.arbitrage': 'Arbitrage',
+    'infer.title': 'Model Inference Results', 'infer.subtitle': 'Direction probability based on market state recognition',
+    'infer.consensus': 'Consensus',
+    'infer.note': 'Reason: Arbitrage route is Oscillation Bouncer | Invalid: conditions not met, awaiting next evaluation.',
+    'dir.long': 'Long', 'dir.short': 'Short',
+    'gate.title': 'Multi-Timeframe Gate', 'gate.trend': 'Trend', 'gate.momentum': 'Momentum', 'gate.entry': 'Entry',
+    'gate.passed': 'Passed', 'gate.pass': 'Pass', 'gate.confidence': 'Confidence',
+    'gate.limit': 'Max open signals: 2',
+    'gate.signal': 'Multi-TF consensus: 4H/1H/15M all aligned, long direction, gate triggered.',
+    'decision.label': 'Current Model Output', 'decision.direction': 'Long', 'decision.confidence': 'Confidence: ',
+    'decision.summary': 'Summary: ', 'decision.summary_text': 'Primary NVDA direction=Long score=58.32 source=',
+    'decision.source_link': 'Real Model Output',
+    'decision.basis': 'Basis: ', 'decision.basis_text': 'NVDA neighbors, Top3 avg upward prob 58.3%',
+    'decision.provider': 'Provider: ', 'decision.provider_text': 'Quant Engine / XGBoost + LSTM Fusion',
+    'decision.output_source': 'Output Source: ', 'decision.real_output': 'Real Model Output',
+    'action.action': 'Action', 'action.long': 'Long', 'action.target': 'Target',
+    'action.position': 'Position / Leverage', 'action.confidence': 'Confidence',
+    'vote.title': 'Model Voting', 'vote.subtitle': 'Independent scoring and directional votes from sub-models',
+    'vote.xgb_desc': 'Upward prob 35.7%', 'vote.lstm_desc': 'Temporal upward prob 44.7%',
+    'vote.fusion': 'Fusion', 'vote.fusion_desc': 'Fusion prob 38.0%',
+    'vote.score': 'Score', 'vote.real_output': 'Real Model Output',
+    'coming.title': 'Under Development', 'coming.sub': 'Coming Soon — This module is being built'
+  }
+};
+
+/* ═══════════════════ State ═══════════════════ */
+var currentLang = localStorage.getItem('alphacore-lang') || 'zh';
+var currentTheme = localStorage.getItem('alphacore-theme') || 'dark';
+var currentPage = 'inference';
+
+/* ═══════════════════ i18n Engine ═══════════════════ */
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('alphacore-lang', lang);
+  document.documentElement.lang = lang === 'zh' ? 'zh' : 'en';
+  var dict = I18N[lang];
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    if (dict[key] !== undefined) { el.textContent = dict[key]; }
+  });
+}
+
+/* ═══════════════════ Theme Engine ═══════════════════ */
+function setTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem('alphacore-theme', theme);
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+/* ═══════════════════ Toggle Handlers ═══════════════════ */
+function toggleLang() {
+  setLang(currentLang === 'zh' ? 'en' : 'zh');
+}
+function toggleTheme() {
+  setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+}
+
+/* ═══════════════════ Page Switching ═══════════════════ */
+function switchPage(page) {
+  /* Update sidebar active */
+  document.querySelectorAll('.sidebar-item').forEach(function(item) {
+    item.classList.toggle('active', item.getAttribute('data-page') === page);
+  });
+  currentPage = page;
+  var inferPage = document.getElementById('page-inference');
+  var comingSoon = document.getElementById('page-coming-soon');
+  if (page === 'inference') {
+    inferPage.style.display = '';
+    comingSoon.classList.remove('visible');
+  } else {
+    inferPage.style.display = 'none';
+    comingSoon.classList.add('visible');
+    showToast(currentLang === 'zh' ? '该模块正在开发中' : 'This module is under development');
+  }
+}
+
+/* ═══════════════════ Toast ═══════════════════ */
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 2000);
+}
+
+/* ═══════════════════ API Integration ═══════════════════ */
+var apiData = null;
+
+function fetchDashboard() {
+  var loadingEl = document.getElementById('loading-overlay');
+  if (loadingEl) loadingEl.style.display = 'flex';
+
+  fetch('/api/dashboard')
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      apiData = data;
+      renderDashboard(data);
+      if (loadingEl) loadingEl.style.display = 'none';
+    })
+    .catch(function(err) {
+      console.warn('API unavailable, using static data:', err.message);
+      if (loadingEl) loadingEl.style.display = 'none';
+    });
+}
+
+function renderDashboard(d) {
+  if (!d) return;
+
+  /* --- Market State --- */
+  var ms = d.market_state;
+  if (ms) {
+    var stateEl = document.querySelector('[data-i18n="state.current"]');
+    if (stateEl) stateEl.textContent = currentLang === 'zh' ? ms.current_regime_zh : ms.current_regime;
+
+    var transEl = document.querySelector('[data-i18n="state.transition"]');
+    if (transEl) transEl.parentElement.querySelector('strong').textContent = ms.transition_probability + '%';
+
+    /* Score grid */
+    var scoreGrid = document.getElementById('scoreGrid');
+    if (scoreGrid && ms.model_scores) {
+      var items = scoreGrid.querySelectorAll('.score-item');
+      var scores = ms.model_scores;
+      var probs = ms.regime_probabilities;
+      var scoreMap = [
+        {k: 'Trend', v: probs.Trend || 0}, {k: 'Oscillation', v: probs.Oscillation || 0},
+        {k: 'VOLATILITY_SPIKE', v: 0}, {k: 'Arbitrage', v: probs.Arbitrage || 0},
+        {k: 'CRASH', v: probs.Crash || 0}, {k: 'HMM', v: scores.HMM || 0},
+        {k: 'XGBoost', v: scores.XGBoost || 0}, {k: 'LSTM', v: scores.LSTM || 0}
+      ];
+      scoreMap.forEach(function(s, i) {
+        if (items[i]) items[i].querySelector('.value').textContent = s.v.toFixed(2);
+      });
+    }
+  }
+
+  /* --- Asset Bars --- */
+  var inf = d.inference;
+  if (inf && inf.assets) {
+    var assetBars = document.getElementById('assetBars');
+    if (assetBars) {
+      var html = '';
+      inf.assets.forEach(function(a) {
+        var bull = Math.round(a.bull_prob * 100);
+        var bear = 100 - bull;
+        var isUp = a.direction === 'Bullish';
+        var color = isUp ? 'var(--green)' : 'var(--red)';
+        var dirKey = isUp ? 'dir.long' : 'dir.short';
+        var dirText = isUp ? (currentLang === 'zh' ? '看多' : 'Long') : (currentLang === 'zh' ? '看空' : 'Short');
+        html += '<div class="asset-row">'
+          + '<span class="asset-name">' + a.ticker + '</span>'
+          + '<div class="asset-bar-wrap"><div class="asset-bar-red" style="width:' + bear + '%"></div><div class="asset-bar-green" style="width:' + bull + '%"></div></div>'
+          + '<span class="asset-score" style="color:' + color + '">' + (a.bull_prob * 100).toFixed(2) + '</span>'
+          + '<span class="asset-dir" style="color:' + color + '" data-i18n="' + dirKey + '">' + dirText + '</span>'
+          + '</div>';
+      });
+      assetBars.innerHTML = html;
+    }
+
+    /* Consensus direction badge */
+    var consensusBadge = document.querySelector('[data-i18n="dir.long"], [data-i18n="dir.short"]');
+    if (consensusBadge && consensusBadge.closest('.card-header')) {
+      var isLong = inf.consensus_direction === 'Bullish';
+      consensusBadge.setAttribute('data-i18n', isLong ? 'dir.long' : 'dir.short');
+      consensusBadge.textContent = isLong ? (currentLang === 'zh' ? '看多' : 'Long') : (currentLang === 'zh' ? '看空' : 'Short');
+      consensusBadge.className = 'badge ' + (isLong ? 'badge-green' : 'badge-red');
+    }
+  }
+
+  /* --- Gate --- */
+  var g = d.gate;
+  if (g && g.gates) {
+    var gateCards = document.querySelectorAll('.gate-card');
+    g.gates.forEach(function(gate, i) {
+      if (!gateCards[i]) return;
+      var valEl = gateCards[i].querySelector('.gate-value');
+      var fillEl = gateCards[i].querySelector('.fill');
+      var badgeEl = gateCards[i].querySelector('.badge');
+      if (valEl) {
+        valEl.textContent = (gate.score * 100).toFixed(1) + '%';
+        valEl.style.color = gate.passed ? 'var(--green)' : 'var(--red)';
+      }
+      if (fillEl) {
+        fillEl.style.width = (gate.score * 100) + '%';
+        fillEl.style.background = gate.passed ? 'var(--green)' : 'var(--red)';
+      }
+      if (badgeEl) {
+        badgeEl.className = 'badge ' + (gate.passed ? 'badge-green' : 'badge-red');
+        badgeEl.style.fontSize = '10px';
+      }
+    });
+    /* Overall confidence (4th gate card) */
+    if (gateCards[3]) {
+      var ov = gateCards[3].querySelector('.gate-value');
+      var of2 = gateCards[3].querySelector('.fill');
+      if (ov) { ov.textContent = g.overall_confidence.toFixed(0) + '%'; ov.style.color = g.passed ? 'var(--green)' : 'var(--red)'; }
+      if (of2) { of2.style.width = g.overall_confidence + '%'; }
+    }
+    /* Gate passed badge */
+    var gateBadge = document.querySelector('[data-i18n="gate.passed"]');
+    if (gateBadge) {
+      gateBadge.className = 'badge ' + (g.passed ? 'badge-green' : 'badge-red');
+      gateBadge.textContent = g.passed ? (currentLang === 'zh' ? '已通过' : 'Passed') : (currentLang === 'zh' ? '未通过' : 'Failed');
+    }
+  }
+
+  /* --- Decision --- */
+  var dec = d.decision;
+  if (dec) {
+    var dirValue = document.querySelector('.dir-value');
+    if (dirValue) {
+      var isLongDec = dec.direction === 'Bullish';
+      dirValue.textContent = isLongDec ? (currentLang === 'zh' ? '看多' : 'Long') : (currentLang === 'zh' ? '看空' : 'Short');
+      dirValue.style.color = isLongDec ? 'var(--green)' : 'var(--red)';
+    }
+    var confEl = document.querySelector('.confidence strong');
+    if (confEl) confEl.textContent = Math.round(dec.confidence) + '%';
+
+    /* Action grid */
+    var actionCells = document.querySelectorAll('.action-cell .ac-value');
+    if (actionCells.length >= 4) {
+      actionCells[0].textContent = isLongDec ? (currentLang === 'zh' ? '看多' : 'Long') : (currentLang === 'zh' ? '看空' : 'Short');
+      actionCells[0].style.color = isLongDec ? 'var(--green)' : 'var(--red)';
+      actionCells[1].textContent = dec.ticker + '.US';
+      actionCells[2].textContent = Math.round(dec.position_size_pct) + '% / ' + dec.leverage + 'x';
+      actionCells[3].textContent = Math.round(dec.confidence);
+    }
+
+    /* Reasoning in summary */
+    var summaryText = document.querySelector('[data-i18n="decision.summary_text"]');
+    if (summaryText && dec.reasoning) summaryText.textContent = dec.reasoning;
+
+    /* Source label */
+    var sourceEl = document.querySelector('[data-i18n="decision.real_output"]');
+    if (sourceEl) sourceEl.textContent = dec.source;
+  }
+
+  /* --- Model Voting --- */
+  var mv = d.model_voting;
+  if (mv) {
+    var votePanel = document.getElementById('votePanel');
+    if (votePanel) {
+      var vhtml = '';
+      mv.forEach(function(m, i) {
+        var isLast = i === mv.length - 1;
+        var nameStyle = m.model === 'Fusion' ? ' style="color:var(--accent)"' : '';
+        vhtml += '<div class="vote-row"' + (isLast ? ' style="border-bottom:none"' : '') + '>'
+          + '<span class="vote-name"' + nameStyle + '>' + m.model + '</span>'
+          + '<span class="vote-desc">' + m.description + '</span>'
+          + '<div class="vote-stats">'
+          + '<span class="v-score">' + (currentLang === 'zh' ? '评分' : 'Score') + '</span> '
+          + '<span class="v-score">' + m.score.toFixed(2) + '</span>'
+          + '<span class="v-pct">' + Math.round(m.score) + '%</span>'
+          + '<span class="v-src">' + m.source + '</span>'
+          + '</div></div>';
+      });
+      votePanel.innerHTML = vhtml;
+    }
+  }
+
+  /* Re-apply i18n after DOM updates */
+  setLang(currentLang);
+}
+
+/* ═══════════════════ Init ═══════════════════ */
+(function init() {
+  setTheme(currentTheme);
+  setLang(currentLang);
+  /* Try API; if it fails, static data remains visible */
+  fetchDashboard();
+})();
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@ credentials-file: /root/.cloudflared/9273c992-055b-4afc-adfd-afcbf66185d3.json
 
 ingress:
   - hostname: alpha-tunnel.bobbyzhong.com
-    service: http://localhost:8501
+    service: http://localhost:8000
   - hostname: alpha.bobbyzhong.com
-    service: http://localhost:8501
+    service: http://localhost:8000
   - service: http_status:404

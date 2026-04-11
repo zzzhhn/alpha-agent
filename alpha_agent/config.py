@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     backtest_start: str = "20220101"
     backtest_end: str = "20241231"
 
+    # Dashboard / API settings
+    fastapi_port: int = 8000
+    dashboard_tickers: list[str] = ["NVDA", "AAPL", "TSLA"]
+    dashboard_cache_ttl_seconds: int = 300
+    model_dir: Path = Path("data/models")
+
     model_config = {
         "env_file": Path(__file__).resolve().parent.parent / ".env",
         "env_file_encoding": "utf-8",

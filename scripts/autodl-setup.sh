@@ -32,13 +32,29 @@ curl -sf http://localhost:6006/api/version > /dev/null 2>&1 \
     && echo "  Ollama OK" \
     || echo "  WARNING: Ollama not responding on :6006"
 
-# ── 2. Streamlit (always restart to pick up new code) ────────────
+# ── 2. FastAPI (AlphaCore dashboard API) ─────────────────────────
+if pgrep -f "uvicorn alpha_agent.api.app" > /dev/null 2>&1; then
+    echo "[2/4] Restarting FastAPI (picking up new code)..."
+    pkill -f "uvicorn alpha_agent.api.app" 2>/dev/null || true
+    sleep 2
+else
+    echo "[2/4] Starting FastAPI..."
+fi
+cd "$PROJ_DIR"
+nohup /root/miniconda3/bin/python -m uvicorn alpha_agent.api.app:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    > "$LOG_DIR/fastapi.log" 2>&1 &
+sleep 2
+echo "  FastAPI PID: $!"
+
+# ── 3. Streamlit (existing UI, kept for backward compat) ────────
 if pgrep -f "streamlit run" > /dev/null 2>&1; then
-    echo "[2/3] Restarting Streamlit (picking up new code)..."
+    echo "[3/4] Restarting Streamlit (picking up new code)..."
     pkill -f "streamlit run" 2>/dev/null || true
     sleep 2
 else
-    echo "[2/3] Starting Streamlit..."
+    echo "[3/4] Starting Streamlit..."
 fi
 cd "$PROJ_DIR"
 nohup /root/miniconda3/bin/python -m streamlit run alpha_agent/ui/app.py \
@@ -49,7 +65,7 @@ nohup /root/miniconda3/bin/python -m streamlit run alpha_agent/ui/app.py \
 sleep 2
 echo "  Streamlit PID: $!"
 
-# ── 3. Cloudflare Tunnel ─────────────────────────────────────────
+# ── 4. Cloudflare Tunnel ─────────────────────────────────────────
 if ! pgrep -x cloudflared > /dev/null 2>&1; then
     echo "[3/3] Starting Cloudflare Tunnel..."
     nohup cloudflared tunnel run alpha-agent \
@@ -63,6 +79,7 @@ fi
 echo ""
 echo "=== All services started ==="
 echo "  OLLAMA_BASE_URL=$OLLAMA_BASE_URL"
+echo "  FastAPI:    http://localhost:8000"
 echo "  Streamlit:  http://localhost:8501"
 echo "  Tunnel:     alpha.bobbyzhong.com (via Cloudflare)"
 echo ""
