@@ -30,8 +30,8 @@ class TradingDecision:
 
 
 _SYSTEM_PROMPT = """You are AlphaCore, a quantitative trading decision engine.
-Given market state analysis, model predictions, and multi-timeframe gate signals,
-output a JSON trading decision.
+You receive market state analysis, model predictions, and multi-timeframe gate signals.
+You MUST respond with ONLY a JSON object. No markdown, no explanation, no text before or after.
 
 Rules:
 1. If gate has NOT passed, set confidence < 30 and position_size_pct < 5.
@@ -39,15 +39,8 @@ Rules:
 3. Leverage range: 1x (low confidence) to 3x (high confidence). Never exceed 3x.
 4. Position size: 3-15% of portfolio, scaled by confidence.
 
-Output ONLY valid JSON with these exact keys:
-{
-  "direction": "Bullish" or "Bearish" or "Neutral",
-  "confidence": <0-100>,
-  "position_size_pct": <0-100>,
-  "leverage": <1-3>,
-  "ticker": "<ticker>",
-  "reasoning": "<2-3 sentence explanation>"
-}"""
+Respond with EXACTLY this JSON structure (no other text):
+{"direction":"Bullish","confidence":50,"position_size_pct":5,"leverage":1,"ticker":"NVDA","reasoning":"explanation here"}"""
 
 
 class LLMDecisionEngine:
@@ -122,20 +115,28 @@ Multi-Timeframe Gate:
   Overall: {gate.overall_confidence:.2%}, Passed: {gate.passed}
 {gate_details}
 
-Generate your trading decision as JSON."""
+Respond with ONLY the JSON object, nothing else."""
 
     def _parse_response(self, response: LLMResponse, ticker: str) -> TradingDecision:
         """Parse LLM JSON output into TradingDecision."""
+        import re
+
+        content = response.content.strip()
+
+        # Try direct parse first
         try:
-            data = json.loads(response.content)
+            data = json.loads(content)
         except json.JSONDecodeError:
-            # Try extracting JSON from markdown code blocks
-            import re
-            match = re.search(r"\{[\s\S]*\}", response.content)
+            # Try extracting JSON from markdown code blocks or mixed text
+            match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", content)
             if match:
-                data = json.loads(match.group(0))
+                try:
+                    data = json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    logger.error("Failed to parse extracted JSON: %s", match.group(0)[:200])
+                    return self._rule_based_fallback(ticker, None, None)
             else:
-                logger.error("Failed to parse LLM response: %s", response.content[:200])
+                logger.error("No JSON found in LLM response: %s", content[:200])
                 return self._rule_based_fallback(ticker, None, None)
 
         return TradingDecision(
