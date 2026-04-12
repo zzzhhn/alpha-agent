@@ -48,6 +48,9 @@ markers = ["slow: marks tests that hit external networks (deselect with '-m \"no
 target-version = "py312"
 line-length = 100
 
+[tool.setuptools.packages.find]
+include = ["alpha_agent*"]
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
