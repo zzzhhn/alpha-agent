@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "regions": ["hkg1"],
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/qcore", "destination": "/api/index" },
+    { "source": "/ws/(.*)", "destination": "/api/index" }
+  ],
+  "env": {
+    "LLM_PROVIDER": "openai",
+    "OPENAI_BASE_URL": "https://openrouter.ai/api/v1",
+    "OPENAI_MODEL": "google/gemma-3-27b-it",
+    "SERVERLESS": "true"
+  }
+}

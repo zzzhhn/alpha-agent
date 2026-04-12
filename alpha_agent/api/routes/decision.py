@@ -8,7 +8,6 @@ from fastapi import APIRouter, Request
 
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.config import get_settings
-from alpha_agent.llm.ollama import OllamaClient
 from alpha_agent.models.features import compute_features
 from alpha_agent.models.fusion import fuse_predictions
 from alpha_agent.models.trainer import get_or_train_models, _fetch_training_data
@@ -62,16 +61,9 @@ async def decision(request: Request) -> dict:
     gate_result = evaluate_gates(primary)
 
     # LLM decision
-    ollama = OllamaClient(
-        base_url=settings.ollama_base_url,
-        model=settings.ollama_model,
-    )
-
-    try:
-        engine = LLMDecisionEngine(ollama_client=ollama)
-        trading_decision = await engine.decide(primary, market_state, fusion, gate_result)
-    finally:
-        await ollama.close()
+    llm = request.app.state.llm
+    engine = LLMDecisionEngine(llm_client=llm)
+    trading_decision = await engine.decide(primary, market_state, fusion, gate_result)
 
     result = {
         "decision": asdict(trading_decision),

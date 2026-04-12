@@ -4,8 +4,5 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": ".next",
-  "regions": ["hkg1"],
-  "env": {
-    "NEXT_PUBLIC_API_URL": "https://alpha.bobbyzhong.com"
-  }
+  "regions": ["hkg1"]
 }

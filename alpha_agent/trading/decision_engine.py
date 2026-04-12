@@ -7,8 +7,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from alpha_agent.llm.base import LLMResponse, Message
-from alpha_agent.llm.ollama import OllamaClient
+from alpha_agent.llm.base import LLMClient, LLMResponse, Message
 from alpha_agent.models.fusion import FusionResult
 from alpha_agent.models.hmm import MarketState
 from alpha_agent.trading.gate import GateResult
@@ -46,8 +45,8 @@ Respond with EXACTLY this JSON structure (no other text):
 class LLMDecisionEngine:
     """Synthesizes all model outputs into a final trading decision via LLM."""
 
-    def __init__(self, ollama_client: OllamaClient | None = None) -> None:
-        self._client = ollama_client
+    def __init__(self, llm_client: LLMClient | None = None) -> None:
+        self._client = llm_client
 
     async def decide(
         self,

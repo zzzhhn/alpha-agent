@@ -10,7 +10,6 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 
 from alpha_agent.api.cache import TTLCache
-from alpha_agent.llm.ollama import OllamaClient
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -27,14 +26,13 @@ async def system_health(request: Request) -> dict:
     if cached is not None:
         return cached
 
-    # Ollama availability check
-    ollama_status = "unknown"
+    # LLM availability check
+    llm_status = "unknown"
     try:
-        client = OllamaClient(base_url=settings.ollama_base_url)
-        ollama_status = "ok" if await client.is_available() else "unreachable"
-        await client.close()
+        llm = request.app.state.llm
+        llm_status = "ok" if await llm.is_available() else "unreachable"
     except Exception:
-        ollama_status = "error"
+        llm_status = "error"
 
     # Model file status
     model_dir = Path(settings.model_dir)
@@ -46,7 +44,7 @@ async def system_health(request: Request) -> dict:
 
     result = {
         "services": {
-            "ollama": ollama_status,
+            "llm": llm_status,
             "fastapi": "ok",
             "tunnel": "unknown",
         },

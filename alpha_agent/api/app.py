@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -13,11 +14,15 @@ from fastapi.staticfiles import StaticFiles
 
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.config import get_settings
+from alpha_agent.llm.factory import create_llm_client
 
 logger = logging.getLogger(__name__)
 
 # Shared cache instance — injected into route handlers via app.state
 _cache = TTLCache()
+
+# Detect serverless environment (Vercel Functions set AWS_LAMBDA_FUNCTION_NAME)
+SERVERLESS = os.environ.get("VERCEL", "") == "1" or os.environ.get("SERVERLESS", "") == "true"
 
 
 @asynccontextmanager
@@ -27,15 +32,22 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.settings = settings
     application.state.cache = _cache
 
+    # Create shared LLM client — reused across requests (connection pooling)
+    llm = create_llm_client(settings)
+    application.state.llm = llm
+
     logger.info(
-        "AlphaCore API starting — tickers=%s, cache_ttl=%ds",
+        "AlphaCore API starting — tickers=%s, llm=%s, serverless=%s",
         settings.dashboard_tickers,
-        settings.dashboard_cache_ttl_seconds,
+        settings.llm_provider,
+        SERVERLESS,
     )
 
-    # Lazy model training on first request (not startup) to keep boot fast
     yield
 
+    # Cleanup LLM client connection pool
+    if hasattr(llm, "close"):
+        await llm.close()
     logger.info("AlphaCore API shutting down.")
 
 
@@ -91,21 +103,23 @@ def create_app() -> FastAPI:
     application.include_router(orders_router)
     application.include_router(audit_router)
 
-    # --- WebSocket endpoints ------------------------------------------------
-    from alpha_agent.api.websocket import router as ws_router
+    # --- WebSocket endpoints (skip in serverless — no persistent connections) ---
+    if not SERVERLESS:
+        from alpha_agent.api.websocket import router as ws_router
 
-    application.include_router(ws_router)
+        application.include_router(ws_router)
 
     # --- Health check -----------------------------------------------------
     @application.get("/api/health")
     async def health() -> dict:
         return {"status": "ok", "service": "alphacore"}
 
-    # --- Static files (dashboard HTML) ------------------------------------
-    project_root = Path(__file__).resolve().parent.parent.parent
-    static_dir = project_root
-    if (static_dir / "qcore_dashboard.html").exists():
-        application.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    # --- Static files (dashboard HTML) — skip in serverless ----------------
+    if not SERVERLESS:
+        project_root = Path(__file__).resolve().parent.parent.parent
+        static_dir = project_root
+        if (static_dir / "qcore_dashboard.html").exists():
+            application.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     return application
 

@@ -11,7 +11,6 @@ from fastapi import APIRouter, HTTPException, Request
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.api.routes.v1.schemas import DashboardSummaryResponse
 from alpha_agent.config import get_settings
-from alpha_agent.llm.ollama import OllamaClient
 from alpha_agent.models.features import compute_features
 from alpha_agent.models.fusion import fuse_predictions
 from alpha_agent.models.hmm import REGIME_LABELS_ZH
@@ -116,17 +115,9 @@ async def dashboard_summary(request: Request) -> DashboardSummaryResponse:
     gate_result = evaluate_gates(primary)
 
     # LLM Decision
-    ollama = OllamaClient(
-        base_url=settings.ollama_base_url,
-        model=settings.ollama_model,
-    )
-    try:
-        engine = LLMDecisionEngine(ollama_client=ollama)
-        decision = await engine.decide(
-            primary, market_state, fusion, gate_result
-        )
-    finally:
-        await ollama.close()
+    llm = request.app.state.llm
+    engine = LLMDecisionEngine(llm_client=llm)
+    decision = await engine.decide(primary, market_state, fusion, gate_result)
 
     elapsed = time.monotonic() - start_time
 

@@ -14,8 +14,6 @@ from alpha_agent.api.routes.v1.schemas import (
     SystemConfigResponse,
     SystemHealthResponse,
 )
-from alpha_agent.llm.ollama import OllamaClient
-
 router = APIRouter(prefix="/system", tags=["system"])
 
 _START_TIME = time.monotonic()
@@ -31,13 +29,12 @@ async def system_health(request: Request) -> SystemHealthResponse:
     if cached is not None:
         return cached
 
-    ollama_status = "unknown"
+    llm_status = "unknown"
     try:
-        client = OllamaClient(base_url=settings.ollama_base_url)
-        ollama_status = "ok" if await client.is_available() else "unreachable"
-        await client.close()
+        llm = request.app.state.llm
+        llm_status = "ok" if await llm.is_available() else "unreachable"
     except Exception:
-        ollama_status = "error"
+        llm_status = "error"
 
     model_dir = Path(settings.model_dir)
     joblib_files = (
@@ -50,7 +47,7 @@ async def system_health(request: Request) -> SystemHealthResponse:
 
     result = SystemHealthResponse(
         services={
-            "ollama": ollama_status,
+            "llm": llm_status,
             "fastapi": "ok",
             "tunnel": "unknown",
         },
