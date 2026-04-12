@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════ Dark Theme (Default) ═══════════════════ */
+:root,
+[data-theme="dark"] {
+  --bg: #0a0e1a;
+  --bg-secondary: #0f1420;
+  --card: #141a2a;
+  --card-inner: #0d1220;
+  --sidebar-bg: #0c1018;
+  --sidebar-active: linear-gradient(
+    135deg,
+    rgba(124, 110, 246, 0.18),
+    rgba(99, 102, 241, 0.1)
+  );
+  --sidebar-active-border: #7c6ef6;
+  --border: #1e2535;
+  --border-light: #2a3245;
+  --text: #e2e8f0;
+  --text-secondary: #c0c8d8;
+  --muted: #6b7a90;
+  --accent: #7c6ef6;
+  --accent-glow: rgba(124, 110, 246, 0.15);
+  --cyan: #38bdf8;
+  --green: #4ade80;
+  --green-dim: rgba(74, 222, 128, 0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.12);
+  --yellow: #fbbf24;
+  --purple: #a78bfa;
+  --purple-dim: rgba(167, 139, 250, 0.15);
+  --topbar-bg: rgba(10, 14, 26, 0.85);
+  --badge-green-bg: rgba(74, 222, 128, 0.12);
+  --badge-green-text: #4ade80;
+  --badge-red-bg: rgba(239, 68, 68, 0.12);
+  --badge-red-text: #ef4444;
+  --badge-purple-bg: rgba(124, 110, 246, 0.15);
+  --badge-purple-text: #a78bfa;
+  --scrollbar-thumb: #2a3245;
+  --toggle-bg: #1e2535;
+  --toggle-active: #7c6ef6;
+}
+
+/* ═══════════════════ Light Theme ═══════════════════ */
+[data-theme="light"] {
+  --bg: #f0f2f5;
+  --bg-secondary: #e8ebf0;
+  --card: #ffffff;
+  --card-inner: #f5f7fa;
+  --border: #d8dde5;
+  --border-light: #e2e7ef;
+  --text: #1a2332;
+  --text-secondary: #3a4a5c;
+  --muted: #7a8a9c;
+  --sidebar-bg: #f5f7fa;
+  --sidebar-active: linear-gradient(
+    135deg,
+    rgba(124, 110, 246, 0.1),
+    rgba(99, 102, 241, 0.06)
+  );
+  --sidebar-active-border: #7c6ef6;
+  --accent: #7c6ef6;
+  --accent-glow: rgba(124, 110, 246, 0.1);
+  --cyan: #0ea5e9;
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.1);
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.1);
+  --yellow: #ca8a04;
+  --purple: #7c3aed;
+  --purple-dim: rgba(124, 58, 237, 0.1);
+  --topbar-bg: rgba(240, 242, 245, 0.9);
+  --badge-green-bg: rgba(22, 163, 74, 0.1);
+  --badge-green-text: #16a34a;
+  --badge-red-bg: rgba(220, 38, 38, 0.1);
+  --badge-red-text: #dc2626;
+  --badge-purple-bg: rgba(124, 58, 237, 0.1);
+  --badge-purple-text: #7c3aed;
+  --scrollbar-thumb: #c0c8d8;
+  --toggle-bg: #d8dde5;
+  --toggle-active: #7c6ef6;
+}
+
+/* ═══════════════════ Base Styles ═══════════════════ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  transition:
+    background 0.3s,
+    color 0.3s;
+}
+
+/* ═══════════════════ Scrollbar ═══════════════════ */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+/* ═══════════════════ Custom Utilities ═══════════════════ */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .glass-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .glass-inner {
+    background: var(--card-inner);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .sidebar-active-bg {
+    background: var(--sidebar-active);
+  }
+
+  .topbar-blur {
+    background: var(--topbar-bg);
+    backdrop-filter: blur(8px);
+  }
+}
