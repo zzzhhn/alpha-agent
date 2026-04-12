@@ -56,8 +56,24 @@ class OpenAIClient(LLMClient):
         )
 
     async def is_available(self) -> bool:
+        """Check reachability — try /models first, fall back to a tiny chat."""
         try:
             response = await self._client.get("/models")
+            if response.status_code == 200:
+                return True
+        except (httpx.ConnectError, httpx.TimeoutException):
+            return False
+        except Exception:
+            pass
+
+        # Fallback: some providers (e.g. Kimi) don't expose /models
+        try:
+            probe = {
+                "model": self._model,
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+            }
+            response = await self._client.post("/chat/completions", json=probe)
             return response.status_code == 200
         except (httpx.ConnectError, httpx.TimeoutException):
             return False

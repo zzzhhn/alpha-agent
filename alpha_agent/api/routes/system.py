@@ -34,13 +34,18 @@ async def system_health(request: Request) -> dict:
     except Exception:
         llm_status = "error"
 
-    # Model file status
-    model_dir = Path(settings.model_dir)
-    joblib_files = list(model_dir.glob("*.joblib")) if model_dir.exists() else []
-    models_trained = len(joblib_files) > 0
-    last_trained = (
-        max(f.stat().st_mtime for f in joblib_files) if joblib_files else None
-    )
+    # Model file status (may not exist in serverless)
+    try:
+        model_dir = Path(settings.model_dir)
+        joblib_files = list(model_dir.glob("*.joblib")) if model_dir.exists() else []
+        models_trained = len(joblib_files) > 0
+        last_trained = (
+            max(f.stat().st_mtime for f in joblib_files) if joblib_files else None
+        )
+    except (OSError, PermissionError):
+        joblib_files = []
+        models_trained = False
+        last_trained = None
 
     result = {
         "services": {
