@@ -35,7 +35,13 @@ def _format_results(results: tuple[FactorResult, ...]) -> str:
 
 
 class EvalAgent(BaseAgent):
-    """Evaluates backtested factors and decides: accept, reject, or refine."""
+    """Evaluates backtested factors and decides: accept, reject, or refine.
+
+    Blueprint Agent 2 (partial): evaluation feeds the research summary.
+    SLA: 1.5s (timeout → default to reject with raw data).
+    """
+
+    _sla_seconds = 1.5
 
     async def run(self, state: PipelineState) -> PipelineState:
         if not state.results:

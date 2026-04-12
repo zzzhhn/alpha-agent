@@ -86,7 +86,11 @@ body {
 .sidebar-logo .logo-tag { font-size: 10px; color: var(--accent); background: var(--accent-glow); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
 .sidebar-group { padding: 16px 12px 4px; }
 .sidebar-group-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 0 8px; margin-bottom: 4px; }
-.sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 13px; transition: all 0.2s; border-left: 3px solid transparent; margin-bottom: 2px; }
+.sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 13px; transition: all 0.2s; border-left: 3px solid transparent; margin-bottom: 2px; position: relative; }
+.sidebar-item::after { content: ''; position: absolute; left: 22px; top: 100%; width: 1px; height: 6px; background: var(--border); opacity: 0.5; }
+.sidebar-group:last-child .sidebar-item:last-child::after, .sidebar-item:last-child::after { display: none; }
+.sidebar-item.has-update .icon::after { content: ''; position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+.sidebar-item .icon { position: relative; }
 .sidebar-item:hover { color: var(--text-secondary); background: rgba(255,255,255,0.03); }
 .sidebar-item.active { background: var(--sidebar-active); color: var(--text); border-left-color: var(--sidebar-active-border); font-weight: 600; }
 .sidebar-item .icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
@@ -97,8 +101,11 @@ body {
 
 /* ═══════════════════ Topbar ═══════════════════ */
 .topbar-left { display: flex; align-items: center; gap: 16px; }
-.topbar-breadcrumb { font-size: 13px; color: var(--muted); }
-.topbar-breadcrumb span { color: var(--text-secondary); }
+.topbar-breadcrumb { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.topbar-breadcrumb .bc-stage { cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.2s; color: var(--muted); }
+.topbar-breadcrumb .bc-stage:hover { color: var(--text-secondary); background: rgba(255,255,255,0.05); }
+.topbar-breadcrumb .bc-stage.bc-active { color: var(--accent); font-weight: 600; border-bottom: 2px solid var(--accent); }
+.topbar-breadcrumb .bc-sep { color: var(--border); font-size: 10px; }
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 .toggle-btn { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--toggle-bg); color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
 .toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -180,12 +187,6 @@ body {
 .vote-stats .v-pct { color: var(--muted); }
 .vote-stats .v-src { font-size: 11px; color: var(--cyan); cursor: pointer; }
 
-/* ═══════════════════ Coming Soon ═══════════════════ */
-.coming-soon { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 400px; color: var(--muted); }
-.coming-soon.visible { display: flex; }
-.coming-soon .cs-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
-.coming-soon .cs-title { font-size: 20px; font-weight: 600; color: var(--text-secondary); }
-.coming-soon .cs-sub { font-size: 13px; margin-top: 8px; }
 
 /* ═══════════════════ Toast ═══════════════════ */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 20px; font-size: 13px; color: var(--text-secondary); z-index: 100; opacity: 0; transition: all 0.3s; pointer-events: none; }
@@ -204,6 +205,47 @@ body {
 .info-row .info-label { color: var(--muted); }
 .info-row .info-value { font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace; }
 .empty-state { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 13px; }
+
+/* ═══════════════════ KPI Row ═══════════════════ */
+.kpi-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.kpi-card { flex: 1; min-width: 120px; background: var(--card-inner); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.kpi-card .kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi-card .kpi-value { font-size: 22px; font-weight: 700; font-family: 'SF Mono', 'Fira Code', monospace; line-height: 1.2; }
+.kpi-card .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ═══════════════════ Heatmap ═══════════════════ */
+.heatmap-grid { display: grid; gap: 2px; font-size: 12px; }
+.heatmap-cell { padding: 6px 8px; border-radius: 4px; text-align: center; font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600; font-size: 11px; }
+.heatmap-header { font-weight: 700; color: var(--muted); font-size: 10px; text-transform: uppercase; padding: 4px 8px; }
+
+/* ═══════════════════ Metric Bar ═══════════════════ */
+.metric-bar { margin-bottom: 12px; }
+.metric-bar .mb-header { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+.metric-bar .mb-label { color: var(--muted); }
+.metric-bar .mb-value { font-weight: 700; font-family: 'SF Mono', 'Fira Code', monospace; }
+.metric-bar .mb-track { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.metric-bar .mb-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+
+/* ═══════════════════ Ticker Tabs ═══════════════════ */
+.ticker-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+.ticker-tab { padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); transition: all 0.2s; }
+.ticker-tab:hover { border-color: var(--accent); color: var(--accent); }
+.ticker-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ═══════════════════ Pipeline Flow ═══════════════════ */
+.pipeline-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; }
+.pipeline-node { background: var(--card-inner); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 12px; font-weight: 600; text-align: center; min-width: 80px; }
+.pipeline-arrow { color: var(--muted); font-size: 16px; }
+
+/* ═══════════════════ Status Badge ═══════════════════ */
+.status-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+.status-badge .sb-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ═══════════════════ Audit Expand Row ═══════════════════ */
+.data-table tr.expandable { cursor: pointer; }
+.data-table tr.expandable:hover td { background: var(--card-inner); }
+.audit-detail { padding: 12px 16px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); background: var(--card-inner); border-bottom: 1px solid var(--border); }
+.audit-detail pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; }
 
 /* ═══════════════════ Responsive ═══════════════════ */
 @media (max-width: 1100px) {
@@ -284,9 +326,7 @@ body {
 <!-- ═══════════════════ Topbar ═══════════════════ -->
 <header class="topbar">
   <div class="topbar-left">
-    <span class="topbar-breadcrumb" id="breadcrumb-left">
-      <span data-i18n="breadcrumb.left">Python 状态识别 → 模型推理 → AI 决策</span>
-    </span>
+    <span class="topbar-breadcrumb" id="breadcrumb-pipeline"></span>
   </div>
   <div class="topbar-right">
     <button class="toggle-btn" id="btn-theme" onclick="toggleTheme()" title="Toggle theme">☀ / ☾</button>
@@ -299,6 +339,7 @@ body {
 
 <!-- Active Page: Model Inference -->
 <div id="page-inference">
+<div class="kpi-row" id="inference-kpi"></div>
 <div class="content-grid">
 
 <!-- ── Left Column: Model Inference ── -->
@@ -493,127 +534,178 @@ body {
       </div>
     </div>
   </div>
+
+  <!-- Card: Decision Reasoning (expandable) -->
+  <div class="card" id="decision-reasoning-card" style="display:none">
+    <div class="card-header" style="cursor:pointer" onclick="toggleDecisionReasoning()">
+      <div class="card-title"><span class="card-icon">▼</span><span data-i18n="dec.reasoning_title">决策溯源</span></div>
+    </div>
+    <div id="decision-reasoning-body" style="display:none"></div>
+  </div>
+
+  <!-- Card: System Health -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">⊞</span><span data-i18n="inf.health">系统健康</span></div>
+      <span class="badge badge-green" id="inf-health-badge">--</span>
+    </div>
+    <div id="inference-health"></div>
+  </div>
 </div>
 
 </div><!-- /content-grid -->
 </div><!-- /page-inference -->
 
-<!-- Coming Soon Page (fallback) -->
-<div class="coming-soon" id="page-coming-soon">
-  <div class="cs-icon">🚧</div>
-  <div class="cs-title" data-i18n="coming.title">模块开发中</div>
-  <div class="cs-sub" data-i18n="coming.sub">Coming Soon — 该模块正在构建中</div>
-</div>
-
 <!-- ═══════════════════ Page: System Monitor ═══════════════════ -->
 <div id="page-monitor" style="display:none">
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">⊞</span><span data-i18n="mon.services">服务状态</span></div>
+  <div class="kpi-row" id="monitor-kpi"></div>
+  <div class="content-grid">
+    <div class="col-left">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">⊞</span><span data-i18n="mon.services">服务状态</span></div>
+        </div>
+        <div id="monitor-services"></div>
+      </div>
     </div>
-    <div id="monitor-services">
-      <div class="info-row"><span class="info-label">Ollama</span><span class="info-value"><span class="status-dot unknown"></span>--</span></div>
-      <div class="info-row"><span class="info-label">FastAPI</span><span class="info-value"><span class="status-dot unknown"></span>--</span></div>
-      <div class="info-row"><span class="info-label">Tunnel</span><span class="info-value"><span class="status-dot unknown"></span>--</span></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">🔧</span><span data-i18n="mon.training">模型训练状态</span></div>
-    </div>
-    <div id="monitor-training" class="empty-state" data-i18n="mon.no_training">暂无训练任务</div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">💻</span><span data-i18n="mon.system">系统信息</span></div>
-    </div>
-    <div id="monitor-sysinfo">
-      <div class="info-row"><span class="info-label">Python</span><span class="info-value" id="mon-python">--</span></div>
-      <div class="info-row"><span class="info-label" data-i18n="mon.uptime">运行时间</span><span class="info-value" id="mon-uptime">--</span></div>
-      <div class="info-row"><span class="info-label">Cache TTL</span><span class="info-value" id="mon-cache">--</span></div>
+    <div class="col-right">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">🔧</span><span data-i18n="mon.training">模型训练状态</span></div>
+        </div>
+        <div id="monitor-training"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">💻</span><span data-i18n="mon.system">系统信息</span></div>
+        </div>
+        <div id="monitor-sysinfo"></div>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ═══════════════════ Page: Market Data ═══════════════════ -->
 <div id="page-market" style="display:none">
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">↻</span><span data-i18n="mkt.ohlcv">OHLCV 行情数据</span></div>
+  <div class="kpi-row" id="market-kpi"></div>
+  <div class="content-grid">
+    <div class="col-left">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">↻</span><span data-i18n="mkt.ohlcv">OHLCV 行情数据</span></div>
+        </div>
+        <div class="ticker-tabs" id="market-tabs"></div>
+        <div id="market-ohlcv" class="empty-state" data-i18n="mkt.loading">加载中...</div>
+      </div>
     </div>
-    <div id="market-ohlcv" class="empty-state" data-i18n="mkt.loading">加载中...</div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">📐</span><span data-i18n="mkt.features">特征矩阵</span></div>
+    <div class="col-right">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">📐</span><span data-i18n="mkt.heatmap">特征热力图</span></div>
+        </div>
+        <div id="market-heatmap"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">📊</span><span data-i18n="mkt.detail">特征详情</span></div>
+        </div>
+        <div id="market-features" class="empty-state" data-i18n="mkt.select_ticker">选择标的查看详情</div>
+      </div>
     </div>
-    <div id="market-features" class="empty-state" data-i18n="mkt.loading">加载中...</div>
   </div>
 </div>
 
 <!-- ═══════════════════ Page: Alpha Strategy ═══════════════════ -->
 <div id="page-alpha" style="display:none">
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">⚗</span><span data-i18n="alp.factors">因子注册表</span></div>
+  <div class="kpi-row" id="alpha-kpi"></div>
+  <div class="content-grid">
+    <div class="col-left">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">⚗</span><span data-i18n="alp.factors">因子注册表</span></div>
+        </div>
+        <div id="alpha-factors" class="empty-state" data-i18n="alp.no_factors">暂无发现的因子</div>
+      </div>
     </div>
-    <div id="alpha-factors" class="empty-state" data-i18n="alp.no_factors">暂无发现的因子</div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">⚙</span><span data-i18n="alp.pipeline">策略管线配置</span></div>
+    <div class="col-right">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">⚙</span><span data-i18n="alp.pipeline_flow">策略管线流程</span></div>
+        </div>
+        <div id="alpha-pipeline-flow"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">⚡</span><span data-i18n="alp.pipeline_status">管线状态</span></div>
+        </div>
+        <div id="alpha-pipeline"></div>
+      </div>
     </div>
-    <div id="alpha-pipeline" class="empty-state" data-i18n="alp.no_pipeline">暂无管线数据</div>
   </div>
 </div>
 
 <!-- ═══════════════════ Page: Portfolio & Risk ═══════════════════ -->
 <div id="page-risk" style="display:none">
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">📊</span><span data-i18n="rsk.positions">持仓明细</span></div>
+  <div class="kpi-row" id="risk-kpi"></div>
+  <div class="content-grid">
+    <div class="col-left">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">📊</span><span data-i18n="rsk.positions">持仓明细</span></div>
+        </div>
+        <div id="risk-positions" class="empty-state" data-i18n="rsk.no_positions">暂无持仓</div>
+      </div>
     </div>
-    <div id="risk-positions" class="empty-state" data-i18n="rsk.no_positions">暂无持仓</div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">🛡</span><span data-i18n="rsk.metrics">风控指标</span></div>
-    </div>
-    <div id="risk-metrics">
-      <div class="info-row"><span class="info-label" data-i18n="rsk.exposure">总敞口</span><span class="info-value" id="rsk-exposure">--</span></div>
-      <div class="info-row"><span class="info-label" data-i18n="rsk.diversification">分散度</span><span class="info-value" id="rsk-diversification">--</span></div>
-      <div class="info-row"><span class="info-label" data-i18n="rsk.max_drawdown">最大回撤</span><span class="info-value" id="rsk-drawdown">--</span></div>
+    <div class="col-right">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">🛡</span><span data-i18n="rsk.metrics">风控指标</span></div>
+        </div>
+        <div id="risk-metrics"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">📈</span><span data-i18n="rsk.backtest">回测摘要</span></div>
+        </div>
+        <div id="risk-backtest"></div>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- ═══════════════════ Page: Order Execution ═══════════════════ -->
 <div id="page-gateway" style="display:none">
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">⏱</span><span data-i18n="gw.gate_eval">门控评估详情</span></div>
+  <div class="content-grid">
+    <div class="col-left">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">⏱</span><span data-i18n="gw.gate_eval">门控评估详情</span></div>
+          <span class="badge badge-purple" id="gw-gate-badge">--</span>
+        </div>
+        <div id="gw-gate-detail"></div>
+        <div id="gw-confidence" style="margin-top:12px"></div>
+      </div>
     </div>
-    <div id="gw-gate-detail" class="empty-state" data-i18n="gw.loading">加载中...</div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">⚙</span><span data-i18n="gw.exec_config">执行配置</span></div>
+    <div class="col-right">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">⚙</span><span data-i18n="gw.exec_config">执行配置</span></div>
+        </div>
+        <div id="gw-config"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-icon">📋</span><span data-i18n="gw.pending">待执行订单</span></div>
+        </div>
+        <div id="gw-orders" class="empty-state" data-i18n="gw.no_orders">暂无待执行订单</div>
+      </div>
     </div>
-    <div id="gw-config">
-      <div class="info-row"><span class="info-label" data-i18n="gw.mode">交易模式</span><span class="info-value badge badge-purple" data-i18n="gw.paper">模拟盘</span></div>
-      <div class="info-row"><span class="info-label" data-i18n="gw.broker">券商连接</span><span class="info-value" data-i18n="gw.no_broker">未接入</span></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title"><span class="card-icon">📋</span><span data-i18n="gw.pending">待执行订单</span></div>
-    </div>
-    <div id="gw-orders" class="empty-state" data-i18n="gw.no_orders">暂无待执行订单</div>
   </div>
 </div>
 
 <!-- ═══════════════════ Page: Trade Audit ═══════════════════ -->
 <div id="page-audit" style="display:none">
+  <div class="kpi-row" id="audit-kpi"></div>
   <div class="card">
     <div class="card-header">
       <div class="card-title"><span class="card-icon">≡</span><span data-i18n="aud.log">交易审计日志</span></div>
@@ -673,10 +765,11 @@ var I18N = {
     'mon.uptime': '运行时间', 'mon.no_training': '暂无训练任务',
     'mon.train_status': '状态', 'mon.train_model': '模型',
     'mkt.ohlcv': 'OHLCV 行情数据', 'mkt.features': '特征矩阵', 'mkt.loading': '加载中...',
-    'alp.factors': '因子注册表', 'alp.pipeline': '策略管线配置',
+    'mkt.heatmap': '特征热力图', 'mkt.detail': '特征详情', 'mkt.select_ticker': '选择标的查看详情',
+    'alp.factors': '因子注册表', 'alp.pipeline_flow': '策略管线流程', 'alp.pipeline_status': '管线状态',
     'alp.no_factors': '暂无发现的因子', 'alp.no_pipeline': '暂无管线数据',
     'alp.name': '名称', 'alp.sharpe': 'Sharpe', 'alp.status': '状态',
-    'rsk.positions': '持仓明细', 'rsk.metrics': '风控指标',
+    'rsk.positions': '持仓明细', 'rsk.metrics': '风控指标', 'rsk.backtest': '回测摘要',
     'rsk.exposure': '总敞口', 'rsk.diversification': '分散度', 'rsk.max_drawdown': '最大回撤',
     'rsk.no_positions': '暂无持仓', 'rsk.ticker': '标的', 'rsk.direction': '方向',
     'rsk.weight': '权重', 'rsk.score': '评分',
@@ -685,7 +778,14 @@ var I18N = {
     'gw.no_broker': '未接入', 'gw.no_orders': '暂无待执行订单', 'gw.loading': '加载中...',
     'gw.dir': '方向', 'gw.qty': '数量', 'gw.status_col': '状态',
     'aud.log': '交易审计日志', 'aud.no_entries': '暂无审计记录',
-    'aud.time': '时间', 'aud.dir': '方向', 'aud.conf': '置信度', 'aud.source': '来源'
+    'aud.time': '时间', 'aud.dir': '方向', 'aud.conf': '置信度', 'aud.source': '来源',
+    'bc.data': '数据采集', 'bc.feature': '特征提取', 'bc.model': '模型推理',
+    'bc.strategy': '策略生成', 'bc.risk': '风控门禁', 'bc.exec': '执行', 'bc.audit': '审计',
+    'dec.reasoning_title': '决策溯源', 'inf.health': '系统健康',
+    'empty.risk': '等待模型推断产生方向信号', 'empty.risk_cta': '→ 查看模型推断页',
+    'empty.gateway': '门控通过后自动生成待执行订单', 'empty.gateway_cta': '→ 查看模型推断页',
+    'empty.alpha': '因子将在 pipeline 运行后发现', 'empty.alpha_cta': '→ 查看系统监控',
+    'empty.audit': '完成交易决策后自动记录', 'empty.audit_cta': '→ 查看模型推断页'
   },
   en: {
     'logo.tag': 'Core',
@@ -729,10 +829,11 @@ var I18N = {
     'mon.uptime': 'Uptime', 'mon.no_training': 'No training tasks',
     'mon.train_status': 'Status', 'mon.train_model': 'Model',
     'mkt.ohlcv': 'OHLCV Market Data', 'mkt.features': 'Feature Matrix', 'mkt.loading': 'Loading...',
-    'alp.factors': 'Factor Registry', 'alp.pipeline': 'Pipeline Configuration',
+    'mkt.heatmap': 'Feature Heatmap', 'mkt.detail': 'Feature Details', 'mkt.select_ticker': 'Select ticker for details',
+    'alp.factors': 'Factor Registry', 'alp.pipeline_flow': 'Pipeline Flow', 'alp.pipeline_status': 'Pipeline Status',
     'alp.no_factors': 'No factors discovered yet', 'alp.no_pipeline': 'No pipeline data',
     'alp.name': 'Name', 'alp.sharpe': 'Sharpe', 'alp.status': 'Status',
-    'rsk.positions': 'Positions', 'rsk.metrics': 'Risk Metrics',
+    'rsk.positions': 'Positions', 'rsk.metrics': 'Risk Metrics', 'rsk.backtest': 'Backtest Summary',
     'rsk.exposure': 'Total Exposure', 'rsk.diversification': 'Diversification', 'rsk.max_drawdown': 'Max Drawdown',
     'rsk.no_positions': 'No positions', 'rsk.ticker': 'Ticker', 'rsk.direction': 'Direction',
     'rsk.weight': 'Weight', 'rsk.score': 'Score',
@@ -741,7 +842,14 @@ var I18N = {
     'gw.no_broker': 'Not Connected', 'gw.no_orders': 'No pending orders', 'gw.loading': 'Loading...',
     'gw.dir': 'Direction', 'gw.qty': 'Qty', 'gw.status_col': 'Status',
     'aud.log': 'Trading Audit Log', 'aud.no_entries': 'No audit entries',
-    'aud.time': 'Time', 'aud.dir': 'Direction', 'aud.conf': 'Confidence', 'aud.source': 'Source'
+    'aud.time': 'Time', 'aud.dir': 'Direction', 'aud.conf': 'Confidence', 'aud.source': 'Source',
+    'bc.data': 'Data', 'bc.feature': 'Features', 'bc.model': 'Inference',
+    'bc.strategy': 'Strategy', 'bc.risk': 'Risk Gate', 'bc.exec': 'Execution', 'bc.audit': 'Audit',
+    'dec.reasoning_title': 'Decision Trace', 'inf.health': 'System Health',
+    'empty.risk': 'Waiting for model inference to produce signals', 'empty.risk_cta': '→ View Inference',
+    'empty.gateway': 'Orders generated after gate approval', 'empty.gateway_cta': '→ View Inference',
+    'empty.alpha': 'Factors discovered after pipeline runs', 'empty.alpha_cta': '→ View Monitor',
+    'empty.audit': 'Audit entries created after trade decisions', 'empty.audit_cta': '→ View Inference'
   }
 };
 
@@ -780,18 +888,39 @@ function toggleTheme() {
 /* ═══════════════════ Page Switching ═══════════════════ */
 var allPages = ['inference','monitor','market','alpha','risk','gateway','audit'];
 
+var _bcStages = [
+  { page: 'monitor', key: 'bc.data' },
+  { page: 'market',  key: 'bc.feature' },
+  { page: 'inference', key: 'bc.model' },
+  { page: 'alpha',  key: 'bc.strategy' },
+  { page: 'risk',   key: 'bc.risk' },
+  { page: 'gateway', key: 'bc.exec' },
+  { page: 'audit',  key: 'bc.audit' }
+];
+
+function updateBreadcrumb(page) {
+  var el = document.getElementById('breadcrumb-pipeline');
+  if (!el) return;
+  var dict = I18N[currentLang] || {};
+  var html = '';
+  _bcStages.forEach(function(s, i) {
+    if (i > 0) html += '<span class="bc-sep"> → </span>';
+    var cls = 'bc-stage' + (s.page === page ? ' bc-active' : '');
+    html += '<span class="' + cls + '" onclick="switchPage(\'' + s.page + '\')">' + (dict[s.key] || s.key) + '</span>';
+  });
+  el.innerHTML = html;
+}
+
 function switchPage(page) {
   document.querySelectorAll('.sidebar-item').forEach(function(item) {
     item.classList.toggle('active', item.getAttribute('data-page') === page);
   });
   currentPage = page;
-  /* Hide all pages including coming-soon */
   allPages.forEach(function(p) {
     var el = document.getElementById('page-' + p);
     if (el) el.style.display = (p === page) ? '' : 'none';
   });
-  document.getElementById('page-coming-soon').classList.remove('visible');
-  /* Fetch data for non-inference pages */
+  updateBreadcrumb(page);
   if (page !== 'inference') fetchPageData(page);
 }
 
@@ -980,8 +1109,126 @@ function renderDashboard(d) {
     }
   }
 
+  /* --- Inference KPI Row (P0-3) --- */
+  var infKpi = document.getElementById('inference-kpi');
+  if (infKpi) {
+    var stateText = ms ? (currentLang === 'zh' ? (ms.current_regime_zh || ms.current_regime) : ms.current_regime) : '--';
+    var consDir = inf ? inf.consensus_direction : '--';
+    var consDirZh = consDir === 'Bullish' ? '看多' : consDir === 'Bearish' ? '看空' : consDir;
+    var consDirEn = consDir === 'Bullish' ? 'Long' : consDir === 'Bearish' ? 'Short' : consDir;
+    var dirColor = consDir === 'Bullish' ? 'var(--green)' : consDir === 'Bearish' ? 'var(--red)' : 'var(--muted)';
+    var confPct = dec ? Math.round(dec.confidence) + '%' : '--';
+    var gatePassed = g ? (g.passed ? (currentLang === 'zh' ? '已通过' : 'Passed') : (currentLang === 'zh' ? '未通过' : 'Failed')) : '--';
+    var gateColor = g ? (g.passed ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
+    infKpi.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '市场状态' : 'Market State') + '</div><div class="kpi-value">' + stateText + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '共识方向' : 'Consensus') + '</div><div class="kpi-value" style="color:' + dirColor + '">' + (currentLang === 'zh' ? consDirZh : consDirEn) + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '置信度' : 'Confidence') + '</div><div class="kpi-value">' + confPct + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '门控状态' : 'Gate Status') + '</div><div class="kpi-value" style="color:' + gateColor + '">' + gatePassed + '</div></div>';
+  }
+
+  /* --- Decision Reasoning Card (P1-2) --- */
+  var decCard = document.getElementById('decision-reasoning-card');
+  if (decCard && dec) {
+    decCard.style.display = '';
+    var rbody = document.getElementById('decision-reasoning-body');
+    if (rbody) {
+      var rhtml = '<div style="padding:12px 16px;font-size:12px;line-height:1.8;color:var(--text-secondary)">';
+      if (mv && mv.length) {
+        rhtml += '<div style="margin-bottom:8px"><strong style="color:var(--text)">' + (currentLang === 'zh' ? '模型投票' : 'Model Votes') + ':</strong></div>';
+        mv.forEach(function(m) {
+          rhtml += '<div style="padding-left:12px">├─ ' + m.model + ': ' + (m.score * 100).toFixed(1) + '% ' + m.description + '</div>';
+        });
+      }
+      if (g && g.gates) {
+        rhtml += '<div style="margin-top:8px"><strong style="color:var(--text)">' + (currentLang === 'zh' ? '门控信号' : 'Gate Signals') + ':</strong></div>';
+        g.gates.forEach(function(gt) {
+          rhtml += '<div style="padding-left:12px">├─ ' + gt.name + ': ' + (gt.passed ? '✓' : '✗') + ' ' + (gt.score * 100).toFixed(1) + '%</div>';
+        });
+      }
+      if (ms) {
+        rhtml += '<div style="margin-top:8px"><strong style="color:var(--text)">' + (currentLang === 'zh' ? '市场状态' : 'Market State') + ':</strong> ' + (ms.current_regime || '--') + '</div>';
+      }
+      if (dec.reasoning) {
+        rhtml += '<div style="margin-top:8px"><strong style="color:var(--text)">' + (currentLang === 'zh' ? 'LLM 推理' : 'LLM Reasoning') + ':</strong> ' + dec.reasoning + '</div>';
+      }
+      rhtml += '</div>';
+      rbody.innerHTML = rhtml;
+    }
+  }
+
+  /* --- System Health Card (P1-3) --- */
+  var healthEl = document.getElementById('inference-health');
+  var healthBadge = document.getElementById('inf-health-badge');
+  if (healthEl) {
+    var onlineText = currentLang === 'zh' ? '在线' : 'Online';
+    var trainedText = currentLang === 'zh' ? '已训练' : 'Trained';
+    var now = new Date();
+    var timeStr = now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+    healthEl.innerHTML = '<div style="padding:8px 16px;font-size:12px;color:var(--text-secondary)">'
+      + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">'
+      + '<span>● <span style="color:var(--green)">FastAPI ' + onlineText + '</span></span>'
+      + '<span>● <span style="color:var(--green)">Ollama ' + onlineText + '</span></span>'
+      + '<span>● <span style="color:var(--green)">' + (currentLang === 'zh' ? '模型' : 'Model') + ' ' + trainedText + '</span></span>'
+      + '</div>'
+      + '<div style="color:var(--muted);font-size:11px">' + (currentLang === 'zh' ? '最后更新' : 'Last update') + ': ' + timeStr + '</div>'
+      + '</div>';
+    if (healthBadge) { healthBadge.textContent = onlineText; healthBadge.className = 'badge badge-green'; }
+  }
+
   /* Re-apply i18n after DOM updates */
   setLang(currentLang);
+}
+
+/* ═══════════════════ Decision Reasoning Toggle (P1-2) ═══════════════════ */
+function toggleDecisionReasoning() {
+  var body = document.getElementById('decision-reasoning-body');
+  var icon = document.querySelector('#decision-reasoning-card .card-icon');
+  if (body) {
+    var show = body.style.display === 'none';
+    body.style.display = show ? '' : 'none';
+    if (icon) icon.textContent = show ? '▲' : '▼';
+  }
+}
+
+/* ═══════════════════ Real-time Polling (P1-1) ═══════════════════ */
+var _prevApiData = null;
+var _pollTimer = null;
+
+function _startPolling() {
+  if (_pollTimer) return;
+  _pollTimer = setInterval(function() {
+    if (currentPage !== 'inference') return;
+    _prevApiData = apiData ? JSON.parse(JSON.stringify(apiData)) : null;
+    fetch('/api/dashboard')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        apiData = data;
+        renderDashboard(data);
+        _detectChanges(data);
+      })
+      .catch(function() {});
+  }, 30000);
+}
+
+function _detectChanges(newData) {
+  if (!_prevApiData || !newData) return;
+  var oldDir = _prevApiData.inference ? _prevApiData.inference.consensus_direction : null;
+  var newDir = newData.inference ? newData.inference.consensus_direction : null;
+  if (oldDir && newDir && oldDir !== newDir) {
+    var msg = currentLang === 'zh'
+      ? '信号更新：方向从 ' + oldDir + ' 变为 ' + newDir
+      : 'Signal update: direction changed from ' + oldDir + ' to ' + newDir;
+    showToast(msg);
+  }
+  var oldState = _prevApiData.market_state ? _prevApiData.market_state.current_regime : null;
+  var newState = newData.market_state ? newData.market_state.current_regime : null;
+  if (oldState && newState && oldState !== newState) {
+    var msg2 = currentLang === 'zh'
+      ? '状态更新：市场从 ' + oldState + ' 变为 ' + newState
+      : 'State update: market changed from ' + oldState + ' to ' + newState;
+    showToast(msg2);
+  }
 }
 
 /* ═══════════════════ Page Data Fetching ═══════════════════ */
@@ -1004,206 +1251,487 @@ function fetchPageData(page) {
     });
 }
 
+var _prevPageData = {};
+
 function renderPage(page, data) {
   var renderers = {
     monitor: renderMonitor, market: renderMarket, alpha: renderAlpha,
     risk: renderRisk, gateway: renderGateway, audit: renderAudit
   };
   if (renderers[page]) renderers[page](data);
+  _prevPageData[page] = data;
   setLang(currentLang);
 }
 
 function renderMonitor(d) {
   if (!d) return;
-  var services = d.services || {};
+  /* KPI row */
+  var kpiEl = document.getElementById('monitor-kpi');
+  if (kpiEl) {
+    var upCount = 0; var svc = d.services || {};
+    ['ollama','fastapi','tunnel'].forEach(function(k) { if (svc[k] === 'up') upCount++; });
+    var models = d.models || {};
+    var modelCount = Object.keys(models).length;
+    var trainedCount = 0;
+    Object.keys(models).forEach(function(k) { if (models[k] && models[k].trained) trainedCount++; });
+    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '服务在线' : 'Services Up') + '</div><div class="kpi-value" style="color:var(--green)">' + upCount + '/3</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '模型已训练' : 'Models Trained') + '</div><div class="kpi-value" style="color:var(--purple)">' + trainedCount + '/' + modelCount + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">Cache TTL</div><div class="kpi-value">' + (d.cache_ttl || '--') + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '运行时间' : 'Uptime') + '</div><div class="kpi-value">' + (d.uptime || '--') + '</div></div>';
+  }
+  /* Services */
   var container = document.getElementById('monitor-services');
   if (container) {
     var html = '';
     ['Ollama','FastAPI','Tunnel'].forEach(function(name) {
       var key = name.toLowerCase();
-      var status = services[key] || 'unknown';
+      var status = (d.services || {})[key] || 'unknown';
       var cls = status === 'up' ? 'up' : (status === 'down' ? 'down' : 'unknown');
       var label = status === 'up' ? (currentLang === 'zh' ? '在线' : 'Online') : (status === 'down' ? (currentLang === 'zh' ? '离线' : 'Offline') : '--');
-      html += '<div class="info-row"><span class="info-label">' + name + '</span><span class="info-value"><span class="status-dot ' + cls + '"></span>' + label + '</span></div>';
+      html += '<div class="info-row"><span class="info-label"><span class="status-dot ' + cls + '" style="width:10px;height:10px"></span>' + name + '</span><span class="info-value" style="color:' + (status === 'up' ? 'var(--green)' : status === 'down' ? 'var(--red)' : 'var(--muted)') + '">' + label + '</span></div>';
     });
     container.innerHTML = html;
   }
-  var training = d.training;
+  /* Model training */
   var trainEl = document.getElementById('monitor-training');
   if (trainEl) {
-    if (training && training.status) {
-      trainEl.className = '';
-      trainEl.innerHTML = '<div class="info-row"><span class="info-label" data-i18n="mon.train_status">' + (currentLang === 'zh' ? '状态' : 'Status') + '</span><span class="info-value">' + training.status + '</span></div>'
-        + '<div class="info-row"><span class="info-label" data-i18n="mon.train_model">' + (currentLang === 'zh' ? '模型' : 'Model') + '</span><span class="info-value">' + (training.model || '--') + '</span></div>';
+    var models = d.models || {};
+    var mkeys = Object.keys(models);
+    if (mkeys.length > 0) {
+      var mhtml = '';
+      mkeys.forEach(function(k) {
+        var m = models[k];
+        var trained = m && m.trained;
+        mhtml += '<div class="info-row"><span class="info-label">' + k + '</span><span class="info-value"><span class="badge ' + (trained ? 'badge-green' : 'badge-red') + '">' + (trained ? (currentLang === 'zh' ? '已训练' : 'Trained') : (currentLang === 'zh' ? '未训练' : 'Not Trained')) + '</span></span></div>';
+      });
+      if (d.last_trained) mhtml += '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '上次训练' : 'Last Trained') + '</span><span class="info-value">' + d.last_trained + '</span></div>';
+      trainEl.innerHTML = mhtml;
     } else {
-      trainEl.className = 'empty-state';
-      trainEl.textContent = currentLang === 'zh' ? '暂无训练任务' : 'No training tasks';
+      trainEl.innerHTML = '<div class="empty-state">' + (currentLang === 'zh' ? '暂无模型信息' : 'No model info') + '</div>';
     }
   }
-  var pyEl = document.getElementById('mon-python');
-  if (pyEl) pyEl.textContent = d.python_version || '--';
-  var upEl = document.getElementById('mon-uptime');
-  if (upEl) upEl.textContent = d.uptime || '--';
-  var cacheEl = document.getElementById('mon-cache');
-  if (cacheEl) cacheEl.textContent = d.cache_ttl || '--';
+  /* System info */
+  var sysEl = document.getElementById('monitor-sysinfo');
+  if (sysEl) {
+    sysEl.innerHTML = '<div class="info-row"><span class="info-label">Python</span><span class="info-value">' + (d.python_version || '--') + '</span></div>'
+      + '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '平台' : 'Platform') + '</span><span class="info-value">' + (d.platform || '--') + '</span></div>'
+      + '<div class="info-row"><span class="info-label">API Version</span><span class="info-value">' + (d.api_version || '0.1.0') + '</span></div>'
+      + '<div class="info-row"><span class="info-label">Cache TTL</span><span class="info-value">' + (d.cache_ttl || '--') + '</span></div>';
+  }
+}
+
+/* Market page state */
+var _marketTickers = [];
+var _marketData = null;
+var _marketSelectedTicker = null;
+
+function _heatColor(val, min, max) {
+  if (val == null || isNaN(val)) return 'transparent';
+  var mid = (min + max) / 2;
+  var ratio = max === min ? 0.5 : (val - min) / (max - min);
+  if (ratio < 0.5) {
+    var r = Math.round(239 * (1 - ratio * 2) + 100 * ratio * 2);
+    var g = Math.round(68 * (1 - ratio * 2) + 100 * ratio * 2);
+    var b = Math.round(68 * (1 - ratio * 2) + 120 * ratio * 2);
+    return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
+  } else {
+    var t = (ratio - 0.5) * 2;
+    var r = Math.round(100 * (1 - t) + 74 * t);
+    var g = Math.round(100 * (1 - t) + 222 * t);
+    var b = Math.round(120 * (1 - t) + 128 * t);
+    return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
+  }
+}
+
+function _selectMarketTicker(tk) {
+  _marketSelectedTicker = tk;
+  document.querySelectorAll('#market-tabs .ticker-tab').forEach(function(el) {
+    el.classList.toggle('active', el.textContent === tk);
+  });
+  _renderMarketOHLCV(tk);
+  _renderMarketFeatureDetail(tk);
+}
+
+function _renderMarketOHLCV(tk) {
+  var ohlcvEl = document.getElementById('market-ohlcv');
+  if (!ohlcvEl || !_marketData || !_marketData.ohlcv) return;
+  var rows = _marketData.ohlcv[tk] || [];
+  if (rows.length === 0) { ohlcvEl.className = 'empty-state'; ohlcvEl.textContent = currentLang === 'zh' ? '暂无数据' : 'No data'; return; }
+  var last10 = rows.slice(-10);
+  var html = '<table class="data-table"><thead><tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead><tbody>';
+  last10.forEach(function(r) {
+    var chg = r.close && r.open ? ((r.close - r.open) / r.open * 100) : 0;
+    var clr = chg > 0 ? 'color:var(--green)' : chg < 0 ? 'color:var(--red)' : '';
+    html += '<tr><td>' + (r.date || '--').slice(0, 10) + '</td>'
+      + '<td>' + (r.open != null ? r.open.toFixed(2) : '--') + '</td>'
+      + '<td>' + (r.high != null ? r.high.toFixed(2) : '--') + '</td>'
+      + '<td>' + (r.low != null ? r.low.toFixed(2) : '--') + '</td>'
+      + '<td style="' + clr + '">' + (r.close != null ? r.close.toFixed(2) : '--') + '</td>'
+      + '<td>' + (r.volume != null ? r.volume.toLocaleString() : '--') + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  ohlcvEl.className = '';
+  ohlcvEl.innerHTML = html;
+}
+
+function _renderMarketFeatureDetail(tk) {
+  var featEl = document.getElementById('market-features');
+  if (!featEl || !_marketData || !_marketData.features) return;
+  var frows = _marketData.features[tk] || [];
+  if (frows.length === 0) { featEl.className = 'empty-state'; featEl.textContent = currentLang === 'zh' ? '暂无特征' : 'No features'; return; }
+  var featureKeys = ['log_return','volatility_20d','rsi_14','macd','bollinger_pctb'];
+  var labels = { log_return: 'Log Return', volatility_20d: 'Volatility 20D', rsi_14: 'RSI 14', macd: 'MACD', bollinger_pctb: 'Bollinger %B' };
+  var last5 = frows.slice(-5);
+  var html = '<table class="data-table"><thead><tr><th>Date</th>';
+  featureKeys.forEach(function(k) { html += '<th>' + (labels[k] || k) + '</th>'; });
+  html += '</tr></thead><tbody>';
+  last5.forEach(function(row) {
+    html += '<tr><td>' + (row.date || '--').slice(0, 10) + '</td>';
+    featureKeys.forEach(function(k) {
+      var v = row[k];
+      var style = '';
+      if (typeof v === 'number') { style = v > 0 ? 'color:var(--green)' : v < 0 ? 'color:var(--red)' : ''; v = v.toFixed(4); }
+      html += '<td style="' + style + '">' + (v != null ? v : '--') + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  featEl.className = '';
+  featEl.innerHTML = html;
 }
 
 function renderMarket(d) {
   if (!d) return;
-  var ohlcvEl = document.getElementById('market-ohlcv');
-  if (ohlcvEl && d.ohlcv) {
-    var tickers = Object.keys(d.ohlcv);
-    if (tickers.length === 0) { ohlcvEl.className = 'empty-state'; ohlcvEl.textContent = currentLang === 'zh' ? '暂无数据' : 'No data'; return; }
-    var html = '';
-    tickers.forEach(function(tk) {
-      var rows = d.ohlcv[tk] || [];
-      html += '<div style="margin-bottom:12px;font-weight:600;font-size:14px">' + tk + '</div>';
-      html += '<table class="data-table"><thead><tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Vol</th></tr></thead><tbody>';
-      rows.slice(-5).forEach(function(r) {
-        html += '<tr><td>' + (r.date || '--') + '</td><td>' + (r.open != null ? r.open.toFixed(2) : '--') + '</td><td>' + (r.high != null ? r.high.toFixed(2) : '--') + '</td><td>' + (r.low != null ? r.low.toFixed(2) : '--') + '</td><td>' + (r.close != null ? r.close.toFixed(2) : '--') + '</td><td>' + (r.volume != null ? r.volume.toLocaleString() : '--') + '</td></tr>';
-      });
-      html += '</tbody></table>';
+  _marketData = d;
+  _marketTickers = d.tickers || Object.keys(d.ohlcv || {});
+  if (_marketTickers.length === 0) return;
+  /* KPI row: latest price for each ticker */
+  var kpiEl = document.getElementById('market-kpi');
+  if (kpiEl) {
+    var khtml = '';
+    _marketTickers.forEach(function(tk) {
+      var rows = (d.ohlcv || {})[tk] || [];
+      var last = rows.length > 0 ? rows[rows.length - 1] : null;
+      var prev = rows.length > 1 ? rows[rows.length - 2] : null;
+      var price = last ? last.close : null;
+      var chg = (last && prev && prev.close) ? ((last.close - prev.close) / prev.close * 100) : null;
+      var chgStr = chg != null ? (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%' : '--';
+      var clr = chg != null ? (chg >= 0 ? 'var(--green)' : 'var(--red)') : 'inherit';
+      khtml += '<div class="kpi-card"><div class="kpi-label">' + tk + '</div><div class="kpi-value">$' + (price != null ? price.toFixed(2) : '--') + '</div><div class="kpi-sub" style="color:' + clr + '">' + chgStr + '</div></div>';
     });
-    ohlcvEl.className = '';
-    ohlcvEl.innerHTML = html;
+    kpiEl.innerHTML = khtml;
   }
-  var featEl = document.getElementById('market-features');
-  if (featEl && d.features) {
-    var cols = d.features.columns || [];
-    var frows = d.features.rows || [];
-    if (cols.length === 0) { featEl.className = 'empty-state'; featEl.textContent = currentLang === 'zh' ? '暂无特征' : 'No features'; return; }
-    var fhtml = '<table class="data-table"><thead><tr>';
-    cols.forEach(function(c) { fhtml += '<th>' + c + '</th>'; });
-    fhtml += '</tr></thead><tbody>';
-    frows.slice(-5).forEach(function(row) {
-      fhtml += '<tr>';
-      cols.forEach(function(c) {
-        var v = row[c];
-        var style = '';
-        if (typeof v === 'number') { style = v > 0 ? 'color:var(--green)' : (v < 0 ? 'color:var(--red)' : ''); v = v.toFixed(4); }
-        fhtml += '<td style="' + style + '">' + (v != null ? v : '--') + '</td>';
-      });
-      fhtml += '</tr>';
+  /* Ticker tabs */
+  var tabsEl = document.getElementById('market-tabs');
+  if (tabsEl) {
+    var thtml = '';
+    _marketTickers.forEach(function(tk) {
+      thtml += '<button class="ticker-tab" onclick="_selectMarketTicker(\'' + tk + '\')">' + tk + '</button>';
     });
-    fhtml += '</tbody></table>';
-    featEl.className = '';
-    featEl.innerHTML = fhtml;
+    tabsEl.innerHTML = thtml;
   }
+  /* Feature heatmap (all tickers, latest values) */
+  var hmEl = document.getElementById('market-heatmap');
+  if (hmEl && d.features) {
+    var featureKeys = ['log_return','volatility_20d','rsi_14','macd','bollinger_pctb'];
+    var shortLabels = { log_return: 'Return', volatility_20d: 'Vol', rsi_14: 'RSI', macd: 'MACD', bollinger_pctb: 'BBand' };
+    /* Collect latest values for range calc */
+    var allVals = {};
+    featureKeys.forEach(function(k) { allVals[k] = []; });
+    _marketTickers.forEach(function(tk) {
+      var frows = d.features[tk] || [];
+      var last = frows.length > 0 ? frows[frows.length - 1] : {};
+      featureKeys.forEach(function(k) { if (last[k] != null) allVals[k].push(last[k]); });
+    });
+    var mins = {}, maxs = {};
+    featureKeys.forEach(function(k) {
+      mins[k] = allVals[k].length > 0 ? Math.min.apply(null, allVals[k]) : 0;
+      maxs[k] = allVals[k].length > 0 ? Math.max.apply(null, allVals[k]) : 1;
+    });
+    var cols = featureKeys.length + 1;
+    var hhtml = '<div class="heatmap-grid" style="grid-template-columns:80px repeat(' + featureKeys.length + ',1fr)">';
+    hhtml += '<div class="heatmap-header"></div>';
+    featureKeys.forEach(function(k) { hhtml += '<div class="heatmap-header">' + (shortLabels[k] || k) + '</div>'; });
+    _marketTickers.forEach(function(tk) {
+      var frows = d.features[tk] || [];
+      var last = frows.length > 0 ? frows[frows.length - 1] : {};
+      hhtml += '<div class="heatmap-header" style="text-align:left;font-weight:700">' + tk + '</div>';
+      featureKeys.forEach(function(k) {
+        var v = last[k];
+        var bg = _heatColor(v, mins[k], maxs[k]);
+        hhtml += '<div class="heatmap-cell" style="background:' + bg + '">' + (v != null ? (Math.abs(v) < 1 ? v.toFixed(4) : v.toFixed(2)) : '--') + '</div>';
+      });
+    });
+    hhtml += '</div>';
+    hmEl.innerHTML = hhtml;
+  }
+  /* Select first ticker */
+  _selectMarketTicker(_marketTickers[0]);
 }
 
 function renderAlpha(d) {
   if (!d) return;
-  var factEl = document.getElementById('alpha-factors');
-  if (factEl && d.factors) {
-    var factors = d.factors;
-    if (factors.length === 0) { factEl.className = 'empty-state'; factEl.textContent = currentLang === 'zh' ? '暂无发现的因子' : 'No factors discovered yet'; return; }
-    var html = '<table class="data-table"><thead><tr><th data-i18n="alp.name">' + (currentLang === 'zh' ? '名称' : 'Name') + '</th><th>IC</th><th data-i18n="alp.sharpe">Sharpe</th><th data-i18n="alp.status">' + (currentLang === 'zh' ? '状态' : 'Status') + '</th></tr></thead><tbody>';
-    factors.forEach(function(f) {
-      html += '<tr><td>' + f.name + '</td><td>' + (f.ic != null ? f.ic.toFixed(4) : '--') + '</td><td>' + (f.sharpe != null ? f.sharpe.toFixed(2) : '--') + '</td><td><span class="badge ' + (f.active ? 'badge-green' : 'badge-red') + '">' + (f.active ? (currentLang === 'zh' ? '启用' : 'Active') : (currentLang === 'zh' ? '停用' : 'Inactive')) + '</span></td></tr>';
-    });
-    html += '</tbody></table>';
-    factEl.className = '';
-    factEl.innerHTML = html;
+  /* KPI row */
+  var kpiEl = document.getElementById('alpha-kpi');
+  if (kpiEl) {
+    var factors = d.factors || [];
+    var total = factors.length;
+    var bestIC = '--'; var passRate = '--';
+    if (total > 0) {
+      var ics = factors.map(function(f) { return f.ic || 0; });
+      bestIC = Math.max.apply(null, ics).toFixed(4);
+      var accepted = factors.filter(function(f) { return f.active; }).length;
+      passRate = ((accepted / total) * 100).toFixed(0) + '%';
+    }
+    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '因子总数' : 'Total Factors') + '</div><div class="kpi-value">' + total + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="Information Coefficient: ' + (currentLang === 'zh' ? '衡量因子预测能力，>0.03 表示有效' : 'Measures factor predictive power, >0.03 is effective') + '">' + (currentLang === 'zh' ? '最佳 IC' : 'Best IC') + '</div><div class="kpi-value" style="color:var(--cyan)">' + bestIC + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '通过率' : 'Pass Rate') + '</div><div class="kpi-value" style="color:var(--green)">' + passRate + '</div></div>';
   }
-  var pipeEl = document.getElementById('alpha-pipeline');
-  if (pipeEl && d.pipeline) {
-    var p = d.pipeline;
-    var phtml = '';
-    Object.keys(p).forEach(function(k) {
-      phtml += '<div class="info-row"><span class="info-label">' + k + '</span><span class="info-value">' + p[k] + '</span></div>';
+  /* Factor table */
+  var factEl = document.getElementById('alpha-factors');
+  if (factEl) {
+    var factors = d.factors || [];
+    if (factors.length === 0) {
+      factEl.innerHTML = '<div class="empty-state"><div style="margin-bottom:8px">' + (currentLang === 'zh' ? '暂无发现的因子' : 'No factors discovered yet') + '</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + (currentLang === 'zh' ? '因子将在 pipeline 运行后发现' : 'Factors discovered after pipeline runs') + '</div><button onclick="switchPage(\'monitor\')" style="cursor:pointer;background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:11px">' + (currentLang === 'zh' ? '→ 查看系统监控' : '→ View Monitor') + '</button></div>';
+    } else {
+      var html = '<table class="data-table"><thead><tr><th>' + (currentLang === 'zh' ? '名称' : 'Name') + '</th><th>IC</th><th>ICIR</th><th>Sharpe</th><th>' + (currentLang === 'zh' ? '状态' : 'Status') + '</th></tr></thead><tbody>';
+      factors.forEach(function(f) {
+        var icColor = f.ic > 0.03 ? 'var(--green)' : f.ic < 0 ? 'var(--red)' : 'inherit';
+        html += '<tr><td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">' + f.name + '</td>'
+          + '<td style="color:' + icColor + '">' + (f.ic != null ? f.ic.toFixed(4) : '--') + '</td>'
+          + '<td>' + (f.icir != null ? f.icir.toFixed(2) : '--') + '</td>'
+          + '<td>' + (f.sharpe != null ? f.sharpe.toFixed(2) : '--') + '</td>'
+          + '<td><span class="badge ' + (f.active ? 'badge-green' : 'badge-red') + '">' + (f.active ? (currentLang === 'zh' ? '通过' : 'Accept') : (currentLang === 'zh' ? '拒绝' : 'Reject')) + '</span></td></tr>';
+      });
+      html += '</tbody></table>';
+      factEl.innerHTML = html;
+    }
+  }
+  /* Pipeline flow diagram */
+  var flowEl = document.getElementById('alpha-pipeline-flow');
+  if (flowEl) {
+    var agents = [
+      { zh: '假设生成', en: 'Hypothesis' },
+      { zh: '因子构造', en: 'Factor Build' },
+      { zh: '回测评估', en: 'Backtest' },
+      { zh: '评估决策', en: 'Decision' }
+    ];
+    var fhtml = '<div class="pipeline-flow">';
+    agents.forEach(function(a, i) {
+      if (i > 0) fhtml += '<span class="pipeline-arrow">→</span>';
+      fhtml += '<div class="pipeline-node">' + (currentLang === 'zh' ? a.zh : a.en) + '</div>';
     });
-    pipeEl.className = '';
-    pipeEl.innerHTML = phtml;
+    fhtml += '</div>';
+    var p = d.pipeline || {};
+    fhtml += '<div style="margin-top:8px"><div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '最大迭代' : 'Max Iterations') + '</span><span class="info-value">' + (p.max_iterations || 3) + '</span></div></div>';
+    flowEl.innerHTML = fhtml;
+  }
+  /* Pipeline status */
+  var pipeEl = document.getElementById('alpha-pipeline');
+  if (pipeEl) {
+    var p = d.pipeline || {};
+    var statusColor = p.status === 'ready' ? 'var(--green)' : 'var(--yellow)';
+    var statusText = p.status === 'ready' ? (currentLang === 'zh' ? '就绪' : 'Ready') : (p.status || '--');
+    pipeEl.innerHTML = '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '状态' : 'Status') + '</span><span class="info-value"><span class="status-badge"><span class="sb-dot" style="background:' + statusColor + '"></span>' + statusText + '</span></span></div>'
+      + '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '已发现因子' : 'Factors Found') + '</span><span class="info-value">' + (d.factors ? d.factors.length : 0) + '</span></div>'
+      + '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '当前迭代' : 'Current Iter') + '</span><span class="info-value">' + (p.current_iteration || 0) + '/' + (p.max_iterations || 3) + '</span></div>';
   }
 }
 
 function renderRisk(d) {
   if (!d) return;
-  var posEl = document.getElementById('risk-positions');
-  if (posEl && d.positions) {
-    var pos = d.positions;
-    if (pos.length === 0) { posEl.className = 'empty-state'; posEl.textContent = currentLang === 'zh' ? '暂无持仓' : 'No positions'; return; }
-    var html = '<table class="data-table"><thead><tr><th data-i18n="rsk.ticker">' + (currentLang === 'zh' ? '标的' : 'Ticker') + '</th><th data-i18n="rsk.direction">' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th data-i18n="rsk.weight">' + (currentLang === 'zh' ? '权重' : 'Weight') + '</th><th data-i18n="rsk.score">' + (currentLang === 'zh' ? '评分' : 'Score') + '</th></tr></thead><tbody>';
+  /* KPI row */
+  var kpiEl = document.getElementById('risk-kpi');
+  if (kpiEl) {
+    var exp = d.total_exposure != null ? (d.total_exposure * 100).toFixed(0) + '%' : '--';
+    var div = d.diversification != null ? d.diversification.toFixed(2) : '--';
+    var pos = d.positions || [];
+    var longCount = 0; var shortCount = 0;
     pos.forEach(function(p) {
-      var isLong = p.direction === 'Long' || p.direction === 'Bullish';
-      var dirColor = isLong ? 'var(--green)' : 'var(--red)';
-      var dirText = isLong ? (currentLang === 'zh' ? '看多' : 'Long') : (currentLang === 'zh' ? '看空' : 'Short');
-      html += '<tr><td>' + p.ticker + '</td><td style="color:' + dirColor + '">' + dirText + '</td><td>' + (p.weight != null ? (p.weight * 100).toFixed(1) + '%' : '--') + '</td><td>' + (p.score != null ? p.score.toFixed(2) : '--') + '</td></tr>';
+      if (p.direction === 'Long' || p.direction === 'Bullish') longCount++; else shortCount++;
     });
-    html += '</tbody></table>';
-    posEl.className = '';
-    posEl.innerHTML = html;
+    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '组合净头寸占总资本比例' : 'Net position as % of total capital') + '">' + (currentLang === 'zh' ? '总敞口' : 'Exposure') + '</div><div class="kpi-value">' + exp + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '多/空' : 'Long/Short') + '</div><div class="kpi-value"><span style="color:var(--green)">' + longCount + '</span> / <span style="color:var(--red)">' + shortCount + '</span></div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '持仓分散度，越高越分散' : 'Portfolio diversification, higher = more diversified') + '">' + (currentLang === 'zh' ? '分散度' : 'Diversity') + '</div><div class="kpi-value">' + div + '</div></div>';
   }
-  var expEl = document.getElementById('rsk-exposure');
-  if (expEl) expEl.textContent = d.total_exposure != null ? (d.total_exposure * 100).toFixed(1) + '%' : '--';
-  var divEl = document.getElementById('rsk-diversification');
-  if (divEl) divEl.textContent = d.diversification != null ? d.diversification.toFixed(2) : '--';
-  var ddEl = document.getElementById('rsk-drawdown');
-  if (ddEl) ddEl.textContent = d.max_drawdown != null ? (d.max_drawdown * 100).toFixed(1) + '%' : '--';
+  /* Positions with asset-row style bars */
+  var posEl = document.getElementById('risk-positions');
+  if (posEl) {
+    var pos = d.positions || [];
+    if (pos.length === 0) {
+      posEl.innerHTML = '<div class="empty-state"><div style="margin-bottom:8px">' + (currentLang === 'zh' ? '暂无持仓' : 'No positions') + '</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + (currentLang === 'zh' ? '等待模型推断产生方向信号' : 'Waiting for model inference to produce signals') + '</div><button onclick="switchPage(\'inference\')" style="cursor:pointer;background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:11px">' + (currentLang === 'zh' ? '→ 查看模型推断页' : '→ View Inference') + '</button></div>';
+    } else {
+      var html = '';
+      pos.forEach(function(p) {
+        var isLong = p.direction === 'Long' || p.direction === 'Bullish';
+        var dirColor = isLong ? 'var(--green)' : 'var(--red)';
+        var dirText = isLong ? (currentLang === 'zh' ? '看多' : 'Long') : (currentLang === 'zh' ? '看空' : 'Short');
+        var wPct = p.weight != null ? (p.weight * 100).toFixed(1) : 0;
+        var barColor = isLong ? 'var(--green)' : 'var(--red)';
+        html += '<div class="asset-row" style="margin-bottom:10px">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+          + '<span style="font-weight:700;font-size:14px">' + p.ticker + '</span>'
+          + '<span style="font-size:12px;color:' + dirColor + '">' + dirText + '</span>'
+          + '</div>'
+          + '<div class="asset-bar-wrap" style="height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin-bottom:4px">'
+          + '<div style="height:100%;width:' + wPct + '%;background:' + barColor + ';border-radius:3px;transition:width 0.5s"></div>'
+          + '</div>'
+          + '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">'
+          + '<span>' + (currentLang === 'zh' ? '权重' : 'Weight') + ': ' + wPct + '%</span>'
+          + '<span>' + (currentLang === 'zh' ? '评分' : 'Score') + ': ' + (p.score != null ? p.score.toFixed(2) : '--') + '</span>'
+          + '</div></div>';
+      });
+      posEl.innerHTML = html;
+    }
+  }
+  /* Risk metrics with metric-bars */
+  var metricsEl = document.getElementById('risk-metrics');
+  if (metricsEl) {
+    var metrics = [
+      { label: currentLang === 'zh' ? '总敞口' : 'Total Exposure', value: d.total_exposure, max: 1, color: 'var(--cyan)' },
+      { label: currentLang === 'zh' ? '最大单仓' : 'Max Position', value: d.max_position_weight, max: 1, color: 'var(--yellow)' },
+      { label: currentLang === 'zh' ? '分散度' : 'Diversification', value: d.diversification, max: 1, color: 'var(--purple)' }
+    ];
+    var mhtml = '';
+    metrics.forEach(function(m) {
+      var pct = m.value != null ? (m.value * 100) : 0;
+      var display = m.value != null ? pct.toFixed(1) + '%' : '--';
+      if (m.label.indexOf('分散') >= 0 || m.label.indexOf('Divers') >= 0) display = m.value != null ? m.value.toFixed(2) : '--';
+      mhtml += '<div class="metric-bar"><div class="mb-header"><span class="mb-label">' + m.label + '</span><span class="mb-value">' + display + '</span></div><div class="mb-track"><div class="mb-fill" style="width:' + Math.min(pct, 100) + '%;background:' + m.color + '"></div></div></div>';
+    });
+    metricsEl.innerHTML = mhtml;
+  }
+  /* Backtest summary */
+  var btEl = document.getElementById('risk-backtest');
+  if (btEl) {
+    var bt = d.backtest || {};
+    btEl.innerHTML = '<div class="info-row"><span class="info-label" title="' + (currentLang === 'zh' ? '风险调整后收益比，>1 为良好' : 'Risk-adjusted return ratio, >1 is good') + '">Sharpe</span><span class="info-value">' + (bt.sharpe != null ? bt.sharpe.toFixed(2) : '--') + '</span></div>'
+      + '<div class="info-row"><span class="info-label" title="' + (currentLang === 'zh' ? '峰值到谷底的最大跌幅' : 'Largest peak-to-trough decline') + '">' + (currentLang === 'zh' ? '最大回撤' : 'Max Drawdown') + '</span><span class="info-value" style="color:var(--red)">' + (bt.max_drawdown != null ? (bt.max_drawdown * 100).toFixed(1) + '%' : '--') + '</span></div>'
+      + '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '年化收益' : 'Ann. Return') + '</span><span class="info-value">' + (bt.annual_return != null ? (bt.annual_return * 100).toFixed(1) + '%' : '--') + '</span></div>';
+  }
 }
 
 function renderGateway(d) {
   if (!d) return;
+  /* Gate badge */
+  var badgeEl = document.getElementById('gw-gate-badge');
+  if (badgeEl && d.gate) {
+    var allPassed = (d.gate.gates || []).every(function(g) { return g.passed; });
+    badgeEl.className = 'badge ' + (allPassed ? 'badge-green' : 'badge-red');
+    badgeEl.textContent = allPassed ? (currentLang === 'zh' ? '已通过' : 'Passed') : (currentLang === 'zh' ? '未通过' : 'Not Passed');
+  }
+  /* Gate cards */
   var gateEl = document.getElementById('gw-gate-detail');
   if (gateEl && d.gate) {
     var g = d.gate;
     var html = '<div class="gate-row">';
     (g.gates || []).forEach(function(gt) {
       var passed = gt.passed;
-      html += '<div class="gate-card"><div class="gate-label"><span>' + gt.name + '</span><span class="badge ' + (passed ? 'badge-green' : 'badge-red') + '" style="font-size:10px">' + (passed ? (currentLang === 'zh' ? '通过' : 'Pass') : (currentLang === 'zh' ? '未通过' : 'Fail')) + '</span></div><div class="gate-value" style="color:' + (passed ? 'var(--green)' : 'var(--red)') + '">' + (gt.score * 100).toFixed(1) + '%</div><div class="gate-bar"><div class="fill" style="width:' + (gt.score * 100) + '%;background:' + (passed ? 'var(--green)' : 'var(--red)') + '"></div></div></div>';
+      var pct = (gt.score * 100).toFixed(1);
+      html += '<div class="gate-card">'
+        + '<div class="gate-label"><span>' + gt.name + '</span><span class="badge ' + (passed ? 'badge-green' : 'badge-red') + '" style="font-size:10px">' + (passed ? (currentLang === 'zh' ? '通过' : 'Pass') : (currentLang === 'zh' ? '未通过' : 'Fail')) + '</span></div>'
+        + '<div class="gate-value" style="color:' + (passed ? 'var(--green)' : 'var(--red)') + '">' + pct + '%</div>'
+        + '<div class="gate-bar"><div class="fill" style="width:' + pct + '%;background:' + (passed ? 'var(--green)' : 'var(--red)') + '"></div></div>'
+        + '</div>';
     });
     html += '</div>';
-    if (g.overall_confidence != null) {
-      html += '<div class="gate-footer">' + (currentLang === 'zh' ? '综合置信度' : 'Overall Confidence') + ': <strong>' + g.overall_confidence.toFixed(0) + '%</strong></div>';
-    }
-    gateEl.className = '';
     gateEl.innerHTML = html;
   }
-  if (d.config) {
-    var modeEl = document.querySelector('#gw-config [data-i18n="gw.paper"]');
-    if (modeEl) modeEl.textContent = d.config.mode || (currentLang === 'zh' ? '模拟盘' : 'Paper');
-    var brokerEl = document.querySelector('#gw-config [data-i18n="gw.no_broker"]');
-    if (brokerEl) brokerEl.textContent = d.config.broker || (currentLang === 'zh' ? '未接入' : 'Not Connected');
+  /* Confidence bar */
+  var confEl = document.getElementById('gw-confidence');
+  if (confEl && d.gate && d.gate.overall_confidence != null) {
+    var conf = d.gate.overall_confidence;
+    confEl.innerHTML = '<div class="metric-bar"><div class="mb-header"><span class="mb-label">' + (currentLang === 'zh' ? '综合置信度' : 'Overall Confidence') + '</span><span class="mb-value">' + conf.toFixed(0) + '%</span></div><div class="mb-track"><div class="mb-fill" style="width:' + conf + '%;background:var(--accent)"></div></div></div>';
   }
+  /* Execution config */
+  var configEl = document.getElementById('gw-config');
+  if (configEl) {
+    var cfg = d.config || {};
+    configEl.innerHTML = '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '交易模式' : 'Mode') + '</span><span class="info-value"><span class="badge badge-purple">' + (cfg.mode || (currentLang === 'zh' ? '模拟盘' : 'Paper')) + '</span></span></div>'
+      + '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '券商连接' : 'Broker') + '</span><span class="info-value">' + (cfg.broker || (currentLang === 'zh' ? '未接入' : 'Not Connected')) + '</span></div>'
+      + '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '最大仓位' : 'Max Position') + '</span><span class="info-value">' + (cfg.max_position || '15%') + '</span></div>'
+      + '<div class="info-row"><span class="info-label">' + (currentLang === 'zh' ? '最大杠杆' : 'Max Leverage') + '</span><span class="info-value">' + (cfg.max_leverage || '3x') + '</span></div>';
+  }
+  /* Pending orders */
   var ordersEl = document.getElementById('gw-orders');
-  if (ordersEl && d.orders) {
-    if (d.orders.length === 0) { ordersEl.className = 'empty-state'; ordersEl.textContent = currentLang === 'zh' ? '暂无待执行订单' : 'No pending orders'; return; }
-    var ohtml = '<table class="data-table"><thead><tr><th>Ticker</th><th data-i18n="gw.dir">' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th data-i18n="gw.qty">' + (currentLang === 'zh' ? '数量' : 'Qty') + '</th><th data-i18n="gw.status_col">' + (currentLang === 'zh' ? '状态' : 'Status') + '</th></tr></thead><tbody>';
-    d.orders.forEach(function(o) {
-      ohtml += '<tr><td>' + o.ticker + '</td><td>' + o.direction + '</td><td>' + o.quantity + '</td><td>' + o.status + '</td></tr>';
-    });
-    ohtml += '</tbody></table>';
-    ordersEl.className = '';
-    ordersEl.innerHTML = ohtml;
+  if (ordersEl) {
+    var orders = d.orders || [];
+    if (orders.length === 0) {
+      ordersEl.className = 'empty-state';
+      ordersEl.innerHTML = '<div style="margin-bottom:8px">' + (currentLang === 'zh' ? '暂无待执行订单' : 'No pending orders') + '</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + (currentLang === 'zh' ? '门控通过后自动生成待执行订单' : 'Orders generated after gate approval') + '</div><button onclick="switchPage(\'inference\')" style="cursor:pointer;background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:11px">' + (currentLang === 'zh' ? '→ 查看模型推断页' : '→ View Inference') + '</button>';
+    } else {
+      var ohtml = '<table class="data-table"><thead><tr><th>Ticker</th><th>' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th>' + (currentLang === 'zh' ? '数量' : 'Qty') + '</th><th>' + (currentLang === 'zh' ? '状态' : 'Status') + '</th></tr></thead><tbody>';
+      orders.forEach(function(o) {
+        var isLong = o.direction === 'Long' || o.direction === 'Bullish';
+        ohtml += '<tr><td>' + o.ticker + '</td><td style="color:' + (isLong ? 'var(--green)' : 'var(--red)') + '">' + o.direction + '</td><td>' + o.quantity + '</td><td>' + o.status + '</td></tr>';
+      });
+      ohtml += '</tbody></table>';
+      ordersEl.className = '';
+      ordersEl.innerHTML = ohtml;
+    }
   }
 }
 
 function renderAudit(d) {
   if (!d) return;
+  var entries = d.entries || d || [];
+  if (!Array.isArray(entries)) entries = [];
+  /* KPI row */
+  var kpiEl = document.getElementById('audit-kpi');
+  if (kpiEl) {
+    var total = entries.length;
+    var latestDir = entries.length > 0 ? (entries[0].direction || '--') : '--';
+    var avgConf = '--';
+    if (entries.length > 0) {
+      var sum = 0; var count = 0;
+      entries.forEach(function(e) { if (e.confidence != null) { sum += e.confidence; count++; } });
+      if (count > 0) avgConf = (sum / count).toFixed(0) + '%';
+    }
+    var dirColor = latestDir === 'Bullish' || latestDir === 'Long' ? 'var(--green)' : latestDir === 'Bearish' || latestDir === 'Short' ? 'var(--red)' : 'var(--muted)';
+    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '总记录' : 'Total Records') + '</div><div class="kpi-value">' + total + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '最新方向' : 'Latest Direction') + '</div><div class="kpi-value" style="color:' + dirColor + '">' + latestDir + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '平均置信度' : 'Avg Confidence') + '</div><div class="kpi-value">' + avgConf + '</div></div>';
+  }
+  /* Audit log table */
   var logEl = document.getElementById('audit-log');
   if (!logEl) return;
-  var entries = d.entries || d || [];
-  if (!Array.isArray(entries) || entries.length === 0) {
+  if (entries.length === 0) {
     logEl.className = 'empty-state';
-    logEl.textContent = currentLang === 'zh' ? '暂无审计记录' : 'No audit entries';
+    logEl.innerHTML = '<div style="margin-bottom:8px">' + (currentLang === 'zh' ? '暂无审计记录' : 'No audit entries') + '</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + (currentLang === 'zh' ? '完成交易决策后自动记录' : 'Audit entries created after trade decisions') + '</div><button onclick="switchPage(\'inference\')" style="cursor:pointer;background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:11px">' + (currentLang === 'zh' ? '→ 查看模型推断页' : '→ View Inference') + '</button>';
     return;
   }
-  var html = '<table class="data-table"><thead><tr><th data-i18n="aud.time">' + (currentLang === 'zh' ? '时间' : 'Time') + '</th><th>Ticker</th><th data-i18n="aud.dir">' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th data-i18n="aud.conf">' + (currentLang === 'zh' ? '置信度' : 'Confidence') + '</th><th data-i18n="aud.source">' + (currentLang === 'zh' ? '来源' : 'Source') + '</th></tr></thead><tbody>';
-  entries.forEach(function(e) {
+  var html = '<table class="data-table"><thead><tr><th>' + (currentLang === 'zh' ? '时间' : 'Time') + '</th><th>Ticker</th><th>' + (currentLang === 'zh' ? '方向' : 'Direction') + '</th><th>' + (currentLang === 'zh' ? '置信度' : 'Confidence') + '</th><th>' + (currentLang === 'zh' ? '仓位' : 'Position') + '</th><th>' + (currentLang === 'zh' ? '来源' : 'Source') + '</th></tr></thead><tbody>';
+  entries.forEach(function(e, idx) {
     var isLong = e.direction === 'Long' || e.direction === 'Bullish';
-    html += '<tr><td>' + (e.timestamp || '--') + '</td><td>' + (e.ticker || '--') + '</td><td style="color:' + (isLong ? 'var(--green)' : 'var(--red)') + '">' + (e.direction || '--') + '</td><td>' + (e.confidence != null ? e.confidence.toFixed(0) + '%' : '--') + '</td><td>' + (e.source || '--') + '</td></tr>';
+    var isNeutral = e.direction === 'Neutral';
+    var dirColor = isNeutral ? 'var(--muted)' : isLong ? 'var(--green)' : 'var(--red)';
+    html += '<tr class="expandable" onclick="toggleAuditRow(' + idx + ')">'
+      + '<td>' + (e.timestamp || '--') + '</td>'
+      + '<td style="font-weight:600">' + (e.ticker || '--') + '</td>'
+      + '<td style="color:' + dirColor + ';font-weight:600">' + (e.direction || '--') + '</td>'
+      + '<td>' + (e.confidence != null ? e.confidence.toFixed(0) + '%' : '--') + '</td>'
+      + '<td>' + (e.position != null ? e.position + '%' : '--') + '</td>'
+      + '<td>' + (e.source || '--') + '</td></tr>';
+    html += '<tr id="audit-detail-' + idx + '" style="display:none"><td colspan="6"><div class="audit-detail"><pre>' + (e.reasoning || e.summary || (currentLang === 'zh' ? '无详细推理记录' : 'No reasoning details')) + '</pre></div></td></tr>';
   });
   html += '</tbody></table>';
   logEl.className = '';
   logEl.innerHTML = html;
 }
 
+function toggleAuditRow(idx) {
+  var row = document.getElementById('audit-detail-' + idx);
+  if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
 /* ═══════════════════ Init ═══════════════════ */
 (function init() {
   setTheme(currentTheme);
   setLang(currentLang);
+  updateBreadcrumb(currentPage);
   /* Try API; if it fails, static data remains visible */
   fetchDashboard();
+  _startPolling();
 })();
 </script>
 </body>

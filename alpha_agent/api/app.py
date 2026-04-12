@@ -43,18 +43,30 @@ def create_app() -> FastAPI:
     """Build and return the FastAPI application."""
     application = FastAPI(
         title="AlphaCore Dashboard API",
-        version="0.1.0",
+        version="1.0.0",
         lifespan=_lifespan,
     )
+
+    # --- Security middleware (rate limiting always on, auth optional) ----
+    from alpha_agent.api.security import SecurityMiddleware
+    import os
+
+    auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
+    application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
 
     application.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_methods=["GET"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["*", "Authorization"],
     )
 
-    # --- Routes -----------------------------------------------------------
+    # --- v1 versioned API -------------------------------------------------
+    from alpha_agent.api.routes.v1 import v1_router
+
+    application.include_router(v1_router)
+
+    # --- Legacy routes (backward compat — all at /api/...) ----------------
     from alpha_agent.api.routes.dashboard import router as dashboard_router
     from alpha_agent.api.routes.decision import router as decision_router
     from alpha_agent.api.routes.gate import router as gate_router
@@ -78,6 +90,11 @@ def create_app() -> FastAPI:
     application.include_router(portfolio_router)
     application.include_router(orders_router)
     application.include_router(audit_router)
+
+    # --- WebSocket endpoints ------------------------------------------------
+    from alpha_agent.api.websocket import router as ws_router
+
+    application.include_router(ws_router)
 
     # --- Health check -----------------------------------------------------
     @application.get("/api/health")

@@ -22,7 +22,12 @@ class HypothesisAgent(BaseAgent):
 
     Input: state.query (e.g., "find short-term reversal factors")
     Output: state with hypotheses populated
+
+    Blueprint SLA: inherits from FactorAgent (2s) — hypothesis generation
+    uses the same model and has similar latency characteristics.
     """
+
+    _sla_seconds = 2.0
 
     async def run(self, state: PipelineState) -> PipelineState:
         user_content = f"Research direction: {state.query}"

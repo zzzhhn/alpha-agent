@@ -23,7 +23,11 @@ class FactorAgent(BaseAgent):
 
     Input: state.hypotheses
     Output: state with factors populated (only syntactically valid ones)
+
+    Blueprint Agent 1 SLA: 2s (timeout → fallback to parse error).
     """
+
+    _sla_seconds = 2.0
 
     def __init__(self, llm: object) -> None:
         super().__init__(llm)

@@ -70,6 +70,16 @@ class PipelineState:
     # Accumulated across iterations
     all_results: tuple[FactorResult, ...] = ()
 
+    # --- v2.0 Agent outputs (blueprint p3-4) ---
+    research_summary: object = None   # ResearchSummary from ResearchSummaryAgent
+    anomaly_report: object = None     # AnomalyReport from AnomalyDetectorAgent
+    risk_advice: object = None        # RiskAdvice from RiskAdvisorAgent
+
+    # Injected by orchestrator for new agents
+    system_metrics: object = None     # Dict of service health metrics
+    positions: object = None          # Current portfolio positions
+    risk_metrics: object = None       # Current risk metrics dict
+
     def with_updates(self, **kwargs: object) -> PipelineState:
         """Create a new state with specified fields replaced."""
         current = {f.name: getattr(self, f.name) for f in self.__dataclass_fields__.values()}

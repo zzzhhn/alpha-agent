@@ -20,13 +20,20 @@ _DEFAULT_CACHE_DIR = Path("data/parquet")
 class ParquetCache:
     """Read/write Parquet files as a simple file-based cache.
 
-    Each stock code gets its own Parquet file.  Files older than 24 hours
-    are treated as stale and ignored on reads.
+    Each stock code gets its own Parquet file.  Files older than the
+    freshness threshold are treated as stale and ignored on reads.
     """
 
-    def __init__(self, cache_dir: Path = _DEFAULT_CACHE_DIR) -> None:
+    def __init__(
+        self,
+        cache_dir: Path = _DEFAULT_CACHE_DIR,
+        freshness_seconds: float = _FRESHNESS_THRESHOLD,
+    ) -> None:
         self._cache_dir = Path(cache_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
+        self._freshness = freshness_seconds
+        self._hits: int = 0
+        self._misses: int = 0
 
     @property
     def cache_dir(self) -> Path:
@@ -54,10 +61,12 @@ class ParquetCache:
         """
         path = self._path_for(stock_code)
         if not path.exists():
+            self._misses += 1
             return None
 
         if not self._is_fresh(path):
             logger.debug("Cache stale for %s, ignoring.", stock_code)
+            self._misses += 1
             return None
 
         try:
@@ -79,8 +88,10 @@ class ParquetCache:
         result = df.loc[mask]
 
         if result.empty:
+            self._misses += 1
             return None
 
+        self._hits += 1
         return result
 
     def put(self, stock_code: str, data: pd.DataFrame) -> None:
@@ -99,7 +110,20 @@ class ParquetCache:
     def _path_for(self, stock_code: str) -> Path:
         return self._cache_dir / f"{stock_code}.parquet"
 
-    @staticmethod
-    def _is_fresh(path: Path) -> bool:
+    def stats(self) -> dict[str, object]:
+        """Return cache hit/miss statistics."""
+        total = self._hits + self._misses
+        hit_rate = self._hits / total if total > 0 else 0.0
+        cached_files = list(self._cache_dir.glob("*.parquet"))
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": round(hit_rate, 4),
+            "cached_tickers": len(cached_files),
+            "freshness_seconds": self._freshness,
+            "cache_dir": str(self._cache_dir),
+        }
+
+    def _is_fresh(self, path: Path) -> bool:
         age = time.time() - path.stat().st_mtime
-        return age < _FRESHNESS_THRESHOLD
+        return age < self._freshness
