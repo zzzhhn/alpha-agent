@@ -1,8 +1,8 @@
 """Serverless-mode routes — lightweight endpoints without ML dependencies.
 
-Returns demo data matching v1 API contracts so the Next.js frontend
-renders correctly on Vercel without pandas/numpy/scikit-learn.
-Also provides legacy /api/dashboard for qcore_dashboard.html.
+Returns demo data matching the Next.js frontend TypeScript interfaces
+(see frontend/src/lib/types.ts) so every page renders correctly on
+Vercel without pandas/numpy/scikit-learn.
 """
 
 from __future__ import annotations
@@ -48,18 +48,22 @@ async def system_health(request: Request) -> dict:
     }
 
 
+# SystemConfig: api_calls_24h, cache_hit_rate, avg_latency_ms, error_count_24h, alerts[]
 @router.get("/api/v1/system/config")
 async def system_config(request: Request) -> dict:
-    s = request.app.state.settings
     return {
-        "tickers": s.dashboard_tickers,
-        "cache_ttl_seconds": s.dashboard_cache_ttl_seconds,
-        "fastapi_port": 0,
-        "llm_provider": s.llm_provider,
-        "ollama_model": "",
-        "max_iterations": s.max_iterations,
-        "data_cache_max_age_hours": s.data_cache_max_age_hours,
-        "mode": "serverless",
+        "api_calls_24h": 0,
+        "cache_hit_rate": 0.0,
+        "avg_latency_ms": 0,
+        "error_count_24h": 0,
+        "alerts": [
+            {
+                "timestamp": _now_iso(),
+                "severity": "INFO",
+                "service": "system",
+                "message": "Running in serverless mode — ML pipeline offline",
+            }
+        ],
     }
 
 
@@ -67,8 +71,11 @@ async def system_config(request: Request) -> dict:
 # Services / Pipelines / Metrics  (frontend-specific)
 # ═══════════════════════════════════════════════════════════════════════════
 
+# ServiceHealthResponse: { services: ServiceHealth[], timestamp }
+# ServiceHealth: { service_id, status, latency_p95_ms, uptime_pct_24h, last_check_at, last_error_at }
 @router.get("/api/v1/services/health")
 async def services_health(request: Request) -> dict:
+    now = _now_iso()
     llm_ok = False
     try:
         llm_ok = await request.app.state.llm.is_available()
@@ -76,35 +83,61 @@ async def services_health(request: Request) -> dict:
         pass
     return {
         "services": [
-            {"name": "FastAPI", "status": "ok"},
-            {"name": "LLM (Kimi)", "status": "ok" if llm_ok else "degraded"},
-            {"name": "ML Pipeline", "status": "offline (serverless)"},
+            {
+                "service_id": "fastapi",
+                "status": "green",
+                "latency_p95_ms": 45,
+                "uptime_pct_24h": 99.9,
+                "last_check_at": now,
+                "last_error_at": None,
+            },
+            {
+                "service_id": "llm_kimi",
+                "status": "green" if llm_ok else "yellow",
+                "latency_p95_ms": 900,
+                "uptime_pct_24h": 95.0 if llm_ok else 0.0,
+                "last_check_at": now,
+                "last_error_at": None if llm_ok else now,
+            },
+            {
+                "service_id": "ml_pipeline",
+                "status": "red",
+                "latency_p95_ms": 0,
+                "uptime_pct_24h": 0.0,
+                "last_check_at": now,
+                "last_error_at": now,
+            },
         ],
-        "overall": "degraded",
+        "timestamp": now,
     }
 
 
+# PipelineLatency: { segments: LatencySegment[], total_ms, timestamp }
+# LatencySegment: { stage, latency_ms, percentage }
 @router.get("/api/v1/pipelines/latency")
 async def pipeline_latency() -> dict:
+    segments = [
+        {"stage": "data_fetch", "latency_ms": 120, "percentage": 10.3},
+        {"stage": "feature_compute", "latency_ms": 45, "percentage": 3.9},
+        {"stage": "model_inference", "latency_ms": 80, "percentage": 6.9},
+        {"stage": "gate_evaluation", "latency_ms": 15, "percentage": 1.3},
+        {"stage": "llm_decision", "latency_ms": 900, "percentage": 77.6},
+    ]
     return {
-        "stages": [
-            {"name": "data_fetch", "p50_ms": 120, "p99_ms": 350},
-            {"name": "feature_compute", "p50_ms": 45, "p99_ms": 110},
-            {"name": "model_inference", "p50_ms": 80, "p99_ms": 200},
-            {"name": "gate_evaluation", "p50_ms": 15, "p99_ms": 40},
-            {"name": "llm_decision", "p50_ms": 900, "p99_ms": 2500},
-        ],
-        "total_p50_ms": 1160,
-        "total_p99_ms": 3200,
+        "segments": segments,
+        "total_ms": 1160,
+        "timestamp": _now_iso(),
     }
 
 
+# ThroughputMetrics: { tickers_per_sec, trades_per_sec, features_per_sec, timestamp }
 @router.get("/api/v1/metrics/throughput")
 async def throughput() -> dict:
     return {
-        "requests_per_minute": 0,
-        "decisions_today": 0,
-        "cache_hit_rate": 0.0,
+        "tickers_per_sec": 0.0,
+        "trades_per_sec": 0.0,
+        "features_per_sec": 0.0,
+        "timestamp": _now_iso(),
     }
 
 
@@ -124,9 +157,18 @@ async def market_state() -> dict:
     }
 
 
+# MarketIndicators: { ticker, rsi, macd, bollinger_pct_b, volatility, log_return, timestamp }
 @router.get("/api/v1/market/indicators/{ticker}")
 async def market_indicators(ticker: str) -> dict:
-    return {"ticker": ticker, "indicators": [], "ohlcv_recent": []}
+    return {
+        "ticker": ticker,
+        "rsi": 50.0,
+        "macd": 0.0,
+        "bollinger_pct_b": 0.5,
+        "volatility": 0.0,
+        "log_return": 0.0,
+        "timestamp": _now_iso(),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -157,9 +199,24 @@ async def inference_models() -> dict:
 # Features
 # ═══════════════════════════════════════════════════════════════════════════
 
+# FeatureState: { features: string[], tickers: string[], heatmap: number[][], timestamp }
 @router.get("/api/v1/features/state")
-async def features_state() -> list:
-    return []
+async def features_state() -> dict:
+    tickers = ["NVDA", "AAPL", "TSLA"]
+    features = ["RSI_14", "MACD_signal", "BB_%B", "Log_Return", "Volatility_20d"]
+    heatmap = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+    ]
+    return {
+        "features": features,
+        "tickers": tickers,
+        "heatmap": heatmap,
+        "timestamp": _now_iso(),
+    }
 
 
 @router.get("/api/v1/features/stats/{ticker}")
@@ -171,39 +228,52 @@ async def features_stats(ticker: str) -> dict:
 # Alpha
 # ═══════════════════════════════════════════════════════════════════════════
 
+# AlphaSignal[]: { ticker, score, direction, confidence, sources }
 @router.get("/api/v1/alpha/signals")
 async def alpha_signals() -> list:
     return []
 
 
+# AlphaFactor[]: { id, expression, ic, icir, sharpe, status, created_at }
 @router.get("/api/v1/alpha/factors")
 async def alpha_factors() -> list:
     return []
 
 
+# AlphaFactorSummary: { best_ic, best_sharpe, total_factors, pipeline_status }
 @router.get("/api/v1/alpha/factors/summary")
 async def alpha_factors_summary() -> dict:
-    return {"total_factors": 0, "avg_ic": None, "avg_sharpe": None, "pipeline_status": {"state": "idle"}}
+    return {
+        "best_ic": 0.0,
+        "best_sharpe": 0.0,
+        "total_factors": 0,
+        "pipeline_status": "idle",
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Portfolio
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Position[]: { ticker, quantity, avg_price, current_price, pnl, pnl_pct, weight }
 @router.get("/api/v1/portfolio/positions")
 async def portfolio_positions() -> list:
     return []
 
 
+# PortfolioRisk: { total_exposure, diversification_score, max_position_pct,
+#   var_95, sharpe_ratio, max_drawdown, beta, timestamp }
 @router.get("/api/v1/portfolio/risk")
 async def portfolio_risk() -> dict:
     return {
-        "risk_metrics": {
-            "total_exposure": 0.0, "max_single_position": 0.0,
-            "diversification_score": 0.0, "var_95": None, "realized_volatility": None,
-        },
-        "positions": [],
-        "backtest_summary": {},
+        "total_exposure": 0.0,
+        "diversification_score": 0.0,
+        "max_position_pct": 0.0,
+        "var_95": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "beta": 0.0,
+        "timestamp": _now_iso(),
     }
 
 
@@ -211,6 +281,7 @@ async def portfolio_risk() -> dict:
 # Orders
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Order[]: { order_id, ticker, side, quantity, price, status, filled_quantity, timestamp }
 @router.get("/api/v1/orders")
 async def orders_list() -> list:
     return []
@@ -230,25 +301,35 @@ async def orders_history() -> list:
 # Gateway
 # ═══════════════════════════════════════════════════════════════════════════
 
+# GatewayStatus: { gates_passed, gates_failed, overall_confidence,
+#   signal_description, rules: GateRule[], timestamp }
+# GateRule: { name, enabled, passed, confidence, reason }
 @router.get("/api/v1/gateway/status")
 async def gateway_status(request: Request) -> dict:
-    s = request.app.state.settings
+    rules = [
+        {"name": "4H Trend Alignment", "enabled": True, "passed": False, "confidence": 0.0, "reason": "ML pipeline offline"},
+        {"name": "1H Momentum", "enabled": True, "passed": False, "confidence": 0.0, "reason": "ML pipeline offline"},
+        {"name": "15M Entry Signal", "enabled": True, "passed": False, "confidence": 0.0, "reason": "ML pipeline offline"},
+        {"name": "Volume Filter", "enabled": True, "passed": False, "confidence": 0.0, "reason": "ML pipeline offline"},
+    ]
     return {
-        "ticker": s.dashboard_tickers[0] if s.dashboard_tickers else "NVDA",
-        "gates": [],
+        "gates_passed": 0,
+        "gates_failed": 4,
         "overall_confidence": 0.0,
-        "passed": False,
         "signal_description": "Gate evaluation requires ML pipeline",
+        "rules": rules,
+        "timestamp": _now_iso(),
     }
 
 
+# GateRule[]: { name, enabled, passed, confidence, reason }
 @router.get("/api/v1/gateway/rules")
 async def gateway_rules() -> list:
     return [
-        {"name": "4H Trend Alignment", "description": "4h trend aligns with prediction", "enabled": True, "threshold": 0.6},
-        {"name": "1H Momentum", "description": "1h momentum confirmation", "enabled": True, "threshold": 0.5},
-        {"name": "15M Entry Signal", "description": "15m entry timing", "enabled": True, "threshold": 0.55},
-        {"name": "Volume Filter", "description": "Minimum volume threshold", "enabled": True, "threshold": 1.5},
+        {"name": "4H Trend Alignment", "enabled": True, "passed": False, "confidence": 0.0, "reason": "Requires ML pipeline"},
+        {"name": "1H Momentum", "enabled": True, "passed": False, "confidence": 0.0, "reason": "Requires ML pipeline"},
+        {"name": "15M Entry Signal", "enabled": True, "passed": False, "confidence": 0.0, "reason": "Requires ML pipeline"},
+        {"name": "Volume Filter", "enabled": True, "passed": False, "confidence": 0.0, "reason": "Requires ML pipeline"},
     ]
 
 
@@ -256,14 +337,44 @@ async def gateway_rules() -> list:
 # Audit
 # ═══════════════════════════════════════════════════════════════════════════
 
+# AuditEvent[]: complex type — return empty array (frontend handles empty)
 @router.get("/api/v1/audit/events")
 async def audit_events() -> list:
     return []
 
 
+@router.get("/api/v1/audit/events/{event_id}/raw")
+async def audit_event_raw(event_id: str) -> dict:
+    return {
+        "event_id": event_id,
+        "timestamp": _now_iso(),
+        "event_type": "unknown",
+        "user_id": "system",
+        "ticker": "N/A",
+        "side": "BUY",
+        "quantity": 0,
+        "order_price": 0.0,
+        "fill_price": 0.0,
+        "fill_quantity": 0,
+        "decision_chain_id": "",
+        "regime_state": {"current_regime": "Unknown", "probability": 0.0},
+        "risk_assessment": {"var_impact_bps": 0.0, "concentration_impact": 0.0},
+        "execution_latency_ms": 0,
+        "slippage_bps": 0.0,
+        "tags": [],
+    }
+
+
+# AuditSummary: { total_decisions, acceptance_rate, avg_confidence, last_decision_time, decisions[] }
 @router.get("/api/v1/audit/decisions")
 async def audit_decisions() -> dict:
-    return {"decisions": [], "total": 0}
+    return {
+        "total_decisions": 0,
+        "acceptance_rate": 0.0,
+        "avg_confidence": 0.0,
+        "last_decision_time": _now_iso(),
+        "decisions": [],
+    }
 
 
 @router.get("/api/v1/audit/log")
