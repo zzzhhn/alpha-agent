@@ -8,9 +8,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.config import get_settings
@@ -18,44 +17,47 @@ from alpha_agent.llm.factory import create_llm_client
 
 logger = logging.getLogger(__name__)
 
-# Shared cache instance — injected into route handlers via app.state
+# Shared cache instance
 _cache = TTLCache()
 
-# Detect serverless environment (Vercel Functions set AWS_LAMBDA_FUNCTION_NAME)
-SERVERLESS = os.environ.get("VERCEL", "") == "1" or os.environ.get("SERVERLESS", "") == "true"
+# Detect serverless environment
+SERVERLESS = (
+    os.environ.get("VERCEL", "") == "1"
+    or os.environ.get("SERVERLESS", "").lower() == "true"
+)
+
+# Lazy-init state — populated on first request (works on Vercel where
+# ASGI lifespan events may not fire).
+_initialized = False
+
+
+def _ensure_initialized(app: FastAPI) -> None:
+    """Initialize app.state on first request if lifespan didn't run."""
+    global _initialized
+    if _initialized:
+        return
+    _initialized = True
+
+    settings = get_settings()
+    app.state.settings = settings
+    app.state.cache = _cache
+    app.state.llm = create_llm_client(settings)
+
+    logger.info(
+        "AlphaCore API initialized (lazy) — llm=%s, serverless=%s",
+        settings.llm_provider,
+        SERVERLESS,
+    )
 
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
-    """Startup / shutdown logic."""
-    import sys
-    import traceback
-
-    try:
-        settings = get_settings()
-        application.state.settings = settings
-        application.state.cache = _cache
-
-        # Create shared LLM client — reused across requests (connection pooling)
-        llm = create_llm_client(settings)
-        application.state.llm = llm
-
-        logger.info(
-            "AlphaCore API starting — tickers=%s, llm=%s, serverless=%s",
-            settings.dashboard_tickers,
-            settings.llm_provider,
-            SERVERLESS,
-        )
-    except Exception:
-        print(f"LIFESPAN STARTUP ERROR:\n{traceback.format_exc()}", file=sys.stderr, flush=True)
-        raise
-
+    """Startup / shutdown — used by uvicorn; may be skipped on Vercel."""
+    _ensure_initialized(application)
     yield
-
-    # Cleanup LLM client connection pool
-    if hasattr(llm, "close"):
+    llm = getattr(application.state, "llm", None)
+    if llm and hasattr(llm, "close"):
         await llm.close()
-    logger.info("AlphaCore API shutting down.")
 
 
 def create_app() -> FastAPI:
@@ -63,12 +65,23 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="AlphaCore Dashboard API",
         version="1.0.0",
-        lifespan=_lifespan,
+        lifespan=_lifespan if not SERVERLESS else None,
     )
 
-    # --- Security middleware (rate limiting always on, auth optional) ----
+    # --- Lazy-init middleware (Vercel doesn't run lifespan) ----------------
+    if SERVERLESS:
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.responses import Response
+
+        class LazyInitMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request: Request, call_next):
+                _ensure_initialized(request.app)
+                return await call_next(request)
+
+        application.add_middleware(LazyInitMiddleware)
+
+    # --- Security middleware -----------------------------------------------
     from alpha_agent.api.security import SecurityMiddleware
-    import os
 
     auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
     application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
@@ -80,13 +93,12 @@ def create_app() -> FastAPI:
         allow_headers=["*", "Authorization"],
     )
 
-    # --- System route (always available — lightweight) ----------------------
+    # --- System route (always lightweight) ---------------------------------
     from alpha_agent.api.routes.system import router as system_router
 
     application.include_router(system_router)
 
     if SERVERLESS:
-        # Lightweight routes only — no ML/data dependencies
         from alpha_agent.api.routes.serverless import router as serverless_router
 
         application.include_router(serverless_router)
@@ -119,32 +131,27 @@ def create_app() -> FastAPI:
         application.include_router(orders_router)
         application.include_router(audit_router)
 
-    # --- WebSocket endpoints (skip in serverless — no persistent connections) ---
+    # --- WebSocket (skip in serverless) ------------------------------------
     if not SERVERLESS:
         from alpha_agent.api.websocket import router as ws_router
 
         application.include_router(ws_router)
 
-    # --- Health check -----------------------------------------------------
+    # --- Health check (always available) -----------------------------------
     @application.get("/api/health")
     async def health() -> dict:
-        return {"status": "ok", "service": "alphacore"}
+        return {"status": "ok", "service": "alphacore", "mode": "serverless" if SERVERLESS else "full"}
 
-    # --- Static files (dashboard HTML) — skip in serverless ----------------
+    # --- Static files (skip in serverless) ---------------------------------
     if not SERVERLESS:
+        from fastapi.staticfiles import StaticFiles
+
         project_root = Path(__file__).resolve().parent.parent.parent
-        static_dir = project_root
-        if (static_dir / "qcore_dashboard.html").exists():
-            application.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        if (project_root / "qcore_dashboard.html").exists():
+            application.mount("/static", StaticFiles(directory=str(project_root)), name="static")
 
     return application
 
 
-# Module-level app for ``uvicorn alpha_agent.api.app:app``
-try:
-    app = create_app()
-except Exception:
-    import sys
-    import traceback
-    print(f"CREATE_APP ERROR:\n{traceback.format_exc()}", file=sys.stderr, flush=True)
-    raise
+# Module-level app instance
+app = create_app()
