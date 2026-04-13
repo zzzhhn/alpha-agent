@@ -1120,10 +1120,10 @@ function renderDashboard(d) {
     var confPct = dec ? Math.round(dec.confidence) + '%' : '--';
     var gatePassed = g ? (g.passed ? (currentLang === 'zh' ? '已通过' : 'Passed') : (currentLang === 'zh' ? '未通过' : 'Failed')) : '--';
     var gateColor = g ? (g.passed ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
-    infKpi.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '市场状态' : 'Market State') + '</div><div class="kpi-value">' + stateText + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '共识方向' : 'Consensus') + '</div><div class="kpi-value" style="color:' + dirColor + '">' + (currentLang === 'zh' ? consDirZh : consDirEn) + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '置信度' : 'Confidence') + '</div><div class="kpi-value">' + confPct + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '门控状态' : 'Gate Status') + '</div><div class="kpi-value" style="color:' + gateColor + '">' + gatePassed + '</div></div>';
+    infKpi.innerHTML = '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? 'HMM 识别的当前市场微观结构状态' : 'Current market microstructure regime identified by HMM') + '">' + (currentLang === 'zh' ? '市场状态' : 'Market State') + '</div><div class="kpi-value">' + stateText + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '多模型投票的综合方向信号' : 'Aggregated directional signal from multi-model voting') + '">' + (currentLang === 'zh' ? '共识方向' : 'Consensus') + '</div><div class="kpi-value" style="color:' + dirColor + '">' + (currentLang === 'zh' ? consDirZh : consDirEn) + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '模型对当前信号的置信概率' : 'Model confidence probability for current signal') + '">' + (currentLang === 'zh' ? '置信度' : 'Confidence') + '</div><div class="kpi-value">' + confPct + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '多时间框架门控检查是否全部通过' : 'Whether all multi-timeframe gate checks passed') + '">' + (currentLang === 'zh' ? '门控状态' : 'Gate Status') + '</div><div class="kpi-value" style="color:' + gateColor + '">' + gatePassed + '</div></div>';
   }
 
   /* --- Decision Reasoning Card (P1-2) --- */
@@ -1253,17 +1253,28 @@ function fetchPageData(page) {
 
 var _prevPageData = {};
 
+function _deltaHtml(curr, prev, unit, invert) {
+  if (curr == null || prev == null || isNaN(curr) || isNaN(prev)) return '';
+  var diff = curr - prev;
+  if (Math.abs(diff) < 0.0001) return '';
+  var sign = diff > 0 ? '+' : '';
+  var color = invert ? (diff > 0 ? 'var(--red)' : 'var(--green)') : (diff > 0 ? 'var(--green)' : 'var(--red)');
+  var display = unit === '%' ? sign + (diff * 100).toFixed(1) + '%' : sign + diff.toFixed(2);
+  return '<div class="kpi-sub" style="color:' + color + '">△' + display + '</div>';
+}
+
 function renderPage(page, data) {
   var renderers = {
     monitor: renderMonitor, market: renderMarket, alpha: renderAlpha,
     risk: renderRisk, gateway: renderGateway, audit: renderAudit
   };
-  if (renderers[page]) renderers[page](data);
+  var prev = _prevPageData[page] || null;
+  if (renderers[page]) renderers[page](data, prev);
   _prevPageData[page] = data;
   setLang(currentLang);
 }
 
-function renderMonitor(d) {
+function renderMonitor(d, prev) {
   if (!d) return;
   /* KPI row */
   var kpiEl = document.getElementById('monitor-kpi');
@@ -1274,10 +1285,10 @@ function renderMonitor(d) {
     var modelCount = Object.keys(models).length;
     var trainedCount = 0;
     Object.keys(models).forEach(function(k) { if (models[k] && models[k].trained) trainedCount++; });
-    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '服务在线' : 'Services Up') + '</div><div class="kpi-value" style="color:var(--green)">' + upCount + '/3</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '模型已训练' : 'Models Trained') + '</div><div class="kpi-value" style="color:var(--purple)">' + trainedCount + '/' + modelCount + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">Cache TTL</div><div class="kpi-value">' + (d.cache_ttl || '--') + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '运行时间' : 'Uptime') + '</div><div class="kpi-value">' + (d.uptime || '--') + '</div></div>';
+    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? 'Ollama/FastAPI/Tunnel 三个核心服务的在线状态' : 'Online status of Ollama/FastAPI/Tunnel core services') + '">' + (currentLang === 'zh' ? '服务在线' : 'Services Up') + '</div><div class="kpi-value" style="color:var(--green)">' + upCount + '/3</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '已完成训练的 ML 模型数量' : 'Number of ML models that have completed training') + '">' + (currentLang === 'zh' ? '模型已训练' : 'Models Trained') + '</div><div class="kpi-value" style="color:var(--purple)">' + trainedCount + '/' + modelCount + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? 'API 响应缓存的存活时间（秒）' : 'Time-to-live for API response cache in seconds') + '">Cache TTL</div><div class="kpi-value">' + (d.cache_ttl || '--') + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '系统自上次启动以来的运行时间' : 'System uptime since last restart') + '">' + (currentLang === 'zh' ? '运行时间' : 'Uptime') + '</div><div class="kpi-value">' + (d.uptime || '--') + '</div></div>';
   }
   /* Services */
   var container = document.getElementById('monitor-services');
@@ -1400,7 +1411,7 @@ function _renderMarketFeatureDetail(tk) {
   featEl.innerHTML = html;
 }
 
-function renderMarket(d) {
+function renderMarket(d, prev) {
   if (!d) return;
   _marketData = d;
   _marketTickers = d.tickers || Object.keys(d.ohlcv || {});
@@ -1469,23 +1480,30 @@ function renderMarket(d) {
   _selectMarketTicker(_marketTickers[0]);
 }
 
-function renderAlpha(d) {
+function renderAlpha(d, prev) {
   if (!d) return;
   /* KPI row */
   var kpiEl = document.getElementById('alpha-kpi');
   if (kpiEl) {
     var factors = d.factors || [];
     var total = factors.length;
-    var bestIC = '--'; var passRate = '--';
+    var bestIC = '--'; var bestICNum = null; var passRate = '--';
     if (total > 0) {
       var ics = factors.map(function(f) { return f.ic || 0; });
-      bestIC = Math.max.apply(null, ics).toFixed(4);
+      bestICNum = Math.max.apply(null, ics);
+      bestIC = bestICNum.toFixed(4);
       var accepted = factors.filter(function(f) { return f.active; }).length;
       passRate = ((accepted / total) * 100).toFixed(0) + '%';
     }
+    var prevBestIC = null;
+    if (prev && prev.factors && prev.factors.length > 0) {
+      var prevIcs = prev.factors.map(function(f) { return f.ic || 0; });
+      prevBestIC = Math.max.apply(null, prevIcs);
+    }
+    var icDelta = _deltaHtml(bestICNum, prevBestIC, '');
     kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '因子总数' : 'Total Factors') + '</div><div class="kpi-value">' + total + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label" title="Information Coefficient: ' + (currentLang === 'zh' ? '衡量因子预测能力，>0.03 表示有效' : 'Measures factor predictive power, >0.03 is effective') + '">' + (currentLang === 'zh' ? '最佳 IC' : 'Best IC') + '</div><div class="kpi-value" style="color:var(--cyan)">' + bestIC + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '通过率' : 'Pass Rate') + '</div><div class="kpi-value" style="color:var(--green)">' + passRate + '</div></div>';
+      + '<div class="kpi-card"><div class="kpi-label" title="Information Coefficient: ' + (currentLang === 'zh' ? '衡量因子预测能力，>0.03 表示有效' : 'Measures factor predictive power, >0.03 is effective') + '">' + (currentLang === 'zh' ? '最佳 IC' : 'Best IC') + '</div><div class="kpi-value" style="color:var(--cyan)">' + bestIC + '</div>' + icDelta + '</div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '通过回测验证的因子占比' : 'Percentage of factors that passed backtest validation') + '">' + (currentLang === 'zh' ? '通过率' : 'Pass Rate') + '</div><div class="kpi-value" style="color:var(--green)">' + passRate + '</div></div>';
   }
   /* Factor table */
   var factEl = document.getElementById('alpha-factors');
@@ -1538,21 +1556,27 @@ function renderAlpha(d) {
   }
 }
 
-function renderRisk(d) {
+function renderRisk(d, prev) {
   if (!d) return;
   /* KPI row */
   var kpiEl = document.getElementById('risk-kpi');
   if (kpiEl) {
-    var exp = d.total_exposure != null ? (d.total_exposure * 100).toFixed(0) + '%' : '--';
-    var div = d.diversification != null ? d.diversification.toFixed(2) : '--';
+    var expNum = d.total_exposure;
+    var exp = expNum != null ? (expNum * 100).toFixed(0) + '%' : '--';
+    var divNum = d.diversification;
+    var div = divNum != null ? divNum.toFixed(2) : '--';
     var pos = d.positions || [];
     var longCount = 0; var shortCount = 0;
     pos.forEach(function(p) {
       if (p.direction === 'Long' || p.direction === 'Bullish') longCount++; else shortCount++;
     });
-    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '组合净头寸占总资本比例' : 'Net position as % of total capital') + '">' + (currentLang === 'zh' ? '总敞口' : 'Exposure') + '</div><div class="kpi-value">' + exp + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '多/空' : 'Long/Short') + '</div><div class="kpi-value"><span style="color:var(--green)">' + longCount + '</span> / <span style="color:var(--red)">' + shortCount + '</span></div></div>'
-      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '持仓分散度，越高越分散' : 'Portfolio diversification, higher = more diversified') + '">' + (currentLang === 'zh' ? '分散度' : 'Diversity') + '</div><div class="kpi-value">' + div + '</div></div>';
+    var prevExp = prev ? prev.total_exposure : null;
+    var prevDiv = prev ? prev.diversification : null;
+    var expDelta = _deltaHtml(expNum, prevExp, '%');
+    var divDelta = _deltaHtml(divNum, prevDiv, '');
+    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '组合净头寸占总资本比例' : 'Net position as % of total capital') + '">' + (currentLang === 'zh' ? '总敞口' : 'Exposure') + '</div><div class="kpi-value">' + exp + '</div>' + expDelta + '</div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '当前持仓中多头与空头的数量' : 'Number of long vs short positions in portfolio') + '">' + (currentLang === 'zh' ? '多/空' : 'Long/Short') + '</div><div class="kpi-value"><span style="color:var(--green)">' + longCount + '</span> / <span style="color:var(--red)">' + shortCount + '</span></div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '持仓分散度，越高越分散' : 'Portfolio diversification, higher = more diversified') + '">' + (currentLang === 'zh' ? '分散度' : 'Diversity') + '</div><div class="kpi-value">' + div + '</div>' + divDelta + '</div>';
   }
   /* Positions with asset-row style bars */
   var posEl = document.getElementById('risk-positions');
@@ -1611,7 +1635,7 @@ function renderRisk(d) {
   }
 }
 
-function renderGateway(d) {
+function renderGateway(d, prev) {
   if (!d) return;
   /* Gate badge */
   var badgeEl = document.getElementById('gw-gate-badge');
@@ -1672,7 +1696,7 @@ function renderGateway(d) {
   }
 }
 
-function renderAudit(d) {
+function renderAudit(d, prev) {
   if (!d) return;
   var entries = d.entries || d || [];
   if (!Array.isArray(entries)) entries = [];
@@ -1681,16 +1705,26 @@ function renderAudit(d) {
   if (kpiEl) {
     var total = entries.length;
     var latestDir = entries.length > 0 ? (entries[0].direction || '--') : '--';
-    var avgConf = '--';
+    var avgConfNum = null; var avgConf = '--';
     if (entries.length > 0) {
       var sum = 0; var count = 0;
       entries.forEach(function(e) { if (e.confidence != null) { sum += e.confidence; count++; } });
-      if (count > 0) avgConf = (sum / count).toFixed(0) + '%';
+      if (count > 0) { avgConfNum = sum / count; avgConf = avgConfNum.toFixed(0) + '%'; }
     }
+    var prevAvgConf = null;
+    if (prev) {
+      var pe = prev.entries || prev || [];
+      if (Array.isArray(pe) && pe.length > 0) {
+        var ps = 0; var pc = 0;
+        pe.forEach(function(e) { if (e.confidence != null) { ps += e.confidence; pc++; } });
+        if (pc > 0) prevAvgConf = ps / pc;
+      }
+    }
+    var confDelta = _deltaHtml(avgConfNum, prevAvgConf, '%');
     var dirColor = latestDir === 'Bullish' || latestDir === 'Long' ? 'var(--green)' : latestDir === 'Bearish' || latestDir === 'Short' ? 'var(--red)' : 'var(--muted)';
-    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '总记录' : 'Total Records') + '</div><div class="kpi-value">' + total + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '最新方向' : 'Latest Direction') + '</div><div class="kpi-value" style="color:' + dirColor + '">' + latestDir + '</div></div>'
-      + '<div class="kpi-card"><div class="kpi-label">' + (currentLang === 'zh' ? '平均置信度' : 'Avg Confidence') + '</div><div class="kpi-value">' + avgConf + '</div></div>';
+    kpiEl.innerHTML = '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '审计日志中的总决策记录数' : 'Total decision records in audit log') + '">' + (currentLang === 'zh' ? '总记录' : 'Total Records') + '</div><div class="kpi-value">' + total + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '最近一次决策的方向信号' : 'Directional signal from the most recent decision') + '">' + (currentLang === 'zh' ? '最新方向' : 'Latest Direction') + '</div><div class="kpi-value" style="color:' + dirColor + '">' + latestDir + '</div></div>'
+      + '<div class="kpi-card"><div class="kpi-label" title="' + (currentLang === 'zh' ? '所有决策记录的平均模型置信度' : 'Average model confidence across all decision records') + '">' + (currentLang === 'zh' ? '平均置信度' : 'Avg Confidence') + '</div><div class="kpi-value">' + avgConf + '</div>' + confDelta + '</div>';
   }
   /* Audit log table */
   var logEl = document.getElementById('audit-log');

@@ -76,8 +76,6 @@ def evaluate_gates(ticker: str) -> GateResult:
 
     return _default_gate_result()
 
-    return _build_gate_result(trend_score, momentum_score, entry_score)
-
 
 def _compute_trend_score(daily: pd.DataFrame) -> float:
     """4H trend approximation using EMA cross on daily data."""
