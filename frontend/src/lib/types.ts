@@ -354,6 +354,97 @@ export interface TickerSearchResponse {
   readonly timestamp: string;
 }
 
+/* ═══════════════════ Phase 2: Factor Analytics + Gate Editor ═══════════════════ */
+
+export interface FactorRecord {
+  readonly id: number;
+  readonly name: string;
+  readonly expression: string;
+  readonly rationale: string;
+  readonly ic: number;
+  readonly icir: number;
+  readonly sharpe: number;
+  readonly turnover: number;
+  readonly max_drawdown: number;
+  readonly alpha_decay: readonly number[];
+  readonly created_at: string;
+}
+
+export interface FeatureStat {
+  readonly name: string;
+  readonly value: number;
+  readonly mean: number;
+  readonly std: number;
+  readonly min: number;
+  readonly max: number;
+}
+
+export interface FactorAnalysisResult {
+  readonly ticker: string;
+  readonly registry_factors: readonly FactorRecord[];
+  readonly feature_stats: readonly FeatureStat[];
+  readonly feature_names: readonly string[];
+  readonly correlation_matrix: readonly (readonly number[])[];
+  readonly total_factors: number;
+  readonly timestamp: string;
+}
+
+export interface GateScore {
+  readonly name: string;
+  readonly timeframe: string;
+  readonly score: number;
+  readonly weight: number;
+  readonly passed: boolean;
+  readonly description: string;
+}
+
+export interface GateSimulationResult {
+  readonly ticker: string;
+  readonly gates: readonly GateScore[];
+  readonly composite_score: number;
+  readonly threshold: number;
+  readonly passed: boolean;
+  readonly signal_description: string;
+  readonly weights_used: {
+    readonly trend: number;
+    readonly momentum: number;
+    readonly entry: number;
+  };
+  readonly timestamp: string;
+}
+
+/* ═══════════════════ Phase 3: Portfolio Stress Test ═══════════════════ */
+
+export interface StressPosition {
+  readonly ticker: string;
+  readonly value: number;
+  readonly weight: number;
+  readonly shock: number;
+  readonly pnl: number;
+  readonly contribution: number;
+}
+
+export interface StressScenario {
+  readonly id: string;
+  readonly name: string;
+  readonly name_zh: string;
+  readonly description?: string;
+  readonly period?: string;
+}
+
+export interface StressTestResult {
+  readonly scenario: StressScenario;
+  readonly portfolio: {
+    readonly initial_value: number;
+    readonly pnl: number;
+    readonly return_pct: number;
+    readonly final_value: number;
+  };
+  readonly positions: readonly StressPosition[];
+  readonly available_scenarios: readonly StressScenario[];
+  readonly timestamp: string;
+}
+
 /* ═══════════════════ API Response Envelope ═══════════════════ */
 
 export interface ApiResponse<T> {

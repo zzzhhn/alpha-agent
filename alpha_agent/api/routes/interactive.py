@@ -58,6 +58,31 @@ class TickerSearchRequest(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
+class FactorAnalyzeRequest(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=10)
+    sort_by: str = Field(default="ic", pattern=r"^(ic|icir|sharpe|name)$")
+
+    model_config = {"protected_namespaces": ()}
+
+
+class GateSimulateRequest(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=10)
+    gate_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    weight_trend: float = Field(default=0.40, ge=0.0, le=1.0)
+    weight_momentum: float = Field(default=0.35, ge=0.0, le=1.0)
+    weight_entry: float = Field(default=0.25, ge=0.0, le=1.0)
+
+    model_config = {"protected_namespaces": ()}
+
+
+class StressTestRequest(BaseModel):
+    positions: list[dict] = Field(..., min_length=1)
+    scenario: str = Field(default="covid_crash")
+    custom_shocks: dict[str, float] = Field(default_factory=dict)
+
+    model_config = {"protected_namespaces": ()}
+
+
 # ── Constants ───────────────────────────────────────────────────────────────
 
 TRADING_DAYS_PER_YEAR = 252
@@ -385,5 +410,282 @@ async def search_ticker(req: TickerSearchRequest) -> dict[str, Any]:
     return {
         "query": req.query,
         "results": results[:10],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 2: Factor Analytics + Gate Editor
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@router.post("/api/v1/factors/analyze")
+async def analyze_factors(req: FactorAnalyzeRequest) -> dict[str, Any]:
+    """Return factor registry + live feature stats for a ticker."""
+
+    # 1. Factor registry (saved factors from pipeline runs)
+    registry_factors: list[dict] = []
+    try:
+        from alpha_agent.pipeline.registry import FactorRegistry
+        registry = FactorRegistry()
+        for record in registry.list_all():
+            metrics = record.metrics if isinstance(record.metrics, dict) else {}
+            registry_factors.append({
+                "id": record.id,
+                "name": record.hypothesis_name,
+                "expression": record.expression,
+                "rationale": record.rationale,
+                "ic": metrics.get("ic_mean", 0.0),
+                "icir": metrics.get("icir", 0.0),
+                "sharpe": metrics.get("sharpe_ratio", 0.0),
+                "turnover": metrics.get("turnover", 0.0),
+                "max_drawdown": metrics.get("max_drawdown", 0.0),
+                "alpha_decay": metrics.get("alpha_decay", []),
+                "created_at": record.created_at,
+            })
+    except Exception as exc:
+        logger.warning("FactorRegistry load failed: %s", exc)
+
+    # 2. Live feature stats for the ticker
+    feature_stats: list[dict] = []
+    try:
+        ohlcv = _fetch_ohlcv(req.ticker, "2023-01-01", datetime.now().strftime("%Y-%m-%d"))
+        if not ohlcv.empty:
+            from alpha_agent.models.features import compute_feature_stats
+            feature_stats = [dict(s) for s in compute_feature_stats(ohlcv, req.ticker)]
+    except Exception as exc:
+        logger.warning("Feature stats failed: %s", exc)
+
+    # 3. Sort registry factors
+    sort_key = req.sort_by
+    if sort_key in ("ic", "icir", "sharpe") and registry_factors:
+        registry_factors.sort(key=lambda f: abs(f.get(sort_key, 0)), reverse=True)
+    elif sort_key == "name" and registry_factors:
+        registry_factors.sort(key=lambda f: f.get("name", ""))
+
+    # 4. Build correlation matrix from feature stats
+    correlation_matrix: list[list[float]] = []
+    feature_names: list[str] = []
+    try:
+        if not ohlcv.empty:
+            from alpha_agent.models.features import compute_features
+            feat_df = compute_features(ohlcv, req.ticker)
+            if not feat_df.empty:
+                feature_names = list(feat_df.columns)
+                corr = feat_df.corr()
+                correlation_matrix = [[round(float(v), 3) for v in row] for row in corr.values]
+    except Exception as exc:
+        logger.warning("Correlation matrix failed: %s", exc)
+
+    return {
+        "ticker": req.ticker,
+        "registry_factors": registry_factors,
+        "feature_stats": feature_stats,
+        "feature_names": feature_names,
+        "correlation_matrix": correlation_matrix,
+        "total_factors": len(registry_factors),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/api/v1/gates/simulate")
+async def simulate_gates(req: GateSimulateRequest) -> dict[str, Any]:
+    """Evaluate multi-timeframe gates with custom threshold and weights."""
+    try:
+        from alpha_agent.trading.gate import evaluate_gates
+    except ImportError:
+        raise HTTPException(status_code=501, detail="Gate module not available")
+
+    try:
+        result = evaluate_gates(req.ticker)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gate evaluation failed: {exc}") from exc
+
+    # Re-score with user weights
+    weights = {
+        "4H Trend": req.weight_trend,
+        "1H Momentum": req.weight_momentum,
+        "15M Entry": req.weight_entry,
+    }
+    total_weight = sum(weights.values()) or 1.0
+
+    gates_output = []
+    weighted_score = 0.0
+    for gate in result.gates:
+        w = weights.get(gate.name, 0.0) / total_weight
+        weighted_score += gate.score * w
+        gates_output.append({
+            "name": gate.name,
+            "timeframe": gate.timeframe,
+            "score": round(gate.score, 4),
+            "weight": round(w, 4),
+            "passed": gate.score >= req.gate_threshold,
+            "description": gate.description,
+        })
+
+    overall_pass = all(g["passed"] for g in gates_output)
+
+    return {
+        "ticker": req.ticker,
+        "gates": gates_output,
+        "composite_score": round(weighted_score, 4),
+        "threshold": req.gate_threshold,
+        "passed": overall_pass,
+        "signal_description": result.signal_description,
+        "weights_used": {
+            "trend": round(req.weight_trend / total_weight, 4),
+            "momentum": round(req.weight_momentum / total_weight, 4),
+            "entry": round(req.weight_entry / total_weight, 4),
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 3: Portfolio Stress Test
+# ══════════════════════════════════════════════════════════════════════════════
+
+_STRESS_SCENARIOS = {
+    "covid_crash": {
+        "name": "COVID-19 Crash",
+        "name_zh": "新冠暴跌 (2020.02-03)",
+        "description": "Feb-Mar 2020 market crash: SPY -34%, VIX +400%",
+        "period": "2020-02-19 to 2020-03-23",
+        "shocks": {"SPY": -0.34, "QQQ": -0.28, "IWM": -0.41, "VIX": 4.0,
+                   "XLF": -0.38, "XLK": -0.26, "XLE": -0.55, "XLV": -0.22},
+    },
+    "rate_hike_2022": {
+        "name": "2022 Rate Hike Selloff",
+        "name_zh": "2022 加息抛售",
+        "description": "2022 Fed rate hikes: growth stocks hit hardest, SPY -25%",
+        "period": "2022-01-03 to 2022-10-12",
+        "shocks": {"SPY": -0.25, "QQQ": -0.35, "IWM": -0.27, "VIX": 1.5,
+                   "XLF": -0.20, "XLK": -0.33, "XLE": 0.45, "XLV": -0.05},
+    },
+    "gfc_2008": {
+        "name": "2008 Financial Crisis",
+        "name_zh": "2008 金融危机",
+        "description": "Global Financial Crisis: SPY -57%, financials devastated",
+        "period": "2007-10-09 to 2009-03-09",
+        "shocks": {"SPY": -0.57, "QQQ": -0.49, "IWM": -0.60, "VIX": 5.0,
+                   "XLF": -0.83, "XLK": -0.48, "XLE": -0.56, "XLV": -0.38},
+    },
+    "dot_com_burst": {
+        "name": "Dot-Com Bubble Burst",
+        "name_zh": "互联网泡沫破裂 (2000)",
+        "description": "2000-2002 tech crash: NASDAQ -78%, value outperformed",
+        "shocks": {"SPY": -0.49, "QQQ": -0.78, "IWM": -0.32, "VIX": 2.5,
+                   "XLF": -0.18, "XLK": -0.82, "XLE": 0.10, "XLV": -0.10},
+    },
+}
+
+# Beta estimates for common tickers (approximate)
+_TICKER_BETAS: dict[str, dict[str, float]] = {
+    "NVDA": {"SPY": 1.8, "QQQ": 1.6, "XLK": 1.5},
+    "AAPL": {"SPY": 1.2, "QQQ": 1.1, "XLK": 1.0},
+    "MSFT": {"SPY": 1.1, "QQQ": 1.0, "XLK": 0.95},
+    "GOOG": {"SPY": 1.2, "QQQ": 1.1, "XLK": 1.0},
+    "AMZN": {"SPY": 1.3, "QQQ": 1.2, "XLK": 1.1},
+    "META": {"SPY": 1.4, "QQQ": 1.3, "XLK": 1.2},
+    "TSLA": {"SPY": 2.0, "QQQ": 1.8, "XLK": 1.5},
+    "AMD":  {"SPY": 1.7, "QQQ": 1.5, "XLK": 1.4},
+    "NFLX": {"SPY": 1.3, "QQQ": 1.2, "XLK": 1.0},
+    "JPM":  {"SPY": 1.1, "QQQ": 0.6, "XLF": 1.2},
+    "BAC":  {"SPY": 1.3, "QQQ": 0.5, "XLF": 1.4},
+    "V":    {"SPY": 1.0, "QQQ": 0.8, "XLF": 0.9},
+    "JNJ":  {"SPY": 0.7, "QQQ": 0.3, "XLV": 0.9},
+    "WMT":  {"SPY": 0.5, "QQQ": 0.3, "XLK": 0.2},
+    "XOM":  {"SPY": 0.9, "QQQ": 0.3, "XLE": 1.1},
+}
+
+
+def _estimate_ticker_shock(ticker: str, scenario_shocks: dict[str, float]) -> float:
+    """Estimate a ticker's shock using sector ETF beta mapping."""
+    betas = _TICKER_BETAS.get(ticker, {"SPY": 1.0})
+    total_shock = 0.0
+    total_weight = 0.0
+    for etf, beta in betas.items():
+        if etf in scenario_shocks:
+            total_shock += beta * scenario_shocks[etf]
+            total_weight += 1.0
+    if total_weight == 0:
+        return scenario_shocks.get("SPY", -0.20)
+    return total_shock / total_weight
+
+
+@router.post("/api/v1/portfolio/stress")
+async def stress_test(req: StressTestRequest) -> dict[str, Any]:
+    """Run a stress test on a portfolio using predefined or custom scenarios."""
+
+    # Resolve scenario
+    if req.scenario == "custom":
+        if not req.custom_shocks:
+            raise HTTPException(status_code=400, detail="Custom scenario requires custom_shocks")
+        scenario_info = {
+            "name": "Custom Scenario",
+            "name_zh": "自定义情景",
+            "description": "User-defined market shocks",
+            "shocks": req.custom_shocks,
+        }
+    else:
+        scenario_info = _STRESS_SCENARIOS.get(req.scenario)
+        if not scenario_info:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown scenario: {req.scenario}. Available: {list(_STRESS_SCENARIOS.keys())}",
+            )
+
+    shocks = scenario_info["shocks"]
+
+    # Calculate per-position impact
+    total_portfolio_value = sum(p.get("value", 0) for p in req.positions)
+    if total_portfolio_value <= 0:
+        raise HTTPException(status_code=400, detail="Portfolio total value must be positive")
+
+    position_results = []
+    total_pnl = 0.0
+
+    for pos in req.positions:
+        ticker = pos.get("ticker", "UNKNOWN")
+        value = float(pos.get("value", 0))
+        weight = value / total_portfolio_value
+
+        ticker_shock = _estimate_ticker_shock(ticker, shocks)
+        pnl = value * ticker_shock
+        total_pnl += pnl
+
+        position_results.append({
+            "ticker": ticker,
+            "value": round(value, 2),
+            "weight": round(weight, 4),
+            "shock": round(ticker_shock, 4),
+            "pnl": round(pnl, 2),
+            "contribution": round(weight * ticker_shock, 4),
+        })
+
+    # Sort by contribution (worst first)
+    position_results.sort(key=lambda p: p["contribution"])
+
+    portfolio_return = total_pnl / total_portfolio_value
+
+    return {
+        "scenario": {
+            "id": req.scenario,
+            "name": scenario_info.get("name", req.scenario),
+            "name_zh": scenario_info.get("name_zh", req.scenario),
+            "description": scenario_info.get("description", ""),
+            "period": scenario_info.get("period", ""),
+        },
+        "portfolio": {
+            "initial_value": round(total_portfolio_value, 2),
+            "pnl": round(total_pnl, 2),
+            "return_pct": round(portfolio_return * 100, 2),
+            "final_value": round(total_portfolio_value + total_pnl, 2),
+        },
+        "positions": position_results,
+        "available_scenarios": [
+            {"id": k, "name": v["name"], "name_zh": v["name_zh"]}
+            for k, v in _STRESS_SCENARIOS.items()
+        ],
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

@@ -21,6 +21,9 @@ import type {
   TickerAnalyzeRequest,
   TickerAnalysis,
   TickerSearchResponse,
+  FactorAnalysisResult,
+  GateSimulationResult,
+  StressTestResult,
 } from "./types";
 
 const BASE_URL =
@@ -216,5 +219,40 @@ export function searchTicker(query: string) {
   return fetchJson<TickerSearchResponse>("/ticker/search", {
     method: "POST",
     body: JSON.stringify({ query }),
+  });
+}
+
+/* ── Phase 2: Factor Analytics + Gate Editor ── */
+
+export function analyzeFactors(ticker: string, sortBy = "ic") {
+  return fetchJson<FactorAnalysisResult>("/factors/analyze", {
+    method: "POST",
+    body: JSON.stringify({ ticker, sort_by: sortBy }),
+  });
+}
+
+export function simulateGates(params: {
+  ticker: string;
+  gate_threshold?: number;
+  weight_trend?: number;
+  weight_momentum?: number;
+  weight_entry?: number;
+}) {
+  return fetchJson<GateSimulationResult>("/gates/simulate", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+/* ── Phase 3: Portfolio Stress Test ── */
+
+export function runStressTest(params: {
+  positions: { ticker: string; value: number }[];
+  scenario?: string;
+  custom_shocks?: Record<string, number>;
+}) {
+  return fetchJson<StressTestResult>("/portfolio/stress", {
+    method: "POST",
+    body: JSON.stringify(params),
   });
 }
