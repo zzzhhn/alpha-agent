@@ -1,7 +1,10 @@
-"""Vercel serverless entry point — exports the FastAPI app.
+"""Minimal Vercel serverless test."""
 
-Vercel's Python runtime auto-detects the FastAPI instance and wraps it
-as a serverless handler. All routing is handled internally by FastAPI.
-"""
+from fastapi import FastAPI
 
-from alpha_agent.api.app import app  # noqa: F401
+app = FastAPI()
+
+
+@app.get("/api/health")
+async def health() -> dict:
+    return {"status": "ok", "service": "alphacore", "mode": "minimal-test"}
