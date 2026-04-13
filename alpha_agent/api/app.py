@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from alpha_agent.api.cache import TTLCache
@@ -17,42 +17,39 @@ from alpha_agent.llm.factory import create_llm_client
 
 logger = logging.getLogger(__name__)
 
-# Shared cache instance
 _cache = TTLCache()
 
-# Detect serverless environment
 SERVERLESS = (
     os.environ.get("VERCEL", "") == "1"
     or os.environ.get("SERVERLESS", "").lower() == "true"
 )
 
-# Lazy-init state — populated on first request (works on Vercel where
-# ASGI lifespan events may not fire).
+# ── Lazy init (for Vercel where lifespan may not fire) ────────────────────
+
 _initialized = False
 
 
 def _ensure_initialized(app: FastAPI) -> None:
-    """Initialize app.state on first request if lifespan didn't run."""
     global _initialized
     if _initialized:
         return
     _initialized = True
-
     settings = get_settings()
     app.state.settings = settings
     app.state.cache = _cache
     app.state.llm = create_llm_client(settings)
+    logger.info("AlphaCore init (lazy): llm=%s", settings.llm_provider)
 
-    logger.info(
-        "AlphaCore API initialized (lazy) — llm=%s, serverless=%s",
-        settings.llm_provider,
-        SERVERLESS,
-    )
 
+async def _init_dep(request: Request) -> None:
+    """FastAPI dependency that ensures app.state is populated."""
+    _ensure_initialized(request.app)
+
+
+# ── Lifespan (used by uvicorn, may be skipped on Vercel) ──────────────────
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
-    """Startup / shutdown — used by uvicorn; may be skipped on Vercel."""
     _ensure_initialized(application)
     yield
     llm = getattr(application.state, "llm", None)
@@ -60,31 +57,15 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
         await llm.close()
 
 
+# ── App factory ───────────────────────────────────────────────────────────
+
 def create_app() -> FastAPI:
-    """Build and return the FastAPI application."""
     application = FastAPI(
         title="AlphaCore Dashboard API",
         version="1.0.0",
         lifespan=_lifespan if not SERVERLESS else None,
+        dependencies=[Depends(_init_dep)] if SERVERLESS else [],
     )
-
-    # --- Lazy-init middleware (Vercel doesn't run lifespan) ----------------
-    if SERVERLESS:
-        from starlette.middleware.base import BaseHTTPMiddleware
-        from starlette.responses import Response
-
-        class LazyInitMiddleware(BaseHTTPMiddleware):
-            async def dispatch(self, request: Request, call_next):
-                _ensure_initialized(request.app)
-                return await call_next(request)
-
-        application.add_middleware(LazyInitMiddleware)
-
-    # --- Security middleware -----------------------------------------------
-    from alpha_agent.api.security import SecurityMiddleware
-
-    auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
-    application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
 
     application.add_middleware(
         CORSMiddleware,
@@ -93,7 +74,13 @@ def create_app() -> FastAPI:
         allow_headers=["*", "Authorization"],
     )
 
-    # --- System route (always lightweight) ---------------------------------
+    # Security middleware
+    from alpha_agent.api.security import SecurityMiddleware
+
+    auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
+    application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
+
+    # System route (always lightweight)
     from alpha_agent.api.routes.system import router as system_router
 
     application.include_router(system_router)
@@ -102,9 +89,7 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.serverless import router as serverless_router
 
         application.include_router(serverless_router)
-        logger.info("Serverless mode: using LLM-only dashboard routes")
     else:
-        # Full ML pipeline routes
         from alpha_agent.api.routes.v1 import v1_router
 
         application.include_router(v1_router)
@@ -131,18 +116,15 @@ def create_app() -> FastAPI:
         application.include_router(orders_router)
         application.include_router(audit_router)
 
-    # --- WebSocket (skip in serverless) ------------------------------------
     if not SERVERLESS:
         from alpha_agent.api.websocket import router as ws_router
 
         application.include_router(ws_router)
 
-    # --- Health check (always available) -----------------------------------
     @application.get("/api/health")
     async def health() -> dict:
         return {"status": "ok", "service": "alphacore", "mode": "serverless" if SERVERLESS else "full"}
 
-    # --- Static files (skip in serverless) ---------------------------------
     if not SERVERLESS:
         from fastapi.staticfiles import StaticFiles
 
@@ -153,5 +135,4 @@ def create_app() -> FastAPI:
     return application
 
 
-# Module-level app instance
 app = create_app()
