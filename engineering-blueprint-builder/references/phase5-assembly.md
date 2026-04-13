@@ -643,27 +643,67 @@ node generate_blueprint.js
 
 7. **Bookmarks must be unique** (use prefixes like `module-0`, `module-1`).
 
-8. **Page numbers use `PageNumber()` constructor, not `new PageNumber()`.**
+8. **Page numbers use `PageNumber.CURRENT`, not `new PageNumber()`.** The PageNumber class is not a constructor — use the static property `PageNumber.CURRENT` as a child of TextRun.
 
 ---
 
-## Assembly Checklist
+## Bilingual Generation Strategy
 
-Before Phase 6, verify:
+**HARD RULE: Always generate BOTH language versions.** Default is EN + ZH unless user explicitly opted out in Phase 1.
 
-- [ ] npm install docx completed successfully
-- [ ] All helper functions tested with sample content
-- [ ] Cover page includes title and date
-- [ ] TOC with clickable bookmarks (internal hyperlinks)
-- [ ] Each module section has complete spec
-- [ ] All wireframe images embedded with correct altText
-- [ ] Architecture diagram embedded
-- [ ] Header/footer with page numbers
-- [ ] No \n characters (use separate Paragraphs)
-- [ ] No unicode bullets (use bullet property)
-- [ ] All tables have dual width setup
-- [ ] All shading is type CLEAR
-- [ ] Document generated as .docx file
-- [ ] File opens successfully in Word and Google Docs
+### Approach: Parallel Scripts with Separate Bookmark Ranges
+
+Generate two separate `.js` scripts (or one script with a language parameter):
+
+- **EN version**: Bookmark IDs start at 200 (`bm_200`, `bm_201`, ...)
+- **ZH version**: Bookmark IDs start at 500 (`bm_500`, `bm_501`, ...)
+
+This avoids bookmark collision if documents are ever merged.
+
+```javascript
+// EN script
+const h = require("./docx_helpers");
+h.resetBookmarkCounter(200);  // EN range
+// ... generate EN content ...
+
+// ZH script  
+const h = require("./docx_helpers");
+h.resetBookmarkCounter(500);  // ZH range
+// ... generate ZH content ...
+```
+
+### Translation Rules
+
+- Technical terms: Keep English originals in parentheses (e.g., "隐马尔可夫模型 (HMM)")
+- Code snippets: Do NOT translate
+- Table headers: Translate column names
+- Acceptance criteria: Translate description but keep metric values in original form
+- Module names: Translate but keep English in parentheses
+
+---
+
+## GATE 5 — Document Assembly Check
+
+**STOP HERE. Do not proceed to Phase 6 until every check passes.**
+
+```
+□ npm install docx completed successfully
+□ Manual TOC has entries for ALL sections (not empty field codes)
+  Verify: TOC uses InternalHyperlink + PositionalTab, NOT TableOfContents
+□ BOTH language versions generated (EN + ZH, or configured pair)
+  Each with its own bookmark range (200-series EN, 500-series ZH)
+□ All wireframe PNGs embedded in document via ImageRun
+  with all three altText fields (title, description, name)
+□ All Mermaid diagrams rendered to PNG and embedded
+□ Cover page has: title, version, date, classification
+□ Header/footer with page numbers (using PageNumber.CURRENT)
+□ All tables have 8 mandatory columns (Component Inventory tables)
+□ No \\n characters in text (use separate Paragraph objects)
+□ All shading uses ShadingType.CLEAR
+□ Page size set to US Letter (12240×15840 DXA)
+
+RESULT: □ ALL PASS → proceed to Phase 6
+        □ ANY FAIL → fix before proceeding
+```
 
 **If any fail, fix before Phase 6.**

@@ -89,7 +89,7 @@ export function BacktestResults({ result }: BacktestResultsProps) {
         <Card>
           <CardHeader
             title={t(locale, "backtest.trades")}
-            icon="\u26A1"
+            icon="⚡"
             subtitle={`${result.trades.length} ${locale === "zh" ? "条记录" : "records"}`}
           />
           <div className="overflow-x-auto p-4">

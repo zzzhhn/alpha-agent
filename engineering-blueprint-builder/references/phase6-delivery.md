@@ -497,23 +497,31 @@ if __name__ == '__main__':
 
 ---
 
-## Delivery Checklist
+## GATE 6 — Delivery Check
 
-Before presenting files to user:
+**STOP HERE. Do not deliver to user until every check passes.**
 
-- [ ] ZIP integrity verified (all files readable)
-- [ ] XML well-formed (no parsing errors)
-- [ ] Document structure valid (>10 paragraphs, expected tables/images)
-- [ ] Bookmark uniqueness checked (reported)
-- [ ] Files copied to workspace folder
-- [ ] PDF generated (if requested)
-- [ ] File sizes reasonable (>100KB, <50MB)
-- [ ] Files open in Word/Google Docs without errors
-- [ ] All images embedded and visible
-- [ ] TOC bookmarks clickable
-- [ ] No password/encryption (open fully)
+```
+□ EN .docx generated and validated (ZIP OK, XML OK, structural counts OK)
+□ EN .pdf generated via LibreOffice conversion
+□ ZH .docx generated and validated (or second language per Phase 1 config)
+□ ZH .pdf generated via LibreOffice conversion
+□ All 4 files (2× .docx + 2× .pdf) saved to workspace folder
+□ All 4 files have computer:// links provided to user
+□ File sizes are reasonable:
+  - .docx with images: >50KB (if <50KB, images may be missing)
+  - .pdf: >100KB (if <100KB, conversion may have failed)
+□ NEVER post-processed .docx with Python zipfile repack
+  (This causes corruption — assembly must be 100% complete in Node.js)
+□ All images embedded and visible in both language versions
+□ TOC bookmarks clickable in both versions
+□ Both documents have page numbers in footer
 
-**IMPORTANT:** Never post-process .docx with Python zipfile repack. This causes corruption. Assembly must be 100% complete in Node.js phase.
+RESULT: □ ALL PASS → deliver to user with computer:// links
+        □ ANY FAIL → fix before delivering
+```
+
+**CRITICAL:** Always deliver BOTH .docx AND .pdf. Word on macOS frequently fails to open docx-js output. The PDF is the guaranteed-readable backup. This is a HARD RULE — never deliver .docx only.
 
 ---
 

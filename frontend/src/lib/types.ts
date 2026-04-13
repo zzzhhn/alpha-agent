@@ -267,6 +267,10 @@ export interface BacktestRequest {
   readonly macd_fast?: number;
   readonly macd_slow?: number;
   readonly bollinger_period?: number;
+  readonly bollinger_std?: number;
+  readonly stop_loss_pct?: number;
+  readonly take_profit_pct?: number;
+  readonly position_size_pct?: number;
   readonly initial_capital?: number;
 }
 

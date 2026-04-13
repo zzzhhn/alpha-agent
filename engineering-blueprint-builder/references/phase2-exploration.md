@@ -227,18 +227,26 @@ package.json, tsconfig.json, .eslintrc*, webpack.config.js, vite.config.js
 
 ---
 
-## Codebase Exploration Checklist
+## GATE 2 — Current State Assessment Check
 
-Before Phase 3, verify:
+**STOP HERE. Do not proceed to Phase 3 until every check passes.**
 
-- [ ] All tier 1-5 file patterns searched and categorized
-- [ ] Tech stack documented (language, framework, DB, cloud)
-- [ ] Module maturity assessed (% complete for each)
-- [ ] Key gaps identified (missing tests, incomplete APIs)
-- [ ] Existing code patterns observed (naming, structure, error handling)
-- [ ] Dependencies understood (internal vs. external, version constraints)
-- [ ] Untouchable components identified
-- [ ] Any deprecated or planned-to-remove code noted
-- [ ] Performance bottlenecks or known issues documented
+```
+□ Current State Assessment section written with specific findings
+  (Not assumptions — actual observations from code exploration)
+□ Module maturity table populated
+  (Each module has a % complete estimate with evidence)
+□ "Before" state documented (MANDATORY for optimization projects)
+  (Screenshots, descriptions, or wireframes of current UI/architecture)
+□ Tech stack identified and documented
+  (Language, framework, database, cloud, key libraries with versions)
+□ All tier 1-5 file patterns searched and categorized
+□ Key gaps identified (missing tests, incomplete APIs, dead code)
+□ Untouchable components identified and documented
+□ Dependencies mapped (internal vs. external, version constraints)
+
+RESULT: □ ALL PASS → proceed to Phase 3
+        □ ANY FAIL → explore more before proceeding
+```
 
 **If exploration incomplete, go back before Phase 3.**

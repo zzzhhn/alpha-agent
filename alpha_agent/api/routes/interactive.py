@@ -33,6 +33,10 @@ class BacktestRequest(BaseModel):
     macd_fast: int = Field(default=12, ge=2, le=50)
     macd_slow: int = Field(default=26, ge=5, le=100)
     bollinger_period: int = Field(default=20, ge=5, le=100)
+    bollinger_std: float = Field(default=2.0, ge=0.5, le=4.0)
+    stop_loss_pct: float = Field(default=0.0, ge=0.0, le=50.0)
+    take_profit_pct: float = Field(default=0.0, ge=0.0, le=100.0)
+    position_size_pct: float = Field(default=100.0, ge=10.0, le=100.0)
     initial_capital: float = Field(default=100000.0, ge=1000)
 
     model_config = {"protected_namespaces": ()}
@@ -110,11 +114,11 @@ def _compute_macd(close: pd.Series, fast: int = 12, slow: int = 26) -> tuple[pd.
     return macd_line, signal_line
 
 
-def _compute_bollinger(close: pd.Series, period: int = 20) -> tuple[pd.Series, pd.Series, pd.Series]:
+def _compute_bollinger(close: pd.Series, period: int = 20, num_std: float = 2.0) -> tuple[pd.Series, pd.Series, pd.Series]:
     sma = close.rolling(period).mean()
     std = close.rolling(period).std()
-    upper = sma + 2 * std
-    lower = sma - 2 * std
+    upper = sma + num_std * std
+    lower = sma - num_std * std
     return upper, lower, sma
 
 
@@ -180,12 +184,13 @@ async def run_backtest(req: BacktestRequest) -> dict[str, Any]:
     rsi = _compute_rsi(close, req.rsi_period)
     macd_line, signal_line = _compute_macd(close, req.macd_fast, req.macd_slow)
     macd_hist = macd_line - signal_line
-    bb_upper, bb_lower, bb_mid = _compute_bollinger(close, req.bollinger_period)
+    bb_upper, bb_lower, bb_mid = _compute_bollinger(close, req.bollinger_period, req.bollinger_std)
     bb_pctb = (close - bb_lower) / (bb_upper - bb_lower).replace(0, np.nan)
 
     # Generate signals and simulate
     capital = req.initial_capital
     position = 0.0  # shares held
+    entry_price = 0.0
     cash = capital
     trades: list[dict] = []
     equity_values: list[dict] = []
@@ -200,18 +205,26 @@ async def run_backtest(req: BacktestRequest) -> dict[str, Any]:
         # Buy signal: at least 2 of 3 conditions (RSI oversold, MACD positive, near lower band)
         buy_signals = int(r < req.rsi_oversold) + int(mh > 0) + int(bp < 0.3)
         if position == 0 and buy_signals >= 2:
-            shares = int(cash / price)
+            alloc = cash * (req.position_size_pct / 100.0)
+            shares = int(alloc / price)
             if shares > 0:
                 position = shares
+                entry_price = price
                 cash -= shares * price
                 trades.append({"date": date_str, "side": "BUY", "price": round(price, 2), "shares": shares, "pnl": 0.0})
 
-        # Sell signal: RSI overbought OR MACD turning down
-        elif position > 0 and (r > req.rsi_overbought or mh < 0):
-            pnl = position * price - (trades[-1]["price"] * position) if trades else 0.0
-            trades.append({"date": date_str, "side": "SELL", "price": round(price, 2), "shares": int(position), "pnl": round(pnl, 2)})
-            cash += position * price
-            position = 0
+        # Sell signal: stop-loss / take-profit / RSI overbought / MACD turning down
+        elif position > 0:
+            change_pct = (price - entry_price) / entry_price * 100.0
+            hit_stop = req.stop_loss_pct > 0 and change_pct <= -req.stop_loss_pct
+            hit_tp = req.take_profit_pct > 0 and change_pct >= req.take_profit_pct
+            hit_signal = r > req.rsi_overbought or mh < 0
+            if hit_stop or hit_tp or hit_signal:
+                side_label = "SELL (stop)" if hit_stop else "SELL (tp)" if hit_tp else "SELL"
+                pnl = position * price - (entry_price * position)
+                trades.append({"date": date_str, "side": side_label, "price": round(price, 2), "shares": int(position), "pnl": round(pnl, 2)})
+                cash += position * price
+                position = 0
 
         portfolio_value = cash + position * price
         equity_values.append({"date": date_str, "value": round(portfolio_value, 2)})
@@ -219,7 +232,7 @@ async def run_backtest(req: BacktestRequest) -> dict[str, Any]:
     # Close any open position at end
     if position > 0:
         last_price = float(close.iloc[-1])
-        pnl = position * last_price - (trades[-1]["price"] * position) if trades else 0.0
+        pnl = position * last_price - (entry_price * position)
         date_str = str(close.index[-1].date()) if hasattr(close.index[-1], "date") else str(close.index[-1])
         trades.append({"date": date_str, "side": "SELL (close)", "price": round(last_price, 2), "shares": int(position), "pnl": round(pnl, 2)})
         cash += position * last_price
@@ -296,7 +309,7 @@ async def analyze_ticker(req: TickerAnalyzeRequest) -> dict[str, Any]:
     # Compute indicators with custom params
     rsi = _compute_rsi(close, req.rsi_period)
     macd_line, signal_line = _compute_macd(close, req.macd_fast, req.macd_slow)
-    bb_upper, bb_lower, bb_mid = _compute_bollinger(close, req.bollinger_period)
+    bb_upper, bb_lower, bb_mid = _compute_bollinger(close, req.bollinger_period, req.bollinger_std)
     bb_pctb = (close - bb_lower) / (bb_upper - bb_lower).replace(0, np.nan)
 
     # Build OHLCV + indicators response (last 120 days for charting)

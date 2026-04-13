@@ -1,448 +1,369 @@
 # Phase 3: Specification — PRD-Level Module Specification Protocol
 
-**Purpose:** Create engineer-ready specifications. Every module has clear responsibilities, testable acceptance criteria, and defined data contracts.
+**Purpose:** Create engineer-ready specifications that are also product-ready. Every module has clear responsibilities, user psychology grounding, testable acceptance criteria, and defined data contracts.
+
+**ENFORCEMENT:** This phase has the highest failure rate in production. The two most common failures are: (1) tables with only 3 columns instead of 8, and (2) specs that describe what the system does but not why the user cares. Both are blocked by Gate 3.
+
+---
+
+## MANDATORY: The Emotional Layer (5 Questions Per Module)
+
+Before writing ANY technical specification for a module, answer these 5 questions. If any answer is missing, the module spec is INCOMPLETE and must not proceed to Phase 4.
+
+### Question Template
+
+```markdown
+### User Psychology & Pain Points
+
+**1. What anxiety does this module alleviate?**
+> [What the user fears will go wrong without this module]
+
+**2. What is the user's mental model?**
+> [How the user thinks about this module — what metaphor or analogy fits]
+
+**3. What does success feel like to the user?**
+> [The emotional state when this module works perfectly]
+
+**4. What is the current pain point?**
+> [Specific, measurable frustration the user has today]
+
+**5. What is the product form?**
+> [Concrete description of what the user sees — not "a dashboard" but specifics]
+```
+
+### BAD vs GOOD Examples
+
+**BAD (The Surface PRD):**
+```
+1. Anxiety: Users want reliability
+2. Mental model: It's a dashboard
+3. Success: It works well
+4. Pain point: Current system is slow
+5. Product form: A monitoring page
+```
+(Every answer is vague. An engineer cannot build from this.)
+
+**GOOD (The Deep PRD):**
+```
+1. Anxiety: "The user fears missing a market regime change that could wipe out
+   30% of portfolio value in 48 hours. The last time this happened (March 2020),
+   the user didn't detect the shift for 3 days."
+
+2. Mental model: "The user thinks of this as their 'cockpit dashboard' — all
+   critical instruments visible at a glance, with red/yellow/green indicators
+   that require zero interpretation. Like a pilot scanning instruments on
+   final approach."
+
+3. Success: "The user opens the page and within 3 seconds knows: (a) current
+   regime state, (b) whether any position needs immediate action, (c) confidence
+   level of the model's current prediction. No clicking required."
+
+4. Pain point: "Currently, the user must check 4 different terminal windows
+   (TradingView, Bloomberg Terminal, a Python REPL, and a Slack channel) to
+   assemble the same information this module provides in one view. This takes
+   ~12 minutes per check, done 5x/day = 1 hour/day wasted."
+
+5. Product form: "A single-page card grid with 4 status cards (each 280px wide,
+   dark theme). Each card has: (a) a green/yellow/red status dot top-right,
+   (b) a 30-day sparkline chart, (c) current value in large text, (d) 24h delta
+   in smaller text below. Cards expand on click to show a detail panel with
+   the last 90 days of history."
+```
 
 ---
 
 ## Module Specification Template
 
-Create one of these per module. Replace `[ModuleName]` with actual name.
+Create one of these per module. ALL sections are MANDATORY — not "should include" but MUST include.
 
 ```markdown
 # [ModuleName] Module Specification
 
-## 1. Design Rationale
+## 1. User Psychology & Pain Points
+[Answer all 5 emotional questions — see template above]
 
-**Purpose:** One sentence describing why this module exists and what problem it solves.
+## 2. Current vs Proposed State (MANDATORY for optimization projects)
+[Table comparing before and after — see format below]
 
-Example: "The Billing module manages subscription lifecycle, calculates charges, and persists invoices to ensure accurate financial records and audit trails."
+## 3. Product Form & UX Specification
+[What the user actually sees — pixel-level detail]
 
-**Key Design Decisions:**
-- Decision A: Rationale (why not alternative B)
-- Decision B: Rationale (why not alternative C)
+## 4. Component Inventory
+[8-column table — see MANDATORY format below]
 
-Example:
-- Subscriptions are immutable once created (allows audit trail, prevents charge disputes)
-- Invoices generated async via job queue (prevents blocking request; can retry on failure)
-- All calculations in UTC (standardizes across time zones)
+## 5. User Interaction Flows
+[Step-by-step flows — minimum 3 per module]
 
-**Assumptions:**
-- Assumption 1
-- Assumption 2
+## 6. Data Contracts
+[JSON Schema for each key data structure]
 
-Example:
-- Payment processor (Stripe) is authoritative for charge status
-- One user can have multiple subscriptions simultaneously
-- Refunds are manual (not automatic on cancellation)
+## 7. Acceptance Criteria
+[Numbered, falsifiable, testable]
+
+## 8. Edge Cases & Error States
+[Minimum 5 per module]
+```
 
 ---
 
-## 2. Component Inventory
+## Section 1: User Psychology & Pain Points
 
-| Component | Type | Responsibility | Status |
-|-----------|------|-----------------|--------|
-| SubscriptionService | Class | Create/read/update subscriptions; persist to DB | New |
-| InvoiceCalculator | Class | Given subscription, compute charges (tax, prorations) | New |
-| StripeWebhookHandler | Class | Ingest Stripe events; update DB state accordingly | New |
-| POST /api/subscriptions | Endpoint | Create new subscription; call SubscriptionService | New |
-| POST /api/subscriptions/{id}/cancel | Endpoint | Cancel subscription; emit event to event bus | Existing (extend) |
-| GET /api/invoices | Endpoint | List invoices with filters (date, user, status) | New |
+See "MANDATORY: The Emotional Layer" above. All 5 questions must be answered with specific, concrete details. No vague answers.
 
-**Legend:** New = write from scratch. Existing (extend) = modify existing code. Existing (no change) = leave as-is.
+**Self-check:** Read each answer aloud. If it could apply to ANY module in ANY project, it's too vague. Rewrite with specifics.
 
 ---
 
-## 3. Component Specs
+## Section 2: Current vs Proposed State
 
-For each component in inventory, include:
+**MANDATORY for optimization projects. Skip ONLY for greenfield new builds.**
 
-### [ComponentName]
+| Aspect | Current State | Problem | Proposed State | Expected Improvement |
+|--------|--------------|---------|---------------|---------------------|
+| Data refresh | Manual CSV import, 1x/day | 23-hour data lag; user makes decisions on stale data | WebSocket real-time feed | Data lag reduced from 23h to <500ms |
+| Regime detection | User eyeballs charts manually | Subjective; misses subtle shifts; 3-day detection delay | HMM 4-state model with auto-alerts | Detection time from 72h to <4h |
+| Risk display | Separate terminal window | Context-switching wastes 12 min/check | Inline risk panel with VaR gauge | Zero context-switching; 3-second assessment |
 
-**Type:** [Class, Endpoint, Schema, Job]
-
-**Input:**
-```
-{
-  "field1": "type and description",
-  "field2": "type and description"
-}
-```
-
-**Output:**
-```
-{
-  "result": "type and description",
-  "metadata": {
-    "created_at": "ISO 8601 timestamp"
-  }
-}
-```
-
-**Behavior:**
-- Step 1: Description
-- Step 2: Description
-- Step 3: Description
-
-**Error Handling:**
-- Condition: Error code, message, and recovery action
-
-**Example:**
-
-### SubscriptionService.create()
-
-**Type:** Class Method
-
-**Input:**
-```
-{
-  "user_id": "UUID of customer",
-  "plan_id": "SKU reference to pricing tier",
-  "billing_cycle_days": "30 or 365",
-  "start_date": "ISO 8601, defaults to today"
-}
-```
-
-**Output:**
-```
-{
-  "id": "Generated UUID",
-  "user_id": "From input",
-  "plan_id": "From input",
-  "status": "active",
-  "started_at": "ISO 8601",
-  "next_charge_at": "ISO 8601, calculated"
-}
-```
-
-**Behavior:**
-1. Validate plan exists in database
-2. Validate user account is in good standing (not flagged for fraud)
-3. Check for duplicate active subscription (same user + plan)
-4. Generate UUID for subscription
-5. Insert into database with status='active'
-6. Emit 'subscription.created' event to event bus
-7. Return subscription object
-
-**Error Handling:**
-- Plan not found: Return 404, "Plan {plan_id} does not exist"
-- User flagged for fraud: Return 402, "Account review required; contact support"
-- Duplicate active subscription: Return 409, "User already has active {plan_id} subscription"
-- Database error: Return 500, "Subscription creation failed; try again in 60 seconds"
+**Self-check:** Does every row have a measurable "Expected Improvement"? If not, add one.
 
 ---
 
-## 4. User Interaction Flows
+## Section 3: Product Form & UX Specification
 
-**Format:** Step-by-step from user action to final state.
+This section describes what the user actually sees. Not "a dashboard" but the exact layout.
 
-### Example: Cancel Subscription Flow
+**Template:**
+```markdown
+### Layout
+- Page structure: [e.g., "3-column grid of status cards, each 280px wide"]
+- Navigation: [e.g., "Left sidebar with 7 module icons, active module highlighted blue"]
+- Header: [e.g., "Module name + last-updated timestamp + refresh button"]
 
-1. **User Action:** Clicks "Cancel Subscription" button in account settings
-2. **Frontend:** GET /api/subscriptions/{id} to show confirmation dialog with:
-   - Refund amount (prorated if mid-cycle)
-   - Last invoice date
-   - Warning: "Cancellation is immediate; no access after today"
-3. **User Confirms:** Clicks "Confirm Cancellation"
-4. **Frontend:** POST /api/subscriptions/{id}/cancel with reason (optional)
-5. **Backend:** SubscriptionService.cancel():
-   - Validate subscription exists
-   - Calculate prorated refund if applicable
-   - Update status to 'cancelled'
-   - Set cancelled_at timestamp
-   - Emit 'subscription.cancelled' event
-6. **Event Handler:** RefundProcessor listens for 'subscription.cancelled':
-   - If refund > $0: Call Stripe Refund API
-   - If Stripe refund succeeds: Update invoice status to 'refunded'
-   - If Stripe fails: Emit alert for manual processing
-7. **Frontend:** Receives 200 OK; navigates to "Subscription Cancelled" confirmation page
-8. **Final State:** Subscription status = 'cancelled', invoice refunded (or flagged), user has no active subscription
+### Visual Elements
+- Primary display: [e.g., "4 KPI cards in a row: Regime State, Portfolio VaR, Active Signals, P&L Today"]
+- Each card contains: [e.g., "Title (12px, dim), Value (24px, bold), Delta (14px, green/red), 30-day sparkline (60px tall)"]
+- Status indicators: [e.g., "8px dots: green = normal, yellow = warning, red = critical"]
+- Color coding: [e.g., "Dark theme: BG #0F1117, Card #1A1D27, Accent #2E75B6"]
+
+### Interactive States
+- Default: [what user sees on page load]
+- Hover: [what changes on hover — tooltips, highlights]
+- Click/Expand: [what happens on click — panels, modals, detail views]
+- Loading: [skeleton screens, spinners, progress bars]
+- Error: [what user sees when data fails to load]
+- Empty: [what user sees when no data exists yet]
+```
+
+**Self-check:** Can a frontend engineer build this UI from this description alone, without asking questions? If not, add more detail.
 
 ---
 
-## 5. Data Contracts
+## Section 4: Component Inventory — MANDATORY 8-COLUMN TABLE
 
-**Format:** JSON Schema for each key data structure.
+**THIS IS THE MOST COMMONLY FAILED REQUIREMENT.** The table MUST have exactly these 8 columns. If you produce a table with fewer columns, it is INCOMPLETE. Stop and add the missing columns.
+
+| Column | What Goes Here | Example |
+|--------|---------------|---------|
+| **Item/Component** | What is being specified | "Ticker Selector Bar" |
+| **Current State** | What exists now (if applicable) | "Static HTML dropdown, no state" |
+| **Proposed State** | What it should become | "React tabs with active highlight, URL sync" |
+| **Rationale (Why)** | Why this change matters to the user | "Users need instant context switching; current reload takes 2s" |
+| **Implementation Detail** | Engineering-level breakdown with numbered steps | "1. Create TickerTab component with props: tickers[], active, onChange 2. Add React Router search param sync 3. Debounce tab switch by 100ms" |
+| **Acceptance Criteria** | Falsifiable test condition | "Tab switch completes in <100ms; URL updates to /market?ticker=AAPL; active tab has blue underline" |
+| **Expected Effect** | Measurable improvement | "Reduces context-switch time from 2s to <100ms; eliminates full page reload" |
+| **Effort** | T-shirt size + hours estimate | "M (8-12h)" |
+
+### Full Example Row
+
+| Item | Current State | Proposed State | Rationale | Implementation Detail | Acceptance Criteria | Expected Effect | Effort |
+|------|--------------|----------------|-----------|----------------------|--------------------|-----------------|----|
+| Regime Status Card | No equivalent; user checks Bloomberg terminal | Real-time card showing HMM state + confidence + transition probability | User loses 12 min/day checking external tools; misses regime shifts by avg 3 days | 1. Create RegimeCard React component 2. Subscribe to WebSocket /ws/regime 3. Display: state name (large), confidence % (gauge), transition matrix (mini heatmap) 4. Add pulse animation on state change 5. Cache last 24h of states for sparkline | Card updates within 500ms of model output; confidence gauge renders 0-100% range; state change triggers 2s pulse animation; card renders correctly at 280px and 360px widths | Eliminates 1h/day of manual checking; reduces regime detection lag from 72h to <4h; user never needs to leave the platform | M (10-14h) |
+
+### Anti-Pattern: The 3-Column Table
+
+**NEVER produce this:**
+
+| Recommendation | Implementation Detail | Effort |
+|---|---|---|
+| Add regime detection | Implement HMM model | M |
+
+This table is missing 5 columns: Current State, Proposed State, Rationale, Acceptance Criteria, Expected Effect. It tells the engineer WHAT to build but not WHY, not HOW TO TEST IT, and not WHAT IMPROVEMENT TO EXPECT.
+
+---
+
+## Section 5: User Interaction Flows
+
+**Minimum 3 flows per module.** Format: step-by-step from user action to final system state.
+
+### Flow Template
+
+```markdown
+### Flow: [Name] (e.g., "User Detects Regime Change")
+
+1. **Trigger:** [What initiates the flow]
+   → User opens Market Feed page at 9:30 AM ET
+
+2. **System Response:** [What the system shows]
+   → Page loads in <1s; 4 status cards render with latest data
+   → Regime card shows "Bull (High Vol)" with 87% confidence
+
+3. **User Action:** [What the user does next]
+   → User notices regime card has yellow border (regime changed in last 4h)
+   → User clicks regime card to expand detail panel
+
+4. **System Response:** [What happens on interaction]
+   → Detail panel slides open (200ms animation)
+   → Shows: transition history (last 30 days), current state probabilities,
+     model ensemble agreement (3/3 models agree)
+
+5. **User Decision:** [What the user decides]
+   → User sees high confidence in new regime
+   → Clicks "View Affected Positions" button in detail panel
+
+6. **System Response:** [Final state]
+   → Navigates to Portfolio Risk view, pre-filtered to positions with
+     >10% sensitivity to current regime
+   → Risk table highlights 3 positions needing attention
+
+7. **Final State:** [What's different after the flow]
+   → User identified regime change + affected positions in <60 seconds
+   → Previously took ~15 minutes across 4 separate tools
+```
+
+### Flow Categories to Cover
+
+1. **Happy path** — Everything works perfectly
+2. **Error recovery** — API fails, data is stale, model returns NaN
+3. **First-time use** — Empty state, onboarding, no historical data
+
+---
+
+## Section 6: Data Contracts
+
+Provide exact JSON structures for each API endpoint this module uses.
 
 ```json
+// GET /api/regime/current
 {
-  "name": "Subscription",
-  "type": "object",
-  "properties": {
-    "id": {
-      "type": "string",
-      "format": "uuid",
-      "description": "Unique identifier, generated on creation"
-    },
-    "user_id": {
-      "type": "string",
-      "format": "uuid",
-      "description": "Foreign key to user table"
-    },
-    "plan_id": {
-      "type": "string",
-      "description": "References billing plan (e.g., 'plan_pro_annual')"
-    },
-    "status": {
-      "type": "string",
-      "enum": ["active", "paused", "cancelled"],
-      "description": "Current state of subscription"
-    },
-    "billing_cycle_days": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "Billing period length (30, 365, etc.)"
-    },
-    "started_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Subscription activation time in UTC"
-    },
-    "cancelled_at": {
-      "type": ["string", "null"],
-      "format": "date-time",
-      "description": "Cancellation time if applicable, null otherwise"
-    },
-    "next_charge_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Calculated next billing date, null if cancelled"
-    },
-    "created_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Database insertion timestamp"
-    }
+  "state": "bull_high_vol",
+  "state_label": "Bull (High Volatility)",
+  "confidence": 0.87,
+  "transition_probabilities": {
+    "bull_high_vol": 0.72,
+    "bull_low_vol": 0.15,
+    "bear_high_vol": 0.10,
+    "bear_low_vol": 0.03
   },
-  "required": ["id", "user_id", "plan_id", "status", "started_at", "created_at"],
-  "additionalProperties": false
+  "model_agreement": {
+    "hmm": "bull_high_vol",
+    "xgboost": "bull_high_vol",
+    "lstm": "bull_high_vol",
+    "agree": true,
+    "agreement_ratio": 1.0
+  },
+  "last_transition": {
+    "from": "bull_low_vol",
+    "to": "bull_high_vol",
+    "at": "2026-04-13T06:15:00Z",
+    "hours_ago": 3.25
+  },
+  "updated_at": "2026-04-13T09:30:05Z"
 }
 ```
 
+**Self-check:** Can a frontend developer build the UI component using ONLY this JSON contract? If they'd need to ask "what field has X data?" the contract is incomplete.
+
 ---
 
-## 6. Acceptance Criteria
+## Section 7: Acceptance Criteria
 
 ### The Falsifiability Test
 
-**Good acceptance criteria:**
-- Are testable (can write a test case that passes or fails)
-- Are observable (something measurable happens)
-- Have clear success/failure boundary (not "about," "roughly," "around")
+Every acceptance criterion MUST pass this test: **"Can an engineer write an automated test that either passes or fails based on this criterion?"**
 
-**Bad acceptance criteria:**
-- "Works correctly" — too vague
-- "Is performant" — no threshold
-- "Handles errors gracefully" — what's "graceful"?
-- "Displays normally" — which screen size? Which browser?
+If the answer is no, rewrite it.
 
-### BAD vs. GOOD Examples
+### Format Template
 
-#### Example 1: Subscription Creation
-
-**BAD:**
 ```
-When a user creates a subscription, the system should handle it properly.
+AC-[module]-[number]: [metric] [operator] [threshold], verified by [method]
 ```
-(What is "properly"? How do you test this?)
 
-**GOOD:**
-```
-When POST /api/subscriptions is called with valid plan_id, the system:
-1. Creates a subscription with status='active'
-2. Returns 201 Created with subscription JSON
-3. Emits 'subscription.created' event within 100ms
-4. Persists to database (verifiable with SELECT)
-5. Rejects duplicate requests with 409 Conflict
-```
-(Testable: write 5 test cases, each checking one observable behavior)
+### BAD vs GOOD Examples
+
+| # | BAD (Vague) | GOOD (Falsifiable) |
+|---|---|---|
+| 1 | "Works correctly" | "POST /api/regime returns 200 with valid JSON matching schema within 200ms (p95), verified by k6 load test at 50 req/s" |
+| 2 | "Is performant" | "Page initial load <1.5s on 4G connection (Lighthouse performance score ≥90), verified by CI Lighthouse run" |
+| 3 | "Handles errors gracefully" | "When WebSocket disconnects, UI shows 'Reconnecting...' banner within 1s; auto-reconnects within 5s; no data loss on reconnect, verified by Cypress test that kills WS mid-stream" |
+| 4 | "Displays normally" | "Regime card renders correctly at 280px, 360px, and 480px widths; text never truncates; sparkline scales proportionally, verified by Playwright visual regression test" |
+| 5 | "Data is up to date" | "Regime state updates within 500ms of model inference completion, verified by comparing model output timestamp vs UI render timestamp in integration test" |
+| 6 | "User-friendly" | "New user completes 'identify current regime' task in <30s without documentation, verified by usability test with 5 participants" |
+| 7 | "Secure" | "API returns 401 for requests without valid JWT; returns 403 for valid JWT without 'regime:read' scope; verified by integration test suite" |
+| 8 | "Scalable" | "System handles 500 concurrent WebSocket connections with <100ms broadcast latency, verified by k6 WebSocket load test" |
+
+### Zero Tolerance for Vague Language
+
+These words/phrases are BANNED in acceptance criteria:
+- "correctly" → specify what "correct" means
+- "properly" → specify the exact behavior
+- "should work" → specify the observable outcome
+- "displays normally" → specify viewport, browser, and visual expectation
+- "handles gracefully" → specify the error message, timing, and recovery
+- "is fast" → specify the latency threshold and measurement method
+- "is reliable" → specify the uptime %, failure mode, and recovery time
 
 ---
 
-#### Example 2: Refund Calculation
+## Section 8: Edge Cases & Error States
 
-**BAD:**
-```
-Refund amount should be calculated accurately.
-```
-(What counts as "accurate"? ±$0.01? ±1%?)
+**Minimum 5 edge cases per module.** Use this category checklist:
 
-**GOOD:**
-```
-When subscription is cancelled mid-cycle:
-1. Refund = (daily_rate) × (days_remaining), rounded to nearest cent
-2. Example: $365/year plan, 100 days remaining = $100.00 refund
-3. Refund matches Stripe's proration logic (verify via test data)
-4. Refund is issued within 24 hours of cancellation
-5. Refund status is visible in /api/invoices/{id} with field refunded_amount
-```
-
----
-
-#### Example 3: API Response Time
-
-**BAD:**
-```
-The API should be fast.
-```
-(What's "fast"? 1ms? 5s?)
-
-**GOOD:**
-```
-POST /api/subscriptions must respond within 500ms (p95) for:
-1. Valid request with existing plan
-2. Measured from request received to response sent
-3. Under load of 100 req/sec (simulated)
-4. Excluding network latency (measured locally)
-```
+| Category | What Could Go Wrong | How to Handle | How to Test |
+|----------|-------------------|---------------|-------------|
+| **Stale Data** | WebSocket disconnects; data is 5 minutes old | Show "Data may be stale (last update: 5m ago)" warning; dim status dots to gray | Mock WS disconnect; verify warning appears after 30s timeout |
+| **API Failure** | /api/regime returns 500 or times out | Show last-known-good data with "⚠ Using cached data" label; retry every 10s with exponential backoff | Mock 500 response; verify cached data shown + retry behavior |
+| **NaN / Invalid** | Model returns NaN confidence or negative probability | Display "—" for value; show "Model Error" badge on card; log to error tracking | Send NaN in mock response; verify UI doesn't crash and shows fallback |
+| **Narrow Viewport** | User on 1024px laptop screen | Cards reflow to 2-column grid; sparklines shrink proportionally; no horizontal scroll | Resize browser to 1024px; verify layout with Playwright screenshot |
+| **Empty State** | No regime data yet (fresh deployment) | Show skeleton cards with "Awaiting first model run..." message | Load page with empty database; verify skeleton UI renders |
+| **Rate Limited** | API returns 429 Too Many Requests | Queue requests; show "Rate limited — retrying in {n}s" toast; respect Retry-After header | Mock 429 with Retry-After: 5; verify client waits 5s before retry |
+| **Auth Expired** | JWT token expired mid-session | Show "Session expired" modal; redirect to login on confirm; preserve current page URL for redirect-back | Let token expire during active session; verify modal appears and redirect works |
+| **Clock Skew** | Client time differs from server time by >30s | Use server timestamp for all time-relative displays (e.g., "3 min ago"); never rely on client Date.now() for business logic | Set client clock 5 minutes ahead; verify "last updated" still shows correct relative time |
+| **Concurrent Updates** | Two users modify same resource simultaneously | Last-write-wins with version field; show "Updated by another user" if version conflict | Simulate concurrent PUT with same version; verify 409 returned for second request |
+| **Partial Load** | 3 of 4 API calls succeed, 1 fails | Render available cards; show error state only on failed card; don't block entire page | Mock one endpoint as 500, others as 200; verify partial render |
 
 ---
 
-#### Example 4: Error Handling
+## GATE 3 — PRD Quality Self-Check
 
-**BAD:**
-```
-The system should handle errors.
-```
-(Which errors? How?)
+**STOP HERE. Do not proceed to Phase 4 until every check passes.**
 
-**GOOD:**
 ```
-When Stripe API is unavailable:
-1. Return 503 Service Unavailable within 1 second
-2. Include message: "Payment processor temporarily unavailable; retry in 60 seconds"
-3. Emit alert to ops channel (PagerDuty)
-4. Don't update subscription state (remain idempotent)
-5. Log error with request_id for debugging
-```
+For EACH module, verify:
 
----
+□ All 5 emotional questions answered with specific, concrete details
+  (not vague — could NOT apply to any other module)
+□ Current vs Proposed table exists (for optimization projects)
+  with measurable "Expected Improvement" in every row
+□ Product Form describes exact layout (widths, colors, positions)
+□ Component Inventory table has ALL 8 mandatory columns:
+  Item | Current State | Proposed State | Rationale | Implementation Detail |
+  Acceptance Criteria | Expected Effect | Effort
+□ At least 3 User Interaction Flows documented
+  (happy path + error recovery + first-time use)
+□ At least 1 Data Contract (JSON) per API endpoint
+□ Every Acceptance Criterion passes the falsifiability test
+  ("Can an engineer write an automated test for this?")
+□ Zero instances of banned vague language
+  ("correctly", "properly", "should work", "displays normally",
+   "handles gracefully", "is fast", "is reliable")
+□ At least 5 edge cases identified with handling strategy and test method
+□ Edge cases cover at least 4 of these categories:
+  stale data, API failure, NaN, narrow viewport, empty state,
+  rate limited, auth expired, concurrent updates
 
-#### Example 5: Concurrent Requests
-
-**BAD:**
-```
-The system should handle multiple users.
-```
-(2 users? 1000 users? Same action?)
-
-**GOOD:**
-```
-When two users simultaneously POST /api/subscriptions with different plan_ids:
-1. Both requests complete successfully
-2. Both subscriptions are created (separate records)
-3. No database constraint violations
-4. Both receive 201 responses within 500ms
+RESULT: □ ALL PASS → proceed to Phase 4
+        □ ANY FAIL → fix before proceeding
 ```
 
----
-
-#### Example 6: Data Validation
-
-**BAD:**
-```
-Billing cycle should be validated.
-```
-(What are valid values?)
-
-**GOOD:**
-```
-POST /api/subscriptions with billing_cycle_days:
-1. Accepts: 30, 365 (documented valid values)
-2. Rejects: 0, -1, 999 with 400 Bad Request, "billing_cycle_days must be 30 or 365"
-3. Rejects: "monthly", null with 400 Bad Request, "billing_cycle_days must be integer"
-4. Rejects: missing field with 400 Bad Request, "billing_cycle_days required"
-```
-
----
-
-#### Example 7: Pagination
-
-**BAD:**
-```
-The list endpoint should support pagination.
-```
-(Page size? Sort order? Cursor vs. offset?)
-
-**GOOD:**
-```
-GET /api/invoices supports pagination:
-1. Query params: page (1-indexed, default 1), limit (default 25, max 100)
-2. Response includes: items[], total_count, has_next (boolean)
-3. Example: ?page=2&limit=50 returns items 51-100
-4. Sorted by created_at descending by default
-5. Returns 400 Bad Request if page < 1 or limit > 100
-```
-
----
-
-#### Example 8: Timezone Handling
-
-**BAD:**
-```
-Dates should be handled correctly.
-```
-(Which timezone?)
-
-**GOOD:**
-```
-All timestamps in API responses:
-1. Are in ISO 8601 format with UTC timezone (e.g., "2026-04-12T14:30:00Z")
-2. Stored in database as UTC
-3. Next charge calculations use UTC (billing happens at 00:00 UTC)
-4. User's local timezone stored separately for UI display only
-5. Midnight deadline for cancellations is "before 00:00 UTC"
-```
-
----
-
-## 7. Edge Cases
-
-**Always consider:**
-
-| Category | Examples | How to Test |
-|----------|----------|------------|
-| **Stale Data** | User cancels, then tries to charge same subscription | Request charges on cancelled sub; verify 409 returned |
-| **API Failure** | Payment processor timeout mid-request | Mock Stripe timeout; verify system remains consistent |
-| **NaN / Infinity** | Division by zero in calculation (e.g., $0 plan) | Test with 0 billing_cycle_days; verify validation rejects it |
-| **Narrow Viewport** | Mobile phone at 320px width | Render wireframe at 320px; verify readability |
-| **Empty State** | User has no subscriptions | GET /api/subscriptions returns 200 with empty items[] |
-| **Rate Limited** | Stripe API rate limits are hit | Return 429 with Retry-After header; exponential backoff in client |
-| **Auth Expired** | User's JWT expires mid-operation | Return 401; client redirects to login |
-| **Race Condition** | Two cancellation requests simultaneously | Second request returns 409 "Already cancelled" |
-| **Boundary Values** | Refund amount exactly $0.00 | Verify issued without error; appears as "$0.00 refund" |
-| **Locale Mismatch** | User in France, plan in USD | Conversion applied; documented in invoice |
-
----
-
-## 8. Module Dependencies
-
-List external systems this module depends on:
-
-- [ ] Payment Processor: Stripe API (https://stripe.com/docs)
-- [ ] Message Queue: Redis PubSub for event bus
-- [ ] Database: PostgreSQL 14+
-- [ ] Logging: CloudWatch (AWS) or Datadog
-
-For each dependency, document:
-- **What it does:** Role in this module
-- **Fallback behavior:** What happens if it fails
-- **SLA:** Expected availability (99.9%? 99.99%?)
-- **Retry policy:** Exponential backoff with max retries
-
----
-
-## Specification Checklist
-
-Before Phase 4 (Visuals), verify:
-
-- [ ] Design rationale includes key decisions and assumptions
-- [ ] Component inventory complete (all new, extend, no-change items listed)
-- [ ] All components have detailed specs (input, output, behavior)
-- [ ] User interaction flows documented (happy path + error paths)
-- [ ] Data contracts in JSON Schema format
-- [ ] Every acceptance criterion is falsifiable (testable)
-- [ ] Edge cases identified and mapped to test cases
-- [ ] External dependencies documented
-- [ ] No vague language ("correctly," "properly," "should work")
-
-**If any are incomplete, rework before Phase 4.**
+**If any module fails any check, fix it before Phase 4.**

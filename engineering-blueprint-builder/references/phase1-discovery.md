@@ -114,12 +114,33 @@ What applies?
 
 ---
 
-### 5. DELIVERY FORMAT
+### 5. LANGUAGE PAIR (MANDATORY — DO NOT SKIP)
+**Prompt:**
+```
+📋 Which languages should the blueprint be delivered in?
+
+Option A: English + Chinese (EN + ZH) — this is the default
+Option B: English only
+Option C: Other language pair (specify)
+
+Default is EN + ZH. Which do you need?
+```
+
+**What you're detecting:**
+- Language pair for bilingual output (default: EN + ZH)
+- If user doesn't specify, USE THE DEFAULT (EN + ZH)
+- This is a HARD RULE — bilingual output is mandatory unless user explicitly opts out
+
+**CRITICAL:** If the user does not answer this question or says "whatever," default to EN + ZH. Do NOT produce English-only output by default.
+
+---
+
+### 6. DELIVERY FORMAT
 **Prompt:**
 ```
 📋 How will the blueprint be delivered?
 
-Option A: Single comprehensive document (PDF/DOCX)
+Option A: Single comprehensive document (.docx + .pdf pair) — recommended
 Option B: Modular docs (separate files per component)
 Option C: Interactive markdown in repo + wiki
 
@@ -127,15 +148,16 @@ What works for your workflow?
 ```
 
 **What you're detecting:**
-- Is .docx okay or only markdown?
+- Delivery format (always .docx + .pdf pair, per HARD RULE)
 - Will it be printed or screen-only?
 - Does version control matter (git-friendly)?
 - Must include diagrams in-doc or separate?
-- Bilingual support needed?
+
+**CRITICAL:** Regardless of user answer, ALWAYS deliver both .docx and .pdf. Word on macOS frequently fails to open docx-js output. The PDF is the guaranteed-readable backup.
 
 ---
 
-### 6. TECHNOLOGY STACK
+### 7. TECHNOLOGY STACK
 **Prompt:**
 ```
 📋 Any hard tech requirements?
@@ -159,7 +181,7 @@ What's non-negotiable?
 
 ---
 
-### 7. TIMELINE / DELIVERY DATE
+### 8. TIMELINE / DELIVERY DATE
 **Prompt:**
 ```
 📋 When do you need this delivered?
@@ -244,19 +266,24 @@ Include this in your Phase 1 output document:
 
 ---
 
-## Discovery Checklist
+## GATE 1 — Constraint Matrix Check
 
-Before moving to Phase 2, verify you have:
+**STOP HERE. Do not proceed to Phase 2 until every check passes.**
 
-- [ ] Scope explicitly bounded (what's IN, what's OUT)
-- [ ] Timeline with hard date or sprint count
-- [ ] Tech stack locked (language, DB, cloud, framework)
-- [ ] Budget statement (time, money, token limits)
-- [ ] Security/compliance checklist (none vs. some vs. regulated)
-- [ ] Delivery format confirmed (DOCX, markdown, both)
-- [ ] Audience defined (internal, public, enterprise)
-- [ ] Existing system integration points identified (or confirmed it's greenfield)
-- [ ] Stakeholder sign-off path clear (who approves what)
-- [ ] Any "red flags" resolved or explicitly accepted
+```
+□ All 8 constraint categories have explicit answers (not assumptions)
+  Scope, Market/Audience, Budget, Security, Language Pair,
+  Delivery Format, Tech Stack, Timeline
+□ Language pair confirmed (default: EN + ZH if user didn't specify)
+□ Budget constraints documented
+□ "Optimization vs new build" clarified
+□ Delivery format includes .docx + .pdf pair (HARD RULE)
+□ Tech stack locked (language, DB, cloud, framework)
+□ Existing system integration points identified (or confirmed greenfield)
+□ Any "red flags" resolved or explicitly accepted
+
+RESULT: □ ALL PASS → proceed to Phase 2
+        □ ANY FAIL → ask more questions before proceeding
+```
 
 **If any are missing, ask before Phase 2.**
