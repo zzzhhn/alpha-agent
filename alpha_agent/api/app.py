@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from alpha_agent.api.cache import TTLCache
@@ -41,11 +41,6 @@ def _ensure_initialized(app: FastAPI) -> None:
     logger.info("AlphaCore init (lazy): llm=%s", settings.llm_provider)
 
 
-async def _init_dep(request: Request) -> None:
-    """FastAPI dependency that ensures app.state is populated."""
-    _ensure_initialized(request.app)
-
-
 # ── Lifespan (used by uvicorn, may be skipped on Vercel) ──────────────────
 
 @asynccontextmanager
@@ -64,8 +59,12 @@ def create_app() -> FastAPI:
         title="AlphaCore Dashboard API",
         version="1.0.0",
         lifespan=_lifespan if not SERVERLESS else None,
-        dependencies=[Depends(_init_dep)] if SERVERLESS else [],
     )
+
+    # In serverless mode, initialize state eagerly at import time
+    # (lifespan doesn't fire on Vercel)
+    if SERVERLESS:
+        _ensure_initialized(application)
 
     application.add_middleware(
         CORSMiddleware,
