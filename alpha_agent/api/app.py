@@ -64,7 +64,15 @@ def create_app() -> FastAPI:
     # In serverless mode, initialize state eagerly at import time
     # (lifespan doesn't fire on Vercel)
     if SERVERLESS:
-        _ensure_initialized(application)
+        import sys
+        try:
+            _ensure_initialized(application)
+        except Exception as e:
+            print(f"INIT ERROR: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            # Set fallback state so health endpoint works
+            application.state.settings = get_settings()
+            application.state.cache = _cache
+            application.state.llm = None
 
     application.add_middleware(
         CORSMiddleware,
