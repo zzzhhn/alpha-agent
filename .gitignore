@@ -30,3 +30,4 @@ logs/*.md
 status.json
 .coverage
 worker/.wrangler/
+.vercel

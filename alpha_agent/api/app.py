@@ -28,20 +28,27 @@ SERVERLESS = os.environ.get("VERCEL", "") == "1" or os.environ.get("SERVERLESS",
 @asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown logic."""
-    settings = get_settings()
-    application.state.settings = settings
-    application.state.cache = _cache
+    import sys
+    import traceback
 
-    # Create shared LLM client — reused across requests (connection pooling)
-    llm = create_llm_client(settings)
-    application.state.llm = llm
+    try:
+        settings = get_settings()
+        application.state.settings = settings
+        application.state.cache = _cache
 
-    logger.info(
-        "AlphaCore API starting — tickers=%s, llm=%s, serverless=%s",
-        settings.dashboard_tickers,
-        settings.llm_provider,
-        SERVERLESS,
-    )
+        # Create shared LLM client — reused across requests (connection pooling)
+        llm = create_llm_client(settings)
+        application.state.llm = llm
+
+        logger.info(
+            "AlphaCore API starting — tickers=%s, llm=%s, serverless=%s",
+            settings.dashboard_tickers,
+            settings.llm_provider,
+            SERVERLESS,
+        )
+    except Exception:
+        print(f"LIFESPAN STARTUP ERROR:\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+        raise
 
     yield
 
@@ -134,4 +141,10 @@ def create_app() -> FastAPI:
 
 
 # Module-level app for ``uvicorn alpha_agent.api.app:app``
-app = create_app()
+try:
+    app = create_app()
+except Exception:
+    import sys
+    import traceback
+    print(f"CREATE_APP ERROR:\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+    raise
