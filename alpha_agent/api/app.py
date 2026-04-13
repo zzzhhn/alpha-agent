@@ -73,11 +73,12 @@ def create_app() -> FastAPI:
         allow_headers=["*", "Authorization"],
     )
 
-    # Security middleware
-    from alpha_agent.api.security import SecurityMiddleware
+    # Security middleware (skip in serverless — BaseHTTPMiddleware incompatible)
+    if not SERVERLESS:
+        from alpha_agent.api.security import SecurityMiddleware
 
-    auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
-    application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
+        auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
+        application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
 
     # System route (always lightweight)
     from alpha_agent.api.routes.system import router as system_router
