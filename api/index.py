@@ -1,39 +1,17 @@
-"""Vercel serverless entry point — incremental test."""
+"""Vercel serverless entry point — full app with error capture."""
 
 import sys
-import os
+import traceback
 
-# Force serverless detection
-os.environ.setdefault("SERVERLESS", "true")
+try:
+    from alpha_agent.api.app import app  # noqa: F401
+except Exception:
+    # If app fails to load, create diagnostic fallback
+    from fastapi import FastAPI
+    app = FastAPI()
+    _err = traceback.format_exc()
+    print(f"APP LOAD ERROR:\n{_err}", file=sys.stderr, flush=True)
 
-from fastapi import FastAPI
-
-app = FastAPI()
-
-
-@app.get("/api/health")
-async def health() -> dict:
-    return {"status": "ok", "mode": "step2-test"}
-
-
-# Step 2: try importing the config and LLM factory
-@app.get("/api/debug/imports")
-async def debug_imports() -> dict:
-    results = {}
-    for mod_name in [
-        "alpha_agent.config",
-        "alpha_agent.api.cache",
-        "alpha_agent.llm.base",
-        "alpha_agent.llm.openai",
-        "alpha_agent.llm.ollama",
-        "alpha_agent.llm.factory",
-        "alpha_agent.api.security",
-        "alpha_agent.api.routes.system",
-        "alpha_agent.api.routes.serverless",
-    ]:
-        try:
-            __import__(mod_name)
-            results[mod_name] = "ok"
-        except Exception as e:
-            results[mod_name] = f"FAIL: {type(e).__name__}: {e}"
-    return {"imports": results, "python": sys.version}
+    @app.get("/api/health")
+    async def health():
+        return {"status": "error", "error": _err}
