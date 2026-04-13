@@ -21,6 +21,18 @@ interface SidebarGroup {
 
 const NAV_GROUPS: readonly SidebarGroup[] = [
   {
+    labelKey: "group.research",
+    items: [
+      {
+        id: "backtest",
+        labelKey: "nav.backtest",
+        href: "/backtest",
+        emoji: "\uD83D\uDCC9",
+        badge: "New",
+      },
+    ],
+  },
+  {
     labelKey: "group.analysis",
     items: [
       {

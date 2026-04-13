@@ -99,6 +99,11 @@ def create_app() -> FastAPI:
 
     application.include_router(serverless_router)
 
+    # Interactive endpoints (POST — backtest, ticker analysis, search)
+    from alpha_agent.api.routes.interactive import router as interactive_router
+
+    application.include_router(interactive_router)
+
     if not SERVERLESS:
         try:
             from alpha_agent.api.websocket import router as ws_router

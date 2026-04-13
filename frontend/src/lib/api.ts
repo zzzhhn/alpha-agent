@@ -16,6 +16,11 @@ import type {
   GateRule,
   AuditSummary,
   SystemConfig,
+  BacktestRequest,
+  BacktestResult,
+  TickerAnalyzeRequest,
+  TickerAnalysis,
+  TickerSearchResponse,
 } from "./types";
 
 const BASE_URL =
@@ -189,4 +194,27 @@ export function getAuditDecisions(limit = 50) {
 
 export function getSystemConfig() {
   return fetchJson<SystemConfig>("/system/config");
+}
+
+/* ═══════════════════ Interactive (POST) ═══════════════════ */
+
+export function runBacktest(params: BacktestRequest) {
+  return fetchJson<BacktestResult>("/backtest/run", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export function analyzeTicker(params: TickerAnalyzeRequest) {
+  return fetchJson<TickerAnalysis>("/ticker/analyze", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export function searchTicker(query: string) {
+  return fetchJson<TickerSearchResponse>("/ticker/search", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
 }
