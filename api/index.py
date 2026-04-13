@@ -41,9 +41,19 @@ try:
         print(f"⚠ LLM init failed: {e}", file=sys.stderr, flush=True)
 
 except Exception as e:
-    print(f"✗ Settings init failed: {e}", file=sys.stderr, flush=True)
+    import traceback
+    print(f"✗ Settings init failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
     # Bare minimum so routes don't crash on missing state
-    app.state.settings = None
+    # Create a minimal settings-like object with defaults
+    from types import SimpleNamespace
+    app.state.settings = SimpleNamespace(
+        dashboard_tickers=["NVDA", "AAPL", "TSLA"],
+        dashboard_cache_ttl_seconds=300,
+        llm_provider="openai",
+        max_iterations=3,
+        data_cache_max_age_hours=24,
+    )
     app.state.cache = None
     app.state.llm = None
 
