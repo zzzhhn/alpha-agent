@@ -37,58 +37,46 @@ _GATE_THRESHOLD = 0.5
 
 
 def evaluate_gates(ticker: str) -> GateResult:
-    """Evaluate multi-timeframe gates for a ticker using yfinance intraday data.
+    """Evaluate multi-timeframe gates for a ticker.
 
-    Falls back to daily data if intraday is unavailable (market closed, etc.).
+    Tries yfinance first (multi-timeframe), then AKShare daily fallback.
     """
+    daily = pd.DataFrame()
+
+    # ── Try yfinance (multi-timeframe) ───────────────────────────────
     try:
         import yfinance as yf
-    except ImportError:
-        logger.warning("yfinance not installed; returning default gate result.")
-        return _default_gate_result()
-
-    try:
         tk = yf.Ticker(ticker)
-
-        # 4H trend: use 1mo of daily data, approximate with 4-day EMA cross
         daily = tk.history(period="3mo", interval="1d")
-        trend_score = _compute_trend_score(daily) if not daily.empty else 0.5
-
-        # 1H momentum: use 5d of hourly data
         hourly = tk.history(period="5d", interval="1h")
-        momentum_score = _compute_momentum_score(hourly) if not hourly.empty else 0.5
-
-        # 15M entry: use 1d of 15m data
         m15 = tk.history(period="5d", interval="15m")
-        entry_score = _compute_entry_score(m15) if not m15.empty else 0.5
-
+        if not daily.empty:
+            trend_score = _compute_trend_score(daily)
+            momentum_score = _compute_momentum_score(hourly) if not hourly.empty else _estimate_momentum_from_daily(daily)
+            entry_score = _compute_entry_score(m15) if not m15.empty else _estimate_entry_from_daily(daily)
+            return _build_gate_result(trend_score, momentum_score, entry_score)
     except Exception:
-        logger.warning("Failed to fetch intraday data for %s; using defaults.", ticker, exc_info=True)
-        return _default_gate_result()
+        logger.info("yfinance unavailable for %s, trying AKShare.", ticker)
 
-    gates = [
-        GateScore("4H Trend", "4H", trend_score, trend_score >= _GATE_THRESHOLD, "EMA(8) vs EMA(21) cross"),
-        GateScore("1H Momentum", "1H", momentum_score, momentum_score >= _GATE_THRESHOLD, "RSI(14) momentum zone"),
-        GateScore("15M Entry", "15M", entry_score, entry_score >= _GATE_THRESHOLD, "MACD signal cross"),
-    ]
+    # ── Fallback: AKShare daily (works from China) ───────────────────
+    try:
+        import akshare as ak
+        raw = ak.stock_us_daily(symbol=ticker, adjust="qfq")
+        if raw is not None and not raw.empty:
+            daily = raw.tail(90).copy()
+            daily = daily.rename(columns={"close": "Close", "open": "Open",
+                                          "high": "High", "low": "Low",
+                                          "volume": "Volume"})
+            trend_score = _compute_trend_score(daily)
+            momentum_score = _estimate_momentum_from_daily(daily)
+            entry_score = _estimate_entry_from_daily(daily)
+            return _build_gate_result(trend_score, momentum_score, entry_score)
+    except Exception:
+        logger.warning("AKShare fallback also failed for %s.", ticker, exc_info=True)
 
-    # Weighted product: trend 0.4, momentum 0.35, entry 0.25
-    weights = [0.4, 0.35, 0.25]
-    scores = [g.score for g in gates]
-    overall = sum(w * s for w, s in zip(weights, scores))
+    return _default_gate_result()
 
-    all_passed = all(g.passed for g in gates)
-    signal_desc = (
-        f"{'All gates passed' if all_passed else 'Gate check incomplete'} — "
-        f"Trend={trend_score:.0%}, Momentum={momentum_score:.0%}, Entry={entry_score:.0%}"
-    )
-
-    return GateResult(
-        gates=gates,
-        overall_confidence=overall,
-        passed=all_passed,
-        signal_description=signal_desc,
-    )
+    return _build_gate_result(trend_score, momentum_score, entry_score)
 
 
 def _compute_trend_score(daily: pd.DataFrame) -> float:
@@ -136,6 +124,34 @@ def _compute_entry_score(m15: pd.DataFrame) -> float:
     # Score based on MACD histogram (macd - signal)
     histogram = (macd.iloc[-1] - signal.iloc[-1]) / close.iloc[-1]
     return float(np.clip(0.5 + histogram * 50, 0.0, 1.0))
+
+
+def _build_gate_result(trend_score: float, momentum_score: float, entry_score: float) -> GateResult:
+    """Build a GateResult from three gate scores."""
+    gates = [
+        GateScore("4H Trend", "4H", trend_score, trend_score >= _GATE_THRESHOLD, "EMA(8) vs EMA(21) cross"),
+        GateScore("1H Momentum", "1H", momentum_score, momentum_score >= _GATE_THRESHOLD, "RSI(14) momentum zone"),
+        GateScore("15M Entry", "15M", entry_score, entry_score >= _GATE_THRESHOLD, "MACD signal cross"),
+    ]
+    weights = [0.4, 0.35, 0.25]
+    scores = [g.score for g in gates]
+    overall = sum(w * s for w, s in zip(weights, scores))
+    all_passed = all(g.passed for g in gates)
+    signal_desc = (
+        f"{'All gates passed' if all_passed else 'Gate check incomplete'} — "
+        f"Trend={trend_score:.0%}, Momentum={momentum_score:.0%}, Entry={entry_score:.0%}"
+    )
+    return GateResult(gates=gates, overall_confidence=overall, passed=all_passed, signal_description=signal_desc)
+
+
+def _estimate_momentum_from_daily(daily: pd.DataFrame) -> float:
+    """Estimate 1H momentum from daily data using RSI on daily close."""
+    return _compute_momentum_score(daily)
+
+
+def _estimate_entry_from_daily(daily: pd.DataFrame) -> float:
+    """Estimate 15M entry signal from daily data using MACD on daily close."""
+    return _compute_entry_score(daily)
 
 
 def _default_gate_result() -> GateResult:

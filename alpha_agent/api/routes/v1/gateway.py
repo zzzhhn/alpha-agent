@@ -70,8 +70,8 @@ async def gateway_status(request: Request) -> GatewayStatusResponse:
         GateCheck(
             name=g.name,
             passed=g.passed,
-            confidence=g.confidence,
-            reason=g.reason if hasattr(g, "reason") else "",
+            confidence=g.score,
+            reason=g.description,
         )
         for g in gate_result.gates
     ]

@@ -1,4 +1,4 @@
-"""US stock data provider using yfinance (with AKShare fallback for China networks)."""
+"""US stock data provider using AKShare primary (with yfinance fallback for non-China networks)."""
 
 from __future__ import annotations
 
@@ -55,9 +55,10 @@ class YFinanceProvider(DataProvider):
             if i > 0:
                 time.sleep(_REQUEST_INTERVAL)
 
-            df = self._fetch_yfinance(ticker, start_fmt, end_fmt)
+            # AKShare primary (Sina Finance — works from China without VPN)
+            df = self._fetch_akshare_us(ticker, start_fmt, end_fmt)
             if df is None:
-                df = self._fetch_akshare_us(ticker, start_fmt, end_fmt)
+                df = self._fetch_yfinance(ticker, start_fmt, end_fmt)
 
             if df is None or df.empty:
                 logger.warning("No data for %s, skipping.", ticker)
