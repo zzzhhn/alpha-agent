@@ -63,8 +63,36 @@ export function BacktestForm({ onSubmit, isLoading }: BacktestFormProps) {
   const [takeProfit, setTakeProfit] = useState(DEFAULTS.takeProfit);
   const [positionSize, setPositionSize] = useState(DEFAULTS.positionSize);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  const DATA_MIN = "2010-01-01";
+  const today = new Date().toISOString().slice(0, 10);
+
+  const validateDates = useCallback((): boolean => {
+    if (startDate < DATA_MIN) {
+      setDateError(locale === "zh"
+        ? `数据最早可用日期为 ${DATA_MIN}，请调整开始日期`
+        : `Data available from ${DATA_MIN}. Please adjust start date.`);
+      return false;
+    }
+    if (endDate > today) {
+      setDateError(locale === "zh"
+        ? `结束日期不能晚于今天 (${today})`
+        : `End date cannot be later than today (${today}).`);
+      return false;
+    }
+    if (startDate >= endDate) {
+      setDateError(locale === "zh"
+        ? "开始日期必须早于结束日期"
+        : "Start date must be before end date.");
+      return false;
+    }
+    setDateError(null);
+    return true;
+  }, [startDate, endDate, locale, today]);
 
   const handleReset = useCallback(() => {
+    setDateError(null);
     setTicker(DEFAULTS.ticker);
     setStartDate(DEFAULTS.startDate);
     setEndDate(DEFAULTS.endDate);
@@ -81,6 +109,7 @@ export function BacktestForm({ onSubmit, isLoading }: BacktestFormProps) {
   }, []);
 
   const handleSubmit = useCallback(() => {
+    if (!validateDates()) return;
     onSubmit({
       ticker,
       start_date: startDate,
@@ -99,7 +128,7 @@ export function BacktestForm({ onSubmit, isLoading }: BacktestFormProps) {
   }, [
     ticker, startDate, endDate, rsiPeriod, rsiOversold,
     rsiOverbought, macdFast, macdSlow, bollingerPeriod,
-    bollingerStd, stopLoss, takeProfit, positionSize, onSubmit,
+    bollingerStd, stopLoss, takeProfit, positionSize, onSubmit, validateDates,
   ]);
 
   const guides = PARAM_GUIDES[locale];
@@ -133,6 +162,12 @@ export function BacktestForm({ onSubmit, isLoading }: BacktestFormProps) {
             onChange={setEndDate}
           />
         </div>
+
+        {dateError && (
+          <div className="rounded-lg border border-red/30 bg-red/5 px-3 py-2 text-xs text-red">
+            {dateError}
+          </div>
+        )}
 
         {/* RSI */}
         <div className="border-t border-border pt-3">
