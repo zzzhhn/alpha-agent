@@ -197,8 +197,9 @@ async def run_backtest(req: BacktestRequest) -> dict[str, Any]:
         mh = float(macd_hist.iloc[i]) if not np.isnan(macd_hist.iloc[i]) else 0.0
         bp = float(bb_pctb.iloc[i]) if not np.isnan(bb_pctb.iloc[i]) else 0.5
 
-        # Buy signal: RSI oversold + MACD turning up + near lower band
-        if position == 0 and r < req.rsi_oversold and mh > 0 and bp < 0.3:
+        # Buy signal: at least 2 of 3 conditions (RSI oversold, MACD positive, near lower band)
+        buy_signals = int(r < req.rsi_oversold) + int(mh > 0) + int(bp < 0.3)
+        if position == 0 and buy_signals >= 2:
             shares = int(cash / price)
             if shares > 0:
                 position = shares
