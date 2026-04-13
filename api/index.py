@@ -42,7 +42,8 @@ try:
 
 except Exception as e:
     import traceback
-    print(f"✗ Settings init failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    _init_error = f"{type(e).__name__}: {e}"
+    print(f"✗ Settings init failed: {_init_error}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
     # Bare minimum so routes don't crash on missing state
     # Create a minimal settings-like object with defaults
@@ -73,9 +74,11 @@ except Exception as e:
     print(f"✗ system routes: {e}", file=sys.stderr, flush=True)
 
 
+_init_error: str | None = None
+
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok", "service": "alphacore", "mode": "serverless"}
+    return {"status": "ok", "service": "alphacore", "mode": "serverless", "init_error": _init_error}
 
 
 print(f"App ready: {len(app.routes)} routes", file=sys.stderr, flush=True)
