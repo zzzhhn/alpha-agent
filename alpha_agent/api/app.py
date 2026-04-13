@@ -93,14 +93,20 @@ def create_app() -> FastAPI:
 
     application.include_router(system_router)
 
-    if SERVERLESS:
-        from alpha_agent.api.routes.serverless import router as serverless_router
+    # Always load serverless routes — they provide /api/v1/* endpoints
+    # that the Next.js frontend needs, with demo data as fallback.
+    from alpha_agent.api.routes.serverless import router as serverless_router
 
-        application.include_router(serverless_router)
-    else:
-        from alpha_agent.api.routes.v1 import v1_router
+    application.include_router(serverless_router)
 
-        application.include_router(v1_router)
+    if not SERVERLESS:
+        # Full mode: also load real ML-powered routes (may override serverless stubs)
+        try:
+            from alpha_agent.api.routes.v1 import v1_router
+
+            application.include_router(v1_router)
+        except ImportError:
+            logger.warning("v1 routes not available, using serverless stubs only")
 
         from alpha_agent.api.routes.dashboard import router as dashboard_router
         from alpha_agent.api.routes.decision import router as decision_router
@@ -125,9 +131,12 @@ def create_app() -> FastAPI:
         application.include_router(audit_router)
 
     if not SERVERLESS:
-        from alpha_agent.api.websocket import router as ws_router
+        try:
+            from alpha_agent.api.websocket import router as ws_router
 
-        application.include_router(ws_router)
+            application.include_router(ws_router)
+        except ImportError:
+            logger.info("WebSocket module not available, skipping")
 
     @application.get("/api/health")
     async def health() -> dict:
