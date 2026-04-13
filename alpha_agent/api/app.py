@@ -142,12 +142,18 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "service": "alphacore", "mode": "serverless" if SERVERLESS else "full"}
 
-    if not SERVERLESS:
-        from fastapi.staticfiles import StaticFiles
+    # Redirect root and /qcore to Vercel Next.js frontend
+    _FRONTEND_URL = "https://frontend-delta-three-81.vercel.app"
 
-        project_root = Path(__file__).resolve().parent.parent.parent
-        if (project_root / "qcore_dashboard.html").exists():
-            application.mount("/static", StaticFiles(directory=str(project_root)), name="static")
+    from fastapi.responses import RedirectResponse
+
+    @application.get("/")
+    async def root_redirect():
+        return RedirectResponse(_FRONTEND_URL)
+
+    @application.get("/qcore")
+    async def qcore_redirect():
+        return RedirectResponse(_FRONTEND_URL)
 
     return application
 
