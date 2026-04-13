@@ -49,7 +49,7 @@ export function BacktestForm({ onSubmit, isLoading }: BacktestFormProps) {
     <Card>
       <CardHeader
         title={t(locale, "backtest.params")}
-        icon="\u2699\uFE0F"
+        icon="⚙️"
       />
       <div className="space-y-4 p-4">
         {/* Ticker + Date Range */}
