@@ -104,6 +104,11 @@ def create_app() -> FastAPI:
 
     application.include_router(interactive_router)
 
+    # LLM provider control (GET status, POST switch)
+    from alpha_agent.api.routes.llm_control import router as llm_control_router
+
+    application.include_router(llm_control_router)
+
     if not SERVERLESS:
         try:
             from alpha_agent.api.websocket import router as ws_router

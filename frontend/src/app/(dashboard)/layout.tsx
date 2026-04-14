@@ -22,7 +22,7 @@ export default function DashboardLayout({
         </div>
 
         {/* Topbar */}
-        <header className="topbar-blur col-start-2 flex items-center justify-between border-b border-border px-6">
+        <header className="topbar-blur col-start-2 flex items-center justify-between border-b border-[var(--border)] px-6">
           <Breadcrumb />
           <ThemeToggle />
         </header>

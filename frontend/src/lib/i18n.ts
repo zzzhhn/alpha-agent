@@ -2,19 +2,8 @@ export type Locale = "zh" | "en";
 
 const translations = {
   zh: {
-    /* Sidebar */
-    "nav.inference": "模型推理",
-    "nav.market": "市场数据",
-    "nav.alpha": "Alpha 信号",
-    "nav.portfolio": "投资组合",
-    "nav.orders": "订单执行",
-    "nav.gateway": "系统总线",
-    "nav.audit": "审计跟踪",
-
     /* Sidebar groups */
-    "group.analysis": "分析引擎",
-    "group.execution": "执行层",
-    "group.infra": "基础设施",
+    "group.system": "系统",
 
     /* Pipeline breadcrumb */
     "stage.data": "数据采集",
@@ -110,6 +99,21 @@ const translations = {
     "stress.shock": "冲击",
     "stress.pnl": "盈亏",
 
+    /* Activity Log */
+    "nav.activity": "活动日志",
+    "activity.title": "活动日志",
+    "activity.decisions": "决策记录",
+    "activity.executions": "执行记录",
+    "activity.noData": "暂无活动记录",
+    "activity.filter": "筛选...",
+    "activity.reasoning": "推理链",
+
+    /* Model Switcher */
+    "model.label": "AI 模型",
+    "model.switching": "切换中...",
+    "model.switchToKimi": "切换至 Kimi",
+    "model.switchToGemma": "切换至 Gemma 4",
+
     /* Theme */
     "theme.dark": "深色",
     "theme.light": "浅色",
@@ -121,17 +125,7 @@ const translations = {
     "brand.systemOnline": "系统在线",
   },
   en: {
-    "nav.inference": "Inference",
-    "nav.market": "Market Data",
-    "nav.alpha": "Alpha Signals",
-    "nav.portfolio": "Portfolio",
-    "nav.orders": "Orders",
-    "nav.gateway": "System Bus",
-    "nav.audit": "Audit Trail",
-
-    "group.analysis": "Analysis Engine",
-    "group.execution": "Execution",
-    "group.infra": "Infrastructure",
+    "group.system": "System",
 
     "stage.data": "Data Collection",
     "stage.feature": "Feature Extraction",
@@ -220,6 +214,19 @@ const translations = {
     "stress.value": "Value",
     "stress.shock": "Shock",
     "stress.pnl": "P&L",
+
+    "nav.activity": "Activity Log",
+    "activity.title": "Activity Log",
+    "activity.decisions": "Decisions",
+    "activity.executions": "Executions",
+    "activity.noData": "No activity records",
+    "activity.filter": "Filter...",
+    "activity.reasoning": "Reasoning Chain",
+
+    "model.label": "AI Model",
+    "model.switching": "Switching...",
+    "model.switchToKimi": "Switch to Kimi",
+    "model.switchToGemma": "Switch to Gemma 4",
 
     "theme.dark": "Dark",
     "theme.light": "Light",

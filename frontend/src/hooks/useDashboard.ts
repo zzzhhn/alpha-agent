@@ -8,6 +8,7 @@ import {
   getGatewayStatus,
   getAuditDecisions,
   getSystemConfig,
+  getOrderHistory,
 } from "@/lib/api";
 import type {
   ApiResponse,
@@ -17,6 +18,7 @@ import type {
   GatewayStatus,
   AuditSummary,
   SystemConfig,
+  Order,
 } from "@/lib/types";
 
 export function useServiceHealth() {
@@ -57,6 +59,13 @@ export function useAuditDecisions() {
 export function useSystemConfig() {
   return usePolling<ApiResponse<SystemConfig>>({
     fetcher: getSystemConfig,
+    intervalMs: 10_000,
+  });
+}
+
+export function useOrderHistory() {
+  return usePolling<ApiResponse<readonly Order[]>>({
+    fetcher: getOrderHistory,
     intervalMs: 10_000,
   });
 }
