@@ -132,7 +132,7 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter Variable', 'Inter', 'SF Pro Display', -apple-system, system-ui, sans-serif;
+  font-family: 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', 'Inter Variable', 'Inter', -apple-system, system-ui, serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
