@@ -72,22 +72,30 @@ async function fetchJson<T>(
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
+    const timestamp = new Date().toISOString();
+
     if (error instanceof ApiError) {
+      return { data: null, error: error.message, timestamp };
+    }
+
+    if (error instanceof SyntaxError) {
       return {
         data: null,
-        error: error.message,
-        timestamp: new Date().toISOString(),
+        error: `Invalid JSON response (backend likely offline or returning HTML): ${error.message}`,
+        timestamp,
       };
     }
 
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    if (error instanceof TypeError) {
+      return {
+        data: null,
+        error: `Network unreachable (DNS/CORS/offline): ${error.message}`,
+        timestamp,
+      };
+    }
 
-    return {
-      data: null,
-      error: `Network error: ${message}`,
-      timestamp: new Date().toISOString(),
-    };
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { data: null, error: `Unknown error: ${message}`, timestamp };
   }
 }
 
