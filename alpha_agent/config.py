@@ -11,17 +11,29 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """All config is loaded from environment variables or .env file."""
 
-    # LLM provider
-    llm_provider: Literal["ollama", "openai"] = "ollama"
+    # LLM provider. Fixed at startup via env; runtime switching is removed.
+    # See REFACTOR_PLAN.md section 3.4 (llm_control.py deprecation).
+    llm_provider: Literal["ollama", "openai", "kimi"] = "kimi"
 
     # Ollama settings (remote server via SSH tunnel or direct)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "gemma4:26b"
 
-    # OpenAI-compatible API settings (fallback)
+    # OpenAI-compatible API settings (fallback / generic)
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o"
+
+    # Kimi For Coding settings. Anthropic-compatible protocol.
+    # Endpoint: https://api.kimi.com/coding/v1/messages
+    # Docs: https://moonshotai.github.io/kimi-cli/en/configuration/providers.html
+    kimi_api_key: str = ""
+    kimi_base_url: str = "https://api.kimi.com/coding/v1"
+    kimi_model: str = "kimi-for-coding"
+
+    # Startup health check: fail-fast when the configured LLM provider is
+    # unreachable. Set to False in dev/offline scenarios.
+    llm_startup_healthcheck: bool = True
 
     # Data settings
     data_cache_dir: Path = Path("data/parquet")

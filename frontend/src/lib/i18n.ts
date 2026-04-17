@@ -123,6 +123,16 @@ const translations = {
     "brand.name": "AlphaCore",
     "brand.tag": "v2.0",
     "brand.systemOnline": "系统在线",
+
+    /* Strategy Lifecycle (W1 nav rewrite) */
+    "group.lifecycle": "策略生命周期",
+    "lifecycle.data": "数据 Data",
+    "lifecycle.alpha": "因子 Alpha",
+    "lifecycle.signal": "信号 Signal",
+    "lifecycle.backtest": "回测 Backtest",
+    "lifecycle.report": "报告 Report",
+    "lifecycle.stub.title": "W2 即将上线",
+    "lifecycle.stub.body": "此阶段的交互面板将在 W2 落地。当前可访问的仅为导航骨架。",
   },
   en: {
     "group.system": "System",
@@ -235,6 +245,16 @@ const translations = {
     "brand.name": "AlphaCore",
     "brand.tag": "v2.0",
     "brand.systemOnline": "System Online",
+
+    /* Strategy Lifecycle (W1 nav rewrite) */
+    "group.lifecycle": "Strategy Lifecycle",
+    "lifecycle.data": "Data",
+    "lifecycle.alpha": "Alpha",
+    "lifecycle.signal": "Signal",
+    "lifecycle.backtest": "Backtest",
+    "lifecycle.report": "Report",
+    "lifecycle.stub.title": "Coming in W2",
+    "lifecycle.stub.body": "This lifecycle stage is scaffolded. Interactive controls land in W2.",
   },
 } as const;
 
