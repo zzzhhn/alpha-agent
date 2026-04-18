@@ -35,10 +35,12 @@ try:
     try:
         from alpha_agent.llm.factory import create_llm_client
         app.state.llm = create_llm_client(settings)
+        app.state.llm_init_error = None
         print(f"✓ LLM init: {settings.llm_provider}", file=sys.stderr, flush=True)
     except Exception as e:
         app.state.llm = None
-        print(f"⚠ LLM init failed: {e}", file=sys.stderr, flush=True)
+        app.state.llm_init_error = f"{type(e).__name__}: {e}"
+        print(f"⚠ LLM init failed: {app.state.llm_init_error}", file=sys.stderr, flush=True)
 
 except Exception as e:
     import traceback
@@ -56,6 +58,7 @@ except Exception as e:
     )
     app.state.cache = None
     app.state.llm = None
+    app.state.llm_init_error = f"settings_init_failed: {type(e).__name__}: {e}"
 
 # ── Register routes ─────────────────────────────────────────────────────
 try:
