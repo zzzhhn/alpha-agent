@@ -189,13 +189,24 @@ def run_factor_backtest(
     panel = _load_panel()
     T, N = panel.close.shape
 
-    # Evaluate factor on the full panel
+    # Trailing 1-day returns: returns[t] = close[t]/close[t-1] - 1. Row 0 is NaN.
+    trailing_returns = np.full_like(panel.close, np.nan)
+    trailing_returns[1:] = panel.close[1:] / panel.close[:-1] - 1.0
+
+    # VWAP proxy for daily bars: typical price (H+L+C)/3. True VWAP needs
+    # intraday data we don't have at this tier.
+    vwap_proxy = (panel.high + panel.low + panel.close) / 3.0
+
+    # Evaluate factor on the full panel. Operand names must match the
+    # translate-prompt contract in api/routes/interactive.py.
     data = {
         "close": panel.close,
         "open": panel.open_,
         "high": panel.high,
         "low": panel.low,
         "volume": panel.volume,
+        "returns": trailing_returns,
+        "vwap": vwap_proxy,
     }
     factor = np.asarray(eval_factor(spec.expression, data), dtype=np.float64)
     if factor.shape != (T, N):
