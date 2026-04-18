@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { useLocale } from "./LocaleProvider";
 import { t } from "@/lib/i18n";
-import { ModelSwitcher } from "./ModelSwitcher";
 
 interface SidebarNavItem {
   readonly id: string;
@@ -22,32 +21,18 @@ interface SidebarGroup {
 
 const NAV_GROUPS: readonly SidebarGroup[] = [
   {
-    labelKey: "group.research",
+    labelKey: "group.lifecycle",
     items: [
+      { id: "data", labelKey: "lifecycle.data", href: "/data", emoji: "🗂️" },
+      { id: "alpha", labelKey: "lifecycle.alpha", href: "/alpha", emoji: "🧬" },
+      { id: "signal", labelKey: "lifecycle.signal", href: "/signal", emoji: "📡" },
       {
         id: "backtest",
-        labelKey: "nav.backtest",
+        labelKey: "lifecycle.backtest",
         href: "/backtest",
         emoji: "📉",
       },
-      {
-        id: "factors",
-        labelKey: "nav.factors",
-        href: "/factors",
-        emoji: "🧬",
-      },
-      {
-        id: "gates",
-        labelKey: "nav.gates",
-        href: "/gates",
-        emoji: "🚦",
-      },
-      {
-        id: "stress",
-        labelKey: "nav.stress",
-        href: "/stress",
-        emoji: "🌪️",
-      },
+      { id: "report", labelKey: "lifecycle.report", href: "/report", emoji: "📑" },
     ],
   },
   {
@@ -126,9 +111,6 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-
-      {/* Model Switcher */}
-      <ModelSwitcher />
 
       {/* Footer status */}
       <div className="flex items-center gap-2 border-t border-[var(--border)] px-5 py-3 text-xs text-[var(--muted)]">

@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.config import get_settings
+from alpha_agent.core.exceptions import ProviderUnavailableError
+from alpha_agent.core.types import RouterHealth
 from alpha_agent.llm.factory import create_llm_client
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,36 @@ def _ensure_initialized(app: FastAPI) -> None:
     app.state.settings = settings
     app.state.cache = _cache
     app.state.llm = create_llm_client(settings)
+    # Keep router_health if create_app() already populated it (non-serverless path).
+    if not hasattr(app.state, "router_health"):
+        app.state.router_health = []
     logger.info("AlphaCore init (lazy): llm=%s", settings.llm_provider)
+
+
+async def _run_startup_healthcheck(app: FastAPI) -> None:
+    """Fail-fast boot check: the configured LLM provider must be reachable.
+
+    Disabled by LLM_STARTUP_HEALTHCHECK=false (dev/offline scenarios).
+    See REFACTOR_PLAN.md §3.4 and feedback_silent_trycatch_antipattern.md.
+    """
+    settings = app.state.settings
+    if not settings.llm_startup_healthcheck:
+        logger.info("startup healthcheck: skipped (LLM_STARTUP_HEALTHCHECK=false)")
+        return
+    llm = app.state.llm
+    try:
+        ok = await llm.is_available()
+    except Exception as exc:
+        raise ProviderUnavailableError(
+            f"LLM provider {settings.llm_provider!r} health check raised: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+    if not ok:
+        raise ProviderUnavailableError(
+            f"LLM provider {settings.llm_provider!r} is unreachable. "
+            "Set LLM_STARTUP_HEALTHCHECK=false to bypass for dev."
+        )
+    logger.info("startup healthcheck: %s reachable", settings.llm_provider)
 
 
 # ── Lifespan (used by uvicorn, may be skipped on Vercel) ──────────────────
@@ -46,6 +77,7 @@ def _ensure_initialized(app: FastAPI) -> None:
 @asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     _ensure_initialized(application)
+    await _run_startup_healthcheck(application)
     yield
     llm = getattr(application.state, "llm", None)
     if llm and hasattr(llm, "close"):
@@ -88,38 +120,61 @@ def create_app() -> FastAPI:
         auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
         application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
 
-    # System route (always lightweight)
-    from alpha_agent.api.routes.system import router as system_router
+    # Router loading with per-router health tracking.
+    # Silent ImportError is the root cause of ghost-route bugs (see
+    # feedback_silent_trycatch_antipattern.md). We track every attempt and
+    # surface it at /healthz/routers so curl can prove what actually loaded.
+    router_health: list[RouterHealth] = getattr(
+        application.state, "router_health", []
+    )
 
-    application.include_router(system_router)
+    def _load(name: str, loader) -> None:
+        try:
+            application.include_router(loader())
+            router_health.append(RouterHealth(name=name, loaded=True))
+        except Exception as exc:  # noqa: BLE001 — report every reason
+            router_health.append(
+                RouterHealth(
+                    name=name,
+                    loaded=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            )
+            logger.error("router %s failed to load: %s: %s", name, type(exc).__name__, exc)
 
-    # Always load serverless routes — they match frontend TypeScript types exactly
-    # and will attempt real ML calls when available (with demo data fallback).
-    from alpha_agent.api.routes.serverless import router as serverless_router
+    def _import_system():
+        from alpha_agent.api.routes.system import router
+        return router
 
-    application.include_router(serverless_router)
+    def _import_serverless():
+        from alpha_agent.api.routes.serverless import router
+        return router
 
-    # Interactive endpoints (POST — backtest, ticker analysis, search)
-    from alpha_agent.api.routes.interactive import router as interactive_router
+    def _import_interactive():
+        from alpha_agent.api.routes.interactive import router
+        return router
 
-    application.include_router(interactive_router)
-
-    # LLM provider control (GET status, POST switch)
-    from alpha_agent.api.routes.llm_control import router as llm_control_router
-
-    application.include_router(llm_control_router)
+    _load("system", _import_system)
+    _load("serverless", _import_serverless)
+    _load("interactive", _import_interactive)
 
     if not SERVERLESS:
-        try:
-            from alpha_agent.api.websocket import router as ws_router
+        def _import_websocket():
+            from alpha_agent.api.websocket import router
+            return router
 
-            application.include_router(ws_router)
-        except ImportError:
-            logger.info("WebSocket module not available, skipping")
+        _load("websocket", _import_websocket)
+
+    application.state.router_health = router_health
 
     @application.get("/api/health")
     async def health() -> dict:
         return {"status": "ok", "service": "alphacore", "mode": "serverless" if SERVERLESS else "full"}
+
+    @application.get("/healthz/routers", response_model=list[RouterHealth])
+    async def healthz_routers() -> list[RouterHealth]:
+        """Return per-router load status. Curl this to prove what is mounted."""
+        return getattr(application.state, "router_health", [])
 
     # Redirect root and /qcore to Vercel Next.js frontend
     _FRONTEND_URL = "https://frontend-delta-three-81.vercel.app"
