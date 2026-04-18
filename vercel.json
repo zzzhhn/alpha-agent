@@ -3,7 +3,7 @@
   "version": 2,
   "regions": ["hkg1"],
   "functions": {
-    "api/index.py": {
+    "api/*.py": {
       "includeFiles": "alpha_agent/data/**"
     }
   },
