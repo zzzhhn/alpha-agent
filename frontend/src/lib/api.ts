@@ -26,6 +26,8 @@ import type {
   StressTestResult,
   HypothesisTranslateRequest,
   HypothesisTranslateResponse,
+  FactorBacktestRequest,
+  FactorBacktestResponse,
 } from "./types";
 
 const BASE_URL =
@@ -271,6 +273,13 @@ export function runStressTest(params: {
 
 export function translateHypothesis(params: HypothesisTranslateRequest) {
   return fetchJson<HypothesisTranslateResponse>("/alpha/translate", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export function runFactorBacktest(params: FactorBacktestRequest) {
+  return fetchJson<FactorBacktestResponse>("/factor/backtest", {
     method: "POST",
     body: JSON.stringify(params),
   });
