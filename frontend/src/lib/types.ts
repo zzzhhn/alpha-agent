@@ -445,6 +445,42 @@ export interface StressTestResult {
   readonly timestamp: string;
 }
 
+/* ═══════════════════ W2: Hypothesis Translator (T1) ═══════════════════ */
+
+export type FactorUniverse = "CSI300" | "CSI500" | "SP500" | "custom";
+
+export interface FactorSpec {
+  readonly name: string;
+  readonly hypothesis: string;
+  readonly expression: string;
+  readonly operators_used: readonly string[];
+  readonly lookback: number;
+  readonly universe: FactorUniverse;
+  readonly justification: string;
+}
+
+export interface HypothesisTranslateRequest {
+  readonly text: string;
+  readonly universe?: FactorUniverse;
+  readonly budget_tokens?: number;
+}
+
+export interface SmokeReport {
+  readonly rows_valid: number;
+  readonly ic_spearman: number;
+  readonly runtime_ms: number;
+}
+
+export interface HypothesisTranslateResponse {
+  readonly spec: FactorSpec;
+  readonly smoke: SmokeReport;
+  readonly llm_tokens: {
+    readonly prompt: number;
+    readonly completion: number;
+  };
+  readonly llm_raw: string;
+}
+
 /* ═══════════════════ API Response Envelope ═══════════════════ */
 
 export interface ApiResponse<T> {
