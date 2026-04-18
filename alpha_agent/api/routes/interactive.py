@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -873,6 +873,14 @@ async def translate_hypothesis(
 class FactorBacktestRequest(BaseModel):
     spec: _FactorSpec
     train_ratio: float = Field(default=0.80, ge=0.10, le=0.95)
+    direction: Literal["long_short", "long_only", "short_only"] = Field(
+        default="long_short",
+        description=(
+            "Portfolio construction. 'long_short' is market-neutral (gross 2.0), "
+            "'long_only' is apples-to-apples with SPY benchmark, 'short_only' "
+            "is the inverse."
+        ),
+    )
 
 
 class _SplitMetricsModel(BaseModel):
@@ -896,6 +904,7 @@ class FactorBacktestResponse(BaseModel):
     currency: str
     factor_name: str
     benchmark_ticker: str
+    direction: Literal["long_short", "long_only", "short_only"]
 
 
 @router.post(
@@ -929,7 +938,11 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         raise HTTPException(422, f"Expression AST invalid: {exc}") from exc
 
     try:
-        result = run_factor_backtest(body.spec, train_ratio=body.train_ratio)
+        result = run_factor_backtest(
+            body.spec,
+            train_ratio=body.train_ratio,
+            direction=body.direction,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
     except ImportError as exc:
@@ -966,4 +979,5 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         currency=result.currency,
         factor_name=result.factor_name,
         benchmark_ticker=result.benchmark_ticker,
+        direction=result.direction,
     )

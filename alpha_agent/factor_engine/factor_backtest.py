@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -35,6 +36,11 @@ SHORT_PCT: float = 0.30
 DEFAULT_TRAIN_RATIO: float = 0.80
 BENCHMARK_TICKER: str = "SPY"
 CURRENCY: str = "USD"
+
+Direction = Literal["long_short", "long_only", "short_only"]
+SUPPORTED_DIRECTIONS: frozenset[str] = frozenset(
+    {"long_short", "long_only", "short_only"}
+)
 
 PARQUET_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "factor_universe_1y.parquet"
@@ -71,6 +77,7 @@ class FactorBacktestResult:
     currency: str
     factor_name: str
     benchmark_ticker: str
+    direction: str                # "long_short" | "long_only" | "short_only"
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
@@ -175,16 +182,29 @@ def _split_metrics(
 def run_factor_backtest(
     spec: FactorSpec,
     train_ratio: float = DEFAULT_TRAIN_RATIO,
+    direction: Direction = "long_short",
 ) -> FactorBacktestResult:
-    """Run a cross-sectional long-short backtest for the given FactorSpec.
+    """Run a cross-sectional backtest for the given FactorSpec.
+
+    `direction` controls the portfolio construction:
+      - "long_short": top 30% long + bottom 30% short, equal-weight (market-neutral,
+        gross exposure 2.0). Inappropriate benchmark vs SPY in directional markets.
+      - "long_only":  top 30% equal-weight long, 0% short. Gross 1.0, apples-to-apples
+        with SPY.
+      - "short_only": bottom 30% equal-weight short, 0% long. Gross 1.0, inverted.
 
     Raises:
         FileNotFoundError: parquet panel missing at import/first-call time
-        ValueError: factor expression evaluates to wrong shape or all-NaN
+        ValueError: factor expression evaluates to wrong shape or all-NaN,
+                    or unsupported direction
         Any exception from `eval_factor`: propagated with original type
     """
     if not 0.1 <= train_ratio <= 0.95:
         raise ValueError(f"train_ratio {train_ratio!r} must be in [0.1, 0.95]")
+    if direction not in SUPPORTED_DIRECTIONS:
+        raise ValueError(
+            f"direction {direction!r} must be one of {sorted(SUPPORTED_DIRECTIONS)}"
+        )
 
     panel = _load_panel()
     T, N = panel.close.shape
@@ -218,7 +238,11 @@ def run_factor_backtest(
     fwd_returns = np.full_like(panel.close, np.nan)
     fwd_returns[:-1] = panel.close[1:] / panel.close[:-1] - 1.0
 
-    # Daily long-short weights from factor rank
+    # Daily portfolio weights from factor rank. The `direction` flag decides
+    # which legs get populated; IC/Sharpe metrics are always computed on the
+    # realized portfolio return regardless of direction.
+    use_long = direction in ("long_short", "long_only")
+    use_short = direction in ("long_short", "short_only")
     weights = np.zeros((T, N), dtype=np.float64)
     for t in range(T):
         row = factor[t]
@@ -228,14 +252,16 @@ def run_factor_backtest(
             continue
         ranks = np.full_like(row, np.nan)
         ranks[mask] = (row[mask].argsort().argsort() + 1.0) / valid
-        long_mask = ranks >= (1.0 - LONG_PCT)
-        short_mask = ranks <= SHORT_PCT
-        n_long = int(long_mask.sum())
-        n_short = int(short_mask.sum())
-        if n_long > 0:
-            weights[t, long_mask] = 1.0 / n_long
-        if n_short > 0:
-            weights[t, short_mask] = -1.0 / n_short
+        if use_long:
+            long_mask = ranks >= (1.0 - LONG_PCT)
+            n_long = int(long_mask.sum())
+            if n_long > 0:
+                weights[t, long_mask] = 1.0 / n_long
+        if use_short:
+            short_mask = ranks <= SHORT_PCT
+            n_short = int(short_mask.sum())
+            if n_short > 0:
+                weights[t, short_mask] = -1.0 / n_short
 
     # Portfolio daily return = weight[t-1] dot fwd_return[t-1] (i.e. realized at t)
     # fwd_returns[t] is close[t]→close[t+1], so strategy return at t+1 = sum(weights[t] * fwd_returns[t])
@@ -275,4 +301,5 @@ def run_factor_backtest(
         currency=CURRENCY,
         factor_name=spec.name,
         benchmark_ticker=BENCHMARK_TICKER,
+        direction=direction,
     )
