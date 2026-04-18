@@ -689,3 +689,179 @@ async def stress_test(req: StressTestRequest) -> dict[str, Any]:
         ],
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# T1: HypothesisTranslator (REFACTOR_PLAN.md §3.1)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Input: natural-language factor hypothesis
+# Output: FactorSpec JSON (Pydantic-validated + AST-validated) + 10-day smoke IC
+#
+# Pipeline:
+#   1. LLM call with grammar-describing system prompt
+#   2. Pydantic FactorSpec.model_validate  (field schemas)
+#   3. validate_expression  (AST whitelist + declared/used op equality)
+#   4. smoke_test  (20-ticker synthetic panel, 10-day cross-sectional Spearman IC)
+#
+# Failure surfacing: each step raises a distinct HTTPException status so curl
+# consumers can distinguish schema violation (422) from upstream-provider error
+# (502) from smoke crash (500). See feedback_silent_trycatch_antipattern.md.
+
+import json as _json
+import re as _re
+
+from fastapi import Request as _Request
+
+from alpha_agent.core.factor_ast import (
+    FactorSpecValidationError as _FactorSpecValidationError,
+)
+from alpha_agent.core.factor_ast import validate_expression as _validate_expression
+from alpha_agent.core.types import FactorSpec as _FactorSpec
+from alpha_agent.llm.base import Message as _Message
+from alpha_agent.scan.smoke import smoke_test as _smoke_test
+
+
+class HypothesisTranslateRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=500)
+    universe: str = Field(
+        default="SP500", pattern=r"^(CSI300|CSI500|SP500|custom)$"
+    )
+    budget_tokens: int = Field(default=4000, ge=500, le=8000)
+
+
+class SmokeReport(BaseModel):
+    rows_valid: int
+    ic_spearman: float
+    runtime_ms: float
+
+
+class HypothesisTranslateResponse(BaseModel):
+    spec: _FactorSpec
+    smoke: SmokeReport
+    llm_tokens: dict[str, int]
+    llm_raw: str
+
+
+_TRANSLATE_SYSTEM_PROMPT = """You convert a natural-language factor hypothesis into a strict FactorSpec JSON.
+
+Output rules:
+1. Emit ONLY one JSON object. No prose, no markdown fences.
+2. Schema:
+   {
+     "name": "<snake_case, <=40 chars>",
+     "hypothesis": "<<=200 chars, restate the user idea>",
+     "expression": "<Python call syntax using ALLOWED_OPS>",
+     "operators_used": [<exact set of ops used in expression>],
+     "lookback": <int 5-252>,
+     "universe": "<CSI300|CSI500|SP500|custom>",
+     "justification": "<<=400 chars, why this captures the hypothesis>"
+   }
+
+ALLOWED_OPS (every call must be one of these):
+  ts_mean, ts_rank, ts_corr, ts_std, ts_zscore,
+  rank, scale, winsorize,
+  log, sign,
+  add, sub, mul, div, pow
+
+Operands (leaves): close, open, high, low, volume, returns, vwap.
+Numeric literals only. No attributes, no imports, no lambdas, no keyword args.
+
+Op signatures:
+  ts_mean(arr, window:int)    ts_std(arr, window:int)    ts_zscore(arr, window:int)
+  ts_rank(arr, window:int)    ts_corr(arr, arr, window:int)
+  rank(arr)                   scale(arr)                 winsorize(arr)
+  log(arr)                    sign(arr)
+  add(a,b)  sub(a,b)  mul(a,b)  div(a,b)  pow(a,b)
+
+lookback must be >= the largest ts_* window in the expression.
+operators_used must exactly equal the set of ops actually called.
+
+Example input: {"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "CSI500"}
+Example output:
+{"name":"low_turn_roe_up","hypothesis":"Mid-caps with low turnover and rising ROE.","expression":"sub(rank(ts_mean(div(volume,close),20)),rank(ts_zscore(returns,20)))","operators_used":["sub","rank","ts_mean","div","ts_zscore"],"lookback":20,"universe":"CSI500","justification":"Inverse-turnover proxy via rolling volume/close; ROE proxy via short-term return zscore; cross-sectional rank removes scale."}
+"""
+
+
+def _extract_json_object(text: str) -> dict | None:
+    """Pull the first JSON object out of an LLM response (tolerates fences)."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[: cleaned.rfind("```")]
+    match = _re.search(r"\{[\s\S]*\}", cleaned)
+    if match is None:
+        return None
+    try:
+        return _json.loads(match.group(0))
+    except _json.JSONDecodeError:
+        return None
+
+
+@router.post(
+    "/api/v1/alpha/translate",
+    response_model=HypothesisTranslateResponse,
+)
+async def translate_hypothesis(
+    body: HypothesisTranslateRequest, request: _Request
+) -> HypothesisTranslateResponse:
+    """T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC."""
+    llm = getattr(request.app.state, "llm", None)
+    if llm is None:
+        raise HTTPException(
+            503,
+            "LLM provider not initialized (check /healthz/routers and LLM_PROVIDER env)",
+        )
+
+    user_payload = _json.dumps({"hypothesis": body.text, "universe": body.universe})
+    messages = [
+        _Message(role="system", content=_TRANSLATE_SYSTEM_PROMPT),
+        _Message(role="user", content=user_payload),
+    ]
+    try:
+        llm_resp = await llm.chat(
+            messages, temperature=0.3, max_tokens=body.budget_tokens
+        )
+    except Exception as exc:  # noqa: BLE001 — surface upstream failure explicitly
+        raise HTTPException(
+            502, f"LLM provider error: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    spec_dict = _extract_json_object(llm_resp.content)
+    if spec_dict is None:
+        raise HTTPException(
+            422,
+            f"LLM did not return parseable JSON. Head: {llm_resp.content[:200]!r}",
+        )
+
+    try:
+        spec = _FactorSpec.model_validate(spec_dict)
+    except ValueError as exc:
+        raise HTTPException(422, f"FactorSpec schema violation: {exc}") from exc
+
+    try:
+        _validate_expression(spec.expression, spec.operators_used)
+    except _FactorSpecValidationError as exc:
+        raise HTTPException(422, f"Expression AST invalid: {exc}") from exc
+
+    try:
+        smoke = _smoke_test(spec.expression, spec.lookback)
+    except Exception as exc:  # noqa: BLE001 — smoke crash is a real bug
+        raise HTTPException(
+            500, f"Smoke test crashed: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    return HypothesisTranslateResponse(
+        spec=spec,
+        smoke=SmokeReport(
+            rows_valid=smoke.rows_valid,
+            ic_spearman=smoke.ic_spearman,
+            runtime_ms=smoke.runtime_ms,
+        ),
+        llm_tokens={
+            "prompt": llm_resp.prompt_tokens,
+            "completion": llm_resp.completion_tokens,
+        },
+        llm_raw=llm_resp.content,
+    )

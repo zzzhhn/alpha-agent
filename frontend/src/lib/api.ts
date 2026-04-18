@@ -24,6 +24,8 @@ import type {
   FactorAnalysisResult,
   GateSimulationResult,
   StressTestResult,
+  HypothesisTranslateRequest,
+  HypothesisTranslateResponse,
 } from "./types";
 
 const BASE_URL =
@@ -260,6 +262,15 @@ export function runStressTest(params: {
   custom_shocks?: Record<string, number>;
 }) {
   return fetchJson<StressTestResult>("/portfolio/stress", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+/* ── W2: Hypothesis Translator (T1) ── */
+
+export function translateHypothesis(params: HypothesisTranslateRequest) {
+  return fetchJson<HypothesisTranslateResponse>("/alpha/translate", {
     method: "POST",
     body: JSON.stringify(params),
   });
