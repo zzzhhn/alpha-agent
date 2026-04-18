@@ -713,6 +713,11 @@ import re as _re
 
 from fastapi import Request as _Request
 
+from alpha_agent.core.brain_registry import (
+    IMPLEMENTED_OPERATOR_NAMES as _IMPLEMENTED_OPERATOR_NAMES,
+)
+from alpha_agent.core.brain_registry import OPERANDS as _OPERANDS
+from alpha_agent.core.brain_registry import OPERATORS as _OPERATORS
 from alpha_agent.core.factor_ast import (
     FactorSpecValidationError as _FactorSpecValidationError,
 )
@@ -743,44 +748,82 @@ class HypothesisTranslateResponse(BaseModel):
     llm_raw: str
 
 
-_TRANSLATE_SYSTEM_PROMPT = """You convert a natural-language factor hypothesis into a strict FactorSpec JSON.
+def _build_translate_prompt() -> str:
+    """Assemble the T1 system prompt from brain_registry at import time.
 
-Output rules:
-1. Emit ONLY one JSON object. No prose, no markdown fences.
-2. Schema:
-   {
-     "name": "<snake_case, <=40 chars>",
-     "hypothesis": "<<=200 chars, restate the user idea>",
-     "expression": "<Python call syntax using ALLOWED_OPS>",
-     "operators_used": [<exact set of ops used in expression>],
-     "lookback": <int 5-252>,
-     "universe": "<CSI300|CSI500|SP500|custom>",
-     "justification": "<<=400 chars, why this captures the hypothesis>"
-   }
+    Why dynamic: operators/operands come from the Feishu Bitable via
+    scripts/build_brain_registry.py. Hardcoding the prompt would let the two
+    sources drift — the LLM would emit ops/operands the validator rejects.
 
-ALLOWED_OPS (every call must be one of these):
-  ts_mean, ts_rank, ts_corr, ts_std, ts_zscore,
-  rank, scale, winsorize,
-  log, sign,
-  add, sub, mul, div, pow
+    Prompt size (B+ expansion): ~57 ops + 190 operands ~= 2.5KB, comfortably
+    under every provider's context budget.
+    """
+    impl_lines: list[str] = []
+    unimpl_lines: list[str] = []
+    for name in sorted(_OPERATORS):
+        spec = _OPERATORS[name]
+        line = f"  {spec.signature}  -- {spec.description[:60]}"
+        (impl_lines if spec.implemented else unimpl_lines).append(line)
 
-Operands (leaves): close, open, high, low, volume, returns, vwap.
-Numeric literals only. No attributes, no imports, no lambdas, no keyword args.
+    operand_sections: list[str] = []
+    by_category: dict[str, list[str]] = {}
+    for name, spec in _OPERANDS.items():
+        by_category.setdefault(spec.category, []).append(name)
+    for category in sorted(by_category):
+        names = sorted(by_category[category])
+        operand_sections.append(f"  [{category}] {', '.join(names)}")
 
-Op signatures:
-  ts_mean(arr, window:int)    ts_std(arr, window:int)    ts_zscore(arr, window:int)
-  ts_rank(arr, window:int)    ts_corr(arr, arr, window:int)
-  rank(arr)                   scale(arr)                 winsorize(arr)
-  log(arr)                    sign(arr)
-  add(a,b)  sub(a,b)  mul(a,b)  div(a,b)  pow(a,b)
+    return (
+        "You convert a natural-language factor hypothesis into a strict FactorSpec JSON.\n\n"
+        "Output rules:\n"
+        "1. Emit ONLY one JSON object. No prose, no markdown fences.\n"
+        "2. Schema:\n"
+        "   {\n"
+        '     "name": "<snake_case, <=40 chars>",\n'
+        '     "hypothesis": "<<=200 chars, restate the user idea>",\n'
+        '     "expression": "<BRAIN-style expression using allowed ops/operands>",\n'
+        '     "operators_used": [<exact set of ops actually called in expression>],\n'
+        '     "lookback": <int 5-252>,\n'
+        '     "universe": "<CSI300|CSI500|SP500|custom>",\n'
+        '     "justification": "<<=400 chars, why this captures the hypothesis>"\n'
+        "   }\n\n"
+        "GRAMMAR (expression syntax):\n"
+        "  - Function calls only: ts_mean(close, 20), winsorize(x, std=4).\n"
+        "  - Positional or keyword args both fine.\n"
+        "  - Comparisons: <  <=  ==  !=  >  >=    (e.g., close > ts_mean(close, 20))\n"
+        "  - Boolean: and / or / not     Unary: -x  +x\n"
+        "  - Arithmetic must use function form: add(x,y), subtract(x,y), multiply(x,y),\n"
+        "    divide(x,y), power(x,y). Python '+' '-' '*' '/' '**' are NOT allowed.\n"
+        "  - No attribute access, no subscripts, no list/dict/set, no lambdas.\n"
+        "  - Numeric literals (int/float) and enum-style string literals only.\n"
+        f"  - Use ONLY operators/operands from the whitelists below ({len(_OPERATORS)} ops, "
+        f"{len(_OPERANDS)} operands).\n\n"
+        f"OPERATORS -- IMPLEMENTED (preferred, {len(impl_lines)}):\n"
+        + "\n".join(impl_lines)
+        + "\n\n"
+        f"OPERATORS -- experimental (in whitelist, may raise at runtime, {len(unimpl_lines)}):\n"
+        + "\n".join(unimpl_lines)
+        + "\n\n"
+        f"OPERANDS by category ({len(_OPERANDS)} total):\n"
+        + "\n".join(operand_sections)
+        + "\n\n"
+        "CONSTRAINTS:\n"
+        "  - lookback must be >= the largest ts_* window in the expression.\n"
+        "  - operators_used must EXACTLY equal the set of operators actually called\n"
+        "    in expression (neither superset nor subset).\n"
+        "  - Prefer IMPLEMENTED operators; use experimental ones only when no\n"
+        "    implemented equivalent exists (the smoke test will fail otherwise).\n\n"
+        'Example input: {"hypothesis": "mean reversion in oversold large caps", "universe": "SP500"}\n'
+        "Example output:\n"
+        '{"name":"oversold_mean_rev","hypothesis":"Buy large caps whose short-term return is '
+        "well below their own recent mean.\",\"expression\":\"rank(subtract(ts_mean(close, 20), "
+        'close))","operators_used":["rank","subtract","ts_mean"],"lookback":20,"universe":"SP500"'
+        ',"justification":"Short-term negative deviation from 20d mean identifies oversold; '
+        'cross-sectional rank neutralizes cap/scale."}'
+    )
 
-lookback must be >= the largest ts_* window in the expression.
-operators_used must exactly equal the set of ops actually called.
 
-Example input: {"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "CSI500"}
-Example output:
-{"name":"low_turn_roe_up","hypothesis":"Mid-caps with low turnover and rising ROE.","expression":"sub(rank(ts_mean(div(volume,close),20)),rank(ts_zscore(returns,20)))","operators_used":["sub","rank","ts_mean","div","ts_zscore"],"lookback":20,"universe":"CSI500","justification":"Inverse-turnover proxy via rolling volume/close; ROE proxy via short-term return zscore; cross-sectional rank removes scale."}
-"""
+_TRANSLATE_SYSTEM_PROMPT = _build_translate_prompt()
 
 
 def _extract_json_object(text: str) -> dict | None:
