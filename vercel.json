@@ -2,11 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "regions": ["hkg1"],
-  "functions": {
-    "api/*.py": {
-      "includeFiles": "alpha_agent/data/**"
-    }
-  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/qcore", "destination": "/api/index" }
