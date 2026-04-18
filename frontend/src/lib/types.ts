@@ -512,6 +512,14 @@ export interface FactorBacktestResponse {
   readonly benchmark_ticker: string;
 }
 
+export interface HypothesisHistoryEntry {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly request: HypothesisTranslateRequest;
+  readonly result: HypothesisTranslateResponse;
+  readonly isFavorite: boolean;
+}
+
 /* ═══════════════════ API Response Envelope ═══════════════════ */
 
 export interface ApiResponse<T> {

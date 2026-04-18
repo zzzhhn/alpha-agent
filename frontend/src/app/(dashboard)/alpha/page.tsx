@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,9 +9,19 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { runFactorBacktest, translateHypothesis } from "@/lib/api";
 import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
+import { HypothesisHistoryPanel } from "@/components/alpha/HypothesisHistoryPanel";
+import {
+  addToHistory,
+  getFavorites,
+  getRecent,
+  removeFromHistory,
+  toggleFavorite,
+} from "@/lib/hypothesis-history";
 import type {
   FactorBacktestResponse,
   FactorUniverse,
+  HypothesisHistoryEntry,
+  HypothesisTranslateRequest,
   HypothesisTranslateResponse,
 } from "@/lib/types";
 
@@ -32,22 +42,43 @@ export default function AlphaPage() {
   const [backtesting, setBacktesting] = useState(false);
   const [backtestError, setBacktestError] = useState<string | null>(null);
   const [backtest, setBacktest] = useState<FactorBacktestResponse | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<readonly HypothesisHistoryEntry[]>(
+    [],
+  );
+  const [recent, setRecent] = useState<readonly HypothesisHistoryEntry[]>([]);
+
+  // Hydrate from localStorage after mount (SSR-safe)
+  useEffect(() => {
+    setFavorites(getFavorites());
+    setRecent(getRecent());
+  }, []);
+
+  const refreshHistory = useCallback(() => {
+    setFavorites(getFavorites());
+    setRecent(getRecent());
+  }, []);
 
   async function onSubmit() {
     if (text.trim().length === 0) return;
     setLoading(true);
     setError(null);
-    const response = await translateHypothesis({
+    const request: HypothesisTranslateRequest = {
       text: text.trim(),
       universe,
-    });
+    };
+    const response = await translateHypothesis(request);
     setLoading(false);
-    if (response.error) {
-      setError(response.error);
+    if (response.error || !response.data) {
+      setError(response.error ?? "Unknown error");
       setResult(null);
+      setActiveId(null);
       return;
     }
+    const entry = addToHistory(request, response.data);
     setResult(response.data);
+    setActiveId(entry.id);
+    refreshHistory();
     // A new spec invalidates the previous backtest result.
     setBacktest(null);
     setBacktestError(null);
@@ -67,6 +98,36 @@ export default function AlphaPage() {
     setBacktest(response.data);
   }
 
+  const handleLoadEntry = useCallback((entry: HypothesisHistoryEntry) => {
+    setText(entry.request.text);
+    if (entry.request.universe) {
+      setUniverse(entry.request.universe);
+    }
+    setResult(entry.result);
+    setActiveId(entry.id);
+    setError(null);
+  }, []);
+
+  const handleToggleFavorite = useCallback(
+    (id: string) => {
+      toggleFavorite(id);
+      refreshHistory();
+    },
+    [refreshHistory],
+  );
+
+  const handleRemove = useCallback(
+    (id: string) => {
+      removeFromHistory(id);
+      if (activeId === id) {
+        setActiveId(null);
+        setResult(null);
+      }
+      refreshHistory();
+    },
+    [activeId, refreshHistory],
+  );
+
   const icColor = result
     ? Math.abs(result.smoke.ic_spearman) >= 0.03
       ? "text-accent"
@@ -74,15 +135,17 @@ export default function AlphaPage() {
     : "text-muted";
 
   return (
-    <main className="flex h-full flex-col gap-4 overflow-y-auto p-5">
-      <header>
-        <h1 className="text-lg font-semibold text-text">
-          {t(locale, "alpha.title")}
-        </h1>
-        <p className="mt-1 text-xs text-muted">{t(locale, "alpha.subtitle")}</p>
-      </header>
+    <main className="flex h-full flex-col overflow-y-auto p-5">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex flex-col gap-4">
+          <header>
+            <h1 className="text-lg font-semibold text-text">
+              {t(locale, "alpha.title")}
+            </h1>
+            <p className="mt-1 text-xs text-muted">{t(locale, "alpha.subtitle")}</p>
+          </header>
 
-      <Card padding="md">
+          <Card padding="md">
         <div className="flex flex-col gap-3">
           <textarea
             value={text}
@@ -255,6 +318,19 @@ export default function AlphaPage() {
           ) : null}
         </Card>
       ) : null}
+        </div>
+
+        <aside className="lg:sticky lg:top-5 lg:self-start">
+          <HypothesisHistoryPanel
+            favorites={favorites}
+            recent={recent}
+            activeId={activeId}
+            onLoad={handleLoadEntry}
+            onToggleFavorite={handleToggleFavorite}
+            onRemove={handleRemove}
+          />
+        </aside>
+      </div>
     </main>
   );
 }
