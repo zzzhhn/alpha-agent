@@ -932,6 +932,11 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         result = run_factor_backtest(body.spec, train_ratio=body.train_ratio)
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
+    except ImportError as exc:
+        raise HTTPException(
+            503,
+            f"Optional dependency missing during backtest: {type(exc).__name__}: {exc}",
+        ) from exc
     except (ValueError, KeyError) as exc:
         raise HTTPException(
             422, f"Factor evaluation failed: {type(exc).__name__}: {exc}"
