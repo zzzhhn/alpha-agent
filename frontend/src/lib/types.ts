@@ -489,6 +489,29 @@ export interface HypothesisTranslateResponse {
   readonly llm_raw: string;
 }
 
+export interface FactorBacktestRequest {
+  readonly spec: FactorSpec;
+  readonly train_ratio?: number;
+}
+
+export interface FactorSplitMetrics {
+  readonly sharpe: number;
+  readonly total_return: number;
+  readonly ic_spearman: number;
+  readonly n_days: number;
+}
+
+export interface FactorBacktestResponse {
+  readonly equity_curve: readonly EquityCurvePoint[];
+  readonly benchmark_curve: readonly EquityCurvePoint[];
+  readonly train_end_index: number;
+  readonly train_metrics: FactorSplitMetrics;
+  readonly test_metrics: FactorSplitMetrics;
+  readonly currency: string;
+  readonly factor_name: string;
+  readonly benchmark_ticker: string;
+}
+
 /* ═══════════════════ API Response Envelope ═══════════════════ */
 
 export interface ApiResponse<T> {

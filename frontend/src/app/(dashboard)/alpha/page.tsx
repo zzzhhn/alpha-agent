@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { translateHypothesis } from "@/lib/api";
+import { runFactorBacktest, translateHypothesis } from "@/lib/api";
+import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
 import type {
+  FactorBacktestResponse,
   FactorUniverse,
   HypothesisTranslateResponse,
 } from "@/lib/types";
@@ -27,6 +29,9 @@ export default function AlphaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<HypothesisTranslateResponse | null>(null);
+  const [backtesting, setBacktesting] = useState(false);
+  const [backtestError, setBacktestError] = useState<string | null>(null);
+  const [backtest, setBacktest] = useState<FactorBacktestResponse | null>(null);
 
   async function onSubmit() {
     if (text.trim().length === 0) return;
@@ -43,6 +48,23 @@ export default function AlphaPage() {
       return;
     }
     setResult(response.data);
+    // A new spec invalidates the previous backtest result.
+    setBacktest(null);
+    setBacktestError(null);
+  }
+
+  async function onBacktest() {
+    if (!result) return;
+    setBacktesting(true);
+    setBacktestError(null);
+    const response = await runFactorBacktest({ spec: result.spec });
+    setBacktesting(false);
+    if (response.error) {
+      setBacktestError(response.error);
+      setBacktest(null);
+      return;
+    }
+    setBacktest(response.data);
   }
 
   const icColor = result
@@ -162,7 +184,103 @@ export default function AlphaPage() {
           </Card>
         </div>
       ) : null}
+
+      {result ? (
+        <Card padding="md">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-text">
+                {t(locale, "alpha.backtest.title")}
+              </h2>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                {t(locale, "alpha.backtest.subtitle")}
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={onBacktest}
+              disabled={backtesting}
+            >
+              {backtesting
+                ? t(locale, "alpha.backtest.running")
+                : t(locale, "alpha.backtest.run")}
+            </Button>
+          </div>
+
+          {backtestError ? (
+            <p className="mb-2 text-xs text-red-400">
+              {t(locale, "alpha.backtest.errorPrefix")}
+              {backtestError}
+            </p>
+          ) : null}
+
+          {backtest ? (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <MetricTile
+                  label={t(locale, "alpha.backtest.trainSharpe")}
+                  value={backtest.train_metrics.sharpe.toFixed(2)}
+                />
+                <MetricTile
+                  label={t(locale, "alpha.backtest.testSharpe")}
+                  value={backtest.test_metrics.sharpe.toFixed(2)}
+                  emphasize={
+                    backtest.test_metrics.sharpe >= 1.0
+                      ? "pos"
+                      : backtest.test_metrics.sharpe <= -1.0
+                        ? "neg"
+                        : undefined
+                  }
+                />
+                <MetricTile
+                  label={t(locale, "alpha.backtest.trainIC")}
+                  value={backtest.train_metrics.ic_spearman.toFixed(4)}
+                />
+                <MetricTile
+                  label={t(locale, "alpha.backtest.testIC")}
+                  value={backtest.test_metrics.ic_spearman.toFixed(4)}
+                />
+                <MetricTile
+                  label={t(locale, "alpha.backtest.trainReturn")}
+                  value={`${(backtest.train_metrics.total_return * 100).toFixed(2)}%`}
+                />
+                <MetricTile
+                  label={t(locale, "alpha.backtest.testReturn")}
+                  value={`${(backtest.test_metrics.total_return * 100).toFixed(2)}%`}
+                />
+              </div>
+              <FactorPnLChart data={backtest} />
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
     </main>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  emphasize,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly emphasize?: "pos" | "neg";
+}) {
+  const color =
+    emphasize === "pos"
+      ? "text-accent"
+      : emphasize === "neg"
+        ? "text-red-400"
+        : "text-text";
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-border bg-[var(--card-inner,transparent)] px-3 py-2">
+      <span className="text-[10px] uppercase tracking-wide text-muted">
+        {label}
+      </span>
+      <span className={`font-mono text-sm ${color}`}>{value}</span>
+    </div>
   );
 }
 

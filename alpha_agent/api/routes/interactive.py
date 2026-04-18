@@ -865,3 +865,100 @@ async def translate_hypothesis(
         },
         llm_raw=llm_resp.content,
     )
+
+
+# ── Factor long-short backtest ──────────────────────────────────────────────
+
+
+class FactorBacktestRequest(BaseModel):
+    spec: _FactorSpec
+    train_ratio: float = Field(default=0.80, ge=0.10, le=0.95)
+
+
+class _SplitMetricsModel(BaseModel):
+    sharpe: float
+    total_return: float
+    ic_spearman: float
+    n_days: int
+
+
+class _CurvePoint(BaseModel):
+    date: str
+    value: float
+
+
+class FactorBacktestResponse(BaseModel):
+    equity_curve: list[_CurvePoint]
+    benchmark_curve: list[_CurvePoint]
+    train_end_index: int
+    train_metrics: _SplitMetricsModel
+    test_metrics: _SplitMetricsModel
+    currency: str
+    factor_name: str
+    benchmark_ticker: str
+
+
+@router.post(
+    "/api/v1/factor/backtest",
+    response_model=FactorBacktestResponse,
+)
+async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse:
+    """Run a cross-sectional long-short backtest on the 37-ticker US panel.
+
+    Uses a pre-cached 1y OHLCV parquet (committed at deploy-time) so the
+    request stays inside Vercel's 300s timeout. Long top 30% / short
+    bottom 30% by factor rank, equal-weighted daily rebalance. Returns
+    train/test metrics plus SPY benchmark curve for overlay.
+    """
+    # Lazy import: keeps existing interactive endpoints alive if the
+    # factor_engine submodule fails to import (see dual-entry mirror rule).
+    try:
+        from alpha_agent.factor_engine.factor_backtest import run_factor_backtest
+    except ImportError as exc:
+        raise HTTPException(
+            503,
+            f"factor_engine module failed to import: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    # Re-validate the expression against the AST whitelist. The FactorSpec
+    # model already validates operator names, but _validate_expression also
+    # catches AST-level issues like calling a non-whitelisted op inline.
+    try:
+        _validate_expression(body.spec.expression, body.spec.operators_used)
+    except _FactorSpecValidationError as exc:
+        raise HTTPException(422, f"Expression AST invalid: {exc}") from exc
+
+    try:
+        result = run_factor_backtest(body.spec, train_ratio=body.train_ratio)
+    except FileNotFoundError as exc:
+        raise HTTPException(503, f"Panel data missing: {exc}") from exc
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(
+            422, f"Factor evaluation failed: {type(exc).__name__}: {exc}"
+        ) from exc
+    except NotImplementedError as exc:
+        raise HTTPException(
+            422,
+            f"Factor uses an operator without a vectorized impl: {exc}",
+        ) from exc
+
+    return FactorBacktestResponse(
+        equity_curve=[_CurvePoint(**p) for p in result.equity_curve],
+        benchmark_curve=[_CurvePoint(**p) for p in result.benchmark_curve],
+        train_end_index=result.train_end_index,
+        train_metrics=_SplitMetricsModel(
+            sharpe=result.train_metrics.sharpe,
+            total_return=result.train_metrics.total_return,
+            ic_spearman=result.train_metrics.ic_spearman,
+            n_days=result.train_metrics.n_days,
+        ),
+        test_metrics=_SplitMetricsModel(
+            sharpe=result.test_metrics.sharpe,
+            total_return=result.test_metrics.total_return,
+            ic_spearman=result.test_metrics.ic_spearman,
+            n_days=result.test_metrics.n_days,
+        ),
+        currency=result.currency,
+        factor_name=result.factor_name,
+        benchmark_ticker=result.benchmark_ticker,
+    )
