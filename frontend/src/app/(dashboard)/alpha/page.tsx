@@ -6,10 +6,14 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { useLocale } from "@/components/layout/LocaleProvider";
-import { t } from "@/lib/i18n";
+import { t, type TranslationKey } from "@/lib/i18n";
 import { runFactorBacktest, translateHypothesis } from "@/lib/api";
 import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
 import { HypothesisHistoryPanel } from "@/components/alpha/HypothesisHistoryPanel";
+import {
+  FactorExamples,
+  type FactorExample,
+} from "@/components/alpha/FactorExamples";
 import {
   addToHistory,
   getFavorites,
@@ -18,6 +22,7 @@ import {
   toggleFavorite,
 } from "@/lib/hypothesis-history";
 import type {
+  BacktestDirection,
   FactorBacktestResponse,
   FactorUniverse,
   HypothesisHistoryEntry,
@@ -32,6 +37,12 @@ const UNIVERSES: readonly { value: FactorUniverse; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
+const DIRECTION_HELP_KEY: Record<BacktestDirection, TranslationKey> = {
+  long_short: "alpha.backtest.dirHelpLongShort",
+  long_only: "alpha.backtest.dirHelpLongOnly",
+  short_only: "alpha.backtest.dirHelpShortOnly",
+};
+
 export default function AlphaPage() {
   const { locale } = useLocale();
   const [text, setText] = useState("");
@@ -42,6 +53,7 @@ export default function AlphaPage() {
   const [backtesting, setBacktesting] = useState(false);
   const [backtestError, setBacktestError] = useState<string | null>(null);
   const [backtest, setBacktest] = useState<FactorBacktestResponse | null>(null);
+  const [direction, setDirection] = useState<BacktestDirection>("long_only");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<readonly HypothesisHistoryEntry[]>(
     [],
@@ -88,7 +100,7 @@ export default function AlphaPage() {
     if (!result) return;
     setBacktesting(true);
     setBacktestError(null);
-    const response = await runFactorBacktest({ spec: result.spec });
+    const response = await runFactorBacktest({ spec: result.spec, direction });
     setBacktesting(false);
     if (response.error) {
       setBacktestError(response.error);
@@ -97,6 +109,18 @@ export default function AlphaPage() {
     }
     setBacktest(response.data);
   }
+
+  const handleLoadExample = useCallback((example: FactorExample) => {
+    // Loading an example primes the textarea with the natural-language hypothesis
+    // so the user's translate→backtest pipeline runs exactly as it would for
+    // their own input. We don't short-circuit straight to /backtest.
+    setText(locale === "zh" ? example.hypothesisZh : example.hypothesisEn);
+    setResult(null);
+    setBacktest(null);
+    setError(null);
+    setBacktestError(null);
+    setActiveId(null);
+  }, [locale]);
 
   const handleLoadEntry = useCallback((entry: HypothesisHistoryEntry) => {
     setText(entry.request.text);
@@ -184,6 +208,8 @@ export default function AlphaPage() {
         </div>
       </Card>
 
+      <FactorExamples onLoad={handleLoadExample} />
+
       {result ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Card padding="md" className="lg:col-span-2">
@@ -269,6 +295,40 @@ export default function AlphaPage() {
                 ? t(locale, "alpha.backtest.running")
                 : t(locale, "alpha.backtest.run")}
             </Button>
+          </div>
+
+          <div className="mb-3 rounded-md border border-border bg-[var(--card-inner,transparent)] p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold text-text">
+                {t(locale, "alpha.backtest.directionLabel")}
+              </span>
+              {(["long_only", "long_short", "short_only"] as const).map((dir) => {
+                const labelKey =
+                  dir === "long_only"
+                    ? "alpha.backtest.dirLongOnly"
+                    : dir === "long_short"
+                      ? "alpha.backtest.dirLongShort"
+                      : "alpha.backtest.dirShortOnly";
+                const active = direction === dir;
+                return (
+                  <button
+                    key={dir}
+                    type="button"
+                    onClick={() => setDirection(dir)}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] transition ${
+                      active
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-border bg-[var(--toggle-bg)] text-text-secondary hover:border-accent hover:text-accent"
+                    }`}
+                  >
+                    {t(locale, labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-muted">
+              {t(locale, DIRECTION_HELP_KEY[direction])}
+            </p>
           </div>
 
           {backtestError ? (

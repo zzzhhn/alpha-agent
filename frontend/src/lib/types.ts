@@ -489,9 +489,12 @@ export interface HypothesisTranslateResponse {
   readonly llm_raw: string;
 }
 
+export type BacktestDirection = "long_short" | "long_only" | "short_only";
+
 export interface FactorBacktestRequest {
   readonly spec: FactorSpec;
   readonly train_ratio?: number;
+  readonly direction?: BacktestDirection;
 }
 
 export interface FactorSplitMetrics {
@@ -510,6 +513,7 @@ export interface FactorBacktestResponse {
   readonly currency: string;
   readonly factor_name: string;
   readonly benchmark_ticker: string;
+  readonly direction?: BacktestDirection;
 }
 
 export interface HypothesisHistoryEntry {
