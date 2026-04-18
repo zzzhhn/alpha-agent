@@ -308,6 +308,14 @@ export interface BacktestResult {
   readonly timestamp: string;
 }
 
+export interface BacktestHistoryEntry {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly request: BacktestRequest;
+  readonly result: BacktestResult;
+  readonly isFavorite: boolean;
+}
+
 export interface TickerAnalyzeRequest {
   readonly ticker: string;
   readonly rsi_period?: number;

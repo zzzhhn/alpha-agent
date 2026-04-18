@@ -10,6 +10,8 @@ import type { BacktestResult } from "@/lib/types";
 
 interface BacktestResultsProps {
   readonly result: BacktestResult;
+  readonly isFavorite?: boolean;
+  readonly onToggleFavorite?: () => void;
 }
 
 function formatPct(v: number): string {
@@ -20,13 +22,48 @@ function formatNum(v: number): string {
   return v.toFixed(4);
 }
 
-export function BacktestResults({ result }: BacktestResultsProps) {
+export function BacktestResults({
+  result,
+  isFavorite = false,
+  onToggleFavorite,
+}: BacktestResultsProps) {
   const { locale } = useLocale();
   const m = result.metrics;
   const isProfit = m.total_return > 0;
 
   return (
     <div className="space-y-4">
+      {/* Result Header with Favorite Toggle */}
+      {onToggleFavorite && (
+        <div className="flex items-center justify-between px-1">
+          <div className="font-mono text-[11px] text-muted">
+            {result.ticker} | {result.start_date} &rarr; {result.end_date}
+          </div>
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            title={t(
+              locale,
+              isFavorite ? "backtest.unfavoriteAction" : "backtest.favoriteAction"
+            )}
+            aria-pressed={isFavorite}
+            className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+              isFavorite
+                ? "border-accent bg-accent/10 text-accent"
+                : "border-border bg-[var(--toggle-bg)] text-muted hover:border-accent/50 hover:text-text"
+            }`}
+          >
+            <span>{isFavorite ? "\u2605" : "\u2606"}</span>
+            <span>
+              {t(
+                locale,
+                isFavorite ? "backtest.unfavorite" : "backtest.favorite"
+              )}
+            </span>
+          </button>
+        </div>
+      )}
+
       {/* KPI Row */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <KPICard
