@@ -524,6 +524,56 @@ export interface HypothesisHistoryEntry {
   readonly isFavorite: boolean;
 }
 
+/* ═══════════════════ P1: Data Layer ═══════════════════ */
+
+export interface UniverseInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly ticker_count: number;
+  readonly benchmark: string;
+  readonly tickers: readonly string[];
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly n_days: number;
+  readonly currency: string;
+}
+
+export interface UniverseListResponse {
+  readonly universes: readonly UniverseInfo[];
+}
+
+export interface OperatorInfo {
+  readonly name: string;
+  readonly arity: number;
+  readonly category: string;
+  readonly description_en: string;
+  readonly description_zh: string;
+  readonly example: string;
+}
+
+export interface OperandInfo {
+  readonly name: string;
+  readonly derived: boolean;
+  readonly description_en: string;
+  readonly description_zh: string;
+}
+
+export interface OperandCatalogResponse {
+  readonly operators: readonly OperatorInfo[];
+  readonly operands: readonly OperandInfo[];
+}
+
+export interface CoverageResponse {
+  readonly universe_id: string;
+  readonly dates: readonly string[];
+  readonly tickers: readonly string[];
+  readonly matrix: readonly (readonly number[])[];
+  readonly total_cells: number;
+  readonly missing_cells: number;
+  readonly coverage_pct: number;
+  readonly missing_per_ticker: Readonly<Record<string, number>>;
+}
+
 /* ═══════════════════ API Response Envelope ═══════════════════ */
 
 export interface ApiResponse<T> {

@@ -28,6 +28,9 @@ import type {
   HypothesisTranslateResponse,
   FactorBacktestRequest,
   FactorBacktestResponse,
+  UniverseListResponse,
+  OperandCatalogResponse,
+  CoverageResponse,
 } from "./types";
 
 const BASE_URL =
@@ -283,4 +286,20 @@ export function runFactorBacktest(params: FactorBacktestRequest) {
     method: "POST",
     body: JSON.stringify(params),
   });
+}
+
+/* ── P1: Data layer (introspection, GET-only) ── */
+
+export function fetchUniverses() {
+  return fetchJson<UniverseListResponse>("/data/universe");
+}
+
+export function fetchOperandCatalog() {
+  return fetchJson<OperandCatalogResponse>("/data/operands");
+}
+
+export function fetchCoverage(universeId = "SP500_subset") {
+  return fetchJson<CoverageResponse>(
+    `/data/coverage?universe_id=${encodeURIComponent(universeId)}`,
+  );
 }

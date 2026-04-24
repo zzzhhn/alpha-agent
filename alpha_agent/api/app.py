@@ -154,9 +154,14 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.interactive import router
         return router
 
+    def _import_data():
+        from alpha_agent.api.routes.data import router
+        return router
+
     _load("system", _import_system)
     _load("serverless", _import_serverless)
     _load("interactive", _import_interactive)
+    _load("data", _import_data)
 
     if not SERVERLESS:
         def _import_websocket():

@@ -84,6 +84,15 @@ except Exception as e:
     print(f"✗ interactive routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
 
+try:
+    from alpha_agent.api.routes.data import router as data_router
+    app.include_router(data_router)
+    print(f"✓ data routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    print(f"✗ data routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+
 
 @app.get("/api/health")
 async def health() -> dict:
