@@ -308,19 +308,87 @@ export function runFactorBacktest(params: FactorBacktestRequest) {
 }
 
 /* ── P1: Data layer (introspection, GET-only) ── */
+//
+// Module-level promise cache for the three Data endpoints. The /data page
+// re-mounts on every navigation (Next.js App Router doesn't preserve client
+// component state across route changes), so without caching the user pays
+// 3 network round-trips every time they revisit. Since the panel is static
+// (refreshed only when the parquet is rebuilt + redeployed), an in-memory
+// cache that survives the page lifecycle but resets on full reload is the
+// right fit.
+//
+// Failure handling: if the first request errors, the cached promise is
+// cleared so the next caller retries. Successful cache lives until tab close
+// or explicit `force: true`.
 
-export function fetchUniverses() {
-  return fetchJson<UniverseListResponse>("/data/universe");
+interface CacheOpts {
+  readonly force?: boolean;
 }
 
-export function fetchOperandCatalog() {
-  return fetchJson<OperandCatalogResponse>("/data/operands");
+let _universeCache: Promise<ApiResponse<UniverseListResponse>> | null = null;
+let _catalogCache: Promise<ApiResponse<OperandCatalogResponse>> | null = null;
+const _coverageCache = new Map<string, Promise<ApiResponse<CoverageResponse>>>();
+
+function _wrapCache<T>(
+  current: Promise<ApiResponse<T>> | null,
+  fetcher: () => Promise<ApiResponse<T>>,
+  onClear: () => void,
+): Promise<ApiResponse<T>> {
+  if (current) return current;
+  const p = fetcher().then((r) => {
+    if (r.error) onClear();   // failed request — drop cache so retry works
+    return r;
+  });
+  return p;
 }
 
-export function fetchCoverage(universeId = "SP500_subset") {
-  return fetchJson<CoverageResponse>(
-    `/data/coverage?universe_id=${encodeURIComponent(universeId)}`,
-  );
+export function fetchUniverses(opts?: CacheOpts) {
+  if (opts?.force) _universeCache = null;
+  if (!_universeCache) {
+    _universeCache = _wrapCache(
+      _universeCache,
+      () => fetchJson<UniverseListResponse>("/data/universe"),
+      () => { _universeCache = null; },
+    );
+  }
+  return _universeCache;
+}
+
+export function fetchOperandCatalog(opts?: CacheOpts) {
+  if (opts?.force) _catalogCache = null;
+  if (!_catalogCache) {
+    _catalogCache = _wrapCache(
+      _catalogCache,
+      () => fetchJson<OperandCatalogResponse>("/data/operands"),
+      () => { _catalogCache = null; },
+    );
+  }
+  return _catalogCache;
+}
+
+export function fetchCoverage(
+  universeId = "SP500_subset",
+  opts?: CacheOpts,
+) {
+  if (opts?.force) _coverageCache.delete(universeId);
+  let p = _coverageCache.get(universeId);
+  if (!p) {
+    p = fetchJson<CoverageResponse>(
+      `/data/coverage?universe_id=${encodeURIComponent(universeId)}`,
+    ).then((r) => {
+      if (r.error) _coverageCache.delete(universeId);
+      return r;
+    });
+    _coverageCache.set(universeId, p);
+  }
+  return p;
+}
+
+/** Invalidate all Data-module caches in one call (manual refresh). */
+export function invalidateDataCache() {
+  _universeCache = null;
+  _catalogCache = null;
+  _coverageCache.clear();
 }
 
 /* ── P3: Signal Layer ── */

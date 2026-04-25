@@ -223,6 +223,8 @@ const translations = {
     "data.coverage.legend": "绿=有数据 · 灰=缺失",
     "data.loading": "加载中…",
     "data.error": "加载失败",
+    "data.refresh": "刷新",
+    "data.refreshing": "刷新中…",
 
     "signal.title": "信号面板",
     "signal.subtitle": "把因子表达式变成今天的可执行信号——top/bottom 选股、滚动 IC 表现、行业 + 市值敞口三件套。",
@@ -467,6 +469,8 @@ const translations = {
     "data.coverage.legend": "green = present · grey = missing",
     "data.loading": "Loading…",
     "data.error": "Failed to load",
+    "data.refresh": "Refresh",
+    "data.refreshing": "Refreshing…",
 
     "signal.title": "Signal Board",
     "signal.subtitle": "Turn a factor expression into an actionable signal — today's long/short picks, rolling IC track-record, and sector + cap exposures.",
