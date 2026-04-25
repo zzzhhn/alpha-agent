@@ -19,9 +19,20 @@ from alpha_agent.core.types import AllowedOperator
 
 _ALLOWED_OPS: frozenset[str] = frozenset(AllowedOperator.__args__)
 
-_ALLOWED_OPERANDS: frozenset[str] = frozenset(
-    {"close", "open", "high", "low", "volume", "returns", "vwap"}
-)
+# T1 operands (in current factor_universe_1y.parquet — OHLCV + derived).
+# T2 operands (sector / industry / cap / fundamentals) become accepted once
+# factor_universe_sp100_v2.parquet is the active panel; until _load_panel
+# switches over we still serve T1 to keep validation in sync with runtime data.
+_ALLOWED_OPERANDS: frozenset[str] = frozenset({
+    # T1 (always available)
+    "close", "open", "high", "low", "volume", "returns", "vwap",
+    # T2 (price/volume metadata)
+    "cap", "adv20", "sector", "industry", "subindustry",
+    # T2 (8 fundamentals, forward-filled to daily). Names match the WorldQuant
+    # fundamentals catalog — `net_income_adjusted` not `net_income`.
+    "revenue", "net_income_adjusted", "ebitda", "eps",
+    "equity", "assets", "free_cash_flow", "gross_profit",
+})
 
 
 class FactorSpecValidationError(ValueError):

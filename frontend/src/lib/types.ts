@@ -542,25 +542,48 @@ export interface UniverseListResponse {
   readonly universes: readonly UniverseInfo[];
 }
 
+export type CatalogTier = "T1" | "T2" | "T3";
+
 export interface OperatorInfo {
   readonly name: string;
-  readonly arity: number;
+  readonly signature?: string;
+  readonly arity?: number | null;
   readonly category: string;
-  readonly description_en: string;
-  readonly description_zh: string;
-  readonly example: string;
+  readonly function_zh?: string;
+  readonly description_en?: string;
+  readonly description_zh?: string;
+  readonly example?: string;
+  readonly notes?: string;
+  readonly tier: CatalogTier;
+  readonly implemented: boolean;
 }
 
 export interface OperandInfo {
   readonly name: string;
-  readonly derived: boolean;
-  readonly description_en: string;
-  readonly description_zh: string;
+  readonly category?: string;
+  readonly derived?: boolean;
+  readonly description_zh?: string;
+  readonly description_en?: string;
+  readonly usage_zh?: string;
+  readonly unit?: string;
+  readonly tier: CatalogTier;
+  readonly implemented: boolean;
+}
+
+export interface CatalogTierSummary {
+  readonly T1: number;
+  readonly T2: number;
+  readonly T3: number;
+  readonly total: number;
 }
 
 export interface OperandCatalogResponse {
   readonly operators: readonly OperatorInfo[];
   readonly operands: readonly OperandInfo[];
+  readonly tier_summary: {
+    readonly operators: CatalogTierSummary;
+    readonly operands: CatalogTierSummary;
+  };
 }
 
 export interface CoverageResponse {

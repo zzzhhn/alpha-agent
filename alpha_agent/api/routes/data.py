@@ -13,7 +13,10 @@ Design principles:
 
 from __future__ import annotations
 
+import json
 import logging
+from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -28,83 +31,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/data", tags=["data"])
 
 
-# ── Static catalog: operators + operands ───────────────────────────────────
-# Source of truth lives in alpha_agent.core.types (AllowedOperator Literal) and
-# the evaluator's known operands. Descriptions are curated here so the UI can
-# render a human-readable catalog without re-deriving from source code.
+# ── Catalog loader (source of truth = WorldQuant docs ingested into JSON) ──
+# Re-run alpha_agent/data/wq_catalog/augment_catalog.py to refresh tiers
+# whenever the OPS dict or panel schema changes.
 
-_OPERATOR_CATALOG: list[dict] = [
-    {"name": "ts_mean",  "arity": 2, "category": "time_series",
-     "description_en": "Rolling arithmetic mean over last N periods.",
-     "description_zh": "过去 N 期算术平均。",
-     "example": "ts_mean(returns, 10)"},
-    {"name": "ts_rank",  "arity": 2, "category": "time_series",
-     "description_en": "Rolling rank of the last value vs prior N periods.",
-     "description_zh": "当前值在过去 N 期中的排名分位。",
-     "example": "ts_rank(close, 20)"},
-    {"name": "ts_corr",  "arity": 3, "category": "time_series",
-     "description_en": "Rolling correlation of two series over N periods.",
-     "description_zh": "两序列在过去 N 期的滚动相关系数。",
-     "example": "ts_corr(close, volume, 10)"},
-    {"name": "ts_std",   "arity": 2, "category": "time_series",
-     "description_en": "Rolling standard deviation over N periods.",
-     "description_zh": "过去 N 期标准差。",
-     "example": "ts_std(returns, 20)"},
-    {"name": "ts_zscore","arity": 2, "category": "time_series",
-     "description_en": "Rolling z-score: (x - ts_mean(x, N)) / ts_std(x, N).",
-     "description_zh": "过去 N 期 z-score 标准化。",
-     "example": "ts_zscore(close, 20)"},
-    {"name": "rank",     "arity": 1, "category": "cross_section",
-     "description_en": "Cross-sectional rank across the universe [0, 1].",
-     "description_zh": "当日在全 universe 内的横截面排名（0 到 1）。",
-     "example": "rank(close)"},
-    {"name": "scale",    "arity": 1, "category": "cross_section",
-     "description_en": "Cross-sectional L1-normalization (sum of |x| = 1).",
-     "description_zh": "横截面 L1 归一化。",
-     "example": "scale(returns)"},
-    {"name": "log",      "arity": 1, "category": "unary",
-     "description_en": "Natural log. NaN for non-positive input.",
-     "description_zh": "自然对数，非正数返回 NaN。",
-     "example": "log(close)"},
-    {"name": "sign",     "arity": 1, "category": "unary",
-     "description_en": "Sign function: -1, 0, or 1.",
-     "description_zh": "符号函数。",
-     "example": "sign(returns)"},
-    {"name": "winsorize","arity": 2, "category": "cross_section",
-     "description_en": "Cap cross-sectional outliers at quantile q and 1-q.",
-     "description_zh": "按横截面分位截断极值。",
-     "example": "winsorize(returns, 0.05)"},
-    {"name": "add",      "arity": 2, "category": "arithmetic",
-     "description_en": "Element-wise addition.",
-     "description_zh": "逐元素加法。",
-     "example": "add(close, open)"},
-    {"name": "sub",      "arity": 2, "category": "arithmetic",
-     "description_en": "Element-wise subtraction.",
-     "description_zh": "逐元素减法。",
-     "example": "sub(close, vwap)"},
-    {"name": "mul",      "arity": 2, "category": "arithmetic",
-     "description_en": "Element-wise multiplication.",
-     "description_zh": "逐元素乘法。",
-     "example": "mul(rank(close), rank(volume))"},
-    {"name": "div",      "arity": 2, "category": "arithmetic",
-     "description_en": "Element-wise division. NaN on divide-by-zero.",
-     "description_zh": "逐元素除法，除零返回 NaN。",
-     "example": "div(close, vwap)"},
-    {"name": "pow",      "arity": 2, "category": "arithmetic",
-     "description_en": "Element-wise power (base, exponent).",
-     "description_zh": "逐元素幂运算。",
-     "example": "pow(returns, 2)"},
-]
+_CATALOG_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "wq_catalog"
 
-_OPERAND_CATALOG: list[dict] = [
-    {"name": "close",   "derived": False, "description_en": "Daily close price.",            "description_zh": "日收盘价。"},
-    {"name": "open",    "derived": False, "description_en": "Daily open price.",             "description_zh": "日开盘价。"},
-    {"name": "high",    "derived": False, "description_en": "Daily high price.",             "description_zh": "日最高价。"},
-    {"name": "low",     "derived": False, "description_en": "Daily low price.",              "description_zh": "日最低价。"},
-    {"name": "volume",  "derived": False, "description_en": "Daily traded volume (shares).", "description_zh": "日成交量（股数）。"},
-    {"name": "vwap",    "derived": True,  "description_en": "Approximation: (high+low+close)/3. Not true VWAP.", "description_zh": "近似 VWAP：(最高+最低+收盘)/3，非真实 VWAP。"},
-    {"name": "returns", "derived": True,  "description_en": "Daily simple returns: close/close.shift(1) - 1.",   "description_zh": "日简单收益率：close 环比变动。"},
-]
+
+@lru_cache(maxsize=1)
+def _load_catalog() -> tuple[list[dict], list[dict]]:
+    """Return (operators, operands) augmented with tier + implemented flags."""
+    ops_path = _CATALOG_DIR / "operators_augmented.json"
+    fields_path = _CATALOG_DIR / "fields_augmented.json"
+    if not ops_path.exists() or not fields_path.exists():
+        logger.warning(
+            "wq_catalog augmented JSON missing; falling back to empty catalog. "
+            "Re-run alpha_agent/data/wq_catalog/augment_catalog.py."
+        )
+        return [], []
+    operators = json.loads(ops_path.read_text())
+    operands = json.loads(fields_path.read_text())
+    return operators, operands
+
 
 
 # ── Response models ─────────────────────────────────────────────────────────
@@ -127,8 +75,17 @@ class UniverseListResponse(BaseModel):
 
 
 class OperandCatalogResponse(BaseModel):
+    """Augmented WorldQuant catalog. Each item carries `tier` and `implemented`.
+
+    Tier semantics:
+      - "T1" — implemented now, included in factor expressions today
+      - "T2" — implemented, requires v2 panel data (sector / fundamentals)
+      - "T3" — catalog-only; data source unavailable or operator semantics
+        out of scope (vector ops, news/options/sentiment, infix comparisons)
+    """
     operators: list[dict]
     operands: list[dict]
+    tier_summary: dict[str, dict[str, int]]  # {operators|operands: {T1: n, T2, T3, total}}
 
 
 class CoverageResponse(BaseModel):
@@ -168,11 +125,42 @@ def list_universes() -> UniverseListResponse:
 
 
 @router.get("/operands", response_model=OperandCatalogResponse)
-def list_operands() -> OperandCatalogResponse:
-    """Return the full catalog of operators and operands the factor DSL accepts."""
+def list_operands(
+    tier: Literal["all", "available", "T1", "T2", "T3"] = Query(default="all"),
+) -> OperandCatalogResponse:
+    """Return the augmented catalog of operators and operands.
+
+    `tier` filter:
+      - "all":       everything (default — UI catalog page)
+      - "available": only items with implemented=true (LLM prompt feed)
+      - "T1"/"T2"/"T3": exact tier match
+    """
+    operators, operands = _load_catalog()
+
+    if tier == "available":
+        operators = [op for op in operators if op.get("implemented")]
+        operands = [f for f in operands if f.get("implemented")]
+    elif tier in {"T1", "T2", "T3"}:
+        operators = [op for op in operators if op.get("tier") == tier]
+        operands = [f for f in operands if f.get("tier") == tier]
+
+    def _summarize(items: list[dict]) -> dict[str, int]:
+        s = {"T1": 0, "T2": 0, "T3": 0, "total": len(items)}
+        for it in items:
+            t = it.get("tier", "T3")
+            s[t] = s.get(t, 0) + 1
+        return s
+
+    # tier_summary always reflects the full catalog (not the filtered slice),
+    # so the UI can show "you're seeing X / total" alongside the items.
+    full_ops, full_fields = _load_catalog()
     return OperandCatalogResponse(
-        operators=_OPERATOR_CATALOG,
-        operands=_OPERAND_CATALOG,
+        operators=operators,
+        operands=operands,
+        tier_summary={
+            "operators": _summarize(full_ops),
+            "operands": _summarize(full_fields),
+        },
     )
 
 

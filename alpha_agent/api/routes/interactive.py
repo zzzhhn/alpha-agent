@@ -743,12 +743,39 @@ class HypothesisTranslateResponse(BaseModel):
     llm_raw: str
 
 
-_TRANSLATE_SYSTEM_PROMPT = """You convert a natural-language factor hypothesis into a strict FactorSpec JSON.
+def _build_translate_prompt() -> str:
+    """Build the system prompt with the LIVE operator + operand whitelist.
+
+    Source of truth = scan/vectorized.py::OPS and core/factor_ast::_ALLOWED_OPERANDS.
+    Re-rendered each request so adding an operator anywhere flows here automatically.
+    """
+    from alpha_agent.scan.vectorized import OPS as _OPS
+    from alpha_agent.core.factor_ast import _ALLOWED_OPERANDS
+
+    # Group operators by category for readability.
+    arith = sorted(n for n in _OPS if n in {
+        "abs", "add", "subtract", "sub", "multiply", "mul", "divide", "div",
+        "inverse", "log", "sqrt", "power", "pow", "sign", "signed_power",
+        "max", "min", "reverse", "densify",
+    })
+    logic = sorted(n for n in _OPS if n in {
+        "if_else", "and_", "or_", "not_", "is_nan",
+        "equal", "not_equal", "less", "greater", "less_equal", "greater_equal",
+    })
+    ts = sorted(n for n in _OPS if n.startswith("ts_") or n == "last_diff_value")
+    cs = sorted(n for n in _OPS if n in {
+        "rank", "zscore", "scale", "normalize", "quantile", "winsorize",
+    })
+    grp = sorted(n for n in _OPS if n.startswith("group_"))
+
+    operands = sorted(_ALLOWED_OPERANDS)
+
+    return f"""You convert a natural-language factor hypothesis into a strict FactorSpec JSON.
 
 Output rules:
 1. Emit ONLY one JSON object. No prose, no markdown fences.
 2. Schema:
-   {
+   {{
      "name": "<snake_case, <=40 chars>",
      "hypothesis": "<<=200 chars, restate the user idea>",
      "expression": "<Python call syntax using ALLOWED_OPS>",
@@ -756,31 +783,47 @@ Output rules:
      "lookback": <int 5-252>,
      "universe": "<CSI300|CSI500|SP500|custom>",
      "justification": "<<=400 chars, why this captures the hypothesis>"
-   }
+   }}
 
-ALLOWED_OPS (every call must be one of these):
-  ts_mean, ts_rank, ts_corr, ts_std, ts_zscore,
-  rank, scale, winsorize,
-  log, sign,
-  add, sub, mul, div, pow
+ALLOWED_OPS — every function call must be one of these names:
+  arithmetic:    {", ".join(arith)}
+  logical:       {", ".join(logic)}
+  time-series:   {", ".join(ts)}
+  cross-section: {", ".join(cs)}
+  group:         {", ".join(grp)}
 
-Operands (leaves): close, open, high, low, volume, returns, vwap.
-Numeric literals only. No attributes, no imports, no lambdas, no keyword args.
+Operands (leaves) — only these names + numeric literals are allowed:
+  {", ".join(operands)}
+
+No attributes, no imports, no lambdas, no keyword args. No infix `< > == + - * / **`
+— use the functional forms (less, greater, equal, add, sub, mul, div, pow).
 
 Op signatures:
-  ts_mean(arr, window:int)    ts_std(arr, window:int)    ts_zscore(arr, window:int)
-  ts_rank(arr, window:int)    ts_corr(arr, arr, window:int)
-  rank(arr)                   scale(arr)                 winsorize(arr)
-  log(arr)                    sign(arr)
-  add(a,b)  sub(a,b)  mul(a,b)  div(a,b)  pow(a,b)
+  ts_mean(arr, window:int)         ts_std_dev(arr, window:int)
+  ts_zscore(arr, window:int)       ts_rank(arr, window:int)
+  ts_delay(arr, d:int)             ts_delta(arr, d:int)
+  ts_sum/ts_min/ts_max/ts_arg_min/ts_arg_max(arr, window:int)
+  ts_corr(arr, arr, window:int)    ts_covariance(arr, arr, window:int)
+  ts_quantile(arr, window:int, q:float)
+  ts_decay_linear(arr, window:int) ts_decay_exp(arr, window:int)
+  rank(arr)  scale(arr)  zscore(arr)  normalize(arr)
+  winsorize(arr, pct:float)        quantile(arr, n_buckets:int)
+  group_rank/group_zscore/group_neutralize/group_mean/group_scale(arr, group_arr)
+    — group_arr MUST be `sector` or `industry`.
+  if_else(cond, t, f)              and_(a,b)/or_(a,b)/not_(x)
+  equal/less/greater(a,b)
+  add/sub/mul/div/pow/power(a,b)   abs/log/sqrt/sign/inverse(x)
 
 lookback must be >= the largest ts_* window in the expression.
 operators_used must exactly equal the set of ops actually called.
 
-Example input: {"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "CSI500"}
+Example input: {{"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "CSI500"}}
 Example output:
-{"name":"low_turn_roe_up","hypothesis":"Mid-caps with low turnover and rising ROE.","expression":"sub(rank(ts_mean(div(volume,close),20)),rank(ts_zscore(returns,20)))","operators_used":["sub","rank","ts_mean","div","ts_zscore"],"lookback":20,"universe":"CSI500","justification":"Inverse-turnover proxy via rolling volume/close; ROE proxy via short-term return zscore; cross-sectional rank removes scale."}
+{{"name":"low_turn_roe_up","hypothesis":"Mid-caps with low turnover and rising ROE.","expression":"sub(rank(ts_mean(div(volume,close),20)),rank(ts_zscore(returns,20)))","operators_used":["sub","rank","ts_mean","div","ts_zscore"],"lookback":20,"universe":"CSI500","justification":"Inverse-turnover proxy via rolling volume/close; ROE proxy via short-term return zscore; cross-sectional rank removes scale."}}
 """
+
+
+_TRANSLATE_SYSTEM_PROMPT = _build_translate_prompt()
 
 
 def _extract_json_object(text: str) -> dict | None:

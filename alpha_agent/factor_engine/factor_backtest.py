@@ -42,8 +42,21 @@ SUPPORTED_DIRECTIONS: frozenset[str] = frozenset(
     {"long_short", "long_only", "short_only"}
 )
 
-PARQUET_PATH = (
-    Path(__file__).resolve().parent.parent / "data" / "factor_universe_1y.parquet"
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+# Prefer the v2 panel (SP100 + fundamentals + sector) when present. Fall back
+# to the legacy v1 (37 tickers, OHLCV only) so existing backtests keep working
+# during the data migration.
+PARQUET_V2_PATH = _DATA_DIR / "factor_universe_sp100_v2.parquet"
+PARQUET_V1_PATH = _DATA_DIR / "factor_universe_1y.parquet"
+PARQUET_PATH = PARQUET_V2_PATH if PARQUET_V2_PATH.exists() else PARQUET_V1_PATH
+
+# v2 schema additions — None on v1 panels.
+# Names match the WorldQuant fundamentals catalog (see
+# alpha_agent/data/wq_catalog/fields_raw.json::fundamental).
+_V2_FUNDAMENTAL_FIELDS: tuple[str, ...] = (
+    "revenue", "net_income_adjusted", "ebitda", "eps",
+    "equity", "assets", "free_cash_flow", "gross_profit",
 )
 
 
@@ -57,6 +70,11 @@ class _Panel:
     low: np.ndarray
     volume: np.ndarray
     benchmark_close: np.ndarray   # shape (T,)
+    # ── v2 extensions (None when v1 panel is loaded) ──────────────────────
+    cap: np.ndarray | None = None
+    sector: np.ndarray | None = None     # (T, N) string array, broadcast snapshot
+    industry: np.ndarray | None = None
+    fundamentals: dict[str, np.ndarray] | None = None  # field → (T, N)
 
 
 @dataclass(frozen=True)
@@ -115,6 +133,32 @@ def _load_panel() -> _Panel:
         .to_numpy(dtype=np.float64)
     )
 
+    # ── v2 schema extras (cap / sector / industry / fundamentals) ───────────
+    cap = sector = industry = None
+    fundamentals: dict[str, np.ndarray] | None = None
+
+    if "sector" in df.columns:
+        # Sector / industry are snapshots; broadcast the most-recent value per
+        # ticker across all dates.
+        T = len(dates_series)
+        snap = (
+            df.sort_values("date")
+            .drop_duplicates("ticker", keep="last")
+            .set_index("ticker")
+        )
+        sec_row = snap.reindex(list(universe))["sector"].astype(str).to_numpy()
+        ind_row = snap.reindex(list(universe))["industry"].astype(str).to_numpy()
+        sector = np.broadcast_to(sec_row, (T, len(universe))).copy()
+        industry = np.broadcast_to(ind_row, (T, len(universe))).copy()
+
+    if "cap" in df.columns:
+        cap = pivot("cap")
+
+    if any(f in df.columns for f in _V2_FUNDAMENTAL_FIELDS):
+        fundamentals = {
+            f: pivot(f) for f in _V2_FUNDAMENTAL_FIELDS if f in df.columns
+        }
+
     return _Panel(
         dates=dates_series,
         tickers=universe,
@@ -124,6 +168,10 @@ def _load_panel() -> _Panel:
         low=pivot("low"),
         volume=pivot("volume"),
         benchmark_close=bench,
+        cap=cap,
+        sector=sector,
+        industry=industry,
+        fundamentals=fundamentals,
     )
 
 
@@ -219,7 +267,7 @@ def run_factor_backtest(
 
     # Evaluate factor on the full panel. Operand names must match the
     # translate-prompt contract in api/routes/interactive.py.
-    data = {
+    data: dict[str, np.ndarray] = {
         "close": panel.close,
         "open": panel.open_,
         "high": panel.high,
@@ -228,6 +276,23 @@ def run_factor_backtest(
         "returns": trailing_returns,
         "vwap": vwap_proxy,
     }
+    # T2 operands — present iff the v2 panel is active.
+    if panel.cap is not None:
+        data["cap"] = panel.cap
+        # Derived: 20-day average dollar volume = ts_mean(close * volume, 20).
+        # Computed inline here rather than baked into the parquet so the field
+        # always reflects the loaded panel, not a stale snapshot.
+        from alpha_agent.scan.vectorized import ts_mean as _ts_mean
+        data["adv20"] = _ts_mean(panel.close * panel.volume, 20)
+    if panel.sector is not None:
+        data["sector"] = panel.sector
+    if panel.industry is not None:
+        data["industry"] = panel.industry
+        # Convenient alias used by some BRAIN expressions.
+        data.setdefault("subindustry", panel.industry)
+    if panel.fundamentals:
+        for fname, farr in panel.fundamentals.items():
+            data[fname] = farr
     factor = np.asarray(eval_factor(spec.expression, data), dtype=np.float64)
     if factor.shape != (T, N):
         raise ValueError(

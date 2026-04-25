@@ -15,22 +15,30 @@ from pydantic import BaseModel, Field
 # Whitelist of operators allowed in a FactorSpec.expression.
 # Gate against LLM hallucinated operators by checking FactorSpec.operators_used
 # against this Literal at Pydantic validation time.
+#
+# Source of truth: alpha_agent/data/wq_catalog/operators_augmented.json. The
+# subset below is the union of T1 operators (now implemented) plus the legacy
+# short aliases (sub/mul/div/pow) kept for backward compat with existing
+# FACTOR_EXAMPLES and saved Hypothesis history.
 AllowedOperator = Literal[
-    "ts_mean",
-    "ts_rank",
-    "ts_corr",
-    "ts_std",
-    "ts_zscore",
-    "rank",
-    "scale",
-    "log",
-    "sign",
-    "winsorize",
-    "div",
-    "sub",
-    "mul",
-    "add",
-    "pow",
+    # arithmetic — canonical BRAIN names
+    "abs", "add", "subtract", "multiply", "divide", "inverse", "log", "sqrt",
+    "power", "sign", "signed_power", "max", "min", "reverse", "densify",
+    # arithmetic — legacy aliases (do not remove without migrating saved factors)
+    "sub", "mul", "div", "pow",
+    # logical
+    "if_else", "and_", "or_", "not_", "is_nan",
+    "equal", "not_equal", "less", "greater", "less_equal", "greater_equal",
+    # time-series
+    "ts_delay", "ts_delta", "ts_mean", "ts_std", "ts_std_dev", "ts_sum",
+    "ts_product", "ts_min", "ts_max", "ts_rank", "ts_zscore", "ts_arg_min",
+    "ts_arg_max", "ts_corr", "ts_covariance", "ts_quantile", "ts_decay_linear",
+    "ts_decay_exp", "ts_count_nans", "last_diff_value",
+    # cross-section
+    "rank", "zscore", "scale", "normalize", "quantile", "winsorize",
+    # group (T2 — second arg must be a group operand like `sector` / `industry`)
+    "group_rank", "group_zscore", "group_mean", "group_scale",
+    "group_neutralize", "group_backfill",
 ]
 
 

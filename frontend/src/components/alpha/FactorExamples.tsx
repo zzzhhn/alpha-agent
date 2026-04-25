@@ -17,18 +17,18 @@ export interface FactorExample {
   readonly intuitionEn: string;
 }
 
-// All five have been empirically verified in long_only mode against the live
-// backtest endpoint. Panel: 2025-04-21 → 2026-04-17, SPY benchmark +39.78%.
-// See commit 59ea6c5 for the sweep that produced these numbers.
+// All five have been empirically re-verified in long_only mode on the live
+// SP100 v2 panel (100 tickers, 2025-04-25 → 2026-04-24, SPY test +31.14%).
+// Re-run scripts/verify_factor_examples.py if the panel schema changes.
 export const FACTOR_EXAMPLES: readonly FactorExample[] = [
   {
     name: "12 日动量",
     hypothesisZh: "过去两周累计收益最高的股票倾向于持续上涨",
     hypothesisEn: "Stocks with highest 2-week cumulative return tend to keep rising",
     expression: "rank(ts_mean(returns, 12))",
-    totalReturn: 0.5326,
-    testSharpe: 1.97,
-    testIC: 0.025,
+    totalReturn: 0.3798,
+    testSharpe: 3.04,
+    testIC: 0.045,
     intuitionZh:
       "经典趋势跟随。12 日窗口在短期噪音和中期趋势之间取平衡，适合捕捉 sector rotation。",
     intuitionEn:
@@ -39,13 +39,13 @@ export const FACTOR_EXAMPLES: readonly FactorExample[] = [
     hypothesisZh: "收盘价相对 VWAP 偏高的股票，当日买盘推动力强",
     hypothesisEn: "When close is high vs VWAP, intraday buy pressure pushes the price up",
     expression: "rank(div(close, vwap))",
-    totalReturn: 0.5965,
-    testSharpe: 1.83,
-    testIC: 0.028,
+    totalReturn: 0.3665,
+    testSharpe: 0.93,
+    testIC: 0.020,
     intuitionZh:
-      "close / vwap > 1 意味着日内交易加权后买盘占优。高 IC + 高 Sharpe 说明信号干净。",
+      "close / vwap > 1 意味着日内交易加权后买盘占优。在 SP100 上 Sharpe 较低，但累计收益仍跑赢 SPY。",
     intuitionEn:
-      "close/vwap > 1 means volume-weighted buying dominated. High IC + Sharpe indicates a clean signal.",
+      "close/vwap > 1 means volume-weighted buying dominated. Lower Sharpe on SP100 but cumulative return still beats SPY.",
   },
   {
     name: "10 日 VWAP 偏离率",
@@ -53,9 +53,9 @@ export const FACTOR_EXAMPLES: readonly FactorExample[] = [
     hypothesisEn: "The larger the deviation from 10-day VWAP mean, the stronger the capital flow",
     expression:
       "rank(div(sub(close, ts_mean(vwap, 10)), ts_mean(vwap, 10)))",
-    totalReturn: 0.4481,
-    testSharpe: 1.71,
-    testIC: -0.003,
+    totalReturn: 0.3301,
+    testSharpe: 1.14,
+    testIC: 0.025,
     intuitionZh:
       "把 VWAP 拉长到 10 日均值后，捕捉的是中期资金沉淀而非日内噪音。",
     intuitionEn:
@@ -66,9 +66,9 @@ export const FACTOR_EXAMPLES: readonly FactorExample[] = [
     hypothesisZh: "一周累计收益最高的股票延续走强",
     hypothesisEn: "Stocks with highest 1-week cumulative return keep their momentum",
     expression: "rank(ts_mean(returns, 7))",
-    totalReturn: 0.4351,
-    testSharpe: 1.45,
-    testIC: 0.008,
+    totalReturn: 0.3321,
+    testSharpe: 1.58,
+    testIC: 0.029,
     intuitionZh:
       "7 日窗口比 12 日更激进——捕捉短期 news catalyst 带动的 momentum，换手会更高。",
     intuitionEn:
@@ -79,9 +79,9 @@ export const FACTOR_EXAMPLES: readonly FactorExample[] = [
     hypothesisZh: "资金推动 + 趋势确认双重信号叠加",
     hypothesisEn: "Capital flow × trend confirmation stacked signal",
     expression: "rank(mul(div(close, vwap), ts_mean(returns, 10)))",
-    totalReturn: 0.4061,
-    testSharpe: 0.94,
-    testIC: 0.018,
+    totalReturn: 0.3717,
+    testSharpe: 1.99,
+    testIC: 0.036,
     intuitionZh:
       "两个独立信号的乘积——需要 VWAP 偏离和动量同向才触发。降低 false positive 率。",
     intuitionEn:
