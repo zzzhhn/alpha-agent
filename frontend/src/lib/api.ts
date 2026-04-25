@@ -48,62 +48,77 @@ class ApiError extends Error {
   }
 }
 
+// Vercel's anycast edge pool occasionally serves a dead node — symptom is
+// `TypeError: Failed to fetch` because the TLS handshake gets reset and the
+// browser surfaces a network error. A single retry against a fresh connection
+// usually lands on a healthy node and recovers the request transparently.
+// See feedback_vercel_edge_ip_poisoning.md.
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 600;
+
+async function _doFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+  });
+  if (!response.ok) {
+    throw new ApiError(
+      `HTTP ${response.status}: ${response.statusText}`,
+      response.status,
+      url,
+    );
+  }
+  return (await response.json()) as T;
+}
+
 async function fetchJson<T>(
   path: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
   const url = `${API_PREFIX}${path}`;
+  let lastError: unknown;
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    });
-
-    if (!response.ok) {
-      throw new ApiError(
-        `HTTP ${response.status}: ${response.statusText}`,
-        response.status,
-        url
-      );
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const data = await _doFetch<T>(url, options);
+      return { data, error: null, timestamp: new Date().toISOString() };
+    } catch (error) {
+      lastError = error;
+      // Only retry on transient network errors (TypeError) or 5xx upstreams.
+      const transient =
+        error instanceof TypeError ||
+        (error instanceof ApiError && error.status >= 500);
+      if (transient && attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      break;
     }
-
-    const data = (await response.json()) as T;
-
-    return {
-      data,
-      error: null,
-      timestamp: new Date().toISOString(),
-    };
-  } catch (error) {
-    const timestamp = new Date().toISOString();
-
-    if (error instanceof ApiError) {
-      return { data: null, error: error.message, timestamp };
-    }
-
-    if (error instanceof SyntaxError) {
-      return {
-        data: null,
-        error: `Invalid JSON response (backend likely offline or returning HTML): ${error.message}`,
-        timestamp,
-      };
-    }
-
-    if (error instanceof TypeError) {
-      return {
-        data: null,
-        error: `Network unreachable (DNS/CORS/offline): ${error.message}`,
-        timestamp,
-      };
-    }
-
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return { data: null, error: `Unknown error: ${message}`, timestamp };
   }
+
+  const timestamp = new Date().toISOString();
+  if (lastError instanceof ApiError) {
+    return { data: null, error: lastError.message, timestamp };
+  }
+  if (lastError instanceof SyntaxError) {
+    return {
+      data: null,
+      error: `Invalid JSON response (backend likely offline or returning HTML): ${lastError.message}`,
+      timestamp,
+    };
+  }
+  if (lastError instanceof TypeError) {
+    return {
+      data: null,
+      error: `Network unreachable after retry (likely Vercel edge node poisoning — try Cmd+Shift+R or flush DNS cache): ${lastError.message}`,
+      timestamp,
+    };
+  }
+  const message = lastError instanceof Error ? lastError.message : "Unknown error";
+  return { data: null, error: `Unknown error: ${message}`, timestamp };
 }
 
 /* ═══════════════════ API Methods ═══════════════════ */
