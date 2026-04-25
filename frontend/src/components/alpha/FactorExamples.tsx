@@ -17,75 +17,89 @@ export interface FactorExample {
   readonly intuitionEn: string;
 }
 
-// All five have been empirically re-verified in long_only mode on the live
-// SP100 v2 panel (100 tickers, 2025-04-25 → 2026-04-24, SPY test +31.14%).
-// Re-run scripts/verify_factor_examples.py if the panel schema changes.
+// All six factors empirically verified in long_only mode on the live SP100 v2
+// panel (99 tickers + SPY, 2025-04-25 → 2026-04-24, SPY test split +31.14%).
+// Selected from a 21-candidate sweep covering quality / value / momentum /
+// sector-neutral / smoothed / combo themes. Re-run the sweep if the panel
+// schema or universe composition changes.
 export const FACTOR_EXAMPLES: readonly FactorExample[] = [
   {
-    name: "12 日动量",
-    hypothesisZh: "过去两周累计收益最高的股票倾向于持续上涨",
-    hypothesisEn: "Stocks with highest 2-week cumulative return tend to keep rising",
-    expression: "rank(ts_mean(returns, 12))",
-    totalReturn: 0.3798,
-    testSharpe: 3.04,
-    testIC: 0.045,
+    name: "Hump 平滑动量",
+    hypothesisZh: "12 日动量套上 3% 阈值平滑器，过滤每日排名的微小变动",
+    hypothesisEn: "12-day momentum gated by a 3% relative-change smoother to suppress micro-rebalances",
+    expression: "hump(rank(ts_mean(returns, 12)), 0.03)",
+    totalReturn: 0.3835,
+    testSharpe: 2.97,
+    testIC: 0.046,
     intuitionZh:
-      "经典趋势跟随。12 日窗口在短期噪音和中期趋势之间取平衡，适合捕捉 sector rotation。",
+      "hump 算子让排名只在变化超过 3% 时更新，把噪声驱动的换手清理掉。Sharpe 与原始 mom_12 (+3.04) 持平，扣手续费后保留的 alpha 显著更多。这是 T3 实装算子的典型用法。",
     intuitionEn:
-      "Classic trend-following. 12-day window balances short-term noise vs medium trend — good for sector rotation capture.",
+      "hump only refreshes rank when the change exceeds 3%, eliminating noise-driven turnover. Sharpe matches raw mom_12 (+3.04); post-cost alpha retention is materially higher. Canonical usage of a T3-promoted operator.",
   },
   {
-    name: "VWAP 追涨因子",
-    hypothesisZh: "收盘价相对 VWAP 偏高的股票，当日买盘推动力强",
-    hypothesisEn: "When close is high vs VWAP, intraday buy pressure pushes the price up",
-    expression: "rank(div(close, vwap))",
-    totalReturn: 0.3665,
-    testSharpe: 0.93,
+    name: "资产周转率 (Asset Turnover)",
+    hypothesisZh: "高资产周转率的公司单位资产产出更多收入，资本效率更高",
+    hypothesisEn: "Companies with higher asset turnover generate more revenue per dollar of assets — capital-efficient operators",
+    expression: "rank(div(revenue, assets))",
+    totalReturn: 0.4232,
+    testSharpe: 2.11,
+    testIC: 0.026,
+    intuitionZh:
+      "经典 quality 因子。营收/总资产衡量管理层把账面资产变成现金流的能力。在 SP100 上跑赢 SPY 11pp、IC 显著正——demo 时强调 T2 fundamental 字段的可用性。",
+    intuitionEn:
+      "Classic quality factor. Revenue / total assets measures management's ability to convert balance-sheet assets into cash flow. Beats SPY by 11pp on SP100 with significantly positive IC — showcases T2 fundamental fields in action.",
+  },
+  {
+    name: "营业利润 × 动量",
+    hypothesisZh: "高营业利润率 × 强近期动量的双信号乘积",
+    hypothesisEn: "Operating margin × recent momentum — companies that are both profitable and trending",
+    expression: "rank(mul(div(operating_income, revenue), ts_mean(returns, 12)))",
+    totalReturn: 0.3327,
+    testSharpe: 1.96,
+    testIC: 0.031,
+    intuitionZh:
+      "学术 Quality + Momentum 因子的轻量版。乘积要求两个独立信号同时为正，过滤掉「价差大但低利润」和「高利润但停滞」两类伪 alpha。混合因子的设计示范。",
+    intuitionEn:
+      "Lightweight version of the academic Quality + Momentum factor. The product requires both signals positive, filtering out 'wide spread / low margin' and 'high margin / stagnant' false positives. Demo of multi-source factor design.",
+  },
+  {
+    name: "线性衰减动量",
+    hypothesisZh: "10 日动量但近期收益权重更高，比等权 ts_mean 更敏感",
+    hypothesisEn: "10-day momentum with linearly increasing weights — recent returns count more",
+    expression: "rank(ts_decay_linear(returns, 10))",
+    totalReturn: 0.3970,
+    testSharpe: 1.63,
+    testIC: 0.031,
+    intuitionZh:
+      "权重 [1,2,…,10] 让最近 1-2 天权重各占 ~20%。比 ts_mean 等权更早捕捉趋势反转，代价是被噪声打断的概率上升。展示 ts_decay_linear T1 算子。",
+    intuitionEn:
+      "Weights [1..10] give the last 1-2 days ~20% each. Catches trend reversals earlier than equal-weighted ts_mean, at the cost of more whipsaw exposure. Showcases the ts_decay_linear T1 operator.",
+  },
+  {
+    name: "行业中性 ROA",
+    hypothesisZh: "在每个 sector 内部找最高 ROA 的公司，剥离 sector beta",
+    hypothesisEn: "Highest-ROA stocks within each sector, with sector beta removed",
+    expression: "group_neutralize(rank(div(operating_income, assets)), sector)",
+    totalReturn: 0.3927,
+    testSharpe: 1.18,
     testIC: 0.020,
     intuitionZh:
-      "close / vwap > 1 意味着日内交易加权后买盘占优。在 SP100 上 Sharpe 较低，但累计收益仍跑赢 SPY。",
+      "Tech 公司天然 ROA 比 Energy 高，直接横截面比对会变成对 Tech sector 的隐性赌注。group_neutralize 把信号收敛到行业内相对效率，sector 配置归零。这是 T2 group 算子的核心用法。",
     intuitionEn:
-      "close/vwap > 1 means volume-weighted buying dominated. Lower Sharpe on SP100 but cumulative return still beats SPY.",
+      "Tech's ROA is structurally higher than Energy's; cross-sectional ranking alone becomes an implicit Tech bet. group_neutralize collapses the signal to within-sector efficiency, zeroing sector exposure. Core usage of the T2 group operator family.",
   },
   {
-    name: "10 日 VWAP 偏离率",
-    hypothesisZh: "相对 10 日 VWAP 均值偏离越大，说明资金推动越强",
-    hypothesisEn: "The larger the deviation from 10-day VWAP mean, the stronger the capital flow",
-    expression:
-      "rank(div(sub(close, ts_mean(vwap, 10)), ts_mean(vwap, 10)))",
-    totalReturn: 0.3301,
-    testSharpe: 1.14,
-    testIC: 0.025,
+    name: "ROA (经营资产收益率)",
+    hypothesisZh: "经营利润相对总资产的比率——最简洁的 quality 因子",
+    hypothesisEn: "Operating income as a fraction of total assets — the simplest quality factor",
+    expression: "rank(div(operating_income, assets))",
+    totalReturn: 0.4068,
+    testSharpe: 1.27,
+    testIC: 0.006,
     intuitionZh:
-      "把 VWAP 拉长到 10 日均值后，捕捉的是中期资金沉淀而非日内噪音。",
+      "纯 fundamental 因子，无动量、无估值叠加。+40.7% 收益跑赢 SPY 9pp，体现 quality 在 2025-2026 区间的持续性。IC 偏低是因为月度财报与日度收益错配，但累计收益依然显著。",
     intuitionEn:
-      "A 10-day VWAP mean smooths out intraday noise and captures medium-term capital positioning.",
-  },
-  {
-    name: "7 日短期动量",
-    hypothesisZh: "一周累计收益最高的股票延续走强",
-    hypothesisEn: "Stocks with highest 1-week cumulative return keep their momentum",
-    expression: "rank(ts_mean(returns, 7))",
-    totalReturn: 0.3321,
-    testSharpe: 1.58,
-    testIC: 0.029,
-    intuitionZh:
-      "7 日窗口比 12 日更激进——捕捉短期 news catalyst 带动的 momentum，换手会更高。",
-    intuitionEn:
-      "7-day is more aggressive than 12-day — captures momentum driven by short-term news catalysts, with higher turnover.",
-  },
-  {
-    name: "VWAP × 动量组合",
-    hypothesisZh: "资金推动 + 趋势确认双重信号叠加",
-    hypothesisEn: "Capital flow × trend confirmation stacked signal",
-    expression: "rank(mul(div(close, vwap), ts_mean(returns, 10)))",
-    totalReturn: 0.3717,
-    testSharpe: 1.99,
-    testIC: 0.036,
-    intuitionZh:
-      "两个独立信号的乘积——需要 VWAP 偏离和动量同向才触发。降低 false positive 率。",
-    intuitionEn:
-      "Product of two independent signals — fires only when VWAP-skew and momentum align. Cuts false positives.",
+      "Pure fundamental factor with no momentum or valuation overlay. +40.7% return beats SPY by 9pp, demonstrating quality's persistence in 2025-2026. IC is low because quarterly fundamentals lag daily returns, but cumulative outperformance is substantial.",
   },
 ];
 
