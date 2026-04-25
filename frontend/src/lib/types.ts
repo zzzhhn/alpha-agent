@@ -597,6 +597,75 @@ export interface CoverageResponse {
   readonly missing_per_ticker: Readonly<Record<string, number>>;
 }
 
+/* ═══════════════════ P3: Signal Layer ═══════════════════ */
+
+export interface SignalSpec {
+  readonly name: string;
+  readonly hypothesis: string;
+  readonly expression: string;
+  readonly operators_used: readonly string[];
+  readonly lookback: number;
+  readonly universe: "CSI300" | "CSI500" | "SP500" | "custom";
+  readonly justification: string;
+}
+
+export interface SignalTickerRow {
+  readonly ticker: string;
+  readonly factor: number;
+  readonly sector: string | null;
+  readonly cap: number | null;
+}
+
+export interface SignalTodayResponse {
+  readonly as_of: string;
+  readonly factor_name: string;
+  readonly universe_size: number;
+  readonly n_valid: number;
+  readonly top: readonly SignalTickerRow[];
+  readonly bottom: readonly SignalTickerRow[];
+}
+
+export interface ICPoint {
+  readonly date: string;
+  readonly ic: number;
+  readonly rolling_mean: number | null;
+}
+
+export interface ICTimeseriesResponse {
+  readonly factor_name: string;
+  readonly lookback: number;
+  readonly points: readonly ICPoint[];
+  readonly summary: {
+    readonly ic_mean: number;
+    readonly ic_std: number;
+    readonly ic_ir: number;
+    readonly hit_rate: number;
+  };
+}
+
+export interface SectorExposure {
+  readonly sector: string;
+  readonly long_pct: number;
+  readonly short_pct: number;
+  readonly net_pct: number;
+  readonly n_long: number;
+  readonly n_short: number;
+}
+
+export interface CapBucket {
+  readonly bucket: string;
+  readonly long_pct: number;
+  readonly short_pct: number;
+  readonly net_pct: number;
+}
+
+export interface ExposureResponse {
+  readonly factor_name: string;
+  readonly as_of: string;
+  readonly sector_exposure: readonly SectorExposure[];
+  readonly cap_quintile: readonly CapBucket[];
+}
+
 /* ═══════════════════ API Response Envelope ═══════════════════ */
 
 export interface ApiResponse<T> {

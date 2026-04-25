@@ -31,6 +31,10 @@ import type {
   UniverseListResponse,
   OperandCatalogResponse,
   CoverageResponse,
+  SignalSpec,
+  SignalTodayResponse,
+  ICTimeseriesResponse,
+  ExposureResponse,
 } from "./types";
 
 const BASE_URL =
@@ -317,4 +321,27 @@ export function fetchCoverage(universeId = "SP500_subset") {
   return fetchJson<CoverageResponse>(
     `/data/coverage?universe_id=${encodeURIComponent(universeId)}`,
   );
+}
+
+/* ── P3: Signal Layer ── */
+
+export function signalToday(spec: SignalSpec, top_n = 10) {
+  return fetchJson<SignalTodayResponse>("/signal/today", {
+    method: "POST",
+    body: JSON.stringify({ spec, top_n }),
+  });
+}
+
+export function signalIcTimeseries(spec: SignalSpec, lookback = 60) {
+  return fetchJson<ICTimeseriesResponse>("/signal/ic_timeseries", {
+    method: "POST",
+    body: JSON.stringify({ spec, lookback }),
+  });
+}
+
+export function signalExposure(spec: SignalSpec, top_n = 10) {
+  return fetchJson<ExposureResponse>("/signal/exposure", {
+    method: "POST",
+    body: JSON.stringify({ spec, top_n }),
+  });
 }
