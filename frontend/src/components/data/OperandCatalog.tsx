@@ -25,11 +25,22 @@ const TIER_BADGE_VARIANT: Record<CatalogTier, "green" | "yellow" | "muted"> = {
   T3: "muted",
 };
 
+// Label = implementation status, NOT tier-name. T1 and T2 are both live; the
+// tier letter on the badge already conveys "which subset". T3 is the only
+// not-implemented case.
 function tierLabel(tier: CatalogTier, locale: "zh" | "en"): string {
   if (locale === "zh") {
-    return tier === "T1" ? "可用" : tier === "T2" ? "需 T2 数据" : "未实现";
+    return tier === "T1"
+      ? "基础可用"
+      : tier === "T2"
+        ? "扩展可用"
+        : "未实现 (premium)";
   }
-  return tier === "T1" ? "Available" : tier === "T2" ? "Needs T2 data" : "Unavailable";
+  return tier === "T1"
+    ? "Core"
+    : tier === "T2"
+      ? "Extended"
+      : "Unavailable";
 }
 
 export function OperandCatalog({ catalog }: OperandCatalogProps) {
@@ -154,7 +165,7 @@ function OperatorList({
                   "rounded-md border border-border bg-[var(--card-inner,transparent)] p-2.5 " +
                   (op.implemented ? "" : "opacity-60")
                 }
-                title={op.implemented ? undefined : (locale === "zh" ? "尚未实现，将来通过外部数据源接入" : "Not implemented yet — premium / external data source needed")}>
+                title={op.implemented ? undefined : (locale === "zh" ? "未实现：需要 premium 数据源（向量数据/期权/新闻情绪等）" : "Not implemented — requires premium data source (vector/options/news sentiment)")}>
                 <div className="flex items-center justify-between gap-2">
                   <code className="font-mono text-xs font-semibold text-accent">{op.name}</code>
                   <div className="flex shrink-0 items-center gap-1">
@@ -204,7 +215,7 @@ function OperandList({
                   "rounded-md border border-border bg-[var(--card-inner,transparent)] p-2.5 " +
                   (op.implemented ? "" : "opacity-60")
                 }
-                title={op.implemented ? undefined : (locale === "zh" ? "数据源未接入" : "Data source not available")}>
+                title={op.implemented ? undefined : (locale === "zh" ? "数据源未接入：需要 premium 数据集（如 RavenPack 新闻、Options 链、WorldQuant Model 字段等）" : "Data source unavailable — requires premium dataset (RavenPack news, options chain, WorldQuant Model fields, etc.)")}>
                 <div className="flex items-center justify-between gap-2">
                   <code className="font-mono text-xs font-semibold text-accent">{op.name}</code>
                   <TierBadge tier={op.tier} locale={locale} />
