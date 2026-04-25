@@ -69,8 +69,32 @@ async function _doFetch<T>(url: string, options?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
+    // HTTP/2 strips response.statusText, so it's almost always empty in
+    // production. The backend (FastAPI HTTPException) puts the actual
+    // diagnostic in the response body as {"detail": "..."}. Read it
+    // before throwing so the user sees the root cause, not just "HTTP 500:".
+    let detail = response.statusText;
+    try {
+      const text = await response.text();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text) as { detail?: unknown };
+          if (typeof parsed?.detail === "string") {
+            detail = parsed.detail;
+          } else if (parsed?.detail != null) {
+            detail = JSON.stringify(parsed.detail);
+          } else {
+            detail = text.slice(0, 500);
+          }
+        } catch {
+          detail = text.slice(0, 500);
+        }
+      }
+    } catch {
+      // body unreadable — keep statusText (possibly empty)
+    }
     throw new ApiError(
-      `HTTP ${response.status}: ${response.statusText}`,
+      `HTTP ${response.status}: ${detail || "(no body)"}`,
       response.status,
       url,
     );
