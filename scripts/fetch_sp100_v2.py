@@ -70,19 +70,36 @@ OUT_PATH = (
 # 8 fundamental fields. yfinance row labels → our canonical names.
 # Each tuple is (canonical, list of acceptable yfinance row names — first hit wins).
 # Canonical names match the WorldQuant fundamentals catalog.
-FUNDAMENTAL_MAP: list[tuple[str, list[str]]] = [
-    ("revenue",             ["Total Revenue", "Operating Revenue"]),
+# Each entry: (canonical, [yfinance row name candidates], statement_kind)
+# statement_kind: "income" / "balance" / "cashflow"
+FUNDAMENTAL_MAP: list[tuple[str, list[str], str]] = [
+    # ── income statement
+    ("revenue",             ["Total Revenue", "Operating Revenue"],                                  "income"),
     ("net_income_adjusted", ["Net Income", "Net Income Common Stockholders",
-                             "Net Income From Continuing Operation Net Minority Interest"]),
-    ("ebitda",              ["EBITDA", "Normalized EBITDA"]),
-    ("eps",                 ["Diluted EPS", "Basic EPS"]),
+                             "Net Income From Continuing Operation Net Minority Interest"],         "income"),
+    ("ebitda",              ["EBITDA", "Normalized EBITDA"],                                         "income"),
+    ("eps",                 ["Diluted EPS", "Basic EPS"],                                            "income"),
+    ("gross_profit",        ["Gross Profit"],                                                        "income"),
+    ("operating_income",    ["Operating Income", "Total Operating Income As Reported"],              "income"),
+    ("cost_of_goods_sold",  ["Cost Of Revenue", "Reconciled Cost Of Revenue"],                       "income"),
+    ("ebit",                ["EBIT"],                                                                "income"),
+    # ── balance sheet
     ("equity",              ["Common Stock Equity", "Stockholders Equity",
-                             "Total Equity Gross Minority Interest"]),
-    ("assets",              ["Total Assets"]),
-    ("free_cash_flow",      ["Free Cash Flow"]),
-    ("gross_profit",        ["Gross Profit"]),
+                             "Total Equity Gross Minority Interest"],                                "balance"),
+    ("assets",              ["Total Assets"],                                                        "balance"),
+    ("current_assets",      ["Current Assets"],                                                      "balance"),
+    ("current_liabilities", ["Current Liabilities"],                                                 "balance"),
+    ("long_term_debt",      ["Long Term Debt"],                                                      "balance"),
+    ("short_term_debt",     ["Current Debt", "Short Term Debt"],                                     "balance"),
+    ("cash_and_equivalents",["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"], "balance"),
+    ("retained_earnings",   ["Retained Earnings"],                                                   "balance"),
+    ("goodwill",            ["Goodwill", "Goodwill And Other Intangible Assets"],                    "balance"),
+    # ── cash flow
+    ("free_cash_flow",      ["Free Cash Flow"],                                                      "cashflow"),
+    ("operating_cash_flow", ["Operating Cash Flow", "Cash Flow From Continuing Operating Activities"], "cashflow"),
+    ("investing_cash_flow", ["Investing Cash Flow", "Cash Flow From Continuing Investing Activities"], "cashflow"),
 ]
-FUNDAMENTAL_FIELDS = [c for c, _ in FUNDAMENTAL_MAP]
+FUNDAMENTAL_FIELDS = [c for c, _, _ in FUNDAMENTAL_MAP]
 
 
 # ── OHLCV fetch (yfinance) ──────────────────────────────────────────────────
@@ -153,11 +170,13 @@ def fetch_meta(tickers: list[str]) -> dict[str, dict]:
                 "sector":   info.get("sector", "Unknown"),
                 "industry": info.get("industry", "Unknown"),
                 "cap":      info.get("marketCap"),
+                "exchange": info.get("exchange", "Unknown"),
+                "currency": info.get("currency", "Unknown"),
             }
-            print(f"[meta {i}/{len(tickers)}] {tk}: {out[tk]['sector']:20s} cap={out[tk]['cap']}", flush=True)
+            print(f"[meta {i}/{len(tickers)}] {tk}: {out[tk]['sector']:20s} {out[tk]['exchange']:8s} cap={out[tk]['cap']}", flush=True)
         except Exception as e:
             print(f"[meta {i}/{len(tickers)}] {tk}: FAIL {type(e).__name__}: {e}", file=sys.stderr)
-            out[tk] = {"sector": "Unknown", "industry": "Unknown", "cap": None}
+            out[tk] = {"sector": "Unknown", "industry": "Unknown", "cap": None, "exchange": "Unknown", "currency": "Unknown"}
         time.sleep(0.2)
     return out
 
@@ -191,12 +210,8 @@ def fetch_fundamentals(ticker: str) -> pd.DataFrame:
     rows = []
     for d in all_dates:
         rec = {"date": pd.Timestamp(d).strftime("%Y-%m-%d")}
-        for canonical, candidates in FUNDAMENTAL_MAP:
-            stmt = (
-                qis if canonical in {"revenue", "net_income", "ebitda", "eps", "gross_profit"}
-                else qbs if canonical in {"equity", "total_assets"}
-                else qcf
-            )
+        for canonical, candidates, kind in FUNDAMENTAL_MAP:
+            stmt = qis if kind == "income" else qbs if kind == "balance" else qcf
             row = _pick_row(stmt, candidates)
             val = row.get(d) if row is not None else None
             rec[canonical] = float(val) if pd.notna(val) else None
@@ -230,10 +245,12 @@ def assemble(
     ohlcv: pd.DataFrame, meta: dict[str, dict], fund: pd.DataFrame,
 ) -> pd.DataFrame:
     """Merge OHLCV + meta + forward-filled fundamentals into one long-form panel."""
-    # 1. Attach sector/industry/cap from meta (broadcast)
+    # 1. Attach sector/industry/cap/exchange/currency from meta (broadcast)
     ohlcv["sector"]   = ohlcv["ticker"].map(lambda t: meta.get(t, {}).get("sector", "Unknown"))
     ohlcv["industry"] = ohlcv["ticker"].map(lambda t: meta.get(t, {}).get("industry", "Unknown"))
     ohlcv["cap"]      = ohlcv["ticker"].map(lambda t: meta.get(t, {}).get("cap"))
+    ohlcv["exchange"] = ohlcv["ticker"].map(lambda t: meta.get(t, {}).get("exchange", "Unknown"))
+    ohlcv["currency"] = ohlcv["ticker"].map(lambda t: meta.get(t, {}).get("currency", "USD"))
 
     # 2. Forward-fill fundamentals into daily timeline per ticker
     if fund.empty:

@@ -469,8 +469,8 @@
     "function_zh": "d天回归",
     "example": "`ts_regression(returns, market, 60)`",
     "notes": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T1",
+    "implemented": true
   },
   {
     "name": "ts_quantile",
@@ -535,8 +535,8 @@
     "function_zh": "k-th 近非NaN填充",
     "example": "`ts_backfill(eps, 252, 1)`",
     "notes": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T1",
+    "implemented": true
   },
   {
     "name": "ts_count_nans",
@@ -635,7 +635,7 @@
     "example": "`group_neutralize(alpha, industry)`",
     "notes": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "group_rank",
@@ -646,7 +646,7 @@
     "example": "`group_rank(pe, subindustry)`",
     "notes": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "group_zscore",
@@ -657,7 +657,7 @@
     "example": "`group_zscore(returns, sector)`",
     "notes": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "group_mean",
@@ -668,7 +668,7 @@
     "example": "`group_mean(returns, industry)`",
     "notes": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "group_scale",
@@ -679,7 +679,7 @@
     "example": "`group_scale(alpha, sector)`",
     "notes": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "group_backfill",
@@ -690,7 +690,7 @@
     "example": "`group_backfill(eps, industry, 252, 1)`",
     "notes": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "vec_avg",
@@ -733,8 +733,8 @@
     "function_zh": "条件交易",
     "example": "`trade_when(vol > avg, alpha, stop_loss)`",
     "notes": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T1",
+    "implemented": true
   },
   {
     "name": "hump",
@@ -744,7 +744,7 @@
     "function_zh": "驼峰函数",
     "example": "`hump(alpha, 0.1)` 控制换手",
     "notes": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T1",
+    "implemented": true
   }
 ]

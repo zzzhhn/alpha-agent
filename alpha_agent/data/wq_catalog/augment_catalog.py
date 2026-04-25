@@ -36,13 +36,16 @@ T1_OPERATORS: set[str] = {
     # logical (8 functional + 6 comparison aliases = 14)
     "if_else", "and_", "or_", "not_", "is_nan",
     "equal", "not_equal", "less", "greater", "less_equal", "greater_equal",
-    # time-series (21 — skip ts_regression as 3-output, ts_backfill needs care)
+    # time-series (21 base + 2 promoted from T3 = 23)
     "ts_delay", "ts_delta", "ts_mean", "ts_std_dev", "ts_sum", "ts_product",
     "ts_min", "ts_max", "ts_rank", "ts_zscore", "ts_arg_min", "ts_arg_max",
     "ts_corr", "ts_covariance", "ts_quantile", "ts_decay_linear",
     "ts_decay_exp", "ts_count_nans", "last_diff_value",
+    "ts_regression", "ts_backfill",
     # cross-section (6)
     "rank", "zscore", "scale", "normalize", "quantile", "winsorize",
+    # transformational (2 promoted from T3)
+    "trade_when", "hump",
 }
 
 # T2 needs sector / group field — implementable once new parquet has it.
@@ -51,14 +54,13 @@ T2_OPERATORS: set[str] = {
     "group_scale", "group_backfill",
 }
 
-# T3 = catalog-only (semantics unclear or specialized). Includes vector ops
-# (user-skipped), niche transformational ops, and infix comparisons (replaced
-# by the functional aliases in T1).
+# T3 = catalog-only (no fix possible without external resources).
+# Vector ops require vector data we don't have; infix forms have functional
+# aliases in T1; `bucket` is redundant with cross-sectional `quantile`.
 T3_OPERATORS: set[str] = {
-    "vec_avg", "vec_sum",          # user said skip
-    "bucket", "trade_when", "hump",  # niche transformational
-    "==", "!=", "<", ">", "<=", ">=",  # infix — use functional aliases instead
-    "ts_regression", "ts_backfill",  # special return types
+    "vec_avg", "vec_sum",                # vector data unavailable
+    "bucket",                            # redundant with quantile
+    "==", "!=", "<", ">", "<=", ">=",    # infix → use functional aliases
 }
 
 
@@ -68,13 +70,20 @@ T1_OPERANDS: set[str] = {
     "open", "high", "low", "close", "volume", "vwap", "returns",
 }
 
-# T2 = price/volume derived + 8 high-frequency fundamentals (rebuilt parquet)
+# T2 = price/volume metadata + 8 high-frequency fundamentals (rebuilt parquet)
 T2_OPERANDS: set[str] = {
     # price/volume metadata
     "cap", "adv20", "sector", "industry", "subindustry",
-    # 8 fundamentals (high-frequency, financial-datasets free tier)
+    "exchange", "currency",                              # T3-promoted
+    # 8 fundamentals (initial yfinance pull)
     "revenue", "net_income_adjusted", "ebitda", "eps",
     "equity", "assets", "free_cash_flow", "gross_profit",
+    # 12 expanded fundamentals (T3-promoted; same yfinance call, more rows)
+    "current_assets", "current_liabilities",
+    "long_term_debt", "short_term_debt",
+    "cash_and_equivalents", "retained_earnings", "goodwill",
+    "operating_income", "cost_of_goods_sold", "ebit",
+    "operating_cash_flow", "investing_cash_flow",
 }
 
 # T3 = anything in WorldQuant catalog not in T1+T2 (premium / unavailable data)
@@ -98,7 +107,11 @@ def main() -> None:
             ops_aug.append({
                 **it,
                 "tier": tier,
-                "implemented": tier == "T1",  # T2 lit up after T2 ship
+                # T2 group ops require sector/industry to be in the panel — now
+                # always available on the v2 SP100 panel, so they're flagged
+                # implemented (LLM may emit them; AST/evaluator will reject if
+                # the user somehow loads a v1 panel without sector data).
+                "implemented": tier in ("T1", "T2"),
             })
 
     # --- fields
@@ -114,7 +127,7 @@ def main() -> None:
             fields_aug.append({
                 **it,
                 "tier": tier,
-                "implemented": tier == "T1",
+                "implemented": tier in ("T1", "T2"),
             })
 
     (HERE / "operators_augmented.json").write_text(

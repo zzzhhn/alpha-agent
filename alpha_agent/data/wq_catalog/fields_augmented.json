@@ -69,7 +69,7 @@
     "unit": "百万美元",
     "usage_zh": "规模因子",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "adv20",
@@ -78,7 +78,7 @@
     "unit": "股数",
     "usage_zh": "流动性指标",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "industry",
@@ -87,7 +87,7 @@
     "unit": "",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "subindustry",
@@ -96,7 +96,7 @@
     "unit": "",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "sector",
@@ -105,7 +105,7 @@
     "unit": "",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "exchange",
@@ -113,8 +113,8 @@
     "description_zh": "交易所",
     "unit": "",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "currency",
@@ -122,8 +122,8 @@
     "description_zh": "货币",
     "unit": "",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "rel_ret_comp",
@@ -213,7 +213,7 @@
     "unit": "Assets",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "liabilities",
@@ -231,7 +231,7 @@
     "unit": "Equity",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "current_assets",
@@ -239,8 +239,8 @@
     "description_zh": "流动资产",
     "unit": "Current Assets",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "current_liabilities",
@@ -248,8 +248,8 @@
     "description_zh": "流动负债",
     "unit": "Current Liabilities",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "long_term_debt",
@@ -257,8 +257,8 @@
     "description_zh": "长期债务",
     "unit": "Long-term Debt",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "short_term_debt",
@@ -266,8 +266,8 @@
     "description_zh": "短期债务",
     "unit": "Short-term Debt",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "cash_and_equivalents",
@@ -275,8 +275,8 @@
     "description_zh": "现金及等价物",
     "unit": "Cash",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "retained_earnings",
@@ -284,8 +284,8 @@
     "description_zh": "留存收益",
     "unit": "Retained Earnings",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "goodwill",
@@ -293,8 +293,8 @@
     "description_zh": "商誉",
     "unit": "Goodwill",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "intangible_assets",
@@ -321,7 +321,7 @@
     "unit": "规模指标",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "operating_income",
@@ -329,8 +329,8 @@
     "description_zh": "营业利润",
     "unit": "盈利能力",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "gross_profit",
@@ -339,7 +339,7 @@
     "unit": "毛利分析",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "cost_of_goods_sold",
@@ -347,8 +347,8 @@
     "description_zh": "销售成本",
     "unit": "成本分析",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "ebit",
@@ -356,8 +356,8 @@
     "description_zh": "息税前利润",
     "unit": "经营利润",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "ebitda",
@@ -366,7 +366,7 @@
     "unit": "现金流近似",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "net_income_adjusted",
@@ -375,7 +375,7 @@
     "unit": "最终盈利",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "eps",
@@ -384,7 +384,7 @@
     "unit": "每股盈利",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "book_value_per_share",
@@ -401,8 +401,8 @@
     "description_zh": "经营活动现金流",
     "unit": "",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "investing_cash_flow",
@@ -410,8 +410,8 @@
     "description_zh": "投资活动现金流",
     "unit": "",
     "usage_zh": "",
-    "tier": "T3",
-    "implemented": false
+    "tier": "T2",
+    "implemented": true
   },
   {
     "name": "financing_cash_flow",
@@ -429,7 +429,7 @@
     "unit": "",
     "usage_zh": "",
     "tier": "T2",
-    "implemented": false
+    "implemented": true
   },
   {
     "name": "capital_expenditures",

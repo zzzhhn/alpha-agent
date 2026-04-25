@@ -55,9 +55,19 @@ PARQUET_PATH = PARQUET_V2_PATH if PARQUET_V2_PATH.exists() else PARQUET_V1_PATH
 # Names match the WorldQuant fundamentals catalog (see
 # alpha_agent/data/wq_catalog/fields_raw.json::fundamental).
 _V2_FUNDAMENTAL_FIELDS: tuple[str, ...] = (
+    # initial 8 (T2)
     "revenue", "net_income_adjusted", "ebitda", "eps",
     "equity", "assets", "free_cash_flow", "gross_profit",
+    # +12 expanded (T3-promoted, same yfinance pull)
+    "operating_income", "cost_of_goods_sold", "ebit",
+    "current_assets", "current_liabilities",
+    "long_term_debt", "short_term_debt",
+    "cash_and_equivalents", "retained_earnings", "goodwill",
+    "operating_cash_flow", "investing_cash_flow",
 )
+# Multi-window dollar-volume averages computed inline at backtest time so
+# they always reflect the active panel rather than a baked snapshot.
+_ADV_WINDOWS: tuple[int, ...] = (5, 10, 20, 60, 120, 180)
 
 
 @dataclass(frozen=True)
@@ -74,6 +84,8 @@ class _Panel:
     cap: np.ndarray | None = None
     sector: np.ndarray | None = None     # (T, N) string array, broadcast snapshot
     industry: np.ndarray | None = None
+    exchange: np.ndarray | None = None   # broadcast snapshot
+    currency: np.ndarray | None = None
     fundamentals: dict[str, np.ndarray] | None = None  # field → (T, N)
 
 
@@ -133,23 +145,27 @@ def _load_panel() -> _Panel:
         .to_numpy(dtype=np.float64)
     )
 
-    # ── v2 schema extras (cap / sector / industry / fundamentals) ───────────
-    cap = sector = industry = None
+    # ── v2 schema extras (cap / sector / industry / exchange / currency / fundamentals) ──
+    cap = sector = industry = exchange = currency = None
     fundamentals: dict[str, np.ndarray] | None = None
 
     if "sector" in df.columns:
-        # Sector / industry are snapshots; broadcast the most-recent value per
-        # ticker across all dates.
+        # Snapshot fields broadcast to (T, N) so cross-sectional ops work.
         T = len(dates_series)
         snap = (
             df.sort_values("date")
             .drop_duplicates("ticker", keep="last")
             .set_index("ticker")
         )
-        sec_row = snap.reindex(list(universe))["sector"].astype(str).to_numpy()
-        ind_row = snap.reindex(list(universe))["industry"].astype(str).to_numpy()
-        sector = np.broadcast_to(sec_row, (T, len(universe))).copy()
-        industry = np.broadcast_to(ind_row, (T, len(universe))).copy()
+        def _bcast(col: str) -> np.ndarray:
+            row = snap.reindex(list(universe))[col].astype(str).to_numpy()
+            return np.broadcast_to(row, (T, len(universe))).copy()
+        sector = _bcast("sector")
+        industry = _bcast("industry")
+        if "exchange" in df.columns:
+            exchange = _bcast("exchange")
+        if "currency" in df.columns:
+            currency = _bcast("currency")
 
     if "cap" in df.columns:
         cap = pivot("cap")
@@ -171,6 +187,8 @@ def _load_panel() -> _Panel:
         cap=cap,
         sector=sector,
         industry=industry,
+        exchange=exchange,
+        currency=currency,
         fundamentals=fundamentals,
     )
 
@@ -279,17 +297,23 @@ def run_factor_backtest(
     # T2 operands — present iff the v2 panel is active.
     if panel.cap is not None:
         data["cap"] = panel.cap
-        # Derived: 20-day average dollar volume = ts_mean(close * volume, 20).
-        # Computed inline here rather than baked into the parquet so the field
-        # always reflects the loaded panel, not a stale snapshot.
+        # Derived multi-window dollar-volume averages and raw dollar_volume.
+        # Computed inline so they always reflect the loaded panel, not a
+        # baked snapshot.
         from alpha_agent.scan.vectorized import ts_mean as _ts_mean
-        data["adv20"] = _ts_mean(panel.close * panel.volume, 20)
+        dollar_vol = panel.close * panel.volume
+        data["dollar_volume"] = dollar_vol
+        for w in _ADV_WINDOWS:
+            data[f"adv{w}"] = _ts_mean(dollar_vol, w)
     if panel.sector is not None:
         data["sector"] = panel.sector
     if panel.industry is not None:
         data["industry"] = panel.industry
-        # Convenient alias used by some BRAIN expressions.
         data.setdefault("subindustry", panel.industry)
+    if panel.exchange is not None:
+        data["exchange"] = panel.exchange
+    if panel.currency is not None:
+        data["currency"] = panel.currency
     if panel.fundamentals:
         for fname, farr in panel.fundamentals.items():
             data[fname] = farr

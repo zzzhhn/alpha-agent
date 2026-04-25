@@ -26,12 +26,19 @@ _ALLOWED_OPS: frozenset[str] = frozenset(AllowedOperator.__args__)
 _ALLOWED_OPERANDS: frozenset[str] = frozenset({
     # T1 (always available)
     "close", "open", "high", "low", "volume", "returns", "vwap",
-    # T2 (price/volume metadata)
-    "cap", "adv20", "sector", "industry", "subindustry",
-    # T2 (8 fundamentals, forward-filled to daily). Names match the WorldQuant
-    # fundamentals catalog — `net_income_adjusted` not `net_income`.
+    # T2 metadata
+    "cap", "sector", "industry", "subindustry", "exchange", "currency",
+    # T2 derived dollar-volume windows (computed in run_factor_backtest)
+    "adv5", "adv10", "adv20", "adv60", "adv120", "adv180", "dollar_volume",
+    # T2 fundamentals — initial 8
     "revenue", "net_income_adjusted", "ebitda", "eps",
     "equity", "assets", "free_cash_flow", "gross_profit",
+    # T2 fundamentals — 12 expanded (same yfinance pull, more rows)
+    "current_assets", "current_liabilities",
+    "long_term_debt", "short_term_debt",
+    "cash_and_equivalents", "retained_earnings", "goodwill",
+    "operating_income", "cost_of_goods_sold", "ebit",
+    "operating_cash_flow", "investing_cash_flow",
 })
 
 

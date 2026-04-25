@@ -507,6 +507,100 @@ def ts_count_nans(arr: np.ndarray, window: int) -> np.ndarray:
     return out
 
 
+def ts_regression(y: np.ndarray, x: np.ndarray, window: int) -> np.ndarray:
+    """Rolling OLS slope of y on x over `window` periods (cov(x,y) / var(x))."""
+    yx = np.asarray(y, dtype=np.float64)
+    xx = np.asarray(x, dtype=np.float64)
+    if window < 2:
+        raise ValueError("ts_regression window must be >= 2")
+    mx = ts_mean(xx, window)
+    my = ts_mean(yx, window)
+    mxy = ts_mean(xx * yx, window)
+    mxx = ts_mean(xx * xx, window)
+    cov = mxy - mx * my
+    var = mxx - mx * mx
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(var > 0, cov / var, np.nan)
+
+
+def ts_backfill(arr: np.ndarray, window: int) -> np.ndarray:
+    """Replace NaN with the most recent non-NaN value within the trailing window."""
+    x = np.asarray(arr, dtype=np.float64)
+    out = x.copy()
+    for j in range(x.shape[1] if x.ndim == 2 else 1):
+        col = out if x.ndim == 1 else out[:, j]
+        for t in range(len(col)):
+            if np.isnan(col[t]):
+                lo = max(0, t - window + 1)
+                # walk back through window for the nearest non-NaN
+                for k in range(t - 1, lo - 1, -1):
+                    if not np.isnan(col[k]):
+                        col[t] = col[k]
+                        break
+    return out
+
+
+def trade_when(
+    trigger: np.ndarray, alpha: np.ndarray, exit_when: np.ndarray
+) -> np.ndarray:
+    """Conditional alpha-holding signal.
+
+    Semantics (WorldQuant): when `exit_when > 0` the position closes (NaN).
+    When `trigger > 0` the alpha is emitted. Otherwise the previous alpha
+    value is held. This converts an episodic alpha into a holding position.
+    """
+    tr = np.asarray(trigger, dtype=np.float64)
+    al = np.asarray(alpha, dtype=np.float64)
+    ex = np.asarray(exit_when, dtype=np.float64)
+    if tr.shape != al.shape or al.shape != ex.shape:
+        raise ValueError("trade_when: shapes must match")
+    out = np.full_like(al, np.nan)
+    T = al.shape[0]
+    N = al.shape[1] if al.ndim == 2 else 1
+    flat_al = al if al.ndim == 2 else al.reshape(-1, 1)
+    flat_tr = tr if tr.ndim == 2 else tr.reshape(-1, 1)
+    flat_ex = ex if ex.ndim == 2 else ex.reshape(-1, 1)
+    flat_out = out if out.ndim == 2 else out.reshape(-1, 1)
+    for j in range(N):
+        prev = np.nan
+        for t in range(T):
+            if flat_ex[t, j] > 0:
+                prev = np.nan
+            elif flat_tr[t, j] > 0:
+                prev = flat_al[t, j]
+            # else: hold prev unchanged
+            flat_out[t, j] = prev
+    return out.reshape(al.shape)
+
+
+def hump(arr: np.ndarray, threshold: float = 0.01) -> np.ndarray:
+    """Smooth the signal by holding the previous value unless the relative
+    change exceeds `threshold`. Reduces turnover at the cost of latency.
+
+    Update rule: out[t] = out[t-1] unless |x[t] - out[t-1]| > threshold *
+    (1 + |out[t-1]|), then out[t] = x[t]. The (1 + |.|) guards against the
+    degenerate case where out[t-1] is near zero.
+    """
+    x = np.asarray(arr, dtype=np.float64)
+    T = x.shape[0]
+    N = x.shape[1] if x.ndim == 2 else 1
+    flat_x = x if x.ndim == 2 else x.reshape(-1, 1)
+    out = np.full_like(flat_x, np.nan)
+    thr = float(threshold)
+    for j in range(N):
+        prev = np.nan
+        for t in range(T):
+            cur = flat_x[t, j]
+            if np.isnan(prev):
+                prev = cur
+            elif not np.isnan(cur):
+                delta = abs(cur - prev)
+                if delta > thr * (1.0 + abs(prev)):
+                    prev = cur
+            out[t, j] = prev
+    return out.reshape(x.shape)
+
+
 def last_diff_value(arr: np.ndarray) -> np.ndarray:
     """Last value strictly different from the current — NaN if no prior diff exists."""
     x = np.asarray(arr, dtype=np.float64)
@@ -725,6 +819,8 @@ OPS: dict[str, Callable[..., np.ndarray]] = {
     "ts_decay_linear": ts_decay_linear,
     "ts_decay_exp": ts_decay_exp,
     "ts_count_nans": ts_count_nans,
+    "ts_regression": ts_regression,
+    "ts_backfill": ts_backfill,
     "last_diff_value": last_diff_value,
 
     # cross-section
@@ -734,6 +830,10 @@ OPS: dict[str, Callable[..., np.ndarray]] = {
     "normalize": normalize,
     "quantile": quantile,
     "winsorize": winsorize,
+
+    # transformational (T3-promoted)
+    "trade_when": trade_when,
+    "hump": hump,
 
     # group (T2 — require sector/industry operand to be in the data dict)
     "group_rank": group_rank,

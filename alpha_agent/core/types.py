@@ -39,6 +39,8 @@ AllowedOperator = Literal[
     # group (T2 — second arg must be a group operand like `sector` / `industry`)
     "group_rank", "group_zscore", "group_mean", "group_scale",
     "group_neutralize", "group_backfill",
+    # T3-promoted (no new data dependency)
+    "ts_regression", "ts_backfill", "trade_when", "hump",
 ]
 
 
