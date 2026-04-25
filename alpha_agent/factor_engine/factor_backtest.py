@@ -95,6 +95,9 @@ class SplitMetrics:
     total_return: float
     ic_spearman: float
     n_days: int
+    max_drawdown: float = 0.0   # P4.1: largest peak-to-trough drop in this slice
+    turnover: float = 0.0       # P4.1: avg daily L1 weight delta on this slice
+    hit_rate: float = 0.0       # P4.1: pct of days with ic > 0
 
 
 @dataclass(frozen=True)
@@ -213,10 +216,21 @@ def _spearman_ic(factor_row: np.ndarray, fwd_ret_row: np.ndarray) -> float:
     return float((f_centered * r_centered).sum() / denom)
 
 
+def _max_drawdown(returns: np.ndarray) -> float:
+    """Largest peak-to-trough percent drop on a daily-return series."""
+    if returns.size == 0:
+        return 0.0
+    eq = np.cumprod(1.0 + returns)
+    peak = np.maximum.accumulate(eq)
+    dd = (eq - peak) / peak
+    return float(dd.min()) if dd.size else 0.0
+
+
 def _split_metrics(
     daily_returns: np.ndarray,
     factor: np.ndarray,
     fwd_returns: np.ndarray,
+    weights: np.ndarray,
     start: int,
     end: int,
 ) -> SplitMetrics:
@@ -230,6 +244,7 @@ def _split_metrics(
     mean = float(clean.mean())
     std = float(clean.std(ddof=1))
     sharpe = float(mean / std * np.sqrt(252)) if std > 0 else 0.0
+    mdd = _max_drawdown(clean)
 
     ic_samples: list[float] = []
     for t in range(start, end):
@@ -239,9 +254,28 @@ def _split_metrics(
         if not np.isnan(ic):
             ic_samples.append(ic)
     ic_mean = float(np.mean(ic_samples)) if ic_samples else 0.0
+    hit_rate = (
+        float(sum(1 for ic in ic_samples if ic > 0)) / len(ic_samples)
+        if ic_samples else 0.0
+    )
+
+    # Turnover = avg L1 distance between consecutive weight rows on the slice.
+    # Each rebalance moves at most 2.0 in L1 (close one position, open another),
+    # so this is naturally bounded in [0, 2].
+    turnover = 0.0
+    sl_w = weights[start:end]
+    if sl_w.shape[0] > 1:
+        delta = np.abs(sl_w[1:] - sl_w[:-1])
+        turnover = float(delta.sum(axis=1).mean())
 
     return SplitMetrics(
-        sharpe=sharpe, total_return=total_return, ic_spearman=ic_mean, n_days=int(clean.size)
+        sharpe=sharpe,
+        total_return=total_return,
+        ic_spearman=ic_mean,
+        n_days=int(clean.size),
+        max_drawdown=mdd,
+        turnover=turnover,
+        hit_rate=hit_rate,
     )
 
 
@@ -249,21 +283,28 @@ def run_factor_backtest(
     spec: FactorSpec,
     train_ratio: float = DEFAULT_TRAIN_RATIO,
     direction: Direction = "long_short",
+    top_pct: float = LONG_PCT,
+    bottom_pct: float = SHORT_PCT,
+    transaction_cost_bps: float = 0.0,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
-    `direction` controls the portfolio construction:
-      - "long_short": top 30% long + bottom 30% short, equal-weight (market-neutral,
-        gross exposure 2.0). Inappropriate benchmark vs SPY in directional markets.
-      - "long_only":  top 30% equal-weight long, 0% short. Gross 1.0, apples-to-apples
-        with SPY.
-      - "short_only": bottom 30% equal-weight short, 0% long. Gross 1.0, inverted.
+    `direction` controls portfolio construction:
+      - "long_short": top `top_pct` long + bottom `bottom_pct` short, equal-weight
+        within each leg. Gross exposure ~ top_pct + bottom_pct (default 0.6).
+      - "long_only":  top `top_pct` equal-weight long, 0% short (gross = top_pct).
+      - "short_only": bottom `bottom_pct` equal-weight short (gross = bottom_pct).
+
+    `transaction_cost_bps` is applied as a daily drag proportional to L1 weight
+    turnover: cost_bps × L1_delta / 10000. With default top/bottom 0.30 and a
+    high-turnover factor at L1≈1.0, 10 bps round-trip cost shaves ~25% annual
+    return — significant for any meaningful comparison.
 
     Raises:
         FileNotFoundError: parquet panel missing at import/first-call time
-        ValueError: factor expression evaluates to wrong shape or all-NaN,
-                    or unsupported direction
-        Any exception from `eval_factor`: propagated with original type
+        ValueError: factor expression evaluates to wrong shape, unsupported
+                    direction, or out-of-range top/bottom_pct / cost_bps.
+        Any exception from `eval_factor`: propagated with original type.
     """
     if not 0.1 <= train_ratio <= 0.95:
         raise ValueError(f"train_ratio {train_ratio!r} must be in [0.1, 0.95]")
@@ -271,6 +312,12 @@ def run_factor_backtest(
         raise ValueError(
             f"direction {direction!r} must be one of {sorted(SUPPORTED_DIRECTIONS)}"
         )
+    if not 0.01 <= top_pct <= 0.5:
+        raise ValueError(f"top_pct {top_pct!r} must be in [0.01, 0.5]")
+    if not 0.01 <= bottom_pct <= 0.5:
+        raise ValueError(f"bottom_pct {bottom_pct!r} must be in [0.01, 0.5]")
+    if not 0.0 <= transaction_cost_bps <= 200.0:
+        raise ValueError(f"transaction_cost_bps {transaction_cost_bps!r} must be in [0, 200]")
 
     panel = _load_panel()
     T, N = panel.close.shape
@@ -342,12 +389,12 @@ def run_factor_backtest(
         ranks = np.full_like(row, np.nan)
         ranks[mask] = (row[mask].argsort().argsort() + 1.0) / valid
         if use_long:
-            long_mask = ranks >= (1.0 - LONG_PCT)
+            long_mask = ranks >= (1.0 - top_pct)
             n_long = int(long_mask.sum())
             if n_long > 0:
                 weights[t, long_mask] = 1.0 / n_long
         if use_short:
-            short_mask = ranks <= SHORT_PCT
+            short_mask = ranks <= bottom_pct
             n_short = int(short_mask.sum())
             if n_short > 0:
                 weights[t, short_mask] = -1.0 / n_short
@@ -363,6 +410,16 @@ def run_factor_backtest(
             continue
         daily_ret[t + 1] = float((row_w[mask] * row_r[mask]).sum())
 
+    # Apply transaction cost: cost = L1 weight delta × bps / 10000.
+    # Charged on the day the rebalance happens (i.e. day t+1 inherits the
+    # cost of moving from weights[t-1] to weights[t]).
+    if transaction_cost_bps > 0.0:
+        cost_per_unit = transaction_cost_bps / 10_000.0
+        for t in range(1, T):
+            l1_delta = float(np.abs(weights[t] - weights[t - 1]).sum())
+            if not np.isnan(daily_ret[t]):
+                daily_ret[t] -= l1_delta * cost_per_unit
+
     # Equity curve (compound, fillna=0 for early days)
     daily_ret_clean = np.nan_to_num(daily_ret, nan=0.0)
     equity = INITIAL_CAPITAL * np.cumprod(1.0 + daily_ret_clean)
@@ -371,8 +428,8 @@ def run_factor_backtest(
     bench = panel.benchmark_close / panel.benchmark_close[0] * INITIAL_CAPITAL
 
     train_end = int(T * train_ratio)
-    train_m = _split_metrics(daily_ret, factor, fwd_returns, start=0, end=train_end)
-    test_m = _split_metrics(daily_ret, factor, fwd_returns, start=train_end, end=T)
+    train_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=0, end=train_end)
+    test_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=train_end, end=T)
 
     equity_curve = [
         {"date": str(panel.dates[i]), "value": float(equity[i])} for i in range(T)

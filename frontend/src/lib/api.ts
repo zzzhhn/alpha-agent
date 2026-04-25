@@ -16,10 +16,6 @@ import type {
   GateRule,
   AuditSummary,
   SystemConfig,
-  BacktestRequest,
-  BacktestResult,
-  TickerAnalyzeRequest,
-  TickerAnalysis,
   TickerSearchResponse,
   FactorAnalysisResult,
   GateSimulationResult,
@@ -258,20 +254,10 @@ export function getSystemConfig() {
 }
 
 /* ═══════════════════ Interactive (POST) ═══════════════════ */
-
-export function runBacktest(params: BacktestRequest) {
-  return fetchJson<BacktestResult>("/backtest/run", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
-}
-
-export function analyzeTicker(params: TickerAnalyzeRequest) {
-  return fetchJson<TickerAnalysis>("/ticker/analyze", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
-}
+//
+// /backtest/run + /ticker/analyze were removed in P4.1 (legacy single-ticker
+// RSI/MACD strategy backtest). The new factor-backtest workstation calls
+// runFactorBacktest below.
 
 export function searchTicker(query: string) {
   return fetchJson<TickerSearchResponse>("/ticker/search", {

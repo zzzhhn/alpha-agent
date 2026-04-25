@@ -257,97 +257,9 @@ export interface BacktestParams {
   readonly bollinger_period: number;
 }
 
-export interface BacktestRequest {
-  readonly ticker: string;
-  readonly start_date: string;
-  readonly end_date: string;
-  readonly rsi_period?: number;
-  readonly rsi_oversold?: number;
-  readonly rsi_overbought?: number;
-  readonly macd_fast?: number;
-  readonly macd_slow?: number;
-  readonly bollinger_period?: number;
-  readonly bollinger_std?: number;
-  readonly stop_loss_pct?: number;
-  readonly take_profit_pct?: number;
-  readonly position_size_pct?: number;
-  readonly initial_capital?: number;
-}
-
-export interface BacktestTrade {
-  readonly date: string;
-  readonly side: string;
-  readonly price: number;
-  readonly shares: number;
-  readonly pnl: number;
-}
-
-export interface BacktestMetrics {
-  readonly total_return: number;
-  readonly sharpe_ratio: number;
-  readonly sortino_ratio: number;
-  readonly max_drawdown: number;
-  readonly win_rate: number;
-  readonly total_trades: number;
-  readonly final_value: number;
-}
-
 export interface EquityCurvePoint {
   readonly date: string;
   readonly value: number;
-}
-
-export interface BacktestResult {
-  readonly ticker: string;
-  readonly start_date: string;
-  readonly end_date: string;
-  readonly params: BacktestParams;
-  readonly metrics: BacktestMetrics;
-  readonly equity_curve: readonly EquityCurvePoint[];
-  readonly trades: readonly BacktestTrade[];
-  readonly timestamp: string;
-}
-
-export interface BacktestHistoryEntry {
-  readonly id: string;
-  readonly timestamp: string;
-  readonly request: BacktestRequest;
-  readonly result: BacktestResult;
-  readonly isFavorite: boolean;
-}
-
-export interface TickerAnalyzeRequest {
-  readonly ticker: string;
-  readonly rsi_period?: number;
-  readonly macd_fast?: number;
-  readonly macd_slow?: number;
-  readonly bollinger_period?: number;
-}
-
-export interface OHLCVPoint {
-  readonly date: string;
-  readonly open: number;
-  readonly high: number;
-  readonly low: number;
-  readonly close: number;
-  readonly volume: number;
-}
-
-export interface TickerAnalysis {
-  readonly ticker: string;
-  readonly ohlcv: readonly OHLCVPoint[];
-  readonly indicators: {
-    readonly rsi: readonly (number | null)[];
-    readonly macd_line: readonly (number | null)[];
-    readonly macd_signal: readonly (number | null)[];
-    readonly bb_upper: readonly (number | null)[];
-    readonly bb_lower: readonly (number | null)[];
-    readonly bb_mid: readonly (number | null)[];
-    readonly bb_pctb: readonly (number | null)[];
-  };
-  readonly regime: string;
-  readonly regime_probabilities: Record<string, number>;
-  readonly timestamp: string;
 }
 
 export interface TickerSearchResult {
@@ -495,6 +407,9 @@ export interface FactorBacktestRequest {
   readonly spec: FactorSpec;
   readonly train_ratio?: number;
   readonly direction?: BacktestDirection;
+  readonly top_pct?: number;              // P4.1: 0.01–0.50, fraction to long
+  readonly bottom_pct?: number;           // P4.1: 0.01–0.50, fraction to short
+  readonly transaction_cost_bps?: number; // P4.1: 0–200 bps round-trip cost
 }
 
 export interface FactorSplitMetrics {
@@ -502,6 +417,9 @@ export interface FactorSplitMetrics {
   readonly total_return: number;
   readonly ic_spearman: number;
   readonly n_days: number;
+  readonly max_drawdown?: number;   // P4.1
+  readonly turnover?: number;       // P4.1
+  readonly hit_rate?: number;       // P4.1
 }
 
 export interface FactorBacktestResponse {
