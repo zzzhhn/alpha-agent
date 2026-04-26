@@ -222,3 +222,59 @@ body {
     box-shadow: rgba(0, 0, 0, 0.18) 0px 0.5rem 1.5rem;
   }
 }
+
+/* ── Print stylesheet for /report tear sheet (P5.2) ──
+ * Hides nav/sidebar/picker chrome, forces light backgrounds (most quants
+ * print on white paper), and prevents charts from being split across pages.
+ */
+@media print {
+  /* Hide app chrome */
+  aside,
+  header[role="banner"],
+  .report-chrome {
+    display: none !important;
+  }
+
+  /* Force a clean print canvas */
+  body, html {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+  }
+
+  /* Single column, no card glassmorphism */
+  .glass-card {
+    background: #ffffff !important;
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Recharts tooltip / interactive overlays — strip them */
+  .recharts-tooltip-wrapper {
+    display: none !important;
+  }
+
+  /* Page setup */
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  /* Tear sheet container */
+  .report-tearsheet {
+    gap: 8px !important;
+  }
+
+  /* Each major section gets a soft page break opportunity */
+  .report-tearsheet > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Heatmap text legible on white */
+  .report-tearsheet table th,
+  .report-tearsheet table td {
+    color: #111827 !important;
+  }
+}
