@@ -422,6 +422,13 @@ export interface FactorSplitMetrics {
   readonly hit_rate?: number;       // P4.1
 }
 
+export interface MonthlyReturn {
+  readonly year: number;
+  readonly month: number;     // 1–12
+  readonly return: number;    // decimal, e.g. 0.073 for +7.3%
+  readonly n_days: number;
+}
+
 export interface FactorBacktestResponse {
   readonly equity_curve: readonly EquityCurvePoint[];
   readonly benchmark_curve: readonly EquityCurvePoint[];
@@ -432,6 +439,7 @@ export interface FactorBacktestResponse {
   readonly factor_name: string;
   readonly benchmark_ticker: string;
   readonly direction?: BacktestDirection;
+  readonly monthly_returns?: readonly MonthlyReturn[];   // P4.2
 }
 
 export interface HypothesisHistoryEntry {

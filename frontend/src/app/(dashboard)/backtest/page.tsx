@@ -6,6 +6,8 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { BacktestForm, type BacktestFormParams } from "@/components/backtest/BacktestForm";
 import { BacktestKpiStrip } from "@/components/backtest/BacktestKpiStrip";
+import { DrawdownChart } from "@/components/backtest/DrawdownChart";
+import { MonthlyReturnsHeatmap } from "@/components/backtest/MonthlyReturnsHeatmap";
 import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
 import { runFactorBacktest } from "@/lib/api";
 import type { FactorBacktestResponse } from "@/lib/types";
@@ -78,6 +80,10 @@ export default function BacktestPage() {
             </header>
             <FactorPnLChart data={result} height={340} />
           </Card>
+          <DrawdownChart equityCurve={result.equity_curve} />
+          {result.monthly_returns && result.monthly_returns.length > 0 && (
+            <MonthlyReturnsHeatmap data={result.monthly_returns} />
+          )}
         </>
       )}
     </div>

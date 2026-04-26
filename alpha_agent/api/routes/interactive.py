@@ -699,6 +699,15 @@ class _CurvePoint(BaseModel):
     value: float
 
 
+class _MonthlyReturn(BaseModel):
+    year: int
+    month: int           # 1-12
+    return_: float = Field(alias="return")
+    n_days: int
+
+    model_config = {"populate_by_name": True}
+
+
 class FactorBacktestResponse(BaseModel):
     equity_curve: list[_CurvePoint]
     benchmark_curve: list[_CurvePoint]
@@ -709,6 +718,8 @@ class FactorBacktestResponse(BaseModel):
     factor_name: str
     benchmark_ticker: str
     direction: Literal["long_short", "long_only", "short_only"]
+    # P4.2: per-month compounded strategy returns for the heatmap viz.
+    monthly_returns: list[_MonthlyReturn] = Field(default_factory=list)
 
 
 @router.post(
@@ -778,6 +789,16 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             hit_rate=m.hit_rate,
         )
 
+    monthly = [
+        _MonthlyReturn(
+            year=int(m["year"]),
+            month=int(m["month"]),
+            **{"return": float(m["return"])},
+            n_days=int(m["n_days"]),
+        )
+        for m in (result.monthly_returns or [])
+    ]
+
     return FactorBacktestResponse(
         equity_curve=[_CurvePoint(**p) for p in result.equity_curve],
         benchmark_curve=[_CurvePoint(**p) for p in result.benchmark_curve],
@@ -788,4 +809,5 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         factor_name=result.factor_name,
         benchmark_ticker=result.benchmark_ticker,
         direction=result.direction,
+        monthly_returns=monthly,
     )

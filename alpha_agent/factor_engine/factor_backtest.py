@@ -111,6 +111,10 @@ class FactorBacktestResult:
     factor_name: str
     benchmark_ticker: str
     direction: str                # "long_short" | "long_only" | "short_only"
+    # P4.2: calendar-month compounded strategy returns. Each entry is one
+    # bucket {year, month (1-12), return} computed by prod(1+r)-1 over the
+    # month's daily strategy returns (already includes transaction cost).
+    monthly_returns: list[dict] | None = None
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
@@ -438,6 +442,11 @@ def run_factor_backtest(
         {"date": str(panel.dates[i]), "value": float(bench[i])} for i in range(T)
     ]
 
+    # ── P4.2: monthly returns bucket. Skip days where daily_ret is NaN
+    # (insufficient lookback rows at panel head). Order chronologically by
+    # (year, month) so the heatmap renders left-to-right naturally.
+    monthly_returns = _compute_monthly_returns(panel.dates, daily_ret)
+
     return FactorBacktestResult(
         equity_curve=equity_curve,
         benchmark_curve=benchmark_curve,
@@ -448,4 +457,34 @@ def run_factor_backtest(
         factor_name=spec.name,
         benchmark_ticker=BENCHMARK_TICKER,
         direction=direction,
+        monthly_returns=monthly_returns,
     )
+
+
+def _compute_monthly_returns(
+    dates: np.ndarray, daily_ret: np.ndarray,
+) -> list[dict]:
+    """Bucket daily strategy returns by calendar month, compound each bucket."""
+    buckets: dict[tuple[int, int], list[float]] = {}
+    for i, d in enumerate(dates):
+        if i >= daily_ret.shape[0] or np.isnan(daily_ret[i]):
+            continue
+        s = str(d)
+        # Date format is "YYYY-MM-DD" from yfinance
+        try:
+            year = int(s[:4])
+            month = int(s[5:7])
+        except (ValueError, IndexError):
+            continue
+        buckets.setdefault((year, month), []).append(float(daily_ret[i]))
+
+    out: list[dict] = []
+    for (year, month), rets in sorted(buckets.items()):
+        compounded = float(np.prod(1.0 + np.asarray(rets)) - 1.0)
+        out.append({
+            "year": year,
+            "month": month,
+            "return": compounded,
+            "n_days": len(rets),
+        })
+    return out
