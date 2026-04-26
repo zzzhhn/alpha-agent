@@ -16,10 +16,6 @@ import type {
   GateRule,
   AuditSummary,
   SystemConfig,
-  TickerSearchResponse,
-  FactorAnalysisResult,
-  GateSimulationResult,
-  StressTestResult,
   HypothesisTranslateRequest,
   HypothesisTranslateResponse,
   FactorBacktestRequest,
@@ -255,51 +251,10 @@ export function getSystemConfig() {
 
 /* ═══════════════════ Interactive (POST) ═══════════════════ */
 //
-// /backtest/run + /ticker/analyze were removed in P4.1 (legacy single-ticker
-// RSI/MACD strategy backtest). The new factor-backtest workstation calls
-// runFactorBacktest below.
-
-export function searchTicker(query: string) {
-  return fetchJson<TickerSearchResponse>("/ticker/search", {
-    method: "POST",
-    body: JSON.stringify({ query }),
-  });
-}
-
-/* ── Phase 2: Factor Analytics + Gate Editor ── */
-
-export function analyzeFactors(ticker: string, sortBy = "ic") {
-  return fetchJson<FactorAnalysisResult>("/factors/analyze", {
-    method: "POST",
-    body: JSON.stringify({ ticker, sort_by: sortBy }),
-  });
-}
-
-export function simulateGates(params: {
-  ticker: string;
-  gate_threshold?: number;
-  weight_trend?: number;
-  weight_momentum?: number;
-  weight_entry?: number;
-}) {
-  return fetchJson<GateSimulationResult>("/gates/simulate", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
-}
-
-/* ── Phase 3: Portfolio Stress Test ── */
-
-export function runStressTest(params: {
-  positions: { ticker: string; value: number }[];
-  scenario?: string;
-  custom_shocks?: Record<string, number>;
-}) {
-  return fetchJson<StressTestResult>("/portfolio/stress", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
-}
+// Legacy single-ticker endpoints (RSI/MACD/Bollinger backtest, ticker
+// search, factor analytics by ticker, gate simulation, portfolio stress
+// test) were removed in P4.1 / P6.A. They didn't fit the cross-sectional
+// factor research mental model.
 
 /* ── W2: Hypothesis Translator (T1) ── */
 

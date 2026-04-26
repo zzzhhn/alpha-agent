@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +11,7 @@ import { t, type TranslationKey } from "@/lib/i18n";
 import { runFactorBacktest, translateHypothesis } from "@/lib/api";
 import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
 import { HypothesisHistoryPanel } from "@/components/alpha/HypothesisHistoryPanel";
+import { ZooSaveButton } from "@/components/zoo/ZooSaveButton";
 import {
   FactorExamples,
   type FactorExample,
@@ -45,6 +47,7 @@ const DIRECTION_HELP_KEY: Record<BacktestDirection, TranslationKey> = {
 
 export default function AlphaPage() {
   const { locale } = useLocale();
+  const router = useRouter();
   const [text, setText] = useState("");
   const [universe, setUniverse] = useState<FactorUniverse>("CSI500");
   const [loading, setLoading] = useState(false);
@@ -121,6 +124,29 @@ export default function AlphaPage() {
     setBacktestError(null);
     setActiveId(null);
   }, [locale]);
+
+  // P6.D — hand off the current spec to /backtest via sessionStorage so
+  // the user lands on the workstation pre-filled. sessionStorage is
+  // route-scoped to the tab, cleared on read so a second navigation
+  // doesn't keep re-priming the form.
+  const jumpToBacktest = useCallback(() => {
+    if (!result) return;
+    try {
+      window.sessionStorage.setItem(
+        "alphacore.backtest.prefill.v1",
+        JSON.stringify({
+          name: result.spec.name,
+          expression: result.spec.expression,
+          operators_used: result.spec.operators_used,
+          lookback: result.spec.lookback,
+          hypothesis: result.spec.hypothesis,
+        }),
+      );
+    } catch {
+      // sessionStorage disabled — fall through, just navigate; user re-types
+    }
+    router.push("/backtest");
+  }, [result, router]);
 
   const handleLoadEntry = useCallback((entry: HypothesisHistoryEntry) => {
     setText(entry.request.text);
@@ -213,9 +239,36 @@ export default function AlphaPage() {
       {result ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Card padding="md" className="lg:col-span-2">
-            <h2 className="mb-3 text-sm font-semibold text-text">
-              {t(locale, "alpha.resultSpec")}
-            </h2>
+            <header className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-text">
+                {t(locale, "alpha.resultSpec")}
+              </h2>
+              <div className="flex items-center gap-2">
+                <ZooSaveButton
+                  name={result.spec.name}
+                  expression={result.spec.expression}
+                  hypothesis={result.spec.hypothesis}
+                  intuition={result.spec.justification}
+                  headlineMetrics={
+                    backtest
+                      ? {
+                          testSharpe: backtest.test_metrics.sharpe,
+                          totalReturn:
+                            backtest.equity_curve.length > 0
+                              ? backtest.equity_curve[backtest.equity_curve.length - 1].value /
+                                  backtest.equity_curve[0].value -
+                                1
+                              : undefined,
+                          testIc: backtest.test_metrics.ic_spearman,
+                        }
+                      : undefined
+                  }
+                />
+                <Button variant="ghost" size="sm" onClick={jumpToBacktest}>
+                  {t(locale, "alpha.runBacktest")}
+                </Button>
+              </div>
+            </header>
             <dl className="grid grid-cols-[120px_1fr] gap-x-4 gap-y-2 text-xs">
               <SpecRow label={t(locale, "alpha.labelName")} value={result.spec.name} mono />
               <SpecRow

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
@@ -13,8 +13,10 @@ import { BacktestKpiStrip } from "@/components/backtest/BacktestKpiStrip";
 import { DrawdownChart } from "@/components/backtest/DrawdownChart";
 import { MonthlyReturnsHeatmap } from "@/components/backtest/MonthlyReturnsHeatmap";
 import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
+import { CompareEquityChart } from "@/components/charts/CompareEquityChart";
 import { TopBottomTable } from "@/components/signal/TopBottomTable";
 import { ExposureChart } from "@/components/signal/ExposureChart";
+import { listZoo, type ZooEntry } from "@/lib/factor-zoo";
 import {
   runFactorBacktest,
   signalToday,
@@ -35,10 +37,35 @@ function extractOps(expr: string): string[] {
   return Array.from(set);
 }
 
-interface ReportData {
+interface FactorReport {
+  readonly name: string;
+  readonly expression: string;
+  readonly intuition: string;
   readonly backtest: FactorBacktestResponse;
   readonly today: SignalTodayResponse;
   readonly exposure: ExposureResponse;
+}
+
+const REPORT_PREFILL_KEY = "alphacore.report.prefill.v1";
+
+async function fetchAll(name: string, expression: string, hypothesis: string) {
+  const spec: SignalSpec = {
+    name: name || "factor",
+    hypothesis: hypothesis || expression,
+    expression,
+    operators_used: extractOps(expression),
+    lookback: 12,
+    universe: "SP500",
+    justification: "tear sheet generation",
+  };
+  return Promise.all([
+    runFactorBacktest({
+      spec, train_ratio: 0.7, direction: "long_only",
+      top_pct: 0.30, bottom_pct: 0.30, transaction_cost_bps: 5,
+    }),
+    signalToday(spec, 10),
+    signalExposure(spec, 10),
+  ]);
 }
 
 export default function ReportPage() {
@@ -48,53 +75,86 @@ export default function ReportPage() {
   const [intuition, setIntuition] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<ReportData | null>(null);
+  const [primary, setPrimary] = useState<FactorReport | null>(null);
+  const [compare, setCompare] = useState<FactorReport | null>(null);
+  const [zoo, setZoo] = useState<readonly ZooEntry[]>([]);
+
+  // Pull zoo entries on mount; refresh when localStorage might have changed
+  // (we just track length as a heuristic — full reload happens on focus).
+  useEffect(() => {
+    setZoo(listZoo());
+  }, []);
+
+  // Read /factors zoo handoff (if any) and auto-generate.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.sessionStorage.getItem(REPORT_PREFILL_KEY);
+      if (!raw) return;
+      window.sessionStorage.removeItem(REPORT_PREFILL_KEY);
+      const e = JSON.parse(raw) as ZooEntry;
+      if (!e?.expression) return;
+      setFactorName(e.name);
+      setExpr(e.expression);
+      setIntuition(e.intuition ?? "");
+      void generate(e.name, e.expression, e.hypothesis ?? "", "primary");
+    } catch {
+      /* malformed handoff — ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const generate = useCallback(async (
     name: string, expression: string, hypothesis: string,
+    slot: "primary" | "compare",
   ) => {
     setRunning(true);
     setError(null);
-    const spec: SignalSpec = {
-      name: name || "factor",
-      hypothesis: hypothesis || expression,
-      expression,
-      operators_used: extractOps(expression),
-      lookback: 12,
-      universe: "SP500",
-      justification: "tear sheet generation",
-    };
-    const [bt, td, ex] = await Promise.all([
-      runFactorBacktest({
-        spec, train_ratio: 0.7, direction: "long_only",
-        top_pct: 0.30, bottom_pct: 0.30, transaction_cost_bps: 5,
-      }),
-      signalToday(spec, 10),
-      signalExposure(spec, 10),
-    ]);
+    const [bt, td, ex] = await fetchAll(name, expression, hypothesis);
     if (bt.error || td.error || ex.error || !bt.data || !td.data || !ex.data) {
       setError(bt.error ?? td.error ?? ex.error ?? "unknown error");
       setRunning(false);
       return;
     }
-    setData({ backtest: bt.data, today: td.data, exposure: ex.data });
+    const built: FactorReport = {
+      name, expression,
+      intuition: hypothesis,
+      backtest: bt.data, today: td.data, exposure: ex.data,
+    };
+    if (slot === "primary") {
+      setPrimary(built);
+      setCompare(null);
+    } else {
+      setCompare(built);
+    }
     setRunning(false);
   }, []);
 
   function loadExample(example: FactorExample) {
     setFactorName(example.name);
     setExpr(example.expression);
-    setIntuition(locale === "zh" ? example.intuitionZh : example.intuitionEn);
+    const intu = locale === "zh" ? example.intuitionZh : example.intuitionEn;
+    setIntuition(intu);
     void generate(
       example.name,
       example.expression,
       locale === "zh" ? example.hypothesisZh : example.hypothesisEn,
+      "primary",
     );
+  }
+
+  function loadZooEntry(e: ZooEntry, slot: "primary" | "compare") {
+    if (slot === "primary") {
+      setFactorName(e.name);
+      setExpr(e.expression);
+      setIntuition(e.intuition ?? "");
+    }
+    void generate(e.name, e.expression, e.hypothesis ?? "", slot);
   }
 
   function runCustom() {
     if (!expr.trim()) return;
-    void generate(factorName.trim() || "user_factor", expr.trim(), intuition);
+    void generate(factorName.trim() || "user_factor", expr.trim(), intuition, "primary");
   }
 
   return (
@@ -108,7 +168,7 @@ export default function ReportPage() {
             {t(locale, "report.subtitle")}
           </p>
         </div>
-        {data && (
+        {primary && (
           <Button
             variant="primary"
             size="sm"
@@ -119,7 +179,6 @@ export default function ReportPage() {
         )}
       </header>
 
-      {/* Factor selector — hidden on print */}
       <Card padding="md" className="report-chrome">
         <header className="mb-3">
           <h2 className="text-sm font-semibold text-text">
@@ -130,21 +189,48 @@ export default function ReportPage() {
           </p>
         </header>
 
-        <div className="mb-3 flex flex-wrap gap-2">
-          {FACTOR_EXAMPLES.map((example) => (
-            <button
-              key={example.name}
-              type="button"
-              onClick={() => loadExample(example)}
-              disabled={running}
-              className="rounded-md bg-[var(--toggle-bg)] px-3 py-1.5 text-[11px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
-            >
-              {example.name}
-            </button>
-          ))}
+        <div className="mb-3">
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">
+            {t(locale, "report.picker.fromExamples")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {FACTOR_EXAMPLES.map((example) => (
+              <button
+                key={example.name}
+                type="button"
+                onClick={() => loadExample(example)}
+                disabled={running}
+                className="rounded-md bg-[var(--toggle-bg)] px-3 py-1.5 text-[11px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
+              >
+                {example.name}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex flex-col gap-2">
+        {zoo.length > 0 && (
+          <div className="mb-3 border-t border-border pt-3">
+            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">
+              {t(locale, "report.picker.fromZoo")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {zoo.slice(0, 12).map((z) => (
+                <button
+                  key={z.id}
+                  type="button"
+                  onClick={() => loadZooEntry(z, "primary")}
+                  disabled={running}
+                  className="rounded-md border border-border px-3 py-1.5 text-[11px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
+                  title={z.expression}
+                >
+                  {z.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
           <input
             type="text"
             value={factorName}
@@ -165,6 +251,58 @@ export default function ReportPage() {
             </Button>
           </div>
         </div>
+
+        {primary && (
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">
+              {t(locale, "report.picker.compareTitle")}
+            </p>
+            <p className="mb-2 text-[11px] text-muted">
+              {t(locale, "report.picker.compareSubtitle")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {FACTOR_EXAMPLES
+                .filter((e) => e.expression !== primary.expression)
+                .map((example) => (
+                  <button
+                    key={example.name}
+                    type="button"
+                    onClick={() =>
+                      generate(
+                        example.name,
+                        example.expression,
+                        locale === "zh" ? example.hypothesisZh : example.hypothesisEn,
+                        "compare",
+                      )
+                    }
+                    disabled={running}
+                    className="rounded-md bg-[var(--toggle-bg)] px-2 py-1 text-[10px] text-muted hover:text-text disabled:opacity-50"
+                  >
+                    + {example.name}
+                  </button>
+                ))}
+              {zoo
+                .filter((z) => z.expression !== primary.expression)
+                .slice(0, 6)
+                .map((z) => (
+                  <button
+                    key={z.id}
+                    type="button"
+                    onClick={() => loadZooEntry(z, "compare")}
+                    disabled={running}
+                    className="rounded-md border border-border px-2 py-1 text-[10px] text-muted hover:text-text disabled:opacity-50"
+                  >
+                    + {z.name}
+                  </button>
+                ))}
+              {compare && (
+                <Button variant="ghost" size="sm" onClick={() => setCompare(null)}>
+                  {t(locale, "report.picker.compareClear")}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
 
       {error && (
@@ -175,55 +313,102 @@ export default function ReportPage() {
         </Card>
       )}
 
-      {/* Tear sheet — visible on print */}
-      {data && (
+      {primary && compare && (
+        <Card padding="md">
+          <header className="mb-2">
+            <h2 className="text-sm font-semibold text-text">
+              {t(locale, "report.compare.title")}
+            </h2>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted">
+              {t(locale, "report.compare.subtitle")
+                .replace("{a}", primary.name)
+                .replace("{b}", compare.name)}
+            </p>
+          </header>
+          <CompareEquityChart
+            factor1Name={primary.name}
+            factor1={primary.backtest.equity_curve}
+            factor2Name={compare.name}
+            factor2={compare.backtest.equity_curve}
+            benchmark={primary.backtest.benchmark_curve}
+            benchmarkTicker={primary.backtest.benchmark_ticker}
+          />
+        </Card>
+      )}
+
+      {primary && (
         <article className="report-tearsheet flex flex-col gap-3">
-          <Card padding="md">
-            <div className="flex items-baseline justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-text">
-                  {factorName || data.backtest.factor_name}
-                </h2>
-                <code className="mt-1 block font-mono text-[11px] text-muted">
-                  {expr}
-                </code>
-              </div>
-              <div className="text-right text-[10px] text-muted">
-                <div>{t(locale, "report.cover.universe")}: {data.today.universe_size} tickers</div>
-                <div>{t(locale, "report.cover.window")}: {data.backtest.equity_curve[0]?.date} → {data.backtest.equity_curve[data.backtest.equity_curve.length - 1]?.date}</div>
-                <div>{t(locale, "report.cover.benchmark")}: {data.backtest.benchmark_ticker}</div>
-                <div>{t(locale, "report.cover.cost")}: 5 bps</div>
-                <div>{t(locale, "report.cover.generated")}: {new Date().toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</div>
-              </div>
-            </div>
-            {intuition && (
-              <p className="mt-3 border-t border-border pt-3 text-[11px] leading-relaxed text-text/90">
-                {intuition}
-              </p>
-            )}
-          </Card>
-
-          <BacktestKpiStrip result={data.backtest} />
-
+          <CoverCard r={primary} expr={primary.expression} factorName={primary.name} intuition={primary.intuition} locale={locale} />
+          <BacktestKpiStrip result={primary.backtest} />
           <Card padding="md">
             <header className="mb-2">
               <h3 className="text-sm font-semibold text-text">
                 {t(locale, "backtest.equity.title")}
               </h3>
             </header>
-            <FactorPnLChart data={data.backtest} height={260} />
+            <FactorPnLChart data={primary.backtest} height={260} />
           </Card>
-
-          <DrawdownChart equityCurve={data.backtest.equity_curve} />
-
-          {data.backtest.monthly_returns && data.backtest.monthly_returns.length > 0 && (
-            <MonthlyReturnsHeatmap data={data.backtest.monthly_returns} />
+          <DrawdownChart equityCurve={primary.backtest.equity_curve} />
+          {primary.backtest.monthly_returns && primary.backtest.monthly_returns.length > 0 && (
+            <MonthlyReturnsHeatmap data={primary.backtest.monthly_returns} />
           )}
+          <TopBottomTable today={primary.today} loading={false} />
+          <ExposureChart data={primary.exposure} topN={10} loading={false} />
+        </article>
+      )}
 
-          <TopBottomTable today={data.today} loading={false} />
-          <ExposureChart data={data.exposure} topN={10} loading={false} />
+      {compare && (
+        <article className="report-tearsheet flex flex-col gap-3">
+          <Card padding="sm">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              {t(locale, "report.compare.secondLabel")}
+            </p>
+          </Card>
+          <CoverCard r={compare} expr={compare.expression} factorName={compare.name} intuition={compare.intuition} locale={locale} />
+          <BacktestKpiStrip result={compare.backtest} />
+          <DrawdownChart equityCurve={compare.backtest.equity_curve} />
+          {compare.backtest.monthly_returns && compare.backtest.monthly_returns.length > 0 && (
+            <MonthlyReturnsHeatmap data={compare.backtest.monthly_returns} />
+          )}
+          <TopBottomTable today={compare.today} loading={false} />
+          <ExposureChart data={compare.exposure} topN={10} loading={false} />
         </article>
       )}
     </div>
+  );
+}
+
+function CoverCard({
+  r, expr, factorName, intuition, locale,
+}: {
+  r: FactorReport;
+  expr: string;
+  factorName: string;
+  intuition: string;
+  locale: "zh" | "en";
+}) {
+  return (
+    <Card padding="md">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-text">
+            {factorName || r.backtest.factor_name}
+          </h2>
+          <code className="mt-1 block font-mono text-[11px] text-muted">{expr}</code>
+        </div>
+        <div className="text-right text-[10px] text-muted">
+          <div>{t(locale, "report.cover.universe")}: {r.today.universe_size} tickers</div>
+          <div>{t(locale, "report.cover.window")}: {r.backtest.equity_curve[0]?.date} → {r.backtest.equity_curve[r.backtest.equity_curve.length - 1]?.date}</div>
+          <div>{t(locale, "report.cover.benchmark")}: {r.backtest.benchmark_ticker}</div>
+          <div>{t(locale, "report.cover.cost")}: 5 bps</div>
+          <div>{t(locale, "report.cover.generated")}: {new Date().toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</div>
+        </div>
+      </div>
+      {intuition && (
+        <p className="mt-3 border-t border-border pt-3 text-[11px] leading-relaxed text-text/90">
+          {intuition}
+        </p>
+      )}
+    </Card>
   );
 }

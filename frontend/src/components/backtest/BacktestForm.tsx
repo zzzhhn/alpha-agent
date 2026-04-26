@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Slider } from "@/components/ui/Slider";
@@ -23,6 +23,8 @@ export interface BacktestFormParams {
 interface BacktestFormProps {
   readonly running: boolean;
   readonly onRun: (p: BacktestFormParams) => void;
+  readonly initialExpression?: string;
+  readonly autoRun?: boolean;
 }
 
 function extractOps(expr: string): string[] {
@@ -35,14 +37,33 @@ function extractOps(expr: string): string[] {
 
 const DIRECTIONS: readonly BacktestDirection[] = ["long_only", "long_short", "short_only"];
 
-export function BacktestForm({ running, onRun }: BacktestFormProps) {
+export function BacktestForm({ running, onRun, initialExpression, autoRun }: BacktestFormProps) {
   const { locale } = useLocale();
-  const [expr, setExpr] = useState("rank(ts_mean(returns, 12))");
+  const [expr, setExpr] = useState(initialExpression ?? "rank(ts_mean(returns, 12))");
   const [direction, setDirection] = useState<BacktestDirection>("long_only");
   const [trainRatio, setTrainRatio] = useState(70);   // 0.10–0.95 stored as %
   const [topPct, setTopPct] = useState(30);
   const [bottomPct, setBottomPct] = useState(30);
   const [costBps, setCostBps] = useState(0);
+
+  // P6.D — when /alpha hands off via sessionStorage and the page passes
+  // autoRun, fire the run once on first mount so the user lands on a
+  // populated dashboard without having to click "运行回测" again.
+  useEffect(() => {
+    if (autoRun && initialExpression) {
+      onRun({
+        expression: initialExpression,
+        operators_used: extractOps(initialExpression),
+        lookback: 12,
+        direction: "long_only",
+        trainRatio: 0.7,
+        topPct: 0.3,
+        bottomPct: 0.3,
+        transactionCostBps: 0,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function loadExample(ex: FactorExample) {
     setExpr(ex.expression);
