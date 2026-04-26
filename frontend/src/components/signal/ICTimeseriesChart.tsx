@@ -23,17 +23,17 @@ export function ICTimeseriesChart({ data, loading }: ICTimeseriesChartProps) {
   return (
     <Card padding="md">
       <header className="mb-2">
-        <h2 className="text-sm font-semibold text-text">{titleStr}</h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">
+        <h2 className="text-base font-semibold text-text">{titleStr}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">
           {t(locale, "signal.ic.subtitle")}
         </p>
       </header>
 
-      {loading && <p className="py-12 text-center text-[11px] text-muted">…</p>}
+      {loading && <p className="py-12 text-center text-[13px] text-muted">…</p>}
 
       {!loading && data && (
         <>
-          <div className="mb-3 grid grid-cols-2 gap-3 text-[11px] md:grid-cols-4">
+          <div className="mb-3 grid grid-cols-2 gap-3 text-[13px] md:grid-cols-4">
             <KPI label={t(locale, "signal.ic.mean")} value={data.summary.ic_mean.toFixed(4)} accent={data.summary.ic_mean > 0 ? "green" : "red"} />
             <KPI label={t(locale, "signal.ic.std")} value={data.summary.ic_std.toFixed(4)} />
             <KPI label={t(locale, "signal.ic.ir")} value={data.summary.ic_ir.toFixed(2)} accent={data.summary.ic_ir > 0 ? "green" : "red"} />
@@ -68,8 +68,8 @@ function KPI({ label, value, accent }: { label: string; value: string; accent?: 
   const color = accent === "green" ? "text-green" : accent === "red" ? "text-red" : "text-text";
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={`mt-0.5 font-mono text-sm ${color}`}>{value}</div>
+      <div className="text-[12px] uppercase tracking-wide text-muted">{label}</div>
+      <div className={`mt-0.5 font-mono text-base ${color}`}>{value}</div>
     </div>
   );
 }

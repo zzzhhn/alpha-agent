@@ -16,15 +16,15 @@ export function UniverseCard({ universe }: UniverseCardProps) {
     <Card padding="md">
       <header className="mb-3 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-text">{universe.name}</h3>
-          <p className="mt-0.5 font-mono text-[10px] text-muted">{universe.id}</p>
+          <h3 className="text-base font-semibold text-text">{universe.name}</h3>
+          <p className="mt-0.5 font-mono text-[12px] text-muted">{universe.id}</p>
         </div>
         <Badge variant="purple" size="sm">
           {universe.currency}
         </Badge>
       </header>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] md:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] md:grid-cols-4">
         <Stat
           label={t(locale, "data.universe.tickerCount")}
           value={universe.ticker_count.toString()}
@@ -44,14 +44,14 @@ export function UniverseCard({ universe }: UniverseCardProps) {
       </dl>
 
       <details className="mt-3 border-t border-border pt-3">
-        <summary className="cursor-pointer text-[11px] text-muted hover:text-text">
+        <summary className="cursor-pointer text-[13px] text-muted hover:text-text">
           {t(locale, "data.universe.tickersLabel")} ({universe.tickers.length})
         </summary>
         <div className="mt-2 flex flex-wrap gap-1">
           {universe.tickers.map((tk) => (
             <span
               key={tk}
-              className="rounded bg-[var(--toggle-bg)] px-1.5 py-0.5 font-mono text-[10px] text-text"
+              className="rounded bg-[var(--toggle-bg)] px-1.5 py-0.5 font-mono text-[12px] text-text"
             >
               {tk}
             </span>
@@ -65,8 +65,8 @@ export function UniverseCard({ universe }: UniverseCardProps) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[10px] uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-0.5 font-mono text-xs text-text">{value}</dd>
+      <dt className="text-[12px] uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-0.5 font-mono text-sm text-text">{value}</dd>
     </div>
   );
 }

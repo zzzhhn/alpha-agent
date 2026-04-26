@@ -25,10 +25,10 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
   return (
     <Card padding="md">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-text">
+        <h2 className="text-base font-semibold text-text">
           {t(locale, "backtest.kpi.title")}
         </h2>
-        <p className="mt-0.5 text-[10px] text-muted">
+        <p className="mt-0.5 text-[12px] text-muted">
           {t(locale, "backtest.kpi.subtitle")
             .replace("{ret}", `${(fullRet * 100).toFixed(1)}%`)
             .replace("{bench}", `${(benchRet * 100).toFixed(1)}%`)}
@@ -83,9 +83,9 @@ function Kpi({
   const color = accent === "green" ? "text-green" : accent === "red" ? "text-red" : "text-text";
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={`mt-0.5 font-mono text-base font-semibold ${color}`}>{value}</div>
-      {hint && <div className="mt-0.5 text-[10px] text-muted">{hint}</div>}
+      <div className="text-[12px] uppercase tracking-wide text-muted">{label}</div>
+      <div className={`mt-0.5 font-mono text-lg font-semibold ${color}`}>{value}</div>
+      {hint && <div className="mt-0.5 text-[12px] text-muted">{hint}</div>}
     </div>
   );
 }

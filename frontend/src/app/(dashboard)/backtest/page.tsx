@@ -79,10 +79,10 @@ export default function BacktestPage() {
   return (
     <div className="flex flex-col gap-4 p-6">
       <header>
-        <h1 className="text-xl font-semibold text-text">
+        <h1 className="text-2xl font-semibold text-text">
           {t(locale, "backtest.title")}
         </h1>
-        <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-muted">
+        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
           {t(locale, "backtest.subtitle")}
         </p>
       </header>
@@ -96,7 +96,7 @@ export default function BacktestPage() {
 
       {error && (
         <Card padding="md">
-          <p className="text-sm text-red">
+          <p className="text-base text-red">
             {t(locale, "backtest.error")}: {error}
           </p>
         </Card>
@@ -126,10 +126,10 @@ export default function BacktestPage() {
           <BacktestKpiStrip result={result} />
           <Card padding="md">
             <header className="mb-3">
-              <h2 className="text-sm font-semibold text-text">
+              <h2 className="text-base font-semibold text-text">
                 {t(locale, "backtest.equity.title")}
               </h2>
-              <p className="mt-1 text-[11px] leading-relaxed text-muted">
+              <p className="mt-1 text-[13px] leading-relaxed text-muted">
                 {t(locale, "backtest.equity.subtitle")}
               </p>
             </header>

@@ -88,15 +88,35 @@ class OperandCatalogResponse(BaseModel):
     tier_summary: dict[str, dict[str, int]]  # {operators|operands: {T1: n, T2, T3, total}}
 
 
+class FieldCoverage(BaseModel):
+    name: str            # operand name e.g. "revenue"
+    category: str        # "ohlcv" | "metadata" | "fundamental"
+    tier: str            # "T1" | "T2" — matches catalog tier
+    fill_rate: float     # 0.0–1.0
+    n_present: int
+    n_total: int
+
+
+class TickerCoverage(BaseModel):
+    ticker: str
+    fill_rate: float     # OHLCV fill rate for this ticker
+    n_missing: int
+
+
 class CoverageResponse(BaseModel):
     universe_id: str
-    dates: list[str]
-    tickers: list[str]
-    matrix: list[list[int]]          # T × N, 1 = present, 0 = missing
-    total_cells: int
-    missing_cells: int
-    coverage_pct: float
-    missing_per_ticker: dict[str, int]
+    n_tickers: int
+    n_days: int
+    start_date: str
+    end_date: str
+    # OHLCV summary (most users care about this)
+    ohlcv_total_cells: int
+    ohlcv_missing_cells: int
+    ohlcv_coverage_pct: float
+    # Per-field fill rate — varies meaningfully across fundamentals
+    field_coverage: list[FieldCoverage]
+    # Per-ticker OHLCV coverage
+    ticker_coverage: list[TickerCoverage]
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────────
@@ -168,11 +188,13 @@ def list_operands(
 def get_coverage(
     universe_id: Literal["SP500_subset"] = Query(default="SP500_subset"),
 ) -> CoverageResponse:
-    """Return present/missing matrix for the requested universe.
+    """Return per-field fill-rate stats for the active panel.
 
-    All cells are 1 (present) for the current cleaned panel — but the endpoint
-    shape supports future universes where coverage gaps exist. Honest now, ready
-    later.
+    Original v1 returned a (T, N) matrix for a heatmap, which was visually
+    pretty but information-dense at zero — every cell green for cleaned
+    OHLCV. v2 returns (a) per-operand fill rates so fundamentals' real
+    73-98% variation is visible and (b) per-ticker OHLCV coverage as
+    horizontal bars instead of a wall of cells.
     """
     try:
         panel = _load_panel()
@@ -180,22 +202,87 @@ def get_coverage(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     import numpy as np
-    # close is (T, N); cells where close is NaN => missing
-    present = (~np.isnan(panel.close)).astype(int)
-    total = int(present.size)
-    missing = int(total - present.sum())
-    per_ticker = {
-        tk: int((present[:, i] == 0).sum())
-        for i, tk in enumerate(panel.tickers)
-    }
+
+    # OHLCV (close as the canonical existence signal)
+    present_close = (~np.isnan(panel.close)).astype(int)
+    n_total = int(present_close.size)
+    n_missing = int(n_total - present_close.sum())
+
+    ticker_rows: list[TickerCoverage] = []
+    for i, tk in enumerate(panel.tickers):
+        col = present_close[:, i]
+        n_t = int(col.size)
+        n_p = int(col.sum())
+        ticker_rows.append(TickerCoverage(
+            ticker=tk,
+            fill_rate=round(n_p / n_t, 6) if n_t else 0.0,
+            n_missing=n_t - n_p,
+        ))
+    ticker_rows.sort(key=lambda r: r.fill_rate)   # worst coverage first
+
+    # Per-field fill rate. Walks every numeric (T, N) array exposed to the
+    # evaluator so the user sees the *same* fields they can use in factor
+    # expressions, with their realistic fill rates.
+    field_rows: list[FieldCoverage] = []
+
+    def _add(name: str, arr: np.ndarray, category: str, tier: str) -> None:
+        n_p = int((~np.isnan(arr)).sum())
+        n_t = int(arr.size)
+        field_rows.append(FieldCoverage(
+            name=name, category=category, tier=tier,
+            fill_rate=round(n_p / n_t, 6) if n_t else 0.0,
+            n_present=n_p, n_total=n_t,
+        ))
+
+    # OHLCV core
+    _add("close",  panel.close,  "ohlcv", "T1")
+    _add("open",   panel.open_,  "ohlcv", "T1")
+    _add("high",   panel.high,   "ohlcv", "T1")
+    _add("low",    panel.low,    "ohlcv", "T1")
+    _add("volume", panel.volume, "ohlcv", "T1")
+
+    # Metadata (T2, broadcast snapshots — fill rate is 100% by construction)
+    if panel.cap is not None:
+        _add("cap", panel.cap, "metadata", "T2")
+    if panel.sector is not None:
+        # sector is string array; "fill rate" = fraction not "Unknown"
+        sec = panel.sector
+        n_p = int((sec != "Unknown").sum())
+        n_t = int(sec.size)
+        field_rows.append(FieldCoverage(
+            name="sector", category="metadata", tier="T2",
+            fill_rate=round(n_p / n_t, 6) if n_t else 0.0,
+            n_present=n_p, n_total=n_t,
+        ))
+    if panel.industry is not None:
+        ind = panel.industry
+        n_p = int((ind != "Unknown").sum())
+        n_t = int(ind.size)
+        field_rows.append(FieldCoverage(
+            name="industry", category="metadata", tier="T2",
+            fill_rate=round(n_p / n_t, 6) if n_t else 0.0,
+            n_present=n_p, n_total=n_t,
+        ))
+
+    # Fundamentals (T2 — the interesting variation lives here)
+    if panel.fundamentals:
+        for fname, farr in panel.fundamentals.items():
+            _add(fname, farr, "fundamental", "T2")
+
+    # Sort: ohlcv first, then metadata, then fundamentals; within each
+    # category, sort by fill rate ASCENDING so worst-covered floats up.
+    cat_order = {"ohlcv": 0, "metadata": 1, "fundamental": 2}
+    field_rows.sort(key=lambda f: (cat_order.get(f.category, 9), f.fill_rate))
 
     return CoverageResponse(
         universe_id=universe_id,
-        dates=[str(d) for d in panel.dates],
-        tickers=list(panel.tickers),
-        matrix=present.tolist(),
-        total_cells=total,
-        missing_cells=missing,
-        coverage_pct=round(100.0 * (total - missing) / total, 4) if total else 0.0,
-        missing_per_ticker=per_ticker,
+        n_tickers=len(panel.tickers),
+        n_days=len(panel.dates),
+        start_date=str(panel.dates[0]),
+        end_date=str(panel.dates[-1]),
+        ohlcv_total_cells=n_total,
+        ohlcv_missing_cells=n_missing,
+        ohlcv_coverage_pct=round(100.0 * (n_total - n_missing) / n_total, 4) if n_total else 0.0,
+        field_coverage=field_rows,
+        ticker_coverage=ticker_rows,
     )

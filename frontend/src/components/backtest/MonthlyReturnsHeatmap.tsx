@@ -61,10 +61,10 @@ export function MonthlyReturnsHeatmap({ data }: MonthlyReturnsHeatmapProps) {
   return (
     <Card padding="md">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-text">
+        <h2 className="text-base font-semibold text-text">
           {t(locale, "backtest.monthly.title")}
         </h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">
           {t(locale, "backtest.monthly.subtitle")}
         </p>
       </header>
@@ -73,18 +73,18 @@ export function MonthlyReturnsHeatmap({ data }: MonthlyReturnsHeatmapProps) {
         <table className="w-full border-separate" style={{ borderSpacing: 2 }}>
           <thead>
             <tr>
-              <th className="sticky left-0 z-10 bg-[var(--card-bg)] px-2 py-1 text-left text-[10px] font-medium uppercase tracking-wide text-muted">
+              <th className="sticky left-0 z-10 bg-[var(--card-bg)] px-2 py-1 text-left text-[12px] font-medium uppercase tracking-wide text-muted">
                 {t(locale, "backtest.monthly.year")}
               </th>
               {MONTH_LABELS.map((m) => (
                 <th
                   key={m}
-                  className="px-1 py-1 text-center text-[10px] font-medium uppercase tracking-wide text-muted"
+                  className="px-1 py-1 text-center text-[12px] font-medium uppercase tracking-wide text-muted"
                 >
                   {m}
                 </th>
               ))}
-              <th className="px-2 py-1 text-right text-[10px] font-medium uppercase tracking-wide text-muted">
+              <th className="px-2 py-1 text-right text-[12px] font-medium uppercase tracking-wide text-muted">
                 {t(locale, "backtest.monthly.total")}
               </th>
             </tr>
@@ -94,7 +94,7 @@ export function MonthlyReturnsHeatmap({ data }: MonthlyReturnsHeatmapProps) {
               const months = byYear.get(y)!;
               return (
                 <tr key={y}>
-                  <td className="sticky left-0 z-10 bg-[var(--card-bg)] px-2 py-1 font-mono text-xs text-text">
+                  <td className="sticky left-0 z-10 bg-[var(--card-bg)] px-2 py-1 font-mono text-sm text-text">
                     {y}
                   </td>
                   {MONTH_LABELS.map((_label, idx) => {
@@ -103,7 +103,7 @@ export function MonthlyReturnsHeatmap({ data }: MonthlyReturnsHeatmapProps) {
                       return (
                         <td
                           key={idx}
-                          className="rounded-sm border border-border/30 bg-[var(--toggle-bg)] px-1 py-1 text-center text-[10px] text-muted"
+                          className="rounded-sm border border-border/30 bg-[var(--toggle-bg)] px-1 py-1 text-center text-[12px] text-muted"
                           title="no data"
                         >
                           —
@@ -113,7 +113,7 @@ export function MonthlyReturnsHeatmap({ data }: MonthlyReturnsHeatmapProps) {
                     return (
                       <td
                         key={idx}
-                        className="rounded-sm px-1 py-1 text-center font-mono text-[10px] font-medium"
+                        className="rounded-sm px-1 py-1 text-center font-mono text-[12px] font-medium"
                         style={{
                           background: colorFor(m.return),
                           color: textColorFor(m.return),
@@ -125,7 +125,7 @@ export function MonthlyReturnsHeatmap({ data }: MonthlyReturnsHeatmapProps) {
                     );
                   })}
                   <td
-                    className="px-2 py-1 text-right font-mono text-xs font-semibold"
+                    className="px-2 py-1 text-right font-mono text-sm font-semibold"
                     style={{ color: yearTotal(y) >= 0 ? "var(--green, #16a34a)" : "var(--red, #ef4444)" }}
                   >
                     {(yearTotal(y) * 100).toFixed(1)}%
@@ -137,7 +137,7 @@ export function MonthlyReturnsHeatmap({ data }: MonthlyReturnsHeatmapProps) {
         </table>
       </div>
 
-      <p className="mt-2 text-[10px] text-muted">
+      <p className="mt-2 text-[12px] text-muted">
         {t(locale, "backtest.monthly.legend")}
       </p>
     </Card>

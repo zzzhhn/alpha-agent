@@ -85,10 +85,10 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
   return (
     <Card padding="md">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-text">
+        <h2 className="text-base font-semibold text-text">
           {t(locale, "backtest.form.title")}
         </h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">
           {t(locale, "backtest.form.subtitle")}
         </p>
       </header>
@@ -98,11 +98,11 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         onChange={(e) => setExpr(e.target.value)}
         placeholder={t(locale, "backtest.form.exprPlaceholder")}
         rows={3}
-        className="w-full resize-none rounded-md border border-border bg-[var(--toggle-bg)] p-2 font-mono text-xs text-text outline-none focus:border-accent"
+        className="w-full resize-none rounded-md border border-border bg-[var(--toggle-bg)] p-2 font-mono text-sm text-text outline-none focus:border-accent"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-[11px] text-muted">{t(locale, "backtest.form.direction")}:</span>
+        <span className="text-[13px] text-muted">{t(locale, "backtest.form.direction")}:</span>
         {DIRECTIONS.map((d) => (
           <button
             key={d}
@@ -110,8 +110,8 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
             onClick={() => setDirection(d)}
             className={
               direction === d
-                ? "rounded-md bg-accent/15 px-2 py-1 font-mono text-[10px] text-accent"
-                : "rounded-md px-2 py-1 font-mono text-[10px] text-muted hover:bg-[var(--toggle-bg)] hover:text-text"
+                ? "rounded-md bg-accent/15 px-2 py-1 font-mono text-[12px] text-accent"
+                : "rounded-md px-2 py-1 font-mono text-[12px] text-muted hover:bg-[var(--toggle-bg)] hover:text-text"
             }
           >
             {d.replace("_", " ")}
@@ -144,7 +144,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <details className="flex-1">
-          <summary className="cursor-pointer text-[11px] text-muted hover:text-text">
+          <summary className="cursor-pointer text-[13px] text-muted hover:text-text">
             {t(locale, "backtest.form.loadExample")}
           </summary>
           <div className="mt-2 flex flex-wrap gap-1">
@@ -153,7 +153,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
                 key={ex.name}
                 type="button"
                 onClick={() => loadExample(ex)}
-                className="rounded bg-[var(--toggle-bg)] px-2 py-1 text-[10px] text-muted hover:text-text"
+                className="rounded bg-[var(--toggle-bg)] px-2 py-1 text-[12px] text-muted hover:text-text"
               >
                 {ex.name}
               </button>

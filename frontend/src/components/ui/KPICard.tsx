@@ -50,7 +50,7 @@ export function KPICard({
       aria-label={label}
     >
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[11px] text-muted">{label}</span>
+        <span className="text-[13px] text-muted">{label}</span>
         {status && (
           <span
             className={clsx(
@@ -63,13 +63,13 @@ export function KPICard({
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className="font-mono text-lg font-bold text-text">
+        <span className="font-mono text-xl font-bold text-text">
           {value}
         </span>
         {delta && (
           <span
             className={clsx(
-              "font-mono text-xs font-semibold",
+              "font-mono text-sm font-semibold",
               deltaColors[delta.direction]
             )}
           >
@@ -79,7 +79,7 @@ export function KPICard({
       </div>
 
       {subtitle && (
-        <p className="mt-1 text-[11px] text-muted">{subtitle}</p>
+        <p className="mt-1 text-[13px] text-muted">{subtitle}</p>
       )}
     </div>
   );

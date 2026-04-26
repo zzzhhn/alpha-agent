@@ -47,16 +47,16 @@ export function CardHeader({
   return (
     <div className="mb-4 flex items-center justify-between">
       <div>
-        <div className="flex items-center gap-2 text-[15px] font-semibold text-text">
+        <div className="flex items-center gap-2 text-[17px] font-semibold text-text">
           {icon && (
-            <span className="text-base" aria-hidden="true">
+            <span className="text-lg" aria-hidden="true">
               {icon}
             </span>
           )}
           {title}
         </div>
         {subtitle && (
-          <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
+          <p className="mt-0.5 text-sm text-muted">{subtitle}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}

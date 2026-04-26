@@ -22,13 +22,13 @@ export function ExposureChart({ data, topN, loading }: ExposureChartProps) {
   return (
     <Card padding="md">
       <header className="mb-2">
-        <h2 className="text-sm font-semibold text-text">
+        <h2 className="text-base font-semibold text-text">
           {t(locale, "signal.exposure.title")}
         </h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">{subtitle}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">{subtitle}</p>
       </header>
 
-      {loading && <p className="py-12 text-center text-[11px] text-muted">…</p>}
+      {loading && <p className="py-12 text-center text-[13px] text-muted">…</p>}
 
       {!loading && data && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -57,7 +57,7 @@ function SectorBar({
   }
   return (
     <div>
-      <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <h4 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-muted">
         {title}
       </h4>
       <div className="h-[260px] w-full">

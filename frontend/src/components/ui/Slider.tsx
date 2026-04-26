@@ -26,8 +26,8 @@ export function Slider({
   return (
     <div className={clsx("flex flex-col gap-1", className)}>
       <div className="flex items-center justify-between">
-        <label className="text-[11px] text-muted">{label}</label>
-        <span className="font-mono text-xs font-semibold text-text">
+        <label className="text-[13px] text-muted">{label}</label>
+        <span className="font-mono text-sm font-semibold text-text">
           {value}
           {unit}
         </span>
@@ -41,7 +41,7 @@ export function Slider({
         onChange={(e) => onChange(Number(e.target.value))}
         className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-border accent-accent"
       />
-      <div className="flex justify-between text-[10px] text-muted">
+      <div className="flex justify-between text-[12px] text-muted">
         <span>{min}{unit}</span>
         <span>{max}{unit}</span>
       </div>

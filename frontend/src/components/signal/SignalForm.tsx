@@ -55,7 +55,7 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
   return (
     <Card padding="md">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-text">
+        <h2 className="text-base font-semibold text-text">
           {t(locale, "signal.form.title")}
         </h2>
       </header>
@@ -65,7 +65,7 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
         onChange={(e) => setExpr(e.target.value)}
         placeholder={t(locale, "signal.form.exprPlaceholder")}
         rows={3}
-        className="w-full resize-none rounded-md border border-border bg-[var(--toggle-bg)] p-2 font-mono text-xs text-text outline-none focus:border-accent"
+        className="w-full resize-none rounded-md border border-border bg-[var(--toggle-bg)] p-2 font-mono text-sm text-text outline-none focus:border-accent"
       />
 
       <div className="mt-3 flex flex-wrap items-end gap-4">
@@ -96,7 +96,7 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
       </div>
 
       <details className="mt-3 border-t border-border pt-2">
-        <summary className="cursor-pointer text-[11px] text-muted hover:text-text">
+        <summary className="cursor-pointer text-[13px] text-muted hover:text-text">
           {t(locale, "signal.form.loadExample")}
         </summary>
         <div className="mt-2 flex flex-wrap gap-1">
@@ -105,7 +105,7 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
               key={ex.name}
               type="button"
               onClick={() => loadExample(ex)}
-              className="rounded bg-[var(--toggle-bg)] px-2 py-1 text-[10px] text-muted hover:text-text"
+              className="rounded bg-[var(--toggle-bg)] px-2 py-1 text-[12px] text-muted hover:text-text"
             >
               {ex.name}
             </button>

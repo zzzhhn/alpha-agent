@@ -17,11 +17,11 @@ export function TopBottomTable({ today, loading }: TopBottomTableProps) {
     <Card padding="md">
       <header className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-text">
+          <h2 className="text-base font-semibold text-text">
             {t(locale, "signal.today.title")}
           </h2>
           {today && (
-            <p className="mt-0.5 text-[10px] text-muted">
+            <p className="mt-0.5 text-[12px] text-muted">
               {t(locale, "signal.today.asOf")}: <span className="font-mono">{today.as_of}</span>
               {" · "}universe {today.n_valid}/{today.universe_size}
             </p>
@@ -29,9 +29,9 @@ export function TopBottomTable({ today, loading }: TopBottomTableProps) {
         </div>
       </header>
 
-      {loading && <p className="py-6 text-center text-[11px] text-muted">…</p>}
+      {loading && <p className="py-6 text-center text-[13px] text-muted">…</p>}
       {!loading && !today && (
-        <p className="py-6 text-center text-[11px] text-muted">
+        <p className="py-6 text-center text-[13px] text-muted">
           {t(locale, "signal.today.empty")}
         </p>
       )}
@@ -67,10 +67,10 @@ function Side({
     <div>
       <div className="mb-1.5 flex items-center justify-between">
         <Badge variant={variant} size="sm">{title}</Badge>
-        <span className="text-[10px] text-muted">{rows.length}</span>
+        <span className="text-[12px] text-muted">{rows.length}</span>
       </div>
       <div className="overflow-hidden rounded-md border border-border">
-        <table className="w-full text-[11px]">
+        <table className="w-full text-[13px]">
           <thead className="bg-[var(--toggle-bg)]">
             <tr>
               <th className="px-2 py-1 text-left font-medium text-muted">{t(locale, "signal.today.tickerCol")}</th>

@@ -112,10 +112,10 @@ export function FactorExamples({ onLoad }: FactorExamplesProps) {
   return (
     <Card padding="md">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-text">
+        <h2 className="text-base font-semibold text-text">
           {t(locale, "alpha.examples.title")}
         </h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">
           {t(locale, "alpha.examples.subtitle")}
         </p>
       </header>
@@ -141,18 +141,18 @@ function ExampleCard({
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-[var(--card-inner,transparent)] p-3">
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-xs font-semibold text-text">{example.name}</h3>
-        <span className="rounded bg-accent/10 px-2 py-0.5 font-mono text-[10px] text-accent">
+        <h3 className="text-sm font-semibold text-text">{example.name}</h3>
+        <span className="rounded bg-accent/10 px-2 py-0.5 font-mono text-[12px] text-accent">
           +{(example.totalReturn * 100).toFixed(1)}%
         </span>
       </div>
-      <p className="text-[11px] leading-relaxed text-text/90">{hypothesis}</p>
-      <code className="block overflow-x-auto rounded bg-[var(--toggle-bg)] px-2 py-1 font-mono text-[10px] text-muted">
+      <p className="text-[13px] leading-relaxed text-text/90">{hypothesis}</p>
+      <code className="block overflow-x-auto rounded bg-[var(--toggle-bg)] px-2 py-1 font-mono text-[12px] text-muted">
         {example.expression}
       </code>
-      <p className="text-[10px] leading-relaxed text-muted">{intuition}</p>
+      <p className="text-[12px] leading-relaxed text-muted">{intuition}</p>
       <div className="mt-1 flex items-center justify-between gap-2 border-t border-border pt-2">
-        <div className="flex gap-3 text-[10px]">
+        <div className="flex gap-3 text-[12px]">
           <span className="text-muted">
             {t(locale, "alpha.examples.sharpeLabel")}:{" "}
             <span className="font-mono text-text">{example.testSharpe.toFixed(2)}</span>

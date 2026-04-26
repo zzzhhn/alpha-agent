@@ -56,14 +56,14 @@ export function OperandCatalog({ catalog }: OperandCatalogProps) {
     <Card padding="md">
       <header className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-text">
+          <h2 className="text-base font-semibold text-text">
             {t(locale, "data.operands.title")}
           </h2>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+          <p className="mt-1 text-[13px] leading-relaxed text-muted">
             {t(locale, "data.operands.subtitle")}
           </p>
         </div>
-        <div className="text-right text-[10px] text-muted">
+        <div className="text-right text-[12px] text-muted">
           <div>
             <span className="font-mono text-green">T1 {summary.T1}</span> ·{" "}
             <span className="font-mono text-yellow">T2 {summary.T2}</span> ·{" "}
@@ -88,8 +88,8 @@ export function OperandCatalog({ catalog }: OperandCatalogProps) {
               onClick={() => setTierFilter(tf)}
               className={
                 tierFilter === tf
-                  ? "rounded bg-accent/15 px-2 py-0.5 font-mono text-[10px] text-accent"
-                  : "rounded px-2 py-0.5 font-mono text-[10px] text-muted hover:bg-[var(--toggle-bg)] hover:text-text"
+                  ? "rounded bg-accent/15 px-2 py-0.5 font-mono text-[12px] text-accent"
+                  : "rounded px-2 py-0.5 font-mono text-[12px] text-muted hover:bg-[var(--toggle-bg)] hover:text-text"
               }
             >
               {tf}
@@ -129,8 +129,8 @@ function TabBtn({ active, onClick, label }: {
     <button type="button" onClick={onClick}
       className={
         active
-          ? "border-b-2 border-accent px-3 py-1.5 text-xs font-semibold text-accent"
-          : "border-b-2 border-transparent px-3 py-1.5 text-xs text-muted hover:text-text"
+          ? "border-b-2 border-accent px-3 py-1.5 text-sm font-semibold text-accent"
+          : "border-b-2 border-transparent px-3 py-1.5 text-sm text-muted hover:text-text"
       }>{label}</button>
   );
 }
@@ -151,13 +151,13 @@ function OperatorList({
     return acc;
   }, {});
   if (operators.length === 0) {
-    return <p className="py-6 text-center text-[11px] text-muted">no items</p>;
+    return <p className="py-6 text-center text-[13px] text-muted">no items</p>;
   }
   return (
     <div className="space-y-4">
       {Object.entries(grouped).map(([cat, ops]) => (
         <section key={cat}>
-          <h4 className="mb-2 text-[10px] uppercase tracking-wide text-muted">{cat}</h4>
+          <h4 className="mb-2 text-[12px] uppercase tracking-wide text-muted">{cat}</h4>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {ops.map((op) => (
               <div key={op.name}
@@ -167,7 +167,7 @@ function OperatorList({
                 }
                 title={op.implemented ? undefined : (locale === "zh" ? "未实现：需要 premium 数据源（向量数据/期权/新闻情绪等）" : "Not implemented — requires premium data source (vector/options/news sentiment)")}>
                 <div className="flex items-center justify-between gap-2">
-                  <code className="font-mono text-xs font-semibold text-accent">{op.name}</code>
+                  <code className="font-mono text-sm font-semibold text-accent">{op.name}</code>
                   <div className="flex shrink-0 items-center gap-1">
                     {op.arity != null && (
                       <Badge variant="muted" size="sm">arity {op.arity}</Badge>
@@ -175,11 +175,11 @@ function OperatorList({
                     <TierBadge tier={op.tier} locale={locale} />
                   </div>
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed text-text/90">
+                <p className="mt-1 text-[13px] leading-relaxed text-text/90">
                   {op.description_zh ?? op.function_zh ?? op.description_en ?? ""}
                 </p>
                 {op.example && (
-                  <code className="mt-1 block overflow-x-auto rounded bg-[var(--toggle-bg)] px-1.5 py-0.5 font-mono text-[10px] text-muted">
+                  <code className="mt-1 block overflow-x-auto rounded bg-[var(--toggle-bg)] px-1.5 py-0.5 font-mono text-[12px] text-muted">
                     {op.example}
                   </code>
                 )}
@@ -201,13 +201,13 @@ function OperandList({
     return acc;
   }, {});
   if (operands.length === 0) {
-    return <p className="py-6 text-center text-[11px] text-muted">no items</p>;
+    return <p className="py-6 text-center text-[13px] text-muted">no items</p>;
   }
   return (
     <div className="space-y-4">
       {Object.entries(grouped).map(([cat, fs]) => (
         <section key={cat}>
-          <h4 className="mb-2 text-[10px] uppercase tracking-wide text-muted">{cat}</h4>
+          <h4 className="mb-2 text-[12px] uppercase tracking-wide text-muted">{cat}</h4>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {fs.map((op) => (
               <div key={op.name}
@@ -217,14 +217,14 @@ function OperandList({
                 }
                 title={op.implemented ? undefined : (locale === "zh" ? "数据源未接入：需要 premium 数据集（如 RavenPack 新闻、Options 链、WorldQuant Model 字段等）" : "Data source unavailable — requires premium dataset (RavenPack news, options chain, WorldQuant Model fields, etc.)")}>
                 <div className="flex items-center justify-between gap-2">
-                  <code className="font-mono text-xs font-semibold text-accent">{op.name}</code>
+                  <code className="font-mono text-sm font-semibold text-accent">{op.name}</code>
                   <TierBadge tier={op.tier} locale={locale} />
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed text-text/90">
+                <p className="mt-1 text-[13px] leading-relaxed text-text/90">
                   {op.description_zh ?? op.description_en ?? ""}
                 </p>
                 {op.usage_zh && (
-                  <p className="mt-0.5 text-[10px] text-muted">{op.usage_zh}</p>
+                  <p className="mt-0.5 text-[12px] text-muted">{op.usage_zh}</p>
                 )}
               </div>
             ))}

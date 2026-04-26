@@ -61,22 +61,22 @@ export default function FactorsPage() {
   return (
     <div className="flex flex-col gap-4 p-6">
       <header>
-        <h1 className="text-xl font-semibold text-text">
+        <h1 className="text-2xl font-semibold text-text">
           {t(locale, "zoo.title")}
         </h1>
-        <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-muted">
+        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
           {t(locale, "zoo.subtitle")}
         </p>
       </header>
 
       <Card padding="md">
         {entries.length === 0 ? (
-          <p className="py-6 text-center text-[12px] text-muted">
+          <p className="py-6 text-center text-[14px] text-muted">
             {t(locale, "zoo.empty")}
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[13px]">
               <thead className="bg-[var(--toggle-bg)]">
                 <tr>
                   <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "zoo.colName")}</th>

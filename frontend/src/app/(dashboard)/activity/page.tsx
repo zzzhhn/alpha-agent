@@ -90,7 +90,7 @@ export default function ActivityPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-semibold text-[var(--text)]">
+      <h1 className="text-xl font-semibold text-[var(--text)]">
         📋 {t(locale, "activity.title")}
       </h1>
 
@@ -100,7 +100,7 @@ export default function ActivityPage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex-1 rounded-md px-4 py-2 text-xs font-medium transition-colors ${
+            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
               tab === key
                 ? "bg-[var(--accent)] text-white"
                 : "text-[var(--muted)] hover:text-[var(--text)]"
@@ -117,7 +117,7 @@ export default function ActivityPage() {
         placeholder={t(locale, "activity.filter")}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="w-64 rounded-md border border-[var(--border)] bg-transparent px-3 py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+        className="w-64 rounded-md border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
       />
 
       {/* Decisions tab */}
@@ -132,7 +132,7 @@ export default function ActivityPage() {
             <EmptyState title={t(locale, "activity.noData")} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[var(--glass-bg)]">
                     {["Time", "Ticker", "Direction", "Confidence", "Reasoning", "Status"].map((h) => (
@@ -173,10 +173,10 @@ export default function ActivityPage() {
                         </button>
                         {expandedId === d.id && (
                           <div className="border-t border-[var(--border)] bg-[var(--glass-bg)] px-6 py-3">
-                            <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+                            <div className="mb-1 text-[13px] font-medium uppercase tracking-wide text-[var(--muted)]">
                               {t(locale, "activity.reasoning")}
                             </div>
-                            <ol className="list-decimal list-inside space-y-1 text-xs text-[var(--text-secondary)]">
+                            <ol className="list-decimal list-inside space-y-1 text-sm text-[var(--text-secondary)]">
                               {d.reasoning_chain.map((step, i) => (
                                 <li key={i}>{step}</li>
                               ))}
@@ -205,7 +205,7 @@ export default function ActivityPage() {
             <EmptyState title={t(locale, "activity.noData")} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[var(--glass-bg)]">
                     {["Time", "Order ID", "Ticker", "Side", "Qty", "Price", "Filled", "Status"].map((h) => (

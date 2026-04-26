@@ -409,15 +409,32 @@ export interface OperandCatalogResponse {
   };
 }
 
+export interface FieldCoverage {
+  readonly name: string;
+  readonly category: "ohlcv" | "metadata" | "fundamental";
+  readonly tier: "T1" | "T2";
+  readonly fill_rate: number;     // 0–1
+  readonly n_present: number;
+  readonly n_total: number;
+}
+
+export interface TickerCoverage {
+  readonly ticker: string;
+  readonly fill_rate: number;
+  readonly n_missing: number;
+}
+
 export interface CoverageResponse {
   readonly universe_id: string;
-  readonly dates: readonly string[];
-  readonly tickers: readonly string[];
-  readonly matrix: readonly (readonly number[])[];
-  readonly total_cells: number;
-  readonly missing_cells: number;
-  readonly coverage_pct: number;
-  readonly missing_per_ticker: Readonly<Record<string, number>>;
+  readonly n_tickers: number;
+  readonly n_days: number;
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly ohlcv_total_cells: number;
+  readonly ohlcv_missing_cells: number;
+  readonly ohlcv_coverage_pct: number;
+  readonly field_coverage: readonly FieldCoverage[];
+  readonly ticker_coverage: readonly TickerCoverage[];
 }
 
 /* ═══════════════════ P3: Signal Layer ═══════════════════ */

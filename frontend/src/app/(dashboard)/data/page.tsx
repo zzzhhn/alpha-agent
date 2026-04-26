@@ -7,7 +7,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { UniverseCard } from "@/components/data/UniverseCard";
 import { OperandCatalog } from "@/components/data/OperandCatalog";
-import { CoverageHeatmap } from "@/components/data/CoverageHeatmap";
+import { CoverageOverview } from "@/components/data/CoverageOverview";
 import {
   fetchUniverses,
   fetchOperandCatalog,
@@ -71,10 +71,10 @@ export default function DataPage() {
     <div className="flex flex-col gap-4 p-6">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-text">
+          <h1 className="text-2xl font-semibold text-text">
             {t(locale, "data.title")}
           </h1>
-          <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-muted">
+          <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
             {t(locale, "data.subtitle")}
           </p>
         </div>
@@ -92,7 +92,7 @@ export default function DataPage() {
 
       {error && (
         <Card padding="md">
-          <p className="text-sm text-red">
+          <p className="text-base text-red">
             {t(locale, "data.error")}: {error}
           </p>
         </Card>
@@ -100,13 +100,13 @@ export default function DataPage() {
 
       {!error && !universes && (
         <Card padding="md">
-          <p className="text-sm text-muted">{t(locale, "data.loading")}</p>
+          <p className="text-base text-muted">{t(locale, "data.loading")}</p>
         </Card>
       )}
 
       {universes && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-text">
+          <h2 className="text-base font-semibold text-text">
             {t(locale, "data.universe.title")}
           </h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -118,7 +118,7 @@ export default function DataPage() {
       )}
 
       {catalog && <OperandCatalog catalog={catalog} />}
-      {coverage && <CoverageHeatmap coverage={coverage} />}
+      {coverage && <CoverageOverview coverage={coverage} />}
     </div>
   );
 }

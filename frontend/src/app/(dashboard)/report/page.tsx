@@ -161,10 +161,10 @@ export default function ReportPage() {
     <div className="flex flex-col gap-4 p-6">
       <header className="report-chrome flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-text">
+          <h1 className="text-2xl font-semibold text-text">
             {t(locale, "report.title")}
           </h1>
-          <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-muted">
+          <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
             {t(locale, "report.subtitle")}
           </p>
         </div>
@@ -181,16 +181,16 @@ export default function ReportPage() {
 
       <Card padding="md" className="report-chrome">
         <header className="mb-3">
-          <h2 className="text-sm font-semibold text-text">
+          <h2 className="text-base font-semibold text-text">
             {t(locale, "report.picker.title")}
           </h2>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+          <p className="mt-1 text-[13px] leading-relaxed text-muted">
             {t(locale, "report.picker.subtitle")}
           </p>
         </header>
 
         <div className="mb-3">
-          <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">
+          <p className="mb-1 text-[12px] uppercase tracking-wide text-muted">
             {t(locale, "report.picker.fromExamples")}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -200,7 +200,7 @@ export default function ReportPage() {
                 type="button"
                 onClick={() => loadExample(example)}
                 disabled={running}
-                className="rounded-md bg-[var(--toggle-bg)] px-3 py-1.5 text-[11px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
+                className="rounded-md bg-[var(--toggle-bg)] px-3 py-1.5 text-[13px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
               >
                 {example.name}
               </button>
@@ -210,7 +210,7 @@ export default function ReportPage() {
 
         {zoo.length > 0 && (
           <div className="mb-3 border-t border-border pt-3">
-            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">
+            <p className="mb-1 text-[12px] uppercase tracking-wide text-muted">
               {t(locale, "report.picker.fromZoo")}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -220,7 +220,7 @@ export default function ReportPage() {
                   type="button"
                   onClick={() => loadZooEntry(z, "primary")}
                   disabled={running}
-                  className="rounded-md border border-border px-3 py-1.5 text-[11px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
+                  className="rounded-md border border-border px-3 py-1.5 text-[13px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
                   title={z.expression}
                 >
                   {z.name}
@@ -236,14 +236,14 @@ export default function ReportPage() {
             value={factorName}
             onChange={(e) => setFactorName(e.target.value)}
             placeholder={t(locale, "report.picker.namePlaceholder")}
-            className="rounded-md border border-border bg-[var(--toggle-bg)] px-2 py-1.5 text-xs text-text outline-none focus:border-accent"
+            className="rounded-md border border-border bg-[var(--toggle-bg)] px-2 py-1.5 text-sm text-text outline-none focus:border-accent"
           />
           <textarea
             value={expr}
             onChange={(e) => setExpr(e.target.value)}
             placeholder={t(locale, "report.picker.exprPlaceholder")}
             rows={2}
-            className="w-full resize-none rounded-md border border-border bg-[var(--toggle-bg)] p-2 font-mono text-xs text-text outline-none focus:border-accent"
+            className="w-full resize-none rounded-md border border-border bg-[var(--toggle-bg)] p-2 font-mono text-sm text-text outline-none focus:border-accent"
           />
           <div className="flex justify-end">
             <Button onClick={runCustom} disabled={running || expr.trim().length === 0}>
@@ -254,10 +254,10 @@ export default function ReportPage() {
 
         {primary && (
           <div className="mt-3 border-t border-border pt-3">
-            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted">
+            <p className="mb-1 text-[12px] uppercase tracking-wide text-muted">
               {t(locale, "report.picker.compareTitle")}
             </p>
-            <p className="mb-2 text-[11px] text-muted">
+            <p className="mb-2 text-[13px] text-muted">
               {t(locale, "report.picker.compareSubtitle")}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -276,7 +276,7 @@ export default function ReportPage() {
                       )
                     }
                     disabled={running}
-                    className="rounded-md bg-[var(--toggle-bg)] px-2 py-1 text-[10px] text-muted hover:text-text disabled:opacity-50"
+                    className="rounded-md bg-[var(--toggle-bg)] px-2 py-1 text-[12px] text-muted hover:text-text disabled:opacity-50"
                   >
                     + {example.name}
                   </button>
@@ -290,7 +290,7 @@ export default function ReportPage() {
                     type="button"
                     onClick={() => loadZooEntry(z, "compare")}
                     disabled={running}
-                    className="rounded-md border border-border px-2 py-1 text-[10px] text-muted hover:text-text disabled:opacity-50"
+                    className="rounded-md border border-border px-2 py-1 text-[12px] text-muted hover:text-text disabled:opacity-50"
                   >
                     + {z.name}
                   </button>
@@ -307,7 +307,7 @@ export default function ReportPage() {
 
       {error && (
         <Card padding="md" className="report-chrome">
-          <p className="text-sm text-red">
+          <p className="text-base text-red">
             {t(locale, "report.error")}: {error}
           </p>
         </Card>
@@ -316,10 +316,10 @@ export default function ReportPage() {
       {primary && compare && (
         <Card padding="md">
           <header className="mb-2">
-            <h2 className="text-sm font-semibold text-text">
+            <h2 className="text-base font-semibold text-text">
               {t(locale, "report.compare.title")}
             </h2>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted">
+            <p className="mt-1 text-[13px] leading-relaxed text-muted">
               {t(locale, "report.compare.subtitle")
                 .replace("{a}", primary.name)
                 .replace("{b}", compare.name)}
@@ -342,7 +342,7 @@ export default function ReportPage() {
           <BacktestKpiStrip result={primary.backtest} />
           <Card padding="md">
             <header className="mb-2">
-              <h3 className="text-sm font-semibold text-text">
+              <h3 className="text-base font-semibold text-text">
                 {t(locale, "backtest.equity.title")}
               </h3>
             </header>
@@ -360,7 +360,7 @@ export default function ReportPage() {
       {compare && (
         <article className="report-tearsheet flex flex-col gap-3">
           <Card padding="sm">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <p className="text-[13px] font-semibold uppercase tracking-wide text-muted">
               {t(locale, "report.compare.secondLabel")}
             </p>
           </Card>
@@ -391,12 +391,12 @@ function CoverCard({
     <Card padding="md">
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-text">
+          <h2 className="text-xl font-semibold text-text">
             {factorName || r.backtest.factor_name}
           </h2>
-          <code className="mt-1 block font-mono text-[11px] text-muted">{expr}</code>
+          <code className="mt-1 block font-mono text-[13px] text-muted">{expr}</code>
         </div>
-        <div className="text-right text-[10px] text-muted">
+        <div className="text-right text-[12px] text-muted">
           <div>{t(locale, "report.cover.universe")}: {r.today.universe_size} tickers</div>
           <div>{t(locale, "report.cover.window")}: {r.backtest.equity_curve[0]?.date} → {r.backtest.equity_curve[r.backtest.equity_curve.length - 1]?.date}</div>
           <div>{t(locale, "report.cover.benchmark")}: {r.backtest.benchmark_ticker}</div>
@@ -405,7 +405,7 @@ function CoverCard({
         </div>
       </div>
       {intuition && (
-        <p className="mt-3 border-t border-border pt-3 text-[11px] leading-relaxed text-text/90">
+        <p className="mt-3 border-t border-border pt-3 text-[13px] leading-relaxed text-text/90">
           {intuition}
         </p>
       )}

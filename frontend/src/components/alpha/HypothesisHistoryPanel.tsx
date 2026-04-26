@@ -55,7 +55,7 @@ function HistoryItem({
 
   return (
     <div
-      className={`group relative rounded-md border px-2.5 py-2 text-xs transition-colors ${
+      className={`group relative rounded-md border px-2.5 py-2 text-sm transition-colors ${
         isActive
           ? "border-accent bg-accent/5"
           : "border-border bg-[var(--toggle-bg)] hover:border-accent/50"
@@ -67,17 +67,17 @@ function HistoryItem({
         className="block w-full text-left"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-mono text-[11px] font-semibold text-text">
+          <span className="truncate font-mono text-[13px] font-semibold text-text">
             {entry.result.spec.name}
           </span>
-          <span className="shrink-0 text-[10px] text-muted">
+          <span className="shrink-0 text-[12px] text-muted">
             {formatTimeAgo(entry.timestamp, locale)}
           </span>
         </div>
-        <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-muted">
+        <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-muted">
           {hypothesis}
         </p>
-        <div className="mt-1.5 flex items-center gap-3 text-[10px]">
+        <div className="mt-1.5 flex items-center gap-3 text-[12px]">
           <span className={icColor}>IC {ic.toFixed(4)}</span>
           <span className="text-muted">
             {entry.result.smoke.rows_valid}
@@ -121,7 +121,7 @@ function HistoryItem({
       </div>
 
       {entry.isFavorite && (
-        <span className="absolute left-1.5 top-1.5 text-[10px] text-accent">
+        <span className="absolute left-1.5 top-1.5 text-[12px] text-accent">
           &#9733;
         </span>
       )}
@@ -149,14 +149,14 @@ export function HypothesisHistoryPanel({
       />
       <div className="space-y-3 p-3">
         {!hasAny && (
-          <p className="px-1 text-[11px] leading-relaxed text-muted">
+          <p className="px-1 text-[13px] leading-relaxed text-muted">
             {t(locale, "alpha.historyEmpty")}
           </p>
         )}
 
         {favorites.length > 0 && (
           <div className="space-y-1.5">
-            <h4 className="px-1 text-[10px] font-semibold uppercase tracking-wider text-accent">
+            <h4 className="px-1 text-[12px] font-semibold uppercase tracking-wider text-accent">
               {t(locale, "alpha.historyFavorites")} ({favorites.length})
             </h4>
             {favorites.map((entry) => (
@@ -175,7 +175,7 @@ export function HypothesisHistoryPanel({
 
         {recent.length > 0 && (
           <div className="space-y-1.5">
-            <h4 className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <h4 className="px-1 text-[12px] font-semibold uppercase tracking-wider text-muted">
               {t(locale, "alpha.historyRecent")} ({recent.length})
             </h4>
             {recent.map((entry) => (

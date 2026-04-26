@@ -56,8 +56,8 @@ export default function SignalPage() {
   return (
     <div className="flex flex-col gap-4 p-6">
       <header>
-        <h1 className="text-xl font-semibold text-text">{t(locale, "signal.title")}</h1>
-        <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-muted">
+        <h1 className="text-2xl font-semibold text-text">{t(locale, "signal.title")}</h1>
+        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
           {t(locale, "signal.subtitle")}
         </p>
       </header>
@@ -66,7 +66,7 @@ export default function SignalPage() {
 
       {error && (
         <Card padding="md">
-          <p className="text-sm text-red">{error}</p>
+          <p className="text-base text-red">{error}</p>
         </Card>
       )}
 

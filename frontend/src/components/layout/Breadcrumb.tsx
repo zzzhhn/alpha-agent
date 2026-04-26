@@ -23,13 +23,13 @@ export function Breadcrumb() {
 
   return (
     <nav
-      className="flex items-center gap-2 text-sm"
+      className="flex items-center gap-2 text-base"
       aria-label="Current page"
     >
       <span className="text-[var(--muted)]">
         {t(locale, "group.research" as Parameters<typeof t>[1])}
       </span>
-      <span className="text-[10px] text-[var(--muted)]" aria-hidden="true">
+      <span className="text-[12px] text-[var(--muted)]" aria-hidden="true">
         {"\u203A"}
       </span>
       <span className="font-medium text-[var(--text)]">

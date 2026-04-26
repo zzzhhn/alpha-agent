@@ -48,18 +48,18 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
     <Card padding="md">
       <header className="mb-2 flex items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-text">
+          <h2 className="text-base font-semibold text-text">
             {t(locale, "backtest.drawdown.title")}
           </h2>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+          <p className="mt-1 text-[13px] leading-relaxed text-muted">
             {t(locale, "backtest.drawdown.subtitle")}
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[10px] uppercase tracking-wide text-muted">
+          <div className="text-[12px] uppercase tracking-wide text-muted">
             {t(locale, "backtest.drawdown.worst")}
           </div>
-          <div className="font-mono text-base font-semibold text-red">
+          <div className="font-mono text-lg font-semibold text-red">
             {minDD.toFixed(2)}%
           </div>
         </div>

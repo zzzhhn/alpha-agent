@@ -19,10 +19,10 @@ export function LifecycleStub({ stageLabelKey, emoji }: Props) {
       <div aria-hidden="true" className="text-5xl">
         {emoji}
       </div>
-      <h1 className="text-2xl font-semibold text-[var(--text)]">
+      <h1 className="text-3xl font-semibold text-[var(--text)]">
         {t(locale, stageLabelKey)}
       </h1>
-      <p className="max-w-md text-sm text-[var(--muted)]">
+      <p className="max-w-md text-base text-[var(--muted)]">
         {t(locale, "lifecycle.stub.title")} · {t(locale, "lifecycle.stub.body")}
       </p>
     </main>
