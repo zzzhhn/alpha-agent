@@ -301,6 +301,7 @@ export interface FactorBacktestRequest {
   readonly mode?: BacktestMode;           // A7 v3: static (default) | walk_forward
   readonly wf_window_days?: number;       // A7 v3: 20–252, only used when walk_forward
   readonly wf_step_days?: number;         // A7 v3: 5–wf_window_days
+  readonly include_breakdown?: boolean;   // B4 v3: opt-in heavy daily_breakdown payload
 }
 
 export interface WalkForwardWindow {
@@ -313,6 +314,19 @@ export interface WalkForwardWindow {
   readonly max_drawdown: number;
   readonly turnover: number;
   readonly hit_rate: number;
+}
+
+export interface BasketEntry {
+  readonly ticker: string;
+  readonly weight: number;
+}
+
+export interface DailyBreakdown {
+  readonly date: string;
+  readonly long_basket: readonly BasketEntry[];
+  readonly short_basket: readonly BasketEntry[];
+  readonly daily_return: number;
+  readonly daily_ic: number;
 }
 
 export interface FactorSplitMetrics {
@@ -344,6 +358,7 @@ export interface FactorBacktestResponse {
   readonly direction?: BacktestDirection;
   readonly monthly_returns?: readonly MonthlyReturn[];   // P4.2
   readonly walk_forward?: readonly WalkForwardWindow[] | null;   // A7 v3
+  readonly daily_breakdown?: readonly DailyBreakdown[] | null;   // B4 v3
 }
 
 export interface HypothesisHistoryEntry {

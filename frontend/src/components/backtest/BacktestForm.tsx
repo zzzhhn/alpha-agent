@@ -21,6 +21,7 @@ export interface BacktestFormParams {
   readonly mode: BacktestMode;
   readonly wfWindowDays: number;    // 20-252
   readonly wfStepDays: number;      // 5-wfWindowDays
+  readonly includeBreakdown: boolean;
 }
 
 interface BacktestFormProps {
@@ -52,6 +53,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
   const [mode, setMode] = useState<BacktestMode>("static");
   const [wfWindowDays, setWfWindowDays] = useState(60);
   const [wfStepDays, setWfStepDays] = useState(20);
+  const [includeBreakdown, setIncludeBreakdown] = useState(false);
 
   // P6.D — when /alpha hands off via sessionStorage and the page passes
   // autoRun, fire the run once on first mount so the user lands on a
@@ -70,6 +72,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         mode: "static",
         wfWindowDays: 60,
         wfStepDays: 20,
+        includeBreakdown: false,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,6 +96,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
       // Clamp wfStepDays so it never exceeds wfWindowDays (backend validates)
       wfWindowDays,
       wfStepDays: Math.min(wfStepDays, wfWindowDays),
+      includeBreakdown,
     });
   }
 
@@ -195,6 +199,19 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
           />
         </div>
       )}
+
+      <label className="mt-3 flex items-center gap-2 text-[13px] text-muted">
+        <input
+          type="checkbox"
+          checked={includeBreakdown}
+          onChange={(e) => setIncludeBreakdown(e.target.checked)}
+          className="cursor-pointer"
+        />
+        <span>{t(locale, "backtest.form.includeBreakdown")}</span>
+        <span className="text-[12px] text-muted">
+          {t(locale, "backtest.form.includeBreakdownHint")}
+        </span>
+      </label>
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <details className="flex-1">

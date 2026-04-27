@@ -70,6 +70,7 @@ export default function BacktestPage() {
       mode: p.mode,
       wf_window_days: p.wfWindowDays,
       wf_step_days: p.wfStepDays,
+      include_breakdown: p.includeBreakdown,
     });
     if (res.error || !res.data) {
       setError(res.error ?? "unknown error");
@@ -145,9 +146,118 @@ export default function BacktestPage() {
           {result.walk_forward && result.walk_forward.length > 0 && (
             <WalkForwardTable windows={result.walk_forward} />
           )}
+          {result.daily_breakdown && result.daily_breakdown.length > 0 && (
+            <DailyBreakdownPanel breakdown={result.daily_breakdown} factorName={result.factor_name} />
+          )}
         </>
       )}
     </div>
+  );
+}
+
+function DailyBreakdownPanel({
+  breakdown, factorName,
+}: {
+  readonly breakdown: NonNullable<FactorBacktestResponse["daily_breakdown"]>;
+  readonly factorName: string;
+}) {
+  const { locale } = useLocale();
+
+  // Filter out warm-up days that have no positions (lookback hasn't filled yet)
+  const populated = breakdown.filter(
+    (d) => d.long_basket.length > 0 || d.short_basket.length > 0,
+  );
+  const positiveIc = populated.filter((d) => d.daily_ic > 0).length;
+  const hitRate = populated.length > 0 ? positiveIc / populated.length : 0;
+
+  function downloadFlat() {
+    // Flatten: one row per (date, side, ticker, weight) so the CSV is
+    // load-into-Excel-pivot-friendly. daily_return / daily_ic repeat per row.
+    const rows: string[][] = [];
+    rows.push(["date", "side", "ticker", "weight", "daily_return", "daily_ic"]);
+    for (const d of breakdown) {
+      for (const e of d.long_basket) {
+        rows.push([d.date, "long", e.ticker, e.weight.toFixed(6), d.daily_return.toFixed(6), d.daily_ic.toFixed(6)]);
+      }
+      for (const e of d.short_basket) {
+        rows.push([d.date, "short", e.ticker, e.weight.toFixed(6), d.daily_return.toFixed(6), d.daily_ic.toFixed(6)]);
+      }
+    }
+    const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${factorName}_daily_breakdown.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <Card padding="md">
+      <header className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-text">
+            {t(locale, "backtest.breakdown.title")}
+          </h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-muted">
+            {t(locale, "backtest.breakdown.subtitle")
+              .replace("{n}", String(populated.length))
+              .replace("{hit}", `${(hitRate * 100).toFixed(0)}%`)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={downloadFlat}
+          className="rounded-md border border-border bg-[var(--toggle-bg)] px-3 py-1 text-[13px] text-text hover:bg-accent/15 hover:text-accent"
+        >
+          {t(locale, "backtest.breakdown.download")}
+        </button>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead className="bg-[var(--toggle-bg)]">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "backtest.breakdown.colDate")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.breakdown.colNLong")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.breakdown.colNShort")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.breakdown.colReturn")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.breakdown.colIc")}</th>
+              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "backtest.breakdown.colTopLong")}</th>
+              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "backtest.breakdown.colTopShort")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {populated.slice(-30).reverse().map((d) => (
+              <tr key={d.date} className="border-t border-border">
+                <td className="px-2 py-1.5 font-mono text-text">{d.date}</td>
+                <td className="px-2 py-1.5 text-right font-mono text-muted">{d.long_basket.length}</td>
+                <td className="px-2 py-1.5 text-right font-mono text-muted">{d.short_basket.length}</td>
+                <td className="px-2 py-1.5 text-right font-mono">
+                  <span className={d.daily_return >= 0 ? "text-green" : "text-red"}>
+                    {(d.daily_return * 100).toFixed(2)}%
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 text-right font-mono">
+                  <span className={d.daily_ic >= 0 ? "text-green" : "text-red"}>
+                    {d.daily_ic.toFixed(3)}
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 font-mono text-[12px] text-muted">
+                  {d.long_basket.slice(0, 3).map((e) => e.ticker).join(", ")}
+                </td>
+                <td className="px-2 py-1.5 font-mono text-[12px] text-muted">
+                  {d.short_basket.slice(0, 3).map((e) => e.ticker).join(", ")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[12px] text-muted">
+        {t(locale, "backtest.breakdown.tableHint")}
+      </p>
+    </Card>
   );
 }
 

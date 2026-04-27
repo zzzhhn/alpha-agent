@@ -308,6 +308,9 @@ class FactorBacktestRequest(BaseModel):
         description="Length of each rolling window in trading days.")
     wf_step_days: int = Field(default=20, ge=5, le=252,
         description="Days between consecutive window starts.")
+    # B4 (v3) — per-day basket + IC drill-down. Heavy payload, opt-in.
+    include_breakdown: bool = Field(default=False,
+        description="Return daily_breakdown[] with per-day long/short basket + IC.")
 
 
 class _SplitMetricsModel(BaseModel):
@@ -346,6 +349,19 @@ class _WalkForwardWindow(BaseModel):
     hit_rate: float
 
 
+class _BasketEntry(BaseModel):
+    ticker: str
+    weight: float
+
+
+class _DailyBreakdown(BaseModel):
+    date: str
+    long_basket: list[_BasketEntry]
+    short_basket: list[_BasketEntry]
+    daily_return: float
+    daily_ic: float
+
+
 class FactorBacktestResponse(BaseModel):
     equity_curve: list[_CurvePoint]
     benchmark_curve: list[_CurvePoint]
@@ -360,6 +376,8 @@ class FactorBacktestResponse(BaseModel):
     monthly_returns: list[_MonthlyReturn] = Field(default_factory=list)
     # A7 (v3): per-window metrics, only populated when mode="walk_forward".
     walk_forward: list[_WalkForwardWindow] | None = None
+    # B4 (v3): per-day basket + IC, only populated when include_breakdown=true.
+    daily_breakdown: list[_DailyBreakdown] | None = None
 
 
 @router.post(
@@ -403,6 +421,7 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             mode=body.mode,
             wf_window_days=body.wf_window_days,
             wf_step_days=body.wf_step_days,
+            include_breakdown=body.include_breakdown,
         )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
@@ -448,6 +467,18 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         else None
     )
 
+    daily_breakdown = (
+        [_DailyBreakdown(
+            date=d["date"],
+            long_basket=[_BasketEntry(**e) for e in d["long_basket"]],
+            short_basket=[_BasketEntry(**e) for e in d["short_basket"]],
+            daily_return=d["daily_return"],
+            daily_ic=d["daily_ic"],
+        ) for d in result.daily_breakdown]
+        if result.daily_breakdown is not None
+        else None
+    )
+
     return FactorBacktestResponse(
         equity_curve=[_CurvePoint(**p) for p in result.equity_curve],
         benchmark_curve=[_CurvePoint(**p) for p in result.benchmark_curve],
@@ -460,4 +491,5 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         direction=result.direction,
         monthly_returns=monthly,
         walk_forward=walk_forward,
+        daily_breakdown=daily_breakdown,
     )

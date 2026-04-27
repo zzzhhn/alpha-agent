@@ -143,6 +143,9 @@ class FactorBacktestResult:
     # `wf_window_days` length advancing `wf_step_days` at a time. Populated
     # only when mode="walk_forward"; None for static mode (default).
     walk_forward: list[dict] | None = None
+    # B4 (v3): per-day {long_basket, short_basket, daily_return, daily_ic}.
+    # Heavy payload (~30 entries × T days), only built when include_breakdown=True.
+    daily_breakdown: list[dict] | None = None
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
@@ -331,6 +334,7 @@ def run_factor_backtest(
     mode: Mode = "static",
     wf_window_days: int = 60,
     wf_step_days: int = 20,
+    include_breakdown: bool = False,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -462,6 +466,32 @@ def run_factor_backtest(
     # (year, month) so the heatmap renders left-to-right naturally.
     monthly_returns = _compute_monthly_returns(panel.dates, daily_ret)
 
+    # B4 (v3): per-day long/short basket + daily return + daily IC for the
+    # "what did the strategy actually trade" drill-down. Heavy payload, opt-in.
+    daily_breakdown: list[dict] | None = None
+    if include_breakdown:
+        daily_breakdown = []
+        for ti in range(T):
+            row_w = weights[ti]
+            longs = [
+                {"ticker": panel.tickers[i], "weight": float(row_w[i])}
+                for i in range(N) if row_w[i] > 0
+            ]
+            shorts = [
+                {"ticker": panel.tickers[i], "weight": float(row_w[i])}
+                for i in range(N) if row_w[i] < 0
+            ]
+            longs.sort(key=lambda r: -r["weight"])
+            shorts.sort(key=lambda r: r["weight"])
+            d_ic = _spearman_ic(factor[ti], fwd_returns[ti]) if ti < T else 0.0
+            daily_breakdown.append({
+                "date": str(panel.dates[ti]),
+                "long_basket": longs,
+                "short_basket": shorts,
+                "daily_return": float(daily_ret[ti]) if not np.isnan(daily_ret[ti]) else 0.0,
+                "daily_ic": float(d_ic) if not np.isnan(d_ic) else 0.0,
+            })
+
     # A7 (v3): rolling per-window metrics. Static mode skips this so payload
     # stays small for users who don't care about IS/OOS decay analysis.
     walk_forward: list[dict] | None = None
@@ -496,6 +526,7 @@ def run_factor_backtest(
         direction=direction,
         monthly_returns=monthly_returns,
         walk_forward=walk_forward,
+        daily_breakdown=daily_breakdown,
     )
 
 
