@@ -151,9 +151,14 @@ def _apply_universe_filter(
         keep &= np.array([tk not in excl for tk in panel.tickers], dtype=bool)
 
     if flt.sectors and panel.sector is not None:
-        wanted = set(flt.sectors)
+        # Case-insensitive match to forgive "tech" vs "Technology" typos. The
+        # original strings live in panel.sector verbatim, so lowercase both sides.
+        wanted = {s.strip().lower() for s in flt.sectors}
         sector_row = panel.sector[as_of_index]
-        keep &= np.array([s in wanted for s in sector_row], dtype=bool)
+        keep &= np.array(
+            [str(s).strip().lower() in wanted for s in sector_row],
+            dtype=bool,
+        )
 
     if (flt.min_cap is not None or flt.max_cap is not None) and panel.cap is not None:
         cap_row = panel.cap[as_of_index]
@@ -203,7 +208,29 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
     as_of_idx = _resolve_as_of_index(panel.dates, body.as_of_date)
     keep_mask = _apply_universe_filter(panel, as_of_idx, body.universe_filter)
     if not keep_mask.any():
-        raise HTTPException(422, "universe_filter eliminated all tickers")
+        # Self-diagnosing 422: tell the client what the panel actually contains
+        # so they can correct the request without a second round-trip. Most
+        # common cause is a sector name typo (case insensitive matching is
+        # already done; this catches user typing a sector that simply doesn't
+        # exist in the panel).
+        diag: dict[str, object] = {}
+        if body.universe_filter.sectors and panel.sector is not None:
+            available = sorted({str(s) for s in panel.sector[as_of_idx]})
+            diag["available_sectors"] = available
+            diag["requested_sectors"] = list(body.universe_filter.sectors)
+        if (
+            (body.universe_filter.min_cap is not None or body.universe_filter.max_cap is not None)
+            and panel.cap is not None
+        ):
+            cap_row = panel.cap[as_of_idx]
+            cap_clean = cap_row[~np.isnan(cap_row)]
+            if cap_clean.size > 0:
+                diag["panel_cap_min"] = float(cap_clean.min())
+                diag["panel_cap_max"] = float(cap_clean.max())
+        raise HTTPException(
+            422,
+            f"universe_filter eliminated all tickers · diagnostic: {diag}",
+        )
 
     # 1-day forward returns, used for IC weighting
     fwd_returns = np.full_like(panel.close, np.nan)
