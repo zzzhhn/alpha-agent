@@ -337,6 +337,21 @@ export function fetchOperandCatalog(opts?: CacheOpts) {
   return _catalogCache;
 }
 
+/** B1: Fetch operands catalog augmented with operator signatures + source
+ *  snippets. NOT cached — only the Methodology page calls this and the
+ *  payload is heavy. */
+export function fetchOperandCatalogWithSignatures() {
+  return fetchJson<OperandCatalogResponse>("/data/operands?include_signature=true");
+}
+
+/** B1: Canonical sector strings present in the active panel. Used by the
+ *  Methodology Data tab and Screener autocomplete. */
+export function fetchSectors() {
+  return fetchJson<{ sectors: readonly string[]; panel_has_sector: boolean }>(
+    "/data/sectors",
+  );
+}
+
 export function fetchCoverage(
   universeId = "SP500_subset",
   opts?: CacheOpts,

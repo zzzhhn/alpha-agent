@@ -147,6 +147,7 @@ def list_universes() -> UniverseListResponse:
 @router.get("/operands", response_model=OperandCatalogResponse)
 def list_operands(
     tier: Literal["all", "available", "T1", "T2", "T3"] = Query(default="all"),
+    include_signature: bool = Query(default=False),
 ) -> OperandCatalogResponse:
     """Return the augmented catalog of operators and operands.
 
@@ -154,6 +155,11 @@ def list_operands(
       - "all":       everything (default — UI catalog page)
       - "available": only items with implemented=true (LLM prompt feed)
       - "T1"/"T2"/"T3": exact tier match
+
+    `include_signature=true` enriches each operator entry with `signature` and
+    `source_snippet` fields pulled from scan/vectorized.py via inspect. Used
+    by the Methodology page (B1) to render the actual NumPy implementation
+    body rather than just the doc string.
     """
     operators, operands = _load_catalog()
 
@@ -163,6 +169,9 @@ def list_operands(
     elif tier in {"T1", "T2", "T3"}:
         operators = [op for op in operators if op.get("tier") == tier]
         operands = [f for f in operands if f.get("tier") == tier]
+
+    if include_signature:
+        operators = _attach_signatures(operators)
 
     def _summarize(items: list[dict]) -> dict[str, int]:
         s = {"T1": 0, "T2": 0, "T3": 0, "total": len(items)}
@@ -182,6 +191,66 @@ def list_operands(
             "operands": _summarize(full_fields),
         },
     )
+
+
+def _attach_signatures(operators: list[dict]) -> list[dict]:
+    """Pull `signature` and `source_snippet` from scan/vectorized.py for each op.
+
+    Looks up each operator name in `OPS` (the registry); if found, uses
+    inspect.signature() to get the call form and inspect.getsource() to grab
+    the first ~12 lines of the function body. Skips silently for any operator
+    not in OPS — the catalog has T3 placeholders that aren't implemented.
+    """
+    import inspect
+
+    from alpha_agent.scan.vectorized import OPS
+
+    enriched: list[dict] = []
+    for op in operators:
+        name = op.get("name", "")
+        fn = OPS.get(name)
+        if fn is None:
+            enriched.append(op)
+            continue
+        try:
+            sig = str(inspect.signature(fn))
+        except (ValueError, TypeError):
+            sig = ""
+        try:
+            full = inspect.getsource(fn).split("\n")
+            # Trim docstring if it's a multi-line one — keep the first 12 lines
+            # but stop early if we hit `"""` close after seeing `"""` open.
+            snippet = "\n".join(full[:14])
+        except (OSError, TypeError):
+            snippet = ""
+        enriched.append({
+            **op,
+            "signature": f"{name}{sig}" if sig else name,
+            "source_snippet": snippet,
+        })
+    return enriched
+
+
+@router.get("/sectors")
+def list_sectors() -> dict:
+    """Return the canonical list of sector strings present in the active panel.
+
+    Used by:
+      * the Methodology page Data tab to show "what sectors does the panel cover"
+      * the Screener UniverseFilter UI to populate an autocomplete (so users
+        don't type "Tech" and hit a 422)
+    """
+    try:
+        from alpha_agent.factor_engine.factor_backtest import _load_panel
+    except ImportError as exc:
+        raise HTTPException(503, f"factor_engine import failed: {exc}") from exc
+
+    panel = _load_panel()
+    if panel.sector is None:
+        return {"sectors": [], "panel_has_sector": False}
+
+    sectors = sorted({str(s) for s in panel.sector[-1]})
+    return {"sectors": sectors, "panel_has_sector": True}
 
 
 @router.get("/coverage", response_model=CoverageResponse)

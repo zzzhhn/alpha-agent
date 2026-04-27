@@ -35,6 +35,7 @@ const NAV_GROUPS: readonly SidebarGroup[] = [
       { id: "report", labelKey: "lifecycle.report", href: "/report", emoji: "📑" },
       { id: "zoo", labelKey: "lifecycle.zoo", href: "/factors", emoji: "🦄" },
       { id: "screener", labelKey: "lifecycle.screener", href: "/screener", emoji: "🎯" },
+      { id: "methodology", labelKey: "lifecycle.methodology", href: "/methodology", emoji: "📖" },
     ],
   },
 ];
