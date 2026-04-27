@@ -67,6 +67,9 @@ export default function BacktestPage() {
       top_pct: p.topPct,
       bottom_pct: p.bottomPct,
       transaction_cost_bps: p.transactionCostBps,
+      mode: p.mode,
+      wf_window_days: p.wfWindowDays,
+      wf_step_days: p.wfStepDays,
     });
     if (res.error || !res.data) {
       setError(res.error ?? "unknown error");
@@ -139,8 +142,98 @@ export default function BacktestPage() {
           {result.monthly_returns && result.monthly_returns.length > 0 && (
             <MonthlyReturnsHeatmap data={result.monthly_returns} />
           )}
+          {result.walk_forward && result.walk_forward.length > 0 && (
+            <WalkForwardTable windows={result.walk_forward} />
+          )}
         </>
       )}
     </div>
+  );
+}
+
+function WalkForwardTable({
+  windows,
+}: {
+  readonly windows: NonNullable<FactorBacktestResponse["walk_forward"]>;
+}) {
+  const { locale } = useLocale();
+  const sharpes = windows.map((w) => w.sharpe);
+  const min = Math.min(...sharpes);
+  const max = Math.max(...sharpes);
+
+  function spark(value: number): { width: string; color: string } {
+    const range = max - min || 1;
+    const pct = ((value - min) / range) * 100;
+    const color = value > 0 ? "#22c55e" : value < 0 ? "#ef4444" : "#9ca3af";
+    return { width: `${Math.max(4, pct)}%`, color };
+  }
+
+  return (
+    <Card padding="md">
+      <header className="mb-3">
+        <h2 className="text-base font-semibold text-text">
+          {t(locale, "backtest.wf.title")}
+        </h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">
+          {t(locale, "backtest.wf.subtitle")}
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead className="bg-[var(--toggle-bg)]">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "backtest.wf.colWindow")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.wf.colSharpe")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.wf.colIc")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.wf.colReturn")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.wf.colMdd")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.wf.colTurnover")}</th>
+              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "backtest.wf.colHitRate")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {windows.map((w) => {
+              const bar = spark(w.sharpe);
+              return (
+                <tr key={`${w.window_start}-${w.window_end}`} className="border-t border-border">
+                  <td className="px-2 py-1.5 font-mono text-text">
+                    {w.window_start} → {w.window_end}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="h-2 w-12 rounded bg-[var(--toggle-bg)]">
+                        <div className="h-full rounded" style={{ width: bar.width, background: bar.color }} />
+                      </div>
+                      <span className={w.sharpe >= 0 ? "text-text" : "text-red"}>
+                        {w.sharpe.toFixed(2)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <span className={w.ic_spearman >= 0 ? "text-green" : "text-red"}>
+                      {w.ic_spearman.toFixed(3)}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <span className={w.total_return >= 0 ? "text-green" : "text-red"}>
+                      {(w.total_return * 100).toFixed(1)}%
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono text-red">
+                    {(w.max_drawdown * 100).toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono text-muted">
+                    {w.turnover.toFixed(2)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono text-muted">
+                    {(w.hit_rate * 100).toFixed(0)}%
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

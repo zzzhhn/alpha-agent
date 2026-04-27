@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { addToZoo, isInZoo } from "@/lib/factor-zoo";
+import { addToZoo, isInZoo, type ZooDirection } from "@/lib/factor-zoo";
 
 interface ZooSaveButtonProps {
   readonly name: string;
   readonly expression: string;
   readonly hypothesis?: string;
   readonly intuition?: string;
+  readonly direction?: ZooDirection;
   readonly headlineMetrics?: {
     readonly testSharpe?: number;
     readonly totalReturn?: number;
@@ -20,7 +21,7 @@ interface ZooSaveButtonProps {
 }
 
 export function ZooSaveButton({
-  name, expression, hypothesis, intuition, headlineMetrics, disabled,
+  name, expression, hypothesis, intuition, direction, headlineMetrics, disabled,
 }: ZooSaveButtonProps) {
   const { locale } = useLocale();
   const [saved, setSaved] = useState(false);
@@ -40,6 +41,7 @@ export function ZooSaveButton({
       expression: expression.trim(),
       hypothesis: hypothesis ?? "",
       intuition,
+      direction,
       headlineMetrics,
     });
     setSaved(true);

@@ -49,27 +49,6 @@ export interface GatewayStatus {
   readonly timestamp: string;
 }
 
-/* ═══════════════════ Audit Decision ═══════════════════ */
-
-export interface AuditDecision {
-  readonly id: string;
-  readonly timestamp: string;
-  readonly ticker: string;
-  readonly direction: "LONG" | "SHORT" | "NEUTRAL";
-  readonly confidence: number;
-  readonly reasoning: string;
-  readonly reasoning_chain: readonly string[];
-  readonly accepted: boolean;
-}
-
-export interface AuditSummary {
-  readonly total_decisions: number;
-  readonly acceptance_rate: number;
-  readonly avg_confidence: number;
-  readonly last_decision_time: string;
-  readonly decisions: readonly AuditDecision[];
-}
-
 /* ═══════════════════ System Health ═══════════════════ */
 
 export interface SystemConfig {
@@ -298,7 +277,19 @@ export interface HypothesisTranslateResponse {
   readonly llm_raw: string;
 }
 
+/* ═══════════════════ B3: AST visualization ═══════════════════ */
+
+export type AstNode =
+  | { readonly type: "operator"; readonly name: string; readonly args: readonly AstNode[] }
+  | { readonly type: "operand"; readonly name: string }
+  | { readonly type: "literal"; readonly value: number };
+
+export interface ExplainAstResponse {
+  readonly tree: AstNode;
+}
+
 export type BacktestDirection = "long_short" | "long_only" | "short_only";
+export type BacktestMode = "static" | "walk_forward";
 
 export interface FactorBacktestRequest {
   readonly spec: FactorSpec;
@@ -307,6 +298,21 @@ export interface FactorBacktestRequest {
   readonly top_pct?: number;              // P4.1: 0.01–0.50, fraction to long
   readonly bottom_pct?: number;           // P4.1: 0.01–0.50, fraction to short
   readonly transaction_cost_bps?: number; // P4.1: 0–200 bps round-trip cost
+  readonly mode?: BacktestMode;           // A7 v3: static (default) | walk_forward
+  readonly wf_window_days?: number;       // A7 v3: 20–252, only used when walk_forward
+  readonly wf_step_days?: number;         // A7 v3: 5–wf_window_days
+}
+
+export interface WalkForwardWindow {
+  readonly window_start: string;
+  readonly window_end: string;
+  readonly sharpe: number;
+  readonly total_return: number;
+  readonly ic_spearman: number;
+  readonly n_days: number;
+  readonly max_drawdown: number;
+  readonly turnover: number;
+  readonly hit_rate: number;
 }
 
 export interface FactorSplitMetrics {
@@ -337,6 +343,7 @@ export interface FactorBacktestResponse {
   readonly benchmark_ticker: string;
   readonly direction?: BacktestDirection;
   readonly monthly_returns?: readonly MonthlyReturn[];   // P4.2
+  readonly walk_forward?: readonly WalkForwardWindow[] | null;   // A7 v3
 }
 
 export interface HypothesisHistoryEntry {
@@ -504,6 +511,67 @@ export interface ExposureResponse {
   readonly as_of: string;
   readonly sector_exposure: readonly SectorExposure[];
   readonly cap_quintile: readonly CapBucket[];
+}
+
+/* ═══════════════════ Screener (D1) ═══════════════════ */
+
+export type CombineMethod = "equal_z" | "ic_weighted" | "user_weighted";
+
+export interface ScreenerFactorInput {
+  readonly spec: SignalSpec;            // reuse SignalSpec — same FactorSpec shape
+  readonly direction: BacktestDirection;
+  readonly weight?: number;
+}
+
+export interface ScreenerUniverseFilter {
+  readonly sectors?: readonly string[];
+  readonly min_cap?: number;
+  readonly max_cap?: number;
+  readonly exclude_tickers?: readonly string[];
+}
+
+export interface ScreenerRequest {
+  readonly factors: readonly ScreenerFactorInput[];
+  readonly universe_filter?: ScreenerUniverseFilter;
+  readonly lookback_days?: number;
+  readonly top_n?: number;
+  readonly combine_method?: CombineMethod;
+  readonly as_of_date?: string | null;
+}
+
+export interface PerFactorScore {
+  readonly factor_idx: number;
+  readonly raw: number;
+  readonly z: number;
+  readonly contribution: number;
+}
+
+export interface ScreenerRecommendation {
+  readonly ticker: string;
+  readonly composite_score: number;
+  readonly rank: number;
+  readonly sector?: string | null;
+  readonly cap?: number | null;
+  readonly per_factor_scores: readonly PerFactorScore[];
+}
+
+export interface ScreenerFactorDiagnostic {
+  readonly factor_idx: number;
+  readonly expression: string;
+  readonly in_window_ic: number;
+  readonly used_weight: number;
+  readonly n_eligible: number;
+}
+
+export interface ScreenerResponse {
+  readonly recommendations: readonly ScreenerRecommendation[];
+  readonly factor_diagnostics: readonly ScreenerFactorDiagnostic[];
+  readonly metadata: {
+    readonly as_of_date: string;
+    readonly n_eligible_tickers: number;
+    readonly method: CombineMethod;
+    readonly lookback_days: number;
+  };
 }
 
 /* ═══════════════════ API Response Envelope ═══════════════════ */

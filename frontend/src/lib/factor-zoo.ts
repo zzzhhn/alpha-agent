@@ -12,18 +12,29 @@
  * browser, and silently no-ops on the server.
  */
 
+/** Direction the factor was last backtested under. Defaults to long_short
+ * for legacy entries that predate this field. Read consumers should always
+ * fallback via {@link readDirection} below. */
+export type ZooDirection = "long_short" | "long_only" | "short_only";
+
 export interface ZooEntry {
   readonly id: string;
   readonly name: string;
   readonly expression: string;
   readonly hypothesis: string;
   readonly intuition?: string;
+  readonly direction?: ZooDirection;
   readonly savedAt: string;          // ISO 8601
   readonly headlineMetrics?: {
     readonly testSharpe?: number;
     readonly totalReturn?: number;   // full-period, decimal
     readonly testIc?: number;
   };
+}
+
+/** Resolve a Zoo entry's direction with the legacy default. */
+export function readDirection(entry: ZooEntry): ZooDirection {
+  return entry.direction ?? "long_short";
 }
 
 const STORAGE_KEY = "alphacore.factor.zoo.v1";

@@ -102,6 +102,15 @@ except Exception as e:
     print(f"✗ signal routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
 
+try:
+    from alpha_agent.api.routes.screener import router as screener_router
+    app.include_router(screener_router)
+    print(f"✓ screener routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    print(f"✗ screener routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+
 
 @app.get("/api/health")
 async def health() -> dict:

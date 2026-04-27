@@ -14,7 +14,6 @@ import type {
   PortfolioRisk,
   GatewayStatus,
   GateRule,
-  AuditSummary,
   SystemConfig,
   HypothesisTranslateRequest,
   HypothesisTranslateResponse,
@@ -27,6 +26,9 @@ import type {
   SignalTodayResponse,
   ICTimeseriesResponse,
   ExposureResponse,
+  ScreenerRequest,
+  ScreenerResponse,
+  ExplainAstResponse,
 } from "./types";
 
 const BASE_URL =
@@ -219,12 +221,6 @@ export function getPendingOrders() {
   return fetchJson<readonly Order[]>("/orders/pending");
 }
 
-export function getOrderHistory(limit = 50) {
-  return fetchJson<readonly Order[]>(
-    `/orders/history?limit=${limit}`
-  );
-}
-
 /* ═══════════════════ Gateway ═══════════════════ */
 
 export function getGatewayStatus() {
@@ -233,14 +229,6 @@ export function getGatewayStatus() {
 
 export function getGatewayRules() {
   return fetchJson<readonly GateRule[]>("/gateway/rules");
-}
-
-/* ═══════════════════ Audit Decisions ═══════════════════ */
-
-export function getAuditDecisions(limit = 50) {
-  return fetchJson<AuditSummary>(
-    `/audit/decisions?limit=${limit}`
-  );
 }
 
 /* ═══════════════════ System ═══════════════════ */
@@ -269,6 +257,24 @@ export function runFactorBacktest(params: FactorBacktestRequest) {
   return fetchJson<FactorBacktestResponse>("/factor/backtest", {
     method: "POST",
     body: JSON.stringify(params),
+  });
+}
+
+/* ── D1: Multi-factor Screener ── */
+
+export function runScreener(params: ScreenerRequest) {
+  return fetchJson<ScreenerResponse>("/screener/run", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+/* ── B3: AST visualization ── */
+
+export function explainAst(expression: string) {
+  return fetchJson<ExplainAstResponse>("/factor/explain_ast", {
+    method: "POST",
+    body: JSON.stringify({ expression }),
   });
 }
 

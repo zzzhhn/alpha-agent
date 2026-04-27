@@ -53,6 +53,19 @@ export default function FactorsPage() {
     router.push("/report");
   }
 
+  function loadIntoScreener(e: ZooEntry) {
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(
+        "alphacore.screener.prefill.v1",
+        JSON.stringify({ ids: [e.id] }),
+      );
+    } catch {
+      /* ignore */
+    }
+    router.push("/screener");
+  }
+
   function deleteEntry(id: string) {
     removeFromZoo(id);
     refresh();
@@ -122,6 +135,9 @@ export default function FactorsPage() {
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => loadIntoReport(e)}>
                           {t(locale, "zoo.actLoadReport")}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => loadIntoScreener(e)}>
+                          {t(locale, "zoo.actLoadScreener")}
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => deleteEntry(e.id)}>
                           {t(locale, "zoo.actDelete")}

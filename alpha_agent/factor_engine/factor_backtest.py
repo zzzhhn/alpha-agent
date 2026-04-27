@@ -27,8 +27,8 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from alpha_agent.core.exceptions import DataIntegrityError
 from alpha_agent.core.types import FactorSpec
-from alpha_agent.scan.vectorized import evaluate as eval_factor
 
 INITIAL_CAPITAL: float = 100_000.0
 LONG_PCT: float = 0.30
@@ -65,9 +65,33 @@ _V2_FUNDAMENTAL_FIELDS: tuple[str, ...] = (
     "cash_and_equivalents", "retained_earnings", "goodwill",
     "operating_cash_flow", "investing_cash_flow",
 )
-# Multi-window dollar-volume averages computed inline at backtest time so
-# they always reflect the active panel rather than a baked snapshot.
-_ADV_WINDOWS: tuple[int, ...] = (5, 10, 20, 60, 120, 180)
+# Multi-window dollar-volume averages live in kernel.py (single source of
+# truth shared with the screener endpoint).
+
+
+def _assert_trading_days(dates: np.ndarray, calendar_name: str = "XNYS") -> None:
+    """Verify every date in `dates` is a session of the named exchange calendar.
+
+    The benchmark is SPY → NYSE (XNYS). Non-NYSE panels (e.g. CSI300) should
+    pass a different calendar name. Mismatch raises DataIntegrityError so a
+    silently corrupt panel never reaches the IC computation, where a Saturday
+    row would just NaN-out and pollute the per-day metrics.
+    """
+    import exchange_calendars as xcals
+
+    cal = xcals.get_calendar(calendar_name)
+    panel_idx = pd.DatetimeIndex(pd.to_datetime(dates))
+    sessions = cal.sessions_in_range(panel_idx[0], panel_idx[-1])
+    sessions_naive = sessions.tz_localize(None) if sessions.tz is not None else sessions
+    panel_naive = panel_idx.tz_localize(None) if panel_idx.tz is not None else panel_idx
+    bad = panel_naive.difference(sessions_naive)
+    if len(bad) > 0:
+        sample = ", ".join(str(d.date()) for d in bad[:5])
+        raise DataIntegrityError(
+            f"panel contains {len(bad)} non-{calendar_name} session(s) "
+            f"(e.g. {sample}); regenerate parquet via "
+            f"scripts/fetch_factor_universe.py or pass the correct calendar."
+        )
 
 
 @dataclass(frozen=True)
@@ -115,6 +139,10 @@ class FactorBacktestResult:
     # bucket {year, month (1-12), return} computed by prod(1+r)-1 over the
     # month's daily strategy returns (already includes transaction cost).
     monthly_returns: list[dict] | None = None
+    # A7 (v3 walk-forward): per-window SplitMetrics over rolling slices of
+    # `wf_window_days` length advancing `wf_step_days` at a time. Populated
+    # only when mode="walk_forward"; None for static mode (default).
+    walk_forward: list[dict] | None = None
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
@@ -137,6 +165,12 @@ def _load_panel() -> _Panel:
     dates_series = (
         df[df["ticker"] == BENCHMARK_TICKER].sort_values("date")["date"].to_numpy()
     )
+
+    # Guard against silently malformed parquets: every date must be a real
+    # NYSE session, otherwise per-day IC and turnover would NaN-out without
+    # any visible error. This protects against weekend/holiday rows leaking
+    # in from yfinance edge cases.
+    _assert_trading_days(dates_series, calendar_name="XNYS")
 
     def pivot(field: str) -> np.ndarray:
         wide = (
@@ -283,6 +317,10 @@ def _split_metrics(
     )
 
 
+Mode = Literal["static", "walk_forward"]
+SUPPORTED_MODES: frozenset[str] = frozenset({"static", "walk_forward"})
+
+
 def run_factor_backtest(
     spec: FactorSpec,
     train_ratio: float = DEFAULT_TRAIN_RATIO,
@@ -290,6 +328,9 @@ def run_factor_backtest(
     top_pct: float = LONG_PCT,
     bottom_pct: float = SHORT_PCT,
     transaction_cost_bps: float = 0.0,
+    mode: Mode = "static",
+    wf_window_days: int = 60,
+    wf_step_days: int = 20,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -303,6 +344,13 @@ def run_factor_backtest(
     turnover: cost_bps × L1_delta / 10000. With default top/bottom 0.30 and a
     high-turnover factor at L1≈1.0, 10 bps round-trip cost shaves ~25% annual
     return — significant for any meaningful comparison.
+
+    `mode="walk_forward"` adds a rolling per-window SplitMetrics list on top
+    of the static train/test split (which is always populated for back-compat).
+    Each window covers `wf_window_days` consecutive sessions, shifted by
+    `wf_step_days`. On a 251-day panel with the default 60/20 settings this
+    yields ~10 windows — enough to see if a factor's edge decays through time
+    without overpartitioning a small sample.
 
     Raises:
         FileNotFoundError: parquet panel missing at import/first-call time
@@ -322,57 +370,24 @@ def run_factor_backtest(
         raise ValueError(f"bottom_pct {bottom_pct!r} must be in [0.01, 0.5]")
     if not 0.0 <= transaction_cost_bps <= 200.0:
         raise ValueError(f"transaction_cost_bps {transaction_cost_bps!r} must be in [0, 200]")
+    if mode not in SUPPORTED_MODES:
+        raise ValueError(f"mode {mode!r} must be one of {sorted(SUPPORTED_MODES)}")
+    if not 20 <= wf_window_days <= 252:
+        raise ValueError(f"wf_window_days {wf_window_days!r} must be in [20, 252]")
+    if not 5 <= wf_step_days <= wf_window_days:
+        raise ValueError(
+            f"wf_step_days {wf_step_days!r} must be in [5, wf_window_days]"
+        )
 
     panel = _load_panel()
     T, N = panel.close.shape
 
-    # Trailing 1-day returns: returns[t] = close[t]/close[t-1] - 1. Row 0 is NaN.
-    trailing_returns = np.full_like(panel.close, np.nan)
-    trailing_returns[1:] = panel.close[1:] / panel.close[:-1] - 1.0
+    # Operand dict construction lives in kernel.build_data_dict so the screener
+    # endpoint (D1) shares the exact same schema. Anything added to the
+    # translate-prompt contract must be mirrored there, not here.
+    from alpha_agent.factor_engine.kernel import evaluate_factor_full
 
-    # VWAP proxy for daily bars: typical price (H+L+C)/3. True VWAP needs
-    # intraday data we don't have at this tier.
-    vwap_proxy = (panel.high + panel.low + panel.close) / 3.0
-
-    # Evaluate factor on the full panel. Operand names must match the
-    # translate-prompt contract in api/routes/interactive.py.
-    data: dict[str, np.ndarray] = {
-        "close": panel.close,
-        "open": panel.open_,
-        "high": panel.high,
-        "low": panel.low,
-        "volume": panel.volume,
-        "returns": trailing_returns,
-        "vwap": vwap_proxy,
-    }
-    # T2 operands — present iff the v2 panel is active.
-    if panel.cap is not None:
-        data["cap"] = panel.cap
-        # Derived multi-window dollar-volume averages and raw dollar_volume.
-        # Computed inline so they always reflect the loaded panel, not a
-        # baked snapshot.
-        from alpha_agent.scan.vectorized import ts_mean as _ts_mean
-        dollar_vol = panel.close * panel.volume
-        data["dollar_volume"] = dollar_vol
-        for w in _ADV_WINDOWS:
-            data[f"adv{w}"] = _ts_mean(dollar_vol, w)
-    if panel.sector is not None:
-        data["sector"] = panel.sector
-    if panel.industry is not None:
-        data["industry"] = panel.industry
-        data.setdefault("subindustry", panel.industry)
-    if panel.exchange is not None:
-        data["exchange"] = panel.exchange
-    if panel.currency is not None:
-        data["currency"] = panel.currency
-    if panel.fundamentals:
-        for fname, farr in panel.fundamentals.items():
-            data[fname] = farr
-    factor = np.asarray(eval_factor(spec.expression, data), dtype=np.float64)
-    if factor.shape != (T, N):
-        raise ValueError(
-            f"factor expression produced shape {factor.shape}, expected ({T}, {N})"
-        )
+    factor = evaluate_factor_full(panel, spec)
 
     # 1-day forward returns (close-to-close)
     fwd_returns = np.full_like(panel.close, np.nan)
@@ -447,6 +462,28 @@ def run_factor_backtest(
     # (year, month) so the heatmap renders left-to-right naturally.
     monthly_returns = _compute_monthly_returns(panel.dates, daily_ret)
 
+    # A7 (v3): rolling per-window metrics. Static mode skips this so payload
+    # stays small for users who don't care about IS/OOS decay analysis.
+    walk_forward: list[dict] | None = None
+    if mode == "walk_forward":
+        walk_forward = []
+        for start in range(0, T - wf_window_days + 1, wf_step_days):
+            end = start + wf_window_days
+            wm = _split_metrics(
+                daily_ret, factor, fwd_returns, weights, start=start, end=end,
+            )
+            walk_forward.append({
+                "window_start": str(panel.dates[start]),
+                "window_end": str(panel.dates[end - 1]),
+                "sharpe": wm.sharpe,
+                "total_return": wm.total_return,
+                "ic_spearman": wm.ic_spearman,
+                "n_days": wm.n_days,
+                "max_drawdown": wm.max_drawdown,
+                "turnover": wm.turnover,
+                "hit_rate": wm.hit_rate,
+            })
+
     return FactorBacktestResult(
         equity_curve=equity_curve,
         benchmark_curve=benchmark_curve,
@@ -458,6 +495,7 @@ def run_factor_backtest(
         benchmark_ticker=BENCHMARK_TICKER,
         direction=direction,
         monthly_returns=monthly_returns,
+        walk_forward=walk_forward,
     )
 
 

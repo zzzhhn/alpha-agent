@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/Slider";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { FACTOR_EXAMPLES, type FactorExample } from "@/components/alpha/FactorExamples";
-import type { BacktestDirection } from "@/lib/types";
+import type { BacktestDirection, BacktestMode } from "@/lib/types";
 
 export interface BacktestFormParams {
   readonly expression: string;
@@ -18,6 +18,9 @@ export interface BacktestFormParams {
   readonly topPct: number;          // 1-50
   readonly bottomPct: number;       // 1-50
   readonly transactionCostBps: number;  // 0-50
+  readonly mode: BacktestMode;
+  readonly wfWindowDays: number;    // 20-252
+  readonly wfStepDays: number;      // 5-wfWindowDays
 }
 
 interface BacktestFormProps {
@@ -36,6 +39,7 @@ function extractOps(expr: string): string[] {
 }
 
 const DIRECTIONS: readonly BacktestDirection[] = ["long_only", "long_short", "short_only"];
+const MODES: readonly BacktestMode[] = ["static", "walk_forward"];
 
 export function BacktestForm({ running, onRun, initialExpression, autoRun }: BacktestFormProps) {
   const { locale } = useLocale();
@@ -45,6 +49,9 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
   const [topPct, setTopPct] = useState(30);
   const [bottomPct, setBottomPct] = useState(30);
   const [costBps, setCostBps] = useState(0);
+  const [mode, setMode] = useState<BacktestMode>("static");
+  const [wfWindowDays, setWfWindowDays] = useState(60);
+  const [wfStepDays, setWfStepDays] = useState(20);
 
   // P6.D — when /alpha hands off via sessionStorage and the page passes
   // autoRun, fire the run once on first mount so the user lands on a
@@ -60,6 +67,9 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         topPct: 0.3,
         bottomPct: 0.3,
         transactionCostBps: 0,
+        mode: "static",
+        wfWindowDays: 60,
+        wfStepDays: 20,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,6 +89,10 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
       topPct: topPct / 100,
       bottomPct: bottomPct / 100,
       transactionCostBps: costBps,
+      mode,
+      // Clamp wfStepDays so it never exceeds wfWindowDays (backend validates)
+      wfWindowDays,
+      wfStepDays: Math.min(wfStepDays, wfWindowDays),
     });
   }
 
@@ -141,6 +155,46 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
           value={costBps} onChange={setCostBps} unit="bps"
         />
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="text-[13px] text-muted">
+          {t(locale, "backtest.form.modeLabel")}:
+        </span>
+        {MODES.map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={
+              mode === m
+                ? "rounded-md bg-accent/15 px-2 py-1 font-mono text-[12px] text-accent"
+                : "rounded-md px-2 py-1 font-mono text-[12px] text-muted hover:bg-[var(--toggle-bg)] hover:text-text"
+            }
+          >
+            {t(locale, m === "static" ? "backtest.form.modeStatic" : "backtest.form.modeWalkForward")}
+          </button>
+        ))}
+        {mode === "walk_forward" && (
+          <span className="ml-2 text-[12px] text-muted">
+            {t(locale, "backtest.form.modeWfHelp")}
+          </span>
+        )}
+      </div>
+
+      {mode === "walk_forward" && (
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Slider
+            label={t(locale, "backtest.form.wfWindow")}
+            min={20} max={252} step={10}
+            value={wfWindowDays} onChange={setWfWindowDays} unit="d"
+          />
+          <Slider
+            label={t(locale, "backtest.form.wfStep")}
+            min={5} max={Math.min(wfWindowDays, 60)} step={5}
+            value={wfStepDays} onChange={setWfStepDays} unit="d"
+          />
+        </div>
+      )}
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <details className="flex-1">

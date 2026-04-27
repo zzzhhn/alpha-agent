@@ -113,3 +113,50 @@ def validate_expression(
         )
 
     return used
+
+
+# ── B3 (v3): tree extraction for the AST visualization drawer ──────────────
+
+
+def expression_to_tree(expression: str) -> dict:
+    """Parse a validated factor expression into a JSON-serializable tree.
+
+    Node shapes:
+      operator: {"type": "operator", "name": str, "args": [child, ...]}
+      operand:  {"type": "operand",  "name": str}
+      literal:  {"type": "literal",  "value": int | float}
+
+    Pre-condition: caller has already passed `validate_expression`. This
+    helper trusts the input and only converts the AST shape; it raises
+    FactorSpecValidationError if it encounters anything `validate_expression`
+    would have rejected, which means a bug not bad data.
+    """
+    try:
+        tree = ast.parse(expression, mode="eval").body
+    except SyntaxError as exc:
+        raise FactorSpecValidationError(f"unparseable expression: {exc}") from exc
+    return _node_to_dict(tree)
+
+
+def _node_to_dict(node: ast.AST) -> dict:
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name):
+            raise FactorSpecValidationError(
+                "only direct function calls allowed (no attribute/subscript call targets)"
+            )
+        return {
+            "type": "operator",
+            "name": node.func.id,
+            "args": [_node_to_dict(a) for a in node.args],
+        }
+    if isinstance(node, ast.Name):
+        return {"type": "operand", "name": node.id}
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+            return {"type": "literal", "value": node.value}
+        raise FactorSpecValidationError(
+            f"only numeric literals allowed (got {type(node.value).__name__})"
+        )
+    raise FactorSpecValidationError(
+        f"disallowed AST node: {type(node).__name__}"
+    )

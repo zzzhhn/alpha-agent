@@ -16,6 +16,7 @@ import {
   FactorExamples,
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
+import { ASTDrawer } from "@/components/alpha/ASTDrawer";
 import {
   addToHistory,
   getFavorites,
@@ -326,6 +327,8 @@ export default function AlphaPage() {
           </Card>
         </div>
       ) : null}
+
+      {result ? <ASTDrawer expression={result.spec.expression} /> : null}
 
       {result ? (
         <Card padding="md">

@@ -6,9 +6,7 @@ import {
   getPipelineLatency,
   getThroughput,
   getGatewayStatus,
-  getAuditDecisions,
   getSystemConfig,
-  getOrderHistory,
 } from "@/lib/api";
 import type {
   ApiResponse,
@@ -16,9 +14,7 @@ import type {
   PipelineLatency,
   ThroughputMetrics,
   GatewayStatus,
-  AuditSummary,
   SystemConfig,
-  Order,
 } from "@/lib/types";
 
 export function useServiceHealth() {
@@ -49,13 +45,6 @@ export function useGatewayStatus() {
   });
 }
 
-export function useAuditDecisions() {
-  return usePolling<ApiResponse<AuditSummary>>({
-    fetcher: getAuditDecisions,
-    intervalMs: 10_000,
-  });
-}
-
 export function useSystemConfig() {
   return usePolling<ApiResponse<SystemConfig>>({
     fetcher: getSystemConfig,
@@ -63,9 +52,3 @@ export function useSystemConfig() {
   });
 }
 
-export function useOrderHistory() {
-  return usePolling<ApiResponse<readonly Order[]>>({
-    fetcher: getOrderHistory,
-    intervalMs: 10_000,
-  });
-}
