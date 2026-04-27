@@ -1,4 +1,10 @@
-"""US stock data provider using AKShare primary (with yfinance fallback for non-China networks)."""
+"""US stock data provider using priority-failover across yfinance + AKShare.
+
+Source ordering is controlled by `DataFetcherManager` from data/manager.py
+rather than hardcoded fallback chains. Adding a new data source is now a
+matter of writing a class that implements the `BaseFetcher` Protocol and
+calling `manager.register()`.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +21,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from alpha_agent.data.manager import DataFetcherManager
 from alpha_agent.data.provider import DataProvider, OHLCV_COLUMNS, _empty_ohlcv_frame
 
 logger = logging.getLogger(__name__)
@@ -53,79 +60,57 @@ def _jittered_sleep() -> None:
     time.sleep(_REQUEST_INTERVAL + random.uniform(0.5, 2.0))
 
 
-class YFinanceProvider(DataProvider):
-    """Fetches US daily OHLCV data via yfinance.
+class AkshareUSFetcher:
+    """AKShare's stock_us_daily — Sina Finance backed, works from mainland China.
 
-    Accepts an optional ``ParquetCache`` for per-ticker caching.
-    Falls back to AKShare's US stock API when yfinance is blocked (e.g. mainland China).
+    Conforms to BaseFetcher Protocol (data/manager.py). priority=1 because
+    in this deployment context (frequently China-network) AKShare typically
+    succeeds first.
     """
 
-    def __init__(self, cache: "ParquetCache | None" = None) -> None:
-        self._cache = cache
+    name = "akshare_us"
+    priority = 1
 
-    def fetch(
-        self,
-        stock_codes: list[str],
-        start_date: str,
-        end_date: str,
-    ) -> pd.DataFrame:
-        """Fetch daily OHLCV for US tickers.
+    def fetch_ohlcv(
+        self, ticker: str, start: str, end: str,
+    ) -> pd.DataFrame | None:
+        try:
+            import akshare as ak
+        except ImportError:
+            logger.debug("akshare not installed, %s skipped", self.name)
+            return None
 
-        Parameters
-        ----------
-        stock_codes : list[str]
-            US ticker symbols (e.g. ["AAPL", "MSFT"]).
-        start_date, end_date : str
-            Date range in "YYYYMMDD" format.
-        """
-        frames: list[pd.DataFrame] = []
-        start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
-        end_fmt = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
+        @_retry_network
+        def _call() -> "pd.DataFrame":
+            return ak.stock_us_daily(symbol=ticker, adjust="qfq")
 
-        for i, ticker in enumerate(stock_codes):
-            # Cache check
-            if self._cache is not None:
-                cached = self._cache.get(ticker, start_date, end_date)
-                if cached is not None and not cached.empty:
-                    logger.debug("Cache hit for %s (%d rows).", ticker, len(cached))
-                    frames.append(cached)
-                    continue
+        try:
+            raw = _call()
+        except RetryError:
+            logger.warning("%s retries exhausted for %s", self.name, ticker)
+            return None
+        except Exception:  # noqa: BLE001 — non-transient, hand off to manager
+            logger.warning("%s failed for %s", self.name, ticker, exc_info=True)
+            return None
 
-            if i > 0:
-                _jittered_sleep()
+        if raw is None or raw.empty:
+            return None
+        return _normalize_akshare_us(raw, ticker, start, end)
 
-            # AKShare primary (Sina Finance — works from China without VPN)
-            df = self._fetch_akshare_us(ticker, start_fmt, end_fmt)
-            if df is None:
-                df = self._fetch_yfinance(ticker, start_fmt, end_fmt)
 
-            if df is None or df.empty:
-                logger.warning("No data for %s, skipping.", ticker)
-                continue
+class YFinanceFetcher:
+    """yfinance — works on non-China networks. priority=2 (fallback)."""
 
-            frames.append(df)
+    name = "yfinance"
+    priority = 2
 
-            if self._cache is not None:
-                self._cache.put(ticker, df)
-
-        if not frames:
-            return _empty_ohlcv_frame()
-
-        return pd.concat(frames).sort_index()
-
-    @staticmethod
-    def _fetch_yfinance(ticker: str, start: str, end: str) -> pd.DataFrame | None:
-        """Try fetching via yfinance. Returns None on failure.
-
-        Network-level transient errors (ConnectionError/Timeout) are retried
-        up to 4 times with jittered exponential backoff. 4xx HTTPErrors,
-        parse errors, and any non-network exception fail fast and fall back
-        to AKShare.
-        """
+    def fetch_ohlcv(
+        self, ticker: str, start: str, end: str,
+    ) -> pd.DataFrame | None:
         try:
             import yfinance as yf
         except ImportError:
-            logger.debug("yfinance not installed, skipping.")
+            logger.debug("yfinance not installed, %s skipped", self.name)
             return None
 
         @_retry_network
@@ -138,48 +123,90 @@ class YFinanceProvider(DataProvider):
         try:
             data = _call()
         except RetryError:
-            logger.warning("yfinance retries exhausted for %s.", ticker)
+            logger.warning("%s retries exhausted for %s", self.name, ticker)
             return None
-        except Exception:
-            # Non-transient: 4xx, parse errors, etc. — give the fallback a chance.
-            logger.warning("yfinance failed for %s.", ticker, exc_info=True)
+        except Exception:  # noqa: BLE001
+            logger.warning("%s failed for %s", self.name, ticker, exc_info=True)
             return None
 
         if data is None or data.empty:
             return None
-
         return _normalize_yfinance(data, ticker)
 
-    @staticmethod
-    def _fetch_akshare_us(ticker: str, start: str, end: str) -> pd.DataFrame | None:
-        """Fallback: use AKShare's US stock daily API (works from China).
 
-        Same retry policy as yfinance: only transient network errors are retried.
+def build_default_us_manager() -> DataFetcherManager:
+    """Wire up the default US-equity fetcher chain (akshare → yfinance).
+
+    Anything wanting to add a third source (polygon, EODHD) just registers
+    its own BaseFetcher implementation here without touching the call sites.
+    """
+    mgr = DataFetcherManager()
+    mgr.register(AkshareUSFetcher())
+    mgr.register(YFinanceFetcher())
+    return mgr
+
+
+class YFinanceProvider(DataProvider):
+    """Top-level US OHLCV provider.
+
+    Delegates to a `DataFetcherManager` for the actual source-failover logic.
+    The class name is kept for back-compat (existing call sites import
+    `YFinanceProvider`); internally it no longer cares which source serves
+    the data.
+    """
+
+    def __init__(
+        self,
+        cache: "ParquetCache | None" = None,
+        manager: DataFetcherManager | None = None,
+    ) -> None:
+        self._cache = cache
+        self._manager = manager if manager is not None else build_default_us_manager()
+
+    def fetch(
+        self,
+        stock_codes: list[str],
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
+        """Fetch daily OHLCV for a list of US tickers.
+
+        Parameters
+        ----------
+        stock_codes : list[str]
+            US ticker symbols (e.g. ["AAPL", "MSFT"]).
+        start_date, end_date : str
+            "YYYYMMDD" format (provider contract).
         """
-        try:
-            import akshare as ak
-        except ImportError:
-            logger.debug("akshare not installed, skipping US fallback.")
-            return None
+        frames: list[pd.DataFrame] = []
+        start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
+        end_fmt = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
 
-        @_retry_network
-        def _call() -> "pd.DataFrame":
-            # AKShare uses stock_us_daily with symbol like "AAPL"
-            return ak.stock_us_daily(symbol=ticker, adjust="qfq")
+        for i, ticker in enumerate(stock_codes):
+            if self._cache is not None:
+                cached = self._cache.get(ticker, start_date, end_date)
+                if cached is not None and not cached.empty:
+                    logger.debug("Cache hit for %s (%d rows).", ticker, len(cached))
+                    frames.append(cached)
+                    continue
 
-        try:
-            raw = _call()
-        except RetryError:
-            logger.warning("AKShare retries exhausted for %s.", ticker)
-            return None
-        except Exception:
-            logger.warning("AKShare US fallback failed for %s.", ticker, exc_info=True)
-            return None
+            if i > 0:
+                _jittered_sleep()
 
-        if raw is None or raw.empty:
-            return None
+            df = self._manager.fetch_ohlcv(ticker, start_fmt, end_fmt)
 
-        return _normalize_akshare_us(raw, ticker, start, end)
+            if df is None or df.empty:
+                logger.warning("No data for %s from any source (%s)", ticker, self._manager.names())
+                continue
+
+            frames.append(df)
+
+            if self._cache is not None:
+                self._cache.put(ticker, df)
+
+        if not frames:
+            return _empty_ohlcv_frame()
+        return pd.concat(frames).sort_index()
 
 
 def _normalize_yfinance(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
