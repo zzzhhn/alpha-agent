@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import {
@@ -9,6 +10,7 @@ import {
   fetchSectors,
   fetchUniverses,
   fetchCoverage,
+  invalidateDataCache,
 } from "@/lib/api";
 import type {
   OperandCatalogResponse,
@@ -34,31 +36,50 @@ export default function MethodologyPage() {
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
   const [sectors, setSectors] = useState<readonly string[]>([]);
   const [catalog, setCatalog] = useState<OperandCatalogResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Errors are tracked per-fetch so the static Backtest tab never sees them
+  // and so a retry can target the failing slice without re-fetching the rest.
+  const [universesError, setUniversesError] = useState<string | null>(null);
+  const [coverageError, setCoverageError] = useState<string | null>(null);
+  const [sectorsError, setSectorsError] = useState<string | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [reloading, setReloading] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
-      const [u, c, s] = await Promise.all([
-        fetchUniverses(),
-        fetchCoverage("SP500_subset"),
-        fetchSectors(),
-      ]);
-      if (u.error) setError(u.error);
-      if (u.data) setUniverses(u.data);
-      if (c.data) setCoverage(c.data);
-      if (s.data) setSectors(s.data.sectors);
-    })();
+  const loadDataTab = useCallback(async (force = false) => {
+    setReloading(true);
+    if (force) invalidateDataCache();
+    setUniversesError(null);
+    setCoverageError(null);
+    setSectorsError(null);
+    const [u, c, s] = await Promise.all([
+      fetchUniverses({ force }),
+      fetchCoverage("SP500_subset", { force }),
+      fetchSectors(),
+    ]);
+    if (u.error) setUniversesError(u.error); else if (u.data) setUniverses(u.data);
+    if (c.error) setCoverageError(c.error); else if (c.data) setCoverage(c.data);
+    if (s.error) setSectorsError(s.error); else if (s.data) setSectors(s.data.sectors);
+    setReloading(false);
   }, []);
 
-  // Operators tab is heavier; fetch lazily when first opened.
+  const loadOperatorsTab = useCallback(async () => {
+    setReloading(true);
+    setCatalogError(null);
+    const r = await fetchOperandCatalogWithSignatures();
+    if (r.error) setCatalogError(r.error);
+    else if (r.data) setCatalog(r.data);
+    setReloading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadDataTab(false);
+  }, [loadDataTab]);
+
   useEffect(() => {
     if (tab !== "operators" || catalog !== null) return;
-    void (async () => {
-      const r = await fetchOperandCatalogWithSignatures();
-      if (r.error) setError(r.error);
-      if (r.data) setCatalog(r.data);
-    })();
-  }, [tab, catalog]);
+    void loadOperatorsTab();
+  }, [tab, catalog, loadOperatorsTab]);
+
+  const dataTabHasError = Boolean(universesError || coverageError || sectorsError);
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -88,12 +109,21 @@ export default function MethodologyPage() {
         ))}
       </div>
 
-      {error && (
-        <Card padding="md">
-          <p className="text-base text-red">
-            {t(locale, "methodology.error")}: {error}
-          </p>
-        </Card>
+      {tab === "data" && dataTabHasError && (
+        <ErrorCard
+          title={t(locale, "methodology.error")}
+          messages={[universesError, coverageError, sectorsError].filter(Boolean) as string[]}
+          onRetry={() => loadDataTab(true)}
+          retrying={reloading}
+        />
+      )}
+      {tab === "operators" && catalogError && (
+        <ErrorCard
+          title={t(locale, "methodology.error")}
+          messages={[catalogError]}
+          onRetry={loadOperatorsTab}
+          retrying={reloading}
+        />
       )}
 
       {tab === "data" && (
@@ -295,6 +325,42 @@ function BacktestTab() {
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
+
+function ErrorCard({
+  title, messages, onRetry, retrying,
+}: {
+  readonly title: string;
+  readonly messages: readonly string[];
+  readonly onRetry: () => void;
+  readonly retrying: boolean;
+}) {
+  const { locale } = useLocale();
+  // Dedupe — when multiple parallel fetches hit the same edge IP poisoning
+  // they often produce the identical TypeError text; one card row is plenty.
+  const unique = Array.from(new Set(messages));
+  return (
+    <Card padding="md">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-base font-semibold text-red">{title}</p>
+          <ul className="mt-1 list-disc pl-5 text-[13px] leading-relaxed text-text">
+            {unique.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          disabled={retrying}
+        >
+          {retrying ? t(locale, "methodology.retrying") : t(locale, "methodology.retry")}
+        </Button>
+      </div>
+    </Card>
+  );
+}
 
 function Row({
   label, value, mono,
