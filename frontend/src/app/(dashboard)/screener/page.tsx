@@ -186,7 +186,6 @@ export default function ScreenerPage() {
 
       <FactorPickerCard
         zoo={zoo}
-        selections={selections}
         selectedById={selectedById}
         onToggle={toggleFactor}
         onUpdate={updateSelection}
@@ -248,10 +247,9 @@ export default function ScreenerPage() {
 /* ── Subcomponents ─────────────────────────────────────────────────────── */
 
 function FactorPickerCard({
-  zoo, selections, selectedById, onToggle, onUpdate, showWeights,
+  zoo, selectedById, onToggle, onUpdate, showWeights,
 }: {
   readonly zoo: readonly ZooEntry[];
-  readonly selections: readonly FactorSelection[];
   readonly selectedById: Map<string, FactorSelection>;
   readonly onToggle: (e: ZooEntry) => void;
   readonly onUpdate: (id: string, patch: Partial<FactorSelection>) => void;
