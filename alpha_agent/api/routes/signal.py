@@ -24,12 +24,12 @@ from alpha_agent.core.factor_ast import (
     validate_expression,
 )
 from alpha_agent.core.types import FactorSpec
-from alpha_agent.factor_engine.factor_backtest import (
-    _ADV_WINDOWS,
-    _load_panel,
-    _spearman_ic,
+from alpha_agent.factor_engine.factor_backtest import _load_panel
+from alpha_agent.factor_engine.kernel import (
+    build_data_dict,
+    evaluate_factor_full,
+    spearman_ic,
 )
-from alpha_agent.scan.vectorized import OPS, evaluate as eval_factor, ts_mean
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/signal", tags=["signal"])
@@ -114,56 +114,28 @@ class ExposureResponse(BaseModel):
 
 
 def _evaluate_spec(spec: FactorSpec) -> tuple[np.ndarray, dict[str, np.ndarray], Any]:
-    """Validate + load + evaluate. Returns (factor_TxN, data, panel)."""
+    """Validate + load + evaluate. Returns (factor_TxN, data, panel).
+
+    Operand-dict construction and factor evaluation both delegate to
+    kernel.build_data_dict / kernel.evaluate_factor_full so this endpoint
+    stays in lockstep with /factor/backtest and /screener/run.
+    """
     try:
         validate_expression(spec.expression, spec.operators_used)
     except FactorSpecValidationError as exc:
         raise HTTPException(status_code=400, detail=f"spec invalid: {exc}") from exc
 
     panel = _load_panel()
-    T, N = panel.close.shape
-
-    trailing_returns = np.full_like(panel.close, np.nan)
-    trailing_returns[1:] = panel.close[1:] / panel.close[:-1] - 1.0
-    vwap_proxy = (panel.high + panel.low + panel.close) / 3.0
-
-    data: dict[str, np.ndarray] = {
-        "close": panel.close, "open": panel.open_, "high": panel.high,
-        "low": panel.low, "volume": panel.volume,
-        "returns": trailing_returns, "vwap": vwap_proxy,
-    }
-    if panel.cap is not None:
-        data["cap"] = panel.cap
-        dollar_vol = panel.close * panel.volume
-        data["dollar_volume"] = dollar_vol
-        for w in _ADV_WINDOWS:
-            data[f"adv{w}"] = ts_mean(dollar_vol, w)
-    if panel.sector is not None:
-        data["sector"] = panel.sector
-    if panel.industry is not None:
-        data["industry"] = panel.industry
-        data.setdefault("subindustry", panel.industry)
-    if panel.exchange is not None:
-        data["exchange"] = panel.exchange
-    if panel.currency is not None:
-        data["currency"] = panel.currency
-    if panel.fundamentals:
-        for fname, farr in panel.fundamentals.items():
-            data[fname] = farr
+    data = build_data_dict(panel)
 
     try:
-        factor = np.asarray(eval_factor(spec.expression, data), dtype=np.float64)
-    except Exception as exc:
+        factor = evaluate_factor_full(panel, spec)
+    except (ValueError, KeyError, NotImplementedError) as exc:
         raise HTTPException(
             status_code=400,
             detail=f"factor evaluation failed: {type(exc).__name__}: {exc}",
         ) from exc
 
-    if factor.shape != (T, N):
-        raise HTTPException(
-            status_code=400,
-            detail=f"factor shape {factor.shape} != panel shape ({T}, {N})",
-        )
     return factor, data, panel
 
 
@@ -221,7 +193,7 @@ def signal_ic_timeseries(body: ICTimeseriesRequest) -> ICTimeseriesResponse:
     ics: list[float] = []
     dates_used: list[str] = []
     for t in range(start, T - 1):  # T-1 because last fwd is NaN
-        ic = _spearman_ic(factor[t], fwd[t])
+        ic = spearman_ic(factor[t], fwd[t])
         ics.append(ic)
         dates_used.append(str(panel.dates[t]))
 

@@ -453,33 +453,6 @@ async def portfolio_risk() -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Orders
-# ═══════════════════════════════════════════════════════════════════════════
-
-@router.get("/api/v1/orders")
-async def orders_list() -> list:
-    if _check_ml():
-        return [
-            {"order_id": "ORD-001", "ticker": "NVDA", "side": "BUY", "quantity": 50, "price": 119.80, "status": "filled", "filled_quantity": 50, "timestamp": _now_iso()},
-        ]
-    return []
-
-
-@router.get("/api/v1/orders/pending")
-async def orders_pending() -> list:
-    return []
-
-
-@router.get("/api/v1/orders/history")
-async def orders_history() -> list:
-    if _check_ml():
-        return [
-            {"order_id": "ORD-001", "ticker": "NVDA", "side": "BUY", "quantity": 50, "price": 119.80, "status": "filled", "filled_quantity": 50, "timestamp": _now_iso()},
-        ]
-    return []
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 # Gateway
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -538,73 +511,6 @@ async def gateway_rules() -> list:
         {"name": "15M Entry Signal", "enabled": True, "passed": False, "confidence": 0.42, "reason": "Below threshold"},
         {"name": "Volume Filter", "enabled": True, "passed": True, "confidence": 0.81, "reason": "Volume above average"},
     ]
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Audit
-# ═══════════════════════════════════════════════════════════════════════════
-
-@router.get("/api/v1/audit/events")
-async def audit_events() -> list:
-    return []
-
-
-@router.get("/api/v1/audit/events/{event_id}/raw")
-async def audit_event_raw(event_id: str) -> dict:
-    return {
-        "event_id": event_id,
-        "timestamp": _now_iso(),
-        "event_type": "unknown",
-        "user_id": "system",
-        "ticker": "N/A",
-        "side": "BUY",
-        "quantity": 0,
-        "order_price": 0.0,
-        "fill_price": 0.0,
-        "fill_quantity": 0,
-        "decision_chain_id": "",
-        "regime_state": {"current_regime": "Unknown", "probability": 0.0},
-        "risk_assessment": {"var_impact_bps": 0.0, "concentration_impact": 0.0},
-        "execution_latency_ms": 0,
-        "slippage_bps": 0.0,
-        "tags": [],
-    }
-
-
-@router.get("/api/v1/audit/decisions")
-async def audit_decisions() -> dict:
-    ml_ok = _check_ml()
-    if ml_ok:
-        return {
-            "total_decisions": 12,
-            "acceptance_rate": 0.75,
-            "avg_confidence": 0.68,
-            "last_decision_time": _now_iso(),
-            "decisions": [
-                {
-                    "id": "DEC-001",
-                    "timestamp": _now_iso(),
-                    "ticker": "NVDA",
-                    "direction": "bullish",
-                    "confidence": 0.72,
-                    "reasoning": "Strong momentum with regime confirmation",
-                    "reasoning_chain": ["HMM: Arbitrage regime (72%)", "XGBoost: bullish (72%)", "Gate: 3/4 passed"],
-                    "accepted": True,
-                },
-            ],
-        }
-    return {
-        "total_decisions": 0,
-        "acceptance_rate": 0.0,
-        "avg_confidence": 0.0,
-        "last_decision_time": _now_iso(),
-        "decisions": [],
-    }
-
-
-@router.get("/api/v1/audit/log")
-async def audit_log() -> dict:
-    return {"entries": [], "total_entries": 0, "filters": {}}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
