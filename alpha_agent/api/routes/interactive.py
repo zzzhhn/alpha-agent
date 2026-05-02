@@ -321,6 +321,14 @@ class FactorBacktestRequest(BaseModel):
     n_trials: int = Field(default=1, ge=1, le=1000,
         description="How many factor variants the user explored before saving this one. "
                     "Used by Bailey-LdP deflated Sharpe to discount selection bias.")
+    # T2.2 (v4) — sqrt(participation/ADV) slippage. Multiplied by sqrt(% of
+    # ADV traded). Default 0 = no slippage (back-compat).
+    slippage_bps_per_sqrt_pct: float = Field(default=0.0, ge=0.0, le=100.0,
+        description="Almgren-style market impact: cost_bps = k × sqrt(participation_pct).")
+    # T2.3 (v4) — annualized short borrow cost; daily-accrued on |w_short|.
+    short_borrow_bps: float = Field(default=0.0, ge=0.0, le=1000.0,
+        description="Annualized short-leg borrow cost in bps; charged daily on the prior "
+                    "day's |Σ w_short|.")
 
 
 class _SplitMetricsModel(BaseModel):
@@ -404,6 +412,9 @@ class FactorBacktestResponse(BaseModel):
     walk_forward: list[_WalkForwardWindow] | None = None
     # B4 (v3): per-day basket + IC, only populated when include_breakdown=true.
     daily_breakdown: list[_DailyBreakdown] | None = None
+    # T2.4 (v4): IS-OOS Sharpe decay flag.
+    oos_decay: float = 0.0
+    overfit_flag: bool = False
 
 
 @router.post(
@@ -451,6 +462,8 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             purge_days=body.purge_days,
             embargo_days=body.embargo_days,
             n_trials=body.n_trials,
+            slippage_bps_per_sqrt_pct=body.slippage_bps_per_sqrt_pct,
+            short_borrow_bps=body.short_borrow_bps,
         )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
@@ -527,4 +540,6 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         monthly_returns=monthly,
         walk_forward=walk_forward,
         daily_breakdown=daily_breakdown,
+        oos_decay=result.oos_decay,
+        overfit_flag=result.overfit_flag,
     )

@@ -305,6 +305,8 @@ export interface FactorBacktestRequest {
   readonly purge_days?: number;           // T1.3 v4: 0–30, drop last N rows of train slice
   readonly embargo_days?: number;         // T1.3 v4: 0–30, drop first N rows of test slice
   readonly n_trials?: number;             // T2.1 v4: 1–1000, factor variants explored (deflates Sharpe)
+  readonly slippage_bps_per_sqrt_pct?: number; // T2.2 v4: 0–100, sqrt-ADV slippage coeff
+  readonly short_borrow_bps?: number;     // T2.3 v4: 0–1000, annualized short-leg borrow
 }
 
 export interface WalkForwardWindow {
@@ -405,6 +407,9 @@ export interface FactorBacktestResponse {
   readonly monthly_returns?: readonly MonthlyReturn[];   // P4.2
   readonly walk_forward?: readonly WalkForwardWindow[] | null;   // A7 v3
   readonly daily_breakdown?: readonly DailyBreakdown[] | null;   // B4 v3
+  // T2.4 v4 — IS-OOS Sharpe decay
+  readonly oos_decay?: number;        // (train_sharpe − test_sharpe) / max(|train_sharpe|, 1e-3)
+  readonly overfit_flag?: boolean;    // true when oos_decay > 0.5
 }
 
 export interface HypothesisHistoryEntry {

@@ -165,6 +165,12 @@ class FactorBacktestResult:
     # B4 (v3): per-day {long_basket, short_basket, daily_return, daily_ic}.
     # Heavy payload (~30 entries × T days), only built when include_breakdown=True.
     daily_breakdown: list[dict] | None = None
+    # T2.4 (v4): IS-OOS Sharpe degradation. Classic overfit signature when
+    # the train Sharpe is high but test Sharpe collapses.
+    # oos_decay = (train_sharpe - test_sharpe) / max(train_sharpe, eps)
+    # overfit_flag = oos_decay > 0.5 (lost more than half the train edge OOS)
+    oos_decay: float = 0.0
+    overfit_flag: bool = False
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
@@ -468,6 +474,8 @@ def run_factor_backtest(
     purge_days: int = 0,
     embargo_days: int = 0,
     n_trials: int = 1,
+    slippage_bps_per_sqrt_pct: float = 0.0,
+    short_borrow_bps: float = 0.0,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -525,6 +533,14 @@ def run_factor_backtest(
         raise ValueError(f"embargo_days {embargo_days!r} must be in [0, 30]")
     if not 1 <= n_trials <= 1000:
         raise ValueError(f"n_trials {n_trials!r} must be in [1, 1000]")
+    if not 0.0 <= slippage_bps_per_sqrt_pct <= 100.0:
+        raise ValueError(
+            f"slippage_bps_per_sqrt_pct {slippage_bps_per_sqrt_pct!r} must be in [0, 100]"
+        )
+    if not 0.0 <= short_borrow_bps <= 1000.0:
+        raise ValueError(
+            f"short_borrow_bps {short_borrow_bps!r} must be in [0, 1000]"
+        )
     if mode not in SUPPORTED_MODES:
         raise ValueError(f"mode {mode!r} must be one of {sorted(SUPPORTED_MODES)}")
     if not 20 <= wf_window_days <= 252:
@@ -584,15 +600,51 @@ def run_factor_backtest(
             continue
         daily_ret[t + 1] = float((row_w[mask] * row_r[mask]).sum())
 
-    # Apply transaction cost: cost = L1 weight delta × bps / 10000.
-    # Charged on the day the rebalance happens (i.e. day t+1 inherits the
-    # cost of moving from weights[t-1] to weights[t]).
-    if transaction_cost_bps > 0.0:
-        cost_per_unit = transaction_cost_bps / 10_000.0
-        for t in range(1, T):
-            l1_delta = float(np.abs(weights[t] - weights[t - 1]).sum())
-            if not np.isnan(daily_ret[t]):
-                daily_ret[t] -= l1_delta * cost_per_unit
+    # Apply transaction cost: per-name cost on the day a rebalance happens.
+    # Three components:
+    #   1. Flat bps × L1 weight delta — fixed per-trade fee proxy.
+    #   2. T2.2 (v4) sqrt(participation) slippage — Almgren-Chriss-style.
+    #      participation = |Δw_n × portfolio$| / dollar_volume[t, n]
+    #      cost_n_bps = slippage_k × sqrt(participation_pct)
+    #      where participation_pct = participation × 100 so the units of
+    #      slippage_k are "bps per sqrt(% of ADV)". Default 0 = no slippage.
+    #   3. T2.3 (v4) short-leg borrow accrual — daily on |Σ w_short|.
+    flat_cost_per_unit = transaction_cost_bps / 10_000.0
+    slip_k = float(slippage_bps_per_sqrt_pct)
+    daily_borrow = float(short_borrow_bps) / (10_000.0 * 252.0)
+    # Use $-volume from build_data_dict if available (T2 panel only).
+    dollar_volume = panel.close * panel.volume  # shape (T, N)
+    portfolio_value = float(INITIAL_CAPITAL)  # static — doesn't compound through cost
+    for t in range(1, T):
+        if np.isnan(daily_ret[t]):
+            continue
+        delta = weights[t] - weights[t - 1]
+        l1_delta = float(np.abs(delta).sum())
+
+        # 1. Flat bps cost
+        cost = l1_delta * flat_cost_per_unit if transaction_cost_bps > 0 else 0.0
+
+        # 2. sqrt(participation) slippage (only when both factor knobs set)
+        if slip_k > 0.0:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                dollar_traded = np.abs(delta) * portfolio_value
+                # Avoid /0 — names with 0 ADV contribute zero (defensive)
+                participation_pct = np.where(
+                    dollar_volume[t] > 0,
+                    100.0 * dollar_traded / dollar_volume[t],
+                    0.0,
+                )
+            # cost_n_bps = slip_k × sqrt(participation_pct), per trade
+            slip_bps = slip_k * np.sqrt(np.maximum(participation_pct, 0.0))
+            slip_cost = float((np.abs(delta) * slip_bps / 10_000.0).sum())
+            cost += slip_cost
+
+        # 3. Short borrow accrual on the prior day's short book (paid daily)
+        if short_borrow_bps > 0:
+            prior_short = float(np.abs(np.minimum(weights[t - 1], 0.0)).sum())
+            cost += prior_short * daily_borrow
+
+        daily_ret[t] -= cost
 
     # Equity curve (compound, fillna=0 for early days)
     daily_ret_clean = np.nan_to_num(daily_ret, nan=0.0)
@@ -681,6 +733,16 @@ def run_factor_backtest(
                 "hit_rate": wm.hit_rate,
             })
 
+    # T2.4 (v4) — IS-OOS Sharpe drop. Use a tiny epsilon when train Sharpe
+    # is near zero to avoid divide-by-tiny producing huge spurious decays.
+    # Conventional threshold: > 50% of train edge lost OOS = overfit suspect.
+    eps = 1e-3
+    if abs(train_m.sharpe) > eps:
+        oos_decay = float((train_m.sharpe - test_m.sharpe) / max(abs(train_m.sharpe), eps))
+    else:
+        oos_decay = 0.0  # train SR ~= 0 → "decay" undefined; don't flag
+    overfit_flag = bool(oos_decay > 0.5)
+
     return FactorBacktestResult(
         equity_curve=equity_curve,
         benchmark_curve=benchmark_curve,
@@ -694,6 +756,8 @@ def run_factor_backtest(
         monthly_returns=monthly_returns,
         walk_forward=walk_forward,
         daily_breakdown=daily_breakdown,
+        oos_decay=oos_decay,
+        overfit_flag=overfit_flag,
     )
 
 

@@ -47,6 +47,12 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
             .replace("{ret}", `${(fullRet * 100).toFixed(1)}%`)
             .replace("{bench}", `${(benchRet * 100).toFixed(1)}%`)}
         </p>
+        {result.overfit_flag && (
+          <p className="mt-2 rounded-md border border-red/40 bg-red/10 px-2 py-1 text-[12px] text-red">
+            {t(locale, "backtest.kpi.overfitWarning")
+              .replace("{decay}", `${((result.oos_decay ?? 0) * 100).toFixed(0)}%`)}
+          </p>
+        )}
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
