@@ -733,15 +733,16 @@ def run_factor_backtest(
                 "hit_rate": wm.hit_rate,
             })
 
-    # T2.4 (v4) — IS-OOS Sharpe drop. Use a tiny epsilon when train Sharpe
-    # is near zero to avoid divide-by-tiny producing huge spurious decays.
-    # Conventional threshold: > 50% of train edge lost OOS = overfit suspect.
-    eps = 1e-3
-    if abs(train_m.sharpe) > eps:
-        oos_decay = float((train_m.sharpe - test_m.sharpe) / max(abs(train_m.sharpe), eps))
+    # T2.4 (v4) — IS-OOS Sharpe drop. Conventional definition of "overfit":
+    # had a real positive edge in train and lost over half of it OOS. Both
+    # conditions matter — without the train > 0.5 guard, "consistently bad"
+    # factors (negative train) would flag as overfit, which is the wrong
+    # diagnosis for them.
+    if train_m.sharpe > 0.5:
+        oos_decay = float((train_m.sharpe - test_m.sharpe) / train_m.sharpe)
     else:
-        oos_decay = 0.0  # train SR ~= 0 → "decay" undefined; don't flag
-    overfit_flag = bool(oos_decay > 0.5)
+        oos_decay = 0.0  # no train edge to lose → no overfit verdict
+    overfit_flag = bool(train_m.sharpe > 0.5 and oos_decay > 0.5)
 
     return FactorBacktestResult(
         equity_curve=equity_curve,
