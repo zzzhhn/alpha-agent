@@ -166,12 +166,17 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.screener import router
         return router
 
+    def _import_zoo():
+        from alpha_agent.api.routes.zoo import router
+        return router
+
     _load("system", _import_system)
     _load("serverless", _import_serverless)
     _load("interactive", _import_interactive)
     _load("data", _import_data)
     _load("signal", _import_signal)
     _load("screener", _import_screener)
+    _load("zoo", _import_zoo)
 
     if not SERVERLESS:
         def _import_websocket():

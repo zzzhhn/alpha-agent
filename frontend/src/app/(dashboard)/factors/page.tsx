@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { listZoo, removeFromZoo, type ZooEntry } from "@/lib/factor-zoo";
+import { runZooCorrelation } from "@/lib/api";
+import type { ZooCorrelationResponse } from "@/lib/types";
 
 export default function FactorsPage() {
   const { locale } = useLocale();
@@ -71,15 +73,64 @@ export default function FactorsPage() {
     refresh();
   }
 
+  /* ── T2.1 cross-correlation panel state ──────────────────────────────── */
+  const [corrLoading, setCorrLoading] = useState(false);
+  const [corrError, setCorrError] = useState<string | null>(null);
+  const [corrResult, setCorrResult] = useState<ZooCorrelationResponse | null>(null);
+
+  async function checkCorrelation() {
+    if (entries.length < 2) return;
+    setCorrLoading(true);
+    setCorrError(null);
+    setCorrResult(null);
+    const res = await runZooCorrelation({
+      factors: entries.map((e) => ({
+        spec: {
+          name: e.name,
+          hypothesis: e.hypothesis ?? "",
+          expression: e.expression,
+          operators_used: extractOps(e.expression),
+          lookback: 12,
+          universe: "SP500",
+          justification: e.intuition ?? e.hypothesis ?? "zoo entry",
+        },
+        label: e.name,
+      })),
+    });
+    if (res.error || !res.data) {
+      setCorrError(res.error ?? "unknown error");
+    } else {
+      setCorrResult(res.data);
+    }
+    setCorrLoading(false);
+  }
+
   return (
     <div className="flex flex-col gap-4 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-text">
-          {t(locale, "zoo.title")}
-        </h1>
-        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-          {t(locale, "zoo.subtitle")}
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-text">
+            {t(locale, "zoo.title")}
+          </h1>
+          <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
+            {t(locale, "zoo.subtitle")}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={checkCorrelation}
+          disabled={corrLoading || entries.length < 2}
+          title={
+            entries.length < 2
+              ? t(locale, "zoo.corr.disabledHint")
+              : undefined
+          }
+        >
+          {corrLoading
+            ? t(locale, "zoo.corr.running")
+            : t(locale, "zoo.corr.run")}
+        </Button>
       </header>
 
       <Card padding="md">
@@ -151,6 +202,94 @@ export default function FactorsPage() {
           </div>
         )}
       </Card>
+
+      {(corrError || corrResult) && (
+        <Card padding="md">
+          <header className="mb-3">
+            <h2 className="text-base font-semibold text-text">
+              {t(locale, "zoo.corr.title")}
+            </h2>
+            {corrResult && (
+              <p className="mt-1 text-[13px] text-muted">
+                {t(locale, "zoo.corr.subtitle")
+                  .replace("{n}", String(corrResult.names.length))
+                  .replace("{sessions}", String(corrResult.n_sessions))}
+              </p>
+            )}
+          </header>
+          {corrError && <p className="text-[13px] text-red">{corrError}</p>}
+          {corrResult && (
+            <CorrelationPanel data={corrResult} />
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function CorrelationPanel({ data }: { readonly data: ZooCorrelationResponse }) {
+  const { locale } = useLocale();
+  const { names, matrix, warnings } = data;
+
+  function cellColor(v: number): string {
+    if (v >= 0.95) return "bg-red/30 text-red";
+    if (v >= 0.8) return "bg-red/15 text-red";
+    if (v >= 0.5) return "bg-yellow/15 text-yellow";
+    if (v >= -0.5) return "text-muted";
+    return "bg-blue/15 text-blue";
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {warnings.length > 0 && (
+        <div className="rounded-md border border-red/30 bg-red/5 p-3">
+          <div className="mb-2 text-[13px] font-semibold text-red">
+            {t(locale, "zoo.corr.warningsHeader")
+              .replace("{n}", String(warnings.length))}
+          </div>
+          <ul className="space-y-1 text-[12px]">
+            {warnings.map((w) => (
+              <li key={`${w.a}|${w.b}`}>
+                <span className="font-mono text-text">{w.a}</span>
+                <span className="mx-1 text-muted">↔</span>
+                <span className="font-mono text-text">{w.b}</span>
+                <span className="ml-2 font-mono text-red">
+                  corr = {w.corr >= 0 ? "+" : ""}{w.corr.toFixed(3)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="text-[12px]">
+          <thead>
+            <tr>
+              <th className="px-2 py-1"></th>
+              {names.map((n) => (
+                <th key={n} className="px-2 py-1 text-left font-mono text-muted">
+                  {n}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.map((row, i) => (
+              <tr key={names[i]}>
+                <td className="px-2 py-1 font-mono text-muted">{names[i]}</td>
+                {row.map((v, j) => (
+                  <td
+                    key={j}
+                    className={`px-2 py-1 text-center font-mono ${cellColor(v)}`}
+                  >
+                    {v >= 0 ? "+" : ""}{v.toFixed(2)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

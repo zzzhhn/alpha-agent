@@ -27,6 +27,14 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
   const icP = m.ic_pvalue ?? 1;
   const icAccent: "green" | "red" | undefined =
     icP < 0.05 && m.ic_spearman > 0 ? "green" : icP > 0.5 ? "red" : undefined;
+  // T2.1 v4 — Bailey-LdP deflated Sharpe. PSR > 0.95 ≈ Sharpe convincingly
+  // beats the multiple-testing null; PSR < 0.5 ≈ realized SR is below the
+  // lucky-max-of-N-trials baseline.
+  const psr = m.psr ?? 0.5;
+  const luckyMax = m.lucky_max_sr ?? 0;
+  const sharpeAccent: "green" | "red" | undefined =
+    psr >= 0.95 ? "green" : psr < 0.5 ? "red"
+    : m.sharpe >= 1.0 ? "green" : m.sharpe < 0 ? "red" : undefined;
 
   return (
     <Card padding="md">
@@ -51,7 +59,12 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
         <Kpi
           label={t(locale, "backtest.kpi.testSharpe")}
           value={m.sharpe.toFixed(2)}
-          accent={m.sharpe >= 1.0 ? "green" : m.sharpe < 0 ? "red" : undefined}
+          accent={sharpeAccent}
+          hint={
+            luckyMax > 0
+              ? `PSR ${psr.toFixed(2)} · luckyMax ${luckyMax.toFixed(2)}`
+              : `PSR ${psr.toFixed(2)}`
+          }
         />
         <Kpi
           label="IC"

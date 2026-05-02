@@ -316,6 +316,11 @@ class FactorBacktestRequest(BaseModel):
         description="Drop last N rows of train and end-of-WF-window before scoring.")
     embargo_days: int = Field(default=0, ge=0, le=30,
         description="Drop first N rows of test and start-of-WF-window before scoring.")
+    # T2.1 (v4) — multiple-testing correction. n_trials = 1 gives the raw PSR
+    # against SR=0; > 1 deflates the threshold to E[max SR_N | null].
+    n_trials: int = Field(default=1, ge=1, le=1000,
+        description="How many factor variants the user explored before saving this one. "
+                    "Used by Bailey-LdP deflated Sharpe to discount selection bias.")
 
 
 class _SplitMetricsModel(BaseModel):
@@ -331,6 +336,9 @@ class _SplitMetricsModel(BaseModel):
     icir: float = 0.0
     ic_t_stat: float = 0.0
     ic_pvalue: float = 1.0
+    # T2.1 (v4) — Bailey-LdP deflated Sharpe.
+    psr: float = 0.5
+    lucky_max_sr: float = 0.0
 
 
 class _CurvePoint(BaseModel):
@@ -362,6 +370,9 @@ class _WalkForwardWindow(BaseModel):
     icir: float = 0.0
     ic_t_stat: float = 0.0
     ic_pvalue: float = 1.0
+    # T2.1 (v4) — same DSR per window.
+    psr: float = 0.5
+    lucky_max_sr: float = 0.0
 
 
 class _BasketEntry(BaseModel):
@@ -439,6 +450,7 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             include_breakdown=body.include_breakdown,
             purge_days=body.purge_days,
             embargo_days=body.embargo_days,
+            n_trials=body.n_trials,
         )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
@@ -470,6 +482,8 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             icir=m.icir,
             ic_t_stat=m.ic_t_stat,
             ic_pvalue=m.ic_pvalue,
+            psr=m.psr,
+            lucky_max_sr=m.lucky_max_sr,
         )
 
     monthly = [

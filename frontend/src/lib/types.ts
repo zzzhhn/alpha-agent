@@ -304,6 +304,7 @@ export interface FactorBacktestRequest {
   readonly include_breakdown?: boolean;   // B4 v3: opt-in heavy daily_breakdown payload
   readonly purge_days?: number;           // T1.3 v4: 0–30, drop last N rows of train slice
   readonly embargo_days?: number;         // T1.3 v4: 0–30, drop first N rows of test slice
+  readonly n_trials?: number;             // T2.1 v4: 1–1000, factor variants explored (deflates Sharpe)
 }
 
 export interface WalkForwardWindow {
@@ -321,6 +322,36 @@ export interface WalkForwardWindow {
   readonly icir?: number;
   readonly ic_t_stat?: number;
   readonly ic_pvalue?: number;
+  // T2.1 v4 — same DSR per window
+  readonly psr?: number;
+  readonly lucky_max_sr?: number;
+}
+
+/* ═══════════════════ Zoo cross-correlation (T2.1) ═══════════════════ */
+
+export interface ZooCorrelationFactor {
+  readonly spec: FactorSpec;
+  readonly label?: string;
+}
+
+export interface ZooCorrelationRequest {
+  readonly factors: readonly ZooCorrelationFactor[];
+  readonly top_pct?: number;
+  readonly bottom_pct?: number;
+  readonly warn_threshold?: number;
+}
+
+export interface ZooCorrelationWarning {
+  readonly a: string;
+  readonly b: string;
+  readonly corr: number;
+}
+
+export interface ZooCorrelationResponse {
+  readonly names: readonly string[];
+  readonly matrix: readonly (readonly number[])[];
+  readonly warnings: readonly ZooCorrelationWarning[];
+  readonly n_sessions: number;
 }
 
 export interface BasketEntry {
@@ -349,6 +380,9 @@ export interface FactorSplitMetrics {
   readonly icir?: number;            // mean(IC)/std(IC) × √252
   readonly ic_t_stat?: number;       // t-statistic against IC=0
   readonly ic_pvalue?: number;       // two-sided p-value, 1.0 = totally insignificant
+  // T2.1 v4 — Bailey-LdP deflated Sharpe
+  readonly psr?: number;             // probability(true SR > lucky_max_sr); 0.5 = at the bar
+  readonly lucky_max_sr?: number;    // multiple-testing-corrected null benchmark, annualized
 }
 
 export interface MonthlyReturn {

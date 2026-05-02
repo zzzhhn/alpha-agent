@@ -29,6 +29,8 @@ import type {
   ScreenerRequest,
   ScreenerResponse,
   ExplainAstResponse,
+  ZooCorrelationRequest,
+  ZooCorrelationResponse,
 } from "./types";
 
 const BASE_URL =
@@ -275,6 +277,15 @@ export function explainAst(expression: string) {
   return fetchJson<ExplainAstResponse>("/factor/explain_ast", {
     method: "POST",
     body: JSON.stringify({ expression }),
+  });
+}
+
+/* ── T2.1: Zoo cross-correlation ── */
+
+export function runZooCorrelation(params: ZooCorrelationRequest) {
+  return fetchJson<ZooCorrelationResponse>("/zoo/correlation", {
+    method: "POST",
+    body: JSON.stringify(params),
   });
 }
 

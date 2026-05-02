@@ -130,6 +130,12 @@ class SplitMetrics:
     icir: float = 0.0            # ic_mean / ic_std × sqrt(252), annualized info ratio of IC
     ic_t_stat: float = 0.0       # t = ic_mean / (ic_std / sqrt(n)); two-sided test that IC ≠ 0
     ic_pvalue: float = 1.0       # two-sided p-value via normal approximation (n>30 typically)
+    # T2.1 (v4) — Bailey-LdP deflated Sharpe. PSR is the probability the true SR
+    # beats the multiple-testing-corrected null benchmark. lucky_max_sr is what
+    # one would expect the realized SR to be, just by luck, given n_trials
+    # variants tried under SR=0. PSR>0.95 means SR convincingly clears the bar.
+    psr: float = 0.5             # probability(true SR > lucky_max_sr); 0.5 = at the bar
+    lucky_max_sr: float = 0.0    # multiple-testing-corrected benchmark, annualized SR units
 
 
 @dataclass(frozen=True)
@@ -282,6 +288,7 @@ def _split_metrics(
     weights: np.ndarray,
     start: int,
     end: int,
+    n_trials: int = 1,
 ) -> SplitMetrics:
     slice_ret = daily_returns[start:end]
     # Drop NaN days (early lookback window, no-signal days)
@@ -325,6 +332,17 @@ def _split_metrics(
             # Two-sided p-value via normal CDF: p = 2 * (1 - Φ(|t|))
             ic_pvalue = float(math.erfc(abs(ic_t_stat) / np.sqrt(2.0)))
 
+    # T2.1 (v4) — Deflated Sharpe / PSR. n_trials > 1 penalizes selection
+    # bias (user's "winner" is the maximum of N noisy estimates).
+    from alpha_agent.scan.significance import (
+        deflated_sharpe as _deflated_sharpe,
+        expected_max_sharpe_annual as _exp_max_sr,
+    )
+    lucky_max_sr = _exp_max_sr(n_trials=n_trials, n_samples=int(clean.size))
+    psr, _ = _deflated_sharpe(
+        clean, n_trials=n_trials, benchmark_sr_annual=lucky_max_sr,
+    )
+
     # Turnover = avg L1 distance between consecutive weight rows on the slice.
     # Each rebalance moves at most 2.0 in L1 (close one position, open another),
     # so this is naturally bounded in [0, 2].
@@ -346,6 +364,8 @@ def _split_metrics(
         icir=icir,
         ic_t_stat=ic_t_stat,
         ic_pvalue=ic_pvalue,
+        psr=psr,
+        lucky_max_sr=lucky_max_sr,
     )
 
 
@@ -366,6 +386,7 @@ def run_factor_backtest(
     include_breakdown: bool = False,
     purge_days: int = 0,
     embargo_days: int = 0,
+    n_trials: int = 1,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -421,6 +442,8 @@ def run_factor_backtest(
         raise ValueError(f"purge_days {purge_days!r} must be in [0, 30]")
     if not 0 <= embargo_days <= 30:
         raise ValueError(f"embargo_days {embargo_days!r} must be in [0, 30]")
+    if not 1 <= n_trials <= 1000:
+        raise ValueError(f"n_trials {n_trials!r} must be in [1, 1000]")
     if mode not in SUPPORTED_MODES:
         raise ValueError(f"mode {mode!r} must be one of {sorted(SUPPORTED_MODES)}")
     if not 20 <= wf_window_days <= 252:
@@ -503,8 +526,14 @@ def run_factor_backtest(
     # right after the boundary). Validate the resulting slices stay non-empty.
     train_score_end = max(1, train_end - purge_days)
     test_score_start = min(T - 1, train_end + embargo_days)
-    train_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=0, end=train_score_end)
-    test_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=test_score_start, end=T)
+    train_m = _split_metrics(
+        daily_ret, factor, fwd_returns, weights,
+        start=0, end=train_score_end, n_trials=n_trials,
+    )
+    test_m = _split_metrics(
+        daily_ret, factor, fwd_returns, weights,
+        start=test_score_start, end=T, n_trials=n_trials,
+    )
 
     equity_curve = [
         {"date": str(panel.dates[i]), "value": float(equity[i])} for i in range(T)
@@ -557,7 +586,7 @@ def run_factor_backtest(
             score_end = max(score_start + 1, end - purge_days)
             wm = _split_metrics(
                 daily_ret, factor, fwd_returns, weights,
-                start=score_start, end=score_end,
+                start=score_start, end=score_end, n_trials=n_trials,
             )
             walk_forward.append({
                 "window_start": str(panel.dates[start]),
