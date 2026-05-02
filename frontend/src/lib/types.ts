@@ -307,6 +307,8 @@ export interface FactorBacktestRequest {
   readonly n_trials?: number;             // T2.1 v4: 1–1000, factor variants explored (deflates Sharpe)
   readonly slippage_bps_per_sqrt_pct?: number; // T2.2 v4: 0–100, sqrt-ADV slippage coeff
   readonly short_borrow_bps?: number;     // T2.3 v4: 0–1000, annualized short-leg borrow
+  readonly mask_earnings_window?: boolean; // T3.C v4: zero weights around earnings
+  readonly earnings_window_days?: number; // T3.C v4: 0–5, mask half-width
 }
 
 export interface WalkForwardWindow {

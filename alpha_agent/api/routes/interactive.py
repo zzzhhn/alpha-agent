@@ -329,6 +329,12 @@ class FactorBacktestRequest(BaseModel):
     short_borrow_bps: float = Field(default=0.0, ge=0.0, le=1000.0,
         description="Annualized short-leg borrow cost in bps; charged daily on the prior "
                     "day's |Σ w_short|.")
+    # T3.C (v4) — zero out weights ±N days around each ticker's earnings.
+    mask_earnings_window: bool = Field(default=False,
+        description="Skip trading each ticker around its earnings announcement to reduce "
+                    "PEAD noise contamination of momentum/reversal factors.")
+    earnings_window_days: int = Field(default=1, ge=0, le=5,
+        description="Half-width of the earnings mask in trading days (default ±1d).")
 
 
 class _SplitMetricsModel(BaseModel):
@@ -474,6 +480,8 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             n_trials=body.n_trials,
             slippage_bps_per_sqrt_pct=body.slippage_bps_per_sqrt_pct,
             short_borrow_bps=body.short_borrow_bps,
+            mask_earnings_window=body.mask_earnings_window,
+            earnings_window_days=body.earnings_window_days,
         )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc

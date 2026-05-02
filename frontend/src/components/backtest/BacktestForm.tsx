@@ -22,6 +22,7 @@ export interface BacktestFormParams {
   readonly wfWindowDays: number;    // 20-252
   readonly wfStepDays: number;      // 5-wfWindowDays
   readonly includeBreakdown: boolean;
+  readonly maskEarningsWindow: boolean;
 }
 
 interface BacktestFormProps {
@@ -54,6 +55,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
   const [wfWindowDays, setWfWindowDays] = useState(60);
   const [wfStepDays, setWfStepDays] = useState(20);
   const [includeBreakdown, setIncludeBreakdown] = useState(false);
+  const [maskEarningsWindow, setMaskEarningsWindow] = useState(false);
 
   // P6.D — when /alpha hands off via sessionStorage and the page passes
   // autoRun, fire the run once on first mount so the user lands on a
@@ -73,6 +75,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         wfWindowDays: 60,
         wfStepDays: 20,
         includeBreakdown: false,
+        maskEarningsWindow: false,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,6 +100,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
       wfWindowDays,
       wfStepDays: Math.min(wfStepDays, wfWindowDays),
       includeBreakdown,
+      maskEarningsWindow,
     });
   }
 
@@ -210,6 +214,19 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         <span>{t(locale, "backtest.form.includeBreakdown")}</span>
         <span className="text-[12px] text-muted">
           {t(locale, "backtest.form.includeBreakdownHint")}
+        </span>
+      </label>
+
+      <label className="mt-2 flex items-center gap-2 text-[13px] text-muted">
+        <input
+          type="checkbox"
+          checked={maskEarningsWindow}
+          onChange={(e) => setMaskEarningsWindow(e.target.checked)}
+          className="cursor-pointer"
+        />
+        <span>{t(locale, "backtest.form.maskEarnings")}</span>
+        <span className="text-[12px] text-muted">
+          {t(locale, "backtest.form.maskEarningsHint")}
         </span>
       </label>
 

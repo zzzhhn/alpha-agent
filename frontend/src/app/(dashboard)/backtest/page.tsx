@@ -71,6 +71,7 @@ export default function BacktestPage() {
       wf_window_days: p.wfWindowDays,
       wf_step_days: p.wfStepDays,
       include_breakdown: p.includeBreakdown,
+      mask_earnings_window: p.maskEarningsWindow,
     });
     if (res.error || !res.data) {
       setError(res.error ?? "unknown error");

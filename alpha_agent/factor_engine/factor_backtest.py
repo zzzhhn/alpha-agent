@@ -183,6 +183,48 @@ class FactorBacktestResult:
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
 
 
+def _load_earnings_mask(
+    panel_dates: np.ndarray,
+    universe: tuple[str, ...],
+    window_days: int = 1,
+) -> np.ndarray | None:
+    """Build a (T, N) boolean mask flagging earnings-window days (T3.C of v4).
+
+    For each ticker n, looks up its filing_dates from `fundamentals_pit.parquet`
+    and marks cells where `|panel_dates[t] - filing_date|` ≤ `window_days` as
+    True. Used to zero out factor weights around earnings announcements,
+    reducing PEAD (post-earnings-announcement-drift) noise that contaminates
+    momentum and reversal factors.
+
+    Returns None when `fundamentals_pit.parquet` is absent — caller treats
+    that as "no mask" (back-compat: window=0 effectively).
+    """
+    if not PIT_FUNDAMENTALS_PATH.exists():
+        return None
+
+    pit = pd.read_parquet(PIT_FUNDAMENTALS_PATH)
+    if pit.empty or "filing_date" not in pit.columns:
+        return None
+
+    panel_dt = pd.to_datetime(panel_dates).values  # (T,) datetime64[ns]
+    T = len(panel_dates)
+    N = len(universe)
+    mask = np.zeros((T, N), dtype=bool)
+
+    pit_by_ticker = dict(tuple(pit.groupby("ticker", sort=False)))
+    window_ns = pd.Timedelta(days=window_days).asm8.astype("timedelta64[ns]")
+
+    for n, tk in enumerate(universe):
+        sub = pit_by_ticker.get(tk)
+        if sub is None or sub.empty:
+            continue
+        filings = pd.to_datetime(sub["filing_date"]).values  # (Q,)
+        for fd in filings:
+            within = np.abs(panel_dt - fd) <= window_ns
+            mask[within, n] = True
+    return mask
+
+
 def _load_pit_fundamentals(
     panel_dates: np.ndarray,
     universe: tuple[str, ...],
@@ -508,6 +550,8 @@ def run_factor_backtest(
     n_trials: int = 1,
     slippage_bps_per_sqrt_pct: float = 0.0,
     short_borrow_bps: float = 0.0,
+    mask_earnings_window: bool = False,
+    earnings_window_days: int = 1,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -573,6 +617,10 @@ def run_factor_backtest(
         raise ValueError(
             f"short_borrow_bps {short_borrow_bps!r} must be in [0, 1000]"
         )
+    if not 0 <= earnings_window_days <= 5:
+        raise ValueError(
+            f"earnings_window_days {earnings_window_days!r} must be in [0, 5]"
+        )
     if mode not in SUPPORTED_MODES:
         raise ValueError(f"mode {mode!r} must be one of {sorted(SUPPORTED_MODES)}")
     if not 20 <= wf_window_days <= 252:
@@ -620,6 +668,16 @@ def run_factor_backtest(
             n_short = int(short_mask.sum())
             if n_short > 0:
                 weights[t, short_mask] = -1.0 / n_short
+
+    # T3.C (v4): zero out weights inside the earnings announcement window
+    # for each ticker. Builds a (T, N) mask from filing_dates in
+    # fundamentals_pit.parquet (±earnings_window_days). PEAD noise on
+    # announcement days otherwise contaminates short-horizon momentum
+    # and reversal factors.
+    if mask_earnings_window:
+        em = _load_earnings_mask(panel.dates, panel.tickers, window_days=earnings_window_days)
+        if em is not None:
+            weights[em] = 0.0
 
     # Portfolio daily return = weight[t-1] dot fwd_return[t-1] (i.e. realized at t)
     # fwd_returns[t] is close[t]→close[t+1], so strategy return at t+1 = sum(weights[t] * fwd_returns[t])
