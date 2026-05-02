@@ -86,6 +86,18 @@ def build_data_dict(panel: "_Panel") -> dict[str, np.ndarray]:
 def evaluate_factor_full(panel: "_Panel", spec: "FactorSpec") -> np.ndarray:
     """Run a FactorSpec against the panel and return the (T, N) factor values.
 
+    T1.5b (v4): if the panel carries an `is_member` mask, non-member cells in
+    the final factor array are NaN'd out so they cannot enter the long/short
+    basket and cannot contaminate cross-sectional IC. The mask is applied
+    AFTER operator evaluation — per-ticker time-series ops (ts_mean, ts_std,
+    etc.) keep using full price history, but the trading decision only sees
+    cells where the ticker was an actual SP500 constituent.
+
+    Caveat: cross-sectional ops inside the expression (rank, group_neutralize)
+    still see all 98 tickers when computing ranks. For the SP100 panel this
+    distorts ranks by ~4% (4 movers out of 98); for full SP500 with delisted
+    tickers this matters more and would require row-by-row re-ranking.
+
     Raises:
         ValueError: factor expression evaluates to an unexpected shape.
         Any exception raised by `eval_factor`: propagated with original type
@@ -98,6 +110,8 @@ def evaluate_factor_full(panel: "_Panel", spec: "FactorSpec") -> np.ndarray:
         raise ValueError(
             f"factor expression produced shape {factor.shape}, expected ({T}, {N})"
         )
+    if panel.is_member is not None:
+        factor = np.where(panel.is_member, factor, np.nan)
     return factor
 
 

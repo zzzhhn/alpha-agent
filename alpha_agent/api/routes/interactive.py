@@ -437,6 +437,9 @@ class FactorBacktestResponse(BaseModel):
     alpha_t_stat: float = 0.0
     alpha_pvalue: float = 1.0
     r_squared: float = 0.0
+    # T1.5b (v4): point-in-time SP500 membership correction status.
+    survivorship_corrected: bool = False
+    membership_as_of: str | None = None
 
 
 @router.post(
@@ -575,4 +578,6 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         alpha_t_stat=result.alpha_t_stat,
         alpha_pvalue=result.alpha_pvalue,
         r_squared=result.r_squared,
+        survivorship_corrected=result.survivorship_corrected,
+        membership_as_of=result.membership_as_of,
     )

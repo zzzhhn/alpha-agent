@@ -55,6 +55,16 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
             .replace("{ret}", `${(fullRet * 100).toFixed(1)}%`)
             .replace("{bench}", `${(benchRet * 100).toFixed(1)}%`)}
         </p>
+        {result.survivorship_corrected ? (
+          <span className="mt-1.5 inline-block rounded-md border border-green/40 bg-green/10 px-2 py-0.5 text-[11px] text-green">
+            {t(locale, "backtest.kpi.survivorshipCorrected")
+              .replace("{date}", result.membership_as_of ?? "—")}
+          </span>
+        ) : (
+          <span className="mt-1.5 inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600 dark:text-amber-400">
+            {t(locale, "backtest.kpi.survivorshipLegacy")}
+          </span>
+        )}
         {result.overfit_flag && (
           <p className="mt-2 rounded-md border border-red/40 bg-red/10 px-2 py-1 text-[12px] text-red">
             {t(locale, "backtest.kpi.overfitWarning")

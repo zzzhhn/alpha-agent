@@ -117,6 +117,11 @@ class _Panel:
     exchange: np.ndarray | None = None   # broadcast snapshot
     currency: np.ndarray | None = None
     fundamentals: dict[str, np.ndarray] | None = None  # field → (T, N)
+    # T1.5b (v4): point-in-time SP500 membership mask. True iff ticker n was
+    # an SP500 constituent on date t per fja05680/sp500 historical components
+    # CSV. None when membership CSV is absent (caller falls back to "all
+    # members", i.e. legacy survivorship-biased behavior with a warning).
+    is_member: np.ndarray | None = None  # shape (T, N) bool
 
 
 @dataclass(frozen=True)
@@ -186,9 +191,27 @@ class FactorBacktestResult:
     alpha_t_stat: float = 0.0
     alpha_pvalue: float = 1.0
     r_squared: float = 0.0
+    # T1.5b (v4): True iff the panel was filtered through a point-in-time
+    # SP500 membership mask. Frontend KPI strip surfaces this as a small
+    # "✓ SP500-as-of-date" badge so users know whether the result is
+    # survivorship-corrected vs legacy lookahead.
+    survivorship_corrected: bool = False
+    membership_as_of: str | None = None  # "YYYY-MM-DD" of the latest CSV snapshot
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
+
+
+@lru_cache(maxsize=1)
+def _membership_csv_as_of() -> str | None:
+    """Return the date of the latest snapshot in the membership CSV, or None
+    if absent. Used to surface "✓ SP500 as of YYYY-MM-DD" in result payloads."""
+    try:
+        from alpha_agent.data.membership import load_membership_history
+        history = load_membership_history()
+        return history[-1][0].strftime("%Y-%m-%d") if history else None
+    except Exception:
+        return None
 
 
 def _load_earnings_mask(
@@ -377,6 +400,21 @@ def _load_panel() -> _Panel:
                 f: pivot(f) for f in _V2_FUNDAMENTAL_FIELDS if f in df.columns
             }
 
+    # T1.5b (v4): build point-in-time SP500 membership mask. Falls back to
+    # None (no mask, legacy lookahead behavior) if the CSV is missing — with
+    # a warning so the regression isn't silent.
+    from alpha_agent.data.membership import build_is_member_mask
+    is_member = build_is_member_mask(dates_series, universe)
+    if is_member is None:
+        import warnings
+        warnings.warn(
+            "SP500 membership CSV missing — backtests run without "
+            "survivorship correction (LOOKAHEAD-BIASED for any ticker that "
+            "joined/left SP500 inside the panel window). Refresh from "
+            "https://github.com/fja05680/sp500.",
+            stacklevel=2,
+        )
+
     return _Panel(
         dates=dates_series,
         tickers=universe,
@@ -392,6 +430,7 @@ def _load_panel() -> _Panel:
         exchange=exchange,
         currency=currency,
         fundamentals=fundamentals,
+        is_member=is_member,
     )
 
 
@@ -870,6 +909,8 @@ def run_factor_backtest(
         alpha_t_stat=market_decomp.alpha_t_stat,
         alpha_pvalue=market_decomp.alpha_pvalue,
         r_squared=market_decomp.r_squared,
+        survivorship_corrected=panel.is_member is not None,
+        membership_as_of=_membership_csv_as_of(),
     )
 
 

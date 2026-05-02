@@ -428,6 +428,9 @@ export interface FactorBacktestResponse {
   readonly alpha_t_stat?: number;
   readonly alpha_pvalue?: number;
   readonly r_squared?: number;
+  // T1.5b v4 — point-in-time SP500 membership mask status
+  readonly survivorship_corrected?: boolean;
+  readonly membership_as_of?: string | null;  // "YYYY-MM-DD"
 }
 
 export interface HypothesisHistoryEntry {
