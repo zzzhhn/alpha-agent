@@ -32,8 +32,16 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
   // lucky-max-of-N-trials baseline.
   const psr = m.psr ?? 0.5;
   const luckyMax = m.lucky_max_sr ?? 0;
+  // T3.A v4 — bootstrap CI hints. CI spanning zero = realized number is
+  // statistically indistinguishable from no edge.
+  const sharpeLo = m.sharpe_ci_low ?? 0;
+  const sharpeHi = m.sharpe_ci_high ?? 0;
+  const sharpeCiSpansZero = sharpeLo < 0 && sharpeHi > 0;
+  const icLo = m.ic_ci_low ?? 0;
+  const icHi = m.ic_ci_high ?? 0;
+  const icCiSpansZero = icLo < 0 && icHi > 0;
   const sharpeAccent: "green" | "red" | undefined =
-    psr >= 0.95 ? "green" : psr < 0.5 ? "red"
+    psr >= 0.95 ? "green" : psr < 0.5 || sharpeCiSpansZero ? "red"
     : m.sharpe >= 1.0 ? "green" : m.sharpe < 0 ? "red" : undefined;
 
   return (
@@ -67,16 +75,22 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
           value={m.sharpe.toFixed(2)}
           accent={sharpeAccent}
           hint={
-            luckyMax > 0
-              ? `PSR ${psr.toFixed(2)} · luckyMax ${luckyMax.toFixed(2)}`
-              : `PSR ${psr.toFixed(2)}`
+            sharpeHi !== sharpeLo
+              ? `95% CI [${sharpeLo.toFixed(2)}, ${sharpeHi.toFixed(2)}] · PSR ${psr.toFixed(2)}`
+              : luckyMax > 0
+                ? `PSR ${psr.toFixed(2)} · luckyMax ${luckyMax.toFixed(2)}`
+                : `PSR ${psr.toFixed(2)}`
           }
         />
         <Kpi
           label="IC"
           value={m.ic_spearman.toFixed(4)}
-          accent={icAccent}
-          hint={`ICIR ${icir.toFixed(2)} · p=${icP < 0.001 ? "<0.001" : icP.toFixed(3)}`}
+          accent={icCiSpansZero ? "red" : icAccent}
+          hint={
+            icHi !== icLo
+              ? `[${icLo.toFixed(3)}, ${icHi.toFixed(3)}] · p=${icP < 0.001 ? "<0.001" : icP.toFixed(3)}`
+              : `ICIR ${icir.toFixed(2)} · p=${icP < 0.001 ? "<0.001" : icP.toFixed(3)}`
+          }
         />
         <Kpi
           label={t(locale, "backtest.kpi.maxDD")}

@@ -141,6 +141,13 @@ class SplitMetrics:
     # variants tried under SR=0. PSR>0.95 means SR convincingly clears the bar.
     psr: float = 0.5             # probability(true SR > lucky_max_sr); 0.5 = at the bar
     lucky_max_sr: float = 0.0    # multiple-testing-corrected benchmark, annualized SR units
+    # T3.A (v4) — stationary block bootstrap 95% CIs. Wide CI = noisy realized
+    # estimate; narrow CI = stable. Often more honest than a single SR / IC
+    # number when the panel is short.
+    sharpe_ci_low: float = 0.0
+    sharpe_ci_high: float = 0.0
+    ic_ci_low: float = 0.0
+    ic_ci_high: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -424,11 +431,32 @@ def _split_metrics(
     from alpha_agent.scan.significance import (
         deflated_sharpe as _deflated_sharpe,
         expected_max_sharpe_annual as _exp_max_sr,
+        stationary_block_bootstrap_ci as _block_bootstrap_ci,
     )
     lucky_max_sr = _exp_max_sr(n_trials=n_trials, n_samples=int(clean.size))
     psr, _ = _deflated_sharpe(
         clean, n_trials=n_trials, benchmark_sr_annual=lucky_max_sr,
     )
+
+    # T3.A (v4) — stationary block bootstrap 95% CIs.
+    # Sharpe: bootstrap the daily-return series and re-annualize on each draw.
+    # IC mean: bootstrap the per-day IC sample list (already a 1D array of ICs).
+    # Block length 20 ≈ one trading month — captures momentum autocorrelation.
+    def _annualized_sharpe(x: np.ndarray) -> float:
+        sd = float(x.std(ddof=1))
+        return float(x.mean() / sd * np.sqrt(252.0)) if sd > 0 else 0.0
+
+    sharpe_ci_low, sharpe_ci_high = _block_bootstrap_ci(
+        clean, _annualized_sharpe, block_len=20, n_resamples=1000,
+    )
+    if ic_samples:
+        ic_ci_low, ic_ci_high = _block_bootstrap_ci(
+            np.asarray(ic_samples, dtype=np.float64),
+            lambda x: float(x.mean()),
+            block_len=20, n_resamples=1000,
+        )
+    else:
+        ic_ci_low, ic_ci_high = 0.0, 0.0
 
     # Turnover = avg L1 distance between consecutive weight rows on the slice.
     # Each rebalance moves at most 2.0 in L1 (close one position, open another),
@@ -453,6 +481,10 @@ def _split_metrics(
         ic_pvalue=ic_pvalue,
         psr=psr,
         lucky_max_sr=lucky_max_sr,
+        sharpe_ci_low=float(sharpe_ci_low) if not np.isnan(sharpe_ci_low) else 0.0,
+        sharpe_ci_high=float(sharpe_ci_high) if not np.isnan(sharpe_ci_high) else 0.0,
+        ic_ci_low=float(ic_ci_low) if not np.isnan(ic_ci_low) else 0.0,
+        ic_ci_high=float(ic_ci_high) if not np.isnan(ic_ci_high) else 0.0,
     )
 
 

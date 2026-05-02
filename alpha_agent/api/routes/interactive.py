@@ -347,6 +347,11 @@ class _SplitMetricsModel(BaseModel):
     # T2.1 (v4) — Bailey-LdP deflated Sharpe.
     psr: float = 0.5
     lucky_max_sr: float = 0.0
+    # T3.A (v4) — stationary block bootstrap 95% CIs.
+    sharpe_ci_low: float = 0.0
+    sharpe_ci_high: float = 0.0
+    ic_ci_low: float = 0.0
+    ic_ci_high: float = 0.0
 
 
 class _CurvePoint(BaseModel):
@@ -381,6 +386,11 @@ class _WalkForwardWindow(BaseModel):
     # T2.1 (v4) — same DSR per window.
     psr: float = 0.5
     lucky_max_sr: float = 0.0
+    # T3.A (v4) — same bootstrap CIs per window.
+    sharpe_ci_low: float = 0.0
+    sharpe_ci_high: float = 0.0
+    ic_ci_low: float = 0.0
+    ic_ci_high: float = 0.0
 
 
 class _BasketEntry(BaseModel):
@@ -497,6 +507,10 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             ic_pvalue=m.ic_pvalue,
             psr=m.psr,
             lucky_max_sr=m.lucky_max_sr,
+            sharpe_ci_low=m.sharpe_ci_low,
+            sharpe_ci_high=m.sharpe_ci_high,
+            ic_ci_low=m.ic_ci_low,
+            ic_ci_high=m.ic_ci_high,
         )
 
     monthly = [

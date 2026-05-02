@@ -327,6 +327,11 @@ export interface WalkForwardWindow {
   // T2.1 v4 — same DSR per window
   readonly psr?: number;
   readonly lucky_max_sr?: number;
+  // T3.A v4 — same bootstrap CIs per window
+  readonly sharpe_ci_low?: number;
+  readonly sharpe_ci_high?: number;
+  readonly ic_ci_low?: number;
+  readonly ic_ci_high?: number;
 }
 
 /* ═══════════════════ Zoo cross-correlation (T2.1) ═══════════════════ */
@@ -385,6 +390,11 @@ export interface FactorSplitMetrics {
   // T2.1 v4 — Bailey-LdP deflated Sharpe
   readonly psr?: number;             // probability(true SR > lucky_max_sr); 0.5 = at the bar
   readonly lucky_max_sr?: number;    // multiple-testing-corrected null benchmark, annualized
+  // T3.A v4 — stationary block bootstrap 95% CIs
+  readonly sharpe_ci_low?: number;
+  readonly sharpe_ci_high?: number;
+  readonly ic_ci_low?: number;
+  readonly ic_ci_high?: number;
 }
 
 export interface MonthlyReturn {
