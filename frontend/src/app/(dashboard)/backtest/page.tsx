@@ -129,6 +129,7 @@ export default function BacktestPage() {
             </div>
           </Card>
           <BacktestKpiStrip result={result} />
+          <RiskAttributionCard result={result} />
           <Card padding="md">
             <header className="mb-3">
               <h2 className="text-base font-semibold text-text">
@@ -153,6 +154,89 @@ export default function BacktestPage() {
         </>
       )}
     </div>
+  );
+}
+
+function RiskAttributionCard({
+  result,
+}: {
+  readonly result: FactorBacktestResponse;
+}) {
+  const { locale } = useLocale();
+  const alpha = result.alpha_annualized ?? 0;
+  const beta = result.beta_market ?? 0;
+  const r2 = result.r_squared ?? 0;
+  const pAlpha = result.alpha_pvalue ?? 1;
+  // Color logic: alpha green only if statistically significant + positive.
+  // β colored when |β| significantly different from 0 (use a coarse threshold
+  // that maps to "this is leveraged/levered exposure" intuitively).
+  const alphaColor = pAlpha < 0.05 && alpha > 0 ? "text-green"
+    : pAlpha < 0.05 && alpha < 0 ? "text-red"
+    : "text-muted";
+  const betaColor = Math.abs(beta) < 0.15 ? "text-text"
+    : beta > 0.5 ? "text-yellow"
+    : "text-text";
+
+  return (
+    <Card padding="md">
+      <header className="mb-3">
+        <h3 className="text-[14px] font-semibold text-text">
+          {t(locale, "backtest.risk.title")}
+        </h3>
+        <p className="mt-0.5 text-[12px] text-muted">
+          {t(locale, "backtest.risk.subtitle")}
+        </p>
+      </header>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-muted">
+            {t(locale, "backtest.risk.alpha")}
+          </div>
+          <div className={`mt-0.5 font-mono text-base font-semibold ${alphaColor}`}>
+            {alpha >= 0 ? "+" : ""}{(alpha * 100).toFixed(2)}%
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted">
+            p={pAlpha < 0.001 ? "<0.001" : pAlpha.toFixed(3)}
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-muted">
+            {t(locale, "backtest.risk.beta")}
+          </div>
+          <div className={`mt-0.5 font-mono text-base font-semibold ${betaColor}`}>
+            {beta >= 0 ? "+" : ""}{beta.toFixed(3)}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted">
+            {t(locale, "backtest.risk.betaHint")}
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-muted">
+            R²
+          </div>
+          <div className="mt-0.5 font-mono text-base font-semibold text-text">
+            {(r2 * 100).toFixed(1)}%
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted">
+            {t(locale, "backtest.risk.r2Hint")}
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-muted">
+            {t(locale, "backtest.risk.verdict")}
+          </div>
+          <div className={`mt-0.5 font-mono text-[13px] ${alphaColor}`}>
+            {pAlpha < 0.05 && Math.abs(beta) < 0.3
+              ? t(locale, "backtest.risk.verdictAlphaPure")
+              : pAlpha < 0.05
+                ? t(locale, "backtest.risk.verdictAlphaLevered")
+                : Math.abs(beta) > 0.5
+                  ? t(locale, "backtest.risk.verdictBetaOnly")
+                  : t(locale, "backtest.risk.verdictNoise")}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 

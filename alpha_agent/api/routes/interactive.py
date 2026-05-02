@@ -431,6 +431,12 @@ class FactorBacktestResponse(BaseModel):
     # T2.4 (v4): IS-OOS Sharpe decay flag.
     oos_decay: float = 0.0
     overfit_flag: bool = False
+    # T3.B (v4): market α/β decomposition.
+    alpha_annualized: float = 0.0
+    beta_market: float = 0.0
+    alpha_t_stat: float = 0.0
+    alpha_pvalue: float = 1.0
+    r_squared: float = 0.0
 
 
 @router.post(
@@ -564,4 +570,9 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         daily_breakdown=daily_breakdown,
         oos_decay=result.oos_decay,
         overfit_flag=result.overfit_flag,
+        alpha_annualized=result.alpha_annualized,
+        beta_market=result.beta_market,
+        alpha_t_stat=result.alpha_t_stat,
+        alpha_pvalue=result.alpha_pvalue,
+        r_squared=result.r_squared,
     )

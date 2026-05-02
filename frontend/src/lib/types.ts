@@ -422,6 +422,12 @@ export interface FactorBacktestResponse {
   // T2.4 v4 — IS-OOS Sharpe decay
   readonly oos_decay?: number;        // (train_sharpe − test_sharpe) / max(|train_sharpe|, 1e-3)
   readonly overfit_flag?: boolean;    // true when oos_decay > 0.5
+  // T3.B v4 — market α/β decomposition (full-period daily regression on SPY)
+  readonly alpha_annualized?: number;
+  readonly beta_market?: number;
+  readonly alpha_t_stat?: number;
+  readonly alpha_pvalue?: number;
+  readonly r_squared?: number;
 }
 
 export interface HypothesisHistoryEntry {

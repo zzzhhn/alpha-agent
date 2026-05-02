@@ -178,6 +178,14 @@ class FactorBacktestResult:
     # overfit_flag = oos_decay > 0.5 (lost more than half the train edge OOS)
     oos_decay: float = 0.0
     overfit_flag: bool = False
+    # T3.B (v4) — market α/β decomposition: regress strategy daily return on
+    # benchmark (SPY). High R² + significant β = factor is mostly market exposure;
+    # near-zero β + significant α = real factor signal.
+    alpha_annualized: float = 0.0
+    beta_market: float = 0.0
+    alpha_t_stat: float = 0.0
+    alpha_pvalue: float = 1.0
+    r_squared: float = 0.0
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
@@ -823,6 +831,14 @@ def run_factor_backtest(
                 "hit_rate": wm.hit_rate,
             })
 
+    # T3.B (v4) — market α/β decomposition. Regress full-period daily strategy
+    # return on SPY's daily return. Surfaces whether realized Sharpe traces to
+    # excess alpha or to leveraged market exposure.
+    from alpha_agent.factor_engine.risk_attribution import decompose_alpha_beta
+    bench_daily = np.full_like(bench, np.nan)
+    bench_daily[1:] = bench[1:] / bench[:-1] - 1.0
+    market_decomp = decompose_alpha_beta(daily_ret, bench_daily)
+
     # T2.4 (v4) — IS-OOS Sharpe drop. Conventional definition of "overfit":
     # had a real positive edge in train and lost over half of it OOS. Both
     # conditions matter — without the train > 0.5 guard, "consistently bad"
@@ -849,6 +865,11 @@ def run_factor_backtest(
         daily_breakdown=daily_breakdown,
         oos_decay=oos_decay,
         overfit_flag=overfit_flag,
+        alpha_annualized=market_decomp.alpha_annualized,
+        beta_market=market_decomp.beta_market,
+        alpha_t_stat=market_decomp.alpha_t_stat,
+        alpha_pvalue=market_decomp.alpha_pvalue,
+        r_squared=market_decomp.r_squared,
     )
 
 
