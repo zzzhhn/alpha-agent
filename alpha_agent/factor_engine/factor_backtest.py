@@ -19,6 +19,7 @@ so every operator it accepts is the same set the smoke test accepts.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -122,6 +123,13 @@ class SplitMetrics:
     max_drawdown: float = 0.0   # P4.1: largest peak-to-trough drop in this slice
     turnover: float = 0.0       # P4.1: avg daily L1 weight delta on this slice
     hit_rate: float = 0.0       # P4.1: pct of days with ic > 0
+    # T1.4 (v4): IC distribution stats. Without these, an IC mean of 0.02
+    # could be a clean 0.02 ± 0.01 (real signal, ICIR ~ 30) or 0.02 ± 0.15
+    # (pure noise, ICIR ~ 2 but not statistically distinguishable from zero).
+    ic_std: float = 0.0          # std of per-day Spearman IC samples in this slice
+    icir: float = 0.0            # ic_mean / ic_std × sqrt(252), annualized info ratio of IC
+    ic_t_stat: float = 0.0       # t = ic_mean / (ic_std / sqrt(n)); two-sided test that IC ≠ 0
+    ic_pvalue: float = 1.0       # two-sided p-value via normal approximation (n>30 typically)
 
 
 @dataclass(frozen=True)
@@ -300,6 +308,23 @@ def _split_metrics(
         if ic_samples else 0.0
     )
 
+    # T1.4 (v4): IC distribution + significance. Computed on the same per-day
+    # IC sample list. Use ddof=1 for sample std (we have N daily ICs, not the
+    # population). t-stat = mean / SE; p-value via normal CDF (panel sizes ≥ 30
+    # make the t-distribution → normal approximation accurate within 1%).
+    ic_std = 0.0
+    icir = 0.0
+    ic_t_stat = 0.0
+    ic_pvalue = 1.0
+    if len(ic_samples) >= 2:
+        ic_arr = np.asarray(ic_samples, dtype=np.float64)
+        ic_std = float(ic_arr.std(ddof=1))
+        if ic_std > 1e-12:
+            icir = float(ic_mean / ic_std * np.sqrt(252.0))
+            ic_t_stat = float(ic_mean / (ic_std / np.sqrt(len(ic_arr))))
+            # Two-sided p-value via normal CDF: p = 2 * (1 - Φ(|t|))
+            ic_pvalue = float(math.erfc(abs(ic_t_stat) / np.sqrt(2.0)))
+
     # Turnover = avg L1 distance between consecutive weight rows on the slice.
     # Each rebalance moves at most 2.0 in L1 (close one position, open another),
     # so this is naturally bounded in [0, 2].
@@ -317,6 +342,10 @@ def _split_metrics(
         max_drawdown=mdd,
         turnover=turnover,
         hit_rate=hit_rate,
+        ic_std=ic_std,
+        icir=icir,
+        ic_t_stat=ic_t_stat,
+        ic_pvalue=ic_pvalue,
     )
 
 
@@ -335,6 +364,8 @@ def run_factor_backtest(
     wf_window_days: int = 60,
     wf_step_days: int = 20,
     include_breakdown: bool = False,
+    purge_days: int = 0,
+    embargo_days: int = 0,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -356,6 +387,18 @@ def run_factor_backtest(
     yields ~10 windows — enough to see if a factor's edge decays through time
     without overpartitioning a small sample.
 
+    `purge_days` drops the last N rows of the train slice before scoring (and
+    the last N rows of each walk-forward window). Used because train's last
+    row's forward return is computed from close[t+1] which lives in the test
+    set — that's a literal label-leak across the boundary. Conservative
+    default 0; set 1-5 for any factor whose forward horizon overlaps the
+    split.
+
+    `embargo_days` drops the first N rows of the test slice (and the first
+    N rows of each walk-forward window) so factors with rolling lookback
+    don't get scored on their boundary settling period. Default 0; set
+    `lookback / 2` for moderate factors.
+
     Raises:
         FileNotFoundError: parquet panel missing at import/first-call time
         ValueError: factor expression evaluates to wrong shape, unsupported
@@ -374,6 +417,10 @@ def run_factor_backtest(
         raise ValueError(f"bottom_pct {bottom_pct!r} must be in [0.01, 0.5]")
     if not 0.0 <= transaction_cost_bps <= 200.0:
         raise ValueError(f"transaction_cost_bps {transaction_cost_bps!r} must be in [0, 200]")
+    if not 0 <= purge_days <= 30:
+        raise ValueError(f"purge_days {purge_days!r} must be in [0, 30]")
+    if not 0 <= embargo_days <= 30:
+        raise ValueError(f"embargo_days {embargo_days!r} must be in [0, 30]")
     if mode not in SUPPORTED_MODES:
         raise ValueError(f"mode {mode!r} must be one of {sorted(SUPPORTED_MODES)}")
     if not 20 <= wf_window_days <= 252:
@@ -451,8 +498,13 @@ def run_factor_backtest(
     bench = panel.benchmark_close / panel.benchmark_close[0] * INITIAL_CAPITAL
 
     train_end = int(T * train_ratio)
-    train_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=0, end=train_end)
-    test_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=train_end, end=T)
+    # T1.3 (v4): purge tail of train (its fwd_return spans into test) and
+    # embargo head of test (rolling lookback in factor still re-settling
+    # right after the boundary). Validate the resulting slices stay non-empty.
+    train_score_end = max(1, train_end - purge_days)
+    test_score_start = min(T - 1, train_end + embargo_days)
+    train_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=0, end=train_score_end)
+    test_m = _split_metrics(daily_ret, factor, fwd_returns, weights, start=test_score_start, end=T)
 
     equity_curve = [
         {"date": str(panel.dates[i]), "value": float(equity[i])} for i in range(T)
@@ -494,13 +546,18 @@ def run_factor_backtest(
 
     # A7 (v3): rolling per-window metrics. Static mode skips this so payload
     # stays small for users who don't care about IS/OOS decay analysis.
+    # T1.3 (v4): each window's effective scoring slice is shrunk by embargo
+    # at the head and purge at the tail to avoid the boundary leakage modes.
     walk_forward: list[dict] | None = None
     if mode == "walk_forward":
         walk_forward = []
         for start in range(0, T - wf_window_days + 1, wf_step_days):
             end = start + wf_window_days
+            score_start = min(end - 1, start + embargo_days)
+            score_end = max(score_start + 1, end - purge_days)
             wm = _split_metrics(
-                daily_ret, factor, fwd_returns, weights, start=start, end=end,
+                daily_ret, factor, fwd_returns, weights,
+                start=score_start, end=score_end,
             )
             walk_forward.append({
                 "window_start": str(panel.dates[start]),

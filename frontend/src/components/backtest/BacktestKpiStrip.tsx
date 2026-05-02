@@ -21,6 +21,12 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
   const dd = m.max_drawdown ?? 0;
   const turnover = m.turnover ?? 0;
   const hitRate = m.hit_rate ?? 0;
+  // T1.4 v4 — IC significance. p<0.05 = "real signal"; p>0.5 = noise.
+  // Honest verdict beats a green Sharpe number every time.
+  const icir = m.icir ?? 0;
+  const icP = m.ic_pvalue ?? 1;
+  const icAccent: "green" | "red" | undefined =
+    icP < 0.05 && m.ic_spearman > 0 ? "green" : icP > 0.5 ? "red" : undefined;
 
   return (
     <Card padding="md">
@@ -50,7 +56,8 @@ export function BacktestKpiStrip({ result }: BacktestKpiStripProps) {
         <Kpi
           label="IC"
           value={m.ic_spearman.toFixed(4)}
-          accent={m.ic_spearman > 0 ? "green" : "red"}
+          accent={icAccent}
+          hint={`ICIR ${icir.toFixed(2)} · p=${icP < 0.001 ? "<0.001" : icP.toFixed(3)}`}
         />
         <Kpi
           label={t(locale, "backtest.kpi.maxDD")}

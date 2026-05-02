@@ -145,9 +145,11 @@ def test_api_happy_path_returns_full_payload() -> None:
     assert body["train_end_index"] > 0
     assert len(body["equity_curve"]) == len(body["benchmark_curve"])
     assert body["equity_curve"][0].keys() == {"date", "value"}
-    assert set(body["train_metrics"].keys()) == {
-        "sharpe", "total_return", "ic_spearman", "n_days",
-    }
+    # Subset assertion — schema is additive (P4.1 turnover/MDD/hit_rate,
+    # T1.4 ICIR/p-value, etc.). Strict equality breaks every additive PR.
+    assert {"sharpe", "total_return", "ic_spearman", "n_days"} <= set(
+        body["train_metrics"].keys()
+    )
 
 
 def test_api_rejects_unknown_operand_with_422() -> None:

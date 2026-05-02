@@ -311,6 +311,11 @@ class FactorBacktestRequest(BaseModel):
     # B4 (v3) — per-day basket + IC drill-down. Heavy payload, opt-in.
     include_breakdown: bool = Field(default=False,
         description="Return daily_breakdown[] with per-day long/short basket + IC.")
+    # T1.3 (v4) — purge / embargo around the static train/test boundary.
+    purge_days: int = Field(default=0, ge=0, le=30,
+        description="Drop last N rows of train and end-of-WF-window before scoring.")
+    embargo_days: int = Field(default=0, ge=0, le=30,
+        description="Drop first N rows of test and start-of-WF-window before scoring.")
 
 
 class _SplitMetricsModel(BaseModel):
@@ -321,6 +326,11 @@ class _SplitMetricsModel(BaseModel):
     max_drawdown: float = 0.0
     turnover: float = 0.0
     hit_rate: float = 0.0
+    # T1.4 (v4) — IC distribution + significance.
+    ic_std: float = 0.0
+    icir: float = 0.0
+    ic_t_stat: float = 0.0
+    ic_pvalue: float = 1.0
 
 
 class _CurvePoint(BaseModel):
@@ -347,6 +357,11 @@ class _WalkForwardWindow(BaseModel):
     max_drawdown: float
     turnover: float
     hit_rate: float
+    # T1.4 (v4) — same IC stats per window.
+    ic_std: float = 0.0
+    icir: float = 0.0
+    ic_t_stat: float = 0.0
+    ic_pvalue: float = 1.0
 
 
 class _BasketEntry(BaseModel):
@@ -422,6 +437,8 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             wf_window_days=body.wf_window_days,
             wf_step_days=body.wf_step_days,
             include_breakdown=body.include_breakdown,
+            purge_days=body.purge_days,
+            embargo_days=body.embargo_days,
         )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
@@ -449,6 +466,10 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             max_drawdown=m.max_drawdown,
             turnover=m.turnover,
             hit_rate=m.hit_rate,
+            ic_std=m.ic_std,
+            icir=m.icir,
+            ic_t_stat=m.ic_t_stat,
+            ic_pvalue=m.ic_pvalue,
         )
 
     monthly = [

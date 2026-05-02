@@ -302,6 +302,8 @@ export interface FactorBacktestRequest {
   readonly wf_window_days?: number;       // A7 v3: 20–252, only used when walk_forward
   readonly wf_step_days?: number;         // A7 v3: 5–wf_window_days
   readonly include_breakdown?: boolean;   // B4 v3: opt-in heavy daily_breakdown payload
+  readonly purge_days?: number;           // T1.3 v4: 0–30, drop last N rows of train slice
+  readonly embargo_days?: number;         // T1.3 v4: 0–30, drop first N rows of test slice
 }
 
 export interface WalkForwardWindow {
@@ -314,6 +316,11 @@ export interface WalkForwardWindow {
   readonly max_drawdown: number;
   readonly turnover: number;
   readonly hit_rate: number;
+  // T1.4 v4 — same per-window
+  readonly ic_std?: number;
+  readonly icir?: number;
+  readonly ic_t_stat?: number;
+  readonly ic_pvalue?: number;
 }
 
 export interface BasketEntry {
@@ -337,6 +344,11 @@ export interface FactorSplitMetrics {
   readonly max_drawdown?: number;   // P4.1
   readonly turnover?: number;       // P4.1
   readonly hit_rate?: number;       // P4.1
+  // T1.4 v4 — IC distribution + statistical significance
+  readonly ic_std?: number;
+  readonly icir?: number;            // mean(IC)/std(IC) × √252
+  readonly ic_t_stat?: number;       // t-statistic against IC=0
+  readonly ic_pvalue?: number;       // two-sided p-value, 1.0 = totally insignificant
 }
 
 export interface MonthlyReturn {
