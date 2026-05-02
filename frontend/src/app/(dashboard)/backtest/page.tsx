@@ -172,6 +172,7 @@ function RiskAttributionCard({
   // that maps to "this is leveraged/levered exposure" intuitively).
   const alphaColor = pAlpha < 0.05 && alpha > 0 ? "text-green"
     : pAlpha < 0.05 && alpha < 0 ? "text-red"
+    : pAlpha < 0.10 && alpha > 0 ? "text-yellow"
     : "text-muted";
   const betaColor = Math.abs(beta) < 0.15 ? "text-text"
     : beta > 0.5 ? "text-yellow"
@@ -230,9 +231,11 @@ function RiskAttributionCard({
               ? t(locale, "backtest.risk.verdictAlphaPure")
               : pAlpha < 0.05
                 ? t(locale, "backtest.risk.verdictAlphaLevered")
-                : Math.abs(beta) > 0.5
-                  ? t(locale, "backtest.risk.verdictBetaOnly")
-                  : t(locale, "backtest.risk.verdictNoise")}
+                : pAlpha < 0.10 && alpha > 0 && Math.abs(beta) < 0.3
+                  ? t(locale, "backtest.risk.verdictMarginal")
+                  : Math.abs(beta) > 0.5
+                    ? t(locale, "backtest.risk.verdictBetaOnly")
+                    : t(locale, "backtest.risk.verdictNoise")}
           </div>
         </div>
       </div>
