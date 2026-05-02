@@ -51,6 +51,11 @@ _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 PARQUET_V2_PATH = _DATA_DIR / "factor_universe_sp100_v2.parquet"
 PARQUET_V1_PATH = _DATA_DIR / "factor_universe_1y.parquet"
 PARQUET_PATH = PARQUET_V2_PATH if PARQUET_V2_PATH.exists() else PARQUET_V1_PATH
+# T1.1 (v4): point-in-time fundamentals. When this parquet is present,
+# `_load_panel()` overrides the legacy broadcast-snapshot fundamentals with
+# per-row as-of joins keyed on filing_date. Missing → fallback to broadcast
+# (with warning) for back-compat with pre-v4 deployments.
+PIT_FUNDAMENTALS_PATH = _DATA_DIR / "fundamentals_pit.parquet"
 
 # v2 schema additions — None on v1 panels.
 # Names match the WorldQuant fundamentals catalog (see
@@ -165,6 +170,67 @@ class FactorBacktestResult:
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
 
 
+def _load_pit_fundamentals(
+    panel_dates: np.ndarray,
+    universe: tuple[str, ...],
+) -> dict[str, np.ndarray] | None:
+    """As-of join PIT fundamentals onto the panel timeline (T1.1 of v4).
+
+    For each `(t, n)`: value = the most recent row in `fundamentals_pit.parquet`
+    where `ticker == universe[n]` and `filing_date <= panel_dates[t]`. Cells
+    are NaN where no statement has been filed yet at `t`. This is the
+    canonical PIT join — replaces the legacy broadcast-snapshot pattern that
+    leaked future earnings ~30-45 days into the past.
+
+    Returns None if the PIT parquet is missing — caller falls back to legacy
+    broadcast (with explicit warning logged). When present, the returned dict
+    has `(T, N)` arrays for every fundamental field in the parquet (typically
+    20 fields ≡ `_V2_FUNDAMENTAL_FIELDS`).
+    """
+    if not PIT_FUNDAMENTALS_PATH.exists():
+        return None
+
+    pit = pd.read_parquet(PIT_FUNDAMENTALS_PATH)
+    if pit.empty:
+        return None
+
+    panel_dates_dt = pd.to_datetime(panel_dates).values  # numpy datetime64
+    T = len(panel_dates)
+    N = len(universe)
+
+    fundamental_fields = [
+        c for c in pit.columns
+        if c not in ("ticker", "report_period", "filing_date")
+    ]
+    out: dict[str, np.ndarray] = {
+        f: np.full((T, N), np.nan, dtype=np.float64) for f in fundamental_fields
+    }
+
+    pit_by_ticker = dict(tuple(pit.groupby("ticker", sort=False)))
+
+    for n, tk in enumerate(universe):
+        sub = pit_by_ticker.get(tk)
+        if sub is None or sub.empty:
+            continue
+        sub = sub.sort_values("filing_date").reset_index(drop=True)
+        filing_dates = pd.to_datetime(sub["filing_date"]).values
+        # searchsorted with side='right' returns the insertion index that
+        # keeps `panel_dates_dt[t]` strictly before equal `filing_dates`
+        # entries — but we want filings whose date IS <= panel_date to count
+        # as "known". Subtract 1 to land on the last such row.
+        idx = np.searchsorted(filing_dates, panel_dates_dt, side="right") - 1
+        valid = idx >= 0
+        if not valid.any():
+            continue
+        for f in fundamental_fields:
+            field_vals = sub[f].to_numpy(dtype=np.float64)
+            row = np.full(T, np.nan, dtype=np.float64)
+            row[valid] = field_vals[idx[valid]]
+            out[f][:, n] = row
+
+    return out
+
+
 @lru_cache(maxsize=1)
 def _load_panel() -> _Panel:
     if not PARQUET_PATH.exists():
@@ -229,9 +295,24 @@ def _load_panel() -> _Panel:
         cap = pivot("cap")
 
     if any(f in df.columns for f in _V2_FUNDAMENTAL_FIELDS):
-        fundamentals = {
-            f: pivot(f) for f in _V2_FUNDAMENTAL_FIELDS if f in df.columns
-        }
+        # T1.1 (v4): PIT-aligned fundamentals (filing_date as-of join) take
+        # precedence over the legacy broadcast snapshot. The broadcast
+        # pattern attached each quarter's value to its fiscal end date,
+        # leaking ~30-45 days of unannounced earnings into past panel rows.
+        pit_fund = _load_pit_fundamentals(dates_series, universe)
+        if pit_fund is not None and pit_fund:
+            fundamentals = pit_fund
+        else:
+            import warnings
+            warnings.warn(
+                f"PIT fundamentals not found at {PIT_FUNDAMENTALS_PATH}; "
+                "falling back to legacy broadcast (LOOKAHEAD-BIASED). "
+                "Run scripts/build_pit_fundamentals.py to generate.",
+                stacklevel=2,
+            )
+            fundamentals = {
+                f: pivot(f) for f in _V2_FUNDAMENTAL_FIELDS if f in df.columns
+            }
 
     return _Panel(
         dates=dates_series,
