@@ -574,6 +574,10 @@ export interface SignalTodayResponse {
   readonly n_valid: number;
   readonly top: readonly SignalTickerRow[];
   readonly bottom: readonly SignalTickerRow[];
+  // v4 cross-page parity
+  readonly survivorship_corrected?: boolean;
+  readonly membership_as_of?: string | null;
+  readonly neutralize?: "none" | "sector";
 }
 
 export interface ICPoint {
@@ -591,7 +595,12 @@ export interface ICTimeseriesResponse {
     readonly ic_std: number;
     readonly ic_ir: number;
     readonly hit_rate: number;
+    readonly ic_ci_low?: number;   // v4: stationary block bootstrap CI
+    readonly ic_ci_high?: number;
   };
+  readonly survivorship_corrected?: boolean;
+  readonly membership_as_of?: string | null;
+  readonly neutralize?: "none" | "sector";
 }
 
 export interface SectorExposure {
@@ -615,6 +624,9 @@ export interface ExposureResponse {
   readonly as_of: string;
   readonly sector_exposure: readonly SectorExposure[];
   readonly cap_quintile: readonly CapBucket[];
+  readonly survivorship_corrected?: boolean;
+  readonly membership_as_of?: string | null;
+  readonly neutralize?: "none" | "sector";
 }
 
 /* ═══════════════════ Screener (D1) ═══════════════════ */
@@ -641,6 +653,7 @@ export interface ScreenerRequest {
   readonly top_n?: number;
   readonly combine_method?: CombineMethod;
   readonly as_of_date?: string | null;
+  readonly neutralize?: "none" | "sector";  // v4 cross-page parity
 }
 
 export interface PerFactorScore {
@@ -675,6 +688,9 @@ export interface ScreenerResponse {
     readonly n_eligible_tickers: number;
     readonly method: CombineMethod;
     readonly lookback_days: number;
+    readonly neutralize?: "none" | "sector";
+    readonly survivorship_corrected?: boolean;
+    readonly membership_as_of?: string | null;
   };
 }
 

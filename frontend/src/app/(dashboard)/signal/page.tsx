@@ -39,9 +39,9 @@ export default function SignalPage() {
       justification: "interactive signal run",
     };
     const [t1, t2, t3] = await Promise.all([
-      signalToday(spec, p.topN),
-      signalIcTimeseries(spec, p.icLookback),
-      signalExposure(spec, p.topN),
+      signalToday(spec, p.topN, p.neutralize),
+      signalIcTimeseries(spec, p.icLookback, p.neutralize),
+      signalExposure(spec, p.topN, p.neutralize),
     ]);
     if (t1.error || t2.error || t3.error) {
       setError(t1.error ?? t2.error ?? t3.error);
@@ -70,9 +70,45 @@ export default function SignalPage() {
         </Card>
       )}
 
+      {today && (
+        <SignalSurvivorshipBadge
+          corrected={today.survivorship_corrected ?? false}
+          asOf={today.membership_as_of ?? null}
+          neutralize={today.neutralize ?? "none"}
+        />
+      )}
+
       <TopBottomTable today={today} loading={running && !today} />
       <ICTimeseriesChart data={icTs} loading={running && !icTs} />
       <ExposureChart data={exposure} topN={topN} loading={running && !exposure} />
+    </div>
+  );
+}
+
+function SignalSurvivorshipBadge({
+  corrected, asOf, neutralize,
+}: {
+  readonly corrected: boolean;
+  readonly asOf: string | null;
+  readonly neutralize: "none" | "sector";
+}) {
+  const { locale } = useLocale();
+  return (
+    <div className="flex flex-wrap gap-2">
+      {corrected ? (
+        <span className="inline-block rounded-md border border-green/40 bg-green/10 px-2 py-0.5 text-[11px] text-green">
+          {t(locale, "backtest.kpi.survivorshipCorrected").replace("{date}", asOf ?? "—")}
+        </span>
+      ) : (
+        <span className="inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600 dark:text-amber-400">
+          {t(locale, "backtest.kpi.survivorshipLegacy")}
+        </span>
+      )}
+      {neutralize === "sector" && (
+        <span className="inline-block rounded-md border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+          ✓ {t(locale, "backtest.form.neutralize.sector")}
+        </span>
+      )}
     </div>
   );
 }

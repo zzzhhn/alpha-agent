@@ -36,6 +36,7 @@ export default function ScreenerPage() {
   const [topN, setTopN] = useState(20);
   const [combineMethod, setCombineMethod] = useState<CombineMethod>("equal_z");
   const [asOfDate, setAsOfDate] = useState("");
+  const [neutralize, setNeutralize] = useState<"none" | "sector">("none");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScreenerResponse | null>(null);
@@ -137,6 +138,7 @@ export default function ScreenerPage() {
       top_n: topN,
       combine_method: combineMethod,
       as_of_date: asOfDate.trim() || null,
+      neutralize,
     });
 
     if (res.error || !res.data) {
@@ -214,6 +216,29 @@ export default function ScreenerPage() {
         onAsOfDate={setAsOfDate}
       />
 
+      <Card padding="md">
+        <div className="flex items-center gap-2 text-[13px] text-muted">
+          <span>{t(locale, "backtest.form.neutralize")}:</span>
+          {(["none", "sector"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setNeutralize(mode)}
+              className={`rounded px-2 py-0.5 text-[12px] ${
+                neutralize === mode
+                  ? "bg-accent text-white"
+                  : "bg-[var(--toggle-bg)] text-muted hover:text-text"
+              }`}
+            >
+              {t(locale, `backtest.form.neutralize.${mode}`)}
+            </button>
+          ))}
+          <span className="text-[12px] text-muted">
+            {t(locale, "backtest.form.neutralizeHint")}
+          </span>
+        </div>
+      </Card>
+
       <div className="flex justify-end">
         <Button onClick={run} disabled={running || selections.length === 0}>
           {running ? t(locale, "screener.running") : t(locale, "screener.run")}
@@ -226,6 +251,27 @@ export default function ScreenerPage() {
             {t(locale, "screener.error")}: {error}
           </p>
         </Card>
+      )}
+
+      {result && (
+        <div className="flex flex-wrap gap-2">
+          {result.metadata.survivorship_corrected ? (
+            <span className="inline-block rounded-md border border-green/40 bg-green/10 px-2 py-0.5 text-[11px] text-green">
+              {t(locale, "backtest.kpi.survivorshipCorrected").replace(
+                "{date}", String(result.metadata.membership_as_of ?? "—"),
+              )}
+            </span>
+          ) : (
+            <span className="inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600 dark:text-amber-400">
+              {t(locale, "backtest.kpi.survivorshipLegacy")}
+            </span>
+          )}
+          {result.metadata.neutralize === "sector" && (
+            <span className="inline-block rounded-md border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+              ✓ {t(locale, "backtest.form.neutralize.sector")}
+            </span>
+          )}
+        </div>
       )}
 
       {result && (

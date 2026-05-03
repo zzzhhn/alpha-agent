@@ -14,6 +14,7 @@ export interface SignalParams {
   readonly lookback: number;
   readonly icLookback: number;
   readonly topN: number;
+  readonly neutralize: "none" | "sector";  // v4 cross-page parity
 }
 
 interface SignalFormProps {
@@ -37,6 +38,7 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
   const [expr, setExpr] = useState<string>("rank(ts_mean(returns, 12))");
   const [icLookback, setIcLookback] = useState(60);
   const [topN, setTopN] = useState(10);
+  const [neutralize, setNeutralize] = useState<"none" | "sector">("none");
 
   function loadExample(ex: FactorExample) {
     setExpr(ex.expression);
@@ -49,6 +51,7 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
       lookback: 12,
       icLookback,
       topN,
+      neutralize,
     });
   }
 
@@ -93,6 +96,27 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
         <Button onClick={submit} disabled={running}>
           {running ? "…" : t(locale, "signal.form.run")}
         </Button>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 text-[13px] text-muted">
+        <span>{t(locale, "backtest.form.neutralize")}:</span>
+        {(["none", "sector"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setNeutralize(mode)}
+            className={`rounded px-2 py-0.5 text-[12px] ${
+              neutralize === mode
+                ? "bg-accent text-white"
+                : "bg-[var(--toggle-bg)] text-muted hover:text-text"
+            }`}
+          >
+            {t(locale, `backtest.form.neutralize.${mode}`)}
+          </button>
+        ))}
+        <span className="text-[12px] text-muted">
+          {t(locale, "backtest.form.neutralizeHint")}
+        </span>
       </div>
 
       <details className="mt-3 border-t border-border pt-2">

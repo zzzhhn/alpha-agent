@@ -19,12 +19,18 @@ import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from typing import Literal
+
 from alpha_agent.core.factor_ast import (
     FactorSpecValidationError,
     validate_expression,
 )
 from alpha_agent.core.types import FactorSpec
-from alpha_agent.factor_engine.factor_backtest import _load_panel
+from alpha_agent.factor_engine.factor_backtest import (
+    _load_panel,
+    _membership_csv_as_of,
+    _sector_neutralize_factor,
+)
 from alpha_agent.factor_engine.kernel import (
     build_data_dict,
     evaluate_factor_full,
@@ -40,6 +46,11 @@ router = APIRouter(prefix="/api/v1/signal", tags=["signal"])
 
 class _SignalRequest(BaseModel):
     spec: FactorSpec
+    # v4 (Bundle A.2 cross-page parity): sector-neutralize factor before
+    # ranking so within-sector picks dominate. Same semantics as
+    # /factor/backtest. Default 'none' preserves back-compat for callers
+    # that haven't been updated.
+    neutralize: Literal["none", "sector"] = "none"
     model_config = {"protected_namespaces": ()}
 
 
@@ -72,6 +83,11 @@ class TodayResponse(BaseModel):
     n_valid: int
     top: list[TickerRow]
     bottom: list[TickerRow]
+    # v4 cross-page parity: surface survivorship-correction status so
+    # the SignalView can show the same "✓ SP500 校正" badge that /backtest does.
+    survivorship_corrected: bool = False
+    membership_as_of: str | None = None
+    neutralize: Literal["none", "sector"] = "none"
 
 
 class ICPoint(BaseModel):
@@ -84,7 +100,10 @@ class ICTimeseriesResponse(BaseModel):
     factor_name: str
     lookback: int
     points: list[ICPoint]
-    summary: dict[str, float]    # {ic_mean, ic_std, ic_ir, hit_rate}
+    summary: dict[str, float]    # {ic_mean, ic_std, ic_ir, hit_rate, ic_ci_low, ic_ci_high}
+    survivorship_corrected: bool = False
+    membership_as_of: str | None = None
+    neutralize: Literal["none", "sector"] = "none"
 
 
 class SectorExposure(BaseModel):
@@ -108,17 +127,27 @@ class ExposureResponse(BaseModel):
     as_of: str
     sector_exposure: list[SectorExposure]
     cap_quintile: list[CapBucket]
+    survivorship_corrected: bool = False
+    membership_as_of: str | None = None
+    neutralize: Literal["none", "sector"] = "none"
 
 
 # ── Shared evaluation helper ────────────────────────────────────────────────
 
 
-def _evaluate_spec(spec: FactorSpec) -> tuple[np.ndarray, dict[str, np.ndarray], Any]:
+def _evaluate_spec(
+    spec: FactorSpec, neutralize: str = "none"
+) -> tuple[np.ndarray, dict[str, np.ndarray], Any]:
     """Validate + load + evaluate. Returns (factor_TxN, data, panel).
 
     Operand-dict construction and factor evaluation both delegate to
     kernel.build_data_dict / kernel.evaluate_factor_full so this endpoint
     stays in lockstep with /factor/backtest and /screener/run.
+
+    `neutralize='sector'` subtracts per-sector cross-sectional mean from
+    the factor before ranking — matches the /factor/backtest knob so a
+    sector-neutral signal in /signal/today behaves identically to the
+    same expression on /backtest.
     """
     try:
         validate_expression(spec.expression, spec.operators_used)
@@ -136,6 +165,9 @@ def _evaluate_spec(spec: FactorSpec) -> tuple[np.ndarray, dict[str, np.ndarray],
             detail=f"factor evaluation failed: {type(exc).__name__}: {exc}",
         ) from exc
 
+    if neutralize == "sector" and panel.sector is not None:
+        factor = _sector_neutralize_factor(factor, panel.sector)
+
     return factor, data, panel
 
 
@@ -145,7 +177,7 @@ def _evaluate_spec(spec: FactorSpec) -> tuple[np.ndarray, dict[str, np.ndarray],
 @router.post("/today", response_model=TodayResponse)
 def signal_today(body: TodayRequest) -> TodayResponse:
     """Return the latest cross-sectional ranking — top/bottom N tickers."""
-    factor, _data, panel = _evaluate_spec(body.spec)
+    factor, _data, panel = _evaluate_spec(body.spec, body.neutralize)
     last = factor[-1]
     valid_mask = ~np.isnan(last)
     valid_idx = np.where(valid_mask)[0]
@@ -169,6 +201,9 @@ def signal_today(body: TodayRequest) -> TodayResponse:
         n_valid=int(valid_mask.sum()),
         top=rows[:n],
         bottom=list(reversed(rows[-n:])),
+        survivorship_corrected=panel.is_member is not None,
+        membership_as_of=_membership_csv_as_of(),
+        neutralize=body.neutralize,
     )
 
 
@@ -183,7 +218,7 @@ def signal_ic_timeseries(body: ICTimeseriesRequest) -> ICTimeseriesResponse:
     return is close[t+1]/close[t]-1, so the last day is naturally NaN
     (no T+1 yet) and is omitted.
     """
-    factor, _data, panel = _evaluate_spec(body.spec)
+    factor, _data, panel = _evaluate_spec(body.spec, body.neutralize)
     T, _N = factor.shape
 
     fwd = np.full_like(panel.close, np.nan)
@@ -216,6 +251,18 @@ def signal_ic_timeseries(body: ICTimeseriesRequest) -> ICTimeseriesResponse:
     ic_ir = ic_mean / ic_std * np.sqrt(252) if ic_std > 0 else 0.0
     hit_rate = float((arr > 0).sum()) / len(arr) if len(arr) else 0.0
 
+    # v4: bootstrap CI on the IC mean — same stationary block bootstrap
+    # used by /factor/backtest. With block_len=20 (≈ 1 month autocorr
+    # horizon) and 1000 resamples, gives a 95% CI around the realized
+    # IC. Visible in frontend SignalView as a band beneath the rolling
+    # mean line.
+    ic_ci_low = ic_ci_high = float("nan")
+    if len(arr) >= 20:
+        from alpha_agent.scan.significance import stationary_block_bootstrap_ci
+        ic_ci_low, ic_ci_high = stationary_block_bootstrap_ci(
+            arr, lambda x: float(np.mean(x)), block_len=20, n_resamples=1000, ci=0.95, seed=42,
+        )
+
     return ICTimeseriesResponse(
         factor_name=body.spec.name,
         lookback=body.lookback,
@@ -225,7 +272,12 @@ def signal_ic_timeseries(body: ICTimeseriesRequest) -> ICTimeseriesResponse:
             "ic_std": ic_std,
             "ic_ir": float(ic_ir),
             "hit_rate": hit_rate,
+            "ic_ci_low": float(ic_ci_low) if not np.isnan(ic_ci_low) else 0.0,
+            "ic_ci_high": float(ic_ci_high) if not np.isnan(ic_ci_high) else 0.0,
         },
+        survivorship_corrected=panel.is_member is not None,
+        membership_as_of=_membership_csv_as_of(),
+        neutralize=body.neutralize,
     )
 
 
@@ -235,7 +287,7 @@ def signal_ic_timeseries(body: ICTimeseriesRequest) -> ICTimeseriesResponse:
 @router.post("/exposure", response_model=ExposureResponse)
 def signal_exposure(body: ExposureRequest) -> ExposureResponse:
     """Sector and cap-quintile exposure of today's top-N long / bottom-N short."""
-    factor, _data, panel = _evaluate_spec(body.spec)
+    factor, _data, panel = _evaluate_spec(body.spec, body.neutralize)
     last = factor[-1]
     valid = ~np.isnan(last)
     n = body.top_n
@@ -302,4 +354,7 @@ def signal_exposure(body: ExposureRequest) -> ExposureResponse:
         as_of=str(panel.dates[-1]),
         sector_exposure=sector_rows,
         cap_quintile=cap_rows,
+        survivorship_corrected=panel.is_member is not None,
+        membership_as_of=_membership_csv_as_of(),
+        neutralize=body.neutralize,
     )

@@ -390,23 +390,29 @@ export function invalidateDataCache() {
 
 /* ── P3: Signal Layer ── */
 
-export function signalToday(spec: SignalSpec, top_n = 10) {
+export function signalToday(
+  spec: SignalSpec, top_n = 10, neutralize: "none" | "sector" = "none",
+) {
   return fetchJson<SignalTodayResponse>("/signal/today", {
     method: "POST",
-    body: JSON.stringify({ spec, top_n }),
+    body: JSON.stringify({ spec, top_n, neutralize }),
   });
 }
 
-export function signalIcTimeseries(spec: SignalSpec, lookback = 60) {
+export function signalIcTimeseries(
+  spec: SignalSpec, lookback = 60, neutralize: "none" | "sector" = "none",
+) {
   return fetchJson<ICTimeseriesResponse>("/signal/ic_timeseries", {
     method: "POST",
-    body: JSON.stringify({ spec, lookback }),
+    body: JSON.stringify({ spec, lookback, neutralize }),
   });
 }
 
-export function signalExposure(spec: SignalSpec, top_n = 10) {
+export function signalExposure(
+  spec: SignalSpec, top_n = 10, neutralize: "none" | "sector" = "none",
+) {
   return fetchJson<ExposureResponse>("/signal/exposure", {
     method: "POST",
-    body: JSON.stringify({ spec, top_n }),
+    body: JSON.stringify({ spec, top_n, neutralize }),
   });
 }

@@ -71,6 +71,11 @@ class ScreenerRequest(BaseModel):
         default=None,
         description="YYYY-MM-DD; null = panel's most recent session.",
     )
+    # v4 cross-page parity (Bundle A.2): apply per-sector neutralization to
+    # each factor BEFORE z-scoring, so the resulting recommendations have
+    # near-zero net sector exposure. Identical semantics to /signal and
+    # /factor/backtest.
+    neutralize: Literal["none", "sector"] = "none"
 
 
 class PerFactorScore(BaseModel):
@@ -257,6 +262,13 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
                 422, f"factor[{idx}] evaluation failed: {type(exc).__name__}: {exc}"
             ) from exc
 
+        # Sector-neutralize per factor before scoring if requested. Subtracts
+        # per-sector cross-sectional mean at as_of_idx so within-sector picks
+        # dominate the z-score / IC-weighted combine.
+        if body.neutralize == "sector" and panel.sector is not None:
+            from alpha_agent.factor_engine.factor_backtest import _sector_neutralize_factor
+            factor_full = _sector_neutralize_factor(factor_full, panel.sector)
+
         row_raw = factor_full[as_of_idx].copy()
         # Direction: short_only → invert, others use raw
         if f.direction == "short_only":
@@ -349,6 +361,7 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
             per_factor_scores=per_factor,
         ))
 
+    from alpha_agent.factor_engine.factor_backtest import _membership_csv_as_of
     return ScreenerResponse(
         recommendations=recs,
         factor_diagnostics=diagnostics,
@@ -357,5 +370,8 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
             "n_eligible_tickers": int(keep_mask.sum()),
             "method": body.combine_method,
             "lookback_days": body.lookback_days,
+            "neutralize": body.neutralize,
+            "survivorship_corrected": panel.is_member is not None,
+            "membership_as_of": _membership_csv_as_of(),
         },
     )
