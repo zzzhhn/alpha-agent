@@ -173,6 +173,30 @@ class SplitMetrics:
 
 
 @dataclass(frozen=True)
+class RegimeMetrics:
+    """Bundle A.1: sub-period metrics partitioned by macro regime.
+
+    Regime classification is on the BENCHMARK's 60-day rolling return:
+        bull:     SPY 60d return > +5%
+        bear:     SPY 60d return < -5%
+        sideways: −5% ≤ SPY 60d return ≤ +5%
+
+    A factor is "regime-robust" if its Sharpe / α-t are positive across all
+    three regimes. A factor that only delivers in one regime is a regime bet
+    masquerading as alpha — exactly what walk-forward and per-regime
+    diagnostics surface.
+    """
+    regime: str               # "bull" | "bear" | "sideways"
+    n_days: int               # days in this regime within the test slice
+    sharpe: float
+    ic_spearman: float
+    ic_pvalue: float
+    alpha_annualized: float   # OLS alpha in this regime's days only
+    alpha_t_stat: float
+    alpha_pvalue: float
+
+
+@dataclass(frozen=True)
 class FactorBacktestResult:
     equity_curve: list[dict]      # [{"date", "value"}]
     benchmark_curve: list[dict]
@@ -214,6 +238,13 @@ class FactorBacktestResult:
     # survivorship-corrected vs legacy lookahead.
     survivorship_corrected: bool = False
     membership_as_of: str | None = None  # "YYYY-MM-DD" of the latest CSV snapshot
+    # Bundle A.1 (v4): per-regime Sharpe / IC / alpha breakdown. Surfaces
+    # which sub-periods carry the factor's edge. Length is 1-3 entries
+    # depending on which regimes appear in the test slice.
+    regime_breakdown: list[RegimeMetrics] | None = None
+    # Bundle A.2 (v4): "none" or "sector" — sector-neutral re-ranks within
+    # each GICS sector, decoupling factor signal from sector beta.
+    neutralize: str = "none"
 
 
 # ── Panel loader (lazy, cached per-process) ─────────────────────────────────
@@ -605,6 +636,134 @@ Mode = Literal["static", "walk_forward"]
 SUPPORTED_MODES: frozenset[str] = frozenset({"static", "walk_forward"})
 
 
+Neutralize = Literal["none", "sector"]
+
+
+def _sector_neutralize_factor(
+    factor: np.ndarray, sector: np.ndarray
+) -> np.ndarray:
+    """Bundle A.2: subtract per-sector cross-sectional mean at each date.
+
+    After neutralization, each ticker's value is its factor exposure RELATIVE
+    to its sector peers. Subsequent global rank then picks the strongest
+    relative-to-sector tickers across the universe — the resulting portfolio
+    has by-construction near-zero net exposure to any single sector.
+
+    Inputs:
+        factor: (T, N) float array, NaN-permitted
+        sector: (T, N) string array (panel.sector broadcast snapshot)
+    """
+    out = factor.copy()
+    T = factor.shape[0]
+    for t in range(T):
+        valid = ~np.isnan(factor[t])
+        if not valid.any():
+            continue
+        sec_row = sector[t]
+        for sec in np.unique(sec_row[valid]):
+            if sec in ("Unknown", "", "nan"):
+                continue
+            sec_mask = valid & (sec_row == sec)
+            if sec_mask.sum() < 2:
+                continue  # at least 2 tickers needed to define a "sector mean"
+            mean = float(np.nanmean(factor[t, sec_mask]))
+            out[t, sec_mask] = factor[t, sec_mask] - mean
+    return out
+
+
+def _classify_regimes(
+    benchmark_close: np.ndarray, lookback: int = 60, threshold: float = 0.05
+) -> np.ndarray:
+    """Bundle A.1: regime label per date based on benchmark trailing return.
+
+    Returns a (T,) array of strings: "bull" | "bear" | "sideways" | "warmup".
+    First `lookback` days are "warmup" (insufficient history to classify).
+    """
+    T = len(benchmark_close)
+    regimes = np.full(T, "warmup", dtype=object)
+    for t in range(lookback, T):
+        ret = benchmark_close[t] / benchmark_close[t - lookback] - 1.0
+        if ret > threshold:
+            regimes[t] = "bull"
+        elif ret < -threshold:
+            regimes[t] = "bear"
+        else:
+            regimes[t] = "sideways"
+    return regimes
+
+
+def _compute_regime_metrics(
+    daily_ret: np.ndarray,
+    factor: np.ndarray,
+    fwd_returns: np.ndarray,
+    benchmark_daily_ret: np.ndarray,
+    regimes: np.ndarray,
+    test_slice: slice,
+) -> list[RegimeMetrics]:
+    """Bundle A.1: split test slice by regime, compute SR/IC/alpha per regime."""
+    out: list[RegimeMetrics] = []
+    test_regimes = regimes[test_slice]
+    test_daily_ret = daily_ret[test_slice]
+    test_fwd_returns = fwd_returns[test_slice]
+    test_factor = factor[test_slice]
+    test_bench = benchmark_daily_ret[test_slice]
+
+    for regime in ("bull", "sideways", "bear"):
+        mask = (test_regimes == regime)
+        n = int(mask.sum())
+        if n < 20:  # too few obs for stable stats
+            continue
+
+        rets = test_daily_ret[mask]
+        rets = rets[~np.isnan(rets)]
+        if len(rets) < 20:
+            continue
+        sr = float(np.mean(rets) / (np.std(rets, ddof=1) + 1e-12) * np.sqrt(252))
+
+        # Mean Spearman IC across the days in this regime
+        ic_samples = []
+        for i in np.where(mask)[0]:
+            ic = _spearman_ic(test_factor[i], test_fwd_returns[i])
+            if not np.isnan(ic):
+                ic_samples.append(ic)
+        if len(ic_samples) < 10:
+            continue
+        ic_mean = float(np.mean(ic_samples))
+        ic_std = float(np.std(ic_samples, ddof=1) + 1e-12)
+        ic_t = ic_mean / (ic_std / np.sqrt(len(ic_samples)))
+        ic_p = float(math.erfc(abs(ic_t) / np.sqrt(2.0)))
+
+        # Per-regime alpha via OLS on the regime's days only
+        bench_in = test_bench[mask]
+        valid = ~(np.isnan(rets) | np.isnan(bench_in[:len(rets)]))
+        if valid.sum() < 20:
+            alpha_a = alpha_t = 0.0
+            alpha_p = 1.0
+        else:
+            r = rets[valid]
+            b = bench_in[:len(rets)][valid]
+            n_obs = len(r)
+            b_mean = b.mean()
+            r_mean = r.mean()
+            cov = ((b - b_mean) * (r - r_mean)).sum() / (n_obs - 1)
+            var = ((b - b_mean) ** 2).sum() / (n_obs - 1)
+            beta = cov / (var + 1e-12)
+            alpha_daily = r_mean - beta * b_mean
+            resid = r - alpha_daily - beta * b
+            sigma2 = (resid ** 2).sum() / max(n_obs - 2, 1)
+            se_alpha = float(np.sqrt(sigma2 * (1 / n_obs + b_mean ** 2 / (var * (n_obs - 1) + 1e-12))))
+            alpha_t = float(alpha_daily / (se_alpha + 1e-12))
+            alpha_a = float(alpha_daily * 252)
+            alpha_p = float(math.erfc(abs(alpha_t) / np.sqrt(2.0)))
+
+        out.append(RegimeMetrics(
+            regime=regime, n_days=n, sharpe=sr,
+            ic_spearman=ic_mean, ic_pvalue=ic_p,
+            alpha_annualized=alpha_a, alpha_t_stat=alpha_t, alpha_pvalue=alpha_p,
+        ))
+    return out
+
+
 def run_factor_backtest(
     spec: FactorSpec,
     train_ratio: float = DEFAULT_TRAIN_RATIO,
@@ -623,6 +782,7 @@ def run_factor_backtest(
     short_borrow_bps: float = 0.0,
     mask_earnings_window: bool = False,
     earnings_window_days: int = 1,
+    neutralize: Neutralize = "none",
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -710,6 +870,22 @@ def run_factor_backtest(
     from alpha_agent.factor_engine.kernel import evaluate_factor_full
 
     factor = evaluate_factor_full(panel, spec)
+
+    # Bundle A.2 (v4): sector-neutralize the factor before rank if requested.
+    # Subtract per-sector mean at each date so within-sector ranking drives
+    # the basket — decouples factor signal from sector beta. Requires
+    # panel.sector to be populated (v3 panel has it; v1 doesn't, in which
+    # case neutralize="sector" silently degrades to "none" with a warning).
+    if neutralize == "sector":
+        if panel.sector is not None:
+            factor = _sector_neutralize_factor(factor, panel.sector)
+        else:
+            import warnings
+            warnings.warn(
+                "neutralize='sector' requested but panel has no sector data "
+                "(legacy v1 panel?); falling back to none.",
+                stacklevel=2,
+            )
 
     # 1-day forward returns (close-to-close)
     fwd_returns = np.full_like(panel.close, np.nan)
@@ -913,6 +1089,21 @@ def run_factor_backtest(
         oos_decay = 0.0  # no train edge to lose → no overfit verdict
     overfit_flag = bool(train_m.sharpe > 0.5 and oos_decay > 0.5)
 
+    # Bundle A.1 (v4) — per-regime SR/IC/alpha breakdown. Classify each test
+    # day by SPY 60d return (bull > +5%, bear < -5%, sideways otherwise),
+    # then compute the same metrics restricted to each regime's days. Lets
+    # users see if a +1.5 SR factor is regime-robust or just rode 2024 AI
+    # bull market.
+    regimes = _classify_regimes(panel.benchmark_close, lookback=60, threshold=0.05)
+    regime_breakdown = _compute_regime_metrics(
+        daily_ret=daily_ret,
+        factor=factor,
+        fwd_returns=fwd_returns,
+        benchmark_daily_ret=bench_daily,
+        regimes=regimes,
+        test_slice=slice(train_end, T),
+    )
+
     return FactorBacktestResult(
         equity_curve=equity_curve,
         benchmark_curve=benchmark_curve,
@@ -935,6 +1126,8 @@ def run_factor_backtest(
         r_squared=market_decomp.r_squared,
         survivorship_corrected=panel.is_member is not None,
         membership_as_of=_membership_csv_as_of(),
+        regime_breakdown=regime_breakdown if regime_breakdown else None,
+        neutralize=neutralize,
     )
 
 

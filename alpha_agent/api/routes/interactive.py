@@ -335,6 +335,12 @@ class FactorBacktestRequest(BaseModel):
                     "PEAD noise contamination of momentum/reversal factors.")
     earnings_window_days: int = Field(default=1, ge=0, le=5,
         description="Half-width of the earnings mask in trading days (default ±1d).")
+    # Bundle A.2 (v4) — sector-neutral portfolio: rank within each GICS sector,
+    # then pool. Decouples factor signal from sector beta exposure.
+    neutralize: Literal["none", "sector"] = Field(default="none",
+        description="Portfolio neutralization mode. 'sector' subtracts per-sector mean "
+                    "from the factor before ranking, so the basket has near-zero net "
+                    "sector exposure.")
 
 
 class _SplitMetricsModel(BaseModel):
@@ -399,6 +405,18 @@ class _WalkForwardWindow(BaseModel):
     ic_ci_high: float = 0.0
 
 
+class _RegimeMetricsModel(BaseModel):
+    """Bundle A.1 (v4): sub-period metrics partitioned by SPY 60d regime."""
+    regime: Literal["bull", "bear", "sideways"]
+    n_days: int
+    sharpe: float
+    ic_spearman: float
+    ic_pvalue: float
+    alpha_annualized: float
+    alpha_t_stat: float
+    alpha_pvalue: float
+
+
 class _BasketEntry(BaseModel):
     ticker: str
     weight: float
@@ -440,6 +458,10 @@ class FactorBacktestResponse(BaseModel):
     # T1.5b (v4): point-in-time SP500 membership correction status.
     survivorship_corrected: bool = False
     membership_as_of: str | None = None
+    # Bundle A.1 (v4): per-regime SR/IC/alpha breakdown of the test slice.
+    regime_breakdown: list[_RegimeMetricsModel] | None = None
+    # Bundle A.2 (v4): which neutralization mode was applied.
+    neutralize: Literal["none", "sector"] = "none"
 
 
 @router.post(
@@ -491,6 +513,7 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             short_borrow_bps=body.short_borrow_bps,
             mask_earnings_window=body.mask_earnings_window,
             earnings_window_days=body.earnings_window_days,
+            neutralize=body.neutralize,
         )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
@@ -580,4 +603,14 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         r_squared=result.r_squared,
         survivorship_corrected=result.survivorship_corrected,
         membership_as_of=result.membership_as_of,
+        regime_breakdown=(
+            [_RegimeMetricsModel(
+                regime=rm.regime, n_days=rm.n_days,
+                sharpe=rm.sharpe, ic_spearman=rm.ic_spearman, ic_pvalue=rm.ic_pvalue,
+                alpha_annualized=rm.alpha_annualized,
+                alpha_t_stat=rm.alpha_t_stat, alpha_pvalue=rm.alpha_pvalue,
+            ) for rm in result.regime_breakdown]
+            if result.regime_breakdown else None
+        ),
+        neutralize=result.neutralize,
     )

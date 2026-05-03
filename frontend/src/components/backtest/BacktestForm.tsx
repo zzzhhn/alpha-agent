@@ -23,6 +23,7 @@ export interface BacktestFormParams {
   readonly wfStepDays: number;      // 5-wfWindowDays
   readonly includeBreakdown: boolean;
   readonly maskEarningsWindow: boolean;
+  readonly neutralize: "none" | "sector";  // Bundle A.2 v4
 }
 
 interface BacktestFormProps {
@@ -56,6 +57,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
   const [wfStepDays, setWfStepDays] = useState(20);
   const [includeBreakdown, setIncludeBreakdown] = useState(false);
   const [maskEarningsWindow, setMaskEarningsWindow] = useState(false);
+  const [neutralize, setNeutralize] = useState<"none" | "sector">("none");
 
   // P6.D — when /alpha hands off via sessionStorage and the page passes
   // autoRun, fire the run once on first mount so the user lands on a
@@ -76,6 +78,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         wfStepDays: 20,
         includeBreakdown: false,
         maskEarningsWindow: false,
+        neutralize: "none",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,6 +104,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
       wfStepDays: Math.min(wfStepDays, wfWindowDays),
       includeBreakdown,
       maskEarningsWindow,
+      neutralize,
     });
   }
 
@@ -229,6 +233,27 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
           {t(locale, "backtest.form.maskEarningsHint")}
         </span>
       </label>
+
+      <div className="mt-2 flex items-center gap-2 text-[13px] text-muted">
+        <span>{t(locale, "backtest.form.neutralize")}:</span>
+        {(["none", "sector"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setNeutralize(mode)}
+            className={`rounded px-2 py-0.5 text-[12px] ${
+              neutralize === mode
+                ? "bg-accent text-white"
+                : "bg-[var(--toggle-bg)] text-muted hover:text-text"
+            }`}
+          >
+            {t(locale, `backtest.form.neutralize.${mode}`)}
+          </button>
+        ))}
+        <span className="text-[12px] text-muted">
+          {t(locale, "backtest.form.neutralizeHint")}
+        </span>
+      </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <details className="flex-1">

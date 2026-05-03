@@ -309,6 +309,7 @@ export interface FactorBacktestRequest {
   readonly short_borrow_bps?: number;     // T2.3 v4: 0–1000, annualized short-leg borrow
   readonly mask_earnings_window?: boolean; // T3.C v4: zero weights around earnings
   readonly earnings_window_days?: number; // T3.C v4: 0–5, mask half-width
+  readonly neutralize?: "none" | "sector"; // Bundle A.2 v4: sector-neutral mode
 }
 
 export interface WalkForwardWindow {
@@ -431,6 +432,21 @@ export interface FactorBacktestResponse {
   // T1.5b v4 — point-in-time SP500 membership mask status
   readonly survivorship_corrected?: boolean;
   readonly membership_as_of?: string | null;  // "YYYY-MM-DD"
+  // Bundle A.1 v4 — per-regime SR/IC/alpha breakdown of test slice
+  readonly regime_breakdown?: readonly RegimeMetrics[] | null;
+  // Bundle A.2 v4 — sector-neutralization mode applied
+  readonly neutralize?: "none" | "sector";
+}
+
+export interface RegimeMetrics {
+  readonly regime: "bull" | "bear" | "sideways";
+  readonly n_days: number;
+  readonly sharpe: number;
+  readonly ic_spearman: number;
+  readonly ic_pvalue: number;
+  readonly alpha_annualized: number;
+  readonly alpha_t_stat: number;
+  readonly alpha_pvalue: number;
 }
 
 export interface HypothesisHistoryEntry {

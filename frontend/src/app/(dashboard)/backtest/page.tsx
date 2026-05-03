@@ -72,6 +72,7 @@ export default function BacktestPage() {
       wf_step_days: p.wfStepDays,
       include_breakdown: p.includeBreakdown,
       mask_earnings_window: p.maskEarningsWindow,
+      neutralize: p.neutralize,
     });
     if (res.error || !res.data) {
       setError(res.error ?? "unknown error");
@@ -130,6 +131,9 @@ export default function BacktestPage() {
           </Card>
           <BacktestKpiStrip result={result} />
           <RiskAttributionCard result={result} />
+          {result.regime_breakdown && result.regime_breakdown.length > 0 && (
+            <RegimeBreakdownCard result={result} />
+          )}
           <Card padding="md">
             <header className="mb-3">
               <h2 className="text-base font-semibold text-text">
@@ -425,6 +429,96 @@ function WalkForwardTable({
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono text-muted">
                     {(w.hit_rate * 100).toFixed(0)}%
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function RegimeBreakdownCard({
+  result,
+}: {
+  readonly result: FactorBacktestResponse;
+}) {
+  const { locale } = useLocale();
+  const breakdown = result.regime_breakdown ?? [];
+  // Highlight regime-specific risk: green if α-t convincingly positive in this
+  // sub-period, red if negative, neutral otherwise. Lets users spot factors
+  // whose total-period alpha is carried by one regime only.
+  function regimeColor(alphaP: number, alphaT: number): string {
+    if (alphaP < 0.05 && alphaT > 0) return "text-green";
+    if (alphaP < 0.05 && alphaT < 0) return "text-red";
+    if (alphaP < 0.10 && alphaT > 0) return "text-yellow";
+    return "text-muted";
+  }
+
+  return (
+    <Card padding="md">
+      <header className="mb-3">
+        <h3 className="text-[14px] font-semibold text-text">
+          {t(locale, "backtest.regime.title")}
+        </h3>
+        <p className="mt-0.5 text-[12px] text-muted">
+          {t(locale, "backtest.regime.subtitle")}
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border text-left text-muted">
+              <th className="px-2 py-1.5 text-[11px] font-medium uppercase">
+                {t(locale, "backtest.regime.label")}
+              </th>
+              <th className="px-2 py-1.5 text-right text-[11px] font-medium uppercase">N days</th>
+              <th className="px-2 py-1.5 text-right text-[11px] font-medium uppercase">SR</th>
+              <th className="px-2 py-1.5 text-right text-[11px] font-medium uppercase">IC</th>
+              <th className="px-2 py-1.5 text-right text-[11px] font-medium uppercase">IC p</th>
+              <th className="px-2 py-1.5 text-right text-[11px] font-medium uppercase">α (ann)</th>
+              <th className="px-2 py-1.5 text-right text-[11px] font-medium uppercase">α-t</th>
+              <th className="px-2 py-1.5 text-right text-[11px] font-medium uppercase">α p</th>
+            </tr>
+          </thead>
+          <tbody>
+            {breakdown.map((r) => {
+              const color = regimeColor(r.alpha_pvalue, r.alpha_t_stat);
+              return (
+                <tr key={r.regime} className="border-b border-border/40">
+                  <td className="px-2 py-1.5 font-mono">
+                    {t(locale, `backtest.regime.${r.regime}`)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono text-muted">{r.n_days}</td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <span className={r.sharpe >= 0 ? "text-text" : "text-red"}>
+                      {r.sharpe >= 0 ? "+" : ""}{r.sharpe.toFixed(2)}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <span className={r.ic_spearman >= 0 ? "text-text" : "text-red"}>
+                      {r.ic_spearman >= 0 ? "+" : ""}{r.ic_spearman.toFixed(4)}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono text-muted">
+                    {r.ic_pvalue < 0.001 ? "<0.001" : r.ic_pvalue.toFixed(3)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <span className={color}>
+                      {r.alpha_annualized >= 0 ? "+" : ""}{(r.alpha_annualized * 100).toFixed(2)}%
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <span className={color}>
+                      {r.alpha_t_stat >= 0 ? "+" : ""}{r.alpha_t_stat.toFixed(2)}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    <span className={color}>
+                      {r.alpha_pvalue < 0.001 ? "<0.001" : r.alpha_pvalue.toFixed(3)}
+                    </span>
                   </td>
                 </tr>
               );
