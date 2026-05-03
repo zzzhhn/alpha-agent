@@ -8,20 +8,68 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
 import { listZoo, removeFromZoo, type ZooEntry } from "@/lib/factor-zoo";
-import { runZooCorrelation } from "@/lib/api";
+import {
+  runZooCorrelation,
+  listServerFactors,
+  getDecayAlerts,
+  type ServerFactor,
+  type DecayAlert,
+} from "@/lib/api";
 import type { ZooCorrelationResponse } from "@/lib/types";
+
+// Bundle B (T4.1): merge server-backed Factor DB with localStorage Zoo.
+// Server is source of truth (every backtest auto-saves); localStorage
+// kept as fallback for offline + back-compat with v1 entries that
+// haven't been re-run since the migration.
+function mergeFactors(server: readonly ServerFactor[], local: readonly ZooEntry[]): readonly ZooEntry[] {
+  // Server entries first (always fresher, have run history); local entries
+  // appended only if their expression isn't already covered by server.
+  const serverExprs = new Set(server.map((f) => f.expression));
+  const fromServer: ZooEntry[] = server.map((f) => ({
+    id: f.id,
+    name: f.name,
+    expression: f.expression,
+    hypothesis: f.hypothesis ?? "",
+    intuition: f.intuition ?? undefined,
+    direction: (f.last_direction as ZooEntry["direction"]) ?? "long_short",
+    savedAt: f.updated_at ?? f.created_at ?? new Date().toISOString(),
+    headlineMetrics: {
+      testSharpe: f.last_test_sharpe ?? undefined,
+      testIc: f.last_test_ic ?? undefined,
+    },
+    neutralize: (f.last_neutralize as "none" | "sector" | undefined) ?? undefined,
+    benchmarkTicker: (f.last_benchmark as "SPY" | "RSP" | undefined) ?? undefined,
+  }));
+  return [...fromServer, ...local.filter((e) => !serverExprs.has(e.expression))];
+}
 
 export default function FactorsPage() {
   const { locale } = useLocale();
   const router = useRouter();
   const [entries, setEntries] = useState<readonly ZooEntry[]>([]);
+  const [decay, setDecay] = useState<readonly DecayAlert[]>([]);
 
-  function refresh() {
-    setEntries(listZoo());
+  async function refresh() {
+    // Server first (auto-saved); fall back to localStorage if API unreachable
+    try {
+      const [r1, r2] = await Promise.all([
+        listServerFactors(200),
+        getDecayAlerts({ min_runs: 3, decay_threshold: 0.5 }),
+      ]);
+      const local = listZoo();
+      if (r1.data) {
+        setEntries(mergeFactors(r1.data, local));
+      } else {
+        setEntries(local);
+      }
+      if (r2.data) setDecay(r2.data);
+    } catch {
+      setEntries(listZoo());
+    }
   }
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, []);
 
   function loadIntoBacktest(e: ZooEntry) {
@@ -127,6 +175,17 @@ export default function FactorsPage() {
           <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
             {t(locale, "zoo.subtitle")}
           </p>
+          {decay.length > 0 && (
+            <div className="mt-2 inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[12px] text-amber-700 dark:text-amber-400">
+              ⚠ {t(locale, "zoo.decayBanner").replace("{n}", String(decay.length))}
+              {decay.slice(0, 3).map((d) => (
+                <span key={d.factor_id} className="ml-2 font-mono">
+                  {d.name}: IC {(d.baseline_ic * 100).toFixed(2)}% → {(d.latest_ic * 100).toFixed(2)}%
+                </span>
+              ))}
+              {decay.length > 3 && <span className="ml-2 text-muted">+{decay.length - 3}</span>}
+            </div>
+          )}
         </div>
         <Button
           variant="ghost"

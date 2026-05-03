@@ -1138,6 +1138,65 @@ def run_factor_backtest(
         test_slice=slice(train_end, T),
     )
 
+    # Bundle B (T4.1) — persist the result to the Factor DB for cross-
+    # session continuity, run history, and decay alerts. Wrapped so DB
+    # failures (Neon pool exhaustion, schema mismatch, etc.) NEVER break
+    # the user's backtest response — they get the result, the DB just
+    # silently misses the write and we log the error.
+    try:
+        from alpha_agent.storage import upsert_factor, record_run
+        # Build per-day IC time-series for decay analysis. Computed on
+        # the test slice only (the part the user sees as "future" perf).
+        from alpha_agent.factor_engine.kernel import spearman_ic
+        test_daily_ic: list[float] = []
+        for t in range(train_end, T - 1):
+            ic_t = spearman_ic(factor[t], fwd_returns[t])
+            if not np.isnan(ic_t):
+                test_daily_ic.append(float(ic_t))
+
+        factor_id = upsert_factor(
+            name=spec.name,
+            expression=spec.expression,
+            operators_used=list(spec.operators_used),
+            hypothesis=getattr(spec, "hypothesis", None),
+            last_run_summary={
+                "direction": direction,
+                "neutralize": neutralize,
+                "benchmark": benchmark_ticker,
+                "test_sharpe": test_m.sharpe,
+                "test_ic": test_m.ic_spearman,
+                "alpha_t": market_decomp.alpha_t_stat,
+                "alpha_p": market_decomp.alpha_pvalue,
+                "psr": test_m.psr,
+                "overfit_flag": overfit_flag,
+            },
+        )
+        record_run(
+            factor_id=factor_id,
+            panel_version="sp500_v3" if PARQUET_PATH == PARQUET_V3_PATH else "sp100_v2",
+            direction=direction,
+            neutralize=neutralize,
+            benchmark_ticker=benchmark_ticker,
+            top_pct=top_pct,
+            bottom_pct=bottom_pct,
+            transaction_cost_bps=transaction_cost_bps,
+            test_sharpe=test_m.sharpe,
+            test_ic=test_m.ic_spearman,
+            test_psr=test_m.psr,
+            alpha_annualized=market_decomp.alpha_annualized,
+            alpha_t=market_decomp.alpha_t_stat,
+            alpha_p=market_decomp.alpha_pvalue,
+            beta=market_decomp.beta_market,
+            r_squared=market_decomp.r_squared,
+            overfit_flag=overfit_flag,
+            daily_ic=test_daily_ic,
+        )
+    except Exception as exc:  # noqa: BLE001 — DB persistence is best-effort
+        import logging
+        logging.getLogger(__name__).warning(
+            "factor DB persist failed: %s: %s", type(exc).__name__, exc,
+        )
+
     return FactorBacktestResult(
         equity_curve=equity_curve,
         benchmark_curve=benchmark_curve,

@@ -166,6 +166,10 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.screener import router
         return router
 
+    def _import_factors_db():
+        from alpha_agent.api.routes.factors_db import router
+        return router
+
     def _import_zoo():
         from alpha_agent.api.routes.zoo import router
         return router
@@ -177,6 +181,7 @@ def create_app() -> FastAPI:
     _load("signal", _import_signal)
     _load("screener", _import_screener)
     _load("zoo", _import_zoo)
+    _load("factors_db", _import_factors_db)
 
     if not SERVERLESS:
         def _import_websocket():

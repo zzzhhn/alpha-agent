@@ -416,3 +416,90 @@ export function signalExposure(
     body: JSON.stringify({ spec, top_n, neutralize }),
   });
 }
+
+/* ── Bundle B (T4.1): Factor Performance DB ── */
+
+export interface ServerFactor {
+  readonly id: string;
+  readonly ast_hash: string;
+  readonly name: string;
+  readonly expression: string;
+  readonly hypothesis?: string | null;
+  readonly intuition?: string | null;
+  readonly last_direction?: string | null;
+  readonly last_neutralize?: string | null;
+  readonly last_benchmark?: string | null;
+  readonly last_test_sharpe?: number | null;
+  readonly last_test_ic?: number | null;
+  readonly last_alpha_t?: number | null;
+  readonly last_alpha_p?: number | null;
+  readonly last_psr?: number | null;
+  readonly last_overfit_flag?: boolean | null;
+  readonly n_runs: number;
+  readonly created_at?: string | null;
+  readonly updated_at?: string | null;
+}
+
+export interface ServerFactorRun {
+  readonly id: string;
+  readonly factor_id: string;
+  readonly panel_version: string;
+  readonly direction: string;
+  readonly neutralize: string;
+  readonly benchmark_ticker: string;
+  readonly top_pct: number;
+  readonly bottom_pct: number;
+  readonly transaction_cost_bps: number;
+  readonly test_sharpe: number;
+  readonly test_ic: number;
+  readonly test_psr?: number | null;
+  readonly alpha_annualized?: number | null;
+  readonly alpha_t?: number | null;
+  readonly alpha_p?: number | null;
+  readonly beta?: number | null;
+  readonly r_squared?: number | null;
+  readonly overfit_flag: boolean;
+  readonly daily_ic?: readonly number[] | null;
+  readonly ran_at?: string | null;
+}
+
+export interface DecayAlert {
+  readonly factor_id: string;
+  readonly name: string;
+  readonly expression: string;
+  readonly n_runs: number;
+  readonly baseline_ic: number;
+  readonly latest_ic: number;
+  readonly decay_pct: number;
+  readonly latest_run_at: string;
+}
+
+export function listServerFactors(limit = 100) {
+  return fetchJson<ServerFactor[]>(`/factors?limit=${limit}`);
+}
+
+export function getServerFactor(factorId: string) {
+  return fetchJson<{ factor: ServerFactor; runs: ServerFactorRun[] }>(
+    `/factors/${encodeURIComponent(factorId)}`,
+  );
+}
+
+export function deleteServerFactor(factorId: string) {
+  return fetchJson<{ deleted: string }>(
+    `/factors/${encodeURIComponent(factorId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function getDecayAlerts(opts?: {
+  rolling_window_days?: number;
+  min_runs?: number;
+  decay_threshold?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.rolling_window_days) params.set("rolling_window_days", String(opts.rolling_window_days));
+  if (opts?.min_runs) params.set("min_runs", String(opts.min_runs));
+  if (opts?.decay_threshold) params.set("decay_threshold", String(opts.decay_threshold));
+  const qs = params.toString();
+  return fetchJson<DecayAlert[]>(`/factors/decay_alerts${qs ? "?" + qs : ""}`);
+}
