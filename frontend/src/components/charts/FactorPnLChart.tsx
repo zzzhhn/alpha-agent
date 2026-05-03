@@ -12,6 +12,8 @@ import {
   Legend,
 } from "recharts";
 import type { FactorBacktestResponse } from "@/lib/types";
+import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 
 interface FactorPnLChartProps {
   readonly data: FactorBacktestResponse;
@@ -22,6 +24,13 @@ interface MergedPoint {
   readonly date: string;
   readonly factor: number;
   readonly benchmark: number;
+  // Cumulative excess return = (factor/factor[0]) - (benchmark/benchmark[0]).
+  // For long-only equity baskets β≈1 to the universe so factor and benchmark
+  // visually overlap; this third series surfaces the small (~3-10%) alpha
+  // residual on a rescaled right axis where it becomes visible. Without it
+  // users mistake "no alpha" for "factor failed to run". (Long-only on RSP
+  // is the most affected case.)
+  readonly excess: number;
 }
 
 function mergeCurves(
@@ -38,13 +47,24 @@ function mergeCurves(
       benchmark: p.value,
     });
   }
-  return Array.from(byDate.entries())
+  const sorted = Array.from(byDate.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, v]) => ({
       date,
       factor: v.factor ?? NaN,
       benchmark: v.benchmark ?? NaN,
     }));
+  // Compute excess relative to first valid factor / benchmark values.
+  const f0 = sorted.find((p) => Number.isFinite(p.factor))?.factor ?? NaN;
+  const b0 = sorted.find((p) => Number.isFinite(p.benchmark))?.benchmark ?? NaN;
+  return sorted.map((p) => ({
+    ...p,
+    excess:
+      Number.isFinite(p.factor) && Number.isFinite(p.benchmark) &&
+      Number.isFinite(f0) && Number.isFinite(b0) && f0 > 0 && b0 > 0
+        ? p.factor / f0 - p.benchmark / b0
+        : NaN,
+  }));
 }
 
 function currencyLabel(code: string): string {
@@ -62,6 +82,7 @@ function formatCurrency(value: number, code: string): string {
 }
 
 export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
+  const { locale } = useLocale();
   const merged = mergeCurves(data.equity_curve, data.benchmark_curve);
   if (merged.length === 0) return null;
 
@@ -99,6 +120,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           minTickGap={32}
         />
         <YAxis
+          yAxisId="left"
           tick={{ fontSize: 10, fill: "var(--muted)" }}
           tickFormatter={(v: number) => `${sym}${(v / 1000).toFixed(0)}k`}
           domain={["auto", "auto"]}
@@ -111,6 +133,25 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
             dy: 40,
           }}
         />
+        {/* Right axis dedicated to the excess-return (alpha residual) series.
+            Scale is independent of the main P&L scale so the small ~3-10%
+            spread becomes legible even when the strategy and benchmark
+            curves visually overlap on the left axis. */}
+        <YAxis
+          yAxisId="right"
+          orientation="right"
+          tick={{ fontSize: 10, fill: "var(--accent, #34d399)" }}
+          tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`}
+          domain={["auto", "auto"]}
+          label={{
+            value: t(locale, "backtest.equity.excessAxis"),
+            angle: 90,
+            position: "insideRight",
+            fill: "var(--accent, #34d399)",
+            fontSize: 11,
+            dy: -40,
+          }}
+        />
         <Tooltip
           contentStyle={{
             background: "var(--card)",
@@ -120,6 +161,9 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           }}
           formatter={(value, name) => {
             const num = typeof value === "number" ? value : Number(value);
+            if (name === "excess") {
+              return [`${num >= 0 ? "+" : ""}${(num * 100).toFixed(2)}%`, t(locale, "backtest.equity.excessLegend")];
+            }
             const label =
               name === "factor"
                 ? data.factor_name
@@ -133,9 +177,11 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           verticalAlign="top"
           iconType="plainline"
           wrapperStyle={{ fontSize: 12, paddingBottom: 4 }}
-          formatter={(value) =>
-            value === "factor" ? data.factor_name : data.benchmark_ticker
-          }
+          formatter={(value) => {
+            if (value === "factor") return data.factor_name;
+            if (value === "excess") return t(locale, "backtest.equity.excessLegend");
+            return data.benchmark_ticker;
+          }}
         />
         {splitDate ? (
           <ReferenceLine
@@ -175,6 +221,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           }}
         />
         <Line
+          yAxisId="left"
           type="monotone"
           dataKey="factor"
           name="factor"
@@ -184,12 +231,27 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           isAnimationActive={false}
         />
         <Line
+          yAxisId="left"
           type="monotone"
           dataKey="benchmark"
           name="benchmark"
           stroke="var(--muted-strong, #94a3b8)"
           strokeWidth={1.5}
           strokeDasharray="4 3"
+          dot={false}
+          isAnimationActive={false}
+        />
+        {/* Excess curve: cumulative (strategy_total_return - benchmark_total_return).
+            Left axis ($ P&L) and right axis (% excess) are independently scaled,
+            so on long-only baskets where β≈1 the small alpha residual becomes
+            visible as a separate trace instead of hiding inside the overlap. */}
+        <Line
+          yAxisId="right"
+          type="monotone"
+          dataKey="excess"
+          name="excess"
+          stroke="var(--green, #10b981)"
+          strokeWidth={1.5}
           dot={false}
           isAnimationActive={false}
         />
