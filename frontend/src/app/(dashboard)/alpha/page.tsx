@@ -57,7 +57,13 @@ export default function AlphaPage() {
   const [backtesting, setBacktesting] = useState(false);
   const [backtestError, setBacktestError] = useState<string | null>(null);
   const [backtest, setBacktest] = useState<FactorBacktestResponse | null>(null);
-  const [direction, setDirection] = useState<BacktestDirection>("long_only");
+  // Default to long_short — see CLAUDE.md / FactorExamples context: the
+  // curated examples are statistically significant in long_short but
+  // underperform cap-weighted SPY in long_only on the 2024-2026
+  // mega-cap-concentrated panel. Loading an example with long_only would
+  // produce results that contradict the headline α-t / PSR claims baked
+  // into the example intuition strings.
+  const [direction, setDirection] = useState<BacktestDirection>("long_short");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<readonly HypothesisHistoryEntry[]>(
     [],
