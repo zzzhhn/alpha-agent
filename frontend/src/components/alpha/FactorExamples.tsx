@@ -17,89 +17,99 @@ export interface FactorExample {
   readonly intuitionEn: string;
 }
 
-// All six factors empirically verified in long_only mode on the live SP100 v2
-// panel (99 tickers + SPY, 2025-04-25 → 2026-04-24, SPY test split +31.14%).
-// Selected from a 21-candidate sweep covering quality / value / momentum /
-// sector-neutral / smoothed / combo themes. Re-run the sweep if the panel
-// schema or universe composition changes.
+// Top 6 long-only factor picks from the SP500 v3 selection workflow
+// (scripts/select_long_only_factors.py). 22 academic-classic candidates ×
+// 4 mode variants (plain/sector-neutral × top30%/top10%) → ranked by
+// composite score (alpha-t × PSR × cross-mode stability).
+//
+// HONEST DISCLAIMER: on the SP500 v3 panel (3y, 555 tickers, 2023-05 →
+// 2026-04), no long-only factor on cap-weighted SPY benchmark clears the
+// rigorous α-t > 1.0 threshold. The strongest pick (`ep`, top 10%) reaches
+// α-t = +0.99. Cause: 2024-2026 was a Mag-7-concentrated bull market; SPY
+// effectively IS the mega-cap basket, so any equal-weight basket lags.
+//
+// Per-regime breakdown shows the universal pattern: sideways α-t > 0,
+// bull α-t < 0. Long-only factors are a sideways/bear regime tool. For
+// rigorous alpha generation, use long_short with sector-neutral instead
+// (e.g. zs_vol_20 → α-t = +2.20, p = 0.028 in long_short SN mode).
 export const FACTOR_EXAMPLES: readonly FactorExample[] = [
   {
-    name: "Hump 平滑动量",
-    hypothesisZh: "12 日动量套上 3% 阈值平滑器，过滤每日排名的微小变动",
-    hypothesisEn: "12-day momentum gated by a 3% relative-change smoother to suppress micro-rebalances",
-    expression: "hump(rank(ts_mean(returns, 12)), 0.03)",
-    totalReturn: 0.3835,
-    testSharpe: 2.97,
-    testIC: 0.046,
+    name: "Earnings Yield (top 10%)",
+    hypothesisZh: "高盈利收益率（净利润 / 市值）公司在 SP500 中长期跑赢——经典 Basu 1977 价值因子",
+    hypothesisEn: "High earnings yield (net income / market cap) outperforms in SP500 — classic Basu 1977 value factor",
+    expression: "rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))",
+    totalReturn: 0.066,
+    testSharpe: 1.76,
+    testIC: 0.012,
     intuitionZh:
-      "hump 算子让排名只在变化超过 3% 时更新，把噪声驱动的换手清理掉。Sharpe 与原始 mom_12 (+3.04) 持平，扣手续费后保留的 alpha 显著更多。这是 T3 实装算子的典型用法。",
+      "6 个 long_only 因子里 α-t 最强（+0.99，~p<0.10）。集中持有 top 10%（top 55 股），SPY excess +6.6%/年，PSR=0.91。Regime 分解：bull α-t=+0.20，sideways α-t=+0.96——两个 regime 都正向，难得。这是唯一在 bull 期也没显著输 SPY 的因子。",
     intuitionEn:
-      "hump only refreshes rank when the change exceeds 3%, eliminating noise-driven turnover. Sharpe matches raw mom_12 (+3.04); post-cost alpha retention is materially higher. Canonical usage of a T3-promoted operator.",
+      "Strongest α-t (+0.99, ~p<0.10) of the 6 long-only picks. Concentrated top 10% (top 55 stocks), SPY excess +6.6%/yr, PSR=0.91. Regime breakdown: bull α-t=+0.20, sideways α-t=+0.96 — positive in both, rare. The only pick that doesn't visibly underperform SPY in bull regime.",
   },
   {
-    name: "资产周转率 (Asset Turnover)",
-    hypothesisZh: "高资产周转率的公司单位资产产出更多收入，资本效率更高",
-    hypothesisEn: "Companies with higher asset turnover generate more revenue per dollar of assets — capital-efficient operators",
-    expression: "rank(div(revenue, assets))",
-    totalReturn: 0.4232,
-    testSharpe: 2.11,
-    testIC: 0.026,
+    name: "120d Trend Sharpe (top 30%)",
+    hypothesisZh: "120 日 return/vol 比率——风险调整后的趋势强度，类似 Sharpe ratio 在每只股票上的局部计算",
+    hypothesisEn: "120d return / vol ratio — risk-adjusted trend strength, Sharpe-like per-stock metric",
+    expression: "rank(divide(ts_mean(returns, 120), ts_std(returns, 120)))",
+    totalReturn: 0.009,
+    testSharpe: 1.79,
+    testIC: 0.008,
     intuitionZh:
-      "经典 quality 因子。营收/总资产衡量管理层把账面资产变成现金流的能力。在 SP100 上跑赢 SPY 11pp、IC 显著正——demo 时强调 T2 fundamental 字段的可用性。",
+      "排序按「已实现 Sharpe」，挑出趋势平稳上行的股票。α-t=+0.21（不显著），但 PSR=0.91 说明 SR 高度稳定。3/4 模式变体都正——结构稳定的因子。在牛市集中度高的 2024-25 区间被 SPY 反超。",
     intuitionEn:
-      "Classic quality factor. Revenue / total assets measures management's ability to convert balance-sheet assets into cash flow. Beats SPY by 11pp on SP100 with significantly positive IC — showcases T2 fundamental fields in action.",
+      "Ranks by realized Sharpe — picks stocks with steady upward trends. α-t=+0.21 (not significant), but PSR=0.91 indicates highly stable SR. 3/4 mode variants positive — structurally robust. Loses to SPY in 2024-25 mega-cap-concentrated bull.",
   },
   {
-    name: "营业利润 × 动量",
-    hypothesisZh: "高营业利润率 × 强近期动量的双信号乘积",
-    hypothesisEn: "Operating margin × recent momentum — companies that are both profitable and trending",
-    expression: "rank(mul(div(operating_income, revenue), ts_mean(returns, 12)))",
-    totalReturn: 0.3327,
-    testSharpe: 1.96,
-    testIC: 0.031,
+    name: "Low Vol 120d (top 10% sector-neut)",
+    hypothesisZh: "低波动率异象（Frazzini-Pedersen）——低 β 股票长期跑赢高 β，行业中性化后强化",
+    hypothesisEn: "Low-volatility anomaly (Frazzini-Pedersen) — low-β stocks outperform; sector-neutralized to remove sector tilt",
+    expression: "rank(inverse(ts_std(returns, 120)))",
+    totalReturn: 0.038,
+    testSharpe: 1.16,
+    testIC: 0.013,
     intuitionZh:
-      "学术 Quality + Momentum 因子的轻量版。乘积要求两个独立信号同时为正，过滤掉「价差大但低利润」和「高利润但停滞」两类伪 alpha。混合因子的设计示范。",
+      "Top 10% 集中持有最低波动股，sector-neutralize 剔除「避险行业（公用事业、必需消费）」的隐性 beta。α-t=+0.70。Sideways α-t=+1.29 是亮点——震荡期最稳。bull 期 α-t=-0.55 印证教科书结论：低波在牛市跑输。",
     intuitionEn:
-      "Lightweight version of the academic Quality + Momentum factor. The product requires both signals positive, filtering out 'wide spread / low margin' and 'high margin / stagnant' false positives. Demo of multi-source factor design.",
+      "Top 10% concentrated low-vol; sector-neutral strips defensive-sector (utilities, staples) implicit beta. α-t=+0.70. Sideways α-t=+1.29 is the standout — most stable in chop. Bull α-t=-0.55 confirms textbook: low-vol underperforms in bull.",
   },
   {
-    name: "线性衰减动量",
-    hypothesisZh: "10 日动量但近期收益权重更高，比等权 ts_mean 更敏感",
-    hypothesisEn: "10-day momentum with linearly increasing weights — recent returns count more",
-    expression: "rank(ts_decay_linear(returns, 10))",
-    totalReturn: 0.3970,
-    testSharpe: 1.63,
-    testIC: 0.031,
+    name: "Low Vol 60d (top 10% sector-neut)",
+    hypothesisZh: "低波动 120d 的短期版（60 日）——更敏感但更易翻车",
+    hypothesisEn: "60d version of low-vol — more responsive but noisier than 120d",
+    expression: "rank(inverse(ts_std(returns, 60)))",
+    totalReturn: 0.011,
+    testSharpe: 1.00,
+    testIC: 0.005,
     intuitionZh:
-      "权重 [1,2,…,10] 让最近 1-2 天权重各占 ~20%。比 ts_mean 等权更早捕捉趋势反转，代价是被噪声打断的概率上升。展示 ts_decay_linear T1 算子。",
+      "和 low_vol_120 同源，60 日窗口对最近波动更敏感。α-t=+0.20（弱信号）。在 sideways 期 α-t=+0.78，bull α-t=-0.88。组合里它和 low_vol_120 高度相关——别同时选两个 vol 因子做组合。",
     intuitionEn:
-      "Weights [1..10] give the last 1-2 days ~20% each. Catches trend reversals earlier than equal-weighted ts_mean, at the cost of more whipsaw exposure. Showcases the ts_decay_linear T1 operator.",
+      "60d version of low-vol family. α-t=+0.20 (weak). Sideways α-t=+0.78, bull α-t=-0.88. Highly correlated with low_vol_120 — don't combine both in a portfolio.",
   },
   {
-    name: "行业中性 ROA",
-    hypothesisZh: "在每个 sector 内部找最高 ROA 的公司，剥离 sector beta",
-    hypothesisEn: "Highest-ROA stocks within each sector, with sector beta removed",
-    expression: "group_neutralize(rank(div(operating_income, assets)), sector)",
-    totalReturn: 0.3927,
-    testSharpe: 1.18,
-    testIC: 0.020,
+    name: "Volume Z-Score 20d (top 10%)",
+    hypothesisZh: "20 日成交量 z-score 排名——异常活跃度信号，小盘股一旦放量短期表现强",
+    hypothesisEn: "20d volume z-score rank — abnormal-volume signal; small-caps often outperform short-term after volume spikes",
+    expression: "ts_zscore(volume, 20)",
+    totalReturn: 0.006,
+    testSharpe: 2.17,
+    testIC: 0.015,
     intuitionZh:
-      "Tech 公司天然 ROA 比 Energy 高，直接横截面比对会变成对 Tech sector 的隐性赌注。group_neutralize 把信号收敛到行业内相对效率，sector 配置归零。这是 T2 group 算子的核心用法。",
+      "[Tier C]——4 个变体里只 1 个 α-t 正，模式脆弱。但同一表达式在 long_short sector-neutral 模式下 α-t=+2.20（p=0.028）显著。提醒：因子在 long_short 比 long_only 强得多，因为它本质是「价差信号」而非「绝对收益信号」。",
     intuitionEn:
-      "Tech's ROA is structurally higher than Energy's; cross-sectional ranking alone becomes an implicit Tech bet. group_neutralize collapses the signal to within-sector efficiency, zeroing sector exposure. Core usage of the T2 group operator family.",
+      "[Tier C] — only 1/4 mode variants positive, mode-fragile. But the SAME expression in long_short sector-neutral mode hits α-t=+2.20 (p=0.028). Lesson: factor is fundamentally a SPREAD signal, not an absolute-return signal — it shines in long_short, not long_only.",
   },
   {
-    name: "ROA (经营资产收益率)",
-    hypothesisZh: "经营利润相对总资产的比率——最简洁的 quality 因子",
-    hypothesisEn: "Operating income as a fraction of total assets — the simplest quality factor",
-    expression: "rank(div(operating_income, assets))",
-    totalReturn: 0.4068,
-    testSharpe: 1.27,
-    testIC: 0.006,
+    name: "Book Yield B/P (top 10%)",
+    hypothesisZh: "经典 Fama-French 价值因子——book-to-market 比率高的股票长期跑赢",
+    hypothesisEn: "Classic Fama-French B/M value factor — high book-to-market stocks outperform long-term",
+    expression: "rank(divide(equity, multiply(close, shares_outstanding)))",
+    totalReturn: 0.003,
+    testSharpe: 1.51,
+    testIC: 0.001,
     intuitionZh:
-      "纯 fundamental 因子，无动量、无估值叠加。+40.7% 收益跑赢 SPY 9pp，体现 quality 在 2025-2026 区间的持续性。IC 偏低是因为月度财报与日度收益错配，但累计收益依然显著。",
+      "[Tier C]。α-t=+0.04 实质上是噪声，但 PSR=0.88 说明绝对 SR 不差。教科书 value 因子在 2024-2026 大型科技股牛市里失效——growth 跑赢 value 的「价值陷阱十年」延续。仅作组合多样性纳入。",
     intuitionEn:
-      "Pure fundamental factor with no momentum or valuation overlay. +40.7% return beats SPY by 9pp, demonstrating quality's persistence in 2025-2026. IC is low because quarterly fundamentals lag daily returns, but cumulative outperformance is substantial.",
+      "[Tier C]. α-t=+0.04 is essentially noise but PSR=0.88. The textbook value factor has been crushed in the 2024-2026 mega-cap-tech bull market — the 'value trap decade' continues. Included for portfolio diversity, not signal strength.",
   },
 ];
 
@@ -143,7 +153,7 @@ function ExampleCard({
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-semibold text-text">{example.name}</h3>
         <span className="rounded bg-accent/10 px-2 py-0.5 font-mono text-[12px] text-accent">
-          +{(example.totalReturn * 100).toFixed(1)}%
+          {example.totalReturn >= 0 ? "+" : ""}{(example.totalReturn * 100).toFixed(1)}%
         </span>
       </div>
       <p className="text-[13px] leading-relaxed text-text/90">{hypothesis}</p>
