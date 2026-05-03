@@ -1,4 +1,8 @@
-"""6-factor long_only selection workflow on the SP500 v3 panel.
+"""6-factor selection workflow on the SP500 v3 panel.
+
+Supports both `--direction long_only` and `--direction long_short`. Default
+is long_short since cap-weighted SPY benchmark is hostile to long_only in
+mega-cap-concentrated bull regimes (see docs/long_only_factor_selection.md).
 
 Process:
   Stage 1: run ~22 candidate factor expressions in long_only mode.
@@ -122,6 +126,11 @@ CANDIDATES: list[tuple[str, str, str, str, list[str]]] = [
 ]
 
 
+DIRECTION = "long_short"  # overridden by main()
+ALPHA_T_THRESHOLD = 1.5    # tightened for long_short; relaxed to 0.0 for long_only
+PSR_THRESHOLD = 0.65
+
+
 def run_one(name: str, expr: str, ops: list[str], neutralize: str = "none", top_pct: float = 0.30) -> dict | None:
     """Single backtest, return summary dict or None on AST/eval error."""
     try:
@@ -130,7 +139,7 @@ def run_one(name: str, expr: str, ops: list[str], neutralize: str = "none", top_
             operators_used=ops, lookback=120,
             universe="SP500", justification="",
         )
-        r = fbm.run_factor_backtest(spec, direction="long_only", neutralize=neutralize, top_pct=top_pct)
+        r = fbm.run_factor_backtest(spec, direction=DIRECTION, neutralize=neutralize, top_pct=top_pct)
         return {
             "name": name,
             "neutralize": neutralize,
@@ -154,6 +163,20 @@ def run_one(name: str, expr: str, ops: list[str], neutralize: str = "none", top_
 
 
 def main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--direction", choices=("long_short", "long_only"), default="long_short")
+    ap.add_argument("--alpha-t", type=float, default=None,
+                    help="α-t threshold for Stage 2; default 1.5 (long_short) or 0.0 (long_only)")
+    args = ap.parse_args()
+    global DIRECTION, ALPHA_T_THRESHOLD
+    DIRECTION = args.direction
+    ALPHA_T_THRESHOLD = (
+        args.alpha_t if args.alpha_t is not None
+        else (1.5 if DIRECTION == "long_short" else 0.0)
+    )
+
+    print(f"[stage 1] direction={DIRECTION}, α-t threshold={ALPHA_T_THRESHOLD}", file=sys.stderr)
     print("[stage 1] running 22 candidates × 4 variants (plain/SN × top30%/top10%); keep best by α-t", file=sys.stderr)
     all_results: dict[str, dict] = {}
     for fam, name, thesis, expr, ops in CANDIDATES:
@@ -186,10 +209,10 @@ def main() -> int:
     # ── threshold and instead keep anything with positive direction AND
     # ── deflated-Sharpe robustness; we'll surface the actual significance
     # ── levels in the report rather than gating on them. ──────────────────
-    print("\n[stage 2] filtering: α-t > 0 (positive direction) AND PSR > 0.55", file=sys.stderr)
+    print(f"\n[stage 2] filtering: α-t > {ALPHA_T_THRESHOLD} AND PSR > {PSR_THRESHOLD}", file=sys.stderr)
     stage2 = {
         n: r for n, r in all_results.items()
-        if r["alpha_t"] > 0 and r["psr"] > 0.55
+        if r["alpha_t"] > ALPHA_T_THRESHOLD and r["psr"] > PSR_THRESHOLD
     }
     print(f"  → {len(stage2)} survivors: {list(stage2.keys())}", file=sys.stderr)
 

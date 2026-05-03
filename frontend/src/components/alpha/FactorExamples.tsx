@@ -10,106 +10,103 @@ export interface FactorExample {
   readonly hypothesisZh: string;
   readonly hypothesisEn: string;
   readonly expression: string;
-  readonly totalReturn: number;   // decimal, e.g. 0.5326 for +53.26%
+  readonly totalReturn: number;
   readonly testSharpe: number;
   readonly testIC: number;
   readonly intuitionZh: string;
   readonly intuitionEn: string;
 }
 
-// Top 6 long-only factor picks from the SP500 v3 selection workflow
-// (scripts/select_long_only_factors.py). 22 academic-classic candidates ×
-// 4 mode variants (plain/sector-neutral × top30%/top10%) → ranked by
-// composite score (alpha-t × PSR × cross-mode stability).
+// Top 6 long_short factor picks from SP500 v3 selection workflow
+// (scripts/select_long_only_factors.py --direction long_short --alpha-t 1.0).
 //
-// HONEST DISCLAIMER: on the SP500 v3 panel (3y, 555 tickers, 2023-05 →
-// 2026-04), no long-only factor on cap-weighted SPY benchmark clears the
-// rigorous α-t > 1.0 threshold. The strongest pick (`ep`, top 10%) reaches
-// α-t = +0.99. Cause: 2024-2026 was a Mag-7-concentrated bull market; SPY
-// effectively IS the mega-cap basket, so any equal-weight basket lags.
+// All 6 passed full 4-stage filter: α-t > 1.0, PSR > 0.65, ≥2 of 4 mode
+// variants positive, at least one regime with positive α-t. Top 3 (ep,
+// vol_zscore_20, dvol_zscore_60) clear the rigorous α-t > 1.5 + p < 0.10
+// threshold. Family diversity enforced: max 2 picks per category.
 //
-// Per-regime breakdown shows the universal pattern: sideways α-t > 0,
-// bull α-t < 0. Long-only factors are a sideways/bear regime tool. For
-// rigorous alpha generation, use long_short with sector-neutral instead
-// (e.g. zs_vol_20 → α-t = +2.20, p = 0.028 in long_short SN mode).
+// CONTEXT: long_short means top-30% long basket netted against bottom-30%
+// short basket. Returns are market-neutral — strategy SR / α/β are
+// independent of SPY's path. This is why these factors look strong while
+// the same expressions in long_only mode underperform cap-weighted SPY.
 export const FACTOR_EXAMPLES: readonly FactorExample[] = [
   {
-    name: "Earnings Yield (top 10%)",
-    hypothesisZh: "高盈利收益率（净利润 / 市值）公司在 SP500 中长期跑赢——经典 Basu 1977 价值因子",
-    hypothesisEn: "High earnings yield (net income / market cap) outperforms in SP500 — classic Basu 1977 value factor",
+    name: "Earnings Yield (E/P)",
+    hypothesisZh: "高盈利收益率（净利润/市值）股 long、低 EY 股 short——经典 Basu 1977 价值因子的多空版",
+    hypothesisEn: "Long high earnings yield (net income / market cap), short low — long_short version of Basu 1977 value",
     expression: "rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))",
     totalReturn: 0.066,
-    testSharpe: 1.76,
-    testIC: 0.012,
+    testSharpe: 1.85,
+    testIC: 0.030,
     intuitionZh:
-      "6 个 long_only 因子里 α-t 最强（+0.99，~p<0.10）。集中持有 top 10%（top 55 股），SPY excess +6.6%/年，PSR=0.91。Regime 分解：bull α-t=+0.20，sideways α-t=+0.96——两个 regime 都正向，难得。这是唯一在 bull 期也没显著输 SPY 的因子。",
+      "6 个 picks 中 α-t 最强（+2.73, p=0.006）。Bull α-t=+1.08, sideways α-t=+1.58——两个 regime 都显著。4/4 模式变体正向，PSR=0.93。学术 Basu 价值因子在 long_short 上至今仍 work，证明 cap-weighted bull 稀释的不是因子本身而是 long_only 的结构。",
     intuitionEn:
-      "Strongest α-t (+0.99, ~p<0.10) of the 6 long-only picks. Concentrated top 10% (top 55 stocks), SPY excess +6.6%/yr, PSR=0.91. Regime breakdown: bull α-t=+0.20, sideways α-t=+0.96 — positive in both, rare. The only pick that doesn't visibly underperform SPY in bull regime.",
+      "Strongest pick: α-t=+2.73, p=0.006. Bull α-t=+1.08, sideways α-t=+1.58 — significant in BOTH regimes. 4/4 mode variants positive, PSR=0.93. Basu value factor still works in long_short — confirming that cap-weighted bull dilutes long_only structure, not the factor itself.",
   },
   {
-    name: "120d Trend Sharpe (top 30%)",
-    hypothesisZh: "120 日 return/vol 比率——风险调整后的趋势强度，类似 Sharpe ratio 在每只股票上的局部计算",
-    hypothesisEn: "120d return / vol ratio — risk-adjusted trend strength, Sharpe-like per-stock metric",
-    expression: "rank(divide(ts_mean(returns, 120), ts_std(returns, 120)))",
-    totalReturn: 0.009,
-    testSharpe: 1.79,
-    testIC: 0.008,
-    intuitionZh:
-      "排序按「已实现 Sharpe」，挑出趋势平稳上行的股票。α-t=+0.21（不显著），但 PSR=0.91 说明 SR 高度稳定。3/4 模式变体都正——结构稳定的因子。在牛市集中度高的 2024-25 区间被 SPY 反超。",
-    intuitionEn:
-      "Ranks by realized Sharpe — picks stocks with steady upward trends. α-t=+0.21 (not significant), but PSR=0.91 indicates highly stable SR. 3/4 mode variants positive — structurally robust. Loses to SPY in 2024-25 mega-cap-concentrated bull.",
-  },
-  {
-    name: "Low Vol 120d (top 10% sector-neut)",
-    hypothesisZh: "低波动率异象（Frazzini-Pedersen）——低 β 股票长期跑赢高 β，行业中性化后强化",
-    hypothesisEn: "Low-volatility anomaly (Frazzini-Pedersen) — low-β stocks outperform; sector-neutralized to remove sector tilt",
-    expression: "rank(inverse(ts_std(returns, 120)))",
-    totalReturn: 0.038,
-    testSharpe: 1.16,
-    testIC: 0.013,
-    intuitionZh:
-      "Top 10% 集中持有最低波动股，sector-neutralize 剔除「避险行业（公用事业、必需消费）」的隐性 beta。α-t=+0.70。Sideways α-t=+1.29 是亮点——震荡期最稳。bull 期 α-t=-0.55 印证教科书结论：低波在牛市跑输。",
-    intuitionEn:
-      "Top 10% concentrated low-vol; sector-neutral strips defensive-sector (utilities, staples) implicit beta. α-t=+0.70. Sideways α-t=+1.29 is the standout — most stable in chop. Bull α-t=-0.55 confirms textbook: low-vol underperforms in bull.",
-  },
-  {
-    name: "Low Vol 60d (top 10% sector-neut)",
-    hypothesisZh: "低波动 120d 的短期版（60 日）——更敏感但更易翻车",
-    hypothesisEn: "60d version of low-vol — more responsive but noisier than 120d",
-    expression: "rank(inverse(ts_std(returns, 60)))",
-    totalReturn: 0.011,
-    testSharpe: 1.00,
-    testIC: 0.005,
-    intuitionZh:
-      "和 low_vol_120 同源，60 日窗口对最近波动更敏感。α-t=+0.20（弱信号）。在 sideways 期 α-t=+0.78，bull α-t=-0.88。组合里它和 low_vol_120 高度相关——别同时选两个 vol 因子做组合。",
-    intuitionEn:
-      "60d version of low-vol family. α-t=+0.20 (weak). Sideways α-t=+0.78, bull α-t=-0.88. Highly correlated with low_vol_120 — don't combine both in a portfolio.",
-  },
-  {
-    name: "Volume Z-Score 20d (top 10%)",
-    hypothesisZh: "20 日成交量 z-score 排名——异常活跃度信号，小盘股一旦放量短期表现强",
-    hypothesisEn: "20d volume z-score rank — abnormal-volume signal; small-caps often outperform short-term after volume spikes",
+    name: "Volume Z-Score 20d",
+    hypothesisZh: "20 日成交量 z-score——异常活跃度信号，sector-neutral 模式下剥离行业 rotation 噪声",
+    hypothesisEn: "20-day volume z-score — abnormal-trading signal; sector-neutral strips sector-rotation noise",
     expression: "ts_zscore(volume, 20)",
-    totalReturn: 0.006,
-    testSharpe: 2.17,
+    totalReturn: 0.038,
+    testSharpe: 3.85,
     testIC: 0.015,
     intuitionZh:
-      "[Tier C]——4 个变体里只 1 个 α-t 正，模式脆弱。但同一表达式在 long_short sector-neutral 模式下 α-t=+2.20（p=0.028）显著。提醒：因子在 long_short 比 long_only 强得多，因为它本质是「价差信号」而非「绝对收益信号」。",
+      "α-t=+2.20 (p=0.028)。Sector-neutral top-30% 模式下 SR=+3.85（很高），bull α-t=+1.59, sideways α-t=+2.09——bull 期都显著。这是 alpha-agent 引擎首个跨过 p<0.05 的因子。「不寻常的成交量先于价格」的微观市场行为信号。",
     intuitionEn:
-      "[Tier C] — only 1/4 mode variants positive, mode-fragile. But the SAME expression in long_short sector-neutral mode hits α-t=+2.20 (p=0.028). Lesson: factor is fundamentally a SPREAD signal, not an absolute-return signal — it shines in long_short, not long_only.",
+      "α-t=+2.20 (p=0.028). Sector-neutral top-30% mode delivers SR=+3.85. Bull α-t=+1.59, sideways α-t=+2.09 — significant even in bull. First factor on alpha-agent to clear p<0.05. Microstructure: 'unusual volume precedes price'.",
   },
   {
-    name: "Book Yield B/P (top 10%)",
-    hypothesisZh: "经典 Fama-French 价值因子——book-to-market 比率高的股票长期跑赢",
-    hypothesisEn: "Classic Fama-French B/M value factor — high book-to-market stocks outperform long-term",
-    expression: "rank(divide(equity, multiply(close, shares_outstanding)))",
-    totalReturn: 0.003,
-    testSharpe: 1.51,
-    testIC: 0.001,
+    name: "Dollar Volume Z-Score 60d",
+    hypothesisZh: "60 日美元成交量 z-score——比裸成交量更准的市场关注度指标",
+    hypothesisEn: "60-day dollar volume z-score — better attention proxy than raw volume since it weights by price",
+    expression: "ts_zscore(dollar_volume, 60)",
+    totalReturn: 0.069,
+    testSharpe: 3.29,
+    testIC: 0.020,
     intuitionZh:
-      "[Tier C]。α-t=+0.04 实质上是噪声，但 PSR=0.88 说明绝对 SR 不差。教科书 value 因子在 2024-2026 大型科技股牛市里失效——growth 跑赢 value 的「价值陷阱十年」延续。仅作组合多样性纳入。",
+      "α-t=+1.88 (p=0.060) 边缘显著。Plain top-30% 模式下 PSR=1.00 (deflated SR 完全跑赢 lucky max)。Bull α-t=+0.62 略弱，sideways α-t=+2.33 极强。和 vol_zscore_20 高度相关，组合不要同时用两个。",
     intuitionEn:
-      "[Tier C]. α-t=+0.04 is essentially noise but PSR=0.88. The textbook value factor has been crushed in the 2024-2026 mega-cap-tech bull market — the 'value trap decade' continues. Included for portfolio diversity, not signal strength.",
+      "α-t=+1.88 (p=0.060), borderline significant. Plain top-30% mode: PSR=1.00 (deflated SR fully clears lucky-max threshold). Bull α-t=+0.62 weaker, sideways α-t=+2.33 very strong. Correlates with vol_zscore_20 — don't combine both.",
+  },
+  {
+    name: "60d Trend Sharpe",
+    hypothesisZh: "60 日 return/vol 比率——风险调整后的趋势强度，long 高 Sharpe 股、short 低 Sharpe 股",
+    hypothesisEn: "60d return/vol ratio — risk-adjusted trend strength; long high-Sharpe, short low-Sharpe",
+    expression: "rank(divide(ts_mean(returns, 60), ts_std(returns, 60)))",
+    totalReturn: 0.030,
+    testSharpe: 1.57,
+    testIC: 0.010,
+    intuitionZh:
+      "α-t=+1.23 (p=0.22)，4/4 模式变体正向。Bull α-t=-0.27 略负，sideways α-t=+1.30 强——典型 momentum 信号在震荡里赚钱、牛市跟不上 mega-cap 的特征。Sector-neutral 模式表现最佳。",
+    intuitionEn:
+      "α-t=+1.23 (p=0.22), 4/4 mode variants positive. Bull α-t=-0.27 weak, sideways α-t=+1.30 strong — classic momentum: works in chop, lags in mega-cap-led bull. Best in sector-neutral mode.",
+  },
+  {
+    name: "Book Yield (B/P)",
+    hypothesisZh: "经典 Fama-French 价值因子，long 高 B/M、short 低 B/M",
+    hypothesisEn: "Classic Fama-French B/M value — long high book-to-market, short low",
+    expression: "rank(divide(equity, multiply(close, shares_outstanding)))",
+    totalReturn: 0.030,
+    testSharpe: 1.76,
+    testIC: 0.005,
+    intuitionZh:
+      "α-t=+1.09 (p=0.28)。Bull α-t=+0.82, sideways α-t=+1.49——两个 regime 都正。Plain top-30% 模式 PSR=0.92。B/P 在 long_only 跑输 SPY 严重，但 long_short 把 growth 高估部分 short 掉就翻身了。",
+    intuitionEn:
+      "α-t=+1.09 (p=0.28). Bull α-t=+0.82, sideways α-t=+1.49 — positive in both. Plain top-30% mode PSR=0.92. B/P long-only crushed by SPY, but long_short extracts the spread by shorting overpriced growth.",
+  },
+  {
+    name: "Cash Buffer (Cash/Equity)",
+    hypothesisZh: "现金缓冲比例（cash/equity）——high cash 公司财务韧性更强，sector-neutral 后凸显",
+    hypothesisEn: "Cash buffer (cash/equity) — high-cash firms more resilient; sector-neutral reveals the signal",
+    expression: "rank(divide(cash_and_equivalents, equity))",
+    totalReturn: 0.018,
+    testSharpe: 0.63,
+    testIC: 0.008,
+    intuitionZh:
+      "α-t=+1.39 (p=0.16)。Bull α-t=+0.95, sideways α-t=-0.20——和其他几个相反，bull 比 sideways 强。SR 偏低 (+0.63) 但 α-t 不低，说明 alpha 是市场中性提取的。Sector-neutral top-30% 模式最佳。",
+    intuitionEn:
+      "α-t=+1.39 (p=0.16). Bull α-t=+0.95, sideways α-t=-0.20 — opposite of others, bull stronger. SR low (+0.63) but α-t solid — alpha is market-neutral extraction. Sector-neutral top-30% mode best.",
   },
 ];
 

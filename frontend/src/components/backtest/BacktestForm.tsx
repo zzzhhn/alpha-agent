@@ -47,7 +47,7 @@ const MODES: readonly BacktestMode[] = ["static", "walk_forward"];
 export function BacktestForm({ running, onRun, initialExpression, autoRun }: BacktestFormProps) {
   const { locale } = useLocale();
   const [expr, setExpr] = useState(initialExpression ?? "rank(ts_mean(returns, 12))");
-  const [direction, setDirection] = useState<BacktestDirection>("long_only");
+  const [direction, setDirection] = useState<BacktestDirection>("long_short");
   const [trainRatio, setTrainRatio] = useState(70);   // 0.10–0.95 stored as %
   const [topPct, setTopPct] = useState(30);
   const [bottomPct, setBottomPct] = useState(30);
@@ -68,7 +68,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         expression: initialExpression,
         operators_used: extractOps(initialExpression),
         lookback: 12,
-        direction: "long_only",
+        direction: "long_short",
         trainRatio: 0.7,
         topPct: 0.3,
         bottomPct: 0.3,
