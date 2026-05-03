@@ -32,3 +32,4 @@ status.json
 worker/.wrangler/
 .vercel
 .worktrees/
+alpha_agent/data/factor_db.sqlite
