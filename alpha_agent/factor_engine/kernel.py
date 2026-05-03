@@ -80,6 +80,27 @@ def build_data_dict(panel: "_Panel") -> dict[str, np.ndarray]:
     if panel.fundamentals:
         for fname, farr in panel.fundamentals.items():
             data[fname] = farr
+
+    # T1.5a (v4) compat: AST whitelist (`_ALLOWED_OPERANDS`) lists ~22
+    # fundamental fields, but a given panel may carry only a subset (e.g. v3
+    # SP500 panel from Compustat has no quarterly cash-flow because fundq
+    # only stores YTD). Backfill missing fundamentals with NaN arrays so
+    # factor expressions still parse and evaluate — they just produce NaN
+    # factor values, which surface as zero positions / zero PnL downstream.
+    # Better than KeyError at eval time: user sees "factor produced nothing"
+    # rather than a stack trace.
+    from alpha_agent.core.factor_ast import _ALLOWED_OPERANDS
+    _METADATA_OPERANDS = {
+        "close", "open", "high", "low", "volume", "returns", "vwap",
+        "cap", "sector", "industry", "subindustry", "exchange", "currency",
+        "dollar_volume", "adv5", "adv10", "adv20", "adv60", "adv120", "adv180",
+    }
+    fundamental_operands = _ALLOWED_OPERANDS - _METADATA_OPERANDS
+    nan_shape = panel.close.shape
+    for op in fundamental_operands:
+        if op not in data:
+            data[op] = np.full(nan_shape, np.nan, dtype=np.float64)
+
     return data
 
 
