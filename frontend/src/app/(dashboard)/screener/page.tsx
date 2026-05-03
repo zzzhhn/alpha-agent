@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Slider } from "@/components/ui/Slider";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
 import { listZoo, readDirection, type ZooEntry, type ZooDirection } from "@/lib/factor-zoo";
 import { runScreener } from "@/lib/api";
@@ -107,7 +108,7 @@ export default function ScreenerPage() {
           name: entry.name,
           hypothesis: entry.hypothesis ?? "",
           expression: entry.expression,
-          operators_used: extractOps(entry.expression),
+          operators_used: [...extractOps(entry.expression)],
           lookback: 12,
           universe: "SP500",
           justification: entry.intuition ?? entry.hypothesis ?? "screener factor",
@@ -736,10 +737,3 @@ function formatCap(cap: number): string {
   return cap.toFixed(0);
 }
 
-function extractOps(expr: string): string[] {
-  const re = /([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-  const set = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(expr))) set.add(m[1]);
-  return Array.from(set);
-}

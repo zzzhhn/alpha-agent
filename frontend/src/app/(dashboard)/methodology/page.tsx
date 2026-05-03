@@ -260,16 +260,33 @@ function OperatorsTab({ catalog }: { readonly catalog: OperandCatalogResponse | 
 function BacktestTab() {
   const { locale } = useLocale();
 
-  // Each row is one of the 6 KPIs the backtest engine returns. The text is
-  // intentionally written as the formula itself + the file:line where it lives,
-  // so when the engine changes the user can git blame the same line.
+  // Each row documents one engine output. v4 surfaced 9 additional rigor
+  // metrics on top of the 6 base KPIs; these are spelled out so users can
+  // see the formulas and find the source via the ref column.
   const rows: { keyBase: string; formula: string; ref: string }[] = [
-    { keyBase: "sharpe", formula: "Sharpe = mean(daily_ret) / std(daily_ret) × √252", ref: "factor_backtest.py L282" },
-    { keyBase: "totalReturn", formula: "Total return = ∏(1 + daily_ret) − 1 over the slice", ref: "factor_backtest.py L279" },
-    { keyBase: "ic", formula: "IC = mean of cross-sectional Spearman(rank(factor[t]), rank(fwd_ret[t])) across t", ref: "kernel.py spearman_ic" },
-    { keyBase: "mdd", formula: "MaxDD = min((cumprod(1+r) − running_max) / running_max) over the slice", ref: "factor_backtest.py L256" },
-    { keyBase: "turnover", formula: "Turnover = mean(L1 norm of weight delta between consecutive rows)", ref: "factor_backtest.py L301" },
-    { keyBase: "hitRate", formula: "Hit rate = fraction of days with daily IC > 0", ref: "factor_backtest.py L293" },
+    // T0 — base KPIs (always shown)
+    { keyBase: "sharpe", formula: "Sharpe = mean(daily_ret) / std(daily_ret) × √252", ref: "factor_backtest.py:_split_metrics" },
+    { keyBase: "totalReturn", formula: "Total return = ∏(1 + daily_ret) − 1 over the slice", ref: "factor_backtest.py:_split_metrics" },
+    { keyBase: "ic", formula: "IC = mean of cross-sectional Spearman(rank(factor[t]), rank(fwd_ret[t])) across t", ref: "kernel.py:spearman_ic" },
+    { keyBase: "mdd", formula: "MaxDD = min((cumprod(1+r) − running_max) / running_max)", ref: "factor_backtest.py:_max_drawdown" },
+    { keyBase: "turnover", formula: "Turnover = mean(L1 norm of weight delta between consecutive rows)", ref: "factor_backtest.py:_split_metrics" },
+    { keyBase: "hitRate", formula: "Hit rate = fraction of days with daily IC > 0", ref: "factor_backtest.py:_split_metrics" },
+    // v4 — IC distribution & significance (T1.4)
+    { keyBase: "icir", formula: "ICIR = mean(IC) / std(IC) × √252", ref: "factor_backtest.py:_split_metrics" },
+    { keyBase: "icPvalue", formula: "IC p = math.erfc(|t| / √2) where t = mean(IC) / (std(IC)/√n)", ref: "factor_backtest.py:_split_metrics" },
+    // v4 — Bailey-Lopez de Prado deflated Sharpe (T2.1)
+    { keyBase: "psr", formula: "PSR = Φ((SR − E[max SR | SR=0, n_trials]) × √(n−1) / √(1 − γ₃·SR + (γ₄−1)/4·SR²))", ref: "scan/significance.py:deflated_sharpe" },
+    // v4 — α/β decomposition vs benchmark (T3.B)
+    { keyBase: "alphaBeta", formula: "α + β = OLS regress(daily_ret, bench_daily); α-t and α-p reported", ref: "factor_engine/risk_attribution.py" },
+    // v4 — bootstrap CIs (T3.A)
+    { keyBase: "bootstrapCi", formula: "95% CI via stationary block bootstrap (block_len=20, n_resamples=1000)", ref: "scan/significance.py:stationary_block_bootstrap_ci" },
+    // v4 — IS-OOS overfit flag (T2.4)
+    { keyBase: "overfitFlag", formula: "overfit = (train_SR > 0.5) AND ((train_SR − test_SR)/train_SR > 0.5)", ref: "factor_backtest.py:run_factor_backtest" },
+    // v4 — slippage + borrow (T2.2/T2.3)
+    { keyBase: "slippageCost", formula: "slippage_bps = bps_const + k × √(participation/ADV) per trade", ref: "factor_backtest.py:run_factor_backtest" },
+    { keyBase: "borrowCost", formula: "borrow_drag = short_borrow_bps/252 × Σ|w_short| each day", ref: "factor_backtest.py:run_factor_backtest" },
+    // v4 — regime breakdown (Bundle A.1)
+    { keyBase: "regime", formula: "Days classified by SPY 60d return: bull >+5%, bear <−5%, sideways otherwise; SR/IC/α reported per regime", ref: "factor_backtest.py:_classify_regimes" },
   ];
 
   return (

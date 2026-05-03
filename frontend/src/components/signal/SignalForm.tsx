@@ -7,6 +7,7 @@ import { Slider } from "@/components/ui/Slider";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { FACTOR_EXAMPLES, type FactorExample } from "@/components/alpha/FactorExamples";
+import { extractOps } from "@/lib/factor-spec";
 
 export interface SignalParams {
   readonly expression: string;
@@ -20,17 +21,6 @@ export interface SignalParams {
 interface SignalFormProps {
   readonly running: boolean;
   readonly onRun: (p: SignalParams) => void;
-}
-
-// Naive operator extraction — pulls function-call identifiers out of the
-// expression. Backend re-validates via AST, so this only feeds the
-// declared-ops list (which the API checks for exact match).
-function extractOps(expr: string): string[] {
-  const re = /([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-  const set = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(expr))) set.add(m[1]);
-  return Array.from(set);
 }
 
 export function SignalForm({ running, onRun }: SignalFormProps) {
@@ -47,7 +37,7 @@ export function SignalForm({ running, onRun }: SignalFormProps) {
   function submit() {
     onRun({
       expression: expr.trim(),
-      operators_used: extractOps(expr),
+      operators_used: [...extractOps(expr)],
       lookback: 12,
       icLookback,
       topN,

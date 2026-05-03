@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
 import { listZoo, removeFromZoo, type ZooEntry } from "@/lib/factor-zoo";
 import { runZooCorrelation } from "@/lib/api";
@@ -35,7 +36,7 @@ export default function FactorsPage() {
         JSON.stringify({
           name: e.name,
           expression: e.expression,
-          operators_used: extractOps(e.expression),
+          operators_used: [...extractOps(e.expression)],
           lookback: 12,
           hypothesis: e.hypothesis,
           direction: e.direction,
@@ -100,7 +101,7 @@ export default function FactorsPage() {
           name: e.name,
           hypothesis: e.hypothesis ?? "",
           expression: e.expression,
-          operators_used: extractOps(e.expression),
+          operators_used: [...extractOps(e.expression)],
           lookback: 12,
           universe: "SP500",
           justification: e.intuition ?? e.hypothesis ?? "zoo entry",
@@ -310,10 +311,3 @@ function renderColored(label: string, value: number) {
   return <span className={cls}>{label}</span>;
 }
 
-function extractOps(expr: string): string[] {
-  const re = /([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-  const set = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(expr))) set.add(m[1]);
-  return Array.from(set);
-}

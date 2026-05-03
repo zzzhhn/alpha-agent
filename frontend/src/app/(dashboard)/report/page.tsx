@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
 import {
   FACTOR_EXAMPLES,
@@ -29,13 +30,6 @@ import type {
   ExposureResponse,
 } from "@/lib/types";
 
-function extractOps(expr: string): string[] {
-  const re = /([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-  const set = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(expr))) set.add(m[1]);
-  return Array.from(set);
-}
 
 interface FactorReport {
   readonly name: string;
@@ -74,7 +68,7 @@ async function fetchAll(
     name: name || "factor",
     hypothesis: hypothesis || expression,
     expression,
-    operators_used: extractOps(expression),
+    operators_used: [...extractOps(expression)],
     lookback: 12,
     universe: "SP500",
     justification: "tear sheet generation",

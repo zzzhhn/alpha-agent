@@ -7,6 +7,7 @@ import { Slider } from "@/components/ui/Slider";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { FACTOR_EXAMPLES, type FactorExample } from "@/components/alpha/FactorExamples";
+import { extractOps } from "@/lib/factor-spec";
 import type { BacktestDirection, BacktestMode } from "@/lib/types";
 
 export interface BacktestFormParams {
@@ -47,14 +48,6 @@ interface BacktestFormProps {
   };
 }
 
-function extractOps(expr: string): string[] {
-  const re = /([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
-  const set = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(expr))) set.add(m[1]);
-  return Array.from(set);
-}
-
 const DIRECTIONS: readonly BacktestDirection[] = ["long_only", "long_short", "short_only"];
 const MODES: readonly BacktestMode[] = ["static", "walk_forward"];
 
@@ -93,7 +86,7 @@ export function BacktestForm({
     if (autoRun && initialExpression) {
       onRun({
         expression: initialExpression,
-        operators_used: extractOps(initialExpression),
+        operators_used: [...extractOps(initialExpression)],
         lookback: 12,
         direction: "long_short",
         trainRatio: 0.7,
@@ -119,7 +112,7 @@ export function BacktestForm({
   function submit() {
     onRun({
       expression: expr.trim(),
-      operators_used: extractOps(expr),
+      operators_used: [...extractOps(expr)],
       lookback: 12,
       direction,
       trainRatio: trainRatio / 100,
