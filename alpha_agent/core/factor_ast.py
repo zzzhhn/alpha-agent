@@ -39,6 +39,12 @@ _ALLOWED_OPERANDS: frozenset[str] = frozenset({
     "cash_and_equivalents", "retained_earnings", "goodwill",
     "operating_income", "cost_of_goods_sold", "ebit",
     "operating_cash_flow", "investing_cash_flow",
+    # T1.5a (v4) Compustat additions — shares_outstanding (cshoq) lets users
+    # express market cap dynamically as `multiply(close, shares_outstanding)`,
+    # essential for B/M, E/P, S/P value factors. total_liabilities (ltq) lets
+    # debt ratios be expressed without going through long_term + short_term
+    # individually. Both ride the existing PIT as-of join — no new pull.
+    "shares_outstanding", "total_liabilities",
 })
 
 

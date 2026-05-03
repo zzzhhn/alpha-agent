@@ -1708,5 +1708,77 @@
     "usage_zh": "",
     "tier": "T3",
     "implemented": false
+  },
+  {
+    "name": "shares_outstanding",
+    "category": "fundamental",
+    "description_zh": "流通股数（百万股）",
+    "unit": "shares (millions)",
+    "usage_zh": "动态市值因子的关键分母：multiply(close, shares_outstanding) ⇒ 实时市值",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "total_liabilities",
+    "category": "fundamental",
+    "description_zh": "总负债（资产负债表）",
+    "unit": "USD",
+    "usage_zh": "杠杆因子分子，divide(total_liabilities, equity) ⇒ debt-to-equity",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "dollar_volume",
+    "category": "price_volume",
+    "description_zh": "美元成交额：close × volume。每日衡量股票实际可交易容量",
+    "unit": "USD",
+    "usage_zh": "成交额 z-score 因子（已验证 long_short α-t≈+1.88）",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "adv5",
+    "category": "price_volume",
+    "description_zh": "5 日平均美元成交额（dollar_volume 5d 滚动均值）",
+    "unit": "USD",
+    "usage_zh": "流动性筛选 / 滑点估计参数（slippage_bps × √(participation/adv5)）",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "adv10",
+    "category": "price_volume",
+    "description_zh": "10 日平均美元成交额（dollar_volume 10d 滚动均值）",
+    "unit": "USD",
+    "usage_zh": "流动性筛选 / 滑点估计参数（slippage_bps × √(participation/adv10)）",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "adv60",
+    "category": "price_volume",
+    "description_zh": "60 日平均美元成交额（dollar_volume 60d 滚动均值）",
+    "unit": "USD",
+    "usage_zh": "流动性筛选 / 滑点估计参数（slippage_bps × √(participation/adv60)）",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "adv120",
+    "category": "price_volume",
+    "description_zh": "120 日平均美元成交额（dollar_volume 120d 滚动均值）",
+    "unit": "USD",
+    "usage_zh": "流动性筛选 / 滑点估计参数（slippage_bps × √(participation/adv120)）",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "adv180",
+    "category": "price_volume",
+    "description_zh": "180 日平均美元成交额（dollar_volume 180d 滚动均值）",
+    "unit": "USD",
+    "usage_zh": "流动性筛选 / 滑点估计参数（slippage_bps × √(participation/adv180)）",
+    "tier": "T1",
+    "implemented": true
   }
 ]
