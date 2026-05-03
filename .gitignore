@@ -31,3 +31,4 @@ status.json
 .coverage
 worker/.wrangler/
 .vercel
+.worktrees/
