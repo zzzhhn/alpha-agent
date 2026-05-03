@@ -45,17 +45,30 @@ SUPPORTED_DIRECTIONS: frozenset[str] = frozenset(
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-# Prefer the v2 panel (SP100 + fundamentals + sector) when present. Fall back
-# to the legacy v1 (37 tickers, OHLCV only) so existing backtests keep working
-# during the data migration.
+# Panel auto-selection chain (highest priority first):
+#   v3: Alpaca-sourced 3y SP500 panel (~556 tickers incl. delisted, D-1 fresh,
+#       Compustat fundamentals via WRDS with proper RDQ filing dates) — T1.5a.
+#   v2: yfinance-sourced 1y SP100 panel (~98 tickers, 16-month max lag).
+#   v1: legacy 37-ticker OHLCV-only panel (no fundamentals, no sector).
+PARQUET_V3_PATH = _DATA_DIR / "factor_universe_sp500_v3.parquet"
 PARQUET_V2_PATH = _DATA_DIR / "factor_universe_sp100_v2.parquet"
 PARQUET_V1_PATH = _DATA_DIR / "factor_universe_1y.parquet"
-PARQUET_PATH = PARQUET_V2_PATH if PARQUET_V2_PATH.exists() else PARQUET_V1_PATH
+PARQUET_PATH = (
+    PARQUET_V3_PATH if PARQUET_V3_PATH.exists()
+    else PARQUET_V2_PATH if PARQUET_V2_PATH.exists()
+    else PARQUET_V1_PATH
+)
 # T1.1 (v4): point-in-time fundamentals. When this parquet is present,
 # `_load_panel()` overrides the legacy broadcast-snapshot fundamentals with
 # per-row as-of joins keyed on filing_date. Missing → fallback to broadcast
 # (with warning) for back-compat with pre-v4 deployments.
-PIT_FUNDAMENTALS_PATH = _DATA_DIR / "fundamentals_pit.parquet"
+# v3 panel uses its own dedicated PIT parquet (Compustat-sourced).
+PIT_FUNDAMENTALS_V3_PATH = _DATA_DIR / "fundamentals_pit_sp500_v3.parquet"
+PIT_FUNDAMENTALS_V2_PATH = _DATA_DIR / "fundamentals_pit.parquet"
+PIT_FUNDAMENTALS_PATH = (
+    PIT_FUNDAMENTALS_V3_PATH if PARQUET_PATH == PARQUET_V3_PATH and PIT_FUNDAMENTALS_V3_PATH.exists()
+    else PIT_FUNDAMENTALS_V2_PATH
+)
 
 # v2 schema additions — None on v1 panels.
 # Names match the WorldQuant fundamentals catalog (see
@@ -70,6 +83,10 @@ _V2_FUNDAMENTAL_FIELDS: tuple[str, ...] = (
     "long_term_debt", "short_term_debt",
     "cash_and_equivalents", "retained_earnings", "goodwill",
     "operating_cash_flow", "investing_cash_flow",
+    # T1.5a (v4): Compustat shares_outstanding (cshoq) for v3 panels —
+    # absent from v2 yfinance pulls, present in v3 WRDS pulls. Listed here
+    # so the PIT as-of join automatically picks it up when available.
+    "shares_outstanding", "total_liabilities",
 )
 # Multi-window dollar-volume averages live in kernel.py (single source of
 # truth shared with the screener endpoint).
@@ -380,7 +397,14 @@ def _load_panel() -> _Panel:
     if "cap" in df.columns:
         cap = pivot("cap")
 
-    if any(f in df.columns for f in _V2_FUNDAMENTAL_FIELDS):
+    # Two paths to fundamentals:
+    #   (a) v2 panel: OHLCV parquet has fundamental columns AND a PIT parquet
+    #       optionally exists for as-of join (with broadcast fallback).
+    #   (b) v3 panel: OHLCV parquet has NO fundamental columns; the PIT
+    #       parquet alone supplies them. Common case post-T1.5a.
+    has_inline_funds = any(f in df.columns for f in _V2_FUNDAMENTAL_FIELDS)
+    has_pit_parquet = PIT_FUNDAMENTALS_PATH.exists()
+    if has_inline_funds or has_pit_parquet:
         # T1.1 (v4): PIT-aligned fundamentals (filing_date as-of join) take
         # precedence over the legacy broadcast snapshot. The broadcast
         # pattern attached each quarter's value to its fiscal end date,
@@ -388,7 +412,7 @@ def _load_panel() -> _Panel:
         pit_fund = _load_pit_fundamentals(dates_series, universe)
         if pit_fund is not None and pit_fund:
             fundamentals = pit_fund
-        else:
+        elif has_inline_funds:
             import warnings
             warnings.warn(
                 f"PIT fundamentals not found at {PIT_FUNDAMENTALS_PATH}; "
