@@ -73,6 +73,7 @@ export default function BacktestPage() {
       include_breakdown: p.includeBreakdown,
       mask_earnings_window: p.maskEarningsWindow,
       neutralize: p.neutralize,
+      benchmark_ticker: p.benchmarkTicker,
     });
     if (res.error || !res.data) {
       setError(res.error ?? "unknown error");

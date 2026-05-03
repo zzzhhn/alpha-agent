@@ -24,6 +24,7 @@ export interface BacktestFormParams {
   readonly includeBreakdown: boolean;
   readonly maskEarningsWindow: boolean;
   readonly neutralize: "none" | "sector";  // Bundle A.2 v4
+  readonly benchmarkTicker: "SPY" | "RSP";  // v4 alternative benchmark
 }
 
 interface BacktestFormProps {
@@ -58,6 +59,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
   const [includeBreakdown, setIncludeBreakdown] = useState(false);
   const [maskEarningsWindow, setMaskEarningsWindow] = useState(false);
   const [neutralize, setNeutralize] = useState<"none" | "sector">("none");
+  const [benchmarkTicker, setBenchmarkTicker] = useState<"SPY" | "RSP">("SPY");
 
   // P6.D — when /alpha hands off via sessionStorage and the page passes
   // autoRun, fire the run once on first mount so the user lands on a
@@ -79,6 +81,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         includeBreakdown: false,
         maskEarningsWindow: false,
         neutralize: "none",
+        benchmarkTicker: "SPY",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,6 +108,7 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
       includeBreakdown,
       maskEarningsWindow,
       neutralize,
+      benchmarkTicker,
     });
   }
 
@@ -252,6 +256,27 @@ export function BacktestForm({ running, onRun, initialExpression, autoRun }: Bac
         ))}
         <span className="text-[12px] text-muted">
           {t(locale, "backtest.form.neutralizeHint")}
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 text-[13px] text-muted">
+        <span>{t(locale, "backtest.form.benchmark")}:</span>
+        {(["SPY", "RSP"] as const).map((bt) => (
+          <button
+            key={bt}
+            type="button"
+            onClick={() => setBenchmarkTicker(bt)}
+            className={`rounded px-2 py-0.5 text-[12px] font-mono ${
+              benchmarkTicker === bt
+                ? "bg-accent text-white"
+                : "bg-[var(--toggle-bg)] text-muted hover:text-text"
+            }`}
+          >
+            {bt}
+          </button>
+        ))}
+        <span className="text-[12px] text-muted">
+          {t(locale, "backtest.form.benchmarkHint")}
         </span>
       </div>
 

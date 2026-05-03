@@ -310,6 +310,7 @@ export interface FactorBacktestRequest {
   readonly mask_earnings_window?: boolean; // T3.C v4: zero weights around earnings
   readonly earnings_window_days?: number; // T3.C v4: 0–5, mask half-width
   readonly neutralize?: "none" | "sector"; // Bundle A.2 v4: sector-neutral mode
+  readonly benchmark_ticker?: "SPY" | "RSP";  // v4: alt benchmark for α/β regression
 }
 
 export interface WalkForwardWindow {

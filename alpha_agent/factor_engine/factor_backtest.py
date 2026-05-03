@@ -35,7 +35,13 @@ INITIAL_CAPITAL: float = 100_000.0
 LONG_PCT: float = 0.30
 SHORT_PCT: float = 0.30
 DEFAULT_TRAIN_RATIO: float = 0.80
-BENCHMARK_TICKER: str = "SPY"
+BENCHMARK_TICKER: str = "SPY"  # default; alternatives are kept aside in panel.benchmark_alts
+# Tickers held out of the cross-sectional universe and stored as benchmarks.
+# SPY = cap-weighted SP500 (Mag-7 dominated, +75% in 3y panel).
+# RSP = equal-weight SP500 (every constituent ~0.20% weight, +42% in 3y panel).
+# Long-only factor strategies are far closer to RSP's regime than SPY's, so
+# RSP is the more honest benchmark for any equal-weight factor basket.
+BENCHMARK_TICKERS: tuple[str, ...] = ("SPY", "RSP")
 CURRENCY: str = "USD"
 
 Direction = Literal["long_short", "long_only", "short_only"]
@@ -126,7 +132,11 @@ class _Panel:
     high: np.ndarray
     low: np.ndarray
     volume: np.ndarray
-    benchmark_close: np.ndarray   # shape (T,)
+    benchmark_close: np.ndarray   # shape (T,) — primary (SPY by default)
+    # Multi-benchmark support: keys include all BENCHMARK_TICKERS that exist
+    # in the loaded parquet. Default lookup (panel.benchmark_close) returns
+    # SPY; run_factor_backtest can swap in RSP via benchmark_ticker arg.
+    benchmark_alts: dict[str, np.ndarray] | None = None
     # ── v2 extensions (None when v1 panel is loaded) ──────────────────────
     cap: np.ndarray | None = None
     sector: np.ndarray | None = None     # (T, N) string array, broadcast snapshot
@@ -373,12 +383,13 @@ def _load_panel() -> _Panel:
             f"run scripts/fetch_factor_universe.py to generate"
         )
     df = pd.read_parquet(PARQUET_PATH)
-    # Pivot long -> wide per field, with SPY held aside
+    # Pivot long -> wide per field, with all BENCHMARK_TICKERS held aside.
     all_tickers = sorted(df["ticker"].unique())
     if BENCHMARK_TICKER not in all_tickers:
-        raise ValueError(f"benchmark {BENCHMARK_TICKER!r} missing from parquet")
+        raise ValueError(f"primary benchmark {BENCHMARK_TICKER!r} missing from parquet")
+    available_benchmarks = tuple(t for t in BENCHMARK_TICKERS if t in all_tickers)
 
-    universe = tuple(t for t in all_tickers if t != BENCHMARK_TICKER)
+    universe = tuple(t for t in all_tickers if t not in available_benchmarks)
     dates_series = (
         df[df["ticker"] == BENCHMARK_TICKER].sort_values("date")["date"].to_numpy()
     )
@@ -402,6 +413,13 @@ def _load_panel() -> _Panel:
         .sort_values("date")["close"]
         .to_numpy(dtype=np.float64)
     )
+    # Store every benchmark close-series (including primary) keyed by ticker.
+    # Lets run_factor_backtest swap in RSP via benchmark_ticker arg without
+    # re-pivoting the parquet.
+    benchmark_alts = {
+        bt: df[df["ticker"] == bt].sort_values("date")["close"].to_numpy(dtype=np.float64)
+        for bt in available_benchmarks
+    }
 
     # ── v2 schema extras (cap / sector / industry / exchange / currency / fundamentals) ──
     cap = sector = industry = exchange = currency = None
@@ -479,6 +497,7 @@ def _load_panel() -> _Panel:
         low=pivot("low"),
         volume=pivot("volume"),
         benchmark_close=bench,
+        benchmark_alts=benchmark_alts,
         cap=cap,
         sector=sector,
         industry=industry,
@@ -783,6 +802,7 @@ def run_factor_backtest(
     mask_earnings_window: bool = False,
     earnings_window_days: int = 1,
     neutralize: Neutralize = "none",
+    benchmark_ticker: str = BENCHMARK_TICKER,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -868,6 +888,20 @@ def run_factor_backtest(
     # endpoint (D1) shares the exact same schema. Anything added to the
     # translate-prompt contract must be mirrored there, not here.
     from alpha_agent.factor_engine.kernel import evaluate_factor_full
+
+    # Resolve benchmark close series. Default = panel.benchmark_close (SPY);
+    # alternative = panel.benchmark_alts[ticker] when caller swaps in RSP, etc.
+    # Equity curve, regime classification, and α/β decomposition all use this.
+    if benchmark_ticker != BENCHMARK_TICKER:
+        if not panel.benchmark_alts or benchmark_ticker not in panel.benchmark_alts:
+            avail = list(panel.benchmark_alts.keys()) if panel.benchmark_alts else [BENCHMARK_TICKER]
+            raise ValueError(
+                f"benchmark_ticker={benchmark_ticker!r} not in panel; "
+                f"available: {avail}"
+            )
+        bench_close = panel.benchmark_alts[benchmark_ticker]
+    else:
+        bench_close = panel.benchmark_close
 
     factor = evaluate_factor_full(panel, spec)
 
@@ -988,7 +1022,7 @@ def run_factor_backtest(
     equity = INITIAL_CAPITAL * np.cumprod(1.0 + daily_ret_clean)
 
     # Benchmark: SPY buy-and-hold rescaled to INITIAL_CAPITAL
-    bench = panel.benchmark_close / panel.benchmark_close[0] * INITIAL_CAPITAL
+    bench = bench_close / bench_close[0] * INITIAL_CAPITAL
 
     train_end = int(T * train_ratio)
     # T1.3 (v4): purge tail of train (its fwd_return spans into test) and
@@ -1094,7 +1128,7 @@ def run_factor_backtest(
     # then compute the same metrics restricted to each regime's days. Lets
     # users see if a +1.5 SR factor is regime-robust or just rode 2024 AI
     # bull market.
-    regimes = _classify_regimes(panel.benchmark_close, lookback=60, threshold=0.05)
+    regimes = _classify_regimes(bench_close, lookback=60, threshold=0.05)
     regime_breakdown = _compute_regime_metrics(
         daily_ret=daily_ret,
         factor=factor,
@@ -1112,7 +1146,7 @@ def run_factor_backtest(
         test_metrics=test_m,
         currency=CURRENCY,
         factor_name=spec.name,
-        benchmark_ticker=BENCHMARK_TICKER,
+        benchmark_ticker=benchmark_ticker,
         direction=direction,
         monthly_returns=monthly_returns,
         walk_forward=walk_forward,

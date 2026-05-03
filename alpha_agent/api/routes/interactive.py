@@ -341,6 +341,12 @@ class FactorBacktestRequest(BaseModel):
         description="Portfolio neutralization mode. 'sector' subtracts per-sector mean "
                     "from the factor before ranking, so the basket has near-zero net "
                     "sector exposure.")
+    # RSP equal-weight benchmark: meaningfully different from cap-weighted SPY in
+    # mega-cap-concentrated regimes (3y panel: SPY +75% vs RSP +42%, spread −33%).
+    benchmark_ticker: Literal["SPY", "RSP"] = Field(default="SPY",
+        description="Benchmark for alpha/beta regression. SPY = cap-weighted "
+                    "(Mag-7 dominated), RSP = equal-weight SP500. Long-only equal-"
+                    "weight baskets are far closer to RSP's regime than SPY's.")
 
 
 class _SplitMetricsModel(BaseModel):
@@ -514,6 +520,7 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             mask_earnings_window=body.mask_earnings_window,
             earnings_window_days=body.earnings_window_days,
             neutralize=body.neutralize,
+            benchmark_ticker=body.benchmark_ticker,
         )
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
