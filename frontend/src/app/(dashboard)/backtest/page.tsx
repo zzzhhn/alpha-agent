@@ -19,6 +19,17 @@ interface PrefillPayload {
   readonly operators_used: readonly string[];
   readonly lookback: number;
   readonly hypothesis?: string;
+  // v4 cross-page parity (Phase 2.4): full backtest config from a Zoo
+  // replay, so /backtest reproduces the EXACT run that produced the
+  // saved Sharpe — not the form's default config. All optional for
+  // back-compat with v1 prefills.
+  readonly direction?: "long_short" | "long_only" | "short_only";
+  readonly neutralize?: "none" | "sector";
+  readonly benchmarkTicker?: "SPY" | "RSP";
+  readonly mode?: "static" | "walk_forward";
+  readonly topPct?: number;
+  readonly bottomPct?: number;
+  readonly transactionCostBps?: number;
 }
 
 const PREFILL_KEY = "alphacore.backtest.prefill.v1";
@@ -31,6 +42,11 @@ export default function BacktestPage() {
   const [prefill, setPrefill] = useState<PrefillPayload | null>(null);
   const [lastExpr, setLastExpr] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
+  // v4 cross-page parity: capture the full BacktestFormParams that produced
+  // the last result so ZooSaveButton can persist it. Without this, saved
+  // headlineMetrics correspond to a config the Zoo entry doesn't carry,
+  // and replay reproduces a different number than the saved one.
+  const [lastParams, setLastParams] = useState<BacktestFormParams | null>(null);
 
   // P6.D — read /alpha handoff once, then clear so a refresh doesn't
   // re-prefill stale state.
@@ -52,6 +68,7 @@ export default function BacktestPage() {
     setError(null);
     setLastExpr(p.expression);
     setLastName(prefill?.name ?? "user_factor");
+    setLastParams(p);
     const res = await runFactorBacktest({
       spec: {
         name: prefill?.name ?? "user_factor",
@@ -99,6 +116,15 @@ export default function BacktestPage() {
         onRun={run}
         initialExpression={prefill?.expression}
         autoRun={Boolean(prefill?.expression)}
+        initialConfig={prefill ? {
+          direction: prefill.direction,
+          neutralize: prefill.neutralize,
+          benchmarkTicker: prefill.benchmarkTicker,
+          mode: prefill.mode,
+          topPct: prefill.topPct,
+          bottomPct: prefill.bottomPct,
+          transactionCostBps: prefill.transactionCostBps,
+        } : undefined}
       />
 
       {error && (
@@ -117,6 +143,13 @@ export default function BacktestPage() {
                 name={lastName}
                 expression={lastExpr}
                 hypothesis={prefill?.hypothesis}
+                direction={lastParams?.direction}
+                neutralize={lastParams?.neutralize}
+                benchmarkTicker={lastParams?.benchmarkTicker}
+                mode={lastParams?.mode}
+                topPct={lastParams?.topPct}
+                bottomPct={lastParams?.bottomPct}
+                transactionCostBps={lastParams?.transactionCostBps}
                 headlineMetrics={{
                   testSharpe: result.test_metrics.sharpe,
                   totalReturn:

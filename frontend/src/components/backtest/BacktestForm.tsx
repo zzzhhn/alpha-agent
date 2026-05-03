@@ -32,6 +32,19 @@ interface BacktestFormProps {
   readonly onRun: (p: BacktestFormParams) => void;
   readonly initialExpression?: string;
   readonly autoRun?: boolean;
+  // v4 cross-page parity: when /factors Zoo replays an entry, the saved
+  // config flows in as initialConfig so the form reproduces the EXACT
+  // backtest. All fields optional — undefined falls back to platform
+  // defaults defined inline below.
+  readonly initialConfig?: {
+    readonly direction?: BacktestDirection;
+    readonly neutralize?: "none" | "sector";
+    readonly benchmarkTicker?: "SPY" | "RSP";
+    readonly mode?: BacktestMode;
+    readonly topPct?: number;
+    readonly bottomPct?: number;
+    readonly transactionCostBps?: number;
+  };
 }
 
 function extractOps(expr: string): string[] {
@@ -45,21 +58,33 @@ function extractOps(expr: string): string[] {
 const DIRECTIONS: readonly BacktestDirection[] = ["long_only", "long_short", "short_only"];
 const MODES: readonly BacktestMode[] = ["static", "walk_forward"];
 
-export function BacktestForm({ running, onRun, initialExpression, autoRun }: BacktestFormProps) {
+export function BacktestForm({
+  running, onRun, initialExpression, autoRun, initialConfig,
+}: BacktestFormProps) {
   const { locale } = useLocale();
   const [expr, setExpr] = useState(initialExpression ?? "rank(ts_mean(returns, 12))");
-  const [direction, setDirection] = useState<BacktestDirection>("long_short");
+  const [direction, setDirection] = useState<BacktestDirection>(
+    initialConfig?.direction ?? "long_short",
+  );
   const [trainRatio, setTrainRatio] = useState(70);   // 0.10–0.95 stored as %
-  const [topPct, setTopPct] = useState(30);
-  const [bottomPct, setBottomPct] = useState(30);
-  const [costBps, setCostBps] = useState(0);
-  const [mode, setMode] = useState<BacktestMode>("static");
+  const [topPct, setTopPct] = useState(
+    initialConfig?.topPct !== undefined ? Math.round(initialConfig.topPct * 100) : 30,
+  );
+  const [bottomPct, setBottomPct] = useState(
+    initialConfig?.bottomPct !== undefined ? Math.round(initialConfig.bottomPct * 100) : 30,
+  );
+  const [costBps, setCostBps] = useState(initialConfig?.transactionCostBps ?? 0);
+  const [mode, setMode] = useState<BacktestMode>(initialConfig?.mode ?? "static");
   const [wfWindowDays, setWfWindowDays] = useState(60);
   const [wfStepDays, setWfStepDays] = useState(20);
   const [includeBreakdown, setIncludeBreakdown] = useState(false);
   const [maskEarningsWindow, setMaskEarningsWindow] = useState(false);
-  const [neutralize, setNeutralize] = useState<"none" | "sector">("none");
-  const [benchmarkTicker, setBenchmarkTicker] = useState<"SPY" | "RSP">("SPY");
+  const [neutralize, setNeutralize] = useState<"none" | "sector">(
+    initialConfig?.neutralize ?? "none",
+  );
+  const [benchmarkTicker, setBenchmarkTicker] = useState<"SPY" | "RSP">(
+    initialConfig?.benchmarkTicker ?? "SPY",
+  );
 
   // P6.D — when /alpha hands off via sessionStorage and the page passes
   // autoRun, fire the run once on first mount so the user lands on a

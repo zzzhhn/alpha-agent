@@ -17,11 +17,22 @@ interface ZooSaveButtonProps {
     readonly totalReturn?: number;
     readonly testIc?: number;
   };
+  // v4 cross-page parity: persist the full config that produced the
+  // saved metrics so replay reproduces the exact backtest, not the
+  // platform default.
+  readonly neutralize?: "none" | "sector";
+  readonly benchmarkTicker?: "SPY" | "RSP";
+  readonly mode?: "static" | "walk_forward";
+  readonly topPct?: number;
+  readonly bottomPct?: number;
+  readonly transactionCostBps?: number;
   readonly disabled?: boolean;
 }
 
 export function ZooSaveButton({
-  name, expression, hypothesis, intuition, direction, headlineMetrics, disabled,
+  name, expression, hypothesis, intuition, direction, headlineMetrics,
+  neutralize, benchmarkTicker, mode, topPct, bottomPct, transactionCostBps,
+  disabled,
 }: ZooSaveButtonProps) {
   const { locale } = useLocale();
   const [saved, setSaved] = useState(false);
@@ -43,6 +54,7 @@ export function ZooSaveButton({
       intuition,
       direction,
       headlineMetrics,
+      neutralize, benchmarkTicker, mode, topPct, bottomPct, transactionCostBps,
     });
     setSaved(true);
     setBusy(false);

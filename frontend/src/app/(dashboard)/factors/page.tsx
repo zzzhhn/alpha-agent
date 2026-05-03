@@ -26,6 +26,10 @@ export default function FactorsPage() {
   function loadIntoBacktest(e: ZooEntry) {
     if (typeof window === "undefined") return;
     try {
+      // v4 cross-page parity: persist full saved config so /backtest replays
+      // the EXACT run that produced the saved metrics (instead of the
+      // platform default config). Each field is optional — readConfig fills
+      // defaults for v1 entries that predate the schema bump.
       window.sessionStorage.setItem(
         "alphacore.backtest.prefill.v1",
         JSON.stringify({
@@ -34,6 +38,13 @@ export default function FactorsPage() {
           operators_used: extractOps(e.expression),
           lookback: 12,
           hypothesis: e.hypothesis,
+          direction: e.direction,
+          neutralize: e.neutralize,
+          benchmarkTicker: e.benchmarkTicker,
+          mode: e.mode,
+          topPct: e.topPct,
+          bottomPct: e.bottomPct,
+          transactionCostBps: e.transactionCostBps,
         }),
       );
     } catch {

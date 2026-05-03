@@ -30,11 +30,43 @@ export interface ZooEntry {
     readonly totalReturn?: number;   // full-period, decimal
     readonly testIc?: number;
   };
+  // v4 cross-page parity (Phase 2.4): persist the full backtest config
+  // that produced the saved metrics. Without these fields, replay from
+  // /factors uses /backtest defaults — saved Sharpe is unreplicable and
+  // the headline metric becomes a "trust me bro" claim. Optional for
+  // back-compat with v1 entries (resolveConfig fills defaults).
+  readonly neutralize?: "none" | "sector";
+  readonly benchmarkTicker?: "SPY" | "RSP";
+  readonly mode?: "static" | "walk_forward";
+  readonly topPct?: number;          // 0.01-0.50
+  readonly bottomPct?: number;       // 0.01-0.50
+  readonly transactionCostBps?: number;
 }
 
 /** Resolve a Zoo entry's direction with the legacy default. */
 export function readDirection(entry: ZooEntry): ZooDirection {
   return entry.direction ?? "long_short";
+}
+
+/** Resolve full backtest config with v1-entry-friendly defaults. */
+export function readConfig(entry: ZooEntry): {
+  direction: ZooDirection;
+  neutralize: "none" | "sector";
+  benchmarkTicker: "SPY" | "RSP";
+  mode: "static" | "walk_forward";
+  topPct: number;
+  bottomPct: number;
+  transactionCostBps: number;
+} {
+  return {
+    direction: entry.direction ?? "long_short",
+    neutralize: entry.neutralize ?? "none",
+    benchmarkTicker: entry.benchmarkTicker ?? "SPY",
+    mode: entry.mode ?? "static",
+    topPct: entry.topPct ?? 0.30,
+    bottomPct: entry.bottomPct ?? 0.30,
+    transactionCostBps: entry.transactionCostBps ?? 5,
+  };
 }
 
 const STORAGE_KEY = "alphacore.factor.zoo.v1";

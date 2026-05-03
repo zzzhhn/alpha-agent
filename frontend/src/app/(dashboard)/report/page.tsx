@@ -48,7 +48,28 @@ interface FactorReport {
 
 const REPORT_PREFILL_KEY = "alphacore.report.prefill.v1";
 
-async function fetchAll(name: string, expression: string, hypothesis: string) {
+// v4 cross-page parity: instead of hardcoding direction/cost/etc the way
+// the legacy fetchAll did (and then having CoverCard advertise "5 bps"
+// regardless of what the user set), accept a config and surface it in
+// the UI. Defaults match the platform-wide v4 defaults: long_short,
+// no neutralize, SPY benchmark, 5 bps cost.
+export interface ReportConfig {
+  readonly direction: "long_short" | "long_only" | "short_only";
+  readonly neutralize: "none" | "sector";
+  readonly benchmarkTicker: "SPY" | "RSP";
+  readonly transactionCostBps: number;
+}
+
+const DEFAULT_REPORT_CONFIG: ReportConfig = {
+  direction: "long_short",
+  neutralize: "none",
+  benchmarkTicker: "SPY",
+  transactionCostBps: 5,
+};
+
+async function fetchAll(
+  name: string, expression: string, hypothesis: string, cfg: ReportConfig,
+) {
   const spec: SignalSpec = {
     name: name || "factor",
     hypothesis: hypothesis || expression,
@@ -60,11 +81,15 @@ async function fetchAll(name: string, expression: string, hypothesis: string) {
   };
   return Promise.all([
     runFactorBacktest({
-      spec, train_ratio: 0.7, direction: "long_only",
-      top_pct: 0.30, bottom_pct: 0.30, transaction_cost_bps: 5,
+      spec, train_ratio: 0.7,
+      direction: cfg.direction,
+      top_pct: 0.30, bottom_pct: 0.30,
+      transaction_cost_bps: cfg.transactionCostBps,
+      neutralize: cfg.neutralize,
+      benchmark_ticker: cfg.benchmarkTicker,
     }),
-    signalToday(spec, 10),
-    signalExposure(spec, 10),
+    signalToday(spec, 10, cfg.neutralize),
+    signalExposure(spec, 10, cfg.neutralize),
   ]);
 }
 
@@ -78,6 +103,7 @@ export default function ReportPage() {
   const [primary, setPrimary] = useState<FactorReport | null>(null);
   const [compare, setCompare] = useState<FactorReport | null>(null);
   const [zoo, setZoo] = useState<readonly ZooEntry[]>([]);
+  const [config, setConfig] = useState<ReportConfig>(DEFAULT_REPORT_CONFIG);
 
   // Pull zoo entries on mount; refresh when localStorage might have changed
   // (we just track length as a heuristic — full reload happens on focus).
@@ -110,7 +136,7 @@ export default function ReportPage() {
   ) => {
     setRunning(true);
     setError(null);
-    const [bt, td, ex] = await fetchAll(name, expression, hypothesis);
+    const [bt, td, ex] = await fetchAll(name, expression, hypothesis, config);
     if (bt.error || td.error || ex.error || !bt.data || !td.data || !ex.data) {
       setError(bt.error ?? td.error ?? ex.error ?? "unknown error");
       setRunning(false);
@@ -128,7 +154,7 @@ export default function ReportPage() {
       setCompare(built);
     }
     setRunning(false);
-  }, []);
+  }, [config]);
 
   function loadExample(example: FactorExample) {
     setFactorName(example.name);
@@ -188,6 +214,47 @@ export default function ReportPage() {
             {t(locale, "report.picker.subtitle")}
           </p>
         </header>
+
+        {/* v4 cross-page parity: tear-sheet config — direction / neutralize /
+            benchmark / cost. Used to hardcode long_only + cost=5; that made
+            CoverCard advertise parameters the user couldn't see, never mind
+            change. Now the UI shows actual settings + lets user adjust. */}
+        <div className="mb-3 flex flex-wrap items-center gap-3 text-[13px] text-muted">
+          <div className="flex items-center gap-1">
+            <span>direction:</span>
+            {(["long_short", "long_only", "short_only"] as const).map((d) => (
+              <button key={d} type="button" onClick={() => setConfig((c) => ({ ...c, direction: d }))}
+                className={`rounded px-2 py-0.5 text-[12px] ${config.direction === d ? "bg-accent text-white" : "bg-[var(--toggle-bg)] hover:text-text"}`}>
+                {d}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <span>{t(locale, "backtest.form.neutralize")}:</span>
+            {(["none", "sector"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setConfig((c) => ({ ...c, neutralize: m }))}
+                className={`rounded px-2 py-0.5 text-[12px] ${config.neutralize === m ? "bg-accent text-white" : "bg-[var(--toggle-bg)] hover:text-text"}`}>
+                {t(locale, `backtest.form.neutralize.${m}`)}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <span>{t(locale, "backtest.form.benchmark")}:</span>
+            {(["SPY", "RSP"] as const).map((bt) => (
+              <button key={bt} type="button" onClick={() => setConfig((c) => ({ ...c, benchmarkTicker: bt }))}
+                className={`rounded px-2 py-0.5 font-mono text-[12px] ${config.benchmarkTicker === bt ? "bg-accent text-white" : "bg-[var(--toggle-bg)] hover:text-text"}`}>
+                {bt}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <span>cost:</span>
+            <input type="number" min={0} max={50} step={1} value={config.transactionCostBps}
+              onChange={(e) => setConfig((c) => ({ ...c, transactionCostBps: Number(e.target.value) || 0 }))}
+              className="w-14 rounded border border-border bg-[var(--toggle-bg)] px-1 text-[12px] text-text" />
+            <span className="text-[12px]">bps</span>
+          </div>
+        </div>
 
         <div className="mb-3">
           <p className="mb-1 text-[12px] uppercase tracking-wide text-muted">
@@ -338,7 +405,7 @@ export default function ReportPage() {
 
       {primary && (
         <article className="report-tearsheet flex flex-col gap-3">
-          <CoverCard r={primary} expr={primary.expression} factorName={primary.name} intuition={primary.intuition} locale={locale} />
+          <CoverCard r={primary} expr={primary.expression} factorName={primary.name} intuition={primary.intuition} locale={locale} config={config} />
           <BacktestKpiStrip result={primary.backtest} />
           <Card padding="md">
             <header className="mb-2">
@@ -364,7 +431,7 @@ export default function ReportPage() {
               {t(locale, "report.compare.secondLabel")}
             </p>
           </Card>
-          <CoverCard r={compare} expr={compare.expression} factorName={compare.name} intuition={compare.intuition} locale={locale} />
+          <CoverCard r={compare} expr={compare.expression} factorName={compare.name} intuition={compare.intuition} locale={locale} config={config} />
           <BacktestKpiStrip result={compare.backtest} />
           <DrawdownChart equityCurve={compare.backtest.equity_curve} />
           {compare.backtest.monthly_returns && compare.backtest.monthly_returns.length > 0 && (
@@ -379,13 +446,14 @@ export default function ReportPage() {
 }
 
 function CoverCard({
-  r, expr, factorName, intuition, locale,
+  r, expr, factorName, intuition, locale, config,
 }: {
   r: FactorReport;
   expr: string;
   factorName: string;
   intuition: string;
   locale: "zh" | "en";
+  config: ReportConfig;
 }) {
   return (
     <Card padding="md">
@@ -400,7 +468,8 @@ function CoverCard({
           <div>{t(locale, "report.cover.universe")}: {r.today.universe_size} tickers</div>
           <div>{t(locale, "report.cover.window")}: {r.backtest.equity_curve[0]?.date} → {r.backtest.equity_curve[r.backtest.equity_curve.length - 1]?.date}</div>
           <div>{t(locale, "report.cover.benchmark")}: {r.backtest.benchmark_ticker}</div>
-          <div>{t(locale, "report.cover.cost")}: 5 bps</div>
+          <div>direction: {config.direction}{config.neutralize === "sector" ? " · sector-neutral" : ""}</div>
+          <div>{t(locale, "report.cover.cost")}: {config.transactionCostBps} bps</div>
           <div>{t(locale, "report.cover.generated")}: {new Date().toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</div>
         </div>
       </div>
