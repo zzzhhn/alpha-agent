@@ -177,24 +177,90 @@ def fetch_wrds_metadata(tickers: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]
     """
     import wrds
 
-    db = wrds.Connection(wrds_username=os.environ.get("WRDS_USERNAME", "zzzhhn"))
+    # wrds-py prompts for `input()` confirmation even when wrds_username is
+    # set; in non-interactive contexts (Claude Code subprocess, CI, cron)
+    # this raises EOFError. Workaround: pre-load PGPASSWORD from ~/.pgpass
+    # so __make_sa_engine_conn() succeeds on the first attempt and the
+    # interactive prompt path is never hit.
+    # CRITICAL: read WRDS password from ~/.pgpass FIRST, before checking
+    # env. dotenv loads Neon's PGPASSWORD into os.environ via .env (since
+    # `vercel env pull`), which would otherwise shadow the WRDS password
+    # we actually need here. We always prefer pgpass for WRDS.
+    wrds_user = os.environ.get("WRDS_USERNAME", "zzzhhn")
+    pw = None
+    pgpass_path = Path.home() / ".pgpass"
+    if pgpass_path.exists():
+        for line in pgpass_path.read_text().splitlines():
+            # pgpass format: host:port:db:user:password. Passwords can contain
+            # colons (WRDS auto-generates them), so split with maxsplit=4 to
+            # keep trailing colons inside the password field.
+            parts = line.strip().split(":", 4)
+            if len(parts) == 5 and "wharton" in parts[0] and parts[3] == wrds_user:
+                pw = parts[4]
+                break
+    if not pw:
+        raise RuntimeError(
+            f"WRDS password not found in ~/.pgpass for user {wrds_user!r}. "
+            f"Add a line: wrds-pgdata.wharton.upenn.edu:9737:wrds:{wrds_user}:<PASSWORD>"
+        )
+    print(f"[wrds] auth: user={wrds_user} pw_len={len(pw)} PGHOST={os.environ.get('PGHOST', '<unset>')}", flush=True)
+    # The Neon-related env vars from `vercel env pull` shadow the WRDS
+    # connection: wrds.Connection's __init__ reads PGHOST from os.environ,
+    # which points to Neon (ep-broad-waterfall-...neon.tech) when .env is
+    # loaded. Strip them locally for the WRDS connection only — restore
+    # afterwards in case other code paths rely on them.
+    saved_pg = {k: os.environ.pop(k, None) for k in
+                ("PGHOST", "PGHOST_UNPOOLED", "PGUSER", "PGPASSWORD",
+                 "PGDATABASE", "DATABASE_URL", "DATABASE_URL_UNPOOLED")}
+    os.environ["PGPASSWORD"] = pw  # restore the WRDS password we just looked up
+    try:
+        db = wrds.Connection(
+            wrds_username=wrds_user,
+            wrds_password=pw,
+            wrds_hostname="wrds-pgdata.wharton.upenn.edu",
+            wrds_port=9737,
+            wrds_dbname="wrds",
+        )
+    finally:
+        for k, v in saved_pg.items():
+            if v is not None:
+                os.environ[k] = v
 
     # (a) Sector + industry + cap snapshot, one row per ticker.
     print("[wrds] fetching sector + cap snapshot...", flush=True)
     ticker_list = ",".join(f"'{t}'" for t in tickers)
+    # Bundle C.1 (Phase A) fix — two SQL bugs corrected for SP500 ticker
+    # coverage (was 82.7% → 96.6%):
+    #
+    # 1. `latest_link`: changed `ORDER BY ... linkenddt DESC` to
+    #    `... DESC NULLS FIRST`. PostgreSQL's default is NULLS LAST for
+    #    DESC, which sorted active links (linkenddt IS NULL) AFTER
+    #    historical ones — DISTINCT ON then picked the wrong (historical)
+    #    gvkey. Active links MUST come first.
+    # 2. `latest_name`: now `DISTINCT ON (ticker)` (one PERMNO per ticker)
+    #    plus `nameenddt > '2024-01-01'` to drop reused ticker codes from
+    #    defunct historical companies (e.g. AAL was reused 3× since 1971;
+    #    we want the active American Airlines PERMNO 21020, not the 1997
+    #    All American Life Corp PERMNO 63845).
+    # 3. CRSP `stocknames.ticker` collapses class shares into the root
+    #    code (BRK-B → "BRK", BF-B → "BF"). Strip the class suffix at
+    #    the SQL boundary so panel tickers map cleanly.
+    crsp_form_tickers = [t.split("-")[0] if "-" in t else t for t in tickers]
+    ticker_list = ",".join(f"'{t}'" for t in set(crsp_form_tickers))
     meta_sql = f"""
         WITH latest_link AS (
             SELECT DISTINCT ON (lpermno) gvkey, lpermno, linkdt, linkenddt
             FROM crsp.ccmxpf_linktable
             WHERE linktype IN ('LU', 'LC')
               AND linkprim IN ('P', 'C')
-            ORDER BY lpermno, linkenddt DESC
+            ORDER BY lpermno, linkenddt DESC NULLS FIRST
         ),
-        latest_name AS (
-            SELECT DISTINCT ON (permno) permno, ticker
+        active_name AS (
+            SELECT DISTINCT ON (ticker) permno, ticker
             FROM crsp.stocknames
             WHERE ticker IN ({ticker_list})
-            ORDER BY permno, nameenddt DESC
+              AND nameenddt > '2024-01-01'
+            ORDER BY ticker, nameenddt DESC NULLS FIRST
         )
         SELECT
             n.ticker,
@@ -202,7 +268,7 @@ def fetch_wrds_metadata(tickers: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]
             c.gsector,
             c.gind,
             c.gsubind
-        FROM latest_name n
+        FROM active_name n
         JOIN latest_link l ON n.permno = l.lpermno
         JOIN comp.company c ON l.gvkey = c.gvkey
     """
@@ -279,6 +345,24 @@ def assemble_panel(
         ohlcv["currency"] = "USD"
         return ohlcv, pd.DataFrame()
 
+    # Bundle C.1 class-share rehydration: meta_df was queried with CRSP-form
+    # tickers (BRK not BRK-B because CRSP collapses class shares). Panel
+    # uses Yahoo dash form (BRK-B). For each CRSP-form row in meta, find
+    # any panel ticker whose root matches and add a duplicate row with the
+    # panel-form ticker, so the maps below resolve cleanly.
+    panel_tickers = ohlcv["ticker"].unique()
+    crsp_to_panel: dict[str, list[str]] = {}
+    for pt in panel_tickers:
+        root = pt.split("-")[0] if "-" in pt else pt
+        crsp_to_panel.setdefault(root, []).append(pt)
+    rows_to_add = []
+    for _, row in meta.iterrows():
+        for panel_form in crsp_to_panel.get(row["ticker"], []):
+            if panel_form != row["ticker"]:
+                rows_to_add.append({**row.to_dict(), "ticker": panel_form})
+    if rows_to_add:
+        meta = pd.concat([meta, pd.DataFrame(rows_to_add)], ignore_index=True)
+
     sector_map = meta.set_index("ticker")["gsector"].astype("Int64").to_dict()
     industry_map = meta.set_index("ticker")["gind"].astype("Int64").to_dict()
     gvkey_map = meta.set_index("ticker")["gvkey"].to_dict()
@@ -326,6 +410,10 @@ def main() -> int:
     ap.add_argument("--end", type=str, default=None,
                     help="Panel end date YYYY-MM-DD (default: today - 2 days)")
     ap.add_argument("--skip-fundamentals", action="store_true")
+    ap.add_argument("--skip-ohlcv", action="store_true",
+                    help="Re-use existing OHLCV parquet; only re-pull WRDS "
+                         "metadata + fundamentals. Useful when fixing the "
+                         "Compustat link-table join without re-hitting Alpaca.")
     ap.add_argument("--out", type=str, default=str(OUT_PARQUET))
     args = ap.parse_args()
 
@@ -341,11 +429,18 @@ def main() -> int:
     print(f"  union size: {len(universe)} tickers (incl. delisted)", flush=True)
 
     # Step 2: OHLCV
-    print(f"\n[2/4] pulling OHLCV from Alpaca for {len(universe)+1} tickers...", flush=True)
-    all_tickers = universe + [BENCHMARK]
-    t0 = time.time()
-    ohlcv = fetch_ohlcv_alpaca(all_tickers, start.to_pydatetime(), end.to_pydatetime())
-    print(f"  total: {len(ohlcv)} rows, {ohlcv['ticker'].nunique()} tickers in {time.time()-t0:.1f}s", flush=True)
+    if args.skip_ohlcv and Path(args.out).exists():
+        print(f"\n[2/4] --skip-ohlcv: reading {Path(args.out).name} (no Alpaca call)", flush=True)
+        existing = pd.read_parquet(args.out)
+        # Strip prior meta columns; we'll re-assemble with fresh WRDS data.
+        ohlcv = existing[["date", "ticker", "open", "high", "low", "close", "volume"]].copy()
+        print(f"  loaded: {len(ohlcv)} rows, {ohlcv['ticker'].nunique()} tickers", flush=True)
+    else:
+        print(f"\n[2/4] pulling OHLCV from Alpaca for {len(universe)+1} tickers...", flush=True)
+        all_tickers = universe + [BENCHMARK]
+        t0 = time.time()
+        ohlcv = fetch_ohlcv_alpaca(all_tickers, start.to_pydatetime(), end.to_pydatetime())
+        print(f"  total: {len(ohlcv)} rows, {ohlcv['ticker'].nunique()} tickers in {time.time()-t0:.1f}s", flush=True)
 
     # Step 3: WRDS sector + fundamentals
     if args.skip_fundamentals:
