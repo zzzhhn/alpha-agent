@@ -33,8 +33,10 @@ import json
 import re
 import subprocess
 import sys
+import threading
 import time
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -52,7 +54,8 @@ USER_AGENT = "alpha-agent research zzzhhn123-9472 (a22309@cuhk.edu.cn)"
 SEC_HOST = "https://www.sec.gov"
 SEC_DATA_HOST = "https://data.sec.gov"
 TICKERS_URL = f"{SEC_HOST}/files/company_tickers.json"
-RATE_LIMIT_SLEEP = 0.12  # 8.3 req/s — under SEC's 10/s fair-use bar
+RATE_LIMIT_SLEEP = 0.12  # 8.3 req/s — under SEC's 10/s fair-use bar (serial mode)
+PARALLEL_PER_WORKER_SLEEP = 0.65  # 6 workers × 1/0.65 = 9.2 req/s aggregate — at SEC ceiling
 
 
 def _request(url: str, timeout: int = 15, retries: int = 3) -> bytes:
@@ -131,14 +134,51 @@ def list_form4_for_ticker(
 
 
 def fetch_form4_xml(cik: str, accession_no_dashes: str) -> bytes | None:
-    """Try the canonical xslF345X06/form4.xml path first (legible XML);
-    fall back to the bare form4.xml path. Returns bytes or None on
-    miss (rare but happens for very old filings with non-standard layout).
+    """Locate + download the Form 4 XML for a filing.
+
+    Filing agents use INCONSISTENT XML filenames:
+      - Older / standard:  form4.xml         (~50% of SP500)
+      - XSL-rendered:      xslF345X06/form4.xml
+      - Workiva / agents:  wk-form4_<timestamp>.xml
+      - Other custom names
+
+    Strategy (cheap → expensive):
+      1. Try /form4.xml directly (1 req, hits ~50% of filings)
+      2. Try /xslF345X06/form4.xml (1 req, hits ~20%)
+      3. Fetch index.json, find any *form4*.xml in directory listing,
+         try each (3+ reqs but only for the remaining ~30% of filings)
+
+    Average cost: 1.3-1.5 reqs per filing — much better than always
+    fetching index.json (which was 2 reqs per filing).
     """
     base = f"{SEC_HOST}/Archives/edgar/data/{int(cik)}/{accession_no_dashes}"
+    # Step 1+2: cheap hardcoded paths that cover most of the historic
+    # filer base. curl returns rc=22 immediately on 404 (no retry), so
+    # the cost of each miss is ~0.5s + the per-worker sleep.
     for path in ("/form4.xml", "/xslF345X06/form4.xml"):
         try:
             return _request(base + path)
+        except Exception:
+            continue
+    # Step 3: fall back to directory discovery for novel filename patterns.
+    try:
+        idx_bytes = _request(base + "/index.json")
+        idx = json.loads(idx_bytes)
+    except Exception:
+        return None
+    items = idx.get("directory", {}).get("item", [])
+    candidates = [
+        it["name"] for it in items
+        if isinstance(it.get("name"), str)
+        and it["name"].lower().endswith(".xml")
+        and ("form4" in it["name"].lower() or "form-4" in it["name"].lower()
+             or "ownership" in it["name"].lower())
+    ]
+    # Prefer files at the root over xslF345X06/ (the latter is XSLT-rendered).
+    candidates.sort(key=lambda n: ("xsl" in n.lower(), len(n)))
+    for name in candidates:
+        try:
+            return _request(f"{base}/{name}")
         except Exception:
             continue
     return None
@@ -260,6 +300,9 @@ def main() -> int:
     ap.add_argument("--out", type=str, default=str(OUT_PATH))
     ap.add_argument("--resume", action="store_true",
                     help="Skip tickers already in the checkpoint parquet.")
+    ap.add_argument("--workers", type=int, default=6,
+                    help="Parallel ticker fetchers. SEC fair-use is 10 req/s "
+                         "aggregate; default 6 × 0.65s sleep = 9.2 req/s.")
     args = ap.parse_args()
 
     panel = pd.read_parquet(V3_PANEL)
@@ -287,39 +330,70 @@ def main() -> int:
     todo = [(t, c) for t, c in matched if t not in done_tickers]
 
     # Step 2-5: pull + parse per ticker.
-    for i, (ticker, cik) in enumerate(todo, 1):
-        try:
-            time.sleep(RATE_LIMIT_SLEEP)
-            filings = list_form4_for_ticker(cik, args.start, args.end)
-            print(f"  [{i}/{len(todo)}] {ticker}: {len(filings)} filings to fetch", flush=True)
-            n_tx = 0
-            n_404 = 0
-            t_start = time.time()
-            for j, (filing_date, acc_clean) in enumerate(filings, 1):
-                time.sleep(RATE_LIMIT_SLEEP)
-                xml_bytes = fetch_form4_xml(cik, acc_clean)
-                if xml_bytes is None:
-                    n_404 += 1
-                    continue
-                txs = parse_form4(xml_bytes)
-                for t in txs:
-                    t["ticker"] = ticker
-                    t["filing_date"] = filing_date
-                    t["accession"] = acc_clean
-                all_rows.extend(txs)
-                n_tx += len(txs)
-                if j % 20 == 0:
-                    print(f"    {j}/{len(filings)} filings ({n_tx} txs, {n_404} 404s, {time.time()-t_start:.0f}s)", flush=True)
-            print(f"  → {ticker} done: {n_tx} txs, {n_404} 404s in {time.time()-t_start:.0f}s", flush=True)
-        except Exception as exc:
-            print(f"  [{i}/{len(todo)}] {ticker}: FAIL {type(exc).__name__}: {str(exc)[:80]}", file=sys.stderr)
+    # Parallel mode: each worker holds an entire ticker (its 50-200 filings)
+    # serially, but multiple tickers process concurrently. With 4 workers
+    # × 0.55s gap, aggregate is 7.3 req/s — well under SEC's 10/s fair-use.
+    # Each worker has its own per-request sleep; no global lock needed.
+    rows_lock = threading.Lock()
+    progress_lock = threading.Lock()
+    completed = [0]  # mutable counter, accessed under progress_lock
 
-        # Per-ticker checkpoint — Form 4 fetches can take 1-30 minutes per
-        # ticker depending on insider activity volume; never lose more
-        # than one ticker's worth of work to a crash / network drop.
-        pd.DataFrame(all_rows).to_parquet(CHECKPOINT_PATH, index=False, compression="snappy")
-        if i % 10 == 0:
-            print(f"  [checkpoint] {i}/{len(todo)} tickers done; {len(all_rows)} rows", flush=True)
+    def process_ticker(ticker: str, cik: str) -> tuple[str, int, int, float]:
+        """Worker fn: fetch + parse all Form 4 filings for one ticker.
+
+        Returns (ticker, n_filings, n_txs, elapsed_s) for the progress
+        printer. Appends raw transactions to the global `all_rows` list
+        under `rows_lock` so the checkpoint logic can read it.
+        """
+        time.sleep(PARALLEL_PER_WORKER_SLEEP)
+        filings = list_form4_for_ticker(cik, args.start, args.end)
+        local_rows: list[dict] = []
+        t_start = time.time()
+        for filing_date, acc_clean in filings:
+            time.sleep(PARALLEL_PER_WORKER_SLEEP)
+            xml_bytes = fetch_form4_xml(cik, acc_clean)
+            if xml_bytes is None:
+                continue
+            txs = parse_form4(xml_bytes)
+            for t in txs:
+                t["ticker"] = ticker
+                t["filing_date"] = filing_date
+                t["accession"] = acc_clean
+            local_rows.extend(txs)
+        with rows_lock:
+            all_rows.extend(local_rows)
+        return ticker, len(filings), len(local_rows), time.time() - t_start
+
+    workers = max(1, min(args.workers, 6))  # SEC fair-use ceiling
+    print(f"\n[step 2-5] fetching {len(todo)} tickers with {workers} parallel workers...", flush=True)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(process_ticker, t, c): t for t, c in todo}
+        for fut in as_completed(futures):
+            ticker = futures[fut]
+            try:
+                ticker_done, n_filings, n_txs, elapsed = fut.result()
+            except Exception as exc:
+                with progress_lock:
+                    completed[0] += 1
+                    print(f"  [{completed[0]}/{len(todo)}] {ticker}: FAIL "
+                          f"{type(exc).__name__}: {str(exc)[:80]}", file=sys.stderr)
+                continue
+            with progress_lock:
+                completed[0] += 1
+                i = completed[0]
+                print(f"  [{i}/{len(todo)}] {ticker_done}: "
+                      f"{n_filings} filings → {n_txs} txs ({elapsed:.0f}s)", flush=True)
+                # Per-ticker checkpoint — never lose more than one ticker's
+                # work to a crash. Held under progress_lock to keep parquet
+                # writes serialized (pandas isn't thread-safe).
+                if i % 10 == 0 or i == len(todo):
+                    with rows_lock:
+                        pd.DataFrame(all_rows).to_parquet(
+                            CHECKPOINT_PATH, index=False, compression="snappy",
+                        )
+                        n_rows = len(all_rows)
+                    print(f"  [checkpoint] {i}/{len(todo)} tickers; "
+                          f"{n_rows} txs persisted", flush=True)
 
     # Step 6: aggregate + save final.
     print(f"\n[step 6] aggregating {len(all_rows)} raw transaction rows...", flush=True)
