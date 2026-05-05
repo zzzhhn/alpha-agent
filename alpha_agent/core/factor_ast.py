@@ -45,6 +45,13 @@ _ALLOWED_OPERANDS: frozenset[str] = frozenset({
     # debt ratios be expressed without going through long_term + short_term
     # individually. Both ride the existing PIT as-of join — no new pull.
     "shares_outstanding", "total_liabilities",
+    # Bundle C.3 (v4) — insider Form 4 alt-alpha. `insider_net_dollars` is
+    # the per-day signed dollar net (sum of P/purchase minus S/sale at
+    # transaction price × shares) from SEC EDGAR Form 4 filings, filtered
+    # to discretionary trades only (Cohen-Malloy-Pomorski 2012). Many
+    # ticker-days have zero insider activity → NaN-filled by kernel.
+    # Intended composition: rank(ts_mean(insider_net_dollars, 60)).
+    "insider_net_dollars", "insider_n_buys", "insider_n_sells",
 })
 
 

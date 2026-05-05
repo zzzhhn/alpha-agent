@@ -80,6 +80,11 @@ def build_data_dict(panel: "_Panel") -> dict[str, np.ndarray]:
     if panel.fundamentals:
         for fname, farr in panel.fundamentals.items():
             data[fname] = farr
+    # Bundle C.3 (v4): expose insider Form 4 operands the same way as
+    # fundamentals. None means parquet missing → handled by NaN-fill below.
+    if getattr(panel, "insider_form4", None):
+        for fname, farr in panel.insider_form4.items():
+            data[fname] = farr
 
     # T1.5a (v4) compat: AST whitelist (`_ALLOWED_OPERANDS`) lists ~22
     # fundamental fields, but a given panel may carry only a subset (e.g. v3

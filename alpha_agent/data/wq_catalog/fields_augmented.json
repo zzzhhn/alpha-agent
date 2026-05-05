@@ -1780,5 +1780,32 @@
     "usage_zh": "流动性筛选 / 滑点估计参数（slippage_bps × √(participation/adv180)）",
     "tier": "T1",
     "implemented": true
+  },
+  {
+    "name": "insider_net_dollars",
+    "category": "alt_data",
+    "description_zh": "Form 4 当日 insider 净买入美元（Σ 买入 dollars - Σ 卖出 dollars，仅 P/S 自主交易）",
+    "unit": "USD",
+    "usage_zh": "rank(ts_mean(insider_net_dollars, 60)) — Cohen-Malloy-Pomorski 2012 信号；信号稀疏（多数 ticker-day NaN），用 ts_mean 平滑窗口聚合",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "insider_n_buys",
+    "category": "alt_data",
+    "description_zh": "Form 4 当日 insider 买入交易笔数（transaction_code='P'）",
+    "unit": "count",
+    "usage_zh": "高 buy 频率信号；ts_sum(insider_n_buys, 30) 衡量 30 天累积",
+    "tier": "T1",
+    "implemented": true
+  },
+  {
+    "name": "insider_n_sells",
+    "category": "alt_data",
+    "description_zh": "Form 4 当日 insider 卖出交易笔数（transaction_code='S'）",
+    "unit": "count",
+    "usage_zh": "subtract(insider_n_buys, insider_n_sells) — buy-sell 频率差",
+    "tier": "T1",
+    "implemented": true
   }
 ]
