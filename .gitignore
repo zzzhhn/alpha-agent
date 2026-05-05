@@ -33,3 +33,7 @@ worker/.wrangler/
 .vercel
 .worktrees/
 alpha_agent/data/factor_db.sqlite
+
+# Bundle C.3 Form 4 — intermediate + sample artifacts (commit production version only after full pull)
+alpha_agent/data/_form4_checkpoint.parquet
+alpha_agent/data/insider_form4_sp500_v3.parquet
