@@ -157,6 +157,7 @@ _DEFAULT_SQLITE_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "factor_db.sqlite"
 )
 _engine: Engine | None = None  # lazy-initialised process-wide singleton
+_schema_ready: bool = False    # idempotent one-shot init guard, see get_engine()
 
 
 def is_db_configured() -> bool:
@@ -191,17 +192,45 @@ def get_engine() -> Engine:
     next query in a request would fail with "connection closed". The
     pre_ping costs ~1ms per acquisition but eliminates an entire class
     of flaky errors.
+
+    Auto-creates schema on first acquisition (one-shot per process via
+    `_schema_ready` guard). Without this, scripts that hit the DB
+    directly — `verify_insider_alpha.py`, ad-hoc notebooks, the
+    Hypothesis Lab worker — would all see `OperationalError: no such
+    table: factors` because they never import the API route module
+    where `init_schema()` was previously the only call site.
+    `Base.metadata.create_all` is idempotent (CREATE IF NOT EXISTS)
+    so this is safe to run on every process boot in production.
     """
-    global _engine
+    global _engine, _schema_ready
     if _engine is None:
         url = _resolve_url()
         _engine = create_engine(url, pool_pre_ping=True, pool_recycle=300)
+    if not _schema_ready:
+        try:
+            Base.metadata.create_all(_engine)
+            _schema_ready = True
+        except Exception as exc:  # noqa: BLE001 — surface via downstream query
+            # Don't poison the singleton; let the caller's actual operation
+            # fail with a clearer error. Common cause: readonly DB user, or
+            # Neon role missing CREATE privilege.
+            import logging
+            logging.getLogger(__name__).warning(
+                "factor DB schema auto-init failed: %s: %s; "
+                "subsequent queries will surface the underlying error",
+                type(exc).__name__, exc,
+            )
     return _engine
 
 
 def init_schema() -> None:
-    """Create tables if they don't exist. Idempotent — call on startup."""
+    """Create tables if they don't exist. Idempotent. Now mostly redundant
+    with the auto-init in `get_engine()`, but kept as the public surface
+    for any caller that wants to force a re-check (e.g. after a manual
+    DROP or migration)."""
+    global _schema_ready
     Base.metadata.create_all(get_engine())
+    _schema_ready = True
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
