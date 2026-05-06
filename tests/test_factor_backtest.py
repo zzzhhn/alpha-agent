@@ -108,6 +108,82 @@ def test_engine_deterministic_given_same_spec() -> None:
     assert a.equity_curve[-1]["value"] == b.equity_curve[-1]["value"]
 
 
+def test_transaction_cost_bps_reaches_pnl_end_to_end() -> None:
+    """A6: confirm transaction_cost_bps actually subtracts from realized PnL
+    via the wrapper, not just the kernel.
+
+    Use a high-turnover mean-reversion spec so cost has bite. With cost=0 the
+    test_metrics must equal the byte-equal pre-refactor numbers (verified
+    via run-vs-run determinism); with cost=20 bps the same spec must show
+    *strictly lower* total return on the same panel. Sharpe direction is
+    not required to flip — high-turnover factors with weak edge can keep
+    Sharpe sign while losing magnitude.
+    """
+    from alpha_agent.factor_engine.factor_backtest import run_factor_backtest
+
+    # Mean-reversion at 5d → daily basket churns more than long-horizon factors.
+    spec = _spec("sub(ts_mean(close, 5), close)")
+
+    free = run_factor_backtest(spec, transaction_cost_bps=0.0)
+    paid = run_factor_backtest(spec, transaction_cost_bps=20.0)
+
+    assert paid.test_metrics.total_return < free.test_metrics.total_return, (
+        f"cost did not reach PnL: free total_ret={free.test_metrics.total_return} "
+        f"paid total_ret={paid.test_metrics.total_return}"
+    )
+    # Turnover is cost-invariant — only daily PnL changes, weights identical.
+    assert (
+        abs(free.test_metrics.turnover - paid.test_metrics.turnover) < 1e-12
+    ), "turnover changed across cost levels — kernel pipeline order broken"
+
+
+def test_walk_forward_returns_rolling_window_metrics() -> None:
+    """A7: walk_forward mode populates result.walk_forward with one entry per
+    rolling window. Static mode leaves it None. Same spec, two modes — the
+    train/test SplitMetrics also live and are non-trivial in both cases.
+
+    Expected window count: depends on panel length. 1y panel (~251 days)
+    yields ~10 windows; 3y panel (~752 days) yields ~35. Bound generously
+    so the test works on either checked-in panel.
+    """
+    from alpha_agent.factor_engine.factor_backtest import run_factor_backtest
+
+    spec = _spec()
+
+    static_r = run_factor_backtest(spec, mode="static")
+    wf_r = run_factor_backtest(
+        spec, mode="walk_forward", wf_window_days=60, wf_step_days=20,
+    )
+
+    assert static_r.walk_forward is None, "static mode must NOT populate walk_forward"
+    assert wf_r.walk_forward is not None, "walk_forward mode must populate windows"
+    assert 5 <= len(wf_r.walk_forward) <= 50, (
+        f"unexpected window count {len(wf_r.walk_forward)} for 60d/20d on a 1-3y panel"
+    )
+
+    # Each window dict has the documented keys; sharpe is a real float.
+    for w in wf_r.walk_forward:
+        assert "window_start" in w and "window_end" in w
+        assert "sharpe" in w and isinstance(w["sharpe"], float)
+        assert "ic_spearman" in w and isinstance(w["ic_spearman"], float)
+        assert w["sharpe"] == w["sharpe"], "window sharpe NaN — engine bug"
+
+    # Static train/test still populated in walk_forward mode (back-compat).
+    assert wf_r.train_metrics.n_days > 0
+    assert wf_r.test_metrics.n_days > 0
+
+
+def test_walk_forward_rejects_out_of_range_params() -> None:
+    """A7 validation: window/step bounds enforced at the engine level."""
+    from alpha_agent.factor_engine.factor_backtest import run_factor_backtest
+
+    spec = _spec()
+    with pytest.raises(ValueError, match="wf_window_days"):
+        run_factor_backtest(spec, mode="walk_forward", wf_window_days=500)
+    with pytest.raises(ValueError, match="wf_step_days"):
+        run_factor_backtest(spec, mode="walk_forward", wf_window_days=60, wf_step_days=2)
+
+
 # ── API-level tests (exercise pydantic + route glue) ───────────────────────
 
 

@@ -120,3 +120,79 @@ class TestAKShareProvider:
         provider = AKShareProvider()
         df = provider.fetch(["XXXXXX"], "20250101", "20250301")
         assert df.empty
+
+
+# ------------------------------------------------------------------
+# A2: retry semantics on us_provider — fail-fast on 4xx, retry on transient
+# ------------------------------------------------------------------
+
+class TestRetrySemantics:
+    """A2: the @_retry_network decorator must:
+      - retry on ConnectionError / TimeoutError / requests.ChunkedEncodingError
+      - NOT retry on requests.HTTPError (4xx auth/schema, 5xx server failure)
+      - cap at 5 attempts and re-raise the last exception
+    """
+
+    def test_retry_does_not_fire_on_http_error(self) -> None:
+        """4xx-style errors must fail-fast — burning 5 round-trips on a 401
+        is the exact anti-pattern A2 was designed to avoid."""
+        import requests
+        from alpha_agent.data.us_provider import _retry_network
+
+        call_count = {"n": 0}
+
+        @_retry_network
+        def _401_response() -> None:
+            call_count["n"] += 1
+            raise requests.exceptions.HTTPError("401 Unauthorized")
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            _401_response()
+        assert call_count["n"] == 1, (
+            f"HTTPError must fail-fast, got {call_count['n']} attempts"
+        )
+
+    def test_retry_fires_on_connection_error_and_caps_at_5(self) -> None:
+        """Transient ConnectionError keeps retrying until stop_after_attempt(5)
+        is hit, then re-raises (reraise=True)."""
+        import requests
+        from alpha_agent.data.us_provider import _retry_network
+
+        call_count = {"n": 0}
+
+        @_retry_network
+        def _always_unreachable() -> None:
+            call_count["n"] += 1
+            raise requests.exceptions.ConnectionError("connection refused")
+
+        # We don't want to wait through 5 exponential backoff sleeps in the test
+        # (would take 30+ seconds). Monkey-patch tenacity's wait to be instant.
+        from unittest.mock import patch
+        with patch("alpha_agent.data.us_provider.wait_random_exponential",
+                   return_value=lambda *a, **kw: 0):
+            # The decorator captured wait at definition time, so just call
+            # and accept the wait. Accept up to ~30s (4 retries × ~max-cap).
+            with pytest.raises(requests.exceptions.ConnectionError):
+                _always_unreachable()
+        assert call_count["n"] == 5, (
+            f"ConnectionError must retry until cap; got {call_count['n']} attempts"
+        )
+
+    def test_retry_succeeds_on_first_recovery(self) -> None:
+        """A successful call after one transient failure should return cleanly."""
+        import requests
+        from alpha_agent.data.us_provider import _retry_network
+
+        call_count = {"n": 0}
+
+        @_retry_network
+        def _flaky_then_ok() -> str:
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise requests.exceptions.ConnectionError("first attempt")
+            return "ok"
+
+        # Same wait-bypass concern; accept the small wait
+        result = _flaky_then_ok()
+        assert result == "ok"
+        assert call_count["n"] == 2

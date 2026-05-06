@@ -13,6 +13,11 @@ dependencies = [
     "yfinance>=0.2",
     "exchange-calendars>=4.5",
     "tenacity>=8.0",
+    # A1: unified LLM client. Replaces handwritten httpx clients for
+    # Kimi/OpenAI/Ollama with a single LiteLLM-routed call. Pinned >=1.50
+    # for the Anthropic-compat custom-api_base support that Kimi For
+    # Coding requires.
+    "litellm>=1.50",
 ]
 
 [project.optional-dependencies]

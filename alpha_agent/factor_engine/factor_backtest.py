@@ -30,6 +30,20 @@ import pandas as pd
 
 from alpha_agent.core.exceptions import DataIntegrityError
 from alpha_agent.core.types import FactorSpec
+# A5 (kernel layering): the numeric pipeline lives in `kernel.py` so it can be
+# unit-tested with synthetic panels and reused by /screener. We re-export the
+# helpers under their old private names below for any callsite that imported
+# them directly (zoo.py, screener.py, tests).
+from alpha_agent.factor_engine.kernel import (
+    KernelParams,
+    KernelResult,
+    SplitMetrics,
+    max_drawdown as _max_drawdown,
+    run_kernel,
+    sector_neutralize_factor as _sector_neutralize_factor,
+    spearman_ic as _spearman_ic,
+    split_metrics as _split_metrics,
+)
 
 INITIAL_CAPITAL: float = 100_000.0
 LONG_PCT: float = 0.30
@@ -160,35 +174,8 @@ class _Panel:
     is_member: np.ndarray | None = None  # shape (T, N) bool
 
 
-@dataclass(frozen=True)
-class SplitMetrics:
-    sharpe: float
-    total_return: float
-    ic_spearman: float
-    n_days: int
-    max_drawdown: float = 0.0   # P4.1: largest peak-to-trough drop in this slice
-    turnover: float = 0.0       # P4.1: avg daily L1 weight delta on this slice
-    hit_rate: float = 0.0       # P4.1: pct of days with ic > 0
-    # T1.4 (v4): IC distribution stats. Without these, an IC mean of 0.02
-    # could be a clean 0.02 ± 0.01 (real signal, ICIR ~ 30) or 0.02 ± 0.15
-    # (pure noise, ICIR ~ 2 but not statistically distinguishable from zero).
-    ic_std: float = 0.0          # std of per-day Spearman IC samples in this slice
-    icir: float = 0.0            # ic_mean / ic_std × sqrt(252), annualized info ratio of IC
-    ic_t_stat: float = 0.0       # t = ic_mean / (ic_std / sqrt(n)); two-sided test that IC ≠ 0
-    ic_pvalue: float = 1.0       # two-sided p-value via normal approximation (n>30 typically)
-    # T2.1 (v4) — Bailey-LdP deflated Sharpe. PSR is the probability the true SR
-    # beats the multiple-testing-corrected null benchmark. lucky_max_sr is what
-    # one would expect the realized SR to be, just by luck, given n_trials
-    # variants tried under SR=0. PSR>0.95 means SR convincingly clears the bar.
-    psr: float = 0.5             # probability(true SR > lucky_max_sr); 0.5 = at the bar
-    lucky_max_sr: float = 0.0    # multiple-testing-corrected benchmark, annualized SR units
-    # T3.A (v4) — stationary block bootstrap 95% CIs. Wide CI = noisy realized
-    # estimate; narrow CI = stable. Often more honest than a single SR / IC
-    # number when the panel is short.
-    sharpe_ci_low: float = 0.0
-    sharpe_ci_high: float = 0.0
-    ic_ci_low: float = 0.0
-    ic_ci_high: float = 0.0
+# SplitMetrics is now defined in alpha_agent.factor_engine.kernel and re-exported
+# at the top of this module for back-compat with any direct import. See A5.
 
 
 @dataclass(frozen=True)
@@ -573,144 +560,9 @@ def _load_panel() -> _Panel:
 # ── Core backtest ───────────────────────────────────────────────────────────
 
 
-def _spearman_ic(factor_row: np.ndarray, fwd_ret_row: np.ndarray) -> float:
-    """Single-day cross-sectional Spearman IC (NaN-safe)."""
-    mask = ~(np.isnan(factor_row) | np.isnan(fwd_ret_row))
-    if mask.sum() < 3:
-        return 0.0
-    f = factor_row[mask]
-    r = fwd_ret_row[mask]
-    f_rank = f.argsort().argsort().astype(np.float64)
-    r_rank = r.argsort().argsort().astype(np.float64)
-    f_centered = f_rank - f_rank.mean()
-    r_centered = r_rank - r_rank.mean()
-    denom = float(np.sqrt((f_centered**2).sum() * (r_centered**2).sum()))
-    if denom == 0.0:
-        return 0.0
-    return float((f_centered * r_centered).sum() / denom)
-
-
-def _max_drawdown(returns: np.ndarray) -> float:
-    """Largest peak-to-trough percent drop on a daily-return series."""
-    if returns.size == 0:
-        return 0.0
-    eq = np.cumprod(1.0 + returns)
-    peak = np.maximum.accumulate(eq)
-    dd = (eq - peak) / peak
-    return float(dd.min()) if dd.size else 0.0
-
-
-def _split_metrics(
-    daily_returns: np.ndarray,
-    factor: np.ndarray,
-    fwd_returns: np.ndarray,
-    weights: np.ndarray,
-    start: int,
-    end: int,
-    n_trials: int = 1,
-) -> SplitMetrics:
-    slice_ret = daily_returns[start:end]
-    # Drop NaN days (early lookback window, no-signal days)
-    clean = slice_ret[~np.isnan(slice_ret)]
-    if clean.size < 2:
-        return SplitMetrics(sharpe=0.0, total_return=0.0, ic_spearman=0.0, n_days=int(clean.size))
-
-    total_return = float(np.prod(1.0 + clean) - 1.0)
-    mean = float(clean.mean())
-    std = float(clean.std(ddof=1))
-    sharpe = float(mean / std * np.sqrt(252)) if std > 0 else 0.0
-    mdd = _max_drawdown(clean)
-
-    ic_samples: list[float] = []
-    for t in range(start, end):
-        if t >= factor.shape[0] or t >= fwd_returns.shape[0]:
-            break
-        ic = _spearman_ic(factor[t], fwd_returns[t])
-        if not np.isnan(ic):
-            ic_samples.append(ic)
-    ic_mean = float(np.mean(ic_samples)) if ic_samples else 0.0
-    hit_rate = (
-        float(sum(1 for ic in ic_samples if ic > 0)) / len(ic_samples)
-        if ic_samples else 0.0
-    )
-
-    # T1.4 (v4): IC distribution + significance. Computed on the same per-day
-    # IC sample list. Use ddof=1 for sample std (we have N daily ICs, not the
-    # population). t-stat = mean / SE; p-value via normal CDF (panel sizes ≥ 30
-    # make the t-distribution → normal approximation accurate within 1%).
-    ic_std = 0.0
-    icir = 0.0
-    ic_t_stat = 0.0
-    ic_pvalue = 1.0
-    if len(ic_samples) >= 2:
-        ic_arr = np.asarray(ic_samples, dtype=np.float64)
-        ic_std = float(ic_arr.std(ddof=1))
-        if ic_std > 1e-12:
-            icir = float(ic_mean / ic_std * np.sqrt(252.0))
-            ic_t_stat = float(ic_mean / (ic_std / np.sqrt(len(ic_arr))))
-            # Two-sided p-value via normal CDF: p = 2 * (1 - Φ(|t|))
-            ic_pvalue = float(math.erfc(abs(ic_t_stat) / np.sqrt(2.0)))
-
-    # T2.1 (v4) — Deflated Sharpe / PSR. n_trials > 1 penalizes selection
-    # bias (user's "winner" is the maximum of N noisy estimates).
-    from alpha_agent.scan.significance import (
-        deflated_sharpe as _deflated_sharpe,
-        expected_max_sharpe_annual as _exp_max_sr,
-        stationary_block_bootstrap_ci as _block_bootstrap_ci,
-    )
-    lucky_max_sr = _exp_max_sr(n_trials=n_trials, n_samples=int(clean.size))
-    psr, _ = _deflated_sharpe(
-        clean, n_trials=n_trials, benchmark_sr_annual=lucky_max_sr,
-    )
-
-    # T3.A (v4) — stationary block bootstrap 95% CIs.
-    # Sharpe: bootstrap the daily-return series and re-annualize on each draw.
-    # IC mean: bootstrap the per-day IC sample list (already a 1D array of ICs).
-    # Block length 20 ≈ one trading month — captures momentum autocorrelation.
-    def _annualized_sharpe(x: np.ndarray) -> float:
-        sd = float(x.std(ddof=1))
-        return float(x.mean() / sd * np.sqrt(252.0)) if sd > 0 else 0.0
-
-    sharpe_ci_low, sharpe_ci_high = _block_bootstrap_ci(
-        clean, _annualized_sharpe, block_len=20, n_resamples=1000,
-    )
-    if ic_samples:
-        ic_ci_low, ic_ci_high = _block_bootstrap_ci(
-            np.asarray(ic_samples, dtype=np.float64),
-            lambda x: float(x.mean()),
-            block_len=20, n_resamples=1000,
-        )
-    else:
-        ic_ci_low, ic_ci_high = 0.0, 0.0
-
-    # Turnover = avg L1 distance between consecutive weight rows on the slice.
-    # Each rebalance moves at most 2.0 in L1 (close one position, open another),
-    # so this is naturally bounded in [0, 2].
-    turnover = 0.0
-    sl_w = weights[start:end]
-    if sl_w.shape[0] > 1:
-        delta = np.abs(sl_w[1:] - sl_w[:-1])
-        turnover = float(delta.sum(axis=1).mean())
-
-    return SplitMetrics(
-        sharpe=sharpe,
-        total_return=total_return,
-        ic_spearman=ic_mean,
-        n_days=int(clean.size),
-        max_drawdown=mdd,
-        turnover=turnover,
-        hit_rate=hit_rate,
-        ic_std=ic_std,
-        icir=icir,
-        ic_t_stat=ic_t_stat,
-        ic_pvalue=ic_pvalue,
-        psr=psr,
-        lucky_max_sr=lucky_max_sr,
-        sharpe_ci_low=float(sharpe_ci_low) if not np.isnan(sharpe_ci_low) else 0.0,
-        sharpe_ci_high=float(sharpe_ci_high) if not np.isnan(sharpe_ci_high) else 0.0,
-        ic_ci_low=float(ic_ci_low) if not np.isnan(ic_ci_low) else 0.0,
-        ic_ci_high=float(ic_ci_high) if not np.isnan(ic_ci_high) else 0.0,
-    )
+# `_spearman_ic`, `_max_drawdown`, `_split_metrics` now live in
+# `alpha_agent.factor_engine.kernel` (A5). Re-exported under the original
+# private names at the top of this module for any callsite that imported them.
 
 
 Mode = Literal["static", "walk_forward"]
@@ -720,36 +572,8 @@ SUPPORTED_MODES: frozenset[str] = frozenset({"static", "walk_forward"})
 Neutralize = Literal["none", "sector"]
 
 
-def _sector_neutralize_factor(
-    factor: np.ndarray, sector: np.ndarray
-) -> np.ndarray:
-    """Bundle A.2: subtract per-sector cross-sectional mean at each date.
-
-    After neutralization, each ticker's value is its factor exposure RELATIVE
-    to its sector peers. Subsequent global rank then picks the strongest
-    relative-to-sector tickers across the universe — the resulting portfolio
-    has by-construction near-zero net exposure to any single sector.
-
-    Inputs:
-        factor: (T, N) float array, NaN-permitted
-        sector: (T, N) string array (panel.sector broadcast snapshot)
-    """
-    out = factor.copy()
-    T = factor.shape[0]
-    for t in range(T):
-        valid = ~np.isnan(factor[t])
-        if not valid.any():
-            continue
-        sec_row = sector[t]
-        for sec in np.unique(sec_row[valid]):
-            if sec in ("Unknown", "", "nan"):
-                continue
-            sec_mask = valid & (sec_row == sec)
-            if sec_mask.sum() < 2:
-                continue  # at least 2 tickers needed to define a "sector mean"
-            mean = float(np.nanmean(factor[t, sec_mask]))
-            out[t, sec_mask] = factor[t, sec_mask] - mean
-    return out
+# `_sector_neutralize_factor` now lives in kernel.py (A5). Re-exported at the
+# top of this module for back-compat with any direct importer.
 
 
 def _classify_regimes(
@@ -946,11 +770,6 @@ def run_factor_backtest(
     panel = _load_panel()
     T, N = panel.close.shape
 
-    # Operand dict construction lives in kernel.build_data_dict so the screener
-    # endpoint (D1) shares the exact same schema. Anything added to the
-    # translate-prompt contract must be mirrored there, not here.
-    from alpha_agent.factor_engine.kernel import evaluate_factor_full
-
     # Resolve benchmark close series. Default = panel.benchmark_close (SPY);
     # alternative = panel.benchmark_alts[ticker] when caller swaps in RSP, etc.
     # Equity curve, regime classification, and α/β decomposition all use this.
@@ -965,141 +784,49 @@ def run_factor_backtest(
     else:
         bench_close = panel.benchmark_close
 
-    factor = evaluate_factor_full(panel, spec)
-
-    # Bundle A.2 (v4): sector-neutralize the factor before rank if requested.
-    # Subtract per-sector mean at each date so within-sector ranking drives
-    # the basket — decouples factor signal from sector beta. Requires
-    # panel.sector to be populated (v3 panel has it; v1 doesn't, in which
-    # case neutralize="sector" silently degrades to "none" with a warning).
-    if neutralize == "sector":
-        if panel.sector is not None:
-            factor = _sector_neutralize_factor(factor, panel.sector)
-        else:
-            import warnings
-            warnings.warn(
-                "neutralize='sector' requested but panel has no sector data "
-                "(legacy v1 panel?); falling back to none.",
-                stacklevel=2,
-            )
-
-    # 1-day forward returns (close-to-close)
-    fwd_returns = np.full_like(panel.close, np.nan)
-    fwd_returns[:-1] = panel.close[1:] / panel.close[:-1] - 1.0
-
-    # Daily portfolio weights from factor rank. The `direction` flag decides
-    # which legs get populated; IC/Sharpe metrics are always computed on the
-    # realized portfolio return regardless of direction.
-    use_long = direction in ("long_short", "long_only")
-    use_short = direction in ("long_short", "short_only")
-    weights = np.zeros((T, N), dtype=np.float64)
-    for t in range(T):
-        row = factor[t]
-        mask = ~np.isnan(row)
-        valid = mask.sum()
-        if valid < 10:
-            continue
-        ranks = np.full_like(row, np.nan)
-        ranks[mask] = (row[mask].argsort().argsort() + 1.0) / valid
-        if use_long:
-            long_mask = ranks >= (1.0 - top_pct)
-            n_long = int(long_mask.sum())
-            if n_long > 0:
-                weights[t, long_mask] = 1.0 / n_long
-        if use_short:
-            short_mask = ranks <= bottom_pct
-            n_short = int(short_mask.sum())
-            if n_short > 0:
-                weights[t, short_mask] = -1.0 / n_short
-
-    # T3.C (v4): zero out weights inside the earnings announcement window
-    # for each ticker. Builds a (T, N) mask from filing_dates in
-    # fundamentals_pit.parquet (±earnings_window_days). PEAD noise on
-    # announcement days otherwise contaminates short-horizon momentum
-    # and reversal factors.
+    # T3.C (v4): earnings-window mask is loaded here (IO) and passed to the
+    # pure kernel. Kernel zeroes weights on masked cells without knowing where
+    # the dates came from.
+    earnings_mask: np.ndarray | None = None
     if mask_earnings_window:
-        em = _load_earnings_mask(panel.dates, panel.tickers, window_days=earnings_window_days)
-        if em is not None:
-            weights[em] = 0.0
+        earnings_mask = _load_earnings_mask(
+            panel.dates, panel.tickers, window_days=earnings_window_days,
+        )
 
-    # Portfolio daily return = weight[t-1] dot fwd_return[t-1] (i.e. realized at t)
-    # fwd_returns[t] is close[t]→close[t+1], so strategy return at t+1 = sum(weights[t] * fwd_returns[t])
-    daily_ret = np.full(T, np.nan)
-    for t in range(T - 1):
-        row_w = weights[t]
-        row_r = fwd_returns[t]
-        mask = ~np.isnan(row_r)
-        if not mask.any():
-            continue
-        daily_ret[t + 1] = float((row_w[mask] * row_r[mask]).sum())
+    # A5: pure pipeline. Everything from factor evaluation through transaction
+    # cost, equity-curve compound, and train/test SplitMetrics happens here.
+    # Walk-forward, regime breakdown, and α/β regression are wrapper-side
+    # because they want either rolling slices (WF) or external arrays (bench).
+    kernel_result = run_kernel(
+        panel,
+        spec,
+        KernelParams(
+            direction=direction,
+            top_pct=top_pct,
+            bottom_pct=bottom_pct,
+            train_ratio=train_ratio,
+            transaction_cost_bps=transaction_cost_bps,
+            slippage_bps_per_sqrt_pct=slippage_bps_per_sqrt_pct,
+            short_borrow_bps=short_borrow_bps,
+            purge_days=purge_days,
+            embargo_days=embargo_days,
+            n_trials=n_trials,
+            neutralize=neutralize,
+        ),
+        earnings_mask=earnings_mask,
+    )
+    factor = kernel_result.factor
+    weights = kernel_result.weights
+    daily_ret = kernel_result.daily_ret
+    equity = kernel_result.equity
+    fwd_returns = kernel_result.fwd_returns
+    train_end = kernel_result.train_end
+    train_m = kernel_result.train_metrics
+    test_m = kernel_result.test_metrics
 
-    # Apply transaction cost: per-name cost on the day a rebalance happens.
-    # Three components:
-    #   1. Flat bps × L1 weight delta — fixed per-trade fee proxy.
-    #   2. T2.2 (v4) sqrt(participation) slippage — Almgren-Chriss-style.
-    #      participation = |Δw_n × portfolio$| / dollar_volume[t, n]
-    #      cost_n_bps = slippage_k × sqrt(participation_pct)
-    #      where participation_pct = participation × 100 so the units of
-    #      slippage_k are "bps per sqrt(% of ADV)". Default 0 = no slippage.
-    #   3. T2.3 (v4) short-leg borrow accrual — daily on |Σ w_short|.
-    flat_cost_per_unit = transaction_cost_bps / 10_000.0
-    slip_k = float(slippage_bps_per_sqrt_pct)
-    daily_borrow = float(short_borrow_bps) / (10_000.0 * 252.0)
-    # Use $-volume from build_data_dict if available (T2 panel only).
-    dollar_volume = panel.close * panel.volume  # shape (T, N)
-    portfolio_value = float(INITIAL_CAPITAL)  # static — doesn't compound through cost
-    for t in range(1, T):
-        if np.isnan(daily_ret[t]):
-            continue
-        delta = weights[t] - weights[t - 1]
-        l1_delta = float(np.abs(delta).sum())
-
-        # 1. Flat bps cost
-        cost = l1_delta * flat_cost_per_unit if transaction_cost_bps > 0 else 0.0
-
-        # 2. sqrt(participation) slippage (only when both factor knobs set)
-        if slip_k > 0.0:
-            with np.errstate(divide="ignore", invalid="ignore"):
-                dollar_traded = np.abs(delta) * portfolio_value
-                # Avoid /0 — names with 0 ADV contribute zero (defensive)
-                participation_pct = np.where(
-                    dollar_volume[t] > 0,
-                    100.0 * dollar_traded / dollar_volume[t],
-                    0.0,
-                )
-            # cost_n_bps = slip_k × sqrt(participation_pct), per trade
-            slip_bps = slip_k * np.sqrt(np.maximum(participation_pct, 0.0))
-            slip_cost = float((np.abs(delta) * slip_bps / 10_000.0).sum())
-            cost += slip_cost
-
-        # 3. Short borrow accrual on the prior day's short book (paid daily)
-        if short_borrow_bps > 0:
-            prior_short = float(np.abs(np.minimum(weights[t - 1], 0.0)).sum())
-            cost += prior_short * daily_borrow
-
-        daily_ret[t] -= cost
-
-    # Equity curve (compound, fillna=0 for early days)
-    daily_ret_clean = np.nan_to_num(daily_ret, nan=0.0)
-    equity = INITIAL_CAPITAL * np.cumprod(1.0 + daily_ret_clean)
-
-    # Benchmark: SPY buy-and-hold rescaled to INITIAL_CAPITAL
+    # Benchmark: SPY buy-and-hold rescaled to INITIAL_CAPITAL — wrapper-side
+    # because the benchmark series is independent of the factor pipeline.
     bench = bench_close / bench_close[0] * INITIAL_CAPITAL
-
-    train_end = int(T * train_ratio)
-    # T1.3 (v4): purge tail of train (its fwd_return spans into test) and
-    # embargo head of test (rolling lookback in factor still re-settling
-    # right after the boundary). Validate the resulting slices stay non-empty.
-    train_score_end = max(1, train_end - purge_days)
-    test_score_start = min(T - 1, train_end + embargo_days)
-    train_m = _split_metrics(
-        daily_ret, factor, fwd_returns, weights,
-        start=0, end=train_score_end, n_trials=n_trials,
-    )
-    test_m = _split_metrics(
-        daily_ret, factor, fwd_returns, weights,
-        start=test_score_start, end=T, n_trials=n_trials,
-    )
 
     equity_curve = [
         {"date": str(panel.dates[i]), "value": float(equity[i])} for i in range(T)

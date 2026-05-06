@@ -50,8 +50,14 @@ except ImportError:  # requests is a transitive dep of yfinance/akshare; if abse
 
 _retry_network = retry(
     reraise=True,
-    stop=stop_after_attempt(4),
+    # A2 (plan): 5 attempts with capped exponential backoff. Random component
+    # spreads bursts across workers so we don't all retry in lockstep against
+    # a rate-limited upstream.
+    stop=stop_after_attempt(5),
     wait=wait_random_exponential(multiplier=1.0, min=2.0, max=30.0),
+    # Crucially, retries fire ONLY for transient connectivity / chunked
+    # encoding errors. 4xx (auth, schema, not-found) and 5xx (server failure)
+    # both bypass the retry layer — we don't burn 5 round-trips on a 401.
     retry=retry_if_exception_type(_TRANSIENT_NETWORK_EXCEPTIONS),
 )
 
