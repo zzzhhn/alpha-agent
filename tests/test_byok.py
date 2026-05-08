@@ -53,6 +53,25 @@ def test_build_kimi_client_uses_legacy_path_for_ua_gate() -> None:
     # the file-level constants of `_legacy/kimi.py`.
 
 
+def test_build_openai_provider_pointed_at_kimi_url_routes_to_legacy() -> None:
+    """Users frequently pick "OpenAI" provider as a generic OpenAI-compat
+    shim and supply Kimi's URL via the Base URL override. We must detect
+    the Kimi endpoint by URL (not just provider name) and route through
+    the legacy KimiClient so the UA gate is satisfied. Without this, the
+    user's reasonable config silently breaks with "Coding Agents only"."""
+    from alpha_agent.llm._legacy.kimi import KimiClient
+
+    c = _build_byok_client(
+        provider="openai",
+        api_key="sk-test-fake",
+        api_base="https://api.kimi.com/coding/v1",
+        model="kimi-for-coding",
+    )
+    assert isinstance(c, KimiClient), (
+        f"openai+kimi.com URL must route to legacy KimiClient, got {type(c).__name__}"
+    )
+
+
 def test_build_openai_client_no_extra_headers() -> None:
     c = _build_byok_client(
         provider="openai",

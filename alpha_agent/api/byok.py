@@ -105,7 +105,16 @@ def _build_byok_client(
     resolved_model = model or defaults["model"]
 
     # Kimi For Coding — bypass LiteLLM. See docstring above.
-    if provider == "kimi":
+    # Detection by URL (not just provider name) because users frequently
+    # use the "OpenAI" provider as a generic OpenAI-compat shim with a
+    # custom Base URL pointing at any compatible upstream — Kimi's
+    # /coding/v1 is the most common case and would otherwise hit LiteLLM's
+    # openai provider, lose the UA, and fail Kimi's coding-agent gate.
+    is_kimi_endpoint = (
+        provider == "kimi"
+        or "kimi.com" in resolved_base.lower()
+    )
+    if is_kimi_endpoint:
         from alpha_agent.llm._legacy.kimi import KimiClient
         return KimiClient(
             api_key=api_key,
