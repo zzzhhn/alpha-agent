@@ -57,10 +57,19 @@ const MAX_RETRIES = 1;
 const RETRY_DELAY_MS = 600;
 
 async function _doFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  // BYOK — inject the user's LLM credentials as headers on every request.
+  // The backend dependency consumes them only for LLM-burning routes; on
+  // other routes it's a harmless no-op. We do this in `_doFetch` (the
+  // common path) rather than at each call site so we can never forget a
+  // route. See ./byok.ts.
+  // Lazy import keeps SSR-safe (byok.ts has window guards but the
+  // function lookup itself runs on import).
+  const { byokHeaders } = await import("./byok");
   const response = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...byokHeaders(),
       ...options?.headers,
     },
   });

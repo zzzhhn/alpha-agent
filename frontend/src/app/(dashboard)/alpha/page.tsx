@@ -233,10 +233,30 @@ export default function AlphaPage() {
             </p>
           </div>
           {error ? (
-            <p className="text-sm text-red-400">
-              {t(locale, "alpha.errorPrefix")}
-              {error}
-            </p>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm text-red-400">
+                {t(locale, "alpha.errorPrefix")}
+                {error}
+              </p>
+              {/* Phase 2 BYOK — server returns 401 with "byok_required"
+                  in the detail when the user has no key configured. We
+                  pattern-match on that string (rather than the status
+                  code, which is buried by ApiError -> message) and
+                  surface a CTA to /settings so the user knows what to do. */}
+              {/byok_required|X-LLM-API-Key/i.test(error) ? (
+                <p className="text-sm text-[var(--muted)]">
+                  {locale === "zh"
+                    ? "需要先配置你自己的 LLM API key — "
+                    : "You need to configure your own LLM API key first — "}
+                  <a
+                    href="/settings"
+                    className="text-[var(--accent)] underline hover:text-[var(--accent-hover)]"
+                  >
+                    {locale === "zh" ? "前往设置" : "Open Settings"}
+                  </a>
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </Card>
