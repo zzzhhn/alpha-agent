@@ -1,44 +1,54 @@
 "use client";
 
+/**
+ * Sidebar — workstation lifecycle nav (Variation C, Stage 2).
+ *
+ * 200-wide terminal panel with a single LIFECYCLE section (9 items
+ * matching the existing routes). Each item:
+ *   - 11.5px JetBrains Mono text
+ *   - Marker glyph: ▶ for current page, · for others
+ *   - Hover: bg-tm-bg-2 + text-tm-fg
+ *   - Current: bg-tm-accent-soft + text-tm-accent
+ *
+ * Routing is unchanged from Stage 1 — same `<Link prefetch>` behavior
+ * (explicit `prefetch={true}` was set in the prior phase 11 perf pass
+ * to force RSC prefetch on dynamic routes; preserved here).
+ *
+ * Brand block + locale/theme toggles moved OUT of the sidebar in Stage
+ * 2 and now live in the Topbar titlebar above. The footer "system
+ * online" pulse stays as a subtle liveness indicator at the bottom.
+ *
+ * The design's second sidebar section ("FACTORS" — list of recently
+ * used factors) is deliberately dropped for now: it duplicates the
+ * /factors page and adds maintenance overhead with no clear win at
+ * 200px width. Re-evaluate during Stage 3 Factors port.
+ */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { useLocale } from "./LocaleProvider";
 import { t } from "@/lib/i18n";
 
-interface SidebarNavItem {
+interface NavItem {
   readonly id: string;
-  readonly labelKey: string;
   readonly href: string;
-  readonly emoji: string;
-  readonly badge?: string;
-}
-
-interface SidebarGroup {
   readonly labelKey: string;
-  readonly items: readonly SidebarNavItem[];
 }
 
-const NAV_GROUPS: readonly SidebarGroup[] = [
-  {
-    labelKey: "group.lifecycle",
-    items: [
-      { id: "data", labelKey: "lifecycle.data", href: "/data", emoji: "🗂️" },
-      { id: "alpha", labelKey: "lifecycle.alpha", href: "/alpha", emoji: "🧬" },
-      { id: "signal", labelKey: "lifecycle.signal", href: "/signal", emoji: "📡" },
-      {
-        id: "backtest",
-        labelKey: "lifecycle.backtest",
-        href: "/backtest",
-        emoji: "📉",
-      },
-      { id: "report", labelKey: "lifecycle.report", href: "/report", emoji: "📑" },
-      { id: "zoo", labelKey: "lifecycle.zoo", href: "/factors", emoji: "🦄" },
-      { id: "screener", labelKey: "lifecycle.screener", href: "/screener", emoji: "🎯" },
-      { id: "methodology", labelKey: "lifecycle.methodology", href: "/methodology", emoji: "📖" },
-      { id: "settings", labelKey: "lifecycle.settings", href: "/settings", emoji: "⚙️" },
-    ],
-  },
+// Order matches the design's LIFECYCLE list. `id` is informational
+// only (the marker glyph is determined by `pathname === item.href`,
+// not by id). All 9 routes preserved from the legacy sidebar.
+const NAV_ITEMS: ReadonlyArray<NavItem> = [
+  { id: "data", href: "/data", labelKey: "lifecycle.data" },
+  { id: "alpha", href: "/alpha", labelKey: "lifecycle.alpha" },
+  { id: "signal", href: "/signal", labelKey: "lifecycle.signal" },
+  { id: "backtest", href: "/backtest", labelKey: "lifecycle.backtest" },
+  { id: "report", href: "/report", labelKey: "lifecycle.report" },
+  { id: "zoo", href: "/factors", labelKey: "lifecycle.zoo" },
+  { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
+  { id: "methodology", href: "/methodology", labelKey: "lifecycle.methodology" },
+  { id: "settings", href: "/settings", labelKey: "lifecycle.settings" },
 ];
 
 export function Sidebar() {
@@ -47,68 +57,52 @@ export function Sidebar() {
 
   return (
     <aside
-      className="flex h-screen w-[260px] flex-col border-r border-[var(--border-solid)] bg-[var(--sidebar-bg)]"
+      className="flex h-full w-[200px] flex-col overflow-y-auto border-r border-tm-rule bg-tm-bg font-tm-mono text-[12px]"
       role="navigation"
-      aria-label="Main navigation"
+      aria-label="Lifecycle navigation"
     >
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 border-b border-[var(--border)] px-5 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hover)] text-[15px] font-bold text-white">
-          AC
+      <div className="border-b border-tm-rule p-3">
+        <div className="mb-2 px-1.5 text-[10px] font-semibold tracking-[0.12em] text-tm-muted">
+          LIFECYCLE
         </div>
-        <span className="text-lg font-semibold text-[var(--text)]">
-          {t(locale, "brand.name")}
-        </span>
-        <span className="ml-1 rounded bg-[var(--accent-glow)] px-1.5 py-px text-[12px] text-[var(--accent)]">
-          {t(locale, "brand.tag")}
-        </span>
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              prefetch={true}
+              aria-current={isActive ? "page" : undefined}
+              className={clsx(
+                "flex w-full items-center gap-2 px-1.5 py-1 text-[11.5px] transition-colors",
+                isActive
+                  ? "bg-tm-accent-soft text-tm-accent"
+                  : "text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg",
+              )}
+            >
+              <span
+                className={clsx(
+                  "w-[10px] text-center",
+                  isActive ? "text-tm-accent" : "text-tm-muted",
+                )}
+                aria-hidden="true"
+              >
+                {isActive ? "▶" : "·"}
+              </span>
+              <span>
+                {t(locale, item.labelKey as Parameters<typeof t>[1])}
+              </span>
+            </Link>
+          );
+        })}
       </div>
 
-      {/* Nav Groups */}
-      <nav className="flex-1 overflow-y-auto">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.labelKey} className="px-3 pt-5 pb-1">
-            <div className="mb-1.5 px-2 text-[13px] font-medium uppercase tracking-[0.08em] text-[var(--muted)]">
-              {t(locale, group.labelKey as Parameters<typeof t>[1])}
-            </div>
-            {group.items.map((item) => {
-              const isActive = pathname === item.href;
-
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={clsx(
-                    "relative mb-0.5 flex items-center gap-2.5 rounded-lg border-l-[3px] px-3 py-2 text-[15px] transition-all duration-150",
-                    isActive
-                      ? "sidebar-active-bg border-l-[var(--sidebar-active-border)] font-semibold text-[var(--text)]"
-                      : "border-l-transparent text-[var(--muted)] hover:bg-[rgba(255,255,255,0.03)] hover:text-[var(--text-secondary)]"
-                  )}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  <span
-                    className="flex h-5 w-5 shrink-0 items-center justify-center text-[17px]"
-                    aria-hidden="true"
-                  >
-                    {item.emoji}
-                  </span>
-                  <span>{t(locale, item.labelKey as Parameters<typeof t>[1])}</span>
-                  {item.badge && (
-                    <span className="ml-auto rounded bg-[var(--accent-glow)] px-1.5 py-px text-[12px] text-[var(--accent)]">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-
-      {/* Footer status */}
-      <div className="flex items-center gap-2 border-t border-[var(--border)] px-5 py-3 text-sm text-[var(--muted)]">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--green)]" />
-        {t(locale, "brand.systemOnline")}
+      <div className="mt-auto flex items-center gap-1.5 border-t border-tm-rule px-3 py-2 text-[10px] text-tm-muted">
+        <span
+          className="h-1.5 w-1.5 animate-tm-pulse bg-tm-accent"
+          aria-hidden="true"
+        />
+        {t(locale, "brand.systemOnline" as Parameters<typeof t>[1])}
       </div>
     </aside>
   );
