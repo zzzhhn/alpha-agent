@@ -26,13 +26,16 @@ async def system_health(request: Request) -> dict:
     if cached is not None:
         return cached
 
-    # LLM availability check
+    # LLM availability check (Phase 1 BYOK aware)
     llm_status = "unknown"
-    try:
-        llm = request.app.state.llm
-        llm_status = "ok" if await llm.is_available() else "unreachable"
-    except Exception:
-        llm_status = "error"
+    llm = getattr(request.app.state, "llm", None)
+    if llm is None:
+        llm_status = "byok"
+    else:
+        try:
+            llm_status = "ok" if await llm.is_available() else "unreachable"
+        except Exception:
+            llm_status = "error"
 
     # Model file status (may not exist in serverless)
     try:

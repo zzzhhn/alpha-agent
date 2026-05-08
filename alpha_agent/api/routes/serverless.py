@@ -55,11 +55,17 @@ def _now_iso() -> str:
 @router.get("/api/v1/system/health")
 async def system_health(request: Request) -> dict:
     llm_status = "unknown"
-    try:
-        llm = request.app.state.llm
-        llm_status = "ok" if await llm.is_available() else "unreachable"
-    except Exception:
-        llm_status = "error"
+    llm = getattr(request.app.state, "llm", None)
+    if llm is None:
+        # Phase 1 BYOK — no platform LLM is the expected state on public
+        # deploys. Surface this explicitly so the dashboard widget reads
+        # "byok" rather than the misleading "error".
+        llm_status = "byok"
+    else:
+        try:
+            llm_status = "ok" if await llm.is_available() else "unreachable"
+        except Exception:
+            llm_status = "error"
     ml_ok = _check_ml()
     return {
         "services": {"llm": llm_status, "fastapi": "ok", "tunnel": "n/a"},
@@ -103,10 +109,12 @@ async def system_config(request: Request) -> dict:
 async def services_health(request: Request) -> dict:
     now = _now_iso()
     llm_ok = False
-    try:
-        llm_ok = await request.app.state.llm.is_available()
-    except Exception:
-        pass
+    llm = getattr(request.app.state, "llm", None)
+    if llm is not None:
+        try:
+            llm_ok = await llm.is_available()
+        except Exception:
+            pass
     ml_ok = _check_ml()
     return {
         "services": [

@@ -6,11 +6,13 @@ import logging
 import time
 from dataclasses import asdict
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse
 
+from alpha_agent.api.byok import get_llm_client as _get_llm_client
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.config import get_settings
+from alpha_agent.llm.base import LLMClient as _LLMClient
 from alpha_agent.llm.factory import create_llm_client
 from alpha_agent.models.features import compute_features
 from alpha_agent.models.fusion import fuse_predictions
@@ -34,7 +36,10 @@ async def serve_dashboard() -> FileResponse:
 
 
 @router.get("/api/dashboard")
-async def dashboard(request: Request) -> dict:
+async def dashboard(
+    request: Request,
+    llm: _LLMClient = Depends(_get_llm_client),
+) -> dict:
     """Single endpoint aggregating market state, inference, gate, and decision."""
     cache: TTLCache = request.app.state.cache
     settings = request.app.state.settings
@@ -100,8 +105,7 @@ async def dashboard(request: Request) -> dict:
     # --- Gate ---
     gate_result = evaluate_gates(primary)
 
-    # --- LLM Decision ---
-    llm = request.app.state.llm
+    # --- LLM Decision (Phase 1 BYOK — `llm` injected by dependency) ---
     engine = LLMDecisionEngine(llm_client=llm)
     decision = await engine.decide(primary, market_state, fusion, gate_result)
 

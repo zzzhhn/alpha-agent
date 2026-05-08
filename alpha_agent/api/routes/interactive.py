@@ -11,7 +11,9 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from alpha_agent.api.byok import get_llm_client as _get_llm_client
+from alpha_agent.llm.base import LLMClient as _LLMClient
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -175,15 +177,16 @@ def _extract_json_object(text: str) -> dict | None:
     response_model=HypothesisTranslateResponse,
 )
 async def translate_hypothesis(
-    body: HypothesisTranslateRequest, request: _Request
+    body: HypothesisTranslateRequest,
+    request: _Request,
+    llm: _LLMClient = Depends(_get_llm_client),
 ) -> HypothesisTranslateResponse:
-    """T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC."""
-    llm = getattr(request.app.state, "llm", None)
-    if llm is None:
-        raise HTTPException(
-            503,
-            "LLM provider not initialized (check /healthz/routers and LLM_PROVIDER env)",
-        )
+    """T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.
+
+    Phase 1 BYOK — `llm` is now per-request, built from the caller's
+    X-LLM-* headers (or platform fallback in dev). No more shared
+    `app.state.llm` to drain operator quota.
+    """
 
     user_payload = _json.dumps({"hypothesis": body.text, "universe": body.universe})
     messages = [

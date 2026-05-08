@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from alpha_agent.api.byok import get_llm_client as _get_llm_client
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.config import get_settings
+from alpha_agent.llm.base import LLMClient as _LLMClient
 from alpha_agent.models.features import compute_features
 from alpha_agent.models.fusion import fuse_predictions
 from alpha_agent.models.trainer import get_or_train_models, _fetch_training_data
@@ -19,7 +21,10 @@ router = APIRouter(prefix="/api", tags=["trading"])
 
 
 @router.get("/decision")
-async def decision(request: Request) -> dict:
+async def decision(
+    request: Request,
+    llm: _LLMClient = Depends(_get_llm_client),
+) -> dict:
     """Return the final LLM trading decision with full reasoning."""
     cache: TTLCache = request.app.state.cache
     settings = request.app.state.settings
@@ -60,8 +65,7 @@ async def decision(request: Request) -> dict:
 
     gate_result = evaluate_gates(primary)
 
-    # LLM decision
-    llm = request.app.state.llm
+    # LLM decision (Phase 1 BYOK — `llm` injected by dependency)
     engine = LLMDecisionEngine(llm_client=llm)
     trading_decision = await engine.decide(primary, market_state, fusion, gate_result)
 

@@ -39,11 +39,32 @@ def _ensure_initialized(app: FastAPI) -> None:
     settings = get_settings()
     app.state.settings = settings
     app.state.cache = _cache
-    app.state.llm = create_llm_client(settings)
+    # Phase 1 BYOK — platform LLM is now optional. Public deploys set
+    # ALPHACORE_REQUIRE_BYOK=true and leave provider keys unset; the
+    # `byok.get_llm_client` dependency builds one per request from the
+    # caller's headers. We still try to construct a platform client here
+    # so local dev (with KIMI_API_KEY in .env) keeps the legacy "no
+    # BYOK headers required" flow. Construction failure (no key) is now
+    # warned, not fatal — see feedback_silent_trycatch_antipattern.md;
+    # we surface the reason via app.state.llm_init_error so /healthz can
+    # report it.
+    try:
+        app.state.llm = create_llm_client(settings)
+        app.state.llm_init_error = None
+    except Exception as exc:  # noqa: BLE001 — surfaced via /healthz
+        app.state.llm = None
+        app.state.llm_init_error = f"{type(exc).__name__}: {exc}"
+        logger.warning(
+            "Platform LLM not available — running in BYOK-only mode: %s: %s",
+            type(exc).__name__, exc,
+        )
     # Keep router_health if create_app() already populated it (non-serverless path).
     if not hasattr(app.state, "router_health"):
         app.state.router_health = []
-    logger.info("AlphaCore init (lazy): llm=%s", settings.llm_provider)
+    logger.info(
+        "AlphaCore init (lazy): provider=%s platform_llm=%s",
+        settings.llm_provider, "ok" if app.state.llm else "absent (BYOK-only)",
+    )
 
 
 async def _run_startup_healthcheck(app: FastAPI) -> None:
@@ -57,6 +78,13 @@ async def _run_startup_healthcheck(app: FastAPI) -> None:
         logger.info("startup healthcheck: skipped (LLM_STARTUP_HEALTHCHECK=false)")
         return
     llm = app.state.llm
+    if llm is None:
+        # Phase 1 BYOK — no platform LLM is a valid deploy state. The
+        # per-request `byok.get_llm_client` dependency handles auth.
+        logger.info(
+            "startup healthcheck: skipped (BYOK-only mode, platform LLM absent)"
+        )
+        return
     try:
         ok = await llm.is_available()
     except Exception as exc:
@@ -110,7 +138,18 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=["*"],
         allow_methods=["GET", "POST"],
-        allow_headers=["*", "Authorization"],
+        # Phase 1 BYOK — explicit allowlist of the X-LLM-* headers the
+        # browser needs to send. The "*" wildcard works in Chromium but
+        # Safari has historically been finicky with custom headers under
+        # CORS preflight; listing them avoids that class of bug.
+        allow_headers=[
+            "*",
+            "Authorization",
+            "X-LLM-Provider",
+            "X-LLM-API-Key",
+            "X-LLM-Base-URL",
+            "X-LLM-Model",
+        ],
     )
 
     # Security middleware (skip in serverless — BaseHTTPMiddleware incompatible)
