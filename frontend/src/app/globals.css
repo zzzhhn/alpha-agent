@@ -278,3 +278,57 @@ body {
     color: #111827 !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Workstation aesthetic — Variation C (Bloomberg-meets-Linear).
+   Source of truth: .references/alpha-agent-design-handoff/.../styles-terminal.css
+   These `--tm-*` tokens live ALONGSIDE the existing Linear/Sentry palette so
+   Stage-1 is purely additive: no current component changes color until a
+   subsequent stage explicitly migrates onto the new tokens.
+   ═════════════════════════════════════════════════════════════════════════ */
+:root,
+[data-theme="dark"] {
+  --tm-bg: #0a0c0f;
+  --tm-bg-2: #11141a;
+  --tm-bg-3: #161a22;
+  --tm-fg: #e7eaf0;
+  --tm-fg-2: #aab1bd;
+  --tm-muted: #6c7280;
+  --tm-rule: #1f242c;
+  --tm-rule-2: #2a3038;
+  --tm-accent: #39d98a;       /* terminal green */
+  --tm-accent-soft: rgba(57, 217, 138, 0.10);
+  --tm-warn: #f0b34a;
+  --tm-warn-soft: rgba(240, 179, 74, 0.12);
+  --tm-neg: #f06464;
+  --tm-neg-soft: rgba(240, 100, 100, 0.12);
+  --tm-info: #6aa9ff;
+  --tm-pos: #39d98a;
+}
+
+[data-theme="light"] {
+  --tm-bg: #f5f5f2;
+  --tm-bg-2: #ffffff;
+  --tm-bg-3: #ebebe6;
+  --tm-fg: #161a20;
+  --tm-fg-2: #41464f;
+  --tm-muted: #828891;
+  --tm-rule: #d8d8d2;
+  --tm-rule-2: #c0c0b8;
+  --tm-accent: #0c8a4f;       /* deeper green for light contrast */
+  --tm-accent-soft: rgba(12, 138, 79, 0.10);
+  --tm-warn: #b06a06;
+  --tm-warn-soft: rgba(176, 106, 6, 0.10);
+  --tm-neg: #b91c1c;
+  --tm-neg-soft: rgba(185, 28, 28, 0.10);
+  --tm-info: #1e63cc;
+  --tm-pos: #0c8a4f;
+}
+
+/* Keyframes shared with the workstation chrome — single definition so
+   Sidebar/Topbar and any pulse LEDs animate identically. */
+@keyframes tm-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
