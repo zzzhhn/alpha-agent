@@ -80,7 +80,19 @@ def _build_byok_client(
     api_base: str | None,
     model: str | None,
 ) -> LLMClient:
-    """Construct a LiteLLMClient from raw header values."""
+    """Construct a per-request LLM client from raw header values.
+
+    Most providers route through LiteLLMClient. Kimi For Coding is a
+    deliberate exception: its `/messages` endpoint gates access by
+    User-Agent (only allow-listed coding agents like Claude Code / Kimi
+    CLI / Roo Code can talk to it). LiteLLM's anthropic provider sets
+    its own UA on the underlying SDK and silently drops `extra_headers`
+    for that field, so the legacy hand-rolled `KimiClient` (which sets
+    the UA at the httpx layer) is the only path that actually works.
+
+    This is the same code path as `LLM_USE_LEGACY=1` for that provider,
+    just made per-provider instead of global.
+    """
     if provider not in _VALID_PROVIDERS:
         raise HTTPException(
             400,
@@ -91,23 +103,23 @@ def _build_byok_client(
     defaults = _PROVIDER_DEFAULTS[provider]
     resolved_base = api_base or defaults["api_base"]
     resolved_model = model or defaults["model"]
-    full_model = f"{defaults['model_prefix']}/{resolved_model}"
 
-    extra_headers: dict[str, str] | None = None
-    thinking_fallback = False
+    # Kimi For Coding — bypass LiteLLM. See docstring above.
     if provider == "kimi":
-        extra_headers = {
-            "User-Agent": _KIMI_USER_AGENT,
-            "anthropic-version": _KIMI_ANTHROPIC_VERSION,
-        }
-    elif provider == "ollama":
-        thinking_fallback = True
+        from alpha_agent.llm._legacy.kimi import KimiClient
+        return KimiClient(
+            api_key=api_key,
+            base_url=resolved_base,
+            model=resolved_model,
+        )
 
+    # All other providers go through LiteLLM.
+    full_model = f"{defaults['model_prefix']}/{resolved_model}"
+    thinking_fallback = provider == "ollama"
     return LiteLLMClient(
         model=full_model,
         api_key=api_key,
         api_base=resolved_base,
-        extra_headers=extra_headers,
         thinking_fallback=thinking_fallback,
     )
 

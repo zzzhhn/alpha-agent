@@ -24,19 +24,33 @@ from alpha_agent.llm.litellm_client import LiteLLMClient
 # ── Direct provider construction (no FastAPI machinery) ──
 
 
-def test_build_kimi_client_attaches_required_headers() -> None:
+def test_build_kimi_client_uses_legacy_path_for_ua_gate() -> None:
+    """Kimi For Coding gates access via User-Agent. LiteLLM's anthropic
+    provider drops `extra_headers["User-Agent"]` (its underlying SDK
+    sets its own UA), so we route Kimi through the legacy hand-rolled
+    KimiClient, which sets the UA at the httpx layer where it actually
+    reaches the server.
+
+    Regression guard: this test exists because we tried LiteLLM-with-
+    extra_headers first, it shipped, and Kimi started 502'ing with
+    "currently only available for Coding Agents" — see commit history."""
+    from alpha_agent.llm._legacy.kimi import KimiClient
+
     c = _build_byok_client(
         provider="kimi",
         api_key="sk-test-fake",
         api_base=None,
         model=None,
     )
-    assert isinstance(c, LiteLLMClient)
-    assert c._model == "anthropic/kimi-for-coding"
-    assert c._api_base == "https://api.kimi.com/coding/v1"
-    assert c._extra_headers is not None
-    assert c._extra_headers["User-Agent"].startswith("claude-cli/")
-    assert c._extra_headers["anthropic-version"] == "2023-06-01"
+    # MUST be the legacy KimiClient, NOT a LiteLLMClient.
+    assert isinstance(c, KimiClient)
+    # Verify the constructor wired through the user's key + the right
+    # default endpoint.
+    assert c._model == "kimi-for-coding"
+    # The legacy client builds an httpx.AsyncClient internally with the
+    # UA + anthropic-version headers baked in; that's the whole reason
+    # we're using it. No public attribute exposes those, so we trust
+    # the file-level constants of `_legacy/kimi.py`.
 
 
 def test_build_openai_client_no_extra_headers() -> None:
