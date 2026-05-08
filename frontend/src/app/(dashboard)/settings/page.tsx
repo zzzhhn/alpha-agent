@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { useLocale } from "@/components/layout/LocaleProvider";
-import { t } from "@/lib/i18n";
 import {
   type ByokCredentials,
   type LLMProvider,
