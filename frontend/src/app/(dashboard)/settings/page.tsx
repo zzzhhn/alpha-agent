@@ -111,9 +111,13 @@ export default function SettingsPage() {
           ...(model.trim() ? { "X-LLM-Model": model.trim() } : {}),
         },
         body: JSON.stringify({
+          // The translate endpoint enforces budget_tokens ∈ [500, 8000];
+          // 256 here would 422-fail BEFORE reaching the BYOK header check
+          // and look like a credential bug. Send the minimum 500 so the
+          // probe is the cheapest valid request.
           text: "5-day mean reversion",
           universe: "SP500",
-          budget_tokens: 256,
+          budget_tokens: 500,
         }),
       });
       const elapsed = Math.round(performance.now() - started);
@@ -122,7 +126,30 @@ export default function SettingsPage() {
         let detail = body.slice(0, 240);
         try {
           const parsed = JSON.parse(body) as { detail?: unknown };
-          if (parsed?.detail) detail = JSON.stringify(parsed.detail).slice(0, 240);
+          if (parsed?.detail !== undefined) {
+            // FastAPI 422 returns detail as an array of validation errors
+            // like [{ type, loc: ["body","budget_tokens"], msg, ... }].
+            // Render those readably ("body.budget_tokens: msg") instead
+            // of dumping the raw JSON, which made past 422s look like
+            // a BYOK credential issue.
+            if (Array.isArray(parsed.detail)) {
+              detail = parsed.detail
+                .map((e: unknown) => {
+                  if (typeof e === "object" && e !== null) {
+                    const err = e as { loc?: unknown[]; msg?: string };
+                    const path = (err.loc ?? []).join(".");
+                    return `${path}: ${err.msg ?? "validation error"}`;
+                  }
+                  return String(e);
+                })
+                .join("; ")
+                .slice(0, 240);
+            } else if (typeof parsed.detail === "string") {
+              detail = parsed.detail;
+            } else {
+              detail = JSON.stringify(parsed.detail).slice(0, 240);
+            }
+          }
         } catch {
           // body is not JSON — keep raw slice
         }
