@@ -1,13 +1,43 @@
 "use client";
 
+/**
+ * Signal page — workstation port (Stage 3 · 4/9).
+ *
+ * Layout: TmSubbar (universe + status pills + retry) → SIGNAL.FORM
+ * pane (textarea + sliders + neutralize chips + factor examples) →
+ * SIGNAL.TODAY pane (long basket / short basket via TmCols2) →
+ * IC.TIMESERIES pane (4 KPIs + recharts) → EXPOSURE pane (sector +
+ * cap quintile via TmCols2).
+ *
+ * All four child panes are workstation-aesthetic Tm* siblings so we
+ * don't disturb the legacy `/report` page that still imports the
+ * original `TopBottomTable` and `ExposureChart`. They co-exist until
+ * the report page is ported (S3 · 8/9).
+ *
+ * Signal-spec construction, parallel fetch, and survivorship-badge
+ * surfacing are byte-equivalent to the legacy page; only presentation
+ * changed.
+ */
+
 import { useState } from "react";
-import { Card } from "@/components/ui/Card";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { SignalForm, type SignalParams } from "@/components/signal/SignalForm";
-import { TopBottomTable } from "@/components/signal/TopBottomTable";
-import { ICTimeseriesChart } from "@/components/signal/ICTimeseriesChart";
-import { ExposureChart } from "@/components/signal/ExposureChart";
+import { TmScreen } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmStatusPill,
+} from "@/components/tm/TmSubbar";
+import { TmPane } from "@/components/tm/TmPane";
+import {
+  TmSignalForm,
+  type SignalParams,
+} from "@/components/signal/TmSignalForm";
+import { TmTopBottomTable } from "@/components/signal/TmTopBottomTable";
+import { TmICTimeseriesChart } from "@/components/signal/TmICTimeseriesChart";
+import { TmExposureChart } from "@/components/signal/TmExposureChart";
 import { signalToday, signalIcTimeseries, signalExposure } from "@/lib/api";
 import type {
   SignalSpec,
@@ -53,62 +83,71 @@ export default function SignalPage() {
     setRunning(false);
   }
 
-  return (
-    <div className="flex flex-col gap-4 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-text">{t(locale, "signal.title")}</h1>
-        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-          {t(locale, "signal.subtitle")}
-        </p>
-      </header>
+  // Surface the survivorship + neutralize state in the subbar so the
+  // user always sees the methodology guard tags above the results.
+  const survivorshipCorrected = today?.survivorship_corrected ?? false;
+  const survivorshipAsOf = today?.membership_as_of ?? null;
+  const neutralizeMode = today?.neutralize ?? "none";
 
-      <SignalForm running={running} onRun={run} />
+  return (
+    <TmScreen>
+      <TmSubbar>
+        <span className="text-tm-muted">SIGNAL</span>
+        <TmSubbarSep />
+        <TmSubbarKV label="UNIVERSE" value="SP500" />
+        {today && (
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV
+              label="VALID"
+              value={`${today.n_valid}/${today.universe_size}`}
+            />
+            <TmSubbarSep />
+            <TmSubbarKV label="AS_OF" value={today.as_of} />
+          </>
+        )}
+        <TmSubbarSpacer />
+        {today && (
+          <TmStatusPill tone={survivorshipCorrected ? "ok" : "warn"}>
+            {survivorshipCorrected
+              ? `SP500-AS-OF · ${survivorshipAsOf ?? "—"}`
+              : "LEGACY (NO MEMBERSHIP MASK)"}
+          </TmStatusPill>
+        )}
+        {neutralizeMode === "sector" && (
+          <TmStatusPill tone="ok">SECTOR-NEUTRAL</TmStatusPill>
+        )}
+        {running && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
+        {error && <TmStatusPill tone="err">ERROR</TmStatusPill>}
+      </TmSubbar>
+
+      <TmSignalForm running={running} onRun={run} />
 
       {error && (
-        <Card padding="md">
-          <p className="text-base text-red">{error}</p>
-        </Card>
+        <TmPane title="ERROR" meta="signal run failed">
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+            {error}
+          </p>
+        </TmPane>
       )}
 
-      {today && (
-        <SignalSurvivorshipBadge
-          corrected={today.survivorship_corrected ?? false}
-          asOf={today.membership_as_of ?? null}
-          neutralize={today.neutralize ?? "none"}
-        />
-      )}
+      <TmTopBottomTable today={today} loading={running && !today} />
+      <TmICTimeseriesChart data={icTs} loading={running && !icTs} />
+      <TmExposureChart
+        data={exposure}
+        topN={topN}
+        loading={running && !exposure}
+      />
 
-      <TopBottomTable today={today} loading={running && !today} />
-      <ICTimeseriesChart data={icTs} loading={running && !icTs} />
-      <ExposureChart data={exposure} topN={topN} loading={running && !exposure} />
-    </div>
-  );
-}
-
-function SignalSurvivorshipBadge({
-  corrected, asOf, neutralize,
-}: {
-  readonly corrected: boolean;
-  readonly asOf: string | null;
-  readonly neutralize: "none" | "sector";
-}) {
-  const { locale } = useLocale();
-  return (
-    <div className="flex flex-wrap gap-2">
-      {corrected ? (
-        <span className="inline-block rounded-md border border-green/40 bg-green/10 px-2 py-0.5 text-[11px] text-green">
-          {t(locale, "backtest.kpi.survivorshipCorrected").replace("{date}", asOf ?? "—")}
-        </span>
-      ) : (
-        <span className="inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600 dark:text-amber-400">
-          {t(locale, "backtest.kpi.survivorshipLegacy")}
-        </span>
+      {/* Footer hint when nothing has been run yet — keeps the screen
+          from ending in raw bg-tm-bg if the user just landed. */}
+      {!today && !icTs && !exposure && !running && (
+        <TmPane title="USAGE" meta="hint">
+          <p className="px-3 py-2 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+            {t(locale, "signal.subtitle")}
+          </p>
+        </TmPane>
       )}
-      {neutralize === "sector" && (
-        <span className="inline-block rounded-md border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
-          ✓ {t(locale, "backtest.form.neutralize.sector")}
-        </span>
-      )}
-    </div>
+    </TmScreen>
   );
 }
