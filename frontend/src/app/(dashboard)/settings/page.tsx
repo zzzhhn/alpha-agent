@@ -8,7 +8,13 @@
  * credentials here; values live in browser localStorage and ship as
  * X-LLM-* headers on every request via `lib/byok.ts`.
  *
- * UX goals:
+ * Stage 3 (redesign): visual layer ported to the workstation aesthetic
+ * via the `tm/*` primitive set. ALL business logic (state shape,
+ * effects, save/test/clear handlers, error parsing, request payload)
+ * is unchanged from the previous version. The diff is purely
+ * className + container components.
+ *
+ * UX goals (unchanged):
  *   * Clear what's stored where (localStorage, never on our server)
  *   * One-click test against the configured provider before saving
  *   * Easy clear / reset
@@ -16,10 +22,14 @@
  */
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { TmPane } from "@/components/tm/TmPane";
+import { TmButton } from "@/components/tm/TmButton";
+import {
+  TmFieldShell,
+  TmInput,
+  TmSelect,
+} from "@/components/tm/TmField";
 import {
   type ByokCredentials,
   type LLMProvider,
@@ -178,132 +188,141 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-[var(--text)]">
-          {zh ? "LLM 凭证（BYOK）" : "LLM Credentials (BYOK)"}
-        </h1>
-        <p className="text-sm text-[var(--muted)]">
+    <div className="mx-auto flex max-w-3xl flex-col gap-4 font-tm-mono">
+      {/* Page header pane — terminal aesthetic title row replaces the
+          large h1 + lede paragraph from the legacy version. */}
+      <TmPane
+        title="SETTINGS / BYOK"
+        meta={zh ? "本地凭证 · 仅浏览器存储" : "local credentials · browser-only"}
+      >
+        <p className="px-3 py-2.5 text-[11.5px] leading-relaxed text-tm-fg-2">
           {zh
             ? "你的 API key 只保存在本浏览器的 localStorage，每次请求作为 header 发送给后端用于调用大模型。alpha-agent 服务器从不存储或日志记录你的 key。"
             : "Your API key is stored in this browser's localStorage and sent as a request header on each LLM call. The alpha-agent server never stores or logs your key."}
         </p>
-      </header>
+      </TmPane>
 
-      <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--card)] p-5">
-        <Select
-          label={zh ? "服务商" : "Provider"}
-          value={provider}
-          onChange={(v) => {
-            setProvider(v as LLMProvider);
-            // Clear test result so a stale "OK" doesn't carry over to a
-            // different provider's draft credentials.
-            setTestState({ kind: "idle" });
-          }}
-          options={PROVIDER_OPTIONS}
-        />
-        <p className="-mt-2 text-xs text-[var(--muted)]">{preset.help}</p>
-
-        {/* API key field — bypass the shared Input component because we
-            need <input type="password"> for native masking that doesn't
-            interfere with editing (a value-replacement mask, like the
-            previous version, makes typing into a non-revealed field
-            confusing). */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[13px] text-muted">API Key</label>
-          <input
-            type={revealKey ? "text" : "password"}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={
-              provider === "ollama"
-                ? zh ? "Ollama 不需要 key（任意填写）" : "Not required for Ollama"
-                : "sk-..."
-            }
-            className="rounded-md border border-[var(--border)] bg-[var(--bg-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
+      {/* Credentials form pane */}
+      <TmPane title="CREDENTIALS" meta={preset.help}>
+        <div className="flex flex-col gap-3 px-3 py-3">
+          <TmSelect
+            label={zh ? "服务商 / PROVIDER" : "PROVIDER"}
+            value={provider}
+            onChange={(v) => {
+              setProvider(v as LLMProvider);
+              // Clear test result so a stale "OK" doesn't carry over to a
+              // different provider's draft credentials.
+              setTestState({ kind: "idle" });
+            }}
+            options={PROVIDER_OPTIONS}
           />
-          <button
-            type="button"
-            onClick={() => setRevealKey((r) => !r)}
-            className="self-start text-xs text-[var(--accent)] hover:underline"
-          >
-            {revealKey
-              ? zh ? "隐藏" : "Hide"
-              : zh ? "显示" : "Reveal"}
-          </button>
-        </div>
 
-        <Input
-          label={zh ? "Base URL（可选，留空用默认）" : "Base URL (optional)"}
-          value={baseUrl}
-          onChange={setBaseUrl}
-          placeholder={preset.defaultBase}
-        />
-        <Input
-          label={zh ? "模型 ID（可选）" : "Model ID (optional)"}
-          value={model}
-          onChange={setModel}
-          placeholder={preset.defaultModel}
-        />
+          {/* API key field — bypass the standard text input because we
+              need <input type="password"> for native masking that doesn't
+              interfere with editing. The reveal toggle sits below the
+              input as an inline secondary control. */}
+          <TmFieldShell label={zh ? "API KEY" : "API KEY"}>
+            <input
+              type={revealKey ? "text" : "password"}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={
+                provider === "ollama"
+                  ? zh ? "Ollama 不需要 key（任意填写）" : "Not required for Ollama"
+                  : "sk-..."
+              }
+              className="h-8 w-full border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[12px] text-tm-fg outline-none transition-colors placeholder:text-tm-muted focus:border-tm-accent"
+            />
+            <button
+              type="button"
+              onClick={() => setRevealKey((r) => !r)}
+              className="self-start text-[10.5px] uppercase tracking-[0.06em] text-tm-info hover:text-tm-fg"
+            >
+              {revealKey
+                ? zh ? "隐藏" : "HIDE"
+                : zh ? "显示" : "REVEAL"}
+            </button>
+          </TmFieldShell>
 
-        <div className="rounded-md border border-[var(--border)] bg-[var(--bg-2)] p-3 text-xs text-[var(--muted)]">
-          <div>
-            {zh ? "实际请求将使用：" : "The request will use:"}
+          <TmInput
+            label={zh ? "BASE URL（可选，留空用默认）" : "BASE URL (optional)"}
+            value={baseUrl}
+            onChange={setBaseUrl}
+            placeholder={preset.defaultBase}
+          />
+          <TmInput
+            label={zh ? "MODEL ID（可选）" : "MODEL ID (optional)"}
+            value={model}
+            onChange={setModel}
+            placeholder={preset.defaultModel}
+          />
+
+          {/* Effective-config readout — terminal-style code block. */}
+          <div className="border border-tm-rule bg-tm-bg-3 px-3 py-2 text-[10.5px] text-tm-muted">
+            <div className="uppercase tracking-[0.06em]">
+              {zh ? "实际请求将使用：" : "REQUEST WILL USE"}
+            </div>
+            <code className="mt-1 block break-all text-tm-fg-2">
+              {provider} · {effectiveBase} · {effectiveModel}
+            </code>
           </div>
-          <code className="mt-1 block break-all text-[var(--text-secondary)]">
-            {provider} · {effectiveBase} · {effectiveModel}
-          </code>
+
+          <div className="flex flex-wrap gap-2">
+            <TmButton variant="primary" onClick={handleSave} disabled={!canSave}>
+              {zh ? "保存" : "SAVE"}
+            </TmButton>
+            <TmButton
+              variant="secondary"
+              onClick={handleTest}
+              disabled={!canSave || testState.kind === "running"}
+            >
+              {testState.kind === "running"
+                ? zh ? "测试中…" : "TESTING…"
+                : zh ? "测试连通" : "TEST CONNECTION"}
+            </TmButton>
+            <TmButton variant="ghost" onClick={handleClear}>
+              {zh ? "清除已保存" : "CLEAR SAVED"}
+            </TmButton>
+          </div>
+
+          {savedAt && (
+            <p className="text-[10.5px] uppercase tracking-[0.06em] text-tm-pos">
+              {zh ? `已保存于 ${savedAt}` : `SAVED AT ${savedAt}`}
+            </p>
+          )}
+
+          {testState.kind === "ok" && (
+            <p className="text-[10.5px] uppercase tracking-[0.04em] text-tm-pos">
+              {zh
+                ? `✓ 连通正常（${testState.ms}ms，prompt ${testState.tokens.prompt} / completion ${testState.tokens.completion} tokens）`
+                : `✓ CONNECTED · ${testState.ms}ms · ${testState.tokens.prompt} prompt / ${testState.tokens.completion} completion tokens`}
+            </p>
+          )}
+          {testState.kind === "fail" && (
+            <p className="text-[10.5px] text-tm-neg">
+              {zh ? "✗ 失败：" : "✗ FAILED: "}
+              {testState.status ? `HTTP ${testState.status} · ` : ""}
+              {testState.message}
+            </p>
+          )}
         </div>
+      </TmPane>
 
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={handleSave} disabled={!canSave}>
-            {zh ? "保存" : "Save"}
-          </Button>
-          <Button variant="secondary" onClick={handleTest} disabled={!canSave || testState.kind === "running"}>
-            {testState.kind === "running"
-              ? zh ? "测试中…" : "Testing…"
-              : zh ? "测试连通" : "Test connection"}
-          </Button>
-          <Button variant="ghost" onClick={handleClear}>
-            {zh ? "清除已保存" : "Clear saved"}
-          </Button>
-        </div>
-
-        {savedAt && (
-          <p className="text-xs text-[var(--green)]">
-            {zh ? `已保存于 ${savedAt}` : `Saved at ${savedAt}`}
-          </p>
-        )}
-
-        {testState.kind === "ok" && (
-          <p className="text-xs text-[var(--green)]">
+      {/* Footnotes pane — origin-scoping warnings. */}
+      <TmPane title="NOTES" meta={zh ? "凭证存储说明" : "credential storage"}>
+        <div className="flex flex-col gap-1.5 px-3 py-2.5 text-[10.5px] leading-relaxed text-tm-muted">
+          <p>
             {zh
-              ? `✓ 连通正常（${testState.ms}ms，prompt ${testState.tokens.prompt} tokens / completion ${testState.tokens.completion} tokens）`
-              : `✓ Connected (${testState.ms}ms, ${testState.tokens.prompt} prompt / ${testState.tokens.completion} completion tokens)`}
+              ? "提示：localStorage 仅在本浏览器、本域名下可见。换浏览器或换设备需要重新填写。"
+              : "Note: localStorage is scoped to this browser and origin. You'll need to re-enter on a different browser or device."}
           </p>
-        )}
-        {testState.kind === "fail" && (
-          <p className="text-xs text-[var(--red)]">
-            {zh ? "✗ 失败：" : "✗ Failed: "}
-            {testState.status ? `HTTP ${testState.status} · ` : ""}
-            {testState.message}
+          <p>
+            {zh
+              ? "提示：preview 部署 URL 与 production 是不同 origin，凭证不会跨越。"
+              : "Note: Vercel preview URLs and production are separate origins; credentials won't carry across."}
           </p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2 text-xs text-[var(--muted)]">
-        <p>
-          {zh
-            ? "提示：localStorage 仅在本浏览器、本域名下可见。换浏览器或换设备需要重新填写。"
-            : "Note: localStorage is scoped to this browser and origin. You'll need to re-enter on a different browser or device."}
-        </p>
-        <p>
-          {zh
-            ? "提示：preview 部署 URL 与 production 是不同 origin，凭证不会跨越。"
-            : "Note: Vercel preview URLs and production are separate origins; credentials won't carry across."}
-        </p>
-      </div>
+        </div>
+      </TmPane>
     </div>
   );
 }
-
