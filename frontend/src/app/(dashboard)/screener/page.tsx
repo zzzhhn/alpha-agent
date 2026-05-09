@@ -1,22 +1,50 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Slider } from "@/components/ui/Slider";
+/**
+ * Screener page — workstation port (Stage 3 · 6/9).
+ *
+ * Layout: TmSubbar (factor counts + status + run button) →
+ *   SCREENER.FACTORS pane (Zoo factor picker, sortable hairline grid) →
+ *   TmCols2 (UNIVERSE.FILTER | COMBINE.PARAMS) →
+ *   RESULTS pane (KPI strip + recommendations + expandable contribution
+ *     bars + CSV export action) →
+ *   DIAGNOSTICS pane (per-factor IC / weight / eligibility table).
+ *
+ * Behavior preserved byte-for-byte: sessionStorage prefill from /factors
+ * (PREFILL_KEY → ids[]), runScreener payload assembly (sectors/exclude
+ * tokenize the same way), CSV export with same header order, expand /
+ * collapse one ticker at a time, survivorship + neutralize badges.
+ */
+
+import { Fragment, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
-import { listZoo, readDirection, type ZooEntry, type ZooDirection } from "@/lib/factor-zoo";
+import {
+  listZoo,
+  readDirection,
+  type ZooEntry,
+  type ZooDirection,
+} from "@/lib/factor-zoo";
 import { runScreener } from "@/lib/api";
 import type {
   CombineMethod,
   ScreenerFactorInput,
   ScreenerResponse,
 } from "@/lib/types";
+import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmStatusPill,
+  TmChip,
+} from "@/components/tm/TmSubbar";
+import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput, TmSelect } from "@/components/tm/TmField";
 
-/** sessionStorage key used by /factors → /screener handoff (D4). Payload
- *  shape: `{ ids: string[] }` — IDs of Zoo entries to pre-select. */
 const PREFILL_KEY = "alphacore.screener.prefill.v1";
 
 interface FactorSelection {
@@ -43,7 +71,7 @@ export default function ScreenerPage() {
   const [result, setResult] = useState<ScreenerResponse | null>(null);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
-  // Initial Zoo load + handoff prefill from /factors page.
+  // Initial Zoo load + handoff prefill from /factors.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const entries = listZoo();
@@ -111,7 +139,8 @@ export default function ScreenerPage() {
           operators_used: [...extractOps(entry.expression)],
           lookback: 12,
           universe: "SP500",
-          justification: entry.intuition ?? entry.hypothesis ?? "screener factor",
+          justification:
+            entry.intuition ?? entry.hypothesis ?? "screener factor",
         },
         direction: sel.direction,
         weight: sel.weight,
@@ -153,8 +182,12 @@ export default function ScreenerPage() {
   function exportCsv() {
     if (!result) return;
     const headers = [
-      "rank", "ticker", "sector", "cap", "composite",
-      ...result.factor_diagnostics.map((d, i) => `factor${i}_z`),
+      "rank",
+      "ticker",
+      "sector",
+      "cap",
+      "composite",
+      ...result.factor_diagnostics.map((_, i) => `factor${i}_z`),
     ];
     const rows = result.recommendations.map((r) => [
       String(r.rank),
@@ -176,18 +209,69 @@ export default function ScreenerPage() {
     URL.revokeObjectURL(url);
   }
 
-  return (
-    <div className="flex flex-col gap-4 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-text">
-          {t(locale, "screener.title")}
-        </h1>
-        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-          {t(locale, "screener.subtitle")}
-        </p>
-      </header>
+  const survivorshipCorrected = result?.metadata.survivorship_corrected ?? false;
+  const survivorshipAsOf = result?.metadata.membership_as_of ?? null;
 
-      <FactorPickerCard
+  return (
+    <TmScreen>
+      <TmSubbar>
+        <span className="text-tm-muted">SCREENER</span>
+        <TmSubbarSep />
+        <TmSubbarKV label="ZOO" value={zoo.length.toString()} />
+        <TmSubbarSep />
+        <TmSubbarKV
+          label="SELECTED"
+          value={selections.length.toString()}
+        />
+        <TmSubbarSep />
+        <TmSubbarKV label="TOP_N" value={topN.toString()} />
+        {result && (
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV
+              label="AS_OF"
+              value={result.metadata.as_of_date}
+            />
+            <TmSubbarSep />
+            <TmSubbarKV
+              label="ELIGIBLE"
+              value={result.metadata.n_eligible_tickers.toString()}
+            />
+          </>
+        )}
+        <TmSubbarSpacer />
+        {result && (
+          <TmStatusPill tone={survivorshipCorrected ? "ok" : "warn"}>
+            {survivorshipCorrected
+              ? `SP500-AS-OF · ${survivorshipAsOf ?? "—"}`
+              : "LEGACY (NO MEMBERSHIP MASK)"}
+          </TmStatusPill>
+        )}
+        {result?.metadata.neutralize === "sector" && (
+          <TmStatusPill tone="ok">SECTOR-NEUTRAL</TmStatusPill>
+        )}
+        {running && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
+        {error && <TmStatusPill tone="err">ERROR</TmStatusPill>}
+        <TmButton
+          variant="primary"
+          onClick={run}
+          disabled={running || selections.length === 0}
+          className="-my-1 px-3"
+        >
+          {running ? t(locale, "screener.running") : t(locale, "screener.run")}
+        </TmButton>
+      </TmSubbar>
+
+      {error && (
+        <TmPane title="ERROR" meta="screener run failed">
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+            {error}
+          </p>
+        </TmPane>
+      )}
+
+      {/* SCREENER.FACTORS — Zoo picker */}
+      <FactorPickerPane
         zoo={zoo}
         selectedById={selectedById}
         onToggle={toggleFactor}
@@ -195,88 +279,34 @@ export default function ScreenerPage() {
         showWeights={combineMethod === "user_weighted"}
       />
 
-      <UniverseFilterCard
-        sectorsInput={sectorsInput}
-        onSectors={setSectorsInput}
-        excludeInput={excludeInput}
-        onExclude={setExcludeInput}
-        minCap={minCap}
-        onMinCap={setMinCap}
-        maxCap={maxCap}
-        onMaxCap={setMaxCap}
-      />
-
-      <CombineParamsCard
-        lookback={lookback}
-        onLookback={setLookback}
-        topN={topN}
-        onTopN={setTopN}
-        combineMethod={combineMethod}
-        onCombineMethod={setCombineMethod}
-        asOfDate={asOfDate}
-        onAsOfDate={setAsOfDate}
-      />
-
-      <Card padding="md">
-        <div className="flex items-center gap-2 text-[13px] text-muted">
-          <span>{t(locale, "backtest.form.neutralize")}:</span>
-          {(["none", "sector"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setNeutralize(mode)}
-              className={`rounded px-2 py-0.5 text-[12px] ${
-                neutralize === mode
-                  ? "bg-accent text-white"
-                  : "bg-[var(--toggle-bg)] text-muted hover:text-text"
-              }`}
-            >
-              {t(locale, `backtest.form.neutralize.${mode}`)}
-            </button>
-          ))}
-          <span className="text-[12px] text-muted">
-            {t(locale, "backtest.form.neutralizeHint")}
-          </span>
-        </div>
-      </Card>
-
-      <div className="flex justify-end">
-        <Button onClick={run} disabled={running || selections.length === 0}>
-          {running ? t(locale, "screener.running") : t(locale, "screener.run")}
-        </Button>
-      </div>
-
-      {error && (
-        <Card padding="md">
-          <p className="text-base text-red">
-            {t(locale, "screener.error")}: {error}
-          </p>
-        </Card>
-      )}
+      {/* UNIVERSE.FILTER | COMBINE.PARAMS */}
+      <TmCols2>
+        <UniverseFilterPane
+          sectorsInput={sectorsInput}
+          onSectors={setSectorsInput}
+          excludeInput={excludeInput}
+          onExclude={setExcludeInput}
+          minCap={minCap}
+          onMinCap={setMinCap}
+          maxCap={maxCap}
+          onMaxCap={setMaxCap}
+        />
+        <CombineParamsPane
+          lookback={lookback}
+          onLookback={setLookback}
+          topN={topN}
+          onTopN={setTopN}
+          combineMethod={combineMethod}
+          onCombineMethod={setCombineMethod}
+          asOfDate={asOfDate}
+          onAsOfDate={setAsOfDate}
+          neutralize={neutralize}
+          onNeutralize={setNeutralize}
+        />
+      </TmCols2>
 
       {result && (
-        <div className="flex flex-wrap gap-2">
-          {result.metadata.survivorship_corrected ? (
-            <span className="inline-block rounded-md border border-green/40 bg-green/10 px-2 py-0.5 text-[11px] text-green">
-              {t(locale, "backtest.kpi.survivorshipCorrected").replace(
-                "{date}", String(result.metadata.membership_as_of ?? "—"),
-              )}
-            </span>
-          ) : (
-            <span className="inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600 dark:text-amber-400">
-              {t(locale, "backtest.kpi.survivorshipLegacy")}
-            </span>
-          )}
-          {result.metadata.neutralize === "sector" && (
-            <span className="inline-block rounded-md border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
-              ✓ {t(locale, "backtest.form.neutralize.sector")}
-            </span>
-          )}
-        </div>
-      )}
-
-      {result && (
-        <ResultsCard
+        <ResultsPane
           result={result}
           expandedTicker={expandedTicker}
           onExpand={setExpandedTicker}
@@ -285,16 +315,28 @@ export default function ScreenerPage() {
       )}
 
       {result && result.factor_diagnostics.length > 0 && (
-        <DiagnosticsCard diagnostics={result.factor_diagnostics} />
+        <DiagnosticsPane diagnostics={result.factor_diagnostics} />
       )}
-    </div>
+
+      {!result && !running && (
+        <TmPane title="USAGE" meta="hint">
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+            {t(locale, "screener.subtitle")}
+          </p>
+        </TmPane>
+      )}
+    </TmScreen>
   );
 }
 
-/* ── Subcomponents ─────────────────────────────────────────────────────── */
+/* ── SCREENER.FACTORS pane ────────────────────────────────────────── */
 
-function FactorPickerCard({
-  zoo, selectedById, onToggle, onUpdate, showWeights,
+function FactorPickerPane({
+  zoo,
+  selectedById,
+  onToggle,
+  onUpdate,
+  showWeights,
 }: {
   readonly zoo: readonly ZooEntry[];
   readonly selectedById: Map<string, FactorSelection>;
@@ -303,105 +345,190 @@ function FactorPickerCard({
   readonly showWeights: boolean;
 }) {
   const { locale } = useLocale();
+  const selectedCount = selectedById.size;
 
-  return (
-    <Card padding="md">
-      <header className="mb-3">
-        <h2 className="text-base font-semibold text-text">
-          {t(locale, "screener.factors.title")}
-        </h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-muted">
-          {t(locale, "screener.factors.subtitle")}
-        </p>
-      </header>
-
-      {zoo.length === 0 ? (
-        <p className="py-6 text-center text-[14px] text-muted">
+  if (zoo.length === 0) {
+    return (
+      <TmPane title="SCREENER.FACTORS" meta="ZOO EMPTY">
+        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
           {t(locale, "screener.factors.empty")}
         </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead className="bg-[var(--toggle-bg)]">
-              <tr>
-                <th className="w-10 px-2 py-1.5"></th>
-                <th className="px-2 py-1.5 text-left font-medium text-muted">
-                  {t(locale, "screener.factors.colName")}
-                </th>
-                <th className="px-2 py-1.5 text-left font-medium text-muted">
-                  {t(locale, "screener.factors.colDirection")}
-                </th>
-                {showWeights && (
-                  <th className="px-2 py-1.5 text-right font-medium text-muted">
-                    {t(locale, "screener.factors.colWeight")}
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {zoo.map((e) => {
-                const sel = selectedById.get(e.id);
-                return (
-                  <tr key={e.id} className="border-t border-border">
-                    <td className="px-2 py-1.5 text-center">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(sel)}
-                        onChange={() => onToggle(e)}
-                        className="cursor-pointer"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <div className="font-mono text-text">{e.name}</div>
-                      <div className="font-mono text-[12px] text-muted truncate max-w-[400px]" title={e.expression}>
-                        {e.expression}
-                      </div>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      {sel ? (
-                        <select
-                          value={sel.direction}
-                          onChange={(ev) => onUpdate(e.id, { direction: ev.target.value as ZooDirection })}
-                          className="rounded border border-border bg-[var(--toggle-bg)] px-2 py-1 text-[12px] text-text"
-                        >
-                          <option value="long_short">long_short</option>
-                          <option value="long_only">long_only</option>
-                          <option value="short_only">short_only</option>
-                        </select>
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
-                    </td>
-                    {showWeights && (
-                      <td className="px-2 py-1.5 text-right">
-                        {sel ? (
-                          <input
-                            type="number"
-                            min={0}
-                            max={10}
-                            step={0.1}
-                            value={sel.weight}
-                            onChange={(ev) => onUpdate(e.id, { weight: Number(ev.target.value) })}
-                            className="w-20 rounded border border-border bg-[var(--toggle-bg)] px-2 py-1 text-right font-mono text-text"
-                          />
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      </TmPane>
+    );
+  }
+
+  return (
+    <TmPane
+      title="SCREENER.FACTORS"
+      meta={`${selectedCount} / ${zoo.length} SELECTED`}
+    >
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+        {t(locale, "screener.factors.subtitle")}
+      </p>
+      <div className="overflow-x-auto">
+        <div
+          className="grid min-w-[860px] gap-px bg-tm-rule"
+          style={{
+            gridTemplateColumns: showWeights
+              ? "32px minmax(140px, 200px) 1fr minmax(140px, 160px) minmax(80px, 100px)"
+              : "32px minmax(140px, 200px) 1fr minmax(140px, 160px)",
+          }}
+        >
+          <PHeader>·</PHeader>
+          <PHeader>{t(locale, "screener.factors.colName")}</PHeader>
+          <PHeader>{t(locale, "zoo.colExpr")}</PHeader>
+          <PHeader>{t(locale, "screener.factors.colDirection")}</PHeader>
+          {showWeights && (
+            <PHeader align="right">
+              {t(locale, "screener.factors.colWeight")}
+            </PHeader>
+          )}
+          {zoo.map((e) => {
+            const sel = selectedById.get(e.id);
+            return (
+              <PickerRow
+                key={e.id}
+                entry={e}
+                selection={sel}
+                showWeights={showWeights}
+                onToggle={() => onToggle(e)}
+                onUpdate={(patch) => onUpdate(e.id, patch)}
+              />
+            );
+          })}
         </div>
-      )}
-    </Card>
+      </div>
+    </TmPane>
   );
 }
 
-function UniverseFilterCard({
-  sectorsInput, onSectors, excludeInput, onExclude, minCap, onMinCap, maxCap, onMaxCap,
+function PickerRow({
+  entry,
+  selection,
+  showWeights,
+  onToggle,
+  onUpdate,
+}: {
+  readonly entry: ZooEntry;
+  readonly selection: FactorSelection | undefined;
+  readonly showWeights: boolean;
+  readonly onToggle: () => void;
+  readonly onUpdate: (patch: Partial<FactorSelection>) => void;
+}) {
+  const isSelected = Boolean(selection);
+  const directionOptions = useMemo(
+    () => [
+      { value: "long_short", label: "long_short" },
+      { value: "long_only", label: "long_only" },
+      { value: "short_only", label: "short_only" },
+    ],
+    [],
+  );
+  return (
+    <>
+      <PCell>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggle}
+          className="cursor-pointer accent-[var(--tm-accent)]"
+        />
+      </PCell>
+      <PCell>
+        <span
+          className={`truncate ${isSelected ? "text-tm-accent" : "text-tm-fg"}`}
+        >
+          {entry.name}
+        </span>
+      </PCell>
+      <PCell title={entry.expression}>
+        <span className="block truncate text-tm-fg-2">{entry.expression}</span>
+      </PCell>
+      <PCell>
+        {selection ? (
+          <TmSelect
+            value={selection.direction}
+            onChange={(v) => onUpdate({ direction: v as ZooDirection })}
+            options={directionOptions}
+            className="w-full"
+          />
+        ) : (
+          <span className="text-tm-muted">—</span>
+        )}
+      </PCell>
+      {showWeights && (
+        <PCell align="right">
+          {selection ? (
+            <input
+              type="number"
+              min={0}
+              max={10}
+              step={0.1}
+              value={selection.weight}
+              onChange={(ev: ChangeEvent<HTMLInputElement>) =>
+                onUpdate({ weight: Number(ev.target.value) })
+              }
+              className="h-7 w-full border border-tm-rule bg-tm-bg-2 px-2 text-right font-tm-mono text-[11px] tabular-nums text-tm-fg outline-none focus:border-tm-accent"
+            />
+          ) : (
+            <span className="text-tm-muted">—</span>
+          )}
+        </PCell>
+      )}
+    </>
+  );
+}
+
+function PHeader({
+  children,
+  align = "left",
+}: {
+  readonly children: React.ReactNode;
+  readonly align?: "left" | "right";
+}) {
+  return (
+    <div
+      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+        align === "right" ? "text-right" : ""
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PCell({
+  children,
+  align = "left",
+  title,
+}: {
+  readonly children: React.ReactNode;
+  readonly align?: "left" | "right";
+  readonly title?: string;
+}) {
+  return (
+    <div
+      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
+        align === "right" ? "justify-end" : ""
+      }`}
+      title={title}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ── UNIVERSE.FILTER pane ─────────────────────────────────────────── */
+
+function UniverseFilterPane({
+  sectorsInput,
+  onSectors,
+  excludeInput,
+  onExclude,
+  minCap,
+  onMinCap,
+  maxCap,
+  onMaxCap,
 }: {
   readonly sectorsInput: string;
   readonly onSectors: (v: string) => void;
@@ -414,46 +541,54 @@ function UniverseFilterCard({
 }) {
   const { locale } = useLocale();
   return (
-    <Card padding="md">
-      <header className="mb-3">
-        <h2 className="text-base font-semibold text-text">
-          {t(locale, "screener.universe.title")}
-        </h2>
-      </header>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <LabelledInput
+    <TmPane title="UNIVERSE.FILTER" meta="4 FIELDS">
+      <div className="grid grid-cols-1 gap-3 px-3 py-3 md:grid-cols-2">
+        <TmInput
           label={t(locale, "screener.universe.sectors")}
           value={sectorsInput}
           onChange={onSectors}
           placeholder="Technology, Healthcare"
+          hint="comma / space separated; case-insensitive"
         />
-        <LabelledInput
+        <TmInput
           label={t(locale, "screener.universe.exclude")}
           value={excludeInput}
           onChange={onExclude}
           placeholder="TSLA, NVDA"
+          hint="upper-cased on submit"
         />
-        <LabelledInput
+        <TmInput
           label={t(locale, "screener.universe.minCap")}
           value={minCap}
           onChange={onMinCap}
           placeholder="10000000000"
-          numeric
+          type="number"
         />
-        <LabelledInput
+        <TmInput
           label={t(locale, "screener.universe.maxCap")}
           value={maxCap}
           onChange={onMaxCap}
           placeholder="3000000000000"
-          numeric
+          type="number"
         />
       </div>
-    </Card>
+    </TmPane>
   );
 }
 
-function CombineParamsCard({
-  lookback, onLookback, topN, onTopN, combineMethod, onCombineMethod, asOfDate, onAsOfDate,
+/* ── COMBINE.PARAMS pane ──────────────────────────────────────────── */
+
+function CombineParamsPane({
+  lookback,
+  onLookback,
+  topN,
+  onTopN,
+  combineMethod,
+  onCombineMethod,
+  asOfDate,
+  onAsOfDate,
+  neutralize,
+  onNeutralize,
 }: {
   readonly lookback: number;
   readonly onLookback: (v: number) => void;
@@ -463,6 +598,8 @@ function CombineParamsCard({
   readonly onCombineMethod: (v: CombineMethod) => void;
   readonly asOfDate: string;
   readonly onAsOfDate: (v: string) => void;
+  readonly neutralize: "none" | "sector";
+  readonly onNeutralize: (v: "none" | "sector") => void;
 }) {
   const { locale } = useLocale();
   const methods: readonly { value: CombineMethod; labelKey: string }[] = [
@@ -471,57 +608,126 @@ function CombineParamsCard({
     { value: "user_weighted", labelKey: "screener.params.combineUserWeighted" },
   ];
   return (
-    <Card padding="md">
-      <header className="mb-3">
-        <h2 className="text-base font-semibold text-text">
-          {t(locale, "screener.params.title")}
-        </h2>
-      </header>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Slider
-          label={t(locale, "screener.params.lookback")}
-          min={10} max={252} step={10}
-          value={lookback} onChange={onLookback} unit="d"
-        />
-        <Slider
-          label={t(locale, "screener.params.topN")}
-          min={5} max={100} step={5}
-          value={topN} onChange={onTopN} unit=""
-        />
+    <TmPane title="COMBINE.PARAMS" meta="4 KNOBS">
+      <div className="flex flex-col gap-3 px-3 py-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <TmSlider
+            label={t(locale, "screener.params.lookback")}
+            min={10}
+            max={252}
+            step={10}
+            value={lookback}
+            unit="d"
+            onChange={onLookback}
+          />
+          <TmSlider
+            label={t(locale, "screener.params.topN")}
+            min={5}
+            max={100}
+            step={5}
+            value={topN}
+            onChange={onTopN}
+          />
+        </div>
         <div>
-          <label className="mb-1 block text-[13px] text-muted">
+          <span className="mb-1 block font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
             {t(locale, "screener.params.combine")}
-          </label>
-          <div className="flex flex-wrap gap-2">
+          </span>
+          <div className="flex flex-wrap gap-1.5">
             {methods.map((m) => (
-              <button
+              <TmChip
                 key={m.value}
-                type="button"
+                on={combineMethod === m.value}
                 onClick={() => onCombineMethod(m.value)}
-                className={
-                  combineMethod === m.value
-                    ? "rounded-md bg-accent/15 px-2 py-1 text-[12px] text-accent"
-                    : "rounded-md px-2 py-1 text-[12px] text-muted hover:bg-[var(--toggle-bg)] hover:text-text"
-                }
               >
                 {t(locale, m.labelKey as Parameters<typeof t>[1])}
-              </button>
+              </TmChip>
             ))}
           </div>
         </div>
-        <LabelledInput
+        <div>
+          <span className="mb-1 block font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+            {t(locale, "backtest.form.neutralize")}
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["none", "sector"] as const).map((m) => (
+              <TmChip
+                key={m}
+                on={neutralize === m}
+                onClick={() => onNeutralize(m)}
+              >
+                {t(locale, `backtest.form.neutralize.${m}`)}
+              </TmChip>
+            ))}
+            <span className="ml-2 font-tm-mono text-[10px] text-tm-muted">
+              {t(locale, "backtest.form.neutralizeHint")}
+            </span>
+          </div>
+        </div>
+        <TmInput
           label={t(locale, "screener.params.asOf")}
           value={asOfDate}
           onChange={onAsOfDate}
           placeholder="YYYY-MM-DD"
+          hint="leave blank for panel last day"
         />
       </div>
-    </Card>
+    </TmPane>
   );
 }
 
-function ResultsCard({
-  result, expandedTicker, onExpand, onExport,
+/* ── Slider ───────────────────────────────────────────────────────── */
+
+function TmSlider({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  unit = "",
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly min: number;
+  readonly max: number;
+  readonly step?: number;
+  readonly unit?: string;
+  readonly onChange: (n: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between font-tm-mono">
+        <label className="text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+          {label}
+        </label>
+        <span className="text-[12px] tabular-nums text-tm-fg">
+          {value}
+          {unit}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+          onChange(Number(e.target.value))
+        }
+        className="h-1 w-full accent-[var(--tm-accent)]"
+      />
+    </div>
+  );
+}
+
+/* ── RESULTS pane ─────────────────────────────────────────────────── */
+
+function ResultsPane({
+  result,
+  expandedTicker,
+  onExpand,
+  onExport,
 }: {
   readonly result: ScreenerResponse;
   readonly expandedTicker: string | null;
@@ -530,120 +736,225 @@ function ResultsCard({
 }) {
   const { locale } = useLocale();
   const recs = result.recommendations;
-  const subtitle = t(locale, "screener.results.subtitle").replace("{n}", String(recs.length));
+  const subtitle = t(locale, "screener.results.subtitle").replace(
+    "{n}",
+    String(recs.length),
+  );
+
+  // Surface aggregate stats above the table — gives a 1-glance read on
+  // composite quality vs the eligible universe.
+  const composites = recs.map((r) => r.composite_score);
+  const meanComposite =
+    composites.length > 0
+      ? composites.reduce((a, b) => a + b, 0) / composites.length
+      : 0;
+  const topScore = composites[0] ?? 0;
 
   return (
-    <Card padding="md">
-      <header className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-text">
-            {t(locale, "screener.results.title")}
-          </h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-muted">
-            {subtitle}
-          </p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={onExport}>
+    <TmPane
+      title="SCREENER.RESULTS"
+      meta={`${recs.length} TOP · ${result.metadata.method}`}
+    >
+      <TmKpiGrid>
+        <TmKpi
+          label="N_ELIGIBLE"
+          value={result.metadata.n_eligible_tickers.toString()}
+          sub="post-filter universe"
+        />
+        <TmKpi
+          label="TOP_SCORE"
+          value={topScore.toFixed(3)}
+          tone={topScore > 0 ? "pos" : "neg"}
+          sub="rank #1 composite"
+        />
+        <TmKpi
+          label="AVG_SCORE"
+          value={meanComposite.toFixed(3)}
+          tone={meanComposite > 0 ? "pos" : "neg"}
+          sub={`${recs.length} basket`}
+        />
+        <TmKpi
+          label="METHOD"
+          value={result.metadata.method.toUpperCase()}
+          sub="combine"
+        />
+      </TmKpiGrid>
+
+      <div className="flex items-center justify-between border-t border-tm-rule bg-tm-bg-2 px-3 py-1.5">
+        <span className="font-tm-mono text-[10.5px] text-tm-muted">
+          {subtitle}
+        </span>
+        <TmButton
+          variant="ghost"
+          onClick={onExport}
+          className="-my-1 h-6 px-2 text-[10px]"
+        >
           {t(locale, "screener.results.exportCsv")}
-        </Button>
-      </header>
+        </TmButton>
+      </div>
 
       {recs.length === 0 ? (
-        <p className="py-6 text-center text-[14px] text-muted">
+        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
           {t(locale, "screener.results.empty")}
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead className="bg-[var(--toggle-bg)]">
-              <tr>
-                <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "screener.results.colRank")}</th>
-                <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "screener.results.colTicker")}</th>
-                <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "screener.results.colSector")}</th>
-                <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "screener.results.colCap")}</th>
-                <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "screener.results.colComposite")}</th>
-                <th className="w-8 px-2 py-1.5"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {recs.map((r) => {
-                const isOpen = expandedTicker === r.ticker;
-                return (
-                  <Fragment key={r.ticker}>
-                    <tr className="border-t border-border">
-                      <td className="px-2 py-1.5 font-mono text-muted">{r.rank}</td>
-                      <td className="px-2 py-1.5 font-mono font-semibold text-text">{r.ticker}</td>
-                      <td className="px-2 py-1.5 text-text">{r.sector ?? "—"}</td>
-                      <td className="px-2 py-1.5 text-right font-mono text-muted">
-                        {r.cap != null ? formatCap(r.cap) : "—"}
-                      </td>
-                      <td className="px-2 py-1.5 text-right font-mono text-text">
-                        {r.composite_score.toFixed(3)}
-                      </td>
-                      <td className="px-2 py-1.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => onExpand(isOpen ? null : r.ticker)}
-                          className="text-muted hover:text-text"
-                        >
-                          {isOpen ? "▾" : "▸"}
-                        </button>
-                      </td>
-                    </tr>
-                    {isOpen && (
-                      <tr className="border-t border-border bg-[var(--toggle-bg)]">
-                        <td colSpan={6} className="px-4 py-3">
-                          <ContributionBars
-                            scores={r.per_factor_scores}
-                            diagnostics={result.factor_diagnostics}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+          <div
+            className="grid min-w-[800px] gap-px bg-tm-rule"
+            style={{
+              gridTemplateColumns:
+                "48px minmax(80px, 100px) minmax(140px, 1fr) minmax(80px, 100px) minmax(80px, 100px) 32px",
+            }}
+          >
+            <RHeader>{t(locale, "screener.results.colRank")}</RHeader>
+            <RHeader>{t(locale, "screener.results.colTicker")}</RHeader>
+            <RHeader>{t(locale, "screener.results.colSector")}</RHeader>
+            <RHeader align="right">{t(locale, "screener.results.colCap")}</RHeader>
+            <RHeader align="right">
+              {t(locale, "screener.results.colComposite")}
+            </RHeader>
+            <RHeader>·</RHeader>
+            {recs.map((r) => {
+              const isOpen = expandedTicker === r.ticker;
+              return (
+                <Fragment key={r.ticker}>
+                  <RCell>
+                    <span className="text-tm-muted">
+                      {String(r.rank).padStart(2, "0")}
+                    </span>
+                  </RCell>
+                  <RCell>
+                    <span className="font-semibold text-tm-accent">
+                      {r.ticker}
+                    </span>
+                  </RCell>
+                  <RCell>
+                    <span className="text-tm-fg-2">{r.sector ?? "—"}</span>
+                  </RCell>
+                  <RCell align="right">
+                    <span className="tabular-nums text-tm-muted">
+                      {r.cap != null ? formatCap(r.cap) : "—"}
+                    </span>
+                  </RCell>
+                  <RCell align="right">
+                    <span
+                      className={`tabular-nums ${r.composite_score >= 0 ? "text-tm-pos" : "text-tm-neg"}`}
+                    >
+                      {r.composite_score >= 0 ? "+" : ""}
+                      {r.composite_score.toFixed(3)}
+                    </span>
+                  </RCell>
+                  <RCell align="right">
+                    <button
+                      type="button"
+                      onClick={() => onExpand(isOpen ? null : r.ticker)}
+                      className="font-tm-mono text-tm-muted hover:text-tm-accent"
+                    >
+                      {isOpen ? "▾" : "▸"}
+                    </button>
+                  </RCell>
+                  {isOpen && (
+                    <div
+                      className="bg-tm-bg-2 px-3 py-3"
+                      style={{ gridColumn: "1 / -1" }}
+                    >
+                      <ContributionBars
+                        scores={r.per_factor_scores}
+                        diagnostics={result.factor_diagnostics}
+                      />
+                    </div>
+                  )}
+                </Fragment>
+              );
+            })}
+          </div>
         </div>
       )}
-    </Card>
+    </TmPane>
+  );
+}
+
+function RHeader({
+  children,
+  align = "left",
+}: {
+  readonly children: React.ReactNode;
+  readonly align?: "left" | "right";
+}) {
+  return (
+    <div
+      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+        align === "right" ? "text-right" : ""
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function RCell({
+  children,
+  align = "left",
+}: {
+  readonly children: React.ReactNode;
+  readonly align?: "left" | "right";
+}) {
+  return (
+    <div
+      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
+        align === "right" ? "justify-end" : ""
+      }`}
+    >
+      {children}
+    </div>
   );
 }
 
 function ContributionBars({
-  scores, diagnostics,
+  scores,
+  diagnostics,
 }: {
   readonly scores: ScreenerResponse["recommendations"][number]["per_factor_scores"];
   readonly diagnostics: ScreenerResponse["factor_diagnostics"];
 }) {
   const max = Math.max(0.1, ...scores.map((s) => Math.abs(s.contribution)));
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       {scores.map((s) => {
         const diag = diagnostics[s.factor_idx];
         const pct = (Math.abs(s.contribution) / max) * 100;
         const positive = s.contribution >= 0;
         return (
-          <div key={s.factor_idx} className="flex items-center gap-3 text-[12px]">
-            <code className="w-48 truncate font-mono text-text" title={diag?.expression ?? ""}>
+          <div
+            key={s.factor_idx}
+            className="flex items-center gap-3 font-tm-mono text-[11px]"
+          >
+            <code
+              className="w-48 truncate text-tm-fg"
+              title={diag?.expression ?? ""}
+            >
               {diag?.expression ?? `factor[${s.factor_idx}]`}
             </code>
-            <div className="relative flex h-4 flex-1 items-center">
-              <div className="absolute left-1/2 h-full w-px bg-border" />
+            <div className="relative flex h-3 flex-1 items-center bg-tm-bg-3">
               <div
-                className="absolute h-full"
+                className="absolute left-1/2 h-full w-px bg-tm-rule-2"
+                aria-hidden="true"
+              />
+              <div
+                className={`absolute h-full ${positive ? "bg-tm-pos" : "bg-tm-neg"}`}
                 style={{
                   [positive ? "left" : "right"]: "50%",
                   width: `${pct / 2}%`,
-                  background: positive ? "#22c55e" : "#ef4444",
                 }}
               />
             </div>
-            <span className="w-16 text-right font-mono text-text">
-              {s.contribution >= 0 ? "+" : ""}{s.contribution.toFixed(3)}
+            <span
+              className={`w-16 text-right tabular-nums ${positive ? "text-tm-pos" : "text-tm-neg"}`}
+            >
+              {s.contribution >= 0 ? "+" : ""}
+              {s.contribution.toFixed(3)}
             </span>
-            <span className="w-14 text-right font-mono text-muted">
+            <span className="w-14 text-right tabular-nums text-tm-muted">
               z={s.z.toFixed(2)}
             </span>
           </div>
@@ -653,82 +964,72 @@ function ContributionBars({
   );
 }
 
-function DiagnosticsCard({
+/* ── DIAGNOSTICS pane ─────────────────────────────────────────────── */
+
+function DiagnosticsPane({
   diagnostics,
 }: {
   readonly diagnostics: ScreenerResponse["factor_diagnostics"];
 }) {
   const { locale } = useLocale();
   return (
-    <Card padding="md">
-      <header className="mb-3">
-        <h2 className="text-base font-semibold text-text">
-          {t(locale, "screener.diagnostics.title")}
-        </h2>
-      </header>
+    <TmPane
+      title="SCREENER.DIAGNOSTICS"
+      meta={`${diagnostics.length} FACTORS`}
+    >
       <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead className="bg-[var(--toggle-bg)]">
-            <tr>
-              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "screener.diagnostics.colExpr")}</th>
-              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "screener.diagnostics.colIc")}</th>
-              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "screener.diagnostics.colWeight")}</th>
-              <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "screener.diagnostics.colEligible")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {diagnostics.map((d) => (
-              <tr key={d.factor_idx} className="border-t border-border">
-                <td className="px-2 py-1.5 font-mono text-text" title={d.expression}>
-                  <span className="block max-w-[400px] truncate">{d.expression}</span>
-                </td>
-                <td className="px-2 py-1.5 text-right font-mono">
-                  {colored(d.in_window_ic.toFixed(3), d.in_window_ic)}
-                </td>
-                <td className="px-2 py-1.5 text-right font-mono text-text">
+        <div
+          className="grid min-w-[700px] gap-px bg-tm-rule"
+          style={{
+            gridTemplateColumns: "1fr minmax(80px, 100px) minmax(80px, 100px) minmax(100px, 120px)",
+          }}
+        >
+          <RHeader>{t(locale, "screener.diagnostics.colExpr")}</RHeader>
+          <RHeader align="right">
+            {t(locale, "screener.diagnostics.colIc")}
+          </RHeader>
+          <RHeader align="right">
+            {t(locale, "screener.diagnostics.colWeight")}
+          </RHeader>
+          <RHeader align="right">
+            {t(locale, "screener.diagnostics.colEligible")}
+          </RHeader>
+          {diagnostics.map((d) => (
+            <Fragment key={d.factor_idx}>
+              <RCell>
+                <span
+                  className="block truncate text-tm-fg-2"
+                  title={d.expression}
+                >
+                  {d.expression}
+                </span>
+              </RCell>
+              <RCell align="right">
+                <span
+                  className={`tabular-nums ${d.in_window_ic > 0 ? "text-tm-pos" : d.in_window_ic < 0 ? "text-tm-neg" : "text-tm-fg"}`}
+                >
+                  {d.in_window_ic.toFixed(3)}
+                </span>
+              </RCell>
+              <RCell align="right">
+                <span className="tabular-nums text-tm-fg">
                   {(d.used_weight * 100).toFixed(1)}%
-                </td>
-                <td className="px-2 py-1.5 text-right font-mono text-muted">
+                </span>
+              </RCell>
+              <RCell align="right">
+                <span className="tabular-nums text-tm-muted">
                   {d.n_eligible}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </span>
+              </RCell>
+            </Fragment>
+          ))}
+        </div>
       </div>
-    </Card>
+    </TmPane>
   );
 }
 
-/* ── Helpers ───────────────────────────────────────────────────────────── */
-
-function LabelledInput({
-  label, value, onChange, placeholder, numeric,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly onChange: (v: string) => void;
-  readonly placeholder?: string;
-  readonly numeric?: boolean;
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-[13px] text-muted">{label}</label>
-      <input
-        type={numeric ? "number" : "text"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded border border-border bg-[var(--toggle-bg)] px-2 py-1 text-[13px] text-text outline-none focus:border-accent"
-      />
-    </div>
-  );
-}
-
-function colored(label: string, value: number) {
-  const cls = value > 0 ? "text-green" : value < 0 ? "text-red" : "text-text";
-  return <span className={cls}>{label}</span>;
-}
+/* ── Helpers ──────────────────────────────────────────────────────── */
 
 function formatCap(cap: number): string {
   if (cap >= 1e12) return `${(cap / 1e12).toFixed(2)}T`;
@@ -736,4 +1037,3 @@ function formatCap(cap: number): string {
   if (cap >= 1e6) return `${(cap / 1e6).toFixed(0)}M`;
   return cap.toFixed(0);
 }
-
