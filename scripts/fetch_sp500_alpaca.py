@@ -402,14 +402,17 @@ def assemble_panel(
         shares_pit["filing_date"] = pd.to_datetime(shares_pit["rdq"])
         shares_pit = shares_pit[
             ["ticker", "filing_date", "shares_outstanding"]
-        ].sort_values(["ticker", "filing_date"])
+        ].sort_values("filing_date")
 
-        # merge_asof requires both frames sorted by the on-key (date /
-        # filing_date) — sort ohlcv by (ticker, date) before joining.
-        ohlcv = ohlcv.sort_values(["ticker", "date"]).reset_index(drop=True)
+        # merge_asof requires the on-key to be globally sorted on BOTH
+        # frames (per-by-group is not enough in pandas ≥ 2.x). Sort each
+        # by the on-key only; the `by="ticker"` arg handles per-group
+        # matching downstream.
+        ohlcv = ohlcv.copy()
         ohlcv["_date_dt"] = pd.to_datetime(ohlcv["date"])
+        ohlcv_sorted = ohlcv.sort_values("_date_dt").reset_index(drop=False)
         merged = pd.merge_asof(
-            ohlcv,
+            ohlcv_sorted,
             shares_pit,
             left_on="_date_dt",
             right_on="filing_date",
@@ -417,6 +420,10 @@ def assemble_panel(
             direction="backward",
             allow_exact_matches=True,
         )
+        # Restore original ohlcv ordering — caller may rely on it for
+        # downstream pivots / parquet write order.
+        merged = merged.sort_values("index").set_index("index")
+        merged.index.name = None
         # Convert millions → raw shares; cap in USD.
         cap_series = (
             merged["close"] * merged["shares_outstanding"] * 1_000_000
