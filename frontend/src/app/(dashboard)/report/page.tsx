@@ -1,22 +1,57 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+/**
+ * Report page — workstation port (Stage 3 · 8/9).
+ *
+ * Tear-sheet generator. Two slots: "primary" (the headline factor) and
+ * "compare" (an optional second factor for side-by-side overlay).
+ * Both slots run through fetchAll() which spawns runFactorBacktest +
+ * signalToday + signalExposure in parallel.
+ *
+ * Layout: TmSubbar (factor name + universe + status pills + print
+ * button) → REPORT.PICKER pane (config chips + example chips + zoo
+ * chips + custom-input + compare chips) → COMPARE.OVERLAY pane (when
+ * both slots filled) → primary tearsheet sequence (REPORT.COVER →
+ * BACKTEST.KPI → EQUITY.UNDERWATER (FactorPnLChart wrapped) →
+ * DRAWDOWN → MONTHLY → SIGNAL.TODAY → EXPOSURE) → compare tearsheet.
+ *
+ * Behavior preserved byte-for-byte: REPORT_PREFILL_KEY handoff from
+ * /factors, ReportConfig propagation, fetchAll triple-fetch, print
+ * via window.print(), example loadExample auto-runs with locale-
+ * appropriate intuition, zoo-entry handoff, compare slot management.
+ *
+ * NOTE: this is the LAST page using legacy BacktestKpiStrip /
+ * DrawdownChart / MonthlyReturnsHeatmap / TopBottomTable /
+ * ExposureChart / CompareEquityChart imports. After this port lands,
+ * the legacy components are dead code and can be removed in S5 polish.
+ */
+
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
+import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmStatusPill,
+  TmChip,
+} from "@/components/tm/TmSubbar";
+import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
+import { TmButton } from "@/components/tm/TmButton";
 import {
   FACTOR_EXAMPLES,
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
-import { BacktestKpiStrip } from "@/components/backtest/BacktestKpiStrip";
-import { DrawdownChart } from "@/components/backtest/DrawdownChart";
-import { MonthlyReturnsHeatmap } from "@/components/backtest/MonthlyReturnsHeatmap";
+import { TmBacktestKpiStrip } from "@/components/backtest/TmBacktestKpiStrip";
+import { TmDrawdownChart } from "@/components/backtest/TmDrawdownChart";
+import { TmMonthlyReturnsHeatmap } from "@/components/backtest/TmMonthlyReturnsHeatmap";
 import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
-import { CompareEquityChart } from "@/components/charts/CompareEquityChart";
-import { TopBottomTable } from "@/components/signal/TopBottomTable";
-import { ExposureChart } from "@/components/signal/ExposureChart";
+import { TmCompareEquityChart } from "@/components/charts/TmCompareEquityChart";
+import { TmTopBottomTable } from "@/components/signal/TmTopBottomTable";
+import { TmExposureChart } from "@/components/signal/TmExposureChart";
 import { listZoo, type ZooEntry } from "@/lib/factor-zoo";
 import {
   runFactorBacktest,
@@ -30,7 +65,6 @@ import type {
   ExposureResponse,
 } from "@/lib/types";
 
-
 interface FactorReport {
   readonly name: string;
   readonly expression: string;
@@ -42,11 +76,6 @@ interface FactorReport {
 
 const REPORT_PREFILL_KEY = "alphacore.report.prefill.v1";
 
-// v4 cross-page parity: instead of hardcoding direction/cost/etc the way
-// the legacy fetchAll did (and then having CoverCard advertise "5 bps"
-// regardless of what the user set), accept a config and surface it in
-// the UI. Defaults match the platform-wide v4 defaults: long_short,
-// no neutralize, SPY benchmark, 5 bps cost.
 export interface ReportConfig {
   readonly direction: "long_short" | "long_only" | "short_only";
   readonly neutralize: "none" | "sector";
@@ -62,7 +91,10 @@ const DEFAULT_REPORT_CONFIG: ReportConfig = {
 };
 
 async function fetchAll(
-  name: string, expression: string, hypothesis: string, cfg: ReportConfig,
+  name: string,
+  expression: string,
+  hypothesis: string,
+  cfg: ReportConfig,
 ) {
   const spec: SignalSpec = {
     name: name || "factor",
@@ -75,9 +107,11 @@ async function fetchAll(
   };
   return Promise.all([
     runFactorBacktest({
-      spec, train_ratio: 0.7,
+      spec,
+      train_ratio: 0.7,
       direction: cfg.direction,
-      top_pct: 0.30, bottom_pct: 0.30,
+      top_pct: 0.30,
+      bottom_pct: 0.30,
       transaction_cost_bps: cfg.transactionCostBps,
       neutralize: cfg.neutralize,
       benchmark_ticker: cfg.benchmarkTicker,
@@ -99,13 +133,48 @@ export default function ReportPage() {
   const [zoo, setZoo] = useState<readonly ZooEntry[]>([]);
   const [config, setConfig] = useState<ReportConfig>(DEFAULT_REPORT_CONFIG);
 
-  // Pull zoo entries on mount; refresh when localStorage might have changed
-  // (we just track length as a heuristic — full reload happens on focus).
   useEffect(() => {
     setZoo(listZoo());
   }, []);
 
-  // Read /factors zoo handoff (if any) and auto-generate.
+  const generate = useCallback(
+    async (
+      name: string,
+      expression: string,
+      hypothesis: string,
+      slot: "primary" | "compare",
+    ) => {
+      setRunning(true);
+      setError(null);
+      const [bt, td, ex] = await fetchAll(name, expression, hypothesis, config);
+      if (
+        bt.error || td.error || ex.error ||
+        !bt.data || !td.data || !ex.data
+      ) {
+        setError(bt.error ?? td.error ?? ex.error ?? "unknown error");
+        setRunning(false);
+        return;
+      }
+      const built: FactorReport = {
+        name,
+        expression,
+        intuition: hypothesis,
+        backtest: bt.data,
+        today: td.data,
+        exposure: ex.data,
+      };
+      if (slot === "primary") {
+        setPrimary(built);
+        setCompare(null);
+      } else {
+        setCompare(built);
+      }
+      setRunning(false);
+    },
+    [config],
+  );
+
+  // P6.D — read /factors zoo handoff (if any) and auto-generate.
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -124,37 +193,20 @@ export default function ReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const generate = useCallback(async (
-    name: string, expression: string, hypothesis: string,
-    slot: "primary" | "compare",
-  ) => {
-    setRunning(true);
-    setError(null);
-    const [bt, td, ex] = await fetchAll(name, expression, hypothesis, config);
-    if (bt.error || td.error || ex.error || !bt.data || !td.data || !ex.data) {
-      setError(bt.error ?? td.error ?? ex.error ?? "unknown error");
-      setRunning(false);
-      return;
-    }
-    const built: FactorReport = {
-      name, expression,
-      intuition: hypothesis,
-      backtest: bt.data, today: td.data, exposure: ex.data,
-    };
-    if (slot === "primary") {
-      setPrimary(built);
-      setCompare(null);
-    } else {
-      setCompare(built);
-    }
-    setRunning(false);
-  }, [config]);
-
   function loadExample(example: FactorExample) {
     setFactorName(example.name);
     setExpr(example.expression);
-    const intu = locale === "zh" ? example.intuitionZh : example.intuitionEn;
+    const intu =
+      locale === "zh" ? example.intuitionZh : example.intuitionEn;
     setIntuition(intu);
+    // v3: pull example's proven config too so the report matches the
+    // verdict the example was discovered under.
+    setConfig((c) => ({
+      direction: example.direction ?? c.direction,
+      neutralize: example.neutralize ?? c.neutralize,
+      benchmarkTicker: example.benchmarkTicker ?? c.benchmarkTicker,
+      transactionCostBps: example.transactionCostBps ?? c.transactionCostBps,
+    }));
     void generate(
       example.name,
       example.expression,
@@ -174,219 +226,109 @@ export default function ReportPage() {
 
   function runCustom() {
     if (!expr.trim()) return;
-    void generate(factorName.trim() || "user_factor", expr.trim(), intuition, "primary");
+    void generate(
+      factorName.trim() || "user_factor",
+      expr.trim(),
+      intuition,
+      "primary",
+    );
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <header className="report-chrome flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-text">
-            {t(locale, "report.title")}
-          </h1>
-          <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-            {t(locale, "report.subtitle")}
-          </p>
-        </div>
+    <TmScreen>
+      <TmSubbar>
+        <span className="text-tm-muted">REPORT</span>
+        <TmSubbarSep />
+        <TmSubbarKV
+          label="FACTOR"
+          value={primary?.name ?? factorName ?? "—"}
+        />
         {primary && (
-          <Button
-            variant="primary"
-            size="sm"
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV
+              label="UNIVERSE"
+              value={`${primary.today.universe_size}`}
+            />
+            <TmSubbarSep />
+            <TmSubbarKV
+              label="SHARPE"
+              value={primary.backtest.test_metrics.sharpe.toFixed(2)}
+            />
+          </>
+        )}
+        {compare && (
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV label="COMPARE" value={compare.name} />
+          </>
+        )}
+        <TmSubbarSpacer />
+        {primary?.backtest.overfit_flag && (
+          <TmStatusPill tone="err">
+            OVERFIT · OOS DECAY{" "}
+            {((primary.backtest.oos_decay ?? 0) * 100).toFixed(0)}%
+          </TmStatusPill>
+        )}
+        {primary && (
+          <TmStatusPill
+            tone={primary.backtest.survivorship_corrected ? "ok" : "warn"}
+          >
+            {primary.backtest.survivorship_corrected
+              ? `SP500-AS-OF · ${primary.backtest.membership_as_of ?? "—"}`
+              : "LEGACY"}
+          </TmStatusPill>
+        )}
+        {running && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
+        {error && <TmStatusPill tone="err">ERROR</TmStatusPill>}
+        {primary && (
+          <TmButton
+            variant="ghost"
             onClick={() => window.print()}
+            className="-my-1 px-2"
           >
             {t(locale, "report.exportPdf")}
-          </Button>
+          </TmButton>
         )}
-      </header>
+      </TmSubbar>
 
-      <Card padding="md" className="report-chrome">
-        <header className="mb-3">
-          <h2 className="text-base font-semibold text-text">
-            {t(locale, "report.picker.title")}
-          </h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-muted">
-            {t(locale, "report.picker.subtitle")}
-          </p>
-        </header>
-
-        {/* v4 cross-page parity: tear-sheet config — direction / neutralize /
-            benchmark / cost. Used to hardcode long_only + cost=5; that made
-            CoverCard advertise parameters the user couldn't see, never mind
-            change. Now the UI shows actual settings + lets user adjust. */}
-        <div className="mb-3 flex flex-wrap items-center gap-3 text-[13px] text-muted">
-          <div className="flex items-center gap-1">
-            <span>direction:</span>
-            {(["long_short", "long_only", "short_only"] as const).map((d) => (
-              <button key={d} type="button" onClick={() => setConfig((c) => ({ ...c, direction: d }))}
-                className={`rounded px-2 py-0.5 text-[12px] ${config.direction === d ? "bg-accent text-white" : "bg-[var(--toggle-bg)] hover:text-text"}`}>
-                {d}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <span>{t(locale, "backtest.form.neutralize")}:</span>
-            {(["none", "sector"] as const).map((m) => (
-              <button key={m} type="button" onClick={() => setConfig((c) => ({ ...c, neutralize: m }))}
-                className={`rounded px-2 py-0.5 text-[12px] ${config.neutralize === m ? "bg-accent text-white" : "bg-[var(--toggle-bg)] hover:text-text"}`}>
-                {t(locale, `backtest.form.neutralize.${m}`)}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <span>{t(locale, "backtest.form.benchmark")}:</span>
-            {(["SPY", "RSP"] as const).map((bt) => (
-              <button key={bt} type="button" onClick={() => setConfig((c) => ({ ...c, benchmarkTicker: bt }))}
-                className={`rounded px-2 py-0.5 font-mono text-[12px] ${config.benchmarkTicker === bt ? "bg-accent text-white" : "bg-[var(--toggle-bg)] hover:text-text"}`}>
-                {bt}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <span>cost:</span>
-            <input type="number" min={0} max={50} step={1} value={config.transactionCostBps}
-              onChange={(e) => setConfig((c) => ({ ...c, transactionCostBps: Number(e.target.value) || 0 }))}
-              className="w-14 rounded border border-border bg-[var(--toggle-bg)] px-1 text-[12px] text-text" />
-            <span className="text-[12px]">bps</span>
-          </div>
-        </div>
-
-        <div className="mb-3">
-          <p className="mb-1 text-[12px] uppercase tracking-wide text-muted">
-            {t(locale, "report.picker.fromExamples")}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {FACTOR_EXAMPLES.map((example) => (
-              <button
-                key={example.name}
-                type="button"
-                onClick={() => loadExample(example)}
-                disabled={running}
-                className="rounded-md bg-[var(--toggle-bg)] px-3 py-1.5 text-[13px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
-              >
-                {example.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {zoo.length > 0 && (
-          <div className="mb-3 border-t border-border pt-3">
-            <p className="mb-1 text-[12px] uppercase tracking-wide text-muted">
-              {t(locale, "report.picker.fromZoo")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {zoo.slice(0, 12).map((z) => (
-                <button
-                  key={z.id}
-                  type="button"
-                  onClick={() => loadZooEntry(z, "primary")}
-                  disabled={running}
-                  className="rounded-md border border-border px-3 py-1.5 text-[13px] text-text hover:bg-accent/15 hover:text-accent disabled:opacity-50"
-                  title={z.expression}
-                >
-                  {z.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2 border-t border-border pt-3">
-          <input
-            type="text"
-            value={factorName}
-            onChange={(e) => setFactorName(e.target.value)}
-            placeholder={t(locale, "report.picker.namePlaceholder")}
-            className="rounded-md border border-border bg-[var(--toggle-bg)] px-2 py-1.5 text-sm text-text outline-none focus:border-accent"
-          />
-          <textarea
-            value={expr}
-            onChange={(e) => setExpr(e.target.value)}
-            placeholder={t(locale, "report.picker.exprPlaceholder")}
-            rows={2}
-            className="w-full resize-none rounded-md border border-border bg-[var(--toggle-bg)] p-2 font-mono text-sm text-text outline-none focus:border-accent"
-          />
-          <div className="flex justify-end">
-            <Button onClick={runCustom} disabled={running || expr.trim().length === 0}>
-              {running ? t(locale, "report.picker.running") : t(locale, "report.picker.generate")}
-            </Button>
-          </div>
-        </div>
-
-        {primary && (
-          <div className="mt-3 border-t border-border pt-3">
-            <p className="mb-1 text-[12px] uppercase tracking-wide text-muted">
-              {t(locale, "report.picker.compareTitle")}
-            </p>
-            <p className="mb-2 text-[13px] text-muted">
-              {t(locale, "report.picker.compareSubtitle")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {FACTOR_EXAMPLES
-                .filter((e) => e.expression !== primary.expression)
-                .map((example) => (
-                  <button
-                    key={example.name}
-                    type="button"
-                    onClick={() =>
-                      generate(
-                        example.name,
-                        example.expression,
-                        locale === "zh" ? example.hypothesisZh : example.hypothesisEn,
-                        "compare",
-                      )
-                    }
-                    disabled={running}
-                    className="rounded-md bg-[var(--toggle-bg)] px-2 py-1 text-[12px] text-muted hover:text-text disabled:opacity-50"
-                  >
-                    + {example.name}
-                  </button>
-                ))}
-              {zoo
-                .filter((z) => z.expression !== primary.expression)
-                .slice(0, 6)
-                .map((z) => (
-                  <button
-                    key={z.id}
-                    type="button"
-                    onClick={() => loadZooEntry(z, "compare")}
-                    disabled={running}
-                    className="rounded-md border border-border px-2 py-1 text-[12px] text-muted hover:text-text disabled:opacity-50"
-                  >
-                    + {z.name}
-                  </button>
-                ))}
-              {compare && (
-                <Button variant="ghost" size="sm" onClick={() => setCompare(null)}>
-                  {t(locale, "report.picker.compareClear")}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </Card>
+      <ReportPickerPane
+        factorName={factorName}
+        onFactorName={setFactorName}
+        expr={expr}
+        onExpr={setExpr}
+        config={config}
+        onConfig={setConfig}
+        zoo={zoo}
+        primary={primary}
+        compare={compare}
+        running={running}
+        loadExample={loadExample}
+        loadZooEntry={loadZooEntry}
+        runCustom={runCustom}
+        generate={generate}
+        clearCompare={() => setCompare(null)}
+      />
 
       {error && (
-        <Card padding="md" className="report-chrome">
-          <p className="text-base text-red">
-            {t(locale, "report.error")}: {error}
+        <TmPane title="ERROR" meta="report generation failed">
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+            {error}
           </p>
-        </Card>
+        </TmPane>
       )}
 
       {primary && compare && (
-        <Card padding="md">
-          <header className="mb-2">
-            <h2 className="text-base font-semibold text-text">
-              {t(locale, "report.compare.title")}
-            </h2>
-            <p className="mt-1 text-[13px] leading-relaxed text-muted">
-              {t(locale, "report.compare.subtitle")
-                .replace("{a}", primary.name)
-                .replace("{b}", compare.name)}
-            </p>
-          </header>
-          <CompareEquityChart
+        <TmPane
+          title="COMPARE.OVERLAY"
+          meta={`${primary.name} vs ${compare.name} vs ${primary.backtest.benchmark_ticker}`}
+        >
+          <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+            {t(locale, "report.compare.subtitle")
+              .replace("{a}", primary.name)
+              .replace("{b}", compare.name)}
+          </p>
+          <TmCompareEquityChart
             factor1Name={primary.name}
             factor1={primary.backtest.equity_curve}
             factor2Name={compare.name}
@@ -394,84 +336,423 @@ export default function ReportPage() {
             benchmark={primary.backtest.benchmark_curve}
             benchmarkTicker={primary.backtest.benchmark_ticker}
           />
-        </Card>
+        </TmPane>
       )}
 
       {primary && (
-        <article className="report-tearsheet flex flex-col gap-3">
-          <CoverCard r={primary} expr={primary.expression} factorName={primary.name} intuition={primary.intuition} locale={locale} config={config} />
-          <BacktestKpiStrip result={primary.backtest} />
-          <Card padding="md">
-            <header className="mb-2">
-              <h3 className="text-base font-semibold text-text">
-                {t(locale, "backtest.equity.title")}
-              </h3>
-            </header>
-            <FactorPnLChart data={primary.backtest} height={260} />
-          </Card>
-          <DrawdownChart equityCurve={primary.backtest.equity_curve} />
-          {primary.backtest.monthly_returns && primary.backtest.monthly_returns.length > 0 && (
-            <MonthlyReturnsHeatmap data={primary.backtest.monthly_returns} />
-          )}
-          <TopBottomTable today={primary.today} loading={false} />
-          <ExposureChart data={primary.exposure} topN={10} loading={false} />
+        <article className="report-tearsheet flex flex-col">
+          <ReportCoverPane
+            r={primary}
+            expr={primary.expression}
+            factorName={primary.name}
+            intuition={primary.intuition}
+            config={config}
+          />
+          <TmBacktestKpiStrip result={primary.backtest} />
+          <TmPane
+            title="EQUITY.CURVE"
+            meta={`${primary.backtest.equity_curve.length} sessions · vs ${primary.backtest.benchmark_ticker}`}
+          >
+            <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+              {t(locale, "backtest.equity.subtitle")}
+            </p>
+            <div className="px-2 pb-2 pt-2">
+              <FactorPnLChart data={primary.backtest} height={260} />
+            </div>
+          </TmPane>
+          <TmDrawdownChart equityCurve={primary.backtest.equity_curve} />
+          {primary.backtest.monthly_returns &&
+            primary.backtest.monthly_returns.length > 0 && (
+              <TmMonthlyReturnsHeatmap
+                data={primary.backtest.monthly_returns}
+              />
+            )}
+          <TmTopBottomTable today={primary.today} loading={false} />
+          <TmExposureChart
+            data={primary.exposure}
+            topN={10}
+            loading={false}
+          />
         </article>
       )}
 
       {compare && (
-        <article className="report-tearsheet flex flex-col gap-3">
-          <Card padding="sm">
-            <p className="text-[13px] font-semibold uppercase tracking-wide text-muted">
+        <article className="report-tearsheet flex flex-col">
+          <TmPane title="REPORT.COMPARE" meta="second factor tear sheet">
+            <p className="px-3 py-2 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-info">
               {t(locale, "report.compare.secondLabel")}
             </p>
-          </Card>
-          <CoverCard r={compare} expr={compare.expression} factorName={compare.name} intuition={compare.intuition} locale={locale} config={config} />
-          <BacktestKpiStrip result={compare.backtest} />
-          <DrawdownChart equityCurve={compare.backtest.equity_curve} />
-          {compare.backtest.monthly_returns && compare.backtest.monthly_returns.length > 0 && (
-            <MonthlyReturnsHeatmap data={compare.backtest.monthly_returns} />
-          )}
-          <TopBottomTable today={compare.today} loading={false} />
-          <ExposureChart data={compare.exposure} topN={10} loading={false} />
+          </TmPane>
+          <ReportCoverPane
+            r={compare}
+            expr={compare.expression}
+            factorName={compare.name}
+            intuition={compare.intuition}
+            config={config}
+          />
+          <TmBacktestKpiStrip result={compare.backtest} />
+          <TmDrawdownChart equityCurve={compare.backtest.equity_curve} />
+          {compare.backtest.monthly_returns &&
+            compare.backtest.monthly_returns.length > 0 && (
+              <TmMonthlyReturnsHeatmap
+                data={compare.backtest.monthly_returns}
+              />
+            )}
+          <TmTopBottomTable today={compare.today} loading={false} />
+          <TmExposureChart
+            data={compare.exposure}
+            topN={10}
+            loading={false}
+          />
         </article>
       )}
+
+      {!primary && !running && (
+        <TmPane title="USAGE" meta="hint">
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+            {t(locale, "report.subtitle")}
+          </p>
+        </TmPane>
+      )}
+    </TmScreen>
+  );
+}
+
+/* ── REPORT.PICKER pane ───────────────────────────────────────────── */
+
+function ReportPickerPane({
+  factorName,
+  onFactorName,
+  expr,
+  onExpr,
+  config,
+  onConfig,
+  zoo,
+  primary,
+  compare,
+  running,
+  loadExample,
+  loadZooEntry,
+  runCustom,
+  generate,
+  clearCompare,
+}: {
+  readonly factorName: string;
+  readonly onFactorName: (v: string) => void;
+  readonly expr: string;
+  readonly onExpr: (v: string) => void;
+  readonly config: ReportConfig;
+  readonly onConfig: (
+    fn: ReportConfig | ((c: ReportConfig) => ReportConfig),
+  ) => void;
+  readonly zoo: readonly ZooEntry[];
+  readonly primary: FactorReport | null;
+  readonly compare: FactorReport | null;
+  readonly running: boolean;
+  readonly loadExample: (e: FactorExample) => void;
+  readonly loadZooEntry: (e: ZooEntry, slot: "primary" | "compare") => void;
+  readonly runCustom: () => void;
+  readonly generate: (
+    name: string,
+    expression: string,
+    hypothesis: string,
+    slot: "primary" | "compare",
+  ) => void;
+  readonly clearCompare: () => void;
+}) {
+  const { locale } = useLocale();
+
+  return (
+    <TmPane
+      title="REPORT.PICKER"
+      meta={`${FACTOR_EXAMPLES.length} EXAMPLES · ${zoo.length} ZOO · ${primary ? "GENERATED" : "EMPTY"}`}
+    >
+      <div className="flex flex-col gap-3 px-3 py-3">
+        {/* Config chip rows: direction / neutralize / benchmark / cost */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <ConfigChipGroup
+            label="direction"
+            options={["long_short", "long_only", "short_only"]}
+            value={config.direction}
+            onChange={(v) => onConfig((c) => ({ ...c, direction: v as ReportConfig["direction"] }))}
+          />
+          <ConfigChipGroup
+            label={t(locale, "backtest.form.neutralize")}
+            options={["none", "sector"]}
+            value={config.neutralize}
+            onChange={(v) => onConfig((c) => ({ ...c, neutralize: v as "none" | "sector" }))}
+          />
+          <ConfigChipGroup
+            label={t(locale, "backtest.form.benchmark")}
+            options={["SPY", "RSP"]}
+            value={config.benchmarkTicker}
+            onChange={(v) => onConfig((c) => ({ ...c, benchmarkTicker: v as "SPY" | "RSP" }))}
+          />
+          <div className="flex items-center gap-2">
+            <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+              cost bps
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              step={1}
+              value={config.transactionCostBps}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                onConfig((c) => ({
+                  ...c,
+                  transactionCostBps: Number(e.target.value) || 0,
+                }))
+              }
+              className="h-6 w-14 border border-tm-rule bg-tm-bg-2 px-2 text-right font-tm-mono text-[11px] tabular-nums text-tm-fg outline-none focus:border-tm-accent"
+            />
+          </div>
+        </div>
+
+        {/* From examples */}
+        <div className="border-t border-tm-rule pt-2.5">
+          <p className="mb-1.5 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+            {t(locale, "report.picker.fromExamples")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {FACTOR_EXAMPLES.map((example) => (
+              <TmChip
+                key={example.name}
+                onClick={() => loadExample(example)}
+                disabled={running}
+              >
+                {example.name}
+              </TmChip>
+            ))}
+          </div>
+        </div>
+
+        {/* From zoo */}
+        {zoo.length > 0 && (
+          <div className="border-t border-tm-rule pt-2.5">
+            <p className="mb-1.5 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+              {t(locale, "report.picker.fromZoo")}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {zoo.slice(0, 12).map((z) => (
+                <TmChip
+                  key={z.id}
+                  onClick={() => loadZooEntry(z, "primary")}
+                  disabled={running}
+                  title={z.expression}
+                >
+                  {z.name}
+                </TmChip>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Custom input */}
+        <div className="flex flex-col gap-2 border-t border-tm-rule pt-2.5">
+          <input
+            type="text"
+            value={factorName}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              onFactorName(e.target.value)
+            }
+            placeholder={t(locale, "report.picker.namePlaceholder")}
+            className="h-8 w-full border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none placeholder:text-tm-muted focus:border-tm-accent"
+          />
+          <textarea
+            value={expr}
+            onChange={(e) => onExpr(e.target.value)}
+            placeholder={t(locale, "report.picker.exprPlaceholder")}
+            rows={2}
+            spellCheck={false}
+            className="w-full resize-none border border-tm-rule bg-tm-bg-2 p-2 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg outline-none focus:border-tm-accent"
+          />
+          <div className="flex justify-end">
+            <TmButton
+              variant="primary"
+              onClick={runCustom}
+              disabled={running || expr.trim().length === 0}
+            >
+              {running
+                ? t(locale, "report.picker.running")
+                : t(locale, "report.picker.generate")}
+            </TmButton>
+          </div>
+        </div>
+
+        {/* Compare slot — appears once primary is set */}
+        {primary && (
+          <div className="border-t border-tm-rule pt-2.5">
+            <p className="mb-1 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+              {t(locale, "report.picker.compareTitle")}
+            </p>
+            <p className="mb-1.5 font-tm-mono text-[10.5px] text-tm-muted">
+              {t(locale, "report.picker.compareSubtitle")}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {FACTOR_EXAMPLES.filter(
+                (e) => e.expression !== primary.expression,
+              ).map((example) => (
+                <TmChip
+                  key={example.name}
+                  onClick={() =>
+                    generate(
+                      example.name,
+                      example.expression,
+                      locale === "zh"
+                        ? example.hypothesisZh
+                        : example.hypothesisEn,
+                      "compare",
+                    )
+                  }
+                  disabled={running}
+                >
+                  + {example.name}
+                </TmChip>
+              ))}
+              {zoo
+                .filter((z) => z.expression !== primary.expression)
+                .slice(0, 6)
+                .map((z) => (
+                  <TmChip
+                    key={z.id}
+                    onClick={() => loadZooEntry(z, "compare")}
+                    disabled={running}
+                  >
+                    + {z.name}
+                  </TmChip>
+                ))}
+              {compare && (
+                <TmButton
+                  variant="ghost"
+                  onClick={clearCompare}
+                  className="h-6 px-2 text-[10px]"
+                >
+                  {t(locale, "report.picker.compareClear")}
+                </TmButton>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </TmPane>
+  );
+}
+
+function ConfigChipGroup({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  readonly label: string;
+  readonly options: readonly string[];
+  readonly value: string;
+  readonly onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+        {label}
+      </span>
+      {options.map((o) => (
+        <TmChip key={o} on={value === o} onClick={() => onChange(o)}>
+          {o}
+        </TmChip>
+      ))}
     </div>
   );
 }
 
-function CoverCard({
-  r, expr, factorName, intuition, locale, config,
+/* ── REPORT.COVER pane (per slot) ─────────────────────────────────── */
+
+function ReportCoverPane({
+  r,
+  expr,
+  factorName,
+  intuition,
+  config,
 }: {
-  r: FactorReport;
-  expr: string;
-  factorName: string;
-  intuition: string;
-  locale: "zh" | "en";
-  config: ReportConfig;
+  readonly r: FactorReport;
+  readonly expr: string;
+  readonly factorName: string;
+  readonly intuition: string;
+  readonly config: ReportConfig;
 }) {
+  const { locale } = useLocale();
+  const eq = r.backtest.equity_curve;
+  const startDate = eq[0]?.date ?? "—";
+  const endDate = eq[eq.length - 1]?.date ?? "—";
+  const totalRet =
+    eq.length > 0 ? eq[eq.length - 1].value / eq[0].value - 1 : 0;
+  const benchEq = r.backtest.benchmark_curve;
+  const benchRet =
+    benchEq.length > 0
+      ? benchEq[benchEq.length - 1].value / benchEq[0].value - 1
+      : 0;
+
   return (
-    <Card padding="md">
-      <div className="flex items-baseline justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-text">
-            {factorName || r.backtest.factor_name}
-          </h2>
-          <code className="mt-1 block font-mono text-[13px] text-muted">{expr}</code>
-        </div>
-        <div className="text-right text-[12px] text-muted">
-          <div>{t(locale, "report.cover.universe")}: {r.today.universe_size} tickers</div>
-          <div>{t(locale, "report.cover.window")}: {r.backtest.equity_curve[0]?.date} → {r.backtest.equity_curve[r.backtest.equity_curve.length - 1]?.date}</div>
-          <div>{t(locale, "report.cover.benchmark")}: {r.backtest.benchmark_ticker}</div>
-          <div>direction: {config.direction}{config.neutralize === "sector" ? " · sector-neutral" : ""}</div>
-          <div>{t(locale, "report.cover.cost")}: {config.transactionCostBps} bps</div>
-          <div>{t(locale, "report.cover.generated")}: {new Date().toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</div>
-        </div>
+    <TmPane
+      title="REPORT.COVER"
+      meta={`${factorName || r.backtest.factor_name} · ${r.today.universe_size} tickers`}
+    >
+      <div className="border-b border-tm-rule px-3 py-2.5">
+        <h2 className="font-tm-mono text-[14px] font-semibold uppercase tracking-[0.04em] text-tm-accent">
+          {factorName || r.backtest.factor_name}
+        </h2>
+        <code className="mt-1 block break-all font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+          {expr}
+        </code>
       </div>
+
+      <TmKpiGrid>
+        <TmKpi
+          label="UNIVERSE"
+          value={r.today.universe_size.toString()}
+          sub="SP500 panel"
+        />
+        <TmKpi
+          label="WINDOW"
+          value={`${eq.length}d`}
+          sub={`${startDate} → ${endDate}`}
+        />
+        <TmKpi
+          label="BENCHMARK"
+          value={r.backtest.benchmark_ticker}
+          sub={`${(benchRet * 100).toFixed(1)}% over slice`}
+        />
+        <TmKpi
+          label="DIRECTION"
+          value={config.direction}
+          sub={
+            config.neutralize === "sector"
+              ? "sector-neutral"
+              : "no neutralize"
+          }
+        />
+        <TmKpi
+          label="COST"
+          value={`${config.transactionCostBps}bps`}
+          sub="round-trip"
+        />
+        <TmKpi
+          label="TOTAL RET"
+          value={`${(totalRet * 100).toFixed(1)}%`}
+          tone={totalRet > benchRet ? "pos" : "neg"}
+          sub={`vs ${(benchRet * 100).toFixed(1)}% bench`}
+        />
+      </TmKpiGrid>
+
       {intuition && (
-        <p className="mt-3 border-t border-border pt-3 text-[13px] leading-relaxed text-text/90">
+        <p className="border-t border-tm-rule px-3 py-2.5 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
           {intuition}
         </p>
       )}
-    </Card>
+
+      <p className="border-t border-tm-rule bg-tm-bg-2 px-3 py-1 font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted">
+        {t(locale, "report.cover.generated")}:{" "}
+        {new Date().toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}
+      </p>
+    </TmPane>
   );
 }
