@@ -68,9 +68,11 @@ const STALE_DAY_THRESHOLD = 30;
 const STALE_SHARPE_THRESHOLD = 0.5;
 const TOP_K = 5;
 const OPS_TOP_N = 10;
-// Hide TIMELINE.ACTIVITY when fewer than this many entries exist —
-// a 3-bar sparkline is meaningless and visually empty.
-const TIMELINE_MIN_ENTRIES = 5;
+// Hide TIMELINE.ACTIVITY when fewer than this many entries exist.
+// 2 was picked after a real-world check: a single-entry timeline is
+// just one bar (no story), but 2+ entries already produce a readable
+// 1- or 2-week pulse worth surfacing.
+const TIMELINE_MIN_ENTRIES = 2;
 
 // Fixed histogram bins — picked to span typical SP500 long_short Sharpe
 // (-1 → 3) and Compustat-era IC (-3% → 8%). Stable bin edges avoid the
