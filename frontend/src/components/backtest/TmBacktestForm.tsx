@@ -101,7 +101,11 @@ export function TmBacktestForm({
   );
   const [wfWindowDays, setWfWindowDays] = useState(60);
   const [wfStepDays, setWfStepDays] = useState(20);
-  const [includeBreakdown, setIncludeBreakdown] = useState(false);
+  // Default ON in v3: PORTFOLIO.TODAY / TURNOVER.PROFILE / POSITION.
+  // CONTRIBUTION panes all need daily_breakdown to render. ~30KB extra
+  // payload is a fair price for institutional-grade content visible by
+  // default; user can still untick to keep responses tiny.
+  const [includeBreakdown, setIncludeBreakdown] = useState(true);
   const [maskEarningsWindow, setMaskEarningsWindow] = useState(false);
   const [neutralize, setNeutralize] = useState<"none" | "sector">(
     initialConfig?.neutralize ?? "none",
@@ -126,7 +130,7 @@ export function TmBacktestForm({
         mode: "static",
         wfWindowDays: 60,
         wfStepDays: 20,
-        includeBreakdown: false,
+        includeBreakdown: true,
         maskEarningsWindow: false,
         neutralize: "none",
         benchmarkTicker: "SPY",
