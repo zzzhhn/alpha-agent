@@ -1,17 +1,23 @@
 "use client";
 
 /**
- * Data page — universe / sectors / schema / operator catalog / coverage.
+ * Data page — universe + coverage (left) and sectorised tickers (right)
+ * side-by-side, then the operator catalog full-width below.
  *
- * Stage 3 redesign re-port — uses TmScreen edge-to-edge stack with
- * tm-subbar at top + flat pane stack below. All data fetching, caching,
- * cancelled-effect cleanup unchanged.
+ * Stage 3 redesign re-port (2nd iteration): the original layout had
+ * UNIVERSE / TICKERS / OPERATORS / COVERAGE as four full-width panes
+ * stacked vertically, which (a) wasted horizontal real estate and (b)
+ * duplicated the trading-days / ticker-count fields between UNIVERSE
+ * and COVERAGE. This iteration merges UNIVERSE + COVERAGE into a
+ * single overview pane and pairs it left-of TICKERS via TmCols2.
+ *
+ * Data fetching, caching, cancelled-effect cleanup unchanged.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
 import {
   TmSubbar,
   TmSubbarKV,
@@ -21,9 +27,11 @@ import {
   TmChip,
 } from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
-import { UniverseDetail } from "@/components/data/UniverseCard";
+import {
+  UniverseOverview,
+  UniverseTickers,
+} from "@/components/data/UniverseCard";
 import { OperandCatalog } from "@/components/data/OperandCatalog";
-import { CoverageOverview } from "@/components/data/CoverageOverview";
 import {
   fetchUniverses,
   fetchOperandCatalog,
@@ -46,24 +54,27 @@ export default function DataPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (force = false) => {
-    const [u, o, c] = await Promise.all([
-      fetchUniverses({ force }),
-      fetchOperandCatalog({ force }),
-      fetchCoverage("SP500_subset", { force }),
-    ]);
-    if (u.error || o.error || c.error) {
-      setError(u.error ?? o.error ?? c.error);
-      return;
-    }
-    setError(null);
-    setUniverses(u.data);
-    if (u.data && !activeUniverseId && u.data.universes.length > 0) {
-      setActiveUniverseId(u.data.universes[0].id);
-    }
-    setCatalog(o.data);
-    setCoverage(c.data);
-  }, [activeUniverseId]);
+  const load = useCallback(
+    async (force = false) => {
+      const [u, o, c] = await Promise.all([
+        fetchUniverses({ force }),
+        fetchOperandCatalog({ force }),
+        fetchCoverage("SP500_subset", { force }),
+      ]);
+      if (u.error || o.error || c.error) {
+        setError(u.error ?? o.error ?? c.error);
+        return;
+      }
+      setError(null);
+      setUniverses(u.data);
+      if (u.data && !activeUniverseId && u.data.universes.length > 0) {
+        setActiveUniverseId(u.data.universes[0].id);
+      }
+      setCatalog(o.data);
+      setCoverage(c.data);
+    },
+    [activeUniverseId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -94,19 +105,19 @@ export default function DataPage() {
     <TmScreen>
       <TmSubbar>
         <span className="text-tm-muted">UNIVERSE</span>
-        {universes
-          ? universes.universes.map((u) => (
-              <TmChip
-                key={u.id}
-                on={u.id === activeUniverse?.id}
-                onClick={() => setActiveUniverseId(u.id)}
-              >
-                {u.id}
-              </TmChip>
-            ))
-          : (
-              <span className="text-tm-muted">{t(locale, "data.loading")}</span>
-            )}
+        {universes ? (
+          universes.universes.map((u) => (
+            <TmChip
+              key={u.id}
+              on={u.id === activeUniverse?.id}
+              onClick={() => setActiveUniverseId(u.id)}
+            >
+              {u.id}
+            </TmChip>
+          ))
+        ) : (
+          <span className="text-tm-muted">{t(locale, "data.loading")}</span>
+        )}
         {activeUniverse && (
           <>
             <TmSubbarSep />
@@ -135,7 +146,9 @@ export default function DataPage() {
           disabled={refreshing || !universes}
           className="-my-1 px-2"
         >
-          {refreshing ? t(locale, "data.refreshing") : t(locale, "data.refresh")}
+          {refreshing
+            ? t(locale, "data.refreshing")
+            : t(locale, "data.refresh")}
         </TmButton>
       </TmSubbar>
 
@@ -155,12 +168,15 @@ export default function DataPage() {
         </TmPane>
       )}
 
-      {/* Active universe detail — title shows the universe id */}
-      {activeUniverse && <UniverseDetail universe={activeUniverse} />}
+      {/* Overview (universe + coverage merged) | Tickers (sector-grouped) */}
+      {activeUniverse && (
+        <TmCols2>
+          <UniverseOverview universe={activeUniverse} coverage={coverage} />
+          <UniverseTickers universe={activeUniverse} />
+        </TmCols2>
+      )}
 
       {catalog && <OperandCatalog catalog={catalog} />}
-
-      {coverage && <CoverageOverview coverage={coverage} />}
     </TmScreen>
   );
 }
