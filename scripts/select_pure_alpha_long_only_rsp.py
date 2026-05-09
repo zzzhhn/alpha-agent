@@ -112,7 +112,15 @@ CANDIDATES: list[tuple[str, str, str, str, list[str]]] = [
 
 def run_one(name: str, expr: str, ops: list[str],
             neutralize: str, top_pct: float) -> dict | None:
-    """Single backtest under (long_only, neutralize, RSP, top_pct)."""
+    """Single backtest under (long_only, neutralize, RSP, top_pct).
+
+    train_ratio=0.70 to match the /backtest form's default 70% slider.
+    Backend's run_factor_backtest defaults to 0.80; if we don't pass
+    explicitly the script's results won't match what users see when
+    they click the loaded example on /backtest. (Hard-learned: the
+    first version of this script defaulted to 0.80 and reported E/P
+    α-p=0.009 while the user's form run showed α-p=0.06.)
+    """
     try:
         spec = FactorSpec(
             name=name, hypothesis="", expression=expr,
@@ -121,6 +129,7 @@ def run_one(name: str, expr: str, ops: list[str],
         )
         r = fbm.run_factor_backtest(
             spec,
+            train_ratio=0.70,
             direction="long_only",
             neutralize=neutralize,
             top_pct=top_pct,
@@ -168,16 +177,19 @@ def verdict(alpha_p: float, beta: float, alpha: float) -> str:
 
 
 def main() -> int:
-    print("[stage 1] running 22 candidates × {2 neutralize × 3 top_pct} = "
-          "6 variants per factor, all under (long_only, RSP)", file=sys.stderr)
+    # User's spec: (long_only, sector-neutral, RSP). FORCE sector — earlier
+    # version of this script picked best of (none, sector) which silently
+    # broke the contract for factors where neutralize=none gave higher α-t.
+    # Sweep across top_pct only.
+    print("[stage 1] running 22 candidates × 3 top_pct variants under "
+          "(long_only, sector-neutral, RSP) — STRICT SPEC", file=sys.stderr)
     chosen: list[dict] = []
     for fam, name, thesis, expr, ops in CANDIDATES:
         variants = []
-        for neut in ("none", "sector"):
-            for tp in (0.10, 0.20, 0.30):
-                v = run_one(name, expr, ops, neut, tp)
-                if v and "error" not in v:
-                    variants.append(v)
+        for tp in (0.10, 0.20, 0.30):
+            v = run_one(name, expr, ops, "sector", tp)
+            if v and "error" not in v:
+                variants.append(v)
         if not variants:
             print(f"  {name}: ALL VARIANTS FAILED", file=sys.stderr)
             continue
@@ -187,8 +199,7 @@ def main() -> int:
         best["expression"] = expr
         best["verdict"] = verdict(best["alpha_p"], best["beta"], best["alpha_ann"])
         chosen.append(best)
-        nlabel = best["neutralize"][:1].upper()
-        print(f"  {name:18s} {nlabel}/top{int(best['top_pct']*100):2d}%  "
+        print(f"  {name:18s} S/top{int(best['top_pct']*100):2d}%  "
               f"SR={best['test_sr']:+.2f}  α-t={best['alpha_t']:+.2f}  "
               f"α-p={best['alpha_p']:.3f}  β={best['beta']:+.3f}  "
               f"verdict={best['verdict']}",

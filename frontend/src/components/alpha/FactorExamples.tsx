@@ -154,116 +154,126 @@ export const FACTOR_EXAMPLES: readonly FactorExample[] = [
 
   // ── Long-only · sector-neutral · RSP picks ─────────────────────────────
   // Sourced from scripts/select_pure_alpha_long_only_rsp.py (run
-  // 2026-05-08). Under (direction=long_only, neutralize=sector,
-  // benchmark=RSP), |β|≈1 is structural — every long_only basket vs an
-  // equity benchmark has β around 1 by construction, so RISK.ATTRIBUTION's
-  // "Pure Alpha" verdict (|β|<0.30) is unreachable. The verdict that
-  // matters here is significance alone: α-p<0.05.
-  // Result: only 1 of 22 candidates clears α-p<0.05. The other 5 picks
-  // are top-α-t directionals — useful as starting points, but their
-  // verdict on RISK.ATTRIBUTION will read MARGINAL or NOISE, not
-  // PURE_ALPHA. Honest labeling in intuition text below.
+  // 2026-05-08, train_ratio=0.70 to match the form's default slider).
+  //
+  // HONEST FINDING under STRICT (long_only, sector-neutral, RSP):
+  //   - 0 of 22 candidates clear α-p<0.05 (the SIG_ALPHA tier)
+  //   - 1 reaches MARGINAL (α-p<0.10): E/P at α-p=0.058, top 20%
+  //   - 5 are NOISE: high_dvol, trend_sharpe_120, momo_6_1,
+  //     vol_zscore_20, cash_buffer
+  //
+  // Why so few hits: sector-neutralization on a long_only basket
+  // strips away the sector tilt that classic value/quality factors
+  // (E/P, B/P, gross_prof) load on. RSP is itself the equal-weighted
+  // SP500, which already does sector balancing — beating it WITHOUT
+  // sector tilts is genuinely hard. Without sector-neutral, E/P
+  // clears α-p=0.009 vs RSP top 10% — the dropped constraint is
+  // doing all the work.
+  //
+  // The verdict bars are correct, not too high. Empirically the
+  // alpha is concentrated in (long_only, NONE, RSP) configs once you
+  // remove sector-neutral. See intuition text per pick.
   {
     name: "E/P · LO·SN·RSP",
-    hypothesisZh: "E/P 在 (long_only, sector-neutral, RSP) 下唯一通过 α-p<0.05 的因子——top 10% sector-neutral 篮子相对等权 RSP 显著超额",
-    hypothesisEn: "E/P is the only factor clearing α-p<0.05 under (long_only, sector-neutral, RSP) — top-10% sector-neutral basket significantly beats equal-weighted RSP",
+    hypothesisZh: "E/P 在严格 (long_only, sector-neutral, RSP) 下唯一进入 MARGINAL 等级——sector 中性化抹掉了价值因子的行业 tilt",
+    hypothesisEn: "E/P is the strongest factor under STRICT (long_only, sector-neutral, RSP) but only reaches MARGINAL — sector-neutralization strips the sector tilt that drives value factor alpha",
     expression: "rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))",
-    totalReturn: 0.030,
-    testSharpe: 1.86,
-    testIC: 0.0084,
+    totalReturn: 0.025,
+    testSharpe: 1.80,
+    testIC: 0.0071,
     direction: "long_only",
     neutralize: "sector",
     benchmarkTicker: "RSP",
-    topPct: 0.10,
+    topPct: 0.20,
     intuitionZh:
-      "★ 唯一在该 hostile config 下通过显著性的因子。α-t=+2.59, p=0.009 (高度显著)。β=+1.17 (long_only 结构性 ≈ 1)，α-ann=+10.88%, PSR=0.92。Bull α-t=+0.89 / sideways α-t=+1.06——两个 regime 都正。RISK.ATTRIBUTION verdict 在 long_only 上不会读 Pure Alpha（|β|<0.30 结构上不可能），但显著正 α 仍证明因子有效。",
+      "MARGINAL 等级 (α-p=0.058, 差 0.008)。α-t=+1.89, β=+1.106, SR=+1.80, α-ann=+4.90%。Bull α-t=+0.30 / sideways α-t=+1.54。把同样表达式去掉 sector-neutral (改成 none) → α-p 跳到 0.009——sector 中性化抹掉了价值因子的行业 tilt（E/P 集中在金融/能源），是真 alpha 的来源。",
     intuitionEn:
-      "★ Only factor clearing significance under this hostile config. α-t=+2.59, p=0.009 (highly significant). β=+1.17 (≈1 structural for long_only), α-ann=+10.88%, PSR=0.92. Bull α-t=+0.89 / sideways α-t=+1.06 — positive both regimes. RISK.ATTRIBUTION won't read Pure Alpha on long_only (|β|<0.30 structurally impossible) but significant positive α proves the factor works.",
-  },
-  {
-    name: "Cash Buffer · LO·SN·RSP",
-    hypothesisZh: "现金/股东权益 long-only top 10% sector-neutral——边缘显著（p=0.077），对市场尾部风险有韧性",
-    hypothesisEn: "Cash/equity long-only top-10% sector-neutral — marginally significant (p=0.077), resilient under tail risk",
-    expression: "rank(divide(cash_and_equivalents, equity))",
-    totalReturn: 0.014,
-    testSharpe: 0.58,
-    testIC: 0.0090,
-    direction: "long_only",
-    neutralize: "sector",
-    benchmarkTicker: "RSP",
-    topPct: 0.10,
-    intuitionZh:
-      "MARGINAL 等级。α-t=+1.77, p=0.077 (差一点 0.05)。bull α-t=-1.90 反向, sideways α-t=+1.13 正——震荡市才是它的舞台，bull 反而拖后腿。RISK.ATTRIBUTION verdict 会读 Marginal。如果用户偏好低风险防御类持仓做底仓可参考。",
-    intuitionEn:
-      "MARGINAL tier. α-t=+1.77, p=0.077 (just misses 0.05). Bull α-t=-1.90 negative, sideways α-t=+1.13 positive — chop-market factor; bull actually drags. RISK.ATTRIBUTION verdict reads Marginal. Useful as defensive sleeve in long_only book.",
+      "MARGINAL tier (α-p=0.058, just misses 0.05). α-t=+1.89, β=+1.106, SR=+1.80, α-ann=+4.90%. Bull α-t=+0.30 / sideways α-t=+1.54. Drop sector-neutral on the same expression and α-p collapses to 0.009 — sector-neutralization strips the sector tilt (E/P concentrates in financials / energy) that was carrying the alpha.",
   },
   {
     name: "High DVol · LO·SN·RSP",
-    hypothesisZh: "60 日美元成交量排名 long-only top 10%——大流动性股票偏向 mega-cap 倾斜，p=0.10 边缘",
-    hypothesisEn: "60d dollar-volume rank long-only top-10% — high-liquidity tilt, borderline at p=0.10",
+    hypothesisZh: "60 日美元成交量排名 sector-neutral top 10%——大流动性股票偏向 mega-cap 倾斜，p=0.103 边缘 NOISE",
+    hypothesisEn: "60d dollar-volume rank sector-neutral top-10% — high-liquidity tilt, borderline NOISE at p=0.103",
     expression: "rank(adv60)",
-    totalReturn: 0.010,
-    testSharpe: 1.01,
-    testIC: 0.0097,
+    totalReturn: 0.018,
+    testSharpe: 1.87,
+    testIC: 0.0132,
     direction: "long_only",
     neutralize: "sector",
     benchmarkTicker: "RSP",
     topPct: 0.10,
     intuitionZh:
-      "α-t=+1.63, p=0.103 边缘不显著。β=+0.94 (相对其他 picks 略低)。本质上是把「流动性最深的名字」long——和 RSP 等权篮子比时 mega-cap 加权效应贡献正 α。Verdict 会读 NOISE 但方向稳定。",
+      "NOISE tier (α-p=0.103)。α-t=+1.63, β=+0.938, SR=+1.87 (batch 第二高), α-ann=+6.72%, PSR=0.96。Bull α-t=+0.51 / sideways α-t=+1.31 都正。本质是「sector 内最深流动性名字」long — vs RSP 等权篮子时大盘股加权效应贡献正 α。SR 高但显著性边缘。",
     intuitionEn:
-      "α-t=+1.63, p=0.103 borderline. β=+0.94 (lower than peers). Essentially longs deepest-liquidity names — vs equal-weighted RSP the mega-cap concentration drives the spread. Verdict reads NOISE but direction is stable.",
+      "NOISE tier (α-p=0.103). α-t=+1.63, β=+0.938, SR=+1.87 (2nd highest in batch), α-ann=+6.72%, PSR=0.96. Bull α-t=+0.51 / sideways α-t=+1.31 both positive. Essentially longs the deepest-liquidity names within each sector — vs equal-weighted RSP the implicit mega-cap weighting drives positive α. High SR, borderline significance.",
   },
   {
     name: "Trend Sharpe 120d · LO·SN·RSP",
-    hypothesisZh: "120 日 return/vol 比率——风险调整后趋势强度，sector-neutral top 10% 模式 SR 最高 (+2.11)",
-    hypothesisEn: "120d return/vol — risk-adjusted trend; sector-neutral top-10% mode hits SR=+2.11 (highest in batch)",
+    hypothesisZh: "120 日 return/vol 比率 sector-neutral top 10%——batch 内 SR 最高 (+2.05)，但 α 显著性 NOISE",
+    hypothesisEn: "120d return/vol sector-neutral top-10% — highest SR in batch (+2.05) but α not significant",
     expression: "rank(divide(ts_mean(returns, 120), ts_std(returns, 120)))",
     totalReturn: 0.030,
-    testSharpe: 2.11,
-    testIC: 0.0185,
+    testSharpe: 2.05,
+    testIC: 0.0186,
     direction: "long_only",
     neutralize: "sector",
     benchmarkTicker: "RSP",
     topPct: 0.10,
     intuitionZh:
-      "Batch 内 SR 最高 (+2.11)，但 α-t=+1.43, p=0.152——SR 高 + α 不显著的典型 momentum: 系统性吃了趋势 tilt 的 β. β=+0.77 (相对其他 picks 最低，因为 momentum 排除了 reversion 名字)。Sideways α-t=+2.05 极强，bull α-t=-0.07 平。",
+      "NOISE tier (α-p=0.152)。α-t=+1.43, β=+0.771 (batch 内最低 β), SR=+2.05, α-ann=+7.93%, PSR=0.97。典型 momentum: SR 高 + α 不显著 = SR 来自 trend β 而非 stock-selection α。Bull α-t=+0.17 / sideways α-t=+1.83。",
     intuitionEn:
-      "Highest SR in batch (+2.11), but α-t=+1.43, p=0.152 — classic high-SR-low-significance momentum: SR rides trend β rather than stock-selection α. β=+0.77 (lowest in batch since momentum excludes mean-reverters). Sideways α-t=+2.05 strong, bull α-t=-0.07 flat.",
+      "NOISE tier (α-p=0.152). α-t=+1.43, β=+0.771 (lowest β in batch), SR=+2.05, α-ann=+7.93%, PSR=0.97. Classic momentum signature: high SR + low α-significance = SR rides trend β rather than stock-selection α. Bull α-t=+0.17 / sideways α-t=+1.83.",
   },
   {
-    name: "B/P · LO·SN·RSP",
-    hypothesisZh: "Book yield long-only top 20% sector-neutral——SR=+1.98 强但 α 不显著",
-    hypothesisEn: "Book yield long-only top-20% sector-neutral — SR=+1.98 strong but α not significant",
-    expression: "rank(divide(equity, multiply(close, shares_outstanding)))",
-    totalReturn: 0.025,
-    testSharpe: 1.98,
-    testIC: 0.0144,
+    name: "Momo 6-1 · LO·SN·RSP",
+    hypothesisZh: "6-1 月 momentum sector-neutral top 20%——经典 Jegadeesh-Titman 在 sector-neutral 下被中和",
+    hypothesisEn: "6-1 month momentum sector-neutral top-20% — classic Jegadeesh-Titman muted by sector-neutralization",
+    expression: "rank(subtract(ts_mean(returns, 126), ts_mean(returns, 21)))",
+    totalReturn: 0.018,
+    testSharpe: 1.22,
+    testIC: 0.0135,
     direction: "long_only",
     neutralize: "sector",
     benchmarkTicker: "RSP",
     topPct: 0.20,
     intuitionZh:
-      "α-t=+1.23, p=0.217。Bull α-t=+1.48 强 / sideways α-t=+0.54 弱——和经典 value 反着来 (value 通常震荡市强)。可能是当前 SP500 v3 panel 里 bull 期价值股回归。Verdict NOISE 但 SR 高。",
+      "NOISE tier (α-p=0.389)。α-t=+0.86, β=+1.036, SR=+1.22, α-ann=+4.45%。Bull α-t=-1.14 反向 / sideways α-t=+1.19 正——典型 momentum 在 mega-cap 牛市中跟不上。Sector-neutral 进一步剥夺了 momentum 的板块 rotation 效应。作为 momentum 类目代表保留，仅供对照。",
     intuitionEn:
-      "α-t=+1.23, p=0.217. Bull α-t=+1.48 strong / sideways α-t=+0.54 weak — opposite of classic value (value usually wins chop). Plausibly value mean-reversion in the current panel's bull. Verdict NOISE but SR high.",
+      "NOISE tier (α-p=0.389). α-t=+0.86, β=+1.036, SR=+1.22, α-ann=+4.45%. Bull α-t=-1.14 negative / sideways α-t=+1.19 positive — momentum struggles to keep pace in mega-cap-led bulls. Sector-neutral further strips momentum's sector-rotation effect. Kept as momentum-family representative.",
   },
   {
-    name: "ROE · LO·SN·RSP",
-    hypothesisZh: "Return on equity long-only top 20% sector-neutral——quality 因子，α 弱但作为 long_only 多样化候选",
-    hypothesisEn: "Return on equity long-only top-20% sector-neutral — quality candidate, weak α but useful for diversification",
-    expression: "rank(divide(net_income_adjusted, equity))",
+    name: "Vol Z-Score 20d · LO·SN·RSP",
+    hypothesisZh: "20 日成交量 z-score sector-neutral top 20%——异常活跃度，long_only/sector-neutral 后 α 弱化",
+    hypothesisEn: "20d volume z-score sector-neutral top-20% — abnormal-trading attention; α weakens under long_only/sector-neutral",
+    expression: "ts_zscore(volume, 20)",
+    totalReturn: 0.020,
+    testSharpe: 1.85,
+    testIC: 0.0107,
+    direction: "long_only",
+    neutralize: "sector",
+    benchmarkTicker: "RSP",
+    topPct: 0.20,
+    intuitionZh:
+      "NOISE tier (α-p=0.397)。α-t=+0.85, β=+1.000, SR=+1.85, α-ann=+2.12%。Bull α-t=-0.98 / sideways α-t=+2.73——震荡市极强但 bull 拖累。同表达式在 long_short 上是 alpha-agent 第一个 p<0.05 的因子（参考 Volume Z-Score 20d 例子）；long_only 把短头去掉，α 依赖结构下降一半。",
+    intuitionEn:
+      "NOISE tier (α-p=0.397). α-t=+0.85, β=+1.000, SR=+1.85, α-ann=+2.12%. Bull α-t=-0.98 / sideways α-t=+2.73 — strong in chop, dragged in bull. Same expression on long_short was alpha-agent's first p<0.05 factor (see the Volume Z-Score 20d example above); long_only drops the short leg and halves the α structurally.",
+  },
+  {
+    name: "Cash Buffer · LO·SN·RSP",
+    hypothesisZh: "现金/股东权益 sector-neutral top 30%——defensive 因子，sector-neutral 抹掉了行业差异",
+    hypothesisEn: "Cash/equity sector-neutral top-30% — defensive factor; sector-neutral strips the cross-sector spread",
+    expression: "rank(divide(cash_and_equivalents, equity))",
     totalReturn: 0.012,
-    testSharpe: 0.72,
-    testIC: 0.0027,
+    testSharpe: 1.21,
+    testIC: 0.0140,
     direction: "long_only",
     neutralize: "sector",
     benchmarkTicker: "RSP",
-    topPct: 0.20,
+    topPct: 0.30,
     intuitionZh:
-      "α-t=+1.20, p=0.230。两个 regime 都偏负 (bull -0.10, sideways -0.83)，依靠 OOS 期间未覆盖的小段时间贡献。verdict NOISE。仅作为 quality 类目的 placeholder 候选；真正 quality alpha 需要等待 IC.HORIZON.DECAY 后端引入更长 horizon 检验。",
+      "NOISE tier (α-p=0.418)。α-t=+0.81, β=+1.091, SR=+1.21, α-ann=+1.92%。Bull α-t=-0.90 / sideways α-t=+0.64。Tech / health-care 通常现金多，sector-neutral 把这个差异抹掉了。底仓 placeholder，无 α 证据。如改成 neutralize=none, top 10%，α-p 升到 ~0.077（仍未达 0.05）。",
     intuitionEn:
-      "α-t=+1.20, p=0.230. Both regimes slightly negative (bull -0.10, sideways -0.83); residual α from a small uncovered slice. Verdict NOISE. Placeholder for quality family; real quality α likely needs the backend backlog's IC.HORIZON.DECAY to test at longer horizons.",
+      "NOISE tier (α-p=0.418). α-t=+0.81, β=+1.091, SR=+1.21, α-ann=+1.92%. Bull α-t=-0.90 / sideways α-t=+0.64. Tech / healthcare typically run cash-rich; sector-neutralization erases the cross-sector spread. Placeholder, no α evidence. Same expression with neutralize=none top 10% improves to α-p≈0.077, still not significant.",
   },
 ];
 
