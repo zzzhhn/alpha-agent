@@ -64,6 +64,13 @@ class UniverseInfo(BaseModel):
     ticker_count: int
     benchmark: str
     tickers: list[str]
+    # Per-ticker GICS sector, aligned to `tickers` by index. Each entry
+    # is the sector string from the panel's last day (sectors rarely
+    # change, and broadcast snapshot anyway). `None` when the panel has
+    # no sector data — the frontend falls back to a single "Unknown"
+    # bucket. Field is optional for back-compat with any older client
+    # that doesn't know about it; absence is equivalent to all-None.
+    sectors: list[str | None] | None = None
     start_date: str
     end_date: str
     n_days: int
@@ -130,12 +137,28 @@ def list_universes() -> UniverseListResponse:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+    # Sector vector (one entry per ticker, latest-day snapshot). Sectors
+    # are snapshot-broadcast so the last row is canonical; nothing is
+    # gained by averaging or majority-voting across rows. Coerce numpy
+    # strings to plain str + filter out the legacy "Unknown" / "" / "nan"
+    # markers that already appear in the AST whitelist's degenerate set.
+    sectors: list[str | None] | None
+    if panel.sector is None:
+        sectors = None
+    else:
+        last_row = panel.sector[-1]
+        sectors = [
+            (None if (s is None or str(s) in ("", "Unknown", "nan")) else str(s))
+            for s in last_row
+        ]
+
     info = UniverseInfo(
         id="SP500_subset",
         name="SP500 Megacap Subset (1Y)",
         ticker_count=len(panel.tickers),
         benchmark=BENCHMARK_TICKER,
         tickers=list(panel.tickers),
+        sectors=sectors,
         start_date=str(panel.dates[0]),
         end_date=str(panel.dates[-1]),
         n_days=len(panel.dates),
