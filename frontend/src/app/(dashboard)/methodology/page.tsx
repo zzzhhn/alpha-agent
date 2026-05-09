@@ -1,10 +1,38 @@
 "use client";
 
+/**
+ * Methodology page — workstation port (Stage 3 · 3/9).
+ *
+ * Surfaces three tabs explaining how the platform actually works:
+ *   - DATA: which universe, which fields, which pipeline steps
+ *   - OPERATORS: every implemented op with signature + source snippet
+ *   - BACKTEST: every reported metric with formula + source ref
+ *
+ * Layout uses the workstation primitives. TmSubbar carries the active-tab
+ * chip row + retry control. Each pane is flat and edge-to-edge with the
+ * shared bottom hairline. Data tab leads with a 5-cell TmKpiGrid +
+ * sectors chips + numbered pipeline. Operators tab keeps the per-op
+ * `<details>` disclosure but in flat hairline rows. Backtest tab keeps
+ * the formula table but as a hairline-grid (`gap-px bg-tm-rule`) instead
+ * of legacy alternating zebra.
+ *
+ * Per-fetch error tracking + targeted retry preserved from legacy.
+ */
+
 import { useCallback, useEffect, useState } from "react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmChip,
+  TmStatusPill,
+} from "@/components/tm/TmSubbar";
+import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
+import { TmButton } from "@/components/tm/TmButton";
 import {
   fetchOperandCatalogWithSignatures,
   fetchSectors,
@@ -36,8 +64,6 @@ export default function MethodologyPage() {
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
   const [sectors, setSectors] = useState<readonly string[]>([]);
   const [catalog, setCatalog] = useState<OperandCatalogResponse | null>(null);
-  // Errors are tracked per-fetch so the static Backtest tab never sees them
-  // and so a retry can target the failing slice without re-fetching the rest.
   const [universesError, setUniversesError] = useState<string | null>(null);
   const [coverageError, setCoverageError] = useState<string | null>(null);
   const [sectorsError, setSectorsError] = useState<string | null>(null);
@@ -55,9 +81,12 @@ export default function MethodologyPage() {
       fetchCoverage("SP500_subset", { force }),
       fetchSectors(),
     ]);
-    if (u.error) setUniversesError(u.error); else if (u.data) setUniverses(u.data);
-    if (c.error) setCoverageError(c.error); else if (c.data) setCoverage(c.data);
-    if (s.error) setSectorsError(s.error); else if (s.data) setSectors(s.data.sectors);
+    if (u.error) setUniversesError(u.error);
+    else if (u.data) setUniverses(u.data);
+    if (c.error) setCoverageError(c.error);
+    else if (c.data) setCoverage(c.data);
+    if (s.error) setSectorsError(s.error);
+    else if (s.data) setSectors(s.data.sectors);
     setReloading(false);
   }, []);
 
@@ -79,50 +108,81 @@ export default function MethodologyPage() {
     void loadOperatorsTab();
   }, [tab, catalog, loadOperatorsTab]);
 
-  const dataTabHasError = Boolean(universesError || coverageError || sectorsError);
+  const dataTabHasError = Boolean(
+    universesError || coverageError || sectorsError,
+  );
+  const dataErrors = [universesError, coverageError, sectorsError].filter(
+    Boolean,
+  ) as string[];
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-text">
-          {t(locale, "methodology.title")}
-        </h1>
-        <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-          {t(locale, "methodology.subtitle")}
-        </p>
-      </header>
-
-      <div className="flex gap-1 border-b border-border">
+    <TmScreen>
+      <TmSubbar>
+        <span className="text-tm-muted">METHODOLOGY</span>
+        <TmSubbarSep />
         {(["data", "operators", "backtest"] as Tab[]).map((tk) => (
-          <button
-            key={tk}
-            type="button"
-            onClick={() => setTab(tk)}
-            className={
-              tab === tk
-                ? "border-b-2 border-accent px-4 py-2 text-[14px] font-semibold text-accent"
-                : "border-b-2 border-transparent px-4 py-2 text-[14px] text-muted hover:text-text"
-            }
-          >
+          <TmChip key={tk} on={tab === tk} onClick={() => setTab(tk)}>
             {t(locale, `methodology.tab.${tk}` as Parameters<typeof t>[1])}
-          </button>
+          </TmChip>
         ))}
-      </div>
+        <TmSubbarSpacer />
+        {tab === "data" && universes && (
+          <>
+            <TmSubbarKV label="N" value={universes.universes[0]?.ticker_count ?? "—"} />
+            <TmSubbarSep />
+          </>
+        )}
+        {tab === "operators" && catalog && (
+          <>
+            <TmSubbarKV
+              label="OPS"
+              value={`${(catalog.operators as OperatorWithSignature[]).filter((o) => o.implemented).length}/${catalog.operators.length}`}
+            />
+            <TmSubbarSep />
+          </>
+        )}
+        {tab === "data" && dataTabHasError && (
+          <TmStatusPill tone="err">FETCH ERROR</TmStatusPill>
+        )}
+        {tab === "operators" && catalogError && (
+          <TmStatusPill tone="err">FETCH ERROR</TmStatusPill>
+        )}
+        {tab === "data" && (
+          <TmButton
+            variant="ghost"
+            onClick={() => loadDataTab(true)}
+            disabled={reloading}
+            className="-my-1 px-2"
+          >
+            {reloading
+              ? t(locale, "methodology.retrying")
+              : t(locale, "methodology.retry")}
+          </TmButton>
+        )}
+        {tab === "operators" && (
+          <TmButton
+            variant="ghost"
+            onClick={loadOperatorsTab}
+            disabled={reloading}
+            className="-my-1 px-2"
+          >
+            {reloading
+              ? t(locale, "methodology.retrying")
+              : t(locale, "methodology.retry")}
+          </TmButton>
+        )}
+      </TmSubbar>
 
       {tab === "data" && dataTabHasError && (
-        <ErrorCard
+        <ErrorPane
           title={t(locale, "methodology.error")}
-          messages={[universesError, coverageError, sectorsError].filter(Boolean) as string[]}
-          onRetry={() => loadDataTab(true)}
-          retrying={reloading}
+          messages={dataErrors}
         />
       )}
       {tab === "operators" && catalogError && (
-        <ErrorCard
+        <ErrorPane
           title={t(locale, "methodology.error")}
           messages={[catalogError]}
-          onRetry={loadOperatorsTab}
-          retrying={reloading}
         />
       )}
 
@@ -131,14 +191,16 @@ export default function MethodologyPage() {
       )}
       {tab === "operators" && <OperatorsTab catalog={catalog} />}
       {tab === "backtest" && <BacktestTab />}
-    </div>
+    </TmScreen>
   );
 }
 
 /* ── Data tab ─────────────────────────────────────────────────────── */
 
 function DataTab({
-  universes, coverage, sectors,
+  universes,
+  coverage,
+  sectors,
 }: {
   readonly universes: UniverseListResponse | null;
   readonly coverage: CoverageResponse | null;
@@ -147,66 +209,113 @@ function DataTab({
   const { locale } = useLocale();
   const u = universes?.universes[0];
 
-  return (
-    <div className="flex flex-col gap-4">
-      <Card padding="md">
-        <h2 className="mb-3 text-base font-semibold text-text">
-          {t(locale, "methodology.data.panelTitle")}
-        </h2>
-        {u && coverage ? (
-          <dl className="grid grid-cols-[160px_1fr] gap-y-2 text-[14px]">
-            <Row label={t(locale, "methodology.data.universe")} value={u.name} mono />
-            <Row label={t(locale, "methodology.data.tickers")} value={`${u.ticker_count}`} mono />
-            <Row label={t(locale, "methodology.data.benchmark")} value={u.benchmark} mono />
-            <Row label={t(locale, "methodology.data.range")} value={`${u.start_date} → ${u.end_date}`} mono />
-            <Row label={t(locale, "methodology.data.days")} value={`${u.n_days}`} mono />
-            <Row label={t(locale, "methodology.data.currency")} value={u.currency} mono />
-            <Row label={t(locale, "methodology.data.ohlcvCoverage")}
-              value={`${coverage.ohlcv_coverage_pct.toFixed(2)}%`} mono />
-          </dl>
-        ) : (
-          <p className="text-muted">{t(locale, "common.loading")}</p>
-        )}
-      </Card>
+  if (!u || !coverage) {
+    return (
+      <TmPane title={t(locale, "methodology.data.panelTitle")}>
+        <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
+          {t(locale, "common.loading")}
+        </p>
+      </TmPane>
+    );
+  }
 
-      <Card padding="md">
-        <h2 className="mb-3 text-base font-semibold text-text">
-          {t(locale, "methodology.data.sectorsTitle")}
-        </h2>
-        <p className="mb-2 text-[13px] text-muted">
+  return (
+    <>
+      <TmPane
+        title={t(locale, "methodology.data.panelTitle")}
+        meta={`${u.id} · ${u.benchmark}`}
+      >
+        <TmKpiGrid>
+          <TmKpi
+            label={t(locale, "methodology.data.tickers")}
+            value={u.ticker_count.toString()}
+            sub={u.id}
+          />
+          <TmKpi
+            label={t(locale, "methodology.data.days")}
+            value={u.n_days.toString()}
+            sub={`${u.start_date} → ${u.end_date}`}
+          />
+          <TmKpi
+            label={t(locale, "methodology.data.ohlcvCoverage")}
+            value={`${coverage.ohlcv_coverage_pct.toFixed(2)}%`}
+            tone={coverage.ohlcv_coverage_pct >= 99 ? "pos" : "warn"}
+            sub="OHLCV"
+          />
+          <TmKpi
+            label={t(locale, "methodology.data.benchmark")}
+            value={u.benchmark}
+            sub={u.currency}
+          />
+          <TmKpi
+            label={t(locale, "methodology.data.universe")}
+            value={u.name}
+          />
+        </TmKpiGrid>
+      </TmPane>
+
+      <TmPane
+        title={t(locale, "methodology.data.sectorsTitle")}
+        meta={`${sectors.length} GICS-1`}
+      >
+        <p className="px-3 pt-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
           {t(locale, "methodology.data.sectorsSubtitle")}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 px-3 pb-3 pt-2">
           {sectors.map((s) => (
-            <code key={s} className="rounded bg-[var(--toggle-bg)] px-2 py-1 text-[13px] text-text">
+            <span
+              key={s}
+              className="border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-[10.5px] text-tm-fg-2"
+            >
               {s}
-            </code>
+            </span>
           ))}
         </div>
-      </Card>
+      </TmPane>
 
-      <Card padding="md">
-        <h2 className="mb-3 text-base font-semibold text-text">
-          {t(locale, "methodology.data.pipelineTitle")}
-        </h2>
-        <ol className="ml-5 list-decimal space-y-2 text-[14px] leading-relaxed text-text">
-          <li>{t(locale, "methodology.data.step1")}</li>
-          <li>{t(locale, "methodology.data.step2")}</li>
-          <li>{t(locale, "methodology.data.step3")}</li>
-          <li>{t(locale, "methodology.data.step4")}</li>
-          <li>{t(locale, "methodology.data.step5")}</li>
+      <TmPane
+        title={t(locale, "methodology.data.pipelineTitle")}
+        meta="5 STAGES"
+      >
+        <ol className="flex flex-col">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <li
+              key={n}
+              className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-[11px] leading-relaxed text-tm-fg last:border-b-0"
+            >
+              <span className="shrink-0 text-tm-accent">
+                {String(n).padStart(2, "0")}
+              </span>
+              <span className="text-tm-fg">
+                {t(
+                  locale,
+                  `methodology.data.step${n}` as Parameters<typeof t>[1],
+                )}
+              </span>
+            </li>
+          ))}
         </ol>
-      </Card>
-    </div>
+      </TmPane>
+    </>
   );
 }
 
 /* ── Operators tab ────────────────────────────────────────────────── */
 
-function OperatorsTab({ catalog }: { readonly catalog: OperandCatalogResponse | null }) {
+function OperatorsTab({
+  catalog,
+}: {
+  readonly catalog: OperandCatalogResponse | null;
+}) {
   const { locale } = useLocale();
   if (!catalog) {
-    return <Card padding="md"><p className="text-muted">{t(locale, "common.loading")}</p></Card>;
+    return (
+      <TmPane title={t(locale, "methodology.operators.title")}>
+        <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
+          {t(locale, "common.loading")}
+        </p>
+      </TmPane>
+    );
   }
   const ops = catalog.operators as OperatorWithSignature[];
   const implemented = ops.filter((o) => o.implemented);
@@ -218,40 +327,47 @@ function OperatorsTab({ catalog }: { readonly catalog: OperandCatalogResponse | 
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card padding="md">
-        <h2 className="mb-2 text-base font-semibold text-text">
-          {t(locale, "methodology.operators.title")}
-        </h2>
-        <p className="text-[13px] text-muted">
+    <>
+      <TmPane
+        title={t(locale, "methodology.operators.title")}
+        meta={`${implemented.length}/${ops.length} IMPLEMENTED`}
+      >
+        <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
           {t(locale, "methodology.operators.subtitle")
             .replace("{n}", String(implemented.length))
             .replace("{total}", String(ops.length))}
         </p>
-      </Card>
+      </TmPane>
 
-      {Array.from(byCategory.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([cat, list]) => (
-        <Card key={cat} padding="md">
-          <h3 className="mb-3 text-[14px] font-semibold uppercase tracking-wide text-muted">
-            {cat} <span className="ml-2 text-[12px] normal-case text-muted">({list.length})</span>
-          </h3>
-          <div className="space-y-3">
-            {list.map((op) => (
-              <details key={op.name} className="rounded border border-border">
-                <summary className="cursor-pointer px-3 py-2 font-mono text-[13px] text-text hover:bg-[var(--toggle-bg)]">
-                  {op.signature ?? op.name}
-                </summary>
-                {op.source_snippet && (
-                  <pre className="m-0 overflow-x-auto rounded-b bg-[var(--toggle-bg)] px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">
-                    {op.source_snippet}
-                  </pre>
-                )}
-              </details>
-            ))}
-          </div>
-        </Card>
-      ))}
-    </div>
+      {Array.from(byCategory.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([cat, list]) => (
+          <TmPane key={cat} title={cat} meta={`${list.length}`}>
+            <ul className="flex flex-col">
+              {list.map((op) => (
+                <li
+                  key={op.name}
+                  className="border-b border-tm-rule last:border-b-0"
+                >
+                  <details className="group">
+                    <summary className="cursor-pointer px-3 py-1.5 font-tm-mono text-[11.5px] text-tm-fg hover:bg-tm-bg-2">
+                      <span className="text-tm-muted group-open:text-tm-accent">
+                        {">"}{" "}
+                      </span>
+                      <span className="text-tm-accent">{op.signature ?? op.name}</span>
+                    </summary>
+                    {op.source_snippet && (
+                      <pre className="m-0 overflow-x-auto border-t border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+                        {op.source_snippet}
+                      </pre>
+                    )}
+                  </details>
+                </li>
+              ))}
+            </ul>
+          </TmPane>
+        ))}
+    </>
   );
 }
 
@@ -264,132 +380,131 @@ function BacktestTab() {
   // metrics on top of the 6 base KPIs; these are spelled out so users can
   // see the formulas and find the source via the ref column.
   const rows: { keyBase: string; formula: string; ref: string }[] = [
-    // T0 — base KPIs (always shown)
     { keyBase: "sharpe", formula: "Sharpe = mean(daily_ret) / std(daily_ret) × √252", ref: "factor_backtest.py:_split_metrics" },
     { keyBase: "totalReturn", formula: "Total return = ∏(1 + daily_ret) − 1 over the slice", ref: "factor_backtest.py:_split_metrics" },
     { keyBase: "ic", formula: "IC = mean of cross-sectional Spearman(rank(factor[t]), rank(fwd_ret[t])) across t", ref: "kernel.py:spearman_ic" },
     { keyBase: "mdd", formula: "MaxDD = min((cumprod(1+r) − running_max) / running_max)", ref: "factor_backtest.py:_max_drawdown" },
     { keyBase: "turnover", formula: "Turnover = mean(L1 norm of weight delta between consecutive rows)", ref: "factor_backtest.py:_split_metrics" },
     { keyBase: "hitRate", formula: "Hit rate = fraction of days with daily IC > 0", ref: "factor_backtest.py:_split_metrics" },
-    // v4 — IC distribution & significance (T1.4)
     { keyBase: "icir", formula: "ICIR = mean(IC) / std(IC) × √252", ref: "factor_backtest.py:_split_metrics" },
     { keyBase: "icPvalue", formula: "IC p = math.erfc(|t| / √2) where t = mean(IC) / (std(IC)/√n)", ref: "factor_backtest.py:_split_metrics" },
-    // v4 — Bailey-Lopez de Prado deflated Sharpe (T2.1)
     { keyBase: "psr", formula: "PSR = Φ((SR − E[max SR | SR=0, n_trials]) × √(n−1) / √(1 − γ₃·SR + (γ₄−1)/4·SR²))", ref: "scan/significance.py:deflated_sharpe" },
-    // v4 — α/β decomposition vs benchmark (T3.B)
     { keyBase: "alphaBeta", formula: "α + β = OLS regress(daily_ret, bench_daily); α-t and α-p reported", ref: "factor_engine/risk_attribution.py" },
-    // v4 — bootstrap CIs (T3.A)
     { keyBase: "bootstrapCi", formula: "95% CI via stationary block bootstrap (block_len=20, n_resamples=1000)", ref: "scan/significance.py:stationary_block_bootstrap_ci" },
-    // v4 — IS-OOS overfit flag (T2.4)
     { keyBase: "overfitFlag", formula: "overfit = (train_SR > 0.5) AND ((train_SR − test_SR)/train_SR > 0.5)", ref: "factor_backtest.py:run_factor_backtest" },
-    // v4 — slippage + borrow (T2.2/T2.3)
     { keyBase: "slippageCost", formula: "slippage_bps = bps_const + k × √(participation/ADV) per trade", ref: "factor_backtest.py:run_factor_backtest" },
     { keyBase: "borrowCost", formula: "borrow_drag = short_borrow_bps/252 × Σ|w_short| each day", ref: "factor_backtest.py:run_factor_backtest" },
-    // v4 — regime breakdown (Bundle A.1)
     { keyBase: "regime", formula: "Days classified by SPY 60d return: bull >+5%, bear <−5%, sideways otherwise; SR/IC/α reported per regime", ref: "factor_backtest.py:_classify_regimes" },
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card padding="md">
-        <h2 className="mb-2 text-base font-semibold text-text">
-          {t(locale, "methodology.backtest.title")}
-        </h2>
-        <p className="text-[13px] leading-relaxed text-muted">
+    <>
+      <TmPane
+        title={t(locale, "methodology.backtest.title")}
+        meta={`${rows.length} METRICS`}
+      >
+        <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
           {t(locale, "methodology.backtest.subtitle")}
         </p>
-      </Card>
+      </TmPane>
 
-      <Card padding="md">
-        <h3 className="mb-3 text-[14px] font-semibold text-text">
-          {t(locale, "methodology.backtest.kpiTitle")}
-        </h3>
-        <table className="w-full text-[13px]">
-          <thead className="bg-[var(--toggle-bg)]">
-            <tr>
-              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "methodology.backtest.colMetric")}</th>
-              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "methodology.backtest.colFormula")}</th>
-              <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "methodology.backtest.colRef")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.keyBase} className="border-t border-border">
-                <td className="px-2 py-1.5 font-mono text-text">
-                  {t(locale, `methodology.backtest.${r.keyBase}` as Parameters<typeof t>[1])}
-                </td>
-                <td className="px-2 py-1.5 font-mono text-[12px] text-muted">{r.formula}</td>
-                <td className="px-2 py-1.5 font-mono text-[12px] text-muted">{r.ref}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      <TmPane
+        title={t(locale, "methodology.backtest.kpiTitle")}
+        meta="FORMULA · SOURCE"
+      >
+        <div
+          className="grid gap-px bg-tm-rule"
+          style={{ gridTemplateColumns: "minmax(140px, 180px) 1fr minmax(180px, 240px)" }}
+        >
+          <div className="bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+            {t(locale, "methodology.backtest.colMetric")}
+          </div>
+          <div className="bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+            {t(locale, "methodology.backtest.colFormula")}
+          </div>
+          <div className="bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+            {t(locale, "methodology.backtest.colRef")}
+          </div>
+          {rows.map((r) => (
+            <BacktestRow key={r.keyBase} keyBase={r.keyBase} formula={r.formula} ref_={r.ref} />
+          ))}
+        </div>
+      </TmPane>
 
-      <Card padding="md">
-        <h3 className="mb-3 text-[14px] font-semibold text-text">
-          {t(locale, "methodology.backtest.portfolioTitle")}
-        </h3>
-        <ul className="ml-5 list-disc space-y-1.5 text-[13px] leading-relaxed text-text">
-          <li>{t(locale, "methodology.backtest.portfolio1")}</li>
-          <li>{t(locale, "methodology.backtest.portfolio2")}</li>
-          <li>{t(locale, "methodology.backtest.portfolio3")}</li>
-          <li>{t(locale, "methodology.backtest.portfolio4")}</li>
+      <TmPane
+        title={t(locale, "methodology.backtest.portfolioTitle")}
+        meta="4 RULES"
+      >
+        <ul className="flex flex-col">
+          {[1, 2, 3, 4].map((n) => (
+            <li
+              key={n}
+              className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-[11px] leading-relaxed text-tm-fg last:border-b-0"
+            >
+              <span className="shrink-0 text-tm-accent">·</span>
+              <span>
+                {t(
+                  locale,
+                  `methodology.backtest.portfolio${n}` as Parameters<typeof t>[1],
+                )}
+              </span>
+            </li>
+          ))}
         </ul>
-      </Card>
-    </div>
+      </TmPane>
+    </>
+  );
+}
+
+function BacktestRow({
+  keyBase,
+  formula,
+  ref_,
+}: {
+  readonly keyBase: string;
+  readonly formula: string;
+  readonly ref_: string;
+}) {
+  const { locale } = useLocale();
+  return (
+    <>
+      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-[11px] text-tm-accent">
+        {t(locale, `methodology.backtest.${keyBase}` as Parameters<typeof t>[1])}
+      </div>
+      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg">
+        {formula}
+      </div>
+      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-muted">
+        {ref_}
+      </div>
+    </>
   );
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
-function ErrorCard({
-  title, messages, onRetry, retrying,
+function ErrorPane({
+  title,
+  messages,
 }: {
   readonly title: string;
   readonly messages: readonly string[];
-  readonly onRetry: () => void;
-  readonly retrying: boolean;
 }) {
-  const { locale } = useLocale();
   // Dedupe — when multiple parallel fetches hit the same edge IP poisoning
-  // they often produce the identical TypeError text; one card row is plenty.
+  // they often produce the identical TypeError text; one row is plenty.
   const unique = Array.from(new Set(messages));
   return (
-    <Card padding="md">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-base font-semibold text-red">{title}</p>
-          <ul className="mt-1 list-disc pl-5 text-[13px] leading-relaxed text-text">
-            {unique.map((m, i) => (
-              <li key={i}>{m}</li>
-            ))}
-          </ul>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onRetry}
-          disabled={retrying}
-        >
-          {retrying ? t(locale, "methodology.retrying") : t(locale, "methodology.retry")}
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-function Row({
-  label, value, mono,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly mono?: boolean;
-}) {
-  return (
-    <>
-      <dt className="text-muted">{label}</dt>
-      <dd className={mono ? "font-mono text-text" : "text-text"}>{value}</dd>
-    </>
+    <TmPane title={title} meta={`${unique.length} ISSUE${unique.length === 1 ? "" : "S"}`}>
+      <ul className="flex flex-col">
+        {unique.map((m, i) => (
+          <li
+            key={i}
+            className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[11px] leading-relaxed text-tm-neg last:border-b-0"
+          >
+            {m}
+          </li>
+        ))}
+      </ul>
+    </TmPane>
   );
 }
