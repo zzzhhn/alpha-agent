@@ -1,28 +1,27 @@
 "use client";
 
 /**
- * Data page — universe / operator catalog / coverage overview.
+ * Data page — universe / sectors / schema / operator catalog / coverage.
  *
- * Stage 3 redesign port. The 3 child components (UniverseCard,
- * OperandCatalog, CoverageOverview) each own their own TmPane, so this
- * page is a thin orchestrator: header pane + universe grid + catalog
- * + coverage. All data fetching, caching, error handling preserved
- * from the legacy implementation.
- *
- * NOT changed:
- *   * fetchUniverses / fetchOperandCatalog / fetchCoverage call sites
- *   * load() callback semantics (force=true on Refresh, force=false on mount)
- *   * invalidateDataCache() on refresh
- *   * cancelled-effect cleanup pattern
- *   * All i18n keys
+ * Stage 3 redesign re-port — uses TmScreen edge-to-edge stack with
+ * tm-subbar at top + flat pane stack below. All data fetching, caching,
+ * cancelled-effect cleanup unchanged.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { TmPane } from "@/components/tm/TmPane";
+import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmStatusPill,
+  TmChip,
+} from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
-import { UniverseCard } from "@/components/data/UniverseCard";
+import { UniverseDetail } from "@/components/data/UniverseCard";
 import { OperandCatalog } from "@/components/data/OperandCatalog";
 import { CoverageOverview } from "@/components/data/CoverageOverview";
 import {
@@ -33,6 +32,7 @@ import {
 } from "@/lib/api";
 import type {
   UniverseListResponse,
+  UniverseInfo,
   OperandCatalogResponse,
   CoverageResponse,
 } from "@/lib/types";
@@ -40,16 +40,12 @@ import type {
 export default function DataPage() {
   const { locale } = useLocale();
   const [universes, setUniverses] = useState<UniverseListResponse | null>(null);
+  const [activeUniverseId, setActiveUniverseId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<OperandCatalogResponse | null>(null);
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Caching design: fetchUniverses/Catalog/Coverage in lib/api.ts memoise
-  // their promises at module scope. The first DataPage mount triggers the
-  // network round-trips; subsequent mounts (e.g. after navigating to /alpha
-  // and back) return the cached results synchronously. Full reload or an
-  // explicit "刷新" click wipes the cache and re-fetches.
   const load = useCallback(async (force = false) => {
     const [u, o, c] = await Promise.all([
       fetchUniverses({ force }),
@@ -62,9 +58,12 @@ export default function DataPage() {
     }
     setError(null);
     setUniverses(u.data);
+    if (u.data && !activeUniverseId && u.data.universes.length > 0) {
+      setActiveUniverseId(u.data.universes[0].id);
+    }
     setCatalog(o.data);
     setCoverage(c.data);
-  }, []);
+  }, [activeUniverseId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,61 +83,84 @@ export default function DataPage() {
     setRefreshing(false);
   }
 
+  const activeUniverse: UniverseInfo | null =
+    (universes &&
+      activeUniverseId &&
+      universes.universes.find((u) => u.id === activeUniverseId)) ||
+    universes?.universes[0] ||
+    null;
+
   return (
-    <div className="flex flex-col gap-4 font-tm-mono">
-      {/* Page header pane — title bar with subtitle in body, refresh CTA
-          on the right. Mirrors the design's master-pane treatment. */}
-      <TmPane
-        title={t(locale, "data.title")}
-        meta={
-          universes ? (
-            <TmButton
-              variant="ghost"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="-my-1 px-2"
-            >
-              {refreshing
-                ? t(locale, "data.refreshing")
-                : t(locale, "data.refresh")}
-            </TmButton>
-          ) : null
-        }
-      >
-        <p className="px-3 py-2.5 text-[11.5px] leading-relaxed text-tm-fg-2">
-          {t(locale, "data.subtitle")}
-        </p>
-      </TmPane>
+    <TmScreen>
+      <TmSubbar>
+        <span className="text-tm-muted">UNIVERSE</span>
+        {universes
+          ? universes.universes.map((u) => (
+              <TmChip
+                key={u.id}
+                on={u.id === activeUniverse?.id}
+                onClick={() => setActiveUniverseId(u.id)}
+              >
+                {u.id}
+              </TmChip>
+            ))
+          : (
+              <span className="text-tm-muted">{t(locale, "data.loading")}</span>
+            )}
+        {activeUniverse && (
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV
+              label={t(locale, "data.universe.benchmark")}
+              value={activeUniverse.benchmark}
+            />
+            <TmSubbarSep />
+            <TmSubbarKV
+              label="N"
+              value={activeUniverse.ticker_count.toString()}
+            />
+          </>
+        )}
+        <TmSubbarSpacer />
+        {coverage && (
+          <TmStatusPill
+            tone={coverage.ohlcv_coverage_pct >= 99 ? "ok" : "warn"}
+          >
+            CACHE · {coverage.ohlcv_coverage_pct.toFixed(2)}% HIT
+          </TmStatusPill>
+        )}
+        <TmButton
+          variant="ghost"
+          onClick={handleRefresh}
+          disabled={refreshing || !universes}
+          className="-my-1 px-2"
+        >
+          {refreshing ? t(locale, "data.refreshing") : t(locale, "data.refresh")}
+        </TmButton>
+      </TmSubbar>
 
       {error && (
         <TmPane title="ERROR" meta={t(locale, "data.error")}>
-          <p className="px-3 py-2.5 text-[11.5px] text-tm-neg">{error}</p>
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+            {error}
+          </p>
         </TmPane>
       )}
 
       {!error && !universes && (
-        <TmPane title="LOADING" meta="…">
-          <p className="px-3 py-2.5 text-[11.5px] text-tm-muted">
+        <TmPane title="LOADING">
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
             {t(locale, "data.loading")}
           </p>
         </TmPane>
       )}
 
-      {universes && (
-        <section className="flex flex-col gap-3">
-          <h2 className="px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-tm-muted">
-            {t(locale, "data.universe.title")}
-          </h2>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {universes.universes.map((u) => (
-              <UniverseCard key={u.id} universe={u} />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Active universe detail — title shows the universe id */}
+      {activeUniverse && <UniverseDetail universe={activeUniverse} />}
 
       {catalog && <OperandCatalog catalog={catalog} />}
+
       {coverage && <CoverageOverview coverage={coverage} />}
-    </div>
+    </TmScreen>
   );
 }

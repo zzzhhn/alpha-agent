@@ -1,5 +1,21 @@
 "use client";
 
+/**
+ * Operator + operand catalog — flat workstation pane.
+ *
+ * Renders as a single TmPane inside the TmScreen stack. Header carries
+ * the tier counts (T1/T2/T3/total). Below the head: a hairline tab
+ * strip (operators / operands) plus an inline tier-filter chip group.
+ * Body groups items by category and renders each item as a 3-line
+ * row (`tm-op` pattern from styles-screens.css):
+ *   - name      (accent green)
+ *   - signature (fg-2, smaller)
+ *   - tier      (muted, small caps)
+ *
+ * No more "card-on-card" rounded grid — items are flat panels with
+ * 1px gap-as-rule against the bg-tm-rule backdrop.
+ */
+
 import { useState } from "react";
 import { TmPane } from "@/components/tm/TmPane";
 import { useLocale } from "@/components/layout/LocaleProvider";
@@ -24,22 +40,15 @@ const TIER_TONE: Record<CatalogTier, string> = {
   T3: "text-tm-muted",
 };
 
-// Label = implementation status, NOT tier-name. T1 and T2 are both live; the
-// tier letter on the badge already conveys "which subset". T3 is the only
-// not-implemented case.
-function tierLabel(tier: CatalogTier, locale: "zh" | "en"): string {
+function tierShort(tier: CatalogTier, locale: "zh" | "en"): string {
   if (locale === "zh") {
     return tier === "T1"
-      ? "基础可用"
+      ? "基础"
       : tier === "T2"
-        ? "扩展可用"
-        : "未实现 (premium)";
+        ? "扩展"
+        : "premium";
   }
-  return tier === "T1"
-    ? "Core"
-    : tier === "T2"
-      ? "Extended"
-      : "Unavailable";
+  return tier === "T1" ? "core" : tier === "T2" ? "extended" : "premium";
 }
 
 export function OperandCatalog({ catalog }: OperandCatalogProps) {
@@ -53,35 +62,30 @@ export function OperandCatalog({ catalog }: OperandCatalogProps) {
 
   return (
     <TmPane
-      title={t(locale, "data.operands.title")}
+      title="OPERATOR.CATALOG"
       meta={
         <span className="font-tm-mono">
           <span className="text-tm-pos">T1 {summary.T1}</span> ·{" "}
           <span className="text-tm-warn">T2 {summary.T2}</span> ·{" "}
-          <span className="text-tm-muted">T3 {summary.T3}</span> · total{" "}
-          {summary.total}
+          <span className="text-tm-muted">T3 {summary.T3}</span> · {summary.total} total
         </span>
       }
     >
-      <p className="px-3 pt-2.5 pb-2 font-tm-mono text-[11px] leading-relaxed text-tm-fg-2">
-        {t(locale, "data.operands.subtitle")}
-      </p>
-
-      {/* Tab strip + tier filter — hairline divider matches pane head */}
-      <div className="flex flex-wrap items-center gap-3 border-y border-tm-rule px-3 py-1.5 font-tm-mono">
-        <div className="flex">
-          <TabBtn
-            active={tab === "operators"}
-            onClick={() => setTab("operators")}
-            label={`${t(locale, "data.operands.operatorsTab")} (${opsSummary.total})`}
-          />
-          <TabBtn
-            active={tab === "operands"}
-            onClick={() => setTab("operands")}
-            label={`${t(locale, "data.operands.operandsTab")} (${fieldsSummary.total})`}
-          />
-        </div>
-        <div className="ml-auto flex gap-0.5">
+      {/* Tab strip — `.tm-tabs` pattern */}
+      <div className="flex border-b border-tm-rule bg-tm-bg-2">
+        <TabBtn
+          active={tab === "operators"}
+          onClick={() => setTab("operators")}
+          label={`${t(locale, "data.operands.operatorsTab")} · ${opsSummary.total}`}
+        />
+        <TabBtn
+          active={tab === "operands"}
+          onClick={() => setTab("operands")}
+          label={`${t(locale, "data.operands.operandsTab")} · ${fieldsSummary.total}`}
+        />
+        {/* Tier filter — pushed right via flex-1 spacer */}
+        <span className="flex-1" />
+        <div className="flex items-center gap-px py-1.5 pr-2">
           {(["all", "available", "T1", "T2", "T3"] as TierFilter[]).map((tf) => (
             <button
               key={tf}
@@ -89,8 +93,8 @@ export function OperandCatalog({ catalog }: OperandCatalogProps) {
               onClick={() => setTierFilter(tf)}
               className={
                 tierFilter === tf
-                  ? "border border-tm-accent bg-tm-accent-soft px-2 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-tm-accent"
-                  : "border border-tm-rule px-2 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-tm-muted hover:border-tm-rule-2 hover:text-tm-fg"
+                  ? "border border-tm-accent bg-tm-accent-soft px-2 py-px font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-accent"
+                  : "border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-fg"
               }
             >
               {tf}
@@ -99,19 +103,21 @@ export function OperandCatalog({ catalog }: OperandCatalogProps) {
         </div>
       </div>
 
-      <div className="px-3 py-3">
-        {tab === "operators" ? (
-          <OperatorList
-            operators={filterOps(catalog.operators, tierFilter)}
-            locale={locale}
-          />
-        ) : (
-          <OperandList
-            operands={filterOps(catalog.operands, tierFilter)}
-            locale={locale}
-          />
-        )}
-      </div>
+      <p className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+        {t(locale, "data.operands.subtitle")}
+      </p>
+
+      {tab === "operators" ? (
+        <OperatorList
+          operators={filterOps(catalog.operators, tierFilter)}
+          locale={locale}
+        />
+      ) : (
+        <OperandList
+          operands={filterOps(catalog.operands, tierFilter)}
+          locale={locale}
+        />
+      )}
     </TmPane>
   );
 }
@@ -140,8 +146,8 @@ function TabBtn({
       onClick={onClick}
       className={
         active
-          ? "border-b border-tm-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-tm-accent"
-          : "border-b border-transparent px-3 py-1 text-[11px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-fg"
+          ? "border-r border-tm-rule border-b-2 border-b-tm-accent bg-tm-bg px-3.5 py-2 font-tm-mono text-[11px] uppercase tracking-[0.04em] text-tm-accent"
+          : "border-r border-tm-rule px-3.5 py-2 font-tm-mono text-[11px] uppercase tracking-[0.04em] text-tm-muted hover:text-tm-fg"
       }
     >
       {label}
@@ -149,19 +155,25 @@ function TabBtn({
   );
 }
 
-function TierTag({
-  tier,
-  locale,
+// Generic per-category section — used for both operators and operands.
+function CategorySection({
+  title,
+  count,
+  children,
 }: {
-  tier: CatalogTier;
-  locale: "zh" | "en";
+  title: string;
+  count: number;
+  children: React.ReactNode;
 }) {
   return (
-    <span
-      className={`border border-tm-rule px-1.5 py-px font-tm-mono text-[10px] uppercase tracking-[0.06em] ${TIER_TONE[tier]}`}
-    >
-      {tier} · {tierLabel(tier, locale)}
-    </span>
+    <section>
+      <div className="border-t border-tm-rule px-3 py-1 font-tm-mono text-[10px] uppercase tracking-[0.10em] text-tm-muted first:border-t-0">
+        {title} ({count})
+      </div>
+      <div className="grid gap-px bg-tm-rule p-px [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -172,6 +184,13 @@ function OperatorList({
   operators: readonly OperatorInfo[];
   locale: "zh" | "en";
 }) {
+  if (operators.length === 0) {
+    return (
+      <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
+        no items
+      </p>
+    );
+  }
   const grouped = operators.reduce<Record<string, OperatorInfo[]>>(
     (acc, op) => {
       (acc[op.category] ??= []).push(op);
@@ -179,66 +198,31 @@ function OperatorList({
     },
     {},
   );
-  if (operators.length === 0) {
-    return (
-      <p className="py-6 text-center font-tm-mono text-[11px] text-tm-muted">
-        no items
-      </p>
-    );
-  }
+
   return (
-    <div className="flex flex-col gap-4">
+    <>
       {Object.entries(grouped).map(([cat, ops]) => (
-        <section key={cat}>
-          <h4 className="mb-2 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-tm-muted">
-            {cat}
-          </h4>
-          <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
-            {ops.map((op) => (
-              <div
-                key={op.name}
-                className={
-                  "border border-tm-rule bg-tm-bg p-2 transition-colors hover:border-tm-rule-2 " +
-                  (op.implemented ? "" : "opacity-60")
-                }
-                title={
-                  op.implemented
-                    ? undefined
-                    : locale === "zh"
-                      ? "未实现：需要 premium 数据源（向量数据/期权/新闻情绪等）"
-                      : "Not implemented — requires premium data source (vector/options/news sentiment)"
-                }
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <code className="font-tm-mono text-[12.5px] font-semibold text-tm-accent">
-                    {op.name}
-                  </code>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {op.arity != null && (
-                      <span className="border border-tm-rule px-1.5 py-px font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
-                        arity {op.arity}
-                      </span>
-                    )}
-                    <TierTag tier={op.tier} locale={locale} />
-                  </div>
-                </div>
-                <p className="mt-1.5 text-[11.5px] leading-relaxed text-tm-fg-2">
-                  {op.description_zh ??
-                    op.function_zh ??
-                    op.description_en ??
-                    ""}
-                </p>
-                {op.example && (
-                  <code className="mt-1.5 block overflow-x-auto bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-muted">
-                    {op.example}
-                  </code>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
+        <CategorySection key={cat} title={cat} count={ops.length}>
+          {ops.map((op) => (
+            <OpRow
+              key={op.name}
+              name={op.name}
+              sig={op.example ?? `${op.name}(...)`}
+              tier={op.tier}
+              implemented={op.implemented}
+              hint={
+                op.description_zh ??
+                op.function_zh ??
+                op.description_en ??
+                ""
+              }
+              locale={locale}
+              kind="operator"
+            />
+          ))}
+        </CategorySection>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -249,60 +233,87 @@ function OperandList({
   operands: readonly OperandInfo[];
   locale: "zh" | "en";
 }) {
+  if (operands.length === 0) {
+    return (
+      <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
+        no items
+      </p>
+    );
+  }
   const grouped = operands.reduce<Record<string, OperandInfo[]>>((acc, op) => {
     const key = op.category ?? "other";
     (acc[key] ??= []).push(op);
     return acc;
   }, {});
-  if (operands.length === 0) {
-    return (
-      <p className="py-6 text-center font-tm-mono text-[11px] text-tm-muted">
-        no items
-      </p>
-    );
-  }
   return (
-    <div className="flex flex-col gap-4">
+    <>
       {Object.entries(grouped).map(([cat, fs]) => (
-        <section key={cat}>
-          <h4 className="mb-2 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-tm-muted">
-            {cat}
-          </h4>
-          <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
-            {fs.map((op) => (
-              <div
-                key={op.name}
-                className={
-                  "border border-tm-rule bg-tm-bg p-2 transition-colors hover:border-tm-rule-2 " +
-                  (op.implemented ? "" : "opacity-60")
-                }
-                title={
-                  op.implemented
-                    ? undefined
-                    : locale === "zh"
-                      ? "数据源未接入：需要 premium 数据集（如 RavenPack 新闻、Options 链、WorldQuant Model 字段等）"
-                      : "Data source unavailable — requires premium dataset (RavenPack news, options chain, WorldQuant Model fields, etc.)"
-                }
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <code className="font-tm-mono text-[12.5px] font-semibold text-tm-accent">
-                    {op.name}
-                  </code>
-                  <TierTag tier={op.tier} locale={locale} />
-                </div>
-                <p className="mt-1.5 text-[11.5px] leading-relaxed text-tm-fg-2">
-                  {op.description_zh ?? op.description_en ?? ""}
-                </p>
-                {op.usage_zh && (
-                  <p className="mt-0.5 text-[10.5px] text-tm-muted">
-                    {op.usage_zh}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
+        <CategorySection key={cat} title={cat} count={fs.length}>
+          {fs.map((op) => (
+            <OpRow
+              key={op.name}
+              name={op.name}
+              sig={op.usage_zh ?? op.name}
+              tier={op.tier}
+              implemented={op.implemented}
+              hint={op.description_zh ?? op.description_en ?? ""}
+              locale={locale}
+              kind="operand"
+            />
+          ))}
+        </CategorySection>
       ))}
+    </>
+  );
+}
+
+interface OpRowProps {
+  readonly name: string;
+  readonly sig: string;
+  readonly tier: CatalogTier;
+  readonly implemented: boolean;
+  readonly hint: string;
+  readonly locale: "zh" | "en";
+  readonly kind: "operator" | "operand";
+}
+
+function OpRow({
+  name,
+  sig,
+  tier,
+  implemented,
+  hint,
+  locale,
+  kind,
+}: OpRowProps) {
+  return (
+    <div
+      className={
+        "flex flex-col gap-0.5 bg-tm-bg px-3 py-1.5 font-tm-mono " +
+        (implemented ? "" : "opacity-50")
+      }
+      title={
+        implemented
+          ? hint || undefined
+          : kind === "operator"
+            ? locale === "zh"
+              ? "未实现：需要 premium 数据源"
+              : "not implemented — premium data source required"
+            : locale === "zh"
+              ? "数据源未接入：需要 premium 数据集"
+              : "data source unavailable — premium dataset required"
+      }
+    >
+      <span className={`text-[12px] font-semibold ${implemented ? "text-tm-accent" : "text-tm-muted"}`}>
+        {name}
+        {!implemented && " · planned"}
+      </span>
+      <span className="truncate text-[10.5px] text-tm-fg-2">{sig}</span>
+      <span
+        className={`text-[9.5px] uppercase tracking-[0.06em] ${TIER_TONE[tier]}`}
+      >
+        {tier} · {tierShort(tier, locale)}
+      </span>
     </div>
   );
 }

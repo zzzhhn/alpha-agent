@@ -38,9 +38,11 @@ export default function DashboardLayout({
         <Topbar />
         <div className="grid min-h-0 flex-1 grid-cols-[200px_1fr]">
           <Sidebar />
-          <main className="overflow-y-auto px-6 py-5 pb-10">
-            {children}
-          </main>
+          {/* No padding on <main> — pages render edge-to-edge as
+              workstation screens (TmScreen establishes the bg-tm-bg
+              "floor" itself). Pages still using the legacy layout can
+              add their own px/py inside their root. */}
+          <main className="min-w-0 overflow-y-auto">{children}</main>
         </div>
       </div>
     </LocaleProvider>
