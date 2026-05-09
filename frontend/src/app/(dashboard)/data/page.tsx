@@ -1,13 +1,37 @@
 "use client";
 
+/**
+ * Data page — universe + coverage (left) and sectorised tickers (right)
+ * side-by-side, then the operator catalog full-width below.
+ *
+ * Stage 3 redesign re-port (2nd iteration): the original layout had
+ * UNIVERSE / TICKERS / OPERATORS / COVERAGE as four full-width panes
+ * stacked vertically, which (a) wasted horizontal real estate and (b)
+ * duplicated the trading-days / ticker-count fields between UNIVERSE
+ * and COVERAGE. This iteration merges UNIVERSE + COVERAGE into a
+ * single overview pane and pairs it left-of TICKERS via TmCols2.
+ *
+ * Data fetching, caching, cancelled-effect cleanup unchanged.
+ */
+
 import { useCallback, useEffect, useState } from "react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { UniverseCard } from "@/components/data/UniverseCard";
+import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmStatusPill,
+  TmChip,
+} from "@/components/tm/TmSubbar";
+import { TmButton } from "@/components/tm/TmButton";
+import {
+  UniverseOverview,
+  UniverseTickers,
+} from "@/components/data/UniverseCard";
 import { OperandCatalog } from "@/components/data/OperandCatalog";
-import { CoverageOverview } from "@/components/data/CoverageOverview";
 import {
   fetchUniverses,
   fetchOperandCatalog,
@@ -16,6 +40,7 @@ import {
 } from "@/lib/api";
 import type {
   UniverseListResponse,
+  UniverseInfo,
   OperandCatalogResponse,
   CoverageResponse,
 } from "@/lib/types";
@@ -23,31 +48,33 @@ import type {
 export default function DataPage() {
   const { locale } = useLocale();
   const [universes, setUniverses] = useState<UniverseListResponse | null>(null);
+  const [activeUniverseId, setActiveUniverseId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<OperandCatalogResponse | null>(null);
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Caching design: fetchUniverses/Catalog/Coverage in lib/api.ts memoise
-  // their promises at module scope. The first DataPage mount triggers the
-  // network round-trips; subsequent mounts (e.g. after navigating to /alpha
-  // and back) return the cached results synchronously. Full reload or an
-  // explicit "刷新" click wipes the cache and re-fetches.
-  const load = useCallback(async (force = false) => {
-    const [u, o, c] = await Promise.all([
-      fetchUniverses({ force }),
-      fetchOperandCatalog({ force }),
-      fetchCoverage("SP500_subset", { force }),
-    ]);
-    if (u.error || o.error || c.error) {
-      setError(u.error ?? o.error ?? c.error);
-      return;
-    }
-    setError(null);
-    setUniverses(u.data);
-    setCatalog(o.data);
-    setCoverage(c.data);
-  }, []);
+  const load = useCallback(
+    async (force = false) => {
+      const [u, o, c] = await Promise.all([
+        fetchUniverses({ force }),
+        fetchOperandCatalog({ force }),
+        fetchCoverage("SP500_subset", { force }),
+      ]);
+      if (u.error || o.error || c.error) {
+        setError(u.error ?? o.error ?? c.error);
+        return;
+      }
+      setError(null);
+      setUniverses(u.data);
+      if (u.data && !activeUniverseId && u.data.universes.length > 0) {
+        setActiveUniverseId(u.data.universes[0].id);
+      }
+      setCatalog(o.data);
+      setCoverage(c.data);
+    },
+    [activeUniverseId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -67,58 +94,98 @@ export default function DataPage() {
     setRefreshing(false);
   }
 
+  const activeUniverse: UniverseInfo | null =
+    (universes &&
+      activeUniverseId &&
+      universes.universes.find((u) => u.id === activeUniverseId)) ||
+    universes?.universes[0] ||
+    null;
+
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-text">
-            {t(locale, "data.title")}
-          </h1>
-          <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-            {t(locale, "data.subtitle")}
-          </p>
-        </div>
-        {universes && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            {refreshing ? t(locale, "data.refreshing") : t(locale, "data.refresh")}
-          </Button>
+    <TmScreen>
+      <TmSubbar>
+        <span className="text-tm-muted">UNIVERSE</span>
+        {universes ? (
+          universes.universes.map((u) => (
+            <TmChip
+              key={u.id}
+              on={u.id === activeUniverse?.id}
+              onClick={() => setActiveUniverseId(u.id)}
+            >
+              {u.id}
+            </TmChip>
+          ))
+        ) : (
+          <span className="text-tm-muted">{t(locale, "data.loading")}</span>
         )}
-      </header>
+        {activeUniverse && (
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV
+              label={t(locale, "data.universe.benchmark")}
+              value={activeUniverse.benchmark}
+            />
+            <TmSubbarSep />
+            <TmSubbarKV
+              label="N"
+              value={activeUniverse.ticker_count.toString()}
+            />
+          </>
+        )}
+        <TmSubbarSpacer />
+        {coverage && (
+          <TmStatusPill
+            tone={coverage.ohlcv_coverage_pct >= 99 ? "ok" : "warn"}
+          >
+            CACHE · {coverage.ohlcv_coverage_pct.toFixed(2)}% HIT
+          </TmStatusPill>
+        )}
+        <TmButton
+          variant="ghost"
+          onClick={handleRefresh}
+          disabled={refreshing || !universes}
+          className="-my-1 px-2"
+        >
+          {refreshing
+            ? t(locale, "data.refreshing")
+            : t(locale, "data.refresh")}
+        </TmButton>
+      </TmSubbar>
 
       {error && (
-        <Card padding="md">
-          <p className="text-base text-red">
-            {t(locale, "data.error")}: {error}
+        <TmPane title="ERROR" meta={t(locale, "data.error")}>
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+            {error}
           </p>
-        </Card>
+        </TmPane>
       )}
 
       {!error && !universes && (
-        <Card padding="md">
-          <p className="text-base text-muted">{t(locale, "data.loading")}</p>
-        </Card>
+        <TmPane title="LOADING">
+          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
+            {t(locale, "data.loading")}
+          </p>
+        </TmPane>
       )}
 
-      {universes && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-base font-semibold text-text">
-            {t(locale, "data.universe.title")}
-          </h2>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {universes.universes.map((u) => (
-              <UniverseCard key={u.id} universe={u} />
-            ))}
-          </div>
-        </section>
+      {/* Overview (universe + coverage merged) | Tickers (sector-grouped).
+          Fixed 640px height across both panes — neither grows when its
+          content does (e.g. user expands all sectors), they just scroll
+          internally. Keeps L/R vertically aligned regardless of which
+          collapsibles are open. 640px ≈ 16:10 viewport content area;
+          tweak via the inline style if you want denser/looser. */}
+      {activeUniverse && (
+        <TmCols2 className="h-[640px]">
+          <UniverseOverview
+            universe={activeUniverse}
+            coverage={coverage}
+            fillHeight
+          />
+          <UniverseTickers universe={activeUniverse} fillHeight />
+        </TmCols2>
       )}
 
       {catalog && <OperandCatalog catalog={catalog} />}
-      {coverage && <CoverageOverview coverage={coverage} />}
-    </div>
+    </TmScreen>
   );
 }

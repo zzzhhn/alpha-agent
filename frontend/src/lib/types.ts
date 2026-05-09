@@ -466,6 +466,13 @@ export interface UniverseInfo {
   readonly ticker_count: number;
   readonly benchmark: string;
   readonly tickers: readonly string[];
+  /**
+   * Per-ticker GICS sector (latest-day snapshot), aligned to `tickers`
+   * by index. `null` for an individual ticker means missing/unknown.
+   * The whole field is `null` (or absent on older backends) when the
+   * loaded panel has no sector data — UI falls back to ungrouped.
+   */
+  readonly sectors?: readonly (string | null)[] | null;
   readonly start_date: string;
   readonly end_date: string;
   readonly n_days: number;

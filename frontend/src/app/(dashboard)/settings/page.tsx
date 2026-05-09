@@ -8,18 +8,25 @@
  * credentials here; values live in browser localStorage and ship as
  * X-LLM-* headers on every request via `lib/byok.ts`.
  *
- * UX goals:
- *   * Clear what's stored where (localStorage, never on our server)
- *   * One-click test against the configured provider before saving
- *   * Easy clear / reset
- *   * Sane provider-aware defaults so most users only need to paste a key
+ * Stage 3 redesign — re-port to match the design's actual workstation
+ * layout (full-width edge-to-edge `tm-screen` with stacked panes
+ * separated by hairlines, NOT centred rounded cards). Form fields use
+ * the `tm-form` flat label-stacked pattern; actions sit in a hairline
+ * `tm-form-foot` bar at the bottom of the credentials pane. ALL
+ * business logic preserved verbatim.
  */
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmStatusPill,
+} from "@/components/tm/TmSubbar";
+import { TmButton } from "@/components/tm/TmButton";
 import {
   type ByokCredentials,
   type LLMProvider,
@@ -35,12 +42,14 @@ type TestState =
   | { kind: "ok"; ms: number; tokens: { prompt: number; completion: number } }
   | { kind: "fail"; status: number | null; message: string };
 
-const PROVIDER_OPTIONS = [
-  { value: "openai", label: PROVIDER_PRESETS.openai.label },
-  { value: "kimi", label: PROVIDER_PRESETS.kimi.label },
-  { value: "ollama", label: PROVIDER_PRESETS.ollama.label },
-  { value: "anthropic", label: PROVIDER_PRESETS.anthropic.label },
-];
+const PROVIDER_VALUES: ReadonlyArray<LLMProvider> = ["openai", "kimi", "ollama", "anthropic"];
+
+// Workstation form-row label class (mirrors `.tm-form label`).
+const FORM_LABEL =
+  "block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-tm-muted";
+
+const FORM_INPUT =
+  "h-7 w-full bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none transition-colors placeholder:text-tm-muted focus:border-tm-accent";
 
 export default function SettingsPage() {
   const { locale } = useLocale();
@@ -54,7 +63,6 @@ export default function SettingsPage() {
   const [testState, setTestState] = useState<TestState>({ kind: "idle" });
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  // Hydrate from localStorage on mount.
   useEffect(() => {
     const c = loadByok();
     if (!c) return;
@@ -70,13 +78,12 @@ export default function SettingsPage() {
   const canSave = apiKey.trim().length > 4;
 
   function handleSave() {
-    const creds: ByokCredentials = {
+    saveByok({
       provider,
       apiKey,
       baseUrl: baseUrl.trim() || undefined,
       model: model.trim() || undefined,
-    };
-    saveByok(creds);
+    } satisfies ByokCredentials);
     setSavedAt(new Date().toLocaleTimeString());
   }
 
@@ -111,10 +118,8 @@ export default function SettingsPage() {
           ...(model.trim() ? { "X-LLM-Model": model.trim() } : {}),
         },
         body: JSON.stringify({
-          // The translate endpoint enforces budget_tokens ∈ [500, 8000];
-          // 256 here would 422-fail BEFORE reaching the BYOK header check
-          // and look like a credential bug. Send the minimum 500 so the
-          // probe is the cheapest valid request.
+          // budget_tokens enforced ≥ 500 by FastAPI; smaller would 422
+          // before the BYOK header check fires.
           text: "5-day mean reversion",
           universe: "SP500",
           budget_tokens: 500,
@@ -127,11 +132,7 @@ export default function SettingsPage() {
         try {
           const parsed = JSON.parse(body) as { detail?: unknown };
           if (parsed?.detail !== undefined) {
-            // FastAPI 422 returns detail as an array of validation errors
-            // like [{ type, loc: ["body","budget_tokens"], msg, ... }].
-            // Render those readably ("body.budget_tokens: msg") instead
-            // of dumping the raw JSON, which made past 422s look like
-            // a BYOK credential issue.
+            // FastAPI 422 ⇒ array of validation errors. Render readably.
             if (Array.isArray(parsed.detail)) {
               detail = parsed.detail
                 .map((e: unknown) => {
@@ -178,132 +179,187 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-[var(--text)]">
-          {zh ? "LLM 凭证（BYOK）" : "LLM Credentials (BYOK)"}
-        </h1>
-        <p className="text-sm text-[var(--muted)]">
+    <TmScreen>
+      <TmSubbar>
+        <TmSubbarKV
+          label={zh ? "存储" : "STORAGE"}
+          value="localStorage · browser-only"
+        />
+        <TmSubbarSep />
+        <TmSubbarKV label={zh ? "服务商" : "PROVIDER"} value={provider} />
+        <TmSubbarSep />
+        <TmSubbarKV label="MODEL" value={effectiveModel} />
+        <TmSubbarSpacer />
+        {savedAt && (
+          <TmStatusPill tone="ok">
+            {zh ? `已保存 ${savedAt}` : `SAVED ${savedAt}`}
+          </TmStatusPill>
+        )}
+      </TmSubbar>
+
+      {/* Intro pane */}
+      <TmPane title="SETTINGS / BYOK" meta={preset.help}>
+        <p className="px-3 py-2.5 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg-2">
           {zh
             ? "你的 API key 只保存在本浏览器的 localStorage，每次请求作为 header 发送给后端用于调用大模型。alpha-agent 服务器从不存储或日志记录你的 key。"
             : "Your API key is stored in this browser's localStorage and sent as a request header on each LLM call. The alpha-agent server never stores or logs your key."}
         </p>
-      </header>
+      </TmPane>
 
-      <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--card)] p-5">
-        <Select
-          label={zh ? "服务商" : "Provider"}
-          value={provider}
-          onChange={(v) => {
-            setProvider(v as LLMProvider);
-            // Clear test result so a stale "OK" doesn't carry over to a
-            // different provider's draft credentials.
-            setTestState({ kind: "idle" });
-          }}
-          options={PROVIDER_OPTIONS}
-        />
-        <p className="-mt-2 text-xs text-[var(--muted)]">{preset.help}</p>
-
-        {/* API key field — bypass the shared Input component because we
-            need <input type="password"> for native masking that doesn't
-            interfere with editing (a value-replacement mask, like the
-            previous version, makes typing into a non-revealed field
-            confusing). */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[13px] text-muted">API Key</label>
-          <input
-            type={revealKey ? "text" : "password"}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={
-              provider === "ollama"
-                ? zh ? "Ollama 不需要 key（任意填写）" : "Not required for Ollama"
-                : "sk-..."
-            }
-            className="rounded-md border border-[var(--border)] bg-[var(--bg-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
-          />
-          <button
-            type="button"
-            onClick={() => setRevealKey((r) => !r)}
-            className="self-start text-xs text-[var(--accent)] hover:underline"
-          >
-            {revealKey
-              ? zh ? "隐藏" : "Hide"
-              : zh ? "显示" : "Reveal"}
-          </button>
-        </div>
-
-        <Input
-          label={zh ? "Base URL（可选，留空用默认）" : "Base URL (optional)"}
-          value={baseUrl}
-          onChange={setBaseUrl}
-          placeholder={preset.defaultBase}
-        />
-        <Input
-          label={zh ? "模型 ID（可选）" : "Model ID (optional)"}
-          value={model}
-          onChange={setModel}
-          placeholder={preset.defaultModel}
-        />
-
-        <div className="rounded-md border border-[var(--border)] bg-[var(--bg-2)] p-3 text-xs text-[var(--muted)]">
-          <div>
-            {zh ? "实际请求将使用：" : "The request will use:"}
+      {/* Credentials form pane — flat tm-form layout */}
+      <TmPane
+        title="CREDENTIALS"
+        meta={
+          <span className="tabular-nums">
+            {provider} · {effectiveBase}
+          </span>
+        }
+      >
+        <div className="flex flex-col gap-3 px-3 py-3">
+          {/* Provider — chip row instead of dropdown so all 4 options
+              are visible at once and clicking any switches without
+              opening a menu. */}
+          <div className="flex flex-col gap-1">
+            <label className={FORM_LABEL}>
+              {zh ? "服务商 / PROVIDER" : "PROVIDER"}
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {PROVIDER_VALUES.map((p) => {
+                const active = p === provider;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => {
+                      setProvider(p);
+                      setTestState({ kind: "idle" });
+                    }}
+                    className={
+                      active
+                        ? "border border-tm-accent bg-tm-accent-soft px-2 py-0.5 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-accent"
+                        : "border border-tm-rule bg-tm-bg-2 px-2 py-0.5 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg"
+                    }
+                  >
+                    {PROVIDER_PRESETS[p].label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <code className="mt-1 block break-all text-[var(--text-secondary)]">
-            {provider} · {effectiveBase} · {effectiveModel}
-          </code>
+
+          {/* API Key with reveal toggle inline */}
+          <div className="flex flex-col gap-1">
+            <label className={FORM_LABEL}>API KEY</label>
+            <div className="flex gap-1">
+              <input
+                type={revealKey ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={
+                  provider === "ollama"
+                    ? zh ? "Ollama 不需要 key（任意填写）" : "not required for Ollama"
+                    : "sk-..."
+                }
+                className={FORM_INPUT}
+              />
+              <button
+                type="button"
+                onClick={() => setRevealKey((r) => !r)}
+                className="border border-tm-rule px-2 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-fg"
+              >
+                {revealKey
+                  ? zh ? "隐藏" : "HIDE"
+                  : zh ? "显示" : "REVEAL"}
+              </button>
+            </div>
+          </div>
+
+          {/* Side-by-side base + model — `tm-form .row` pattern */}
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <label className={FORM_LABEL}>
+                {zh ? "BASE URL（可选）" : "BASE URL (optional)"}
+              </label>
+              <input
+                type="text"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder={preset.defaultBase}
+                className={FORM_INPUT}
+              />
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
+              <label className={FORM_LABEL}>
+                {zh ? "模型 ID（可选）" : "MODEL ID (optional)"}
+              </label>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder={preset.defaultModel}
+                className={FORM_INPUT}
+              />
+            </div>
+          </div>
+
+          <p className="font-tm-mono text-[10.5px] text-tm-muted">
+            {zh ? "实际请求：" : "request will use: "}
+            <span className="text-tm-fg-2">
+              {provider} · {effectiveBase} · {effectiveModel}
+            </span>
+          </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={handleSave} disabled={!canSave}>
-            {zh ? "保存" : "Save"}
-          </Button>
-          <Button variant="secondary" onClick={handleTest} disabled={!canSave || testState.kind === "running"}>
+        {/* tm-form-foot — action bar separated by hairline */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-tm-rule px-3 py-2">
+          <TmButton variant="primary" onClick={handleSave} disabled={!canSave}>
+            {zh ? "保存" : "SAVE"}
+          </TmButton>
+          <TmButton
+            variant="secondary"
+            onClick={handleTest}
+            disabled={!canSave || testState.kind === "running"}
+          >
             {testState.kind === "running"
-              ? zh ? "测试中…" : "Testing…"
-              : zh ? "测试连通" : "Test connection"}
-          </Button>
-          <Button variant="ghost" onClick={handleClear}>
-            {zh ? "清除已保存" : "Clear saved"}
-          </Button>
+              ? zh ? "测试中…" : "TESTING…"
+              : zh ? "测试连通" : "TEST CONNECTION"}
+          </TmButton>
+          <TmButton variant="ghost" onClick={handleClear}>
+            {zh ? "清除已保存" : "CLEAR SAVED"}
+          </TmButton>
+
+          {testState.kind === "ok" && (
+            <TmStatusPill tone="ok">
+              {zh
+                ? `✓ 连通正常 ${testState.ms}ms · ${testState.tokens.prompt} / ${testState.tokens.completion} tokens`
+                : `✓ CONNECTED · ${testState.ms}ms · ${testState.tokens.prompt} / ${testState.tokens.completion} tokens`}
+            </TmStatusPill>
+          )}
+          {testState.kind === "fail" && (
+            <TmStatusPill tone="err">
+              {zh ? "✗ 失败：" : "✗ FAILED: "}
+              {testState.status ? `HTTP ${testState.status} · ` : ""}
+              {testState.message}
+            </TmStatusPill>
+          )}
         </div>
+      </TmPane>
 
-        {savedAt && (
-          <p className="text-xs text-[var(--green)]">
-            {zh ? `已保存于 ${savedAt}` : `Saved at ${savedAt}`}
-          </p>
-        )}
-
-        {testState.kind === "ok" && (
-          <p className="text-xs text-[var(--green)]">
+      {/* Notes pane — origin-scoping warnings */}
+      <TmPane title="NOTES">
+        <ul className="flex flex-col gap-1 px-3 py-2.5 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+          <li>
             {zh
-              ? `✓ 连通正常（${testState.ms}ms，prompt ${testState.tokens.prompt} tokens / completion ${testState.tokens.completion} tokens）`
-              : `✓ Connected (${testState.ms}ms, ${testState.tokens.prompt} prompt / ${testState.tokens.completion} completion tokens)`}
-          </p>
-        )}
-        {testState.kind === "fail" && (
-          <p className="text-xs text-[var(--red)]">
-            {zh ? "✗ 失败：" : "✗ Failed: "}
-            {testState.status ? `HTTP ${testState.status} · ` : ""}
-            {testState.message}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2 text-xs text-[var(--muted)]">
-        <p>
-          {zh
-            ? "提示：localStorage 仅在本浏览器、本域名下可见。换浏览器或换设备需要重新填写。"
-            : "Note: localStorage is scoped to this browser and origin. You'll need to re-enter on a different browser or device."}
-        </p>
-        <p>
-          {zh
-            ? "提示：preview 部署 URL 与 production 是不同 origin，凭证不会跨越。"
-            : "Note: Vercel preview URLs and production are separate origins; credentials won't carry across."}
-        </p>
-      </div>
-    </div>
+              ? "localStorage 仅在本浏览器、本域名下可见。换浏览器或换设备需要重新填写。"
+              : "localStorage is scoped to this browser and origin. Re-enter on a different browser or device."}
+          </li>
+          <li>
+            {zh
+              ? "preview 部署 URL 与 production 是不同 origin，凭证不会跨越。"
+              : "Vercel preview URLs and production are separate origins; credentials do not carry across."}
+          </li>
+        </ul>
+      </TmPane>
+    </TmScreen>
   );
 }
-
