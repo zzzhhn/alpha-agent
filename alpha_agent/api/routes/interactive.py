@@ -172,6 +172,20 @@ def _extract_json_object(text: str) -> dict | None:
         return None
 
 
+def _clip_field(d: dict, key: str, max_len: int) -> None:
+    """Clip an LLM-produced string field in-place to its Pydantic max_length.
+
+    LLMs treat string-length instructions in the prompt as soft hints
+    rather than hard ceilings, so a justification or hypothesis that
+    overshoots by 5-50 chars is common. Clipping here avoids 422-ing
+    the whole translation request on a cosmetic overrun. Reserves 1
+    char for an ellipsis so callers can see the field was clipped.
+    """
+    v = d.get(key)
+    if isinstance(v, str) and len(v) > max_len:
+        d[key] = v[: max_len - 1] + "…"
+
+
 @router.post(
     "/api/v1/alpha/translate",
     response_model=HypothesisTranslateResponse,
@@ -208,6 +222,16 @@ async def translate_hypothesis(
             422,
             f"LLM did not return parseable JSON. Head: {llm_resp.content[:200]!r}",
         )
+
+    # LLMs routinely overshoot string-length instructions in the prompt
+    # ("<<=400 chars" is a soft hint, not a hard ceiling). Clip the three
+    # bounded string fields BEFORE Pydantic validation so a 401-char
+    # justification or a 41-char snake_case name doesn't blow up the
+    # whole translation request. Bounds match alpha_agent.core.types
+    # FactorSpec field constraints exactly.
+    _clip_field(spec_dict, "name", 40)
+    _clip_field(spec_dict, "hypothesis", 200)
+    _clip_field(spec_dict, "justification", 400)
 
     try:
         spec = _FactorSpec.model_validate(spec_dict)
