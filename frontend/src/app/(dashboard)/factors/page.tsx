@@ -1,9 +1,29 @@
 "use client";
 
+/**
+ * Factors / Zoo page — workstation port (Stage 3 · 5/9).
+ *
+ * Merges server-backed Factor DB (auto-saved on every backtest) with
+ * localStorage Zoo (offline + v1 back-compat). Layout becomes a
+ * dense workstation table:
+ *
+ *   - TmSubbar: entry counts (server / local / total) + decay pill +
+ *     correlation run button
+ *   - ZOO.OVERVIEW: 4 KPI cells (entries / decaying / from_server /
+ *     from_local)
+ *   - DECAY.ALERTS: collapsible listing of factors whose IC has
+ *     materially dropped (only shown if alerts exist)
+ *   - ZOO.CATALOG: hairline grid table with name / expression /
+ *     sharpe / return / IC / saved-at + inline action chips
+ *   - CORRELATION (conditional): warnings list + N×N matrix with
+ *     red/yellow/blue tone cells
+ *
+ * Behavior preserved byte-for-byte: server-merge logic, sessionStorage
+ * prefill keys for backtest/report/screener, removeFromZoo + refresh.
+ */
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
@@ -16,14 +36,22 @@ import {
   type DecayAlert,
 } from "@/lib/api";
 import type { ZooCorrelationResponse } from "@/lib/types";
+import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import {
+  TmSubbar,
+  TmSubbarKV,
+  TmSubbarSep,
+  TmSubbarSpacer,
+  TmStatusPill,
+} from "@/components/tm/TmSubbar";
+import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
+import { TmButton } from "@/components/tm/TmButton";
 
 // Bundle B (T4.1): merge server-backed Factor DB with localStorage Zoo.
-// Server is source of truth (every backtest auto-saves); localStorage
-// kept as fallback for offline + back-compat with v1 entries that
-// haven't been re-run since the migration.
-function mergeFactors(server: readonly ServerFactor[], local: readonly ZooEntry[]): readonly ZooEntry[] {
-  // Server entries first (always fresher, have run history); local entries
-  // appended only if their expression isn't already covered by server.
+function mergeFactors(
+  server: readonly ServerFactor[],
+  local: readonly ZooEntry[],
+): readonly ZooEntry[] {
   const serverExprs = new Set(server.map((f) => f.expression));
   const fromServer: ZooEntry[] = server.map((f) => ({
     id: f.id,
@@ -31,40 +59,53 @@ function mergeFactors(server: readonly ServerFactor[], local: readonly ZooEntry[
     expression: f.expression,
     hypothesis: f.hypothesis ?? "",
     intuition: f.intuition ?? undefined,
-    direction: (f.last_direction as ZooEntry["direction"]) ?? "long_short",
+    direction:
+      (f.last_direction as ZooEntry["direction"]) ?? "long_short",
     savedAt: f.updated_at ?? f.created_at ?? new Date().toISOString(),
     headlineMetrics: {
       testSharpe: f.last_test_sharpe ?? undefined,
       testIc: f.last_test_ic ?? undefined,
     },
-    neutralize: (f.last_neutralize as "none" | "sector" | undefined) ?? undefined,
-    benchmarkTicker: (f.last_benchmark as "SPY" | "RSP" | undefined) ?? undefined,
+    neutralize:
+      (f.last_neutralize as "none" | "sector" | undefined) ?? undefined,
+    benchmarkTicker:
+      (f.last_benchmark as "SPY" | "RSP" | undefined) ?? undefined,
   }));
-  return [...fromServer, ...local.filter((e) => !serverExprs.has(e.expression))];
+  return [
+    ...fromServer,
+    ...local.filter((e) => !serverExprs.has(e.expression)),
+  ];
 }
 
 export default function FactorsPage() {
   const { locale } = useLocale();
   const router = useRouter();
   const [entries, setEntries] = useState<readonly ZooEntry[]>([]);
+  const [serverCount, setServerCount] = useState(0);
+  const [localCount, setLocalCount] = useState(0);
   const [decay, setDecay] = useState<readonly DecayAlert[]>([]);
 
   async function refresh() {
-    // Server first (auto-saved); fall back to localStorage if API unreachable
     try {
       const [r1, r2] = await Promise.all([
         listServerFactors(200),
         getDecayAlerts({ min_runs: 3, decay_threshold: 0.5 }),
       ]);
       const local = listZoo();
+      setLocalCount(local.length);
       if (r1.data) {
+        setServerCount(r1.data.length);
         setEntries(mergeFactors(r1.data, local));
       } else {
+        setServerCount(0);
         setEntries(local);
       }
       if (r2.data) setDecay(r2.data);
     } catch {
-      setEntries(listZoo());
+      const local = listZoo();
+      setEntries(local);
+      setLocalCount(local.length);
+      setServerCount(0);
     }
   }
 
@@ -75,10 +116,6 @@ export default function FactorsPage() {
   function loadIntoBacktest(e: ZooEntry) {
     if (typeof window === "undefined") return;
     try {
-      // v4 cross-page parity: persist full saved config so /backtest replays
-      // the EXACT run that produced the saved metrics (instead of the
-      // platform default config). Each field is optional — readConfig fills
-      // defaults for v1 entries that predate the schema bump.
       window.sessionStorage.setItem(
         "alphacore.backtest.prefill.v1",
         JSON.stringify({
@@ -130,13 +167,14 @@ export default function FactorsPage() {
 
   function deleteEntry(id: string) {
     removeFromZoo(id);
-    refresh();
+    void refresh();
   }
 
-  /* ── T2.1 cross-correlation panel state ──────────────────────────────── */
+  /* ── correlation panel state ─────────────────────────────────── */
   const [corrLoading, setCorrLoading] = useState(false);
   const [corrError, setCorrError] = useState<string | null>(null);
-  const [corrResult, setCorrResult] = useState<ZooCorrelationResponse | null>(null);
+  const [corrResult, setCorrResult] =
+    useState<ZooCorrelationResponse | null>(null);
 
   async function checkCorrelation() {
     if (entries.length < 2) return;
@@ -166,32 +204,27 @@ export default function FactorsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-text">
-            {t(locale, "zoo.title")}
-          </h1>
-          <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-            {t(locale, "zoo.subtitle")}
-          </p>
-          {decay.length > 0 && (
-            <div className="mt-2 inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[12px] text-amber-700 dark:text-amber-400">
-              ⚠ {t(locale, "zoo.decayBanner").replace("{n}", String(decay.length))}
-              {decay.slice(0, 3).map((d) => (
-                <span key={d.factor_id} className="ml-2 font-mono">
-                  {d.name}: IC {(d.baseline_ic * 100).toFixed(2)}% → {(d.latest_ic * 100).toFixed(2)}%
-                </span>
-              ))}
-              {decay.length > 3 && <span className="ml-2 text-muted">+{decay.length - 3}</span>}
-            </div>
-          )}
-        </div>
-        <Button
+    <TmScreen>
+      <TmSubbar>
+        <span className="text-tm-muted">FACTORS · ZOO</span>
+        <TmSubbarSep />
+        <TmSubbarKV label="ENTRIES" value={entries.length.toString()} />
+        <TmSubbarSep />
+        <TmSubbarKV label="SERVER" value={serverCount.toString()} />
+        <TmSubbarSep />
+        <TmSubbarKV label="LOCAL" value={localCount.toString()} />
+        <TmSubbarSpacer />
+        {decay.length > 0 && (
+          <TmStatusPill tone="warn">
+            {`${decay.length} DECAYING`}
+          </TmStatusPill>
+        )}
+        {corrLoading && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
+        <TmButton
           variant="ghost"
-          size="sm"
           onClick={checkCorrelation}
           disabled={corrLoading || entries.length < 2}
+          className="-my-1 px-2"
           title={
             entries.length < 2
               ? t(locale, "zoo.corr.disabledHint")
@@ -201,144 +234,330 @@ export default function FactorsPage() {
           {corrLoading
             ? t(locale, "zoo.corr.running")
             : t(locale, "zoo.corr.run")}
-        </Button>
-      </header>
+        </TmButton>
+      </TmSubbar>
 
-      <Card padding="md">
+      <TmPane
+        title="ZOO.OVERVIEW"
+        meta={`${entries.length} TOTAL · ${serverCount} SERVER · ${localCount} LOCAL`}
+      >
+        <TmKpiGrid>
+          <TmKpi
+            label="ENTRIES"
+            value={entries.length.toString()}
+            sub="merged"
+          />
+          <TmKpi
+            label="DECAYING"
+            value={decay.length.toString()}
+            tone={decay.length > 0 ? "warn" : "default"}
+            sub="IC drop ≥ 50%"
+          />
+          <TmKpi
+            label="FROM_SERVER"
+            value={serverCount.toString()}
+            sub="auto-saved"
+          />
+          <TmKpi
+            label="FROM_LOCAL"
+            value={localCount.toString()}
+            sub="offline-only"
+          />
+        </TmKpiGrid>
+        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+          {t(locale, "zoo.subtitle")}
+        </p>
+      </TmPane>
+
+      {decay.length > 0 && (
+        <TmPane
+          title="DECAY.ALERTS"
+          meta={`${decay.length} FACTOR${decay.length === 1 ? "" : "S"}`}
+        >
+          <ul className="flex flex-col">
+            {decay.map((d) => (
+              <li
+                key={d.factor_id}
+                className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[11px] last:border-b-0"
+              >
+                <span className="text-tm-warn">▸</span>
+                <span className="text-tm-fg">{d.name}</span>
+                <span className="text-tm-muted">IC</span>
+                <span className="tabular-nums text-tm-fg-2">
+                  {(d.baseline_ic * 100).toFixed(2)}%
+                </span>
+                <span className="text-tm-muted">→</span>
+                <span className="tabular-nums text-tm-neg">
+                  {(d.latest_ic * 100).toFixed(2)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </TmPane>
+      )}
+
+      <TmPane
+        title="ZOO.CATALOG"
+        meta={`${entries.length} ENTRIES`}
+      >
         {entries.length === 0 ? (
-          <p className="py-6 text-center text-[14px] text-muted">
+          <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
             {t(locale, "zoo.empty")}
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead className="bg-[var(--toggle-bg)]">
-                <tr>
-                  <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "zoo.colName")}</th>
-                  <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "zoo.colExpr")}</th>
-                  <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "zoo.colSharpe")}</th>
-                  <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "zoo.colReturn")}</th>
-                  <th className="px-2 py-1.5 text-right font-medium text-muted">{t(locale, "zoo.colIc")}</th>
-                  <th className="px-2 py-1.5 text-left font-medium text-muted">{t(locale, "zoo.colSavedAt")}</th>
-                  <th className="px-2 py-1.5 text-right font-medium text-muted"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((e) => (
-                  <tr key={e.id} className="border-t border-border">
-                    <td className="px-2 py-1.5 font-mono text-text">{e.name}</td>
-                    <td className="px-2 py-1.5 max-w-[400px] truncate font-mono text-muted" title={e.expression}>
-                      {e.expression}
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono">
-                      {e.headlineMetrics?.testSharpe != null
-                        ? renderColored(e.headlineMetrics.testSharpe.toFixed(2), e.headlineMetrics.testSharpe)
-                        : "—"}
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono">
-                      {e.headlineMetrics?.totalReturn != null
-                        ? renderColored(`${(e.headlineMetrics.totalReturn * 100).toFixed(1)}%`, e.headlineMetrics.totalReturn)
-                        : "—"}
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono">
-                      {e.headlineMetrics?.testIc != null
-                        ? renderColored(e.headlineMetrics.testIc.toFixed(3), e.headlineMetrics.testIc)
-                        : "—"}
-                    </td>
-                    <td className="px-2 py-1.5 text-muted">
-                      {new Date(e.savedAt).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", {
-                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-2 py-1.5 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => loadIntoBacktest(e)}>
-                          {t(locale, "zoo.actLoadBacktest")}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => loadIntoReport(e)}>
-                          {t(locale, "zoo.actLoadReport")}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => loadIntoScreener(e)}>
-                          {t(locale, "zoo.actLoadScreener")}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => deleteEntry(e.id)}>
-                          {t(locale, "zoo.actDelete")}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div
+              className="grid min-w-[1100px] gap-px bg-tm-rule"
+              style={{
+                gridTemplateColumns:
+                  "minmax(140px, 180px) minmax(220px, 1fr) 80px 80px 80px minmax(120px, 140px) minmax(280px, 320px)",
+              }}
+            >
+              <Header>{t(locale, "zoo.colName")}</Header>
+              <Header>{t(locale, "zoo.colExpr")}</Header>
+              <Header align="right">{t(locale, "zoo.colSharpe")}</Header>
+              <Header align="right">{t(locale, "zoo.colReturn")}</Header>
+              <Header align="right">{t(locale, "zoo.colIc")}</Header>
+              <Header>{t(locale, "zoo.colSavedAt")}</Header>
+              <Header align="right">ACTIONS</Header>
+              {entries.map((e) => (
+                <ZooRow
+                  key={e.id}
+                  entry={e}
+                  locale={locale}
+                  onLoadBacktest={() => loadIntoBacktest(e)}
+                  onLoadReport={() => loadIntoReport(e)}
+                  onLoadScreener={() => loadIntoScreener(e)}
+                  onDelete={() => deleteEntry(e.id)}
+                />
+              ))}
+            </div>
           </div>
         )}
-      </Card>
+      </TmPane>
 
       {(corrError || corrResult) && (
-        <Card padding="md">
-          <header className="mb-3">
-            <h2 className="text-base font-semibold text-text">
-              {t(locale, "zoo.corr.title")}
-            </h2>
-            {corrResult && (
-              <p className="mt-1 text-[13px] text-muted">
-                {t(locale, "zoo.corr.subtitle")
-                  .replace("{n}", String(corrResult.names.length))
-                  .replace("{sessions}", String(corrResult.n_sessions))}
-              </p>
-            )}
-          </header>
-          {corrError && <p className="text-[13px] text-red">{corrError}</p>}
-          {corrResult && (
-            <CorrelationPanel data={corrResult} />
+        <TmPane
+          title="CORRELATION"
+          meta={
+            corrResult
+              ? `${corrResult.names.length} FACTORS · ${corrResult.n_sessions} SESSIONS`
+              : undefined
+          }
+        >
+          {corrError && (
+            <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+              {corrError}
+            </p>
           )}
-        </Card>
+          {corrResult && <CorrelationPanel data={corrResult} />}
+        </TmPane>
       )}
+    </TmScreen>
+  );
+}
+
+/* ── Catalog row ──────────────────────────────────────────────────── */
+
+function Header({
+  children,
+  align = "left",
+}: {
+  readonly children: React.ReactNode;
+  readonly align?: "left" | "right";
+}) {
+  return (
+    <div
+      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+        align === "right" ? "text-right" : ""
+      }`}
+    >
+      {children}
     </div>
   );
 }
 
-function CorrelationPanel({ data }: { readonly data: ZooCorrelationResponse }) {
+function ZooRow({
+  entry,
+  locale,
+  onLoadBacktest,
+  onLoadReport,
+  onLoadScreener,
+  onDelete,
+}: {
+  readonly entry: ZooEntry;
+  readonly locale: "zh" | "en";
+  readonly onLoadBacktest: () => void;
+  readonly onLoadReport: () => void;
+  readonly onLoadScreener: () => void;
+  readonly onDelete: () => void;
+}) {
+  const sharpe = entry.headlineMetrics?.testSharpe;
+  const totalRet = entry.headlineMetrics?.totalReturn;
+  const ic = entry.headlineMetrics?.testIc;
+  return (
+    <>
+      <Cell>
+        <span className="text-tm-accent">{entry.name}</span>
+      </Cell>
+      <Cell title={entry.expression}>
+        <span className="block truncate text-tm-fg-2">{entry.expression}</span>
+      </Cell>
+      <NumCell value={sharpe} format={(v) => v.toFixed(2)} />
+      <NumCell
+        value={totalRet}
+        format={(v) => `${(v * 100).toFixed(1)}%`}
+      />
+      <NumCell value={ic} format={(v) => v.toFixed(3)} />
+      <Cell>
+        <span className="text-tm-muted">
+          {new Date(entry.savedAt).toLocaleString(
+            locale === "zh" ? "zh-CN" : "en-US",
+            {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            },
+          )}
+        </span>
+      </Cell>
+      <Cell align="right">
+        <div className="flex justify-end gap-1">
+          <TmButton
+            variant="ghost"
+            onClick={onLoadBacktest}
+            className="h-6 px-1.5 text-[10px]"
+          >
+            {t(locale, "zoo.actLoadBacktest")}
+          </TmButton>
+          <TmButton
+            variant="ghost"
+            onClick={onLoadReport}
+            className="h-6 px-1.5 text-[10px]"
+          >
+            {t(locale, "zoo.actLoadReport")}
+          </TmButton>
+          <TmButton
+            variant="ghost"
+            onClick={onLoadScreener}
+            className="h-6 px-1.5 text-[10px]"
+          >
+            {t(locale, "zoo.actLoadScreener")}
+          </TmButton>
+          <TmButton
+            variant="ghost"
+            onClick={onDelete}
+            className="h-6 px-1.5 text-[10px]"
+          >
+            {t(locale, "zoo.actDelete")}
+          </TmButton>
+        </div>
+      </Cell>
+    </>
+  );
+}
+
+function Cell({
+  children,
+  align = "left",
+  title,
+}: {
+  readonly children: React.ReactNode;
+  readonly align?: "left" | "right";
+  readonly title?: string;
+}) {
+  return (
+    <div
+      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
+        align === "right" ? "justify-end" : ""
+      }`}
+      title={title}
+    >
+      {children}
+    </div>
+  );
+}
+
+function NumCell({
+  value,
+  format,
+}: {
+  readonly value: number | undefined;
+  readonly format: (v: number) => string;
+}) {
+  if (value == null) {
+    return (
+      <Cell align="right">
+        <span className="text-tm-muted">—</span>
+      </Cell>
+    );
+  }
+  const tone =
+    value > 0 ? "text-tm-pos" : value < 0 ? "text-tm-neg" : "text-tm-fg";
+  return (
+    <Cell align="right">
+      <span className={`tabular-nums ${tone}`}>{format(value)}</span>
+    </Cell>
+  );
+}
+
+/* ── Correlation panel ────────────────────────────────────────────── */
+
+function CorrelationPanel({
+  data,
+}: {
+  readonly data: ZooCorrelationResponse;
+}) {
   const { locale } = useLocale();
   const { names, matrix, warnings } = data;
 
-  function cellColor(v: number): string {
-    if (v >= 0.95) return "bg-red/30 text-red";
-    if (v >= 0.8) return "bg-red/15 text-red";
-    if (v >= 0.5) return "bg-yellow/15 text-yellow";
-    if (v >= -0.5) return "text-muted";
-    return "bg-blue/15 text-blue";
+  function cellTone(v: number): string {
+    if (v >= 0.95) return "bg-tm-neg-soft text-tm-neg";
+    if (v >= 0.8) return "bg-tm-warn-soft text-tm-warn";
+    if (v >= 0.5) return "bg-tm-warn-soft text-tm-warn";
+    if (v >= -0.5) return "text-tm-fg-2";
+    return "bg-tm-accent-soft text-tm-accent";
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col">
       {warnings.length > 0 && (
-        <div className="rounded-md border border-red/30 bg-red/5 p-3">
-          <div className="mb-2 text-[13px] font-semibold text-red">
-            {t(locale, "zoo.corr.warningsHeader")
-              .replace("{n}", String(warnings.length))}
+        <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-2.5">
+          <div className="mb-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-neg">
+            {t(locale, "zoo.corr.warningsHeader").replace(
+              "{n}",
+              String(warnings.length),
+            )}
           </div>
-          <ul className="space-y-1 text-[12px]">
+          <ul className="flex flex-col gap-1">
             {warnings.map((w) => (
-              <li key={`${w.a}|${w.b}`}>
-                <span className="font-mono text-text">{w.a}</span>
-                <span className="mx-1 text-muted">↔</span>
-                <span className="font-mono text-text">{w.b}</span>
-                <span className="ml-2 font-mono text-red">
-                  corr = {w.corr >= 0 ? "+" : ""}{w.corr.toFixed(3)}
+              <li
+                key={`${w.a}|${w.b}`}
+                className="flex items-center gap-2 font-tm-mono text-[11px]"
+              >
+                <span className="text-tm-fg">{w.a}</span>
+                <span className="text-tm-muted">↔</span>
+                <span className="text-tm-fg">{w.b}</span>
+                <span className="ml-2 tabular-nums text-tm-neg">
+                  corr = {w.corr >= 0 ? "+" : ""}
+                  {w.corr.toFixed(3)}
                 </span>
               </li>
             ))}
           </ul>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className="text-[12px]">
+      <div className="overflow-x-auto px-3 py-3">
+        <table className="font-tm-mono text-[10.5px]">
           <thead>
             <tr>
               <th className="px-2 py-1"></th>
               {names.map((n) => (
-                <th key={n} className="px-2 py-1 text-left font-mono text-muted">
+                <th
+                  key={n}
+                  className="whitespace-nowrap px-2 py-1 text-left text-tm-muted"
+                >
                   {n}
                 </th>
               ))}
@@ -347,13 +566,16 @@ function CorrelationPanel({ data }: { readonly data: ZooCorrelationResponse }) {
           <tbody>
             {matrix.map((row, i) => (
               <tr key={names[i]}>
-                <td className="px-2 py-1 font-mono text-muted">{names[i]}</td>
+                <td className="whitespace-nowrap px-2 py-1 text-tm-muted">
+                  {names[i]}
+                </td>
                 {row.map((v, j) => (
                   <td
                     key={j}
-                    className={`px-2 py-1 text-center font-mono ${cellColor(v)}`}
+                    className={`px-2 py-1 text-center tabular-nums ${cellTone(v)}`}
                   >
-                    {v >= 0 ? "+" : ""}{v.toFixed(2)}
+                    {v >= 0 ? "+" : ""}
+                    {v.toFixed(2)}
                   </td>
                 ))}
               </tr>
@@ -364,9 +586,3 @@ function CorrelationPanel({ data }: { readonly data: ZooCorrelationResponse }) {
     </div>
   );
 }
-
-function renderColored(label: string, value: number) {
-  const cls = value > 0 ? "text-green" : value < 0 ? "text-red" : "text-text";
-  return <span className={cls}>{label}</span>;
-}
-
