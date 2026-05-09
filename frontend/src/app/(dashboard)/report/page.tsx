@@ -90,6 +90,17 @@ const DEFAULT_REPORT_CONFIG: ReportConfig = {
   transactionCostBps: 5,
 };
 
+// Backend FactorSpec.hypothesis is bounded to 200 chars (Pydantic
+// max_length=200). UI display strings (intuitionZh, hypothesisZh on
+// some v3 examples, free-form user input) can blow past that.
+// Truncating at the boundary so no caller can break the contract.
+const MAX_HYPOTHESIS_CHARS = 200;
+function clipHypothesis(s: string): string {
+  if (s.length <= MAX_HYPOTHESIS_CHARS) return s;
+  // Reserve 1 char for the ellipsis so backend gets exactly 200.
+  return s.slice(0, MAX_HYPOTHESIS_CHARS - 1) + "…";
+}
+
 async function fetchAll(
   name: string,
   expression: string,
@@ -98,7 +109,7 @@ async function fetchAll(
 ) {
   const spec: SignalSpec = {
     name: name || "factor",
-    hypothesis: hypothesis || expression,
+    hypothesis: clipHypothesis(hypothesis || expression),
     expression,
     operators_used: [...extractOps(expression)],
     lookback: 12,
@@ -137,12 +148,17 @@ export default function ReportPage() {
     setZoo(listZoo());
   }, []);
 
+  // generate accepts hypothesis (short, ≤200 chars, sent to backend)
+  // and an optional intuitionForCover (display-only, can be longer).
+  // The split avoids the bug where intuitionZh (~220 chars on v3 picks)
+  // leaked into the backend hypothesis field and triggered HTTP 422.
   const generate = useCallback(
     async (
       name: string,
       expression: string,
       hypothesis: string,
       slot: "primary" | "compare",
+      intuitionForCover?: string,
     ) => {
       setRunning(true);
       setError(null);
@@ -158,7 +174,7 @@ export default function ReportPage() {
       const built: FactorReport = {
         name,
         expression,
-        intuition: hypothesis,
+        intuition: intuitionForCover ?? hypothesis,
         backtest: bt.data,
         today: td.data,
         exposure: ex.data,
@@ -186,7 +202,13 @@ export default function ReportPage() {
       setFactorName(e.name);
       setExpr(e.expression);
       setIntuition(e.intuition ?? "");
-      void generate(e.name, e.expression, e.hypothesis ?? "", "primary");
+      void generate(
+        e.name,
+        e.expression,
+        e.hypothesis ?? "",
+        "primary",
+        e.intuition ?? e.hypothesis ?? "",
+      );
     } catch {
       /* malformed handoff — ignore */
     }
@@ -212,6 +234,7 @@ export default function ReportPage() {
       example.expression,
       locale === "zh" ? example.hypothesisZh : example.hypothesisEn,
       "primary",
+      intu, // long display text on the cover; backend hypothesis stays short
     );
   }
 
@@ -221,16 +244,29 @@ export default function ReportPage() {
       setExpr(e.expression);
       setIntuition(e.intuition ?? "");
     }
-    void generate(e.name, e.expression, e.hypothesis ?? "", slot);
+    void generate(
+      e.name,
+      e.expression,
+      e.hypothesis ?? "",
+      slot,
+      e.intuition ?? e.hypothesis ?? "",
+    );
   }
 
   function runCustom() {
     if (!expr.trim()) return;
+    // intuition is the long human-readable display field; do NOT pass
+    // it as backend hypothesis (Pydantic 200-char cap). For custom user
+    // input we synthesize a short hypothesis but pass the user's full
+    // intuition through as the cover-display field. clipHypothesis at
+    // fetchAll guards anyway.
+    const name = factorName.trim() || "user_factor";
     void generate(
-      factorName.trim() || "user_factor",
+      name,
       expr.trim(),
-      intuition,
+      `tearsheet for ${name}`,
       "primary",
+      intuition,
     );
   }
 
@@ -457,6 +493,7 @@ function ReportPickerPane({
     expression: string,
     hypothesis: string,
     slot: "primary" | "compare",
+    intuitionForCover?: string,
   ) => void;
   readonly clearCompare: () => void;
 }) {
@@ -603,6 +640,9 @@ function ReportPickerPane({
                         ? example.hypothesisZh
                         : example.hypothesisEn,
                       "compare",
+                      locale === "zh"
+                        ? example.intuitionZh
+                        : example.intuitionEn,
                     )
                   }
                   disabled={running}
