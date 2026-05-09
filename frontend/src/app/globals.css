@@ -332,3 +332,156 @@ body {
     opacity: 0.3;
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   S5 POLISH — workstation-themed primitives applied globally
+   ─────────────────────────────────────────────────────────────────────────
+   1. Scrollbar overlay using tm-rule tokens so dark + light themes both
+      get a discreet rule-line aesthetic instead of the legacy translucent
+      Linear thumb.
+   2. Range slider (input[type=range]) skinned to match TmSlider visual:
+      hairline track + tm-accent thumb. Used by HYPOTHESIS.INPUT and
+      both backtest forms.
+   3. Focus ring uses tm-accent at 60% opacity, 1px outline + 2px outline
+      offset — workstation-tight, never the default browser blue blob.
+      Applied to all interactive workstation primitives.
+   4. Selection color uses tm-accent-soft so highlighted text matches
+      terminal aesthetic.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* Workstation-themed scrollbar — scoped to descendants of
+   [data-theme] so it applies app-wide. Overrides the legacy 6px thumb
+   above with a 8px thumb that sits on tm-rule. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--tm-rule, var(--scrollbar-thumb));
+  border-radius: 0;       /* terminal rule lines have no rounding */
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tm-rule-2, var(--scrollbar-thumb));
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Range slider — appears in TmSliders inside TmBacktestForm,
+   TmSignalForm, screener / backtest pages. Default browser styling is
+   wildly inconsistent across Chrome/Safari/Firefox; this hairline +
+   accent-thumb pattern keeps it consistent with tm tokens. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--tm-rule, var(--border));
+}
+input[type="range"]::-moz-range-track {
+  height: 2px;
+  background: var(--tm-rule, var(--border));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -5px;
+  border-radius: 0;
+  background: var(--tm-accent);
+  border: 1px solid var(--tm-accent);
+  cursor: pointer;
+  transition: transform 80ms ease;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 0;
+  background: var(--tm-accent);
+  border: 1px solid var(--tm-accent);
+  cursor: pointer;
+  transition: transform 80ms ease;
+}
+input[type="range"]:focus::-webkit-slider-thumb,
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+input[type="range"]:focus,
+input[type="range"]:focus-visible {
+  outline: none;
+}
+
+/* Focus ring — applied via :focus-visible so mouse clicks don't show
+   it (only keyboard navigation does). 1px tm-accent ring with 2px
+   offset is workstation-tight. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 1px solid var(--tm-accent);
+  outline-offset: 2px;
+}
+
+/* Text selection color — highlights match terminal aesthetic. */
+::selection {
+  background: var(--tm-accent-soft, rgba(57, 217, 138, 0.25));
+  color: var(--tm-fg);
+}
+
+/* Workstation TmChip / TmButton hover lift — subtle background tint
+   without geometry change. Already set via Tailwind utilities on most
+   primitives; this catch-all covers any hand-rolled buttons. */
+@media (hover: hover) {
+  .tm-chip-on-hover {
+    transition:
+      background 100ms ease,
+      color 100ms ease,
+      border-color 100ms ease;
+  }
+}
+
+/* Print styles — used by /report's tear-sheet export. Hide the
+   workstation chrome (sidebar, topbar, picker pane) and let the
+   tearsheet articles print full-width with hairline borders intact. */
+@media print {
+  /* Hide nav chrome — Sidebar, Topbar, and any element marked
+     report-chrome (keeps picker / config rows out of the export). */
+  aside,
+  header,
+  nav,
+  .report-chrome,
+  [data-tm-chrome] {
+    display: none !important;
+  }
+  /* Force light-on-white for print legibility regardless of UI theme. */
+  :root,
+  [data-theme] {
+    --tm-bg: #ffffff;
+    --tm-bg-2: #ffffff;
+    --tm-bg-3: #f5f5f2;
+    --tm-fg: #000000;
+    --tm-fg-2: #333333;
+    --tm-muted: #666666;
+    --tm-rule: #cccccc;
+    --tm-rule-2: #999999;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  /* Avoid breaking inside KPI grids and table rows. */
+  .tm-kpi,
+  tr,
+  li {
+    page-break-inside: avoid;
+  }
+}
