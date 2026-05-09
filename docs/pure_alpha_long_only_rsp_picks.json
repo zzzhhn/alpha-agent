@@ -1,0 +1,176 @@
+[
+  {
+    "name": "ep",
+    "neutralize": "none",
+    "top_pct": 0.1,
+    "test_sr": 1.8629983529476197,
+    "ic": 0.008388989762027687,
+    "ic_p": 0.3523083596256572,
+    "psr": 0.9231863415504797,
+    "alpha_ann": 0.10883719660625608,
+    "alpha_t": 2.5935489229940383,
+    "alpha_p": 0.009499102342076906,
+    "beta": 1.1721983885377245,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 32,
+        "alpha_t": 0.8925826551769765
+      },
+      {
+        "regime": "sideways",
+        "n_days": 119,
+        "alpha_t": 1.0590578013145395
+      }
+    ],
+    "family": "value",
+    "thesis": "Earnings yield E/P",
+    "expression": "rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))",
+    "verdict": "SIG_ALPHA"
+  },
+  {
+    "name": "cash_buffer",
+    "neutralize": "none",
+    "top_pct": 0.1,
+    "test_sr": 0.5798123860659491,
+    "ic": 0.008964417689244247,
+    "ic_p": 0.4799678846349612,
+    "psr": 0.6719360279188006,
+    "alpha_ann": 0.07176649828533715,
+    "alpha_t": 1.771060740223017,
+    "alpha_p": 0.07655060167215415,
+    "beta": 1.1669864954609064,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 32,
+        "alpha_t": -1.8968855126826862
+      },
+      {
+        "regime": "sideways",
+        "n_days": 119,
+        "alpha_t": 1.1305624805021923
+      }
+    ],
+    "family": "health",
+    "thesis": "Cash buffer (cash / equity)",
+    "expression": "rank(divide(cash_and_equivalents, equity))",
+    "verdict": "MARGINAL"
+  },
+  {
+    "name": "high_dvol",
+    "neutralize": "sector",
+    "top_pct": 0.1,
+    "test_sr": 1.013505501832574,
+    "ic": 0.009710930704900696,
+    "ic_p": 0.28142460987208556,
+    "psr": 0.7833439787138715,
+    "alpha_ann": 0.0672287470600905,
+    "alpha_t": 1.6324698034227487,
+    "alpha_p": 0.10258055469545002,
+    "beta": 0.9378863439069266,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 32,
+        "alpha_t": -0.6648170647531294
+      },
+      {
+        "regime": "sideways",
+        "n_days": 119,
+        "alpha_t": 0.5505690305605524
+      }
+    ],
+    "family": "liquidity",
+    "thesis": "High dollar volume rank",
+    "expression": "rank(adv60)",
+    "verdict": "NOISE"
+  },
+  {
+    "name": "trend_sharpe_120",
+    "neutralize": "sector",
+    "top_pct": 0.1,
+    "test_sr": 2.1137742880338943,
+    "ic": 0.018485242403053957,
+    "ic_p": 0.1996687112066259,
+    "psr": 0.9482763460388642,
+    "alpha_ann": 0.0793283499114964,
+    "alpha_t": 1.4338607454657573,
+    "alpha_p": 0.15161200585842294,
+    "beta": 0.7705380529910183,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 32,
+        "alpha_t": -0.07128316679184847
+      },
+      {
+        "regime": "sideways",
+        "n_days": 119,
+        "alpha_t": 2.0488879892372065
+      }
+    ],
+    "family": "trend",
+    "thesis": "120d return / vol",
+    "expression": "rank(divide(ts_mean(returns, 120), ts_std(returns, 120)))",
+    "verdict": "NOISE"
+  },
+  {
+    "name": "bp",
+    "neutralize": "none",
+    "top_pct": 0.2,
+    "test_sr": 1.9779302171307713,
+    "ic": 0.014405400289447643,
+    "ic_p": 0.1372433860308875,
+    "psr": 0.9428579319330609,
+    "alpha_ann": 0.04822333132403412,
+    "alpha_t": 1.2345215310914954,
+    "alpha_p": 0.21700862865137713,
+    "beta": 1.1396847001262462,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 32,
+        "alpha_t": 1.4837069787402808
+      },
+      {
+        "regime": "sideways",
+        "n_days": 119,
+        "alpha_t": 0.5408278363961827
+      }
+    ],
+    "family": "value",
+    "thesis": "Book yield B/P",
+    "expression": "rank(divide(equity, multiply(close, shares_outstanding)))",
+    "verdict": "NOISE"
+  },
+  {
+    "name": "roe",
+    "neutralize": "none",
+    "top_pct": 0.2,
+    "test_sr": 0.715547888589548,
+    "ic": 0.0027142225070254026,
+    "ic_p": 0.653281998632295,
+    "psr": 0.7097824574141536,
+    "alpha_ann": 0.03027977887296631,
+    "alpha_t": 1.201433514528796,
+    "alpha_p": 0.2295830821515743,
+    "beta": 1.0109861434305474,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 32,
+        "alpha_t": -0.10408498623292843
+      },
+      {
+        "regime": "sideways",
+        "n_days": 119,
+        "alpha_t": -0.8269412260764268
+      }
+    ],
+    "family": "quality",
+    "thesis": "Return on equity (ni / equity)",
+    "expression": "rank(divide(net_income_adjusted, equity))",
+    "verdict": "NOISE"
+  }
+]

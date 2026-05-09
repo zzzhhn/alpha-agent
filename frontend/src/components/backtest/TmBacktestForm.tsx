@@ -141,6 +141,17 @@ export function TmBacktestForm({
 
   function loadExample(ex: FactorExample) {
     setExpr(ex.expression);
+    // v3: pull through whichever config fields the example carries.
+    // Fields are independently optional — examples discovered under
+    // different configs (long_short/SPY vs long_only/sector/RSP) each
+    // restore their own proven settings on click. This lets the user
+    // reproduce the example's RISK.ATTRIBUTION verdict directly.
+    if (ex.direction !== undefined) setDirection(ex.direction);
+    if (ex.neutralize !== undefined) setNeutralize(ex.neutralize);
+    if (ex.benchmarkTicker !== undefined) setBenchmarkTicker(ex.benchmarkTicker);
+    if (ex.topPct !== undefined) setTopPct(Math.round(ex.topPct * 100));
+    if (ex.bottomPct !== undefined) setBottomPct(Math.round(ex.bottomPct * 100));
+    if (ex.transactionCostBps !== undefined) setCostBps(ex.transactionCostBps);
   }
 
   function submit() {

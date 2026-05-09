@@ -631,22 +631,43 @@ function WinLossDistributionPane({
   const upPct = series.length > 0 ? (upDays / series.length) * 100 : 0;
   const winLossRatio = avgLoss !== 0 ? Math.abs(avgWin / avgLoss) : 0;
 
+  // Profit factor = sum(gains) / |sum(losses)|, classic risk-adjusted
+  // metric distinct from win-rate × avg-win/avg-loss because it
+  // captures the actual dollar ratio (a strategy with 30% wins but
+  // huge winners can still be profitable).
+  const sumGains = wins.reduce((a, b) => a + b, 0);
+  const sumLosses = losses.reduce((a, b) => a + b, 0);
+  const profitFactor =
+    sumLosses < 0 ? Math.abs(sumGains / sumLosses) : 0;
+
   return (
     <TmPane
       title="WIN/LOSS.DISTRIBUTION"
       meta={`${series.length} sessions · ${upDays} up / ${downDays} down`}
     >
       <TmKpiGrid>
+        <TmKpi
+          label="WIN RATE"
+          value={`${upPct.toFixed(1)}%`}
+          tone={upPct > 50 ? "pos" : "neg"}
+          sub={`${upDays}/${series.length} sessions`}
+        />
         <TmKpi label="BEST DAY" value={`${(bestDay * 100).toFixed(2)}%`} tone="pos" />
         <TmKpi label="WORST DAY" value={`${(worstDay * 100).toFixed(2)}%`} tone="neg" />
-        <TmKpi label="UP %" value={`${upPct.toFixed(0)}%`}
-          tone={upPct > 50 ? "pos" : "neg"} sub={`${upDays}/${series.length}`} />
         <TmKpi label="AVG WIN" value={`${(avgWin * 100).toFixed(2)}%`} tone="pos" />
         <TmKpi label="AVG LOSS" value={`${(avgLoss * 100).toFixed(2)}%`} tone="neg" />
-        <TmKpi label="WIN/LOSS"
+        <TmKpi
+          label="WIN/LOSS"
           value={winLossRatio.toFixed(2)}
           tone={winLossRatio > 1 ? "pos" : "neg"}
-          sub="ratio of magnitudes" />
+          sub="ratio of magnitudes"
+        />
+        <TmKpi
+          label="PROFIT FACTOR"
+          value={profitFactor.toFixed(2)}
+          tone={profitFactor > 1 ? "pos" : "neg"}
+          sub="Σ gains / |Σ losses|"
+        />
       </TmKpiGrid>
       <div className="h-[180px] w-full px-1 pb-1 pt-2">
         <ResponsiveContainer width="100%" height="100%">
