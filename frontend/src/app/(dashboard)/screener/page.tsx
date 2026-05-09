@@ -1372,6 +1372,33 @@ function RecsCapMixPane({
   readonly totalRecs: number;
   readonly unknownCount: number;
 }) {
+  // When every recommendation lacks a cap value (panel.cap all-NaN), 5
+  // empty bars look broken. Show a single empty-state instead so the
+  // user knows it's a data gap, not a UI hang.
+  const allUnknown = totalRecs > 0 && unknownCount === totalRecs;
+
+  if (allUnknown) {
+    return (
+      <TmPane title="RECS.CAPMIX" meta="NO CAP DATA">
+        <div className="flex flex-col gap-1.5 px-3 py-3 font-tm-mono text-[11px]">
+          <p className="text-tm-warn">
+            ▸ all {totalRecs} recommendations missing cap data.
+          </p>
+          <p className="leading-relaxed text-tm-muted">
+            panel field <code className="text-tm-fg-2">cap</code> has 0%
+            coverage on this universe — column exists but values are all-NaN.
+            cap-based filters (MIN_CAP / MAX_CAP) will also silently filter
+            to empty until backfilled. cap is computed as{" "}
+            <code className="text-tm-fg-2">close × shares_outstanding</code>;
+            either WRDS Compustat fundq <code>cshoq</code> or yfinance pull
+            needs to repopulate.
+          </p>
+        </div>
+      </TmPane>
+    );
+  }
+
+  const unknownShare = totalRecs > 0 ? unknownCount / totalRecs : 0;
   const meta = unknownCount
     ? `5 BUCKETS · ${totalRecs} TOP-N · ${unknownCount} UNKNOWN`
     : `5 BUCKETS · ${totalRecs} TOP-N`;
@@ -1403,6 +1430,30 @@ function RecsCapMixPane({
             </span>
           </li>
         ))}
+        {unknownCount > 0 && (
+          <li
+            className="grid items-center gap-3 border-b border-tm-rule bg-tm-bg-2 px-3 py-1 last:border-b-0"
+            style={{
+              gridTemplateColumns: "minmax(80px, 100px) 1fr 50px 50px",
+            }}
+          >
+            <span className="font-tm-mono text-[11px] text-tm-warn">
+              UNKNOWN
+            </span>
+            <div className="relative h-3 w-full bg-tm-bg-3">
+              <div
+                className="h-full bg-tm-warn opacity-50"
+                style={{ width: `${unknownShare * 100}%` }}
+              />
+            </div>
+            <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg-2">
+              {unknownCount}
+            </span>
+            <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-warn">
+              {(unknownShare * 100).toFixed(0)}%
+            </span>
+          </li>
+        )}
       </ul>
     </TmPane>
   );
