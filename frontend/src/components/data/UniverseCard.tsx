@@ -1,7 +1,6 @@
 "use client";
 
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { TmPane } from "@/components/tm/TmPane";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { UniverseInfo } from "@/lib/types";
@@ -10,21 +9,25 @@ interface UniverseCardProps {
   readonly universe: UniverseInfo;
 }
 
+/**
+ * UniverseCard — one universe rendered as a workstation pane.
+ *
+ * Header row carries id + currency tag (replaces the prior Linear-style
+ * purple badge). Body is a 2-col stat grid plus an expandable ticker
+ * roster. All copy keys preserved.
+ */
 export function UniverseCard({ universe }: UniverseCardProps) {
   const { locale } = useLocale();
   return (
-    <Card padding="md">
-      <header className="mb-3 flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-text">{universe.name}</h3>
-          <p className="mt-0.5 font-mono text-[12px] text-muted">{universe.id}</p>
-        </div>
-        <Badge variant="purple" size="sm">
-          {universe.currency}
-        </Badge>
-      </header>
-
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] md:grid-cols-4">
+    <TmPane
+      title={universe.name}
+      meta={
+        <span className="font-tm-mono">
+          {universe.id} · {universe.currency}
+        </span>
+      }
+    >
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-3 py-3 font-tm-mono text-[12px] md:grid-cols-4">
         <Stat
           label={t(locale, "data.universe.tickerCount")}
           value={universe.ticker_count.toString()}
@@ -43,30 +46,32 @@ export function UniverseCard({ universe }: UniverseCardProps) {
         />
       </dl>
 
-      <details className="mt-3 border-t border-border pt-3">
-        <summary className="cursor-pointer text-[13px] text-muted hover:text-text">
+      <details className="border-t border-tm-rule">
+        <summary className="cursor-pointer px-3 py-2 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-fg">
           {t(locale, "data.universe.tickersLabel")} ({universe.tickers.length})
         </summary>
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 px-3 pb-3 pt-1">
           {universe.tickers.map((tk) => (
             <span
               key={tk}
-              className="rounded bg-[var(--toggle-bg)] px-1.5 py-0.5 font-mono text-[12px] text-text"
+              className="border border-tm-rule bg-tm-bg-3 px-1.5 py-0.5 font-tm-mono text-[11px] text-tm-fg-2"
             >
               {tk}
             </span>
           ))}
         </div>
       </details>
-    </Card>
+    </TmPane>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-[12px] uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-0.5 font-mono text-sm text-text">{value}</dd>
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-tm-muted">
+        {label}
+      </dt>
+      <dd className="tabular-nums text-tm-fg">{value}</dd>
     </div>
   );
 }

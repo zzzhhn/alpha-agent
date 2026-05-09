@@ -1,10 +1,27 @@
 "use client";
 
+/**
+ * Data page — universe / operator catalog / coverage overview.
+ *
+ * Stage 3 redesign port. The 3 child components (UniverseCard,
+ * OperandCatalog, CoverageOverview) each own their own TmPane, so this
+ * page is a thin orchestrator: header pane + universe grid + catalog
+ * + coverage. All data fetching, caching, error handling preserved
+ * from the legacy implementation.
+ *
+ * NOT changed:
+ *   * fetchUniverses / fetchOperandCatalog / fetchCoverage call sites
+ *   * load() callback semantics (force=true on Refresh, force=false on mount)
+ *   * invalidateDataCache() on refresh
+ *   * cancelled-effect cleanup pattern
+ *   * All i18n keys
+ */
+
 import { useCallback, useEffect, useState } from "react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TmPane } from "@/components/tm/TmPane";
+import { TmButton } from "@/components/tm/TmButton";
 import { UniverseCard } from "@/components/data/UniverseCard";
 import { OperandCatalog } from "@/components/data/OperandCatalog";
 import { CoverageOverview } from "@/components/data/CoverageOverview";
@@ -68,45 +85,48 @@ export default function DataPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-text">
-            {t(locale, "data.title")}
-          </h1>
-          <p className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted">
-            {t(locale, "data.subtitle")}
-          </p>
-        </div>
-        {universes && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            {refreshing ? t(locale, "data.refreshing") : t(locale, "data.refresh")}
-          </Button>
-        )}
-      </header>
+    <div className="flex flex-col gap-4 font-tm-mono">
+      {/* Page header pane — title bar with subtitle in body, refresh CTA
+          on the right. Mirrors the design's master-pane treatment. */}
+      <TmPane
+        title={t(locale, "data.title")}
+        meta={
+          universes ? (
+            <TmButton
+              variant="ghost"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="-my-1 px-2"
+            >
+              {refreshing
+                ? t(locale, "data.refreshing")
+                : t(locale, "data.refresh")}
+            </TmButton>
+          ) : null
+        }
+      >
+        <p className="px-3 py-2.5 text-[11.5px] leading-relaxed text-tm-fg-2">
+          {t(locale, "data.subtitle")}
+        </p>
+      </TmPane>
 
       {error && (
-        <Card padding="md">
-          <p className="text-base text-red">
-            {t(locale, "data.error")}: {error}
-          </p>
-        </Card>
+        <TmPane title="ERROR" meta={t(locale, "data.error")}>
+          <p className="px-3 py-2.5 text-[11.5px] text-tm-neg">{error}</p>
+        </TmPane>
       )}
 
       {!error && !universes && (
-        <Card padding="md">
-          <p className="text-base text-muted">{t(locale, "data.loading")}</p>
-        </Card>
+        <TmPane title="LOADING" meta="…">
+          <p className="px-3 py-2.5 text-[11.5px] text-tm-muted">
+            {t(locale, "data.loading")}
+          </p>
+        </TmPane>
       )}
 
       {universes && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-base font-semibold text-text">
+          <h2 className="px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-tm-muted">
             {t(locale, "data.universe.title")}
           </h2>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
