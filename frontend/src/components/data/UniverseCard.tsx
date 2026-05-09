@@ -4,24 +4,29 @@
  * Data-page composition primitives — UniverseOverview + UniverseTickers.
  *
  * The /data page wraps these two in a `<TmCols2>` so they sit side-by-
- * side, saving the vertical real estate the previous "stack everything
- * full-width" layout wasted.
+ * side in fixed-height "tabs" that scroll internally — neither pane
+ * grows when its content does (e.g. user expands all sectors), they
+ * just scroll. This keeps left and right vertically aligned regardless
+ * of how either side's content changes.
  *
  * UniverseOverview merges the legacy UNIVERSE pane + DATA.COVERAGE pane
- * into one. The 5-cell KPI strip carries the union of their stats
- * (ticker count, trading days, OHLCV %, benchmark+currency, universe
- * id). Below the strip, when coverage data is present, the per-field
- * fill-rate bars + worst-coverage tickers list render in the same pane
- * — what was a separate DATA.COVERAGE pane below.
+ * into one. The 5-cell KPI strip carries the union of their stats. Then
+ * a collapsible 3-row category summary (`COVERAGE.CATEGORIES`) replaces
+ * the prior wall of ~20 per-field fill-rate bars: each row shows the
+ * category's average fill rate; click ▸ to expand and reveal the field-
+ * level bars that were dominating the page before. Worst-coverage
+ * tickers also moved into a collapsible block (closed by default).
  *
  * UniverseTickers is the sectorised ticker roster. Each GICS sector is
  * its own collapsible block; the body inside each block is a fixed-
  * density grid (78px-min auto-fill) so symbol density is predictable
- * regardless of the longest ticker in the bucket.
+ * regardless of the longest ticker in the bucket. When a sector
+ * expands, the pane scrolls — it does NOT grow vertically, so the
+ * paired UniverseOverview pane stays the same height.
  *
  * `UniverseDetail` and `UniverseCard` are kept as back-compat aliases
  * — old call sites continue to render the same content (overview +
- * tickers stacked).
+ * tickers stacked, no fixed height).
  */
 
 import { useMemo, useState } from "react";
@@ -43,7 +48,7 @@ const CATEGORY_LABEL_KEY = {
 
 // Coverage health colour ramp — tokens for accent/warn/neg, hex
 // fallbacks for the lime/orange middle steps that don't have palette
-// equivalents yet. Same ramp as the legacy CoverageOverview.
+// equivalents yet.
 function colorFor(rate: number): string {
   if (rate >= 0.99) return "var(--tm-pos)";
   if (rate >= 0.95) return "#84cc16"; // lime
@@ -52,6 +57,12 @@ function colorFor(rate: number): string {
   return "var(--tm-neg)";
 }
 
+// Fill-height pane CSS — TmPane root takes the full grid-cell height,
+// the body wrapper grows to fill remaining space and scrolls when
+// content overflows. Used by both panes inside data/page.tsx's TmCols2.
+const FILL_PANE_CLASS = "h-full overflow-hidden";
+const FILL_BODY_CLASS = "flex-1 min-h-0 overflow-y-auto";
+
 // ── UniverseOverview ────────────────────────────────────────────────
 
 interface UniverseOverviewProps {
@@ -59,11 +70,17 @@ interface UniverseOverviewProps {
   /** Coverage payload (from `fetchCoverage`). When undefined, the pane
    *  renders without the fill-rate bars / worst-tickers section. */
   readonly coverage?: CoverageResponse | null;
+  /** When true, the pane fills its parent's height and scrolls
+   *  internally on overflow. Used by data/page.tsx's TmCols2 to make
+   *  Overview + Tickers panes the same height. Defaults to false so
+   *  the back-compat `UniverseDetail` keeps its auto-height layout. */
+  readonly fillHeight?: boolean;
 }
 
 export function UniverseOverview({
   universe,
   coverage,
+  fillHeight = false,
 }: UniverseOverviewProps) {
   const { locale } = useLocale();
 
@@ -92,6 +109,8 @@ export function UniverseOverview({
           benchmark = {universe.benchmark} · {universe.currency}
         </span>
       }
+      className={fillHeight ? FILL_PANE_CLASS : undefined}
+      bodyClassName={fillHeight ? FILL_BODY_CLASS : undefined}
     >
       {/* Merged KPI strip — 5 cells consolidate the previous UNIVERSE
           + COVERAGE overlap (tickers, days, ohlcv%, range, benchmark) */}
@@ -132,79 +151,144 @@ export function UniverseOverview({
         />
       </TmKpiGrid>
 
-      {/* Per-field fill rate bars, grouped by category — pulled in from
-          the legacy CoverageOverview pane. Renders only when coverage
-          data has loaded. */}
+      {/* Coverage drilldown — collapsible category rows. Replaces the
+          previous wall of ~20 per-field fill-rate bars, which was both
+          information overload and the cause of the height mismatch
+          with the right pane. */}
       {coverage && (
-        <>
-          {(["ohlcv", "metadata", "fundamental"] as const).map((cat) => {
-            const fields = byCategory.get(cat);
-            if (!fields || fields.length === 0) return null;
-            return (
-              <section key={cat} className="border-t border-tm-rule">
-                <div className="px-3 py-1 font-tm-mono text-[10px] uppercase tracking-[0.10em] text-tm-muted">
-                  {t(locale, CATEGORY_LABEL_KEY[cat])} ({fields.length})
-                </div>
-                <div className="flex flex-col gap-1 px-3 pb-2">
-                  {fields.map((f) => (
-                    <FieldBar key={f.name} field={f} />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+        <section className="border-t border-tm-rule">
+          <div className="px-3 py-1 font-tm-mono text-[10px] uppercase tracking-[0.10em] text-tm-muted">
+            {t(locale, "data.coverage.title")}
+          </div>
+          <div className="flex flex-col">
+            {(["ohlcv", "metadata", "fundamental"] as const).map((cat) => {
+              const fields = byCategory.get(cat);
+              if (!fields || fields.length === 0) return null;
+              return (
+                <CategoryRow
+                  key={cat}
+                  label={t(locale, CATEGORY_LABEL_KEY[cat])}
+                  fields={fields}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-          {worstTickers.length > 0 && (
-            <section className="border-t border-tm-rule">
-              <div className="px-3 py-1 font-tm-mono text-[10px] uppercase tracking-[0.10em] text-tm-muted">
-                {t(locale, "data.coverage.worstTickers")}
-              </div>
-              <div className="flex flex-col gap-1 px-3 pb-2 font-tm-mono">
-                {worstTickers.map((tk) => (
+      {/* Worst-tickers — collapsible block (closed by default). Was a
+          full-width section taking ~80px; now hidden behind a single
+          row that the user expands when they actually want this view. */}
+      {coverage && worstTickers.length > 0 && (
+        <Collapsible
+          label={t(locale, "data.coverage.worstTickers")}
+          summary={`${worstTickers.length} below 100%`}
+          tone="warn"
+        >
+          <div className="flex flex-col gap-1 px-3 pb-2 font-tm-mono">
+            {worstTickers.map((tk) => (
+              <div
+                key={tk.ticker}
+                className="flex items-center gap-3 text-[11px]"
+              >
+                <span className="w-20 font-semibold text-tm-fg">
+                  {tk.ticker}
+                </span>
+                <div className="relative h-2.5 flex-1 overflow-hidden bg-tm-bg-3">
                   <div
-                    key={tk.ticker}
-                    className="flex items-center gap-3 text-[11px]"
-                  >
-                    <span className="w-20 font-semibold text-tm-fg">
-                      {tk.ticker}
-                    </span>
-                    <div className="relative h-2.5 flex-1 overflow-hidden bg-tm-bg-3">
-                      <div
-                        className="h-full"
-                        style={{
-                          width: `${tk.fill_rate * 100}%`,
-                          background: colorFor(tk.fill_rate),
-                        }}
-                      />
-                    </div>
-                    <span className="w-14 text-right tabular-nums text-tm-fg">
-                      {(tk.fill_rate * 100).toFixed(1)}%
-                    </span>
-                    <span className="w-20 text-right text-[10px] text-tm-muted">
-                      {tk.n_missing} missing
-                    </span>
-                  </div>
-                ))}
+                    className="h-full"
+                    style={{
+                      width: `${tk.fill_rate * 100}%`,
+                      background: colorFor(tk.fill_rate),
+                    }}
+                  />
+                </div>
+                <span className="w-14 text-right tabular-nums text-tm-fg">
+                  {(tk.fill_rate * 100).toFixed(1)}%
+                </span>
+                <span className="w-20 text-right text-[10px] text-tm-muted">
+                  {tk.n_missing} missing
+                </span>
               </div>
-            </section>
-          )}
+            ))}
+          </div>
+        </Collapsible>
+      )}
 
-          <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
-            {t(locale, "data.coverage.legend")}
-          </p>
-        </>
+      {coverage && (
+        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
+          {t(locale, "data.coverage.legend")}
+        </p>
       )}
     </TmPane>
+  );
+}
+
+// ── CategoryRow — collapsible per-category coverage summary ─────────
+
+function mean(rates: readonly number[]): number {
+  if (rates.length === 0) return 0;
+  return rates.reduce((s, r) => s + r, 0) / rates.length;
+}
+
+function CategoryRow({
+  label,
+  fields,
+}: {
+  label: string;
+  fields: readonly FieldCoverage[];
+}) {
+  const [open, setOpen] = useState(false);
+  const avg = mean(fields.map((f) => f.fill_rate));
+  const healthy = fields.filter((f) => f.fill_rate >= 0.99).length;
+  const tone = colorFor(avg);
+
+  return (
+    <div className="border-t border-tm-rule first:border-t-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-[11px] transition-colors hover:bg-tm-bg-2"
+        aria-expanded={open}
+      >
+        <span className="w-3 text-tm-muted" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="w-32 truncate font-semibold uppercase tracking-[0.04em] text-tm-accent">
+          {label}
+        </span>
+        <span className="w-32 text-tm-muted">
+          {healthy}/{fields.length} healthy
+        </span>
+        {/* Mini summary bar — same colour ramp as field-level bars */}
+        <div className="relative h-2.5 flex-1 overflow-hidden bg-tm-bg-3">
+          <div
+            className="h-full transition-[width] duration-200"
+            style={{ width: `${avg * 100}%`, background: tone }}
+          />
+        </div>
+        <span className="w-14 text-right tabular-nums text-tm-fg">
+          {(avg * 100).toFixed(2)}%
+        </span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-1 bg-tm-bg-2 px-3 py-2">
+          {fields.map((f) => (
+            <FieldBar key={f.name} field={f} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 function FieldBar({ field }: { field: FieldCoverage }) {
   return (
     <div className="flex items-center gap-3 font-tm-mono text-[11px]">
-      <code className="w-44 truncate text-tm-fg" title={field.name}>
+      <code className="w-32 truncate text-tm-fg" title={field.name}>
         {field.name}
       </code>
-      <div className="relative h-3 flex-1 overflow-hidden bg-tm-bg-3">
+      <div className="relative h-2.5 flex-1 overflow-hidden bg-tm-bg-3">
         <div
           className="h-full transition-[width] duration-200"
           style={{
@@ -216,17 +300,61 @@ function FieldBar({ field }: { field: FieldCoverage }) {
       <span className="w-14 text-right tabular-nums text-tm-fg">
         {(field.fill_rate * 100).toFixed(1)}%
       </span>
-      <span className="w-24 text-right text-[10px] text-tm-muted">
+      <span className="w-20 text-right text-[10px] text-tm-muted">
         {field.n_present.toLocaleString()} / {field.n_total.toLocaleString()}
       </span>
     </div>
   );
 }
 
-// ── UniverseTickers (sectorised) ────────────────────────────────────
+// ── Generic Collapsible (used for worst-tickers + future drilldowns) ─
+
+function Collapsible({
+  label,
+  summary,
+  tone,
+  defaultOpen = false,
+  children,
+}: {
+  label: string;
+  summary?: string;
+  tone?: "warn" | "pos" | "muted";
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const summaryTone =
+    tone === "warn"
+      ? "text-tm-warn"
+      : tone === "pos"
+        ? "text-tm-pos"
+        : "text-tm-muted";
+  return (
+    <div className="border-t border-tm-rule">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-[10px] uppercase tracking-[0.08em] transition-colors hover:bg-tm-bg-2"
+        aria-expanded={open}
+      >
+        <span className="w-3 text-tm-muted" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="font-semibold text-tm-fg-2">{label}</span>
+        {summary && <span className={summaryTone}>· {summary}</span>}
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+// ── UniverseTickers (sectorised, fill-height capable) ───────────────
 
 interface UniverseTickersProps {
   readonly universe: UniverseInfo;
+  /** When true, the pane fills its parent's height and scrolls
+   *  internally on overflow. Same convention as UniverseOverview. */
+  readonly fillHeight?: boolean;
 }
 
 interface SectorBucket {
@@ -236,16 +364,11 @@ interface SectorBucket {
 }
 
 const UNKNOWN_SECTOR = "Unknown";
-// Sectors smaller than this stay open by default; bigger ones collapse
-// so the pane doesn't scroll forever.
+// Sectors smaller than this stay open by default; bigger ones collapse.
 const COLLAPSE_THRESHOLD = 24;
 
 function bucketTickers(universe: UniverseInfo): SectorBucket[] {
   const sectors = universe.sectors;
-  // No sector data → single bucket containing every ticker. This is
-  // what fires when (a) the backend predates the `sectors` field, or
-  // (b) the loaded panel has no sector column. The fallback keeps the
-  // pane functional.
   if (!sectors || sectors.length !== universe.tickers.length) {
     return [
       {
@@ -264,7 +387,6 @@ function bucketTickers(universe: UniverseInfo): SectorBucket[] {
     map.set(sec, list);
   });
 
-  // Stable order: largest bucket first, "Unknown" pinned to the bottom.
   return Array.from(map.entries())
     .sort(([aK, aTk], [bK, bTk]) => {
       if (aK === UNKNOWN_SECTOR) return 1;
@@ -278,7 +400,10 @@ function bucketTickers(universe: UniverseInfo): SectorBucket[] {
     }));
 }
 
-export function UniverseTickers({ universe }: UniverseTickersProps) {
+export function UniverseTickers({
+  universe,
+  fillHeight = false,
+}: UniverseTickersProps) {
   const buckets = useMemo(() => bucketTickers(universe), [universe]);
 
   return (
@@ -289,6 +414,8 @@ export function UniverseTickers({ universe }: UniverseTickersProps) {
           {universe.tickers.length} symbols · {buckets.length} sectors
         </span>
       }
+      className={fillHeight ? FILL_PANE_CLASS : undefined}
+      bodyClassName={fillHeight ? FILL_BODY_CLASS : undefined}
     >
       <div className="flex flex-col">
         {buckets.map((b, idx) => (
@@ -353,10 +480,8 @@ interface UniverseDetailProps {
   readonly coverage?: CoverageResponse | null;
 }
 
-/** Legacy combined renderer — overview + tickers stacked vertically.
- *  Retained so any caller that still imports `UniverseDetail` /
- *  `UniverseCard` keeps working. New callers should use
- *  `UniverseOverview` + `UniverseTickers` directly inside a TmCols2. */
+/** Legacy combined renderer — overview + tickers stacked vertically,
+ *  auto-height (no fill behavior). */
 export function UniverseDetail({ universe, coverage }: UniverseDetailProps) {
   return (
     <>

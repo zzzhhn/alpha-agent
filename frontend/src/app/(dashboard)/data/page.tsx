@@ -168,11 +168,20 @@ export default function DataPage() {
         </TmPane>
       )}
 
-      {/* Overview (universe + coverage merged) | Tickers (sector-grouped) */}
+      {/* Overview (universe + coverage merged) | Tickers (sector-grouped).
+          Fixed 640px height across both panes — neither grows when its
+          content does (e.g. user expands all sectors), they just scroll
+          internally. Keeps L/R vertically aligned regardless of which
+          collapsibles are open. 640px ≈ 16:10 viewport content area;
+          tweak via the inline style if you want denser/looser. */}
       {activeUniverse && (
-        <TmCols2>
-          <UniverseOverview universe={activeUniverse} coverage={coverage} />
-          <UniverseTickers universe={activeUniverse} />
+        <TmCols2 className="h-[640px]">
+          <UniverseOverview
+            universe={activeUniverse}
+            coverage={coverage}
+            fillHeight
+          />
+          <UniverseTickers universe={activeUniverse} fillHeight />
         </TmCols2>
       )}
 
