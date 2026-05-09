@@ -377,14 +377,69 @@ def assemble_panel(
     )
     ohlcv["exchange"] = "Unknown"
     ohlcv["currency"] = "USD"
-    # Cap = close × shares_outstanding. Compustat doesn't give daily shrout,
-    # so use most recent CSHOQ from fundq if available; else NaN.
-    if not fund.empty and "atq" in fund.columns:
-        # Quick-and-dirty: use atq (assets) as proxy until a proper cshoq pull.
-        # Real cap will require pulling cshoq separately; for now leave NaN
-        # and let the screener's cap filter handle missing values.
-        pass
-    ohlcv["cap"] = pd.NA
+
+    # Cap = close × shares_outstanding via PIT (RDQ-based) as-of join. The
+    # fundq query at line ~309 already pulls f.cshoq AS shares_outstanding;
+    # we PIT-join it backward by filing date so each (t, ticker) sees the
+    # latest pre-filed quarter's shrout (no lookahead). CSHOQ is reported
+    # in millions of shares per Compustat docs, so × 1e6 to get raw share
+    # count, then × close = market cap in USD. Skip when fundq is empty
+    # or shrout column missing — preserves prior all-NaN behavior so the
+    # screener's "no cap data" empty state still triggers gracefully.
+    if (
+        not fund.empty
+        and "shares_outstanding" in fund.columns
+        and "rdq" in fund.columns
+    ):
+        rev_gvkey = {v: k for k, v in gvkey_map.items()}
+        shares_pit = fund[["gvkey", "rdq", "shares_outstanding"]].copy()
+        shares_pit["ticker"] = shares_pit["gvkey"].map(rev_gvkey)
+        shares_pit = shares_pit[
+            shares_pit["ticker"].notna()
+            & shares_pit["rdq"].notna()
+            & shares_pit["shares_outstanding"].notna()
+        ].copy()
+        shares_pit["filing_date"] = pd.to_datetime(shares_pit["rdq"])
+        shares_pit = shares_pit[
+            ["ticker", "filing_date", "shares_outstanding"]
+        ].sort_values(["ticker", "filing_date"])
+
+        # merge_asof requires both frames sorted by the on-key (date /
+        # filing_date) — sort ohlcv by (ticker, date) before joining.
+        ohlcv = ohlcv.sort_values(["ticker", "date"]).reset_index(drop=True)
+        ohlcv["_date_dt"] = pd.to_datetime(ohlcv["date"])
+        merged = pd.merge_asof(
+            ohlcv,
+            shares_pit,
+            left_on="_date_dt",
+            right_on="filing_date",
+            by="ticker",
+            direction="backward",
+            allow_exact_matches=True,
+        )
+        # Convert millions → raw shares; cap in USD.
+        cap_series = (
+            merged["close"] * merged["shares_outstanding"] * 1_000_000
+        ).astype("float64")
+        ohlcv["cap"] = cap_series
+        ohlcv = ohlcv.drop(columns=["_date_dt"])
+
+        n_total = len(ohlcv)
+        n_filled = int(ohlcv["cap"].notna().sum())
+        n_uniq_tickers = int(
+            ohlcv.loc[ohlcv["cap"].notna(), "ticker"].nunique()
+        )
+        print(
+            f"  cap filled: {n_filled}/{n_total} cells ({n_filled / max(n_total, 1) * 100:.1f}%) "
+            f"across {n_uniq_tickers}/{ohlcv['ticker'].nunique()} tickers",
+            flush=True,
+        )
+    else:
+        ohlcv["cap"] = pd.NA
+        print(
+            "  cap left NaN (fundq empty or shares_outstanding missing)",
+            flush=True,
+        )
 
     # PIT fundamentals: long-form on (gvkey, datadate). Rename gvkey→ticker
     # by reverse lookup; drop rows with no rdq (un-filed quarters).
