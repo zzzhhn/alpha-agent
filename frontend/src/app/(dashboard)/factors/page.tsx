@@ -35,6 +35,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  AreaChart,
+  Area,
 } from "recharts";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
@@ -66,6 +68,9 @@ const STALE_DAY_THRESHOLD = 30;
 const STALE_SHARPE_THRESHOLD = 0.5;
 const TOP_K = 5;
 const OPS_TOP_N = 10;
+// Hide TIMELINE.ACTIVITY when fewer than this many entries exist —
+// a 3-bar sparkline is meaningless and visually empty.
+const TIMELINE_MIN_ENTRIES = 5;
 
 // Fixed histogram bins — picked to span typical SP500 long_short Sharpe
 // (-1 → 3) and Compustat-era IC (-3% → 8%). Stable bin edges avoid the
@@ -121,6 +126,53 @@ function bucketize<T extends { lo: number; hi: number }>(
   }));
 }
 
+// Bucket entries into ISO-week buckets keyed by Monday's date string.
+// Fills in zero-count gaps between min and max week so the area chart
+// reads as a continuous timeline rather than a staircase of present-only
+// weeks.
+interface ActivityWeek {
+  readonly week: string; // "YYYY-MM-DD" (Monday of that week)
+  readonly count: number;
+}
+function mondayOf(d: Date): Date {
+  const day = d.getDay();
+  // 0 = Sunday → roll back 6; 1..6 → roll back day-1
+  const offset = day === 0 ? 6 : day - 1;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - offset);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+function bucketByWeek(entries: readonly ZooEntry[]): readonly ActivityWeek[] {
+  if (entries.length === 0) return [];
+  const counts = new Map<string, number>();
+  let minMs = Infinity;
+  let maxMs = -Infinity;
+  for (const e of entries) {
+    const d = new Date(e.savedAt);
+    if (Number.isNaN(d.getTime())) continue;
+    const monday = mondayOf(d);
+    const ms = monday.getTime();
+    if (ms < minMs) minMs = ms;
+    if (ms > maxMs) maxMs = ms;
+    const key = monday.toISOString().slice(0, 10);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  if (!Number.isFinite(minMs) || !Number.isFinite(maxMs)) return [];
+  // Walk weeks from min to max, filling 0s. Cap at 104 weeks (2y) to
+  // avoid an absurdly long timeline if a v1 entry has a savedAt from
+  // years ago — visually unhelpful and slows the chart.
+  const out: ActivityWeek[] = [];
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const maxWeeks = 104;
+  const start = Math.max(minMs, maxMs - (maxWeeks - 1) * WEEK_MS);
+  for (let ms = start; ms <= maxMs; ms += WEEK_MS) {
+    const key = new Date(ms).toISOString().slice(0, 10);
+    out.push({ week: key, count: counts.get(key) ?? 0 });
+  }
+  return out;
+}
+
 function mergeFactors(
   server: readonly ServerFactor[],
   local: readonly ZooEntry[],
@@ -162,6 +214,9 @@ interface Aggregates {
   readonly returnDist: readonly { label: string; count: number }[];
   readonly icDist: readonly { label: string; count: number }[];
   readonly staleEntries: readonly ZooEntry[];
+  readonly activityWeeks: readonly ActivityWeek[];
+  readonly activeWeekCount: number;   // weeks with ≥1 activity
+  readonly peakWeek: { week: string; count: number } | null;
 }
 
 function computeAggregates(entries: readonly ZooEntry[]): Aggregates {
@@ -213,6 +268,16 @@ function computeAggregates(entries: readonly ZooEntry[]): Aggregates {
     );
   });
 
+  const activityWeeks = bucketByWeek(entries);
+  const activeWeekCount = activityWeeks.filter((w) => w.count > 0).length;
+  const peakWeek =
+    activityWeeks.length === 0
+      ? null
+      : activityWeeks.reduce(
+          (best, w) => (w.count > best.count ? w : best),
+          activityWeeks[0],
+        );
+
   return {
     avgSharpe: sharpes.length ? sharpes.reduce((a, b) => a + b, 0) / sharpes.length : null,
     medianIC: ics.length ? median(ics) : null,
@@ -225,6 +290,9 @@ function computeAggregates(entries: readonly ZooEntry[]): Aggregates {
     returnDist: bucketize(returns, RETURN_BINS).map((b) => ({ label: b.label, count: b.count })),
     icDist: bucketize(ics, IC_BINS).map((b) => ({ label: b.label, count: b.count })),
     staleEntries,
+    activityWeeks,
+    activeWeekCount,
+    peakWeek: peakWeek && peakWeek.count > 0 ? peakWeek : null,
   };
 }
 
@@ -503,6 +571,20 @@ export default function FactorsPage() {
           </div>
         </TmPane>
       )}
+
+      {/* 7. TIMELINE.ACTIVITY — only when ≥5 entries (sparkline of fewer
+          weeks is meaningless and looks empty). savedAt reflects most-
+          recent touch (created_at fallback) so this is "factor activity
+          heartbeat", not just minting rate. */}
+      {entries.length >= TIMELINE_MIN_ENTRIES &&
+        aggregates.activityWeeks.length > 0 && (
+          <TimelineActivityPane
+            weeks={aggregates.activityWeeks}
+            activeWeekCount={aggregates.activeWeekCount}
+            peakWeek={aggregates.peakWeek}
+            totalEntries={entries.length}
+          />
+        )}
 
       {/* DECAY.ALERTS (existing) */}
       {decay.length > 0 && (
@@ -850,6 +932,106 @@ function DistChart({
         </ResponsiveContainer>
       </div>
     </div>
+  );
+}
+
+/* ── Timeline activity (Stage 3 · 5/9 v2 add 7) ───────────────────── */
+
+function TimelineActivityPane({
+  weeks,
+  activeWeekCount,
+  peakWeek,
+  totalEntries,
+}: {
+  readonly weeks: readonly ActivityWeek[];
+  readonly activeWeekCount: number;
+  readonly peakWeek: { week: string; count: number } | null;
+  readonly totalEntries: number;
+}) {
+  // Density caption: avg entries per ACTIVE week (not per total — would
+  // suppress the signal once you have a few quiet stretches).
+  const avgPerActiveWeek =
+    activeWeekCount > 0 ? totalEntries / activeWeekCount : 0;
+  return (
+    <TmPane
+      title="TIMELINE.ACTIVITY"
+      meta={`${weeks.length} WEEKS · ${activeWeekCount} ACTIVE`}
+    >
+      <TmKpiGrid>
+        <TmKpi
+          label="WINDOW"
+          value={`${weeks.length}w`}
+          sub={`${weeks[0].week} → ${weeks[weeks.length - 1].week}`}
+        />
+        <TmKpi
+          label="ACTIVE"
+          value={activeWeekCount.toString()}
+          sub={`${((activeWeekCount / weeks.length) * 100).toFixed(0)}% of window`}
+        />
+        <TmKpi
+          label="PEAK"
+          value={peakWeek ? peakWeek.count.toString() : "—"}
+          tone={peakWeek ? "pos" : "default"}
+          sub={peakWeek ? peakWeek.week : "no activity"}
+        />
+        <TmKpi
+          label="AVG / ACTIVE"
+          value={avgPerActiveWeek.toFixed(1)}
+          sub="entries per active week"
+        />
+      </TmKpiGrid>
+
+      <div className="h-[160px] w-full px-1 pb-1 pt-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={weeks as ActivityWeek[]}
+            margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient id="tm-activity-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--tm-accent)" stopOpacity={0.6} />
+                <stop offset="100%" stopColor="var(--tm-accent)" stopOpacity={0.05} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="2 4"
+              stroke="var(--tm-rule)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="week"
+              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              stroke="var(--tm-rule)"
+              interval="preserveStartEnd"
+              minTickGap={40}
+            />
+            <YAxis
+              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              stroke="var(--tm-rule)"
+              allowDecimals={false}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "var(--tm-bg-2)",
+                border: "1px solid var(--tm-rule)",
+                fontSize: 11,
+                fontFamily: "var(--font-jetbrains-mono)",
+                color: "var(--tm-fg)",
+              }}
+              labelFormatter={(label) => `Week of ${label}`}
+            />
+            <Area
+              type="monotone"
+              dataKey="count"
+              stroke="var(--tm-accent)"
+              strokeWidth={1.5}
+              fill="url(#tm-activity-grad)"
+              isAnimationActive={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </TmPane>
   );
 }
 
