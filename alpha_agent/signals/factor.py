@@ -10,7 +10,6 @@ We default to -1 (most recent row) which is correct for live scoring.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 import numpy as np
 

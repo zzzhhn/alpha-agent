@@ -11,7 +11,6 @@ Spec §3.1 weight 0.20.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 import numpy as np
 import pandas as pd
