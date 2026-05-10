@@ -18,6 +18,8 @@ dependencies = [
     # for the Anthropic-compat custom-api_base support that Kimi For
     # Coding requires.
     "litellm>=1.50",
+    "asyncpg>=0.29",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +52,15 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
     "ruff>=0.4",
+]
+storage = [
+    "psycopg[binary]>=3.1",  # sync migration runner only
+]
+test = [
+    "alpha-agent[dev]",
+    "pytest-postgresql>=6.0",
+    "pytest-mock>=3.12",
+    "respx>=0.21",
 ]
 all = ["alpha-agent[ui,server,data,ml]"]
 
