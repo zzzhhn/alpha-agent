@@ -1,4 +1,4 @@
-.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance
+.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance
 
 test:
 	pytest tests/ -m "not slow" -v
@@ -48,3 +48,28 @@ assert 0.0 <= card.confidence <= 1.0, f'confidence out of range: {card.confidenc
 print(f'  ticker={card.ticker} tier={card.tier} confidence={card.confidence:.3f}  OK'); \
 "
 	@echo "M1 acceptance PASS"
+
+openapi-export:
+	python -c "from alpha_agent.api.app import create_app; \
+import json; \
+open('openapi.snapshot.json','w').write(json.dumps(create_app().openapi(), indent=2, sort_keys=True))"
+	@echo "Snapshot updated. Commit openapi.snapshot.json."
+	@if [ -d frontend ]; then \
+	  npx -y openapi-typescript openapi.snapshot.json -o frontend/api-types.gen.ts || \
+	  echo "Frontend type gen skipped (npx unavailable)"; \
+	fi
+
+openapi-check:
+	pytest tests/api/test_openapi_export.py -v
+
+m2-acceptance:
+	@echo "==> Running M2 acceptance suite"
+	pytest tests/api tests/orchestrator tests/cron \
+	    --cov=alpha_agent.api.routes.picks \
+	    --cov=alpha_agent.api.routes.stock \
+	    --cov=alpha_agent.api.routes.brief \
+	    --cov=alpha_agent.api.routes.health \
+	    --cov=alpha_agent.orchestrator \
+	    --cov-fail-under=85 -m "not slow"
+	$(MAKE) openapi-check
+	@echo "M2 acceptance PASS (deploy.sh runs separately for actual Vercel deploy)"
