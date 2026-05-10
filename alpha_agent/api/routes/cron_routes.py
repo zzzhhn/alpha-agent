@@ -16,44 +16,28 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
 
 @router.post("/slow_daily")
-async def slow_daily() -> dict[str, Any]:
+@router.get("/slow_daily")
+async def slow_daily(limit: int | None = Query(None, ge=1, le=600)) -> dict[str, Any]:
+    """Run slow_daily cron. ?limit=N caps universe (≤300s Hobby budget)."""
     from api.cron.slow_daily import handler
-    return await handler()
+    return await handler(limit=limit)
 
 
 @router.post("/fast_intraday")
+@router.get("/fast_intraday")
 async def fast_intraday() -> dict[str, Any]:
     from api.cron.fast_intraday import handler
     return await handler()
 
 
 @router.post("/alert_dispatcher")
-async def alert_dispatcher() -> dict[str, Any]:
-    from api.cron.alert_dispatcher import handler
-    return await handler()
-
-
-# Vercel cron pings via GET on the path. Mirror each POST to GET so the
-# scheduler can trigger without method mismatch.
-@router.get("/slow_daily")
-async def slow_daily_get() -> dict[str, Any]:
-    from api.cron.slow_daily import handler
-    return await handler()
-
-
-@router.get("/fast_intraday")
-async def fast_intraday_get() -> dict[str, Any]:
-    from api.cron.fast_intraday import handler
-    return await handler()
-
-
 @router.get("/alert_dispatcher")
-async def alert_dispatcher_get() -> dict[str, Any]:
+async def alert_dispatcher() -> dict[str, Any]:
     from api.cron.alert_dispatcher import handler
     return await handler()

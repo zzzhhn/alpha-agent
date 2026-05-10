@@ -36,8 +36,13 @@ async def _fetch_one(ticker: str, as_of: datetime) -> dict:
     return {name: mod.fetch_signal(ticker, as_of) for name, mod in _SLOW_MODULES.items()}
 
 
-async def handler() -> dict[str, Any]:
-    """Vercel function entry point. Always returns a dict (never raises)."""
+async def handler(limit: int | None = None) -> dict[str, Any]:
+    """Vercel function entry point. Always returns a dict (never raises).
+
+    `limit`: cap universe size for diagnostic / Hobby-tier 300s budget.
+    None = full SP500 universe (only works under Pro 800s timeout).
+    Recommended: 10 for first-time test, 50-80 for daily cron under Hobby.
+    """
     from alpha_agent.universe import SP500_UNIVERSE
 
     pool = await get_pool(os.environ["DATABASE_URL"])
@@ -55,7 +60,8 @@ async def handler() -> dict[str, Any]:
         )
         return t
 
-    results = await run_batched(SP500_UNIVERSE, _per_ticker, batch_size=20)
+    universe = SP500_UNIVERSE[:limit] if limit else SP500_UNIVERSE
+    results = await run_batched(universe, _per_ticker, batch_size=20)
     rows_written = sum(1 for v in results.values() if not isinstance(v, Exception))
     for t, v in results.items():
         if isinstance(v, Exception):
