@@ -1,4 +1,4 @@
-.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance
+.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check
 
 test:
 	pytest tests/ -m "not slow" -v
@@ -48,3 +48,16 @@ assert 0.0 <= card.confidence <= 1.0, f'confidence out of range: {card.confidenc
 print(f'  ticker={card.ticker} tier={card.tier} confidence={card.confidence:.3f}  OK'); \
 "
 	@echo "M1 acceptance PASS"
+
+openapi-export:
+	python -c "from alpha_agent.api.app import create_app; \
+import json; \
+open('openapi.snapshot.json','w').write(json.dumps(create_app().openapi(), indent=2, sort_keys=True))"
+	@echo "Snapshot updated. Commit openapi.snapshot.json."
+	@if [ -d frontend ]; then \
+	  npx -y openapi-typescript openapi.snapshot.json -o frontend/api-types.gen.ts || \
+	  echo "Frontend type gen skipped (npx unavailable)"; \
+	fi
+
+openapi-check:
+	pytest tests/api/test_openapi_export.py -v

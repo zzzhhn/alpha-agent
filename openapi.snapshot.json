@@ -1,0 +1,4474 @@
+{
+  "components": {
+    "schemas": {
+      "BriefRequest": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "llm_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Provider"
+          },
+          "mode": {
+            "default": "lean",
+            "enum": [
+              "lean",
+              "rich"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "BriefRequest",
+        "type": "object"
+      },
+      "BriefResponse": {
+        "properties": {
+          "rating": {
+            "title": "Rating",
+            "type": "string"
+          },
+          "rendered_at": {
+            "title": "Rendered At",
+            "type": "string"
+          },
+          "thesis": {
+            "$ref": "#/components/schemas/Thesis"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "rating",
+          "thesis",
+          "rendered_at"
+        ],
+        "title": "BriefResponse",
+        "type": "object"
+      },
+      "CapBucket": {
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "long_pct": {
+            "title": "Long Pct",
+            "type": "number"
+          },
+          "net_pct": {
+            "title": "Net Pct",
+            "type": "number"
+          },
+          "short_pct": {
+            "title": "Short Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "bucket",
+          "long_pct",
+          "short_pct",
+          "net_pct"
+        ],
+        "title": "CapBucket",
+        "type": "object"
+      },
+      "CorrelationRequest": {
+        "properties": {
+          "bottom_pct": {
+            "default": 0.3,
+            "maximum": 0.5,
+            "minimum": 0.01,
+            "title": "Bottom Pct",
+            "type": "number"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/_FactorEntry"
+            },
+            "maxItems": 20,
+            "minItems": 2,
+            "title": "Factors",
+            "type": "array"
+          },
+          "top_pct": {
+            "default": 0.3,
+            "maximum": 0.5,
+            "minimum": 0.01,
+            "title": "Top Pct",
+            "type": "number"
+          },
+          "warn_threshold": {
+            "default": 0.8,
+            "description": "|corr| above this counts as a near-duplicate warning.",
+            "maximum": 0.99,
+            "minimum": 0.5,
+            "title": "Warn Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "factors"
+        ],
+        "title": "CorrelationRequest",
+        "type": "object"
+      },
+      "CorrelationResponse": {
+        "description": "Square matrix returned as a list-of-lists in `names` order. Diagonal\nis 1.0; off-diagonal entries can be NaN if a pair has insufficient\noverlapping non-NaN data \u2014 those are encoded as 0.0 to keep JSON valid\n(clients should use n_overlap to detect).",
+        "properties": {
+          "matrix": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Matrix",
+            "type": "array"
+          },
+          "n_sessions": {
+            "title": "N Sessions",
+            "type": "integer"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/_CorrWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "names",
+          "matrix",
+          "warnings",
+          "n_sessions"
+        ],
+        "title": "CorrelationResponse",
+        "type": "object"
+      },
+      "CoverageResponse": {
+        "properties": {
+          "end_date": {
+            "title": "End Date",
+            "type": "string"
+          },
+          "field_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/FieldCoverage"
+            },
+            "title": "Field Coverage",
+            "type": "array"
+          },
+          "n_days": {
+            "title": "N Days",
+            "type": "integer"
+          },
+          "n_tickers": {
+            "title": "N Tickers",
+            "type": "integer"
+          },
+          "ohlcv_coverage_pct": {
+            "title": "Ohlcv Coverage Pct",
+            "type": "number"
+          },
+          "ohlcv_missing_cells": {
+            "title": "Ohlcv Missing Cells",
+            "type": "integer"
+          },
+          "ohlcv_total_cells": {
+            "title": "Ohlcv Total Cells",
+            "type": "integer"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "ticker_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/TickerCoverage"
+            },
+            "title": "Ticker Coverage",
+            "type": "array"
+          },
+          "universe_id": {
+            "title": "Universe Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe_id",
+          "n_tickers",
+          "n_days",
+          "start_date",
+          "end_date",
+          "ohlcv_total_cells",
+          "ohlcv_missing_cells",
+          "ohlcv_coverage_pct",
+          "field_coverage",
+          "ticker_coverage"
+        ],
+        "title": "CoverageResponse",
+        "type": "object"
+      },
+      "DecayAlert": {
+        "properties": {
+          "baseline_ic": {
+            "title": "Baseline Ic",
+            "type": "number"
+          },
+          "decay_pct": {
+            "title": "Decay Pct",
+            "type": "number"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "factor_id": {
+            "title": "Factor Id",
+            "type": "string"
+          },
+          "latest_ic": {
+            "title": "Latest Ic",
+            "type": "number"
+          },
+          "latest_run_at": {
+            "title": "Latest Run At",
+            "type": "string"
+          },
+          "n_runs": {
+            "title": "N Runs",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "factor_id",
+          "name",
+          "expression",
+          "n_runs",
+          "baseline_ic",
+          "latest_ic",
+          "decay_pct",
+          "latest_run_at"
+        ],
+        "title": "DecayAlert",
+        "type": "object"
+      },
+      "ExplainAstRequest": {
+        "properties": {
+          "expression": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "title": "ExplainAstRequest",
+        "type": "object"
+      },
+      "ExplainAstResponse": {
+        "description": "Tree returned as a recursive dict \u2014 Pydantic doesn't model recursion\nwell in serialization, and the shape is documented in the AST helper.\nFrontend types this as a discriminated union via TypeScript instead.",
+        "properties": {
+          "tree": {
+            "additionalProperties": true,
+            "title": "Tree",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tree"
+        ],
+        "title": "ExplainAstResponse",
+        "type": "object"
+      },
+      "ExposureRequest": {
+        "properties": {
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FactorSpec"
+          },
+          "top_n": {
+            "default": 10,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Top N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "ExposureRequest",
+        "type": "object"
+      },
+      "ExposureResponse": {
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "cap_quintile": {
+            "items": {
+              "$ref": "#/components/schemas/CapBucket"
+            },
+            "title": "Cap Quintile",
+            "type": "array"
+          },
+          "factor_name": {
+            "title": "Factor Name",
+            "type": "string"
+          },
+          "membership_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership As Of"
+          },
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "sector_exposure": {
+            "items": {
+              "$ref": "#/components/schemas/SectorExposure"
+            },
+            "title": "Sector Exposure",
+            "type": "array"
+          },
+          "survivorship_corrected": {
+            "default": false,
+            "title": "Survivorship Corrected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "factor_name",
+          "as_of",
+          "sector_exposure",
+          "cap_quintile"
+        ],
+        "title": "ExposureResponse",
+        "type": "object"
+      },
+      "FactorBacktestRequest": {
+        "properties": {
+          "benchmark_ticker": {
+            "default": "SPY",
+            "description": "Benchmark for alpha/beta regression. SPY = cap-weighted (Mag-7 dominated), RSP = equal-weight SP500. Long-only equal-weight baskets are far closer to RSP's regime than SPY's.",
+            "enum": [
+              "SPY",
+              "RSP"
+            ],
+            "title": "Benchmark Ticker",
+            "type": "string"
+          },
+          "bottom_pct": {
+            "default": 0.3,
+            "description": "Fraction of universe to short (rank \u2264 bottom_pct).",
+            "maximum": 0.5,
+            "minimum": 0.01,
+            "title": "Bottom Pct",
+            "type": "number"
+          },
+          "direction": {
+            "default": "long_short",
+            "description": "Portfolio construction. 'long_short' is market-neutral (gross 2.0), 'long_only' is apples-to-apples with SPY benchmark, 'short_only' is the inverse.",
+            "enum": [
+              "long_short",
+              "long_only",
+              "short_only"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "earnings_window_days": {
+            "default": 1,
+            "description": "Half-width of the earnings mask in trading days (default \u00b11d).",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Earnings Window Days",
+            "type": "integer"
+          },
+          "embargo_days": {
+            "default": 0,
+            "description": "Drop first N rows of test and start-of-WF-window before scoring.",
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Embargo Days",
+            "type": "integer"
+          },
+          "include_breakdown": {
+            "default": false,
+            "description": "Return daily_breakdown[] with per-day long/short basket + IC.",
+            "title": "Include Breakdown",
+            "type": "boolean"
+          },
+          "mask_earnings_window": {
+            "default": false,
+            "description": "Skip trading each ticker around its earnings announcement to reduce PEAD noise contamination of momentum/reversal factors.",
+            "title": "Mask Earnings Window",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "static",
+            "description": "static = single 80/20 train/test (default). walk_forward = ALSO compute per-window metrics for IS/OOS decay analysis.",
+            "enum": [
+              "static",
+              "walk_forward"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_trials": {
+            "default": 1,
+            "description": "How many factor variants the user explored before saving this one. Used by Bailey-LdP deflated Sharpe to discount selection bias.",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "N Trials",
+            "type": "integer"
+          },
+          "neutralize": {
+            "default": "none",
+            "description": "Portfolio neutralization mode. 'sector' subtracts per-sector mean from the factor before ranking, so the basket has near-zero net sector exposure.",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "purge_days": {
+            "default": 0,
+            "description": "Drop last N rows of train and end-of-WF-window before scoring.",
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Purge Days",
+            "type": "integer"
+          },
+          "short_borrow_bps": {
+            "default": 0.0,
+            "description": "Annualized short-leg borrow cost in bps; charged daily on the prior day's |\u03a3 w_short|.",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Short Borrow Bps",
+            "type": "number"
+          },
+          "slippage_bps_per_sqrt_pct": {
+            "default": 0.0,
+            "description": "Almgren-style market impact: cost_bps = k \u00d7 sqrt(participation_pct).",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Slippage Bps Per Sqrt Pct",
+            "type": "number"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FactorSpec"
+          },
+          "top_pct": {
+            "default": 0.3,
+            "description": "Fraction of universe to long (rank \u2265 1 - top_pct).",
+            "maximum": 0.5,
+            "minimum": 0.01,
+            "title": "Top Pct",
+            "type": "number"
+          },
+          "train_ratio": {
+            "default": 0.8,
+            "maximum": 0.95,
+            "minimum": 0.1,
+            "title": "Train Ratio",
+            "type": "number"
+          },
+          "transaction_cost_bps": {
+            "default": 0.0,
+            "description": "Round-trip cost in basis points; charged on L1 weight delta.",
+            "maximum": 200.0,
+            "minimum": 0.0,
+            "title": "Transaction Cost Bps",
+            "type": "number"
+          },
+          "wf_step_days": {
+            "default": 20,
+            "description": "Days between consecutive window starts.",
+            "maximum": 252.0,
+            "minimum": 5.0,
+            "title": "Wf Step Days",
+            "type": "integer"
+          },
+          "wf_window_days": {
+            "default": 60,
+            "description": "Length of each rolling window in trading days.",
+            "maximum": 252.0,
+            "minimum": 20.0,
+            "title": "Wf Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "FactorBacktestRequest",
+        "type": "object"
+      },
+      "FactorBacktestResponse": {
+        "properties": {
+          "alpha_annualized": {
+            "default": 0.0,
+            "title": "Alpha Annualized",
+            "type": "number"
+          },
+          "alpha_pvalue": {
+            "default": 1.0,
+            "title": "Alpha Pvalue",
+            "type": "number"
+          },
+          "alpha_t_stat": {
+            "default": 0.0,
+            "title": "Alpha T Stat",
+            "type": "number"
+          },
+          "benchmark_curve": {
+            "items": {
+              "$ref": "#/components/schemas/_CurvePoint"
+            },
+            "title": "Benchmark Curve",
+            "type": "array"
+          },
+          "benchmark_ticker": {
+            "title": "Benchmark Ticker",
+            "type": "string"
+          },
+          "beta_market": {
+            "default": 0.0,
+            "title": "Beta Market",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "daily_breakdown": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/_DailyBreakdown"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Breakdown"
+          },
+          "direction": {
+            "enum": [
+              "long_short",
+              "long_only",
+              "short_only"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "equity_curve": {
+            "items": {
+              "$ref": "#/components/schemas/_CurvePoint"
+            },
+            "title": "Equity Curve",
+            "type": "array"
+          },
+          "factor_name": {
+            "title": "Factor Name",
+            "type": "string"
+          },
+          "membership_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership As Of"
+          },
+          "monthly_returns": {
+            "items": {
+              "$ref": "#/components/schemas/_MonthlyReturn"
+            },
+            "title": "Monthly Returns",
+            "type": "array"
+          },
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "oos_decay": {
+            "default": 0.0,
+            "title": "Oos Decay",
+            "type": "number"
+          },
+          "overfit_flag": {
+            "default": false,
+            "title": "Overfit Flag",
+            "type": "boolean"
+          },
+          "r_squared": {
+            "default": 0.0,
+            "title": "R Squared",
+            "type": "number"
+          },
+          "regime_breakdown": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/_RegimeMetricsModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Breakdown"
+          },
+          "survivorship_corrected": {
+            "default": false,
+            "title": "Survivorship Corrected",
+            "type": "boolean"
+          },
+          "test_metrics": {
+            "$ref": "#/components/schemas/_SplitMetricsModel"
+          },
+          "train_end_index": {
+            "title": "Train End Index",
+            "type": "integer"
+          },
+          "train_metrics": {
+            "$ref": "#/components/schemas/_SplitMetricsModel"
+          },
+          "walk_forward": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/_WalkForwardWindow"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Walk Forward"
+          }
+        },
+        "required": [
+          "equity_curve",
+          "benchmark_curve",
+          "train_end_index",
+          "train_metrics",
+          "test_metrics",
+          "currency",
+          "factor_name",
+          "benchmark_ticker",
+          "direction"
+        ],
+        "title": "FactorBacktestResponse",
+        "type": "object"
+      },
+      "FactorDetailResponse": {
+        "properties": {
+          "factor": {
+            "$ref": "#/components/schemas/FactorSummary"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/FactorRunSummary"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "factor",
+          "runs"
+        ],
+        "title": "FactorDetailResponse",
+        "type": "object"
+      },
+      "FactorDiagnostic": {
+        "properties": {
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "factor_idx": {
+            "title": "Factor Idx",
+            "type": "integer"
+          },
+          "in_window_ic": {
+            "title": "In Window Ic",
+            "type": "number"
+          },
+          "n_eligible": {
+            "title": "N Eligible",
+            "type": "integer"
+          },
+          "used_weight": {
+            "title": "Used Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "factor_idx",
+          "expression",
+          "in_window_ic",
+          "used_weight",
+          "n_eligible"
+        ],
+        "title": "FactorDiagnostic",
+        "type": "object"
+      },
+      "FactorRunSummary": {
+        "properties": {
+          "alpha_annualized": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Annualized"
+          },
+          "alpha_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha P"
+          },
+          "alpha_t": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha T"
+          },
+          "benchmark_ticker": {
+            "title": "Benchmark Ticker",
+            "type": "string"
+          },
+          "beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beta"
+          },
+          "bottom_pct": {
+            "title": "Bottom Pct",
+            "type": "number"
+          },
+          "daily_ic": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Ic"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "factor_id": {
+            "title": "Factor Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "neutralize": {
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "overfit_flag": {
+            "default": false,
+            "title": "Overfit Flag",
+            "type": "boolean"
+          },
+          "panel_version": {
+            "title": "Panel Version",
+            "type": "string"
+          },
+          "r_squared": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R Squared"
+          },
+          "ran_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ran At"
+          },
+          "test_ic": {
+            "title": "Test Ic",
+            "type": "number"
+          },
+          "test_psr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Psr"
+          },
+          "test_sharpe": {
+            "title": "Test Sharpe",
+            "type": "number"
+          },
+          "top_pct": {
+            "title": "Top Pct",
+            "type": "number"
+          },
+          "transaction_cost_bps": {
+            "title": "Transaction Cost Bps",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "factor_id",
+          "panel_version",
+          "direction",
+          "neutralize",
+          "benchmark_ticker",
+          "top_pct",
+          "bottom_pct",
+          "transaction_cost_bps",
+          "test_sharpe",
+          "test_ic"
+        ],
+        "title": "FactorRunSummary",
+        "type": "object"
+      },
+      "FactorSpec": {
+        "description": "A single factor specification, the output of HypothesisTranslator.\n\nDownstream pipeline (W2):\n    Pydantic validate -> AST parse -> 10-day smoke test -> registry",
+        "properties": {
+          "expression": {
+            "description": "WorldQuant-style expression using allowed ops",
+            "title": "Expression",
+            "type": "string"
+          },
+          "hypothesis": {
+            "description": "Human hypothesis statement",
+            "maxLength": 200,
+            "title": "Hypothesis",
+            "type": "string"
+          },
+          "justification": {
+            "maxLength": 400,
+            "title": "Justification",
+            "type": "string"
+          },
+          "lookback": {
+            "maximum": 252.0,
+            "minimum": 5.0,
+            "title": "Lookback",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Short identifier, snake_case",
+            "maxLength": 40,
+            "title": "Name",
+            "type": "string"
+          },
+          "operators_used": {
+            "items": {
+              "enum": [
+                "abs",
+                "add",
+                "subtract",
+                "multiply",
+                "divide",
+                "inverse",
+                "log",
+                "sqrt",
+                "power",
+                "sign",
+                "signed_power",
+                "max",
+                "min",
+                "reverse",
+                "densify",
+                "sub",
+                "mul",
+                "div",
+                "pow",
+                "if_else",
+                "and_",
+                "or_",
+                "not_",
+                "is_nan",
+                "equal",
+                "not_equal",
+                "less",
+                "greater",
+                "less_equal",
+                "greater_equal",
+                "ts_delay",
+                "ts_delta",
+                "ts_mean",
+                "ts_std",
+                "ts_std_dev",
+                "ts_sum",
+                "ts_product",
+                "ts_min",
+                "ts_max",
+                "ts_rank",
+                "ts_zscore",
+                "ts_arg_min",
+                "ts_arg_max",
+                "ts_corr",
+                "ts_covariance",
+                "ts_quantile",
+                "ts_decay_linear",
+                "ts_decay_exp",
+                "ts_count_nans",
+                "last_diff_value",
+                "rank",
+                "zscore",
+                "scale",
+                "normalize",
+                "quantile",
+                "winsorize",
+                "group_rank",
+                "group_zscore",
+                "group_mean",
+                "group_scale",
+                "group_neutralize",
+                "group_backfill",
+                "ts_regression",
+                "ts_backfill",
+                "trade_when",
+                "hump"
+              ],
+              "type": "string"
+            },
+            "title": "Operators Used",
+            "type": "array"
+          },
+          "universe": {
+            "enum": [
+              "CSI300",
+              "CSI500",
+              "SP500",
+              "custom"
+            ],
+            "title": "Universe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "hypothesis",
+          "expression",
+          "operators_used",
+          "lookback",
+          "universe",
+          "justification"
+        ],
+        "title": "FactorSpec",
+        "type": "object"
+      },
+      "FactorSummary": {
+        "properties": {
+          "ast_hash": {
+            "title": "Ast Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "intuition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intuition"
+          },
+          "last_alpha_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Alpha P"
+          },
+          "last_alpha_t": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Alpha T"
+          },
+          "last_benchmark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Benchmark"
+          },
+          "last_direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Direction"
+          },
+          "last_neutralize": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Neutralize"
+          },
+          "last_overfit_flag": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Overfit Flag"
+          },
+          "last_psr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Psr"
+          },
+          "last_test_ic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test Ic"
+          },
+          "last_test_sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test Sharpe"
+          },
+          "n_runs": {
+            "default": 0,
+            "title": "N Runs",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "ast_hash",
+          "name",
+          "expression"
+        ],
+        "title": "FactorSummary",
+        "type": "object"
+      },
+      "FieldCoverage": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "fill_rate": {
+            "title": "Fill Rate",
+            "type": "number"
+          },
+          "n_present": {
+            "title": "N Present",
+            "type": "integer"
+          },
+          "n_total": {
+            "title": "N Total",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "tier",
+          "fill_rate",
+          "n_present",
+          "n_total"
+        ],
+        "title": "FieldCoverage",
+        "type": "object"
+      },
+      "FullCard": {
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "breakdown": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Breakdown",
+            "type": "array"
+          },
+          "composite_score": {
+            "title": "Composite Score",
+            "type": "number"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "top_drags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Drags",
+            "type": "array"
+          },
+          "top_drivers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Drivers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ticker",
+          "rating",
+          "confidence",
+          "composite_score",
+          "as_of",
+          "top_drivers",
+          "top_drags",
+          "breakdown"
+        ],
+        "title": "FullCard",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "db": {
+            "title": "Db",
+            "type": "string"
+          },
+          "last_dispatcher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Dispatcher"
+          },
+          "last_fast_cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Fast Cron"
+          },
+          "last_slow_cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Slow Cron"
+          },
+          "tunnel": {
+            "title": "Tunnel",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tunnel",
+          "db",
+          "last_slow_cron",
+          "last_fast_cron",
+          "last_dispatcher"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "HealthSignalsResponse": {
+        "properties": {
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/SignalStatus"
+            },
+            "title": "Signals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "signals"
+        ],
+        "title": "HealthSignalsResponse",
+        "type": "object"
+      },
+      "HypothesisTranslateRequest": {
+        "properties": {
+          "budget_tokens": {
+            "default": 4000,
+            "maximum": 8000.0,
+            "minimum": 500.0,
+            "title": "Budget Tokens",
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "universe": {
+            "default": "SP500",
+            "pattern": "^(CSI300|CSI500|SP500|custom)$",
+            "title": "Universe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "HypothesisTranslateRequest",
+        "type": "object"
+      },
+      "HypothesisTranslateResponse": {
+        "properties": {
+          "llm_raw": {
+            "title": "Llm Raw",
+            "type": "string"
+          },
+          "llm_tokens": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Llm Tokens",
+            "type": "object"
+          },
+          "smoke": {
+            "$ref": "#/components/schemas/SmokeReport"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FactorSpec"
+          }
+        },
+        "required": [
+          "spec",
+          "smoke",
+          "llm_tokens",
+          "llm_raw"
+        ],
+        "title": "HypothesisTranslateResponse",
+        "type": "object"
+      },
+      "ICPoint": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "ic": {
+            "title": "Ic",
+            "type": "number"
+          },
+          "rolling_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolling Mean"
+          }
+        },
+        "required": [
+          "date",
+          "ic"
+        ],
+        "title": "ICPoint",
+        "type": "object"
+      },
+      "ICTimeseriesRequest": {
+        "properties": {
+          "lookback": {
+            "default": 60,
+            "maximum": 252.0,
+            "minimum": 5.0,
+            "title": "Lookback",
+            "type": "integer"
+          },
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FactorSpec"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "ICTimeseriesRequest",
+        "type": "object"
+      },
+      "ICTimeseriesResponse": {
+        "properties": {
+          "factor_name": {
+            "title": "Factor Name",
+            "type": "string"
+          },
+          "lookback": {
+            "title": "Lookback",
+            "type": "integer"
+          },
+          "membership_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership As Of"
+          },
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ICPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "summary": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Summary",
+            "type": "object"
+          },
+          "survivorship_corrected": {
+            "default": false,
+            "title": "Survivorship Corrected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "factor_name",
+          "lookback",
+          "points",
+          "summary"
+        ],
+        "title": "ICTimeseriesResponse",
+        "type": "object"
+      },
+      "LeanCard": {
+        "description": "Lean projection of a fast-signal row \u2014 no heavy breakdown list.",
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "composite_score": {
+            "title": "Composite Score",
+            "type": "number"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "top_drags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Drags",
+            "type": "array"
+          },
+          "top_drivers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Drivers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ticker",
+          "rating",
+          "confidence",
+          "composite_score",
+          "as_of",
+          "top_drivers",
+          "top_drags"
+        ],
+        "title": "LeanCard",
+        "type": "object"
+      },
+      "OperandCatalogResponse": {
+        "description": "Augmented WorldQuant catalog. Each item carries `tier` and `implemented`.\n\nTier semantics:\n  - \"T1\" \u2014 implemented now, included in factor expressions today\n  - \"T2\" \u2014 implemented, requires v2 panel data (sector / fundamentals)\n  - \"T3\" \u2014 catalog-only; data source unavailable or operator semantics\n    out of scope (vector ops, news/options/sentiment, infix comparisons)",
+        "properties": {
+          "operands": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Operands",
+            "type": "array"
+          },
+          "operators": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Operators",
+            "type": "array"
+          },
+          "tier_summary": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Tier Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "operators",
+          "operands",
+          "tier_summary"
+        ],
+        "title": "OperandCatalogResponse",
+        "type": "object"
+      },
+      "PerFactorScore": {
+        "properties": {
+          "contribution": {
+            "title": "Contribution",
+            "type": "number"
+          },
+          "factor_idx": {
+            "title": "Factor Idx",
+            "type": "integer"
+          },
+          "raw": {
+            "title": "Raw",
+            "type": "number"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "factor_idx",
+          "raw",
+          "z",
+          "contribution"
+        ],
+        "title": "PerFactorScore",
+        "type": "object"
+      },
+      "PicksResponse": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/LeanCard"
+            },
+            "title": "Picks",
+            "type": "array"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "picks",
+          "as_of",
+          "stale"
+        ],
+        "title": "PicksResponse",
+        "type": "object"
+      },
+      "Recommendation": {
+        "properties": {
+          "cap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap"
+          },
+          "composite_score": {
+            "title": "Composite Score",
+            "type": "number"
+          },
+          "per_factor_scores": {
+            "items": {
+              "$ref": "#/components/schemas/PerFactorScore"
+            },
+            "title": "Per Factor Scores",
+            "type": "array"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "composite_score",
+          "rank",
+          "per_factor_scores"
+        ],
+        "title": "Recommendation",
+        "type": "object"
+      },
+      "RouterHealth": {
+        "description": "One row of /healthz/routers response.\n\nSurfaces silent ImportError failures caught by api/index.py try/except\nper feedback_silent_trycatch_antipattern.md.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "loaded": {
+            "title": "Loaded",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "loaded"
+        ],
+        "title": "RouterHealth",
+        "type": "object"
+      },
+      "ScreenerFactor": {
+        "description": "One factor to include in the composite. `weight` only matters when\n`combine_method == \"user_weighted\"`; ignored otherwise.",
+        "properties": {
+          "direction": {
+            "default": "long_short",
+            "enum": [
+              "long_short",
+              "long_only",
+              "short_only"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FactorSpec"
+          },
+          "weight": {
+            "default": 1.0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "ScreenerFactor",
+        "type": "object"
+      },
+      "ScreenerRequest": {
+        "properties": {
+          "as_of_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "YYYY-MM-DD; null = panel's most recent session.",
+            "title": "As Of Date"
+          },
+          "combine_method": {
+            "default": "equal_z",
+            "enum": [
+              "equal_z",
+              "ic_weighted",
+              "user_weighted"
+            ],
+            "title": "Combine Method",
+            "type": "string"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenerFactor"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Factors",
+            "type": "array"
+          },
+          "lookback_days": {
+            "default": 60,
+            "maximum": 252.0,
+            "minimum": 10.0,
+            "title": "Lookback Days",
+            "type": "integer"
+          },
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "top_n": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top N",
+            "type": "integer"
+          },
+          "universe_filter": {
+            "$ref": "#/components/schemas/UniverseFilter"
+          }
+        },
+        "required": [
+          "factors"
+        ],
+        "title": "ScreenerRequest",
+        "type": "object"
+      },
+      "ScreenerResponse": {
+        "properties": {
+          "factor_diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/FactorDiagnostic"
+            },
+            "title": "Factor Diagnostics",
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/Recommendation"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recommendations",
+          "factor_diagnostics",
+          "metadata"
+        ],
+        "title": "ScreenerResponse",
+        "type": "object"
+      },
+      "SectorExposure": {
+        "properties": {
+          "long_pct": {
+            "title": "Long Pct",
+            "type": "number"
+          },
+          "n_long": {
+            "title": "N Long",
+            "type": "integer"
+          },
+          "n_short": {
+            "title": "N Short",
+            "type": "integer"
+          },
+          "net_pct": {
+            "title": "Net Pct",
+            "type": "number"
+          },
+          "sector": {
+            "title": "Sector",
+            "type": "string"
+          },
+          "short_pct": {
+            "title": "Short Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sector",
+          "long_pct",
+          "short_pct",
+          "net_pct",
+          "n_long",
+          "n_short"
+        ],
+        "title": "SectorExposure",
+        "type": "object"
+      },
+      "SignalStatus": {
+        "properties": {
+          "error_count_24h": {
+            "title": "Error Count 24H",
+            "type": "integer"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_success": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "last_success",
+          "last_error",
+          "error_count_24h"
+        ],
+        "title": "SignalStatus",
+        "type": "object"
+      },
+      "SmokeReport": {
+        "properties": {
+          "ic_spearman": {
+            "title": "Ic Spearman",
+            "type": "number"
+          },
+          "rows_valid": {
+            "title": "Rows Valid",
+            "type": "integer"
+          },
+          "runtime_ms": {
+            "title": "Runtime Ms",
+            "type": "number"
+          }
+        },
+        "required": [
+          "rows_valid",
+          "ic_spearman",
+          "runtime_ms"
+        ],
+        "title": "SmokeReport",
+        "type": "object"
+      },
+      "StockResponse": {
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/FullCard"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "card",
+          "stale"
+        ],
+        "title": "StockResponse",
+        "type": "object"
+      },
+      "Thesis": {
+        "properties": {
+          "bear": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bear",
+            "type": "array"
+          },
+          "bull": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bull",
+            "type": "array"
+          }
+        },
+        "required": [
+          "bull",
+          "bear"
+        ],
+        "title": "Thesis",
+        "type": "object"
+      },
+      "TickerCoverage": {
+        "properties": {
+          "fill_rate": {
+            "title": "Fill Rate",
+            "type": "number"
+          },
+          "n_missing": {
+            "title": "N Missing",
+            "type": "integer"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "fill_rate",
+          "n_missing"
+        ],
+        "title": "TickerCoverage",
+        "type": "object"
+      },
+      "TickerRow": {
+        "properties": {
+          "cap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap"
+          },
+          "factor": {
+            "title": "Factor",
+            "type": "number"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "factor"
+        ],
+        "title": "TickerRow",
+        "type": "object"
+      },
+      "TodayRequest": {
+        "properties": {
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FactorSpec"
+          },
+          "top_n": {
+            "default": 10,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Top N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "TodayRequest",
+        "type": "object"
+      },
+      "TodayResponse": {
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "bottom": {
+            "items": {
+              "$ref": "#/components/schemas/TickerRow"
+            },
+            "title": "Bottom",
+            "type": "array"
+          },
+          "factor_name": {
+            "title": "Factor Name",
+            "type": "string"
+          },
+          "membership_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership As Of"
+          },
+          "n_valid": {
+            "title": "N Valid",
+            "type": "integer"
+          },
+          "neutralize": {
+            "default": "none",
+            "enum": [
+              "none",
+              "sector"
+            ],
+            "title": "Neutralize",
+            "type": "string"
+          },
+          "survivorship_corrected": {
+            "default": false,
+            "title": "Survivorship Corrected",
+            "type": "boolean"
+          },
+          "top": {
+            "items": {
+              "$ref": "#/components/schemas/TickerRow"
+            },
+            "title": "Top",
+            "type": "array"
+          },
+          "universe_size": {
+            "title": "Universe Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of",
+          "factor_name",
+          "universe_size",
+          "n_valid",
+          "top",
+          "bottom"
+        ],
+        "title": "TodayResponse",
+        "type": "object"
+      },
+      "UniverseFilter": {
+        "properties": {
+          "exclude_tickers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Tickers"
+          },
+          "max_cap": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cap"
+          },
+          "min_cap": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Cap"
+          },
+          "sectors": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "If set, keep only tickers whose sector is in this list.",
+            "title": "Sectors"
+          }
+        },
+        "title": "UniverseFilter",
+        "type": "object"
+      },
+      "UniverseInfo": {
+        "properties": {
+          "benchmark": {
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "end_date": {
+            "title": "End Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "n_days": {
+            "title": "N Days",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sectors": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sectors"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "ticker_count": {
+            "title": "Ticker Count",
+            "type": "integer"
+          },
+          "tickers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tickers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "ticker_count",
+          "benchmark",
+          "tickers",
+          "start_date",
+          "end_date",
+          "n_days",
+          "currency"
+        ],
+        "title": "UniverseInfo",
+        "type": "object"
+      },
+      "UniverseListResponse": {
+        "properties": {
+          "universes": {
+            "items": {
+              "$ref": "#/components/schemas/UniverseInfo"
+            },
+            "title": "Universes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "universes"
+        ],
+        "title": "UniverseListResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "_BasketEntry": {
+        "properties": {
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "weight"
+        ],
+        "title": "_BasketEntry",
+        "type": "object"
+      },
+      "_CorrWarning": {
+        "properties": {
+          "a": {
+            "title": "A",
+            "type": "string"
+          },
+          "b": {
+            "title": "B",
+            "type": "string"
+          },
+          "corr": {
+            "title": "Corr",
+            "type": "number"
+          }
+        },
+        "required": [
+          "a",
+          "b",
+          "corr"
+        ],
+        "title": "_CorrWarning",
+        "type": "object"
+      },
+      "_CurvePoint": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "value"
+        ],
+        "title": "_CurvePoint",
+        "type": "object"
+      },
+      "_DailyBreakdown": {
+        "properties": {
+          "daily_ic": {
+            "title": "Daily Ic",
+            "type": "number"
+          },
+          "daily_return": {
+            "title": "Daily Return",
+            "type": "number"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "long_basket": {
+            "items": {
+              "$ref": "#/components/schemas/_BasketEntry"
+            },
+            "title": "Long Basket",
+            "type": "array"
+          },
+          "short_basket": {
+            "items": {
+              "$ref": "#/components/schemas/_BasketEntry"
+            },
+            "title": "Short Basket",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date",
+          "long_basket",
+          "short_basket",
+          "daily_return",
+          "daily_ic"
+        ],
+        "title": "_DailyBreakdown",
+        "type": "object"
+      },
+      "_FactorEntry": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Display name for this factor (defaults to spec.name).",
+            "title": "Label"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FactorSpec"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "_FactorEntry",
+        "type": "object"
+      },
+      "_MonthlyReturn": {
+        "properties": {
+          "month": {
+            "title": "Month",
+            "type": "integer"
+          },
+          "n_days": {
+            "title": "N Days",
+            "type": "integer"
+          },
+          "return": {
+            "title": "Return",
+            "type": "number"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "return",
+          "n_days"
+        ],
+        "title": "_MonthlyReturn",
+        "type": "object"
+      },
+      "_RegimeMetricsModel": {
+        "description": "Bundle A.1 (v4): sub-period metrics partitioned by SPY 60d regime.",
+        "properties": {
+          "alpha_annualized": {
+            "title": "Alpha Annualized",
+            "type": "number"
+          },
+          "alpha_pvalue": {
+            "title": "Alpha Pvalue",
+            "type": "number"
+          },
+          "alpha_t_stat": {
+            "title": "Alpha T Stat",
+            "type": "number"
+          },
+          "ic_pvalue": {
+            "title": "Ic Pvalue",
+            "type": "number"
+          },
+          "ic_spearman": {
+            "title": "Ic Spearman",
+            "type": "number"
+          },
+          "n_days": {
+            "title": "N Days",
+            "type": "integer"
+          },
+          "regime": {
+            "enum": [
+              "bull",
+              "bear",
+              "sideways"
+            ],
+            "title": "Regime",
+            "type": "string"
+          },
+          "sharpe": {
+            "title": "Sharpe",
+            "type": "number"
+          }
+        },
+        "required": [
+          "regime",
+          "n_days",
+          "sharpe",
+          "ic_spearman",
+          "ic_pvalue",
+          "alpha_annualized",
+          "alpha_t_stat",
+          "alpha_pvalue"
+        ],
+        "title": "_RegimeMetricsModel",
+        "type": "object"
+      },
+      "_SplitMetricsModel": {
+        "properties": {
+          "hit_rate": {
+            "default": 0.0,
+            "title": "Hit Rate",
+            "type": "number"
+          },
+          "ic_ci_high": {
+            "default": 0.0,
+            "title": "Ic Ci High",
+            "type": "number"
+          },
+          "ic_ci_low": {
+            "default": 0.0,
+            "title": "Ic Ci Low",
+            "type": "number"
+          },
+          "ic_pvalue": {
+            "default": 1.0,
+            "title": "Ic Pvalue",
+            "type": "number"
+          },
+          "ic_spearman": {
+            "title": "Ic Spearman",
+            "type": "number"
+          },
+          "ic_std": {
+            "default": 0.0,
+            "title": "Ic Std",
+            "type": "number"
+          },
+          "ic_t_stat": {
+            "default": 0.0,
+            "title": "Ic T Stat",
+            "type": "number"
+          },
+          "icir": {
+            "default": 0.0,
+            "title": "Icir",
+            "type": "number"
+          },
+          "lucky_max_sr": {
+            "default": 0.0,
+            "title": "Lucky Max Sr",
+            "type": "number"
+          },
+          "max_drawdown": {
+            "default": 0.0,
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "n_days": {
+            "title": "N Days",
+            "type": "integer"
+          },
+          "psr": {
+            "default": 0.5,
+            "title": "Psr",
+            "type": "number"
+          },
+          "sharpe": {
+            "title": "Sharpe",
+            "type": "number"
+          },
+          "sharpe_ci_high": {
+            "default": 0.0,
+            "title": "Sharpe Ci High",
+            "type": "number"
+          },
+          "sharpe_ci_low": {
+            "default": 0.0,
+            "title": "Sharpe Ci Low",
+            "type": "number"
+          },
+          "total_return": {
+            "title": "Total Return",
+            "type": "number"
+          },
+          "turnover": {
+            "default": 0.0,
+            "title": "Turnover",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sharpe",
+          "total_return",
+          "ic_spearman",
+          "n_days"
+        ],
+        "title": "_SplitMetricsModel",
+        "type": "object"
+      },
+      "_WalkForwardWindow": {
+        "properties": {
+          "hit_rate": {
+            "title": "Hit Rate",
+            "type": "number"
+          },
+          "ic_ci_high": {
+            "default": 0.0,
+            "title": "Ic Ci High",
+            "type": "number"
+          },
+          "ic_ci_low": {
+            "default": 0.0,
+            "title": "Ic Ci Low",
+            "type": "number"
+          },
+          "ic_pvalue": {
+            "default": 1.0,
+            "title": "Ic Pvalue",
+            "type": "number"
+          },
+          "ic_spearman": {
+            "title": "Ic Spearman",
+            "type": "number"
+          },
+          "ic_std": {
+            "default": 0.0,
+            "title": "Ic Std",
+            "type": "number"
+          },
+          "ic_t_stat": {
+            "default": 0.0,
+            "title": "Ic T Stat",
+            "type": "number"
+          },
+          "icir": {
+            "default": 0.0,
+            "title": "Icir",
+            "type": "number"
+          },
+          "lucky_max_sr": {
+            "default": 0.0,
+            "title": "Lucky Max Sr",
+            "type": "number"
+          },
+          "max_drawdown": {
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "n_days": {
+            "title": "N Days",
+            "type": "integer"
+          },
+          "psr": {
+            "default": 0.5,
+            "title": "Psr",
+            "type": "number"
+          },
+          "sharpe": {
+            "title": "Sharpe",
+            "type": "number"
+          },
+          "sharpe_ci_high": {
+            "default": 0.0,
+            "title": "Sharpe Ci High",
+            "type": "number"
+          },
+          "sharpe_ci_low": {
+            "default": 0.0,
+            "title": "Sharpe Ci Low",
+            "type": "number"
+          },
+          "total_return": {
+            "title": "Total Return",
+            "type": "number"
+          },
+          "turnover": {
+            "title": "Turnover",
+            "type": "number"
+          },
+          "window_end": {
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window_start",
+          "window_end",
+          "sharpe",
+          "total_return",
+          "ic_spearman",
+          "n_days",
+          "max_drawdown",
+          "turnover",
+          "hit_rate"
+        ],
+        "title": "_WalkForwardWindow",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "AlphaCore Dashboard API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "root_redirect__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Root Redirect"
+      }
+    },
+    "/api/_health": {
+      "get": {
+        "description": "Liveness probe: DB ping + last cron run timestamps.",
+        "operationId": "health_api__health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/_health/cron": {
+      "get": {
+        "description": "Last 5 cron runs per cron name.",
+        "operationId": "health_cron_api__health_cron_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Cron Api  Health Cron Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Cron",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/_health/signals": {
+      "get": {
+        "description": "Per-signal error summary from the last 24 hours.",
+        "operationId": "health_signals_api__health_signals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthSignalsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Signals",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/brief/{ticker}": {
+      "post": {
+        "description": "Generate a Lean thesis.  Rich mode returns 501 until M3.",
+        "operationId": "post_brief_api_brief__ticker__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "maxLength": 10,
+              "minLength": 1,
+              "title": "Ticker",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Brief",
+        "tags": [
+          "brief"
+        ]
+      }
+    },
+    "/api/dashboard": {
+      "get": {
+        "operationId": "legacy_dashboard_api_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Legacy Dashboard Api Dashboard Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy Dashboard",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Api Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/picks/lean": {
+      "get": {
+        "description": "Return top *limit* tickers sorted by composite_score DESC.",
+        "operationId": "picks_lean_api_picks_lean_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PicksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Picks Lean",
+        "tags": [
+          "picks"
+        ]
+      }
+    },
+    "/api/stock/{ticker}": {
+      "get": {
+        "description": "Return the most-recent RatingCard for *ticker*.",
+        "operationId": "get_stock_api_stock__ticker__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "maxLength": 10,
+              "minLength": 1,
+              "title": "Ticker",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Stock",
+        "tags": [
+          "stock"
+        ]
+      }
+    },
+    "/api/system": {
+      "get": {
+        "description": "Return system health, service status, and model info.",
+        "operationId": "system_health_api_system_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response System Health Api System Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "System Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/alpha/factors": {
+      "get": {
+        "operationId": "alpha_factors_api_v1_alpha_factors_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "title": "Response Alpha Factors Api V1 Alpha Factors Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alpha Factors",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/alpha/factors/summary": {
+      "get": {
+        "operationId": "alpha_factors_summary_api_v1_alpha_factors_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Alpha Factors Summary Api V1 Alpha Factors Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alpha Factors Summary",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/alpha/signals": {
+      "get": {
+        "operationId": "alpha_signals_api_v1_alpha_signals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "title": "Response Alpha Signals Api V1 Alpha Signals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alpha Signals",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/alpha/translate": {
+      "post": {
+        "description": "T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.\n\nPhase 1 BYOK \u2014 `llm` is now per-request, built from the caller's\nX-LLM-* headers (or platform fallback in dev). No more shared\n`app.state.llm` to drain operator quota.",
+        "operationId": "translate_hypothesis_api_v1_alpha_translate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-llm-provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-llm-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-llm-base-url",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Base-Url"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-llm-model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Model"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HypothesisTranslateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HypothesisTranslateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Translate Hypothesis",
+        "tags": [
+          "interactive"
+        ]
+      }
+    },
+    "/api/v1/dashboard/summary": {
+      "get": {
+        "operationId": "dashboard_summary_api_v1_dashboard_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Dashboard Summary Api V1 Dashboard Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dashboard Summary",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/data/coverage": {
+      "get": {
+        "description": "Return per-field fill-rate stats for the active panel.\n\nOriginal v1 returned a (T, N) matrix for a heatmap, which was visually\npretty but information-dense at zero \u2014 every cell green for cleaned\nOHLCV. v2 returns (a) per-operand fill rates so fundamentals' real\n73-98% variation is visible and (b) per-ticker OHLCV coverage as\nhorizontal bars instead of a wall of cells.",
+        "operationId": "get_coverage_api_v1_data_coverage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "universe_id",
+            "required": false,
+            "schema": {
+              "const": "SP500_subset",
+              "default": "SP500_subset",
+              "title": "Universe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Coverage",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/v1/data/operands": {
+      "get": {
+        "description": "Return the augmented catalog of operators and operands.\n\n`tier` filter:\n  - \"all\":       everything (default \u2014 UI catalog page)\n  - \"available\": only items with implemented=true (LLM prompt feed)\n  - \"T1\"/\"T2\"/\"T3\": exact tier match\n\n`include_signature=true` enriches each operator entry with `signature` and\n`source_snippet` fields pulled from scan/vectorized.py via inspect. Used\nby the Methodology page (B1) to render the actual NumPy implementation\nbody rather than just the doc string.",
+        "operationId": "list_operands_api_v1_data_operands_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tier",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "available",
+                "T1",
+                "T2",
+                "T3"
+              ],
+              "title": "Tier",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_signature",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Signature",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperandCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Operands",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/v1/data/quality/{ticker}": {
+      "get": {
+        "operationId": "data_quality_api_v1_data_quality__ticker__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "title": "Ticker",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Data Quality Api V1 Data Quality  Ticker  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Data Quality",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/data/sectors": {
+      "get": {
+        "description": "Return the canonical list of sector strings present in the active panel.\n\nUsed by:\n  * the Methodology page Data tab to show \"what sectors does the panel cover\"\n  * the Screener UniverseFilter UI to populate an autocomplete (so users\n    don't type \"Tech\" and hit a 422)",
+        "operationId": "list_sectors_api_v1_data_sectors_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Sectors Api V1 Data Sectors Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Sectors",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/v1/data/universe": {
+      "get": {
+        "description": "List all available universes with their panel statistics.",
+        "operationId": "list_universes_api_v1_data_universe_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UniverseListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Universes",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/v1/factor/backtest": {
+      "post": {
+        "description": "Run a cross-sectional long-short backtest on the 37-ticker US panel.\n\nUses a pre-cached 1y OHLCV parquet (committed at deploy-time) so the\nrequest stays inside Vercel's 300s timeout. Long top 30% / short\nbottom 30% by factor rank, equal-weighted daily rebalance. Returns\ntrain/test metrics plus SPY benchmark curve for overlay.",
+        "operationId": "factor_backtest_api_v1_factor_backtest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactorBacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactorBacktestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Factor Backtest",
+        "tags": [
+          "interactive"
+        ]
+      }
+    },
+    "/api/v1/factor/explain_ast": {
+      "post": {
+        "description": "Convert a factor expression to a tree JSON for the AST drawer.\n\nGoes through `validate_expression` first to guarantee the input meets the\nAST whitelist; only then traversed for visualization. Surfacing the tree\nis a transparency feature (\u75db\u70b9 1 of v3): users see exactly which operators\nand operands their hypothesis became.",
+        "operationId": "explain_ast_api_v1_factor_explain_ast_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplainAstRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplainAstResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explain Ast",
+        "tags": [
+          "interactive"
+        ]
+      }
+    },
+    "/api/v1/factors": {
+      "get": {
+        "operationId": "list_factors_api_v1_factors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FactorSummary"
+                  },
+                  "title": "Response List Factors Api V1 Factors Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Factors",
+        "tags": [
+          "factors"
+        ]
+      }
+    },
+    "/api/v1/factors/decay_alerts": {
+      "get": {
+        "operationId": "decay_alerts_api_v1_factors_decay_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rolling_window_days",
+            "required": false,
+            "schema": {
+              "default": 60,
+              "title": "Rolling Window Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_runs",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "title": "Min Runs",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decay_threshold",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "title": "Decay Threshold",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DecayAlert"
+                  },
+                  "title": "Response Decay Alerts Api V1 Factors Decay Alerts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decay Alerts",
+        "tags": [
+          "factors"
+        ]
+      }
+    },
+    "/api/v1/factors/{factor_id}": {
+      "delete": {
+        "operationId": "delete_factor_api_v1_factors__factor_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factor_id",
+            "required": true,
+            "schema": {
+              "title": "Factor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Factor Api V1 Factors  Factor Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Factor",
+        "tags": [
+          "factors"
+        ]
+      },
+      "get": {
+        "operationId": "get_factor_api_v1_factors__factor_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factor_id",
+            "required": true,
+            "schema": {
+              "title": "Factor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactorDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Factor",
+        "tags": [
+          "factors"
+        ]
+      }
+    },
+    "/api/v1/features/state": {
+      "get": {
+        "operationId": "features_state_api_v1_features_state_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Features State Api V1 Features State Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Features State",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/features/stats/{ticker}": {
+      "get": {
+        "operationId": "features_stats_api_v1_features_stats__ticker__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "title": "Ticker",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Features Stats Api V1 Features Stats  Ticker  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Features Stats",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/gateway/rules": {
+      "get": {
+        "operationId": "gateway_rules_api_v1_gateway_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "title": "Response Gateway Rules Api V1 Gateway Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Gateway Rules",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/gateway/status": {
+      "get": {
+        "operationId": "gateway_status_api_v1_gateway_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gateway Status Api V1 Gateway Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Gateway Status",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/inference/models": {
+      "get": {
+        "operationId": "inference_models_api_v1_inference_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Inference Models Api V1 Inference Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Inference Models",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/inference/predict": {
+      "get": {
+        "operationId": "inference_predict_api_v1_inference_predict_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Inference Predict Api V1 Inference Predict Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Inference Predict",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/market/indicators/{ticker}": {
+      "get": {
+        "operationId": "market_indicators_api_v1_market_indicators__ticker__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "title": "Ticker",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Market Indicators Api V1 Market Indicators  Ticker  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Market Indicators",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/market/state": {
+      "get": {
+        "operationId": "market_state_api_v1_market_state_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Market State Api V1 Market State Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Market State",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/metrics/throughput": {
+      "get": {
+        "operationId": "throughput_api_v1_metrics_throughput_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Throughput Api V1 Metrics Throughput Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Throughput",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/pipelines/latency": {
+      "get": {
+        "operationId": "pipeline_latency_api_v1_pipelines_latency_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pipeline Latency Api V1 Pipelines Latency Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Pipeline Latency",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/portfolio/positions": {
+      "get": {
+        "operationId": "portfolio_positions_api_v1_portfolio_positions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "title": "Response Portfolio Positions Api V1 Portfolio Positions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Portfolio Positions",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/portfolio/risk": {
+      "get": {
+        "operationId": "portfolio_risk_api_v1_portfolio_risk_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Portfolio Risk Api V1 Portfolio Risk Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Portfolio Risk",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/screener/run": {
+      "post": {
+        "description": "Evaluate factors \u2192 filter universe \u2192 z-score \u2192 combine \u2192 rank.\n\nDirection handling per factor:\n  long_only / long_short \u2192 use raw (higher = better)\n  short_only             \u2192 invert score (lower = better)\n\nCombine methods:\n  equal_z         \u2192 mean of z-scores across factors\n  ic_weighted     \u2192 weight each z-score by its in-window mean IC (clipped \u2265 0)\n  user_weighted   \u2192 use per-factor weights from the request (normalized to sum=1)",
+        "operationId": "run_screener_api_v1_screener_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Screener",
+        "tags": [
+          "screener"
+        ]
+      }
+    },
+    "/api/v1/services/health": {
+      "get": {
+        "operationId": "services_health_api_v1_services_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Services Health Api V1 Services Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Services Health",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/signal/exposure": {
+      "post": {
+        "description": "Sector and cap-quintile exposure of today's top-N long / bottom-N short.",
+        "operationId": "signal_exposure_api_v1_signal_exposure_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExposureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExposureResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Signal Exposure",
+        "tags": [
+          "signal"
+        ]
+      }
+    },
+    "/api/v1/signal/ic_timeseries": {
+      "post": {
+        "description": "Daily cross-sectional Spearman IC over the trailing `lookback` window.\n\nFor each day t, IC(t) = Spearman(factor[t], fwd_return[t]). Forward\nreturn is close[t+1]/close[t]-1, so the last day is naturally NaN\n(no T+1 yet) and is omitted.",
+        "operationId": "signal_ic_timeseries_api_v1_signal_ic_timeseries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ICTimeseriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ICTimeseriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Signal Ic Timeseries",
+        "tags": [
+          "signal"
+        ]
+      }
+    },
+    "/api/v1/signal/today": {
+      "post": {
+        "description": "Return the latest cross-sectional ranking \u2014 top/bottom N tickers.",
+        "operationId": "signal_today_api_v1_signal_today_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TodayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Signal Today",
+        "tags": [
+          "signal"
+        ]
+      }
+    },
+    "/api/v1/system/config": {
+      "get": {
+        "operationId": "system_config_api_v1_system_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response System Config Api V1 System Config Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "System Config",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/system/health": {
+      "get": {
+        "operationId": "system_health_api_v1_system_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response System Health Api V1 System Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "System Health",
+        "tags": [
+          "serverless"
+        ]
+      }
+    },
+    "/api/v1/zoo/correlation": {
+      "post": {
+        "description": "Pairwise correlation of daily long-short returns across saved factors.\n\n422 if any factor's expression is AST-invalid or fails to evaluate.\n503 if the panel parquet is missing.",
+        "operationId": "run_zoo_correlation_api_v1_zoo_correlation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrelationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorrelationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Zoo Correlation",
+        "tags": [
+          "zoo"
+        ]
+      }
+    },
+    "/healthz/routers": {
+      "get": {
+        "description": "Return per-router load status. Curl this to prove what is mounted.",
+        "operationId": "healthz_routers_healthz_routers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RouterHealth"
+                  },
+                  "title": "Response Healthz Routers Healthz Routers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz Routers"
+      }
+    },
+    "/qcore": {
+      "get": {
+        "operationId": "qcore_redirect_qcore_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Qcore Redirect"
+      }
+    }
+  }
+}
