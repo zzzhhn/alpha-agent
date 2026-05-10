@@ -1,0 +1,38 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: testpwd
+          POSTGRES_DB: alpha_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install -e ".[dev,storage,test]"
+      - name: Lint
+        run: ruff check alpha_agent tests
+      - name: Test
+        env:
+          DATABASE_URL: postgres://postgres:testpwd@localhost:5432/alpha_test
+        run: |
+          pytest tests/ --cov=alpha_agent --cov-fail-under=80 -m "not slow" -v
