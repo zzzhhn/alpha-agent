@@ -24,6 +24,8 @@ dependencies = [
     # memory feedback_pyproject_optional_deps_not_installed.md.
     "asyncpg>=0.29",
     "python-dotenv>=1.0",
+    # yfinance internal HTML parsing (analyst/earnings) needs lxml
+    "lxml>=4.9",
 ]
 
 [project.optional-dependencies]
