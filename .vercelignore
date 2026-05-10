@@ -36,9 +36,13 @@ node_modules/
 logs/
 status.json
 
-# Cached factor data (not used at request time; recomputed via cron)
-alpha_agent/data/*.parquet
+# Local sqlite cache (not used in serverless; uses Neon postgres instead)
 alpha_agent/data/factor_db.sqlite
+
+# NOTE: parquets MUST be bundled — the factor signal's _load_panel()
+# reads alpha_agent/data/factor_universe_sp500_v3.parquet (~10MB) at
+# request time. Without it every cron run fails with FileNotFoundError.
+# Total parquet weight ~13MB, harmless for 500MB Lambda budget.
 
 # AlphaCore blueprints (large docs)
 _tmp_AlphaCore_*

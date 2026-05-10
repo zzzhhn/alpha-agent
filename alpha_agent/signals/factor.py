@@ -24,11 +24,14 @@ def _evaluate_for_universe(as_of: datetime, expr: str = DEFAULT_FACTOR_EXPR) -> 
     Uses as_of_index=-1 (most recent) since the real kernel does not accept
     a date string — it accepts an integer row index.
     """
-    from alpha_agent.factor_engine.factor_backtest import _Panel
+    from alpha_agent.factor_engine.factor_backtest import _load_panel
     from alpha_agent.factor_engine.kernel import evaluate_cross_section
     from alpha_agent.core.types import FactorSpec
 
-    panel = _Panel.load_default()
+    # `_Panel.load_default()` does NOT exist (M1 plan invented it). The real
+    # API is the module-level `_load_panel()` (lru_cache'd) that reads the
+    # parquet at alpha_agent/data/factor_universe_sp500_v3.parquet.
+    panel = _load_panel()
     spec = FactorSpec(expression=expr)
     scores = evaluate_cross_section(panel, spec, as_of_index=-1)
     arr = np.array(list(scores.values()), dtype=float)
