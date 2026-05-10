@@ -30,6 +30,21 @@ def _dumps(obj: Any) -> str:
     return json.dumps(_json_safe(obj))
 
 
+def _safe_num(x: float | None, default: float = 0.0) -> float:
+    """NaN/Inf/None → default. PG DOUBLE PRECISION accepts NaN but it
+    propagates wrong-direction bias through map_to_tier() and chokes
+    Pydantic JSON serialization downstream."""
+    if x is None:
+        return default
+    try:
+        f = float(x)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except (TypeError, ValueError):
+        return default
+
+
 async def insert_signal_slow(
     pool: asyncpg.Pool,
     ticker: str,
@@ -47,7 +62,7 @@ async def insert_signal_slow(
             breakdown = EXCLUDED.breakdown,
             fetched_at = EXCLUDED.fetched_at
         """,
-        ticker, date, composite_partial, _dumps(breakdown),
+        ticker, date, _safe_num(composite_partial), _dumps(breakdown),
     )
 
 
@@ -74,7 +89,7 @@ async def upsert_signal_fast(
             partial = EXCLUDED.partial,
             fetched_at = EXCLUDED.fetched_at
         """,
-        ticker, date, composite, rating, confidence, _dumps(breakdown), partial,
+        ticker, date, _safe_num(composite), rating, _safe_num(confidence), _dumps(breakdown), partial,
     )
 
 
