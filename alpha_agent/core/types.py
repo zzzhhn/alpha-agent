@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Whitelist of operators allowed in a FactorSpec.expression.
 # Gate against LLM hallucinated operators by checking FactorSpec.operators_used
@@ -70,3 +70,43 @@ class RouterHealth(BaseModel):
     name: str
     loaded: bool
     error: str | None = None
+
+
+# === RatingCard (M1, spec §3.2) ===
+
+Tier = Literal["BUY", "OW", "HOLD", "UW", "SELL"]
+
+
+class BreakdownEntry(BaseModel):
+    """One row of the per-signal breakdown from fusion.combine.CombineResult."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal: str
+    z: float = Field(ge=-3.0, le=3.0)
+    weight: float = Field(ge=0.0, le=1.0)
+    weight_effective: float = Field(ge=0.0, le=1.0)
+    contribution: float
+    raw: object | None = None
+    source: str
+    timestamp: str  # ISO-8601 string from as_of.isoformat()
+    error: str | None = None
+
+
+class RatingCard(BaseModel):
+    """Structured equity rating output of the M1 build-card pipeline.
+
+    Spec §3.2: ticker → 10 signals → fusion → 5-tier rating + confidence
+    + attribution drivers/drags + full breakdown.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str = Field(min_length=1, max_length=10, description="Equity ticker symbol")
+    as_of: str = Field(description="ISO-8601 date string for the rating snapshot")
+    tier: Tier = Field(description="5-tier rating output")
+    composite: float = Field(description="Weighted composite z-score before tier mapping")
+    confidence: float = Field(ge=0.0, le=1.0, description="Signal-agreement confidence [0, 1]")
+    drivers: list[str] = Field(default_factory=list, description="Top contributing signals")
+    drags: list[str] = Field(default_factory=list, description="Top dragging signals")
+    breakdown: list[BreakdownEntry] = Field(default_factory=list, description="Per-signal detail")
