@@ -172,4 +172,17 @@ async def health() -> dict:
     return {"status": "ok", "service": "alphacore", "mode": "serverless"}
 
 
+@app.get("/api/_debug/routes")
+async def debug_routes() -> dict:
+    """List every mounted route so we can see what survived cold-start imports."""
+    routes = []
+    for r in app.routes:
+        path = getattr(r, "path", None)
+        methods = sorted(getattr(r, "methods", set()) - {"HEAD"})
+        if path and methods:
+            routes.append({"path": path, "methods": methods})
+    routes.sort(key=lambda x: x["path"])
+    return {"total": len(routes), "routes": routes}
+
+
 print(f"App ready: {len(app.routes)} routes", file=sys.stderr, flush=True)
