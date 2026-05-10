@@ -239,10 +239,15 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.health import router
         return router
 
+    def _import_cron_routes():
+        from alpha_agent.api.routes.cron_routes import router
+        return router
+
     _load("picks", _import_picks)
     _load("stock", _import_stock)
     _load("brief", _import_brief)
     _load("m2_health", _import_m2_health)
+    _load("cron_routes", _import_cron_routes)
 
     if not SERVERLESS:
         def _import_websocket():
