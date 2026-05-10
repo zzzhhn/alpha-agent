@@ -36,3 +36,31 @@ def test_combine_calendar_excluded():
     result = combine(signals, DEFAULT_WEIGHTS)
     assert all(b["signal"] != "calendar" or b["contribution"] == 0
                for b in result.breakdown)
+
+
+def test_combine_drops_nan_z_signal_doesnt_poison_composite():
+    """A signal with confidence > 0 but z=NaN must NOT poison composite."""
+    from datetime import datetime, UTC
+    import math
+    from alpha_agent.signals.base import SignalScore
+    from alpha_agent.fusion.combine import combine
+
+    nan_sig = SignalScore(
+        ticker="AAPL", z=float("nan"), raw=None, confidence=0.9,
+        as_of=datetime.now(UTC), source="test", error=None,
+    )
+    good_sig = SignalScore(
+        ticker="AAPL", z=1.0, raw=1.0, confidence=0.9,
+        as_of=datetime.now(UTC), source="test", error=None,
+    )
+    signals = {"factor": nan_sig, "technicals": good_sig}
+    weights = {"factor": 0.30, "technicals": 0.20}
+    result = combine(signals, weights)
+    # Composite must be finite, never NaN
+    assert math.isfinite(result.composite), f"composite leaked NaN: {result.composite}"
+    # Drops factor (z=NaN) → all weight redistributes to technicals
+    assert abs(result.composite - 1.0) < 1e-9
+    # NaN-z signal preserved in breakdown but with weight_effective=0 + contribution=0
+    factor_entry = next(b for b in result.breakdown if b["signal"] == "factor")
+    assert factor_entry["weight_effective"] == 0
+    assert factor_entry["contribution"] == 0.0
