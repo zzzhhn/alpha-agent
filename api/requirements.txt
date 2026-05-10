@@ -12,3 +12,6 @@ scipy>=1.12
 joblib>=1.4
 yfinance>=0.2
 akshare>=1.14
+# M2 storage layer (in pyproject [storage] optional; needed by Vercel function imports)
+asyncpg>=0.29
+python-dotenv>=1.0

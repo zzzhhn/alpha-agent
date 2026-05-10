@@ -18,6 +18,12 @@ dependencies = [
     # for the Anthropic-compat custom-api_base support that Kimi For
     # Coding requires.
     "litellm>=1.50",
+    # M2 storage layer. Duplicated in [storage] optional group for non-Vercel
+    # consumers, but kept in core because Vercel runtime install (triggered when
+    # bundle > 250MB) only installs [project.dependencies] — see CLAUDE.md
+    # memory feedback_pyproject_optional_deps_not_installed.md.
+    "asyncpg>=0.29",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
