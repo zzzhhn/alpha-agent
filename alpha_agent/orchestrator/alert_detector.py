@@ -41,7 +41,8 @@ def detect_alerts(
     # 3. iv_spike (options signal)
     opt = _find_signal(curr, "options")
     if opt:
-        iv_pct = (opt.get("raw") or {}).get("iv_percentile", 0)
+        raw_opt = opt.get("raw")
+        iv_pct = raw_opt.get("iv_percentile", 0) if isinstance(raw_opt, dict) else 0
         if iv_pct > 90:
             alerts.append({
                 "type": "iv_spike",
@@ -51,7 +52,8 @@ def detect_alerts(
     # 4. news_velocity (news signal — count > 3× historical mean)
     news = _find_signal(curr, "news")
     if news:
-        n = (news.get("raw") or {}).get("n", 0)
+        raw_news = news.get("raw")
+        n = raw_news.get("n", 0) if isinstance(raw_news, dict) else 0
         if n >= 10:  # placeholder threshold; M3 uses moving average
             alerts.append({
                 "type": "news_velocity",
