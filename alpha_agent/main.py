@@ -41,6 +41,25 @@ def main() -> None:
     # Streamlit UI
     subparsers.add_parser("ui", help="Launch Streamlit dashboard")
 
+    # Build rating card for a ticker
+    bc_parser = subparsers.add_parser(
+        "build-card",
+        help="Build a 5-tier RatingCard for a ticker (10 signals → fusion → JSON)",
+    )
+    bc_parser.add_argument("ticker", help="Equity ticker symbol (e.g., AAPL)")
+    bc_parser.add_argument(
+        "--as-of",
+        default=None,
+        help="Snapshot date YYYY-MM-DD (default: today)",
+        dest="as_of",
+    )
+    bc_parser.add_argument(
+        "--use-fixtures",
+        action="store_true",
+        help="Use deterministic fixture data; no external API calls",
+        dest="use_fixtures",
+    )
+
     args = parser.parse_args()
 
     if args.command == "parse":
@@ -51,6 +70,8 @@ def main() -> None:
         _run_research(args.query, args.max_iter, args.start, args.end, args.top_n, args.report)
     elif args.command == "ui":
         _run_ui()
+    elif args.command == "build-card":
+        _run_build_card(args.ticker, args.as_of, args.use_fixtures)
     else:
         parser.print_help()
         sys.exit(1)
@@ -69,8 +90,6 @@ def _run_parse(expression: str) -> None:
 
 
 def _run_backtest(expression: str, start: str, end: str, top_n: int) -> None:
-    import pandas as pd
-
     from alpha_agent.backtest.engine import BacktestEngine
     from alpha_agent.data.cache import ParquetCache
     from alpha_agent.data.provider import AKShareProvider
@@ -175,6 +194,16 @@ def _run_research(
         with open(outpath, "w") as fh:
             fh.write(html)
         print(f"\nReport saved to {outpath}")
+
+
+def _run_build_card(ticker: str, as_of: str | None, use_fixtures: bool) -> None:
+    from alpha_agent.cli.build_card import run_build_card_cli
+
+    run_build_card_cli(
+        ticker=ticker,
+        as_of_str=as_of or "",
+        use_fixtures=use_fixtures,
+    )
 
 
 def _run_ui() -> None:
