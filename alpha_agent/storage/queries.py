@@ -4,9 +4,30 @@ direct asyncpg usage outside this module is a code smell.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 import asyncpg
+
+
+def _json_safe(obj: Any) -> Any:
+    """Walk a dict/list/scalar, replacing NaN/+Inf/-Inf with None.
+
+    Postgres JSONB rejects NaN/Inf (per JSON spec) but Python json.dumps
+    happily emits them as literal `NaN`/`Infinity` tokens. Sanitize at the
+    storage boundary so callers don't have to remember to filter NaNs out
+    of every signal breakdown."""
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
+
+
+def _dumps(obj: Any) -> str:
+    return json.dumps(_json_safe(obj))
 
 
 async def insert_signal_slow(
@@ -26,7 +47,7 @@ async def insert_signal_slow(
             breakdown = EXCLUDED.breakdown,
             fetched_at = EXCLUDED.fetched_at
         """,
-        ticker, date, composite_partial, json.dumps(breakdown),
+        ticker, date, composite_partial, _dumps(breakdown),
     )
 
 
@@ -53,7 +74,7 @@ async def upsert_signal_fast(
             partial = EXCLUDED.partial,
             fetched_at = EXCLUDED.fetched_at
         """,
-        ticker, date, composite, rating, confidence, json.dumps(breakdown), partial,
+        ticker, date, composite, rating, confidence, _dumps(breakdown), partial,
     )
 
 
@@ -72,7 +93,7 @@ async def enqueue_alert(
         VALUES ($1, $2, $3::jsonb, $4)
         ON CONFLICT (ticker, type, dedup_bucket) DO NOTHING
         """,
-        ticker, type_, json.dumps(payload), dedup_bucket,
+        ticker, type_, _dumps(payload), dedup_bucket,
     )
 
 
@@ -108,5 +129,5 @@ async def log_error(
         INSERT INTO error_log (layer, component, ticker, err_type, err_message, context)
         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
         """,
-        layer, component, ticker, err_type, err_message, json.dumps(context or {}),
+        layer, component, ticker, err_type, err_message, _dumps(context or {}),
     )
