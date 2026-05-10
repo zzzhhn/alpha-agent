@@ -25,9 +25,12 @@ refresh-fixtures:
 m1-acceptance:
 	@echo "=== M1 acceptance: coverage gate ==="
 	pytest tests/storage tests/signals tests/fusion tests/cli tests/integration \
-		--cov=alpha_agent.storage \
 		--cov=alpha_agent.signals \
 		--cov=alpha_agent.fusion \
+		--cov=alpha_agent.storage.postgres \
+		--cov=alpha_agent.storage.queries \
+		--cov=alpha_agent.storage.migrations \
+		--cov=alpha_agent.cli \
 		--cov-fail-under=85 \
 		-m "not slow" \
 		--tb=short -q
