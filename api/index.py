@@ -120,6 +120,52 @@ except Exception as e:
     print(f"✗ zoo routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
 
+# ── M2 routers ─────────────────────────────────────────────────────────
+try:
+    from alpha_agent.api.routes.picks import router as picks_router
+    app.include_router(picks_router)
+    print(f"✓ picks routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    print(f"✗ picks routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+
+try:
+    from alpha_agent.api.routes.stock import router as stock_router
+    app.include_router(stock_router)
+    print(f"✓ stock routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    print(f"✗ stock routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+
+try:
+    from alpha_agent.api.routes.brief import router as brief_router
+    app.include_router(brief_router)
+    print(f"✓ brief routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    print(f"✗ brief routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+
+try:
+    from alpha_agent.api.routes.health import router as m2_health_router
+    app.include_router(m2_health_router)
+    print(f"✓ M2 health routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    print(f"✗ M2 health routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+
+try:
+    from alpha_agent.api.routes.cron_routes import router as cron_router
+    app.include_router(cron_router)
+    print(f"✓ cron routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    print(f"✗ cron routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+
 
 @app.get("/api/health")
 async def health() -> dict:
