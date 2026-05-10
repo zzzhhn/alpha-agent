@@ -222,6 +222,13 @@ def create_app() -> FastAPI:
     _load("zoo", _import_zoo)
     _load("factors_db", _import_factors_db)
 
+    # M2 — picks / stock / brief / health (read endpoints)
+    def _import_picks():
+        from alpha_agent.api.routes.picks import router
+        return router
+
+    _load("picks", _import_picks)
+
     if not SERVERLESS:
         def _import_websocket():
             from alpha_agent.api.websocket import router
