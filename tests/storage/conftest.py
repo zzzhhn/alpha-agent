@@ -6,7 +6,6 @@ clean schema via auto-applied migrations.
 """
 from __future__ import annotations
 
-import asyncio
 import pytest
 import pytest_asyncio
 from pytest_postgresql import factories
