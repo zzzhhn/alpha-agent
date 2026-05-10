@@ -12,8 +12,6 @@
     "api/cron/alert_dispatcher.py": { "maxDuration": 30 }
   },
   "crons": [
-    { "path": "/api/cron/slow_daily", "schedule": "30 13 * * *" },
-    { "path": "/api/cron/fast_intraday", "schedule": "*/15 14-21 * * 1-5" },
-    { "path": "/api/cron/alert_dispatcher", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/slow_daily", "schedule": "30 13 * * *" }
   ]
 }
