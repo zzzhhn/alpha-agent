@@ -1,6 +1,4 @@
-import asyncio
 import pytest
-from unittest.mock import AsyncMock, patch
 
 import asyncpg
 

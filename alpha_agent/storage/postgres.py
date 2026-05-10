@@ -29,11 +29,12 @@ class DBUnavailable(Exception):
 
 
 async def get_pool(dsn: str, *, min_size: int = 1, max_size: int = 10) -> asyncpg.Pool:
-    """Return the singleton pool, creating it on first call.
+    """Singleton pool. Subsequent calls with a different DSN raise — that's a bug.
 
-    Subsequent calls with a *different* DSN raise RuntimeError — that is a
-    programming error (two callers disagreeing on which DB to connect to).
-    """
+    Not safe under concurrent first-call: two coroutines racing into get_pool before
+    either completes create_pool both see _pool=None and create separate pools, leaking
+    one. M1 use case is startup-only (called once before serving requests). For
+    concurrent first-call, wrap with asyncio.Lock externally."""
     global _pool, _pool_dsn
     if _pool is not None:
         if _pool_dsn != dsn:
@@ -56,8 +57,6 @@ async def close_pool() -> None:
 
 
 # Exception types that indicate a transient connection-level failure.
-# asyncpg.TooManyConnectionsError and asyncpg.CannotConnectNowError are
-# subclasses of PostgresConnectionError, so they are covered implicitly.
 _RETRYABLE = (
     asyncpg.PostgresConnectionError,
     asyncpg.exceptions.ConnectionDoesNotExistError,
