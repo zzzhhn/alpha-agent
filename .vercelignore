@@ -1,0 +1,53 @@
+# Vercel deploy bundle: keep ONLY what the Python function (api/index.py)
+# actually needs at runtime. Without this file the entire repo (incl.
+# 545MB of frontend/.next/node_modules) gets uploaded, blowing the 500MB
+# Lambda ephemeral storage limit.
+
+# Frontend is deployed as a SEPARATE Vercel project (frontend-delta-three-81)
+frontend/
+
+# Git worktrees with feature branches; not needed for prod
+.worktrees/
+
+# Tests + dev infra
+tests/
+.pytest_cache/
+
+# Local Python venv (if any)
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Docs + planning
+docs/
+plans/
+*.md
+
+# Build/dev artifacts
+node_modules/
+.next/
+*.docx
+*.pdf
+*.html
+*.png
+
+# Logs / status
+logs/
+status.json
+
+# Cached factor data (not used at request time; recomputed via cron)
+alpha_agent/data/*.parquet
+alpha_agent/data/factor_db.sqlite
+
+# AlphaCore blueprints (large docs)
+_tmp_AlphaCore_*
+AlphaCore_*
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# CI / superpowers session caches
+.superpowers/
