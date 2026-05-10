@@ -7,8 +7,6 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from alpha_agent.signals.base import SignalScore
-
 
 def normalize_cross_section(
     inputs: Mapping[str, Any],
