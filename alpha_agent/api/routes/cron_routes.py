@@ -31,9 +31,10 @@ async def slow_daily(limit: int | None = Query(None, ge=1, le=600)) -> dict[str,
 
 @router.post("/fast_intraday")
 @router.get("/fast_intraday")
-async def fast_intraday() -> dict[str, Any]:
+async def fast_intraday(limit: int | None = Query(None, ge=1, le=600)) -> dict[str, Any]:
+    """Run fast_intraday cron. ?limit=N caps watchlist (Hobby 300s budget)."""
     from api.cron.fast_intraday import handler
-    return await handler()
+    return await handler(limit=limit)
 
 
 @router.post("/alert_dispatcher")
