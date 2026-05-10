@@ -6,9 +6,6 @@
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/qcore", "destination": "/api/index" }
   ],
-  "functions": {
-    "api/index.py": { "maxDuration": 300 }
-  },
   "crons": [
     { "path": "/api/cron/slow_daily", "schedule": "30 13 * * *" }
   ]
