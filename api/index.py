@@ -121,14 +121,18 @@ except Exception as e:
     traceback.print_exc(file=sys.stderr)
 
 # ── M2 routers ─────────────────────────────────────────────────────────
+# Capture import errors into app.state so /api/_debug/load-errors can surface them.
+_m2_load_errors: dict[str, str] = {}
+
 try:
     from alpha_agent.api.routes.picks import router as picks_router
     app.include_router(picks_router)
     print(f"✓ picks routes loaded", file=sys.stderr, flush=True)
 except Exception as e:
     import traceback
-    print(f"✗ picks routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
+    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    _m2_load_errors["picks"] = msg
+    print(f"✗ picks routes: {msg}", file=sys.stderr, flush=True)
 
 try:
     from alpha_agent.api.routes.stock import router as stock_router
@@ -136,8 +140,9 @@ try:
     print(f"✓ stock routes loaded", file=sys.stderr, flush=True)
 except Exception as e:
     import traceback
-    print(f"✗ stock routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
+    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    _m2_load_errors["stock"] = msg
+    print(f"✗ stock routes: {msg}", file=sys.stderr, flush=True)
 
 try:
     from alpha_agent.api.routes.brief import router as brief_router
@@ -145,8 +150,9 @@ try:
     print(f"✓ brief routes loaded", file=sys.stderr, flush=True)
 except Exception as e:
     import traceback
-    print(f"✗ brief routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
+    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    _m2_load_errors["brief"] = msg
+    print(f"✗ brief routes: {msg}", file=sys.stderr, flush=True)
 
 try:
     from alpha_agent.api.routes.health import router as m2_health_router
@@ -154,8 +160,18 @@ try:
     print(f"✓ M2 health routes loaded", file=sys.stderr, flush=True)
 except Exception as e:
     import traceback
-    print(f"✗ M2 health routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
+    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    _m2_load_errors["m2_health"] = msg
+    print(f"✗ M2 health routes: {msg}", file=sys.stderr, flush=True)
+
+# Probe asyncpg directly so we know if it's installed in the runtime
+try:
+    import asyncpg  # noqa: F401
+    _m2_load_errors["_asyncpg_import"] = "OK"
+except Exception as e:
+    _m2_load_errors["_asyncpg_import"] = f"{type(e).__name__}: {e}"
+
+app.state.m2_load_errors = _m2_load_errors
 
 try:
     from alpha_agent.api.routes.cron_routes import router as cron_router
@@ -170,6 +186,12 @@ except Exception as e:
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "service": "alphacore", "mode": "serverless"}
+
+
+@app.get("/api/_debug/load-errors")
+async def debug_load_errors() -> dict:
+    """Surface every M2 router cold-start ImportError + asyncpg probe result."""
+    return getattr(app.state, "m2_load_errors", {})
 
 
 @app.get("/api/_debug/routes")
