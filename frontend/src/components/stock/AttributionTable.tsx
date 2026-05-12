@@ -13,8 +13,8 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
   const sorted = useMemo(() => {
     const out = [...card.breakdown];
     out.sort((a, b) => {
-      const av = (a as Record<string, unknown>)[sortKey];
-      const bv = (b as Record<string, unknown>)[sortKey];
+      const av = (a as unknown as Record<string, unknown>)[sortKey];
+      const bv = (b as unknown as Record<string, unknown>)[sortKey];
       if (typeof av === "number" && typeof bv === "number") {
         return desc ? bv - av : av - bv;
       }
