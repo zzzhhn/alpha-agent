@@ -50,7 +50,15 @@ def _fetch(ticker: str, as_of: datetime) -> SignalScore:
     earn_dates = info.get("earningsDate") or []
 
     # Upcoming earnings (always try, even when surprise data is missing).
-    upcoming = extract_next_earnings(getattr(ticker_obj, "calendar", None), as_of=as_of)
+    # NB: Ticker.calendar property access itself can raise KeyError when
+    # yfinance's internal pandas indexing returns ['Earnings Date'] form
+    # for some ticker shapes — getattr default only catches AttributeError,
+    # not KeyError. Wrap defensively.
+    try:
+        calendar = ticker_obj.calendar
+    except (KeyError, ValueError, TypeError, AttributeError):
+        calendar = None
+    upcoming = extract_next_earnings(calendar, as_of=as_of)
 
     if not earn_dates or actual is None or est is None or est == 0:
         return SignalScore(
