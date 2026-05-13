@@ -72,14 +72,18 @@ async def handler(
     rows_written = sum(1 for v in results.values() if not isinstance(v, Exception))
     for t, v in results.items():
         if isinstance(v, Exception):
-            errors.append({"ticker": t, "err": str(v)[:200]})
+            # str(Exception()) is empty for bare exceptions — always prefix
+            # the type name + fall back to repr() so the response is never a
+            # silent {"err": ""} (CLAUDE.md Silent Exception Anti-Pattern).
+            err_msg = f"{type(v).__name__}: {str(v) or repr(v)}"[:200]
+            errors.append({"ticker": t, "err": err_msg})
             await log_error(
                 pool,
                 layer="cron",
                 component="cron.slow_daily",
                 ticker=t,
                 err_type=type(v).__name__,
-                err_message=str(v)[:200],
+                err_message=str(v) or repr(v),
             )
 
     finished_at = datetime.now(UTC)

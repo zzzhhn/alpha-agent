@@ -53,7 +53,7 @@ def _safe_float(v: float | None, default: float = 0.0) -> float:
 
 
 @router.get("/lean", response_model=PicksResponse)
-async def picks_lean(limit: int = Query(20, ge=1, le=100)) -> PicksResponse:
+async def picks_lean(limit: int = Query(20, ge=1, le=200)) -> PicksResponse:
     """Return top *limit* tickers sorted by composite_score DESC."""
     import traceback
     try:
