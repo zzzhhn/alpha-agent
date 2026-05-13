@@ -32,9 +32,11 @@ import {
   type LLMProvider,
   PROVIDER_PRESETS,
   clearByok,
+  hasByok,
   loadByok,
   saveByok,
 } from "@/lib/byok";
+import { t } from "@/lib/i18n";
 import WeightsEditor from "@/components/settings/WeightsEditor";
 import WatchlistEditor from "@/components/settings/WatchlistEditor";
 
@@ -310,6 +312,14 @@ export default function SettingsPage() {
               {provider} · {effectiveBase} · {effectiveModel}
             </span>
           </p>
+
+          {/* M4b D1: nudge that Rich brief is now consumable. The actual button */}
+          {/* lives on /stock/[ticker], RichThesis component. */}
+          <div className="text-xs text-tm-muted">
+            {hasByok()
+              ? t(locale, "settings.byok.rich_brief_unlocked")
+              : t(locale, "settings.byok.rich_brief_locked")}
+          </div>
         </div>
 
         {/* tm-form-foot — action bar separated by hairline */}
