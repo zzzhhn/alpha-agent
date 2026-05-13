@@ -122,6 +122,27 @@ def test_extract_next_earnings_when_no_entry_returns_none_fields():
                    "eps_estimate": None, "revenue_estimate": None}
 
 
+def test_extract_next_earnings_dict_shape():
+    """Newer yfinance versions return Ticker.calendar as a plain dict with
+    list values. Regression for M4a F1 follow-up: previously crashed with
+    AttributeError 'list' object has no attribute 'iloc'."""
+    cal = {
+        "Earnings Date": [pd.Timestamp("2026-07-31", tz="UTC")],
+        "EPS Estimate": 1.45,
+        "Revenue Estimate": 120_000_000_000,
+    }
+    out = extract_next_earnings(cal, as_of=datetime(2026, 5, 13, tzinfo=UTC))
+    assert out["next_date"] == "2026-07-31"
+    assert out["days_until"] == 79
+    assert out["eps_estimate"] == 1.45
+    assert out["revenue_estimate"] == 120_000_000_000
+
+
+def test_extract_next_earnings_empty_dict_returns_none_fields():
+    out = extract_next_earnings({}, as_of=datetime(2026, 5, 13, tzinfo=UTC))
+    assert out["next_date"] is None
+
+
 def test_extract_ohlcv_shapes_pandas_to_records():
     df = pd.DataFrame(
         {"Open": [100.0, 101.0], "High": [102.0, 103.0],

@@ -115,31 +115,71 @@ def extract_news_items(raw: list[dict], limit: int = 5) -> list[dict]:
     return out
 
 
+def _first(v: Any) -> Any:
+    """Pluck the first element from a list-or-scalar value. `yf.Ticker.calendar`
+    in newer yfinance versions returns a plain dict where each value is a
+    list (e.g. {'Earnings Date': [date1, date2], 'EPS Estimate': 1.45}).
+    Older versions returned a DataFrame. _first lets the dict-shape path
+    treat the inner list uniformly with scalars."""
+    if isinstance(v, list):
+        return v[0] if v else None
+    return v
+
+
 def extract_next_earnings(
-    calendar: pd.DataFrame | None, *, as_of: datetime
+    calendar: pd.DataFrame | dict | None, *, as_of: datetime
 ) -> dict[str, Any]:
-    """Decode `yf.Ticker.calendar` (a DataFrame) into a structured upcoming
-    earnings block. Returns all-None fields if no calendar entry exists."""
+    """Decode `yf.Ticker.calendar` into a structured upcoming earnings block.
+
+    yfinance returns one of three shapes depending on version + cache state:
+    - None (no calendar data)
+    - pandas DataFrame (older versions)
+    - dict like {'Earnings Date': [date], 'EPS Estimate': 1.45,
+                 'Revenue Estimate': 120_000_000_000} (current versions)
+
+    Returns all-None fields if no calendar entry exists.
+    """
     none_payload: dict[str, Any] = {
         "next_date": None, "days_until": None,
         "eps_estimate": None, "revenue_estimate": None,
     }
-    if calendar is None or len(calendar) == 0:
+    if calendar is None:
         return none_payload
     try:
-        date = pd.to_datetime(calendar["Earnings Date"].iloc[0])
+        if isinstance(calendar, pd.DataFrame):
+            if calendar.empty:
+                return none_payload
+            date_raw = calendar["Earnings Date"].iloc[0]
+            eps_raw = (
+                calendar["EPS Estimate"].iloc[0]
+                if "EPS Estimate" in calendar else None
+            )
+            rev_raw = (
+                calendar["Revenue Estimate"].iloc[0]
+                if "Revenue Estimate" in calendar else None
+            )
+        elif isinstance(calendar, dict):
+            if not calendar:
+                return none_payload
+            date_raw = _first(calendar.get("Earnings Date"))
+            if date_raw is None:
+                return none_payload
+            eps_raw = _first(calendar.get("EPS Estimate"))
+            rev_raw = _first(calendar.get("Revenue Estimate"))
+        else:
+            return none_payload
+
+        date = pd.to_datetime(date_raw)
         if date.tzinfo is None:
             date = date.tz_localize("UTC")
         days = (date - as_of).days
         return {
             "next_date": date.strftime("%Y-%m-%d"),
             "days_until": int(days),
-            "eps_estimate": _safe_float(calendar["EPS Estimate"].iloc[0])
-                if "EPS Estimate" in calendar else None,
-            "revenue_estimate": _safe_float(calendar["Revenue Estimate"].iloc[0])
-                if "Revenue Estimate" in calendar else None,
+            "eps_estimate": _safe_float(eps_raw),
+            "revenue_estimate": _safe_float(rev_raw),
         }
-    except (KeyError, IndexError, ValueError, TypeError):
+    except (KeyError, IndexError, ValueError, TypeError, AttributeError):
         return none_payload
 
 
