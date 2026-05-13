@@ -10,6 +10,7 @@ import AttributionTable from "./AttributionTable";
 import PriceChart from "./PriceChart";
 import FundamentalsBlock from "./FundamentalsBlock";
 import CatalystsBlock from "./CatalystsBlock";
+import NewsBlock from "./NewsBlock";
 import SourcesBlock from "./SourcesBlock";
 
 export default function StockCardLayout({
@@ -66,6 +67,7 @@ export default function StockCardLayout({
         <PriceChart ticker={card.ticker} />
         <FundamentalsBlock card={card} />
         <CatalystsBlock card={card} />
+        <NewsBlock card={card} />
         <SourcesBlock card={card} />
       </main>
     </div>
