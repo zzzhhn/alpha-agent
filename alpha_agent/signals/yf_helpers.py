@@ -96,20 +96,60 @@ def _classify_sentiment(title: str) -> str:
 
 def extract_news_items(raw: list[dict], limit: int = 5) -> list[dict]:
     """yfinance Ticker.news → frontend-renderable list. Returns at most
-    `limit` items (most-recent first per yfinance default order)."""
+    `limit` items (most-recent first per yfinance default order).
+
+    Handles two shapes:
+    - Old flat shape: {title, publisher, providerPublishTime, link}
+    - New nested shape (current yfinance): {id, content: {title, pubDate,
+      provider: {displayName}, canonicalUrl: {url}, summary, ...}}
+    The flat-shape lookups remain as last-resort fallbacks so we don't
+    break a future yfinance revert.
+    """
     out: list[dict] = []
     for item in raw[:limit]:
-        title = item.get("title") or ""
-        ts_unix = item.get("providerPublishTime")
-        try:
-            ts_iso = datetime.fromtimestamp(int(ts_unix), tz=UTC).isoformat() if ts_unix else ""
-        except (TypeError, ValueError):
-            ts_iso = ""
+        content = item.get("content") if isinstance(item.get("content"), dict) else item
+
+        title = content.get("title") or item.get("title") or ""
+
+        # Timestamp: new shape uses ISO string in pubDate; old shape uses
+        # unix seconds in providerPublishTime.
+        pub_iso = content.get("pubDate") or content.get("displayTime")
+        if pub_iso:
+            ts_iso = str(pub_iso)
+        else:
+            ts_unix = content.get("providerPublishTime") or item.get("providerPublishTime")
+            try:
+                ts_iso = (
+                    datetime.fromtimestamp(int(ts_unix), tz=UTC).isoformat()
+                    if ts_unix
+                    else ""
+                )
+            except (TypeError, ValueError):
+                ts_iso = ""
+
+        provider = content.get("provider")
+        publisher = (
+            content.get("publisher")
+            or item.get("publisher")
+            or (provider.get("displayName") if isinstance(provider, dict) else "")
+            or ""
+        )
+
+        canonical = content.get("canonicalUrl")
+        click_through = content.get("clickThroughUrl")
+        link = (
+            content.get("link")
+            or item.get("link")
+            or (canonical.get("url") if isinstance(canonical, dict) else "")
+            or (click_through.get("url") if isinstance(click_through, dict) else "")
+            or ""
+        )
+
         out.append({
             "title": title,
-            "publisher": item.get("publisher") or "",
+            "publisher": publisher,
             "published_at": ts_iso,
-            "link": item.get("link") or "",
+            "link": link,
             "sentiment": _classify_sentiment(title),
         })
     return out

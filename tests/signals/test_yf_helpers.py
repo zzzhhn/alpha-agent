@@ -87,6 +87,33 @@ def test_extract_news_items_max_5():
     assert out[0]["sentiment"] in ("pos", "neg", "neu")
 
 
+def test_extract_news_items_new_nested_shape():
+    """Current yfinance Ticker.news returns items as
+    {id, content: {title, pubDate, provider: {displayName}, canonicalUrl: {url}}}.
+    Regression for M4a F1 follow-up: the old flat-shape lookups returned
+    empty strings, so all UI headlines rendered blank in production."""
+    raw = [
+        {
+            "id": "abc",
+            "content": {
+                "id": "abc",
+                "title": "Apple stock soars on record close",
+                "pubDate": "2026-05-13T17:51:12Z",
+                "provider": {"displayName": "Yahoo Finance"},
+                "canonicalUrl": {"url": "https://finance.yahoo.com/news/abc"},
+                "summary": "Apple stock was on pace for a record close...",
+            },
+        }
+    ]
+    out = extract_news_items(raw, limit=5)
+    assert len(out) == 1
+    assert out[0]["title"] == "Apple stock soars on record close"
+    assert out[0]["publisher"] == "Yahoo Finance"
+    assert out[0]["link"] == "https://finance.yahoo.com/news/abc"
+    assert out[0]["published_at"] == "2026-05-13T17:51:12Z"
+    assert out[0]["sentiment"] == "pos"  # "soars" + "record"
+
+
 def test_extract_news_items_sentiment_keyword_classifier():
     out = extract_news_items(
         [
