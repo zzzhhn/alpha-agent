@@ -17,7 +17,10 @@ import numpy as np
 from alpha_agent.signals.base import SignalScore, safe_fetch
 from alpha_agent.signals.yf_helpers import extract_fundamentals, get_ticker
 
-DEFAULT_FACTOR_EXPR = "rank(ts_mean(returns, 12)) - rank(ts_std(returns, 60))"
+# Use function-call form (subtract) instead of infix `-` because the factor
+# engine AST only accepts function calls, not BinOp nodes. Production cron
+# was silently producing factor.raw=null until M4a F1 smoke caught this.
+DEFAULT_FACTOR_EXPR = "subtract(rank(ts_mean(returns, 12)), rank(ts_std(returns, 60)))"
 
 
 def _evaluate_for_universe(as_of: datetime, expr: str = DEFAULT_FACTOR_EXPR) -> dict[str, float]:
@@ -39,7 +42,7 @@ def _evaluate_for_universe(as_of: datetime, expr: str = DEFAULT_FACTOR_EXPR) -> 
         name="default_composite",
         hypothesis="Cross-sectional momentum minus volatility composite for SP500.",
         expression=expr,
-        operators_used=["rank", "ts_mean", "ts_std"],
+        operators_used=["rank", "ts_mean", "ts_std", "subtract"],
         lookback=60,
         universe="SP500",
         justification="Default factor for Phase 1 fast cron when no user override is provided.",
