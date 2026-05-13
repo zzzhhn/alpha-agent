@@ -1,5 +1,6 @@
 import { fetchPicks } from "@/lib/api/picks";
 import PicksTable from "@/components/picks/PicksTable";
+import RefreshButton from "@/components/picks/RefreshButton";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmSubbar, TmSubbarKV, TmSubbarSep, TmStatusPill } from "@/components/tm/TmSubbar";
 
@@ -22,6 +23,10 @@ export default async function PicksPage() {
           </>
         ) : null}
       </TmSubbar>
+
+      <div className="flex justify-end px-4 pt-3">
+        <RefreshButton />
+      </div>
 
       <TmPane
         title="TODAY'S PICKS"

@@ -182,6 +182,16 @@ except Exception as e:
     print(f"✗ cron routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
 
+try:
+    from alpha_agent.api.routes.admin import router as admin_router
+    app.include_router(admin_router)
+    print(f"✓ admin routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    _m2_load_errors["admin"] = msg
+    print(f"✗ admin routes: {msg}", file=sys.stderr, flush=True)
+
 
 @app.get("/api/health")
 async def health() -> dict:
