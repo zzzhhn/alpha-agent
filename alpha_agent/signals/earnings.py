@@ -1,41 +1,75 @@
 # alpha_agent/signals/earnings.py
-"""Earnings catalyst signal. Two components:
+"""Earnings catalyst signal. Two components contribute to z:
 - Proximity: |days_until_or_since_earnings|; sigmoid -> [0, 1]
-- Surprise: (actual - estimate) / |estimate|; +-50% saturates."""
+- Surprise: (actual - estimate) / |estimate|; +-50% saturates.
+
+M4a: raw payload extended with structured upcoming-earnings fields
+(next_date, eps_estimate, revenue_estimate) so CatalystsBlock can render
+a real earnings card without a separate fetch.
+"""
 from __future__ import annotations
+
 from datetime import datetime
+
 import numpy as np
+
 from alpha_agent.signals.base import SignalScore, safe_fetch
+from alpha_agent.signals.yf_helpers import extract_next_earnings, get_ticker
 
 
-def _fetch_info(ticker: str) -> dict:
-    import yfinance as yf
-    t = yf.Ticker(ticker)
-    info = t.info or {}
-    earnings_dates = getattr(t, "earnings_dates", None)
-    if earnings_dates is not None and not earnings_dates.empty:
-        info["epsActual"] = earnings_dates["Reported EPS"].iloc[0]
-        info["epsEstimate"] = earnings_dates["EPS Estimate"].iloc[0]
-        info["earningsDate"] = [earnings_dates.index[0]]
-    return info
+def _fetch_info(ticker: str) -> tuple[dict, object]:
+    """Returns (info_dict, ticker_for_calendar). Keeping the legacy
+    signature so existing tests that patch _fetch_info don't break - but
+    now we also surface the Ticker for calendar extraction."""
+    t = get_ticker(ticker)
+    info = dict(t.info or {})
+    edates = getattr(t, "earnings_dates", None)
+    if edates is not None and not edates.empty:
+        info["epsActual"] = edates["Reported EPS"].iloc[0]
+        info["epsEstimate"] = edates["EPS Estimate"].iloc[0]
+        info["earningsDate"] = [edates.index[0]]
+    return info, t
 
 
 def _fetch(ticker: str, as_of: datetime) -> SignalScore:
-    info = _fetch_info(ticker)
+    info, ticker_obj = _fetch_info(ticker)
     actual = info.get("epsActual")
     est = info.get("epsEstimate")
     earn_dates = info.get("earningsDate") or []
+
+    # Upcoming earnings (always try, even when surprise data is missing).
+    upcoming = extract_next_earnings(getattr(ticker_obj, "calendar", None), as_of=as_of)
+
     if not earn_dates or actual is None or est is None or est == 0:
-        return SignalScore(ticker=ticker, z=0.0, raw=None, confidence=0.3,
-                           as_of=as_of, source="yfinance", error="missing earnings")
+        return SignalScore(
+            ticker=ticker, z=0.0,
+            raw={
+                "surprise_pct": None, "days_to_earnings": None,
+                "next_date": upcoming["next_date"],
+                "days_until": upcoming["days_until"],
+                "eps_estimate": upcoming["eps_estimate"],
+                "revenue_estimate": upcoming["revenue_estimate"],
+            },
+            confidence=0.3, as_of=as_of, source="yfinance",
+            error="missing earnings",
+        )
+
     surprise = (actual - est) / abs(est)
     surprise_z = float(np.clip(surprise / 0.20, -2.0, 2.0))
     days = abs((earn_dates[0].replace(tzinfo=as_of.tzinfo) - as_of).days)
     proximity_w = float(np.exp(-days / 14))
     z = float(np.clip(surprise_z * proximity_w, -3.0, 3.0))
+
     return SignalScore(
         ticker=ticker, z=z,
-        raw={"surprise_pct": surprise * 100, "days_to_earnings": days},
+        raw={
+            "surprise_pct": surprise * 100,
+            "days_to_earnings": days,
+            "next_date": upcoming["next_date"],
+            "days_until": upcoming["days_until"],
+            "eps_estimate": upcoming["eps_estimate"],
+            "revenue_estimate": upcoming["revenue_estimate"],
+        },
         confidence=0.75, as_of=as_of, source="yfinance", error=None,
     )
 
