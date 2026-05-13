@@ -8,12 +8,14 @@ from __future__ import annotations
 import json
 import math
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
+from alpha_agent.signals.yf_helpers import extract_ohlcv, get_ticker
 
 
 def _safe_float(v, default: float = 0.0) -> float:
@@ -84,3 +86,40 @@ async def get_stock(
         breakdown=breakdown_data,
     )
     return StockResponse(card=card, stale=stale)
+
+
+class OhlcvBar(BaseModel):
+    date: str
+    open: float | None
+    high: float | None
+    low: float | None
+    close: float | None
+    volume: int
+
+
+class OhlcvResponse(BaseModel):
+    ticker: str
+    period: str
+    bars: list[OhlcvBar]
+
+
+# yfinance period vocabulary: 1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max.
+# Restrict to the ones the chart UI offers to avoid surprises.
+_AllowedPeriod = Literal["1mo", "3mo", "6mo", "1y", "2y", "5y"]
+
+
+@router.get("/{ticker}/ohlcv", response_model=OhlcvResponse)
+async def stock_ohlcv(
+    ticker: str,
+    period: _AllowedPeriod = "6mo",
+) -> OhlcvResponse:
+    """Lazy OHLCV feed for the price chart. Cache headers in middleware
+    (or here, future) - for now relies on FE-side staleness."""
+    ticker = ticker.upper()
+    df = get_ticker(ticker).history(period=period)
+    bars = extract_ohlcv(df)
+    return OhlcvResponse(
+        ticker=ticker,
+        period=period,
+        bars=[OhlcvBar(**b) for b in bars],
+    )

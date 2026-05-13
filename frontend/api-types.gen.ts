@@ -101,6 +101,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/alert_dispatcher": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Alert Dispatcher */
+        get: operations["alert_dispatcher_api_cron_alert_dispatcher_get"];
+        put?: never;
+        /** Alert Dispatcher */
+        post: operations["alert_dispatcher_api_cron_alert_dispatcher_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/fast_intraday": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fast Intraday
+         * @description Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).
+         *     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
+         *     multi-shot coverage of the top tickers (e.g. 3 × {limit:75, offset:0/75/150}).
+         */
+        get: operations["fast_intraday_api_cron_fast_intraday_get"];
+        put?: never;
+        /**
+         * Fast Intraday
+         * @description Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).
+         *     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
+         *     multi-shot coverage of the top tickers (e.g. 3 × {limit:75, offset:0/75/150}).
+         */
+        post: operations["fast_intraday_api_cron_fast_intraday_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/slow_daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Slow Daily
+         * @description Run slow_daily cron. `limit=N` caps universe (≤300s Hobby budget).
+         *     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
+         *     GH-Actions multi-shot full SP500 coverage (e.g. 4 × {limit:140, offset:0/140/280/420}).
+         */
+        get: operations["slow_daily_api_cron_slow_daily_get"];
+        put?: never;
+        /**
+         * Slow Daily
+         * @description Run slow_daily cron. `limit=N` caps universe (≤300s Hobby budget).
+         *     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
+         *     GH-Actions multi-shot full SP500 coverage (e.g. 4 × {limit:140, offset:0/140/280/420}).
+         */
+        post: operations["slow_daily_api_cron_slow_daily_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dashboard": {
         parameters: {
             query?: never;
@@ -167,6 +241,27 @@ export interface paths {
          * @description Return the most-recent RatingCard for *ticker*.
          */
         get: operations["get_stock_api_stock__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/{ticker}/ohlcv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock Ohlcv
+         * @description Lazy OHLCV feed for the price chart. Cache headers in middleware
+         *     (or here, future) - for now relies on FE-side staleness.
+         */
+        get: operations["stock_ohlcv_api_stock__ticker__ohlcv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1579,6 +1674,30 @@ export interface components {
             /** Top Drivers */
             top_drivers: string[];
         };
+        /** OhlcvBar */
+        OhlcvBar: {
+            /** Close */
+            close: number | null;
+            /** Date */
+            date: string;
+            /** High */
+            high: number | null;
+            /** Low */
+            low: number | null;
+            /** Open */
+            open: number | null;
+            /** Volume */
+            volume: number;
+        };
+        /** OhlcvResponse */
+        OhlcvResponse: {
+            /** Bars */
+            bars: components["schemas"]["OhlcvBar"][];
+            /** Period */
+            period: string;
+            /** Ticker */
+            ticker: string;
+        };
         /**
          * OperandCatalogResponse
          * @description Augmented WorldQuant catalog. Each item carries `tier` and `implemented`.
@@ -2234,6 +2353,186 @@ export interface operations {
             };
         };
     };
+    alert_dispatcher_api_cron_alert_dispatcher_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    alert_dispatcher_api_cron_alert_dispatcher_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    fast_intraday_api_cron_fast_intraday_get: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fast_intraday_api_cron_fast_intraday_post: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    slow_daily_api_cron_slow_daily_get: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    slow_daily_api_cron_slow_daily_post: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     legacy_dashboard_api_dashboard_get: {
         parameters: {
             query?: never;
@@ -2327,6 +2626,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StockResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stock_ohlcv_api_stock__ticker__ohlcv_get: {
+        parameters: {
+            query?: {
+                period?: "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y";
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OhlcvResponse"];
                 };
             };
             /** @description Validation Error */

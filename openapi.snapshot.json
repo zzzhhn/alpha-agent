@@ -1653,6 +1653,98 @@
         "title": "LeanCard",
         "type": "object"
       },
+      "OhlcvBar": {
+        "properties": {
+          "close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "open": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume"
+        ],
+        "title": "OhlcvBar",
+        "type": "object"
+      },
+      "OhlcvResponse": {
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/OhlcvBar"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "period",
+          "bars"
+        ],
+        "title": "OhlcvResponse",
+        "type": "object"
+      },
       "OperandCatalogResponse": {
         "description": "Augmented WorldQuant catalog. Each item carries `tier` and `implemented`.\n\nTier semantics:\n  - \"T1\" \u2014 implemented now, included in factor expressions today\n  - \"T2\" \u2014 implemented, requires v2 panel data (sector / fundamentals)\n  - \"T3\" \u2014 catalog-only; data source unavailable or operator semantics\n    out of scope (vector ops, news/options/sentiment, infix comparisons)",
         "properties": {
@@ -2998,6 +3090,334 @@
         ]
       }
     },
+    "/api/cron/alert_dispatcher": {
+      "get": {
+        "operationId": "alert_dispatcher_api_cron_alert_dispatcher_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Alert Dispatcher Api Cron Alert Dispatcher Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alert Dispatcher",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "operationId": "alert_dispatcher_api_cron_alert_dispatcher_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Alert Dispatcher Api Cron Alert Dispatcher Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alert Dispatcher",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/fast_intraday": {
+      "get": {
+        "description": "Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).\n`offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables\nmulti-shot coverage of the top tickers (e.g. 3 \u00d7 {limit:75, offset:0/75/150}).",
+        "operationId": "fast_intraday_api_cron_fast_intraday_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Fast Intraday Api Cron Fast Intraday Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fast Intraday",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).\n`offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables\nmulti-shot coverage of the top tickers (e.g. 3 \u00d7 {limit:75, offset:0/75/150}).",
+        "operationId": "fast_intraday_api_cron_fast_intraday_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Fast Intraday Api Cron Fast Intraday Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fast Intraday",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/slow_daily": {
+      "get": {
+        "description": "Run slow_daily cron. `limit=N` caps universe (\u2264300s Hobby budget).\n`offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables\nGH-Actions multi-shot full SP500 coverage (e.g. 4 \u00d7 {limit:140, offset:0/140/280/420}).",
+        "operationId": "slow_daily_api_cron_slow_daily_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Slow Daily Api Cron Slow Daily Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Slow Daily",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Run slow_daily cron. `limit=N` caps universe (\u2264300s Hobby budget).\n`offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables\nGH-Actions multi-shot full SP500 coverage (e.g. 4 \u00d7 {limit:140, offset:0/140/280/420}).",
+        "operationId": "slow_daily_api_cron_slow_daily_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Slow Daily Api Cron Slow Daily Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Slow Daily",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/dashboard": {
       "get": {
         "operationId": "legacy_dashboard_api_dashboard_get",
@@ -3052,7 +3472,7 @@
             "required": false,
             "schema": {
               "default": 20,
-              "maximum": 100,
+              "maximum": 200,
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
@@ -3127,6 +3547,67 @@
           }
         },
         "summary": "Get Stock",
+        "tags": [
+          "stock"
+        ]
+      }
+    },
+    "/api/stock/{ticker}/ohlcv": {
+      "get": {
+        "description": "Lazy OHLCV feed for the price chart. Cache headers in middleware\n(or here, future) - for now relies on FE-side staleness.",
+        "operationId": "stock_ohlcv_api_stock__ticker__ohlcv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "6mo",
+              "enum": [
+                "1mo",
+                "3mo",
+                "6mo",
+                "1y",
+                "2y",
+                "5y"
+              ],
+              "title": "Period",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OhlcvResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stock Ohlcv",
         "tags": [
           "stock"
         ]
