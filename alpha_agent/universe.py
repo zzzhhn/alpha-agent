@@ -31,6 +31,11 @@ def _load_sp500() -> list[str]:
 SP500_UNIVERSE: list[str] = _load_sp500()
 
 
-def get_watchlist(top_n: int = 100) -> list[str]:
-    """Stub: returns first top_n from SP500. M3+ reads user-specific list from Postgres."""
-    return SP500_UNIVERSE[:top_n]
+def get_watchlist(top_n: int = 100, offset: int = 0) -> list[str]:
+    """Stub: returns SP500[offset:offset+top_n]. M3+ reads user-specific list from Postgres.
+
+    `offset` enables multi-shot coverage from external schedulers (GH Actions cron
+    workflow) under Hobby 300s function timeout: one shot covers `top_n` slots,
+    successive offsets walk the universe.
+    """
+    return SP500_UNIVERSE[offset : offset + top_n]

@@ -23,18 +23,30 @@ router = APIRouter(prefix="/api/cron", tags=["cron"])
 
 @router.post("/slow_daily")
 @router.get("/slow_daily")
-async def slow_daily(limit: int | None = Query(None, ge=1, le=600)) -> dict[str, Any]:
-    """Run slow_daily cron. ?limit=N caps universe (≤300s Hobby budget)."""
+async def slow_daily(
+    limit: int | None = Query(None, ge=1, le=600),
+    offset: int | None = Query(None, ge=0, le=600),
+) -> dict[str, Any]:
+    """Run slow_daily cron. `limit=N` caps universe (≤300s Hobby budget).
+    `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
+    GH-Actions multi-shot full SP500 coverage (e.g. 4 × {limit:140, offset:0/140/280/420}).
+    """
     from api.cron.slow_daily import handler
-    return await handler(limit=limit)
+    return await handler(limit=limit, offset=offset)
 
 
 @router.post("/fast_intraday")
 @router.get("/fast_intraday")
-async def fast_intraday(limit: int | None = Query(None, ge=1, le=600)) -> dict[str, Any]:
-    """Run fast_intraday cron. ?limit=N caps watchlist (Hobby 300s budget)."""
+async def fast_intraday(
+    limit: int | None = Query(None, ge=1, le=600),
+    offset: int | None = Query(None, ge=0, le=600),
+) -> dict[str, Any]:
+    """Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).
+    `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
+    multi-shot coverage of the top tickers (e.g. 3 × {limit:75, offset:0/75/150}).
+    """
     from api.cron.fast_intraday import handler
-    return await handler(limit=limit)
+    return await handler(limit=limit, offset=offset)
 
 
 @router.post("/alert_dispatcher")

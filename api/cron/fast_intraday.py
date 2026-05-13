@@ -49,11 +49,17 @@ _ALL_MODULES = {
 }
 
 
-async def handler(limit: int | None = None) -> dict[str, Any]:
+async def handler(
+    limit: int | None = None, offset: int | None = None
+) -> dict[str, Any]:
     """Vercel function entry point. Always returns a dict (never raises).
 
     `limit`: cap watchlist size for diagnostic / Hobby-tier 300s budget.
-    None = full watchlist (top_n=100). Recommended: 10 for first test."""
+        None = full watchlist (top_n=100). Recommended: 10 for first test,
+        75 for GH Actions multi-shot (3.8s/ticker × 75 ≈ 285s, fits Hobby).
+    `offset`: start index into the watchlist. Enables multi-shot coverage:
+        3 shots of (limit=75, offset=0/75/150) covers top 225 tickers per cycle.
+    """
     from alpha_agent.universe import get_watchlist
 
     pool = await get_pool(os.environ["DATABASE_URL"])
@@ -63,7 +69,7 @@ async def handler(limit: int | None = None) -> dict[str, Any]:
     errors: list[dict] = []
     bucket = int(now.timestamp()) // 1800  # 30-min dedup window
 
-    universe = get_watchlist(top_n=limit if limit else 100)
+    universe = get_watchlist(top_n=limit if limit else 100, offset=offset or 0)
 
     async def _per_ticker(t: str) -> str:
         # Fetch all 10 signals

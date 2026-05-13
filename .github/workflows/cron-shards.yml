@@ -1,0 +1,103 @@
+name: cron-shards
+# External multi-shot cron driver.
+# Hobby Vercel function timeout = 300s; built-in cron limited to daily on Hobby.
+# This workflow calls the FastAPI cron endpoints in offset-sliced shots to
+# achieve full SP500 (~557 tickers) slow refresh + top-225 fast refresh under
+# the 300s/invocation budget.
+#
+# Endpoint shape (deployed at alpha.bobbyzhong.com via `frontend` Vercel project
+# rewrite → `alpha-agent` backend project):
+#   GET /api/cron/slow_daily?limit=N&offset=M  (5 slow signals, writes daily_signals_slow)
+#   GET /api/cron/fast_intraday?limit=N&offset=M (10 signals, writes daily_signals_fast → picks)
+
+on:
+  schedule:
+    # Daily SP500 slow refresh — 13:30 UTC = 09:30 ET pre-open, weekdays.
+    # 4 sequential shots of limit=140 cover all 557 tickers (~140s each, ~10min total).
+    - cron: '30 13 * * 1-5'
+    # Intraday fast refresh — every 2h during US market (14/16/18/20 UTC = 10am/12pm/2pm/4pm ET).
+    # 3 sequential shots of limit=75 cover top 225 (~285s each, ~15min total per cycle).
+    - cron: '0 14,16,18,20 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which job to run manually'
+        required: true
+        default: 'fast_intraday'
+        type: choice
+        options:
+          - slow_daily
+          - fast_intraday
+          - both
+
+env:
+  BACKEND_BASE: https://alpha.bobbyzhong.com
+
+jobs:
+  slow_daily:
+    if: github.event.schedule == '30 13 * * 1-5' || (github.event_name == 'workflow_dispatch' && (inputs.job == 'slow_daily' || inputs.job == 'both'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: SP500 slow refresh (4 shots × limit=140)
+        run: |
+          set -e
+          TOTAL_WRITTEN=0
+          TOTAL_ERRORS=0
+          for offset in 0 140 280 420; do
+            echo "::group::shot offset=$offset limit=140"
+            T0=$(date +%s)
+            HTTP=$(curl -s --max-time 295 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/slow_daily?limit=140&offset=$offset")
+            DUR=$(( $(date +%s) - T0 ))
+            echo "HTTP=$HTTP duration=${DUR}s"
+            cat /tmp/shot.json | head -c 800
+            echo
+            if [ "$HTTP" != "200" ]; then
+              echo "::error::shot offset=$offset returned HTTP $HTTP"
+              exit 1
+            fi
+            WRITTEN=$(python3 -c "import json; print(json.load(open('/tmp/shot.json')).get('rows_written',0))")
+            ERRORS=$(python3 -c "import json; print(len(json.load(open('/tmp/shot.json')).get('errors',[])))")
+            TOTAL_WRITTEN=$((TOTAL_WRITTEN + WRITTEN))
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERRORS))
+            echo "::endgroup::"
+            sleep 2
+          done
+          echo "## slow_daily summary" >> $GITHUB_STEP_SUMMARY
+          echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
+          echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+
+  fast_intraday:
+    if: github.event.schedule == '0 14,16,18,20 * * 1-5' || (github.event_name == 'workflow_dispatch' && (inputs.job == 'fast_intraday' || inputs.job == 'both'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Top-225 fast refresh (3 shots × limit=75)
+        run: |
+          set -e
+          TOTAL_WRITTEN=0
+          TOTAL_ERRORS=0
+          for offset in 0 75 150; do
+            echo "::group::shot offset=$offset limit=75"
+            T0=$(date +%s)
+            HTTP=$(curl -s --max-time 295 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/fast_intraday?limit=75&offset=$offset")
+            DUR=$(( $(date +%s) - T0 ))
+            echo "HTTP=$HTTP duration=${DUR}s"
+            cat /tmp/shot.json | head -c 800
+            echo
+            if [ "$HTTP" != "200" ]; then
+              echo "::error::shot offset=$offset returned HTTP $HTTP"
+              exit 1
+            fi
+            WRITTEN=$(python3 -c "import json; print(json.load(open('/tmp/shot.json')).get('rows_written',0))")
+            ERRORS=$(python3 -c "import json; print(len(json.load(open('/tmp/shot.json')).get('errors',[])))")
+            TOTAL_WRITTEN=$((TOTAL_WRITTEN + WRITTEN))
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERRORS))
+            echo "::endgroup::"
+            sleep 2
+          done
+          echo "## fast_intraday summary" >> $GITHUB_STEP_SUMMARY
+          echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
+          echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY

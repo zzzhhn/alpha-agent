@@ -36,12 +36,17 @@ async def _fetch_one(ticker: str, as_of: datetime) -> dict:
     return {name: mod.fetch_signal(ticker, as_of) for name, mod in _SLOW_MODULES.items()}
 
 
-async def handler(limit: int | None = None) -> dict[str, Any]:
+async def handler(
+    limit: int | None = None, offset: int | None = None
+) -> dict[str, Any]:
     """Vercel function entry point. Always returns a dict (never raises).
 
     `limit`: cap universe size for diagnostic / Hobby-tier 300s budget.
-    None = full SP500 universe (only works under Pro 800s timeout).
-    Recommended: 10 for first-time test, 50-80 for daily cron under Hobby.
+        None = full SP500 universe (only works under Pro 800s timeout).
+        Recommended: 10 for first-time test, 140-150 for GH Actions multi-shot.
+    `offset`: start index into SP500_UNIVERSE. Enables multi-shot coverage
+        from external schedulers: 4 shots of (limit=140, offset=0/140/280/420)
+        covers all 557 SP500 tickers under Hobby budget.
     """
     from alpha_agent.universe import SP500_UNIVERSE
 
@@ -60,7 +65,9 @@ async def handler(limit: int | None = None) -> dict[str, Any]:
         )
         return t
 
-    universe = SP500_UNIVERSE[:limit] if limit else SP500_UNIVERSE
+    start = offset or 0
+    end = (start + limit) if limit else len(SP500_UNIVERSE)
+    universe = SP500_UNIVERSE[start:end]
     results = await run_batched(universe, _per_ticker, batch_size=20)
     rows_written = sum(1 for v in results.values() if not isinstance(v, Exception))
     for t, v in results.items():
