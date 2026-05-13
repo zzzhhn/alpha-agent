@@ -58,11 +58,20 @@ async def picks_lean(limit: int = Query(20, ge=1, le=100)) -> PicksResponse:
     import traceback
     try:
         pool = await get_db_pool()
+        # CTE pattern: first reduce to one row per ticker (latest date), then
+        # rank by composite. Without the DISTINCT ON, tickers that have rows
+        # on multiple dates surface as duplicates in the response.
         rows = await pool.fetch(
             """
+            WITH latest AS (
+                SELECT DISTINCT ON (ticker)
+                    ticker, date, composite, rating, confidence, breakdown, fetched_at
+                FROM daily_signals_fast
+                WHERE composite IS NOT NULL AND composite = composite  -- exclude NaN
+                ORDER BY ticker, date DESC, fetched_at DESC
+            )
             SELECT ticker, date, composite, rating, confidence, breakdown, fetched_at
-            FROM daily_signals_fast
-            WHERE composite IS NOT NULL AND composite = composite  -- exclude NaN
+            FROM latest
             ORDER BY composite DESC
             LIMIT $1
             """,
