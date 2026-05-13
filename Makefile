@@ -103,3 +103,26 @@ m4a-acceptance:
 	  | python3 -c "import json,sys; d=json.load(sys.stdin); f=next((b for b in d['card']['breakdown'] if b['signal']=='factor'), None); assert f and isinstance(f['raw'], dict) and 'fundamentals' in f['raw'], 'factor.raw missing fundamentals'" \
 	  || (echo 'factor.raw smoke FAILED' && exit 1)
 	@echo "M4a acceptance PASS"
+
+m4b-acceptance:
+	@echo "==> Running M4b acceptance suite"
+	# Backend: alerts + brief stream endpoint tests
+	pytest tests/api/test_alerts_recent.py tests/api/test_brief_stream.py -v
+	# Frontend: deps clean, types clean, lint clean, builds
+	cd frontend && npm ci
+	cd frontend && npx tsc --noEmit
+	cd frontend && npx next lint
+	cd frontend && npx next build
+	# Smoke: hit the deployed alerts endpoint
+	@echo "==> Smoke: /api/alerts/recent?limit=5 (deployed)"
+	@curl -sS --max-time 15 "https://alpha.bobbyzhong.com/api/alerts/recent?limit=5" \
+	  | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'  alerts={len(d[\"alerts\"])}')" \
+	  || (echo 'alerts smoke FAILED' && exit 1)
+	# Smoke: confirm /api/brief/AAPL/stream rejects missing key with 422
+	@echo "==> Smoke: /api/brief/AAPL/stream rejects malformed body"
+	@code=$$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+	  -X POST -H 'content-type: application/json' \
+	  -d '{"provider":"openai"}' \
+	  "https://alpha.bobbyzhong.com/api/brief/AAPL/stream"); \
+	  if [ "$$code" != "422" ]; then echo "expected 422 got $$code"; exit 1; fi
+	@echo "M4b acceptance PASS"
