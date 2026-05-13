@@ -13,6 +13,8 @@ from datetime import datetime
 
 import numpy as np
 
+import pandas as pd
+
 from alpha_agent.signals.base import SignalScore, safe_fetch
 from alpha_agent.signals.yf_helpers import extract_next_earnings, get_ticker
 
@@ -20,14 +22,24 @@ from alpha_agent.signals.yf_helpers import extract_next_earnings, get_ticker
 def _fetch_info(ticker: str) -> tuple[dict, object]:
     """Returns (info_dict, ticker_for_calendar). Keeping the legacy
     signature so existing tests that patch _fetch_info don't break - but
-    now we also surface the Ticker for calendar extraction."""
+    now we also surface the Ticker for calendar extraction.
+
+    `Ticker.earnings_dates` may return None, an empty DataFrame, a populated
+    DataFrame, OR a list/dict depending on yfinance version + cache state.
+    We strictly require a DataFrame before indexing — anything else falls
+    through with no prior-quarter surprise enrichment (extract_next_earnings
+    handles the upcoming-earnings card independently)."""
     t = get_ticker(ticker)
     info = dict(t.info or {})
     edates = getattr(t, "earnings_dates", None)
-    if edates is not None and not edates.empty:
-        info["epsActual"] = edates["Reported EPS"].iloc[0]
-        info["epsEstimate"] = edates["EPS Estimate"].iloc[0]
-        info["earningsDate"] = [edates.index[0]]
+    if isinstance(edates, pd.DataFrame) and not edates.empty:
+        try:
+            info["epsActual"] = edates["Reported EPS"].iloc[0]
+            info["epsEstimate"] = edates["EPS Estimate"].iloc[0]
+            info["earningsDate"] = [edates.index[0]]
+        except (KeyError, IndexError, AttributeError):
+            # Shape drift in yfinance; skip surprise enrichment, keep going.
+            pass
     return info, t
 
 
