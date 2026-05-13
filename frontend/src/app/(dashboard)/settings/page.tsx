@@ -35,6 +35,8 @@ import {
   loadByok,
   saveByok,
 } from "@/lib/byok";
+import WeightsEditor from "@/components/settings/WeightsEditor";
+import WatchlistEditor from "@/components/settings/WatchlistEditor";
 
 type TestState =
   | { kind: "idle" }
@@ -359,6 +361,22 @@ export default function SettingsPage() {
               : "Vercel preview URLs and production are separate origins; credentials do not carry across."}
           </li>
         </ul>
+      </TmPane>
+
+      {/* Signal weights override — JSON editor stored in localStorage */}
+      <TmPane
+        title="SIGNAL WEIGHTS OVERRIDE"
+        meta={zh ? "M3: localStorage · M4+ 同步至服务端" : "M3: localStorage · M4+ syncs to server"}
+      >
+        <WeightsEditor />
+      </TmPane>
+
+      {/* Watchlist — localStorage ticker list used by alerts + cron priority */}
+      <TmPane
+        title="WATCHLIST"
+        meta={zh ? "intraday cron 优先处理 + /alerts 显示" : "intraday cron prioritisation + /alerts display"}
+      >
+        <WatchlistEditor />
       </TmPane>
     </TmScreen>
   );

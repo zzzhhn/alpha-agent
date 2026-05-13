@@ -1,4 +1,4 @@
-.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance
+.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance m3-acceptance
 
 test:
 	pytest tests/ -m "not slow" -v
@@ -73,3 +73,11 @@ m2-acceptance:
 	    --cov-fail-under=85 -m "not slow"
 	$(MAKE) openapi-check
 	@echo "M2 acceptance PASS (deploy.sh runs separately for actual Vercel deploy)"
+
+m3-acceptance:
+	@echo "==> Running M3 acceptance suite"
+	cd frontend && pnpm install --frozen-lockfile
+	cd frontend && pnpm tsc --noEmit
+	cd frontend && pnpm next lint
+	cd frontend && pnpm next build
+	@echo "M3 acceptance PASS (frontend builds cleanly)"

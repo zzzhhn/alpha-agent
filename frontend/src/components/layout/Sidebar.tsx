@@ -40,6 +40,7 @@ interface NavItem {
 // only (the marker glyph is determined by `pathname === item.href`,
 // not by id). All 9 routes preserved from the legacy sidebar.
 const NAV_ITEMS: ReadonlyArray<NavItem> = [
+  { id: "picks", href: "/picks", labelKey: "nav.picks" },
   { id: "data", href: "/data", labelKey: "lifecycle.data" },
   { id: "alpha", href: "/alpha", labelKey: "lifecycle.alpha" },
   { id: "signal", href: "/signal", labelKey: "lifecycle.signal" },
@@ -47,6 +48,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { id: "report", href: "/report", labelKey: "lifecycle.report" },
   { id: "zoo", href: "/factors", labelKey: "lifecycle.zoo" },
   { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
+  { id: "alerts", href: "/alerts", labelKey: "nav.alerts" },
   { id: "methodology", href: "/methodology", labelKey: "lifecycle.methodology" },
   { id: "settings", href: "/settings", labelKey: "lifecycle.settings" },
 ];
