@@ -81,6 +81,9 @@ def _classify_sentiment(title: str) -> str:
     """Keyword-rule sentiment. M4a does not call an LLM here; M4b can replace
     this with a Rich-brief enrichment step that scores headlines via the user's
     BYOK key."""
+    # TODO M4b: switch to word-boundary matching (re.search(r"\b" + w + r"\b"))
+    # or LLM scoring. Current substring match has known false-positive cases:
+    # "restructure"→cut, "waterfall"→fall, "dismiss"→miss, "mission"→miss.
     lower = title.lower()
     pos_hits = sum(1 for w in _POSITIVE_WORDS if w in lower)
     neg_hits = sum(1 for w in _NEGATIVE_WORDS if w in lower)
@@ -136,23 +139,28 @@ def extract_next_earnings(
             "revenue_estimate": _safe_float(calendar["Revenue Estimate"].iloc[0])
                 if "Revenue Estimate" in calendar else None,
         }
-    except (KeyError, IndexError, ValueError):
+    except (KeyError, IndexError, ValueError, TypeError):
         return none_payload
 
 
 def extract_ohlcv(df: pd.DataFrame) -> list[dict]:
     """yfinance.Ticker.history() DataFrame → list of {date, ohlcv} dicts
-    serialisable to JSON for the chart endpoint."""
+    serialisable to JSON for the chart endpoint.
+
+    Price fields (open/high/low/close) propagate None when the underlying
+    value is missing/NaN/Inf, so consumers can drop or gap-fill the bar.
+    Volume defaults to 0 because that's a legitimate no-trade value.
+    """
     if df is None or df.empty:
         return []
     out: list[dict] = []
     for ts, row in df.iterrows():
         out.append({
             "date": ts.strftime("%Y-%m-%d"),
-            "open": _safe_float(row.get("Open")) or 0.0,
-            "high": _safe_float(row.get("High")) or 0.0,
-            "low": _safe_float(row.get("Low")) or 0.0,
-            "close": _safe_float(row.get("Close")) or 0.0,
+            "open": _safe_float(row.get("Open")),
+            "high": _safe_float(row.get("High")),
+            "low": _safe_float(row.get("Low")),
+            "close": _safe_float(row.get("Close")),
             "volume": int(_safe_float(row.get("Volume")) or 0),
         })
     return out

@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-import pytest
 
 from alpha_agent.signals.yf_helpers import (
     extract_fundamentals,
@@ -16,12 +15,28 @@ from alpha_agent.signals.yf_helpers import (
 
 def test_get_ticker_caches_within_ttl():
     """Two calls within TTL should return the same Ticker instance."""
+    from alpha_agent.signals import yf_helpers
+    yf_helpers._cache.clear()
     with patch("yfinance.Ticker") as mock_yf:
         mock_yf.return_value = MagicMock(name="aapl_ticker")
         a = get_ticker("AAPL")
         b = get_ticker("AAPL")
     assert a is b
     assert mock_yf.call_count == 1
+
+
+def test_get_ticker_refreshes_after_ttl():
+    """Calls beyond _TTL_SECONDS create a fresh Ticker instance."""
+    from alpha_agent.signals import yf_helpers
+    yf_helpers._cache.clear()
+    with patch("alpha_agent.signals.yf_helpers.time") as mock_time, \
+         patch("yfinance.Ticker") as mock_yf:
+        mock_time.time.side_effect = [1000.0, 1601.0]
+        mock_yf.side_effect = [MagicMock(name="t1"), MagicMock(name="t2")]
+        a = get_ticker("MSFT")
+        b = get_ticker("MSFT")
+    assert a is not b
+    assert mock_yf.call_count == 2
 
 
 def test_extract_fundamentals_full_payload():
@@ -123,3 +138,17 @@ def test_extract_ohlcv_shapes_pandas_to_records():
 def test_extract_ohlcv_empty_df_returns_empty_list():
     out = extract_ohlcv(pd.DataFrame())
     assert out == []
+
+
+def test_extract_ohlcv_propagates_none_for_missing_prices():
+    """Price fields with NaN/missing must surface as None so the chart
+    consumer can choose drop vs gap-fill, not get a misleading 0.0 bar."""
+    df = pd.DataFrame(
+        {"Open": [100.0, float("nan")], "High": [102.0, 103.0],
+         "Low": [99.0, 100.5], "Close": [101.5, 102.5],
+         "Volume": [1_000_000, 1_100_000]},
+        index=pd.DatetimeIndex(["2026-05-12", "2026-05-13"]),
+    )
+    out = extract_ohlcv(df)
+    assert out[1]["open"] is None
+    assert out[1]["high"] == 103.0  # other fields untouched
