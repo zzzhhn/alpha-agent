@@ -56,3 +56,73 @@ export const postBrief = (ticker: string, body: BriefRequest) =>
     },
     BriefRequest
   >(`/api/brief/${ticker.toUpperCase()}`, body);
+
+// frontend/src/lib/api/picks.ts (additions — append after postBrief)
+
+/**
+ * Expected shape of `breakdown[signal="factor"].raw` after M4a. Block
+ * components cast via `raw as FactorRaw | null`; legacy rows from before
+ * the signal enrichment may still have raw=float, so the cast is unsafe —
+ * the block must check `typeof raw === "object" && raw !== null` first.
+ */
+export interface FundamentalsData {
+  pe_trailing: number | null;
+  pe_forward: number | null;
+  eps_ttm: number | null;
+  market_cap: number | null;
+  dividend_yield: number | null;
+  profit_margin: number | null;
+  debt_to_equity: number | null;
+  beta: number | null;
+}
+
+export interface FactorRaw {
+  z: number;
+  fundamentals: FundamentalsData | null;
+}
+
+export interface NewsItem {
+  title: string;
+  publisher: string;
+  published_at: string; // ISO 8601
+  link: string;
+  sentiment: "pos" | "neg" | "neu";
+}
+
+export interface NewsRaw {
+  n: number;
+  mean_sent: number;
+  headlines: NewsItem[];
+}
+
+export interface EarningsRaw {
+  surprise_pct: number | null;
+  days_to_earnings: number | null;
+  next_date: string | null; // YYYY-MM-DD
+  days_until: number | null;
+  eps_estimate: number | null;
+  revenue_estimate: number | null;
+}
+
+export interface OhlcvBar {
+  date: string; // YYYY-MM-DD
+  // Backend (yf_helpers.extract_ohlcv post A1 fix) propagates null when
+  // yfinance returned NaN/missing prices. Chart consumer (Task E1) must
+  // drop or gap-fill the bar.
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number;
+}
+
+export interface OhlcvResponse {
+  ticker: string;
+  period: string;
+  bars: OhlcvBar[];
+}
+
+export const fetchOhlcv = (ticker: string, period = "6mo") =>
+  apiGet<OhlcvResponse>(
+    `/api/stock/${ticker.toUpperCase()}/ohlcv?period=${period}`,
+  );
