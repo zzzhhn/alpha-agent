@@ -1,30 +1,30 @@
-import { fetchCronHealth } from "@/lib/api/alerts";
-import AlertList from "@/components/alerts/AlertList";
+import AlertTimeline from "@/components/alerts/AlertTimeline";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmSubbar, TmSubbarKV, TmSubbarSep } from "@/components/tm/TmSubbar";
 
 export const dynamic = "force-dynamic";
 
-export default async function AlertsPage() {
-  const data = await fetchCronHealth();
-  const jobCount = Object.keys(data.cron).length;
-  const totalRuns = Object.values(data.cron).reduce((sum, runs) => sum + runs.length, 0);
+interface PageProps {
+  searchParams?: { ticker?: string };
+}
+
+export default function AlertsPage({ searchParams }: PageProps) {
+  const ticker = searchParams?.ticker?.toUpperCase();
 
   return (
     <TmScreen>
       <TmSubbar>
-        <TmSubbarKV label="JOBS" value={String(jobCount)} />
-        <TmSubbarSep />
-        <TmSubbarKV label="TOTAL RUNS" value={String(totalRuns)} />
-        <TmSubbarSep />
-        <TmSubbarKV label="FEED" value="cron history · per-ticker in M4" />
+        <TmSubbarKV label="FEED" value="per-ticker timeline" />
+        {ticker ? (
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV label="FILTER" value={ticker} />
+          </>
+        ) : null}
       </TmSubbar>
 
-      <TmPane
-        title="CRON & ALERTS"
-        meta="Phase 1: cron run history — real per-ticker alert feed deferred to M4"
-      >
-        <AlertList cronRuns={data.cron} />
+      <TmPane title="ALERTS" meta="alert_queue (M4b)">
+        <AlertTimeline ticker={ticker} />
       </TmPane>
     </TmScreen>
   );
