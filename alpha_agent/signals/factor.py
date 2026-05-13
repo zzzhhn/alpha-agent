@@ -29,7 +29,21 @@ def _evaluate_for_universe(as_of: datetime, expr: str = DEFAULT_FACTOR_EXPR) -> 
     from alpha_agent.core.types import FactorSpec
 
     panel = _load_panel()
-    spec = FactorSpec(expression=expr)
+    # FactorSpec requires 6 fields beyond expression. Surfaced by F1 smoke
+    # against deployed /api/stock/AAPL: factor.raw was always null because
+    # FactorSpec(expression=...) raised ValidationError, caught silently by
+    # safe_fetch. B1 unit tests mocked _evaluate_for_universe entirely so
+    # they didn't exercise this constructor — the FactorSpec regression
+    # test below guards against drift.
+    spec = FactorSpec(
+        name="default_composite",
+        hypothesis="Cross-sectional momentum minus volatility composite for SP500.",
+        expression=expr,
+        operators_used=["rank", "ts_mean", "ts_std"],
+        lookback=60,
+        universe="SP500",
+        justification="Default factor for Phase 1 fast cron when no user override is provided.",
+    )
     scores = evaluate_cross_section(panel, spec, as_of_index=-1)
     arr = np.array(list(scores.values()), dtype=float)
     mu, sigma = np.nanmean(arr), np.nanstd(arr)

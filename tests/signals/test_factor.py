@@ -48,3 +48,31 @@ def test_factor_signal_fundamentals_unavailable_keeps_z():
         out = fetch_signal("AAPL", datetime.now(UTC))
     assert out["z"] != 0.0  # z survives even though info fetch failed
     assert out["raw"]["fundamentals"] is None
+
+
+def test_factor_spec_construction_does_not_raise():
+    """Regression guard for the M4a F1 finding.
+
+    The prior implementation called FactorSpec(expression=...) but FactorSpec
+    requires 6 other fields. ValidationError was caught silently by safe_fetch
+    in production, leaving factor.raw=None. The B1 happy-path test mocked
+    _evaluate_for_universe entirely so it never exercised the constructor.
+
+    This test only mocks the panel + kernel so FactorSpec construction runs
+    for real — it will fail if anyone removes a required arg from the call
+    site in factor.py.
+    """
+    from unittest.mock import MagicMock
+
+    from alpha_agent.signals.factor import _evaluate_for_universe
+
+    with patch(
+        "alpha_agent.factor_engine.factor_backtest._load_panel",
+        return_value=MagicMock(),
+    ), patch(
+        "alpha_agent.factor_engine.kernel.evaluate_cross_section",
+        return_value={"AAPL": 1.0, "MSFT": 0.5, "GOOG": -1.0},
+    ):
+        out = _evaluate_for_universe(datetime.now(UTC))
+    assert "AAPL" in out
+    assert -3.0 <= out["AAPL"] <= 3.0
