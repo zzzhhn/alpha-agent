@@ -5,6 +5,7 @@ import type { RatingCard } from "@/lib/api/picks";
 import RatingBadge from "./RatingBadge";
 import ActionBox from "./ActionBox";
 import LeanThesis from "./LeanThesis";
+import RichThesis from "./RichThesis";
 import AttributionRadar from "./AttributionRadar";
 import AttributionTable from "./AttributionTable";
 import PriceChart from "./PriceChart";
@@ -53,6 +54,7 @@ export default function StockCardLayout({
       {/* Right scroll */}
       <main className="col-span-9 space-y-8">
         <LeanThesis card={card} />
+        <RichThesis ticker={card.ticker} />
         <section>
           <h2 className="text-lg font-semibold mb-3 text-tm-fg">Signal Attribution</h2>
           <div className="grid grid-cols-12 gap-4">
