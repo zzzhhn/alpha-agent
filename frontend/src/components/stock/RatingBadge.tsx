@@ -14,9 +14,13 @@ export default function RatingBadge({
   composite,
 }: {
   rating: string;
-  confidence: number;
-  composite: number;
+  confidence: number | null;
+  composite: number | null;
 }) {
+  // NaN/Inf were sanitized to null at the storage boundary; coalesce to 0 here.
+  const c = typeof composite === "number" && isFinite(composite) ? composite : 0;
+  const conf =
+    typeof confidence === "number" && isFinite(confidence) ? confidence : 0;
   return (
     <div className="space-y-2">
       <div
@@ -25,18 +29,18 @@ export default function RatingBadge({
           TIER_COLOR[rating] ?? "bg-zinc-700 text-zinc-200",
         )}
       >
-        {rating} · composite {composite >= 0 ? "+" : ""}
-        {composite.toFixed(2)}σ
+        {rating} · composite {c >= 0 ? "+" : ""}
+        {c.toFixed(2)}σ
       </div>
       <div className="space-y-0.5">
         <div className="flex justify-between text-xs">
           <span className="text-zinc-400">confidence</span>
-          <span>{(confidence * 100).toFixed(0)}%</span>
+          <span>{(conf * 100).toFixed(0)}%</span>
         </div>
         <div className="h-1.5 w-full bg-zinc-800 rounded">
           <div
             className="h-full bg-blue-500 rounded"
-            style={{ width: `${confidence * 100}%` }}
+            style={{ width: `${conf * 100}%` }}
           />
         </div>
       </div>

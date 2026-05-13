@@ -13,14 +13,19 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
   const sorted = useMemo(() => {
     const out = [...card.breakdown];
     out.sort((a, b) => {
-      const av = (a as unknown as Record<string, unknown>)[sortKey];
-      const bv = (b as unknown as Record<string, unknown>)[sortKey];
-      if (typeof av === "number" && typeof bv === "number") {
+      const rawA = (a as unknown as Record<string, unknown>)[sortKey];
+      const rawB = (b as unknown as Record<string, unknown>)[sortKey];
+      // Null-safe numeric coercion: NaN/Inf were sanitized to null by the
+      // storage layer; treat as 0 for ordering purposes.
+      const numericKeys: SortKey[] = ["z", "weight", "contribution"];
+      if (numericKeys.includes(sortKey)) {
+        const av = typeof rawA === "number" ? rawA : 0;
+        const bv = typeof rawB === "number" ? rawB : 0;
         return desc ? bv - av : av - bv;
       }
       return desc
-        ? String(bv).localeCompare(String(av))
-        : String(av).localeCompare(String(bv));
+        ? String(rawB).localeCompare(String(rawA))
+        : String(rawA).localeCompare(String(rawB));
     });
     return out;
   }, [card.breakdown, sortKey, desc]);
@@ -79,29 +84,33 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
             key={b.signal}
             className={clsx(
               "border-b border-zinc-900",
-              b.contribution === 0 ? "opacity-40" : "",
+              (b.contribution ?? 0) === 0 ? "opacity-40" : "",
             )}
           >
             <td className="px-2 py-1">{b.signal}</td>
             <td className="px-2 py-1 text-right font-mono">
-              {b.z >= 0 ? "+" : ""}
-              {b.z.toFixed(2)}
+              {(() => {
+                const z = b.z ?? 0;
+                return `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
+              })()}
             </td>
             <td className="px-2 py-1 text-right font-mono">
-              {b.weight.toFixed(2)}
+              {(b.weight ?? 0).toFixed(2)}
             </td>
             <td
               className={clsx(
                 "px-2 py-1 text-right font-mono",
-                b.contribution > 0
+                (b.contribution ?? 0) > 0
                   ? "text-emerald-300"
-                  : b.contribution < 0
+                  : (b.contribution ?? 0) < 0
                     ? "text-rose-300"
                     : "",
               )}
             >
-              {b.contribution >= 0 ? "+" : ""}
-              {b.contribution.toFixed(2)}
+              {(() => {
+                const c = b.contribution ?? 0;
+                return `${c >= 0 ? "+" : ""}${c.toFixed(2)}`;
+              })()}
             </td>
             <td className="px-2 py-1 text-zinc-500">{b.source}</td>
             <td className="px-2 py-1 text-zinc-500">

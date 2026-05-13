@@ -28,8 +28,9 @@ const ResponsiveContainer = dynamic(
 export default function AttributionRadar({ card }: { card: RatingCard }) {
   const data = card.breakdown.map((b) => ({
     signal: b.signal,
-    z: Math.abs(b.z),
+    z: Math.abs(b.z ?? 0),
   }));
+  const composite = card.composite_score ?? 0;
 
   // Fixed-height parent required — ResponsiveContainer reads offsetWidth;
   // without it the container collapses to 0 in grid/flex parents (CLAUDE.md memory).
@@ -51,8 +52,8 @@ export default function AttributionRadar({ card }: { card: RatingCard }) {
         </RadarChart>
       </ResponsiveContainer>
       <div className="text-center text-xs text-zinc-500 mt-1">
-        composite {card.composite_score >= 0 ? "+" : ""}
-        {card.composite_score.toFixed(2)}σ
+        composite {composite >= 0 ? "+" : ""}
+        {composite.toFixed(2)}σ
       </div>
     </div>
   );

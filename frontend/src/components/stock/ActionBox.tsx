@@ -17,7 +17,10 @@ export default function ActionBox({ card }: { card: RatingCard }) {
       atr14: tech?.atr ?? null,
       analystTarget: analyst?.target ?? null,
       high180d: null,
-      confidence: card.confidence,
+      confidence:
+        typeof card.confidence === "number" && isFinite(card.confidence)
+          ? card.confidence
+          : 0,
     });
   }, [card]);
 

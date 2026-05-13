@@ -6,6 +6,7 @@ recent row is older than 24 hours.  Spec §7.2.
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Path
@@ -13,6 +14,21 @@ from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
+
+
+def _safe_float(v, default: float = 0.0) -> float:
+    """NaN/Inf/None → default. Mirrors picks.py — legacy DB rows may
+    contain NaN composite/confidence written before storage-side
+    sanitization was added."""
+    if v is None:
+        return default
+    try:
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except (TypeError, ValueError):
+        return default
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
 
@@ -59,9 +75,9 @@ async def get_stock(
 
     card = FullCard(
         ticker=row["ticker"],
-        rating=row["rating"],
-        confidence=row["confidence"],
-        composite_score=row["composite"],
+        rating=row["rating"] or "HOLD",
+        confidence=_safe_float(row["confidence"]),
+        composite_score=_safe_float(row["composite"]),
         as_of=fetched_at.isoformat(),
         top_drivers=top_drivers(breakdown_data),
         top_drags=top_drags(breakdown_data),
