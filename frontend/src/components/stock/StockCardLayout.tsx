@@ -22,17 +22,17 @@ export default function StockCardLayout({
     <div className="grid grid-cols-12 gap-6 px-4 py-6">
       {/* Left rail (sticky) */}
       <aside className="col-span-3 sticky top-4 self-start space-y-4">
-        <div className="text-2xl font-bold">{card.ticker}</div>
+        <div className="text-2xl font-bold text-tm-fg">{card.ticker}</div>
         <RatingBadge
           rating={card.rating}
           confidence={card.confidence}
           composite={card.composite_score}
         />
         <ActionBox card={card} />
-        <div className="text-xs text-zinc-500 space-y-0.5">
+        <div className="text-xs text-tm-muted space-y-0.5">
           <div>as of {new Date(card.as_of).toLocaleString()}</div>
           {stale ? (
-            <div className="rounded bg-amber-500/15 px-2 py-1 text-amber-300">
+            <div className="rounded bg-tm-warn-soft px-2 py-1 text-tm-warn">
               ⚠ data &gt; 24h old
             </div>
           ) : null}
@@ -43,7 +43,7 @@ export default function StockCardLayout({
       <main className="col-span-9 space-y-8">
         <LeanThesis card={card} />
         <section>
-          <h2 className="text-lg font-semibold mb-3">Signal Attribution</h2>
+          <h2 className="text-lg font-semibold mb-3 text-tm-fg">Signal Attribution</h2>
           <div className="grid grid-cols-12 gap-4">
             <div className="col-span-4">
               <AttributionRadar card={card} />

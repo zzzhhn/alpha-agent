@@ -34,14 +34,16 @@ export default function AttributionRadar({ card }: { card: RatingCard }) {
 
   // Fixed-height parent required — ResponsiveContainer reads offsetWidth;
   // without it the container collapses to 0 in grid/flex parents (CLAUDE.md memory).
+  // Colors: mid-tone gray for grid/labels stays legible across both themes.
+  // Accent stroke is blue-500 which holds contrast on both light cream + dark bg.
   return (
-    <div style={{ width: "100%", height: 280 }}>
+    <div style={{ width: "100%", height: 280 }} className="text-tm-fg-2">
       <ResponsiveContainer>
         <RadarChart data={data}>
-          <PolarGrid stroke="#3f3f46" />
+          <PolarGrid stroke="#9ca3af" strokeOpacity={0.4} />
           <PolarAngleAxis
             dataKey="signal"
-            tick={{ fontSize: 10, fill: "#a1a1aa" }}
+            tick={{ fontSize: 10, fill: "currentColor" }}
           />
           <Radar
             dataKey="z"
@@ -51,7 +53,7 @@ export default function AttributionRadar({ card }: { card: RatingCard }) {
           />
         </RadarChart>
       </ResponsiveContainer>
-      <div className="text-center text-xs text-zinc-500 mt-1">
+      <div className="text-center text-xs text-tm-muted mt-1">
         composite {composite >= 0 ? "+" : ""}
         {composite.toFixed(2)}σ
       </div>

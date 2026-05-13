@@ -42,40 +42,21 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
   return (
     <table className="w-full text-xs border-collapse">
       <thead>
-        <tr className="text-zinc-400 border-b border-zinc-800">
-          <SortTh
-            onClick={() => setSort("signal")}
-            active={sortKey === "signal"}
-            desc={desc}
-          >
+        <tr className="text-tm-fg-2 border-b border-tm-rule">
+          <SortTh onClick={() => setSort("signal")} active={sortKey === "signal"} desc={desc}>
             signal
           </SortTh>
-          <SortTh
-            onClick={() => setSort("z")}
-            active={sortKey === "z"}
-            desc={desc}
-            numeric
-          >
+          <SortTh onClick={() => setSort("z")} active={sortKey === "z"} desc={desc} numeric>
             z
           </SortTh>
-          <SortTh
-            onClick={() => setSort("weight")}
-            active={sortKey === "weight"}
-            desc={desc}
-            numeric
-          >
+          <SortTh onClick={() => setSort("weight")} active={sortKey === "weight"} desc={desc} numeric>
             w
           </SortTh>
-          <SortTh
-            onClick={() => setSort("contribution")}
-            active={sortKey === "contribution"}
-            desc={desc}
-            numeric
-          >
+          <SortTh onClick={() => setSort("contribution")} active={sortKey === "contribution"} desc={desc} numeric>
             contrib
           </SortTh>
-          <th className="px-2 py-1.5 text-left">source</th>
-          <th className="px-2 py-1.5 text-left">time</th>
+          <th className="px-2 py-1.5 text-left text-tm-fg-2">source</th>
+          <th className="px-2 py-1.5 text-left text-tm-fg-2">time</th>
         </tr>
       </thead>
       <tbody>
@@ -83,28 +64,28 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
           <tr
             key={b.signal}
             className={clsx(
-              "border-b border-zinc-900",
+              "border-b border-tm-rule",
               (b.contribution ?? 0) === 0 ? "opacity-40" : "",
             )}
           >
-            <td className="px-2 py-1">{b.signal}</td>
-            <td className="px-2 py-1 text-right font-mono">
+            <td className="px-2 py-1 text-tm-fg">{b.signal}</td>
+            <td className="px-2 py-1 text-right font-mono text-tm-fg">
               {(() => {
                 const z = b.z ?? 0;
                 return `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
               })()}
             </td>
-            <td className="px-2 py-1 text-right font-mono">
+            <td className="px-2 py-1 text-right font-mono text-tm-fg">
               {(b.weight ?? 0).toFixed(2)}
             </td>
             <td
               className={clsx(
                 "px-2 py-1 text-right font-mono",
                 (b.contribution ?? 0) > 0
-                  ? "text-emerald-300"
+                  ? "text-tm-pos"
                   : (b.contribution ?? 0) < 0
-                    ? "text-rose-300"
-                    : "",
+                    ? "text-tm-neg"
+                    : "text-tm-fg",
               )}
             >
               {(() => {
@@ -112,8 +93,8 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
                 return `${c >= 0 ? "+" : ""}${c.toFixed(2)}`;
               })()}
             </td>
-            <td className="px-2 py-1 text-zinc-500">{b.source}</td>
-            <td className="px-2 py-1 text-zinc-500">
+            <td className="px-2 py-1 text-tm-muted">{b.source}</td>
+            <td className="px-2 py-1 text-tm-muted">
               {new Date(b.timestamp).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -145,7 +126,7 @@ function SortTh({
       className={clsx(
         "cursor-pointer px-2 py-1.5 select-none",
         numeric ? "text-right" : "text-left",
-        active ? "text-zinc-200" : "",
+        active ? "text-tm-fg" : "text-tm-fg-2",
       )}
     >
       {children}

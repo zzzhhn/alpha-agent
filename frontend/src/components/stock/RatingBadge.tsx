@@ -1,11 +1,13 @@
 import clsx from "clsx";
 
+// tm-* tokens are theme-aware (defined under [data-theme="light"] +
+// dark default), so badge stays legible in both modes.
 const TIER_COLOR: Record<string, string> = {
-  BUY: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  OW: "bg-emerald-500/10 text-emerald-200 border-emerald-500/30",
-  HOLD: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
-  UW: "bg-rose-500/10 text-rose-200 border-rose-500/30",
-  SELL: "bg-rose-500/20 text-rose-300 border-rose-500/40",
+  BUY: "bg-tm-accent-soft text-tm-pos border-tm-pos",
+  OW: "bg-tm-accent-soft text-tm-pos border-tm-pos/60",
+  HOLD: "bg-tm-bg-3 text-tm-fg border-tm-rule-2",
+  UW: "bg-tm-neg-soft text-tm-neg border-tm-neg/60",
+  SELL: "bg-tm-neg-soft text-tm-neg border-tm-neg",
 };
 
 export default function RatingBadge({
@@ -34,12 +36,12 @@ export default function RatingBadge({
       </div>
       <div className="space-y-0.5">
         <div className="flex justify-between text-xs">
-          <span className="text-zinc-400">confidence</span>
-          <span>{(conf * 100).toFixed(0)}%</span>
+          <span className="text-tm-fg-2">confidence</span>
+          <span className="text-tm-fg font-mono">{(conf * 100).toFixed(0)}%</span>
         </div>
-        <div className="h-1.5 w-full bg-zinc-800 rounded">
+        <div className="h-1.5 w-full bg-tm-bg-3 rounded">
           <div
-            className="h-full bg-blue-500 rounded"
+            className="h-full bg-tm-accent rounded"
             style={{ width: `${conf * 100}%` }}
           />
         </div>

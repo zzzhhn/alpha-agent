@@ -28,10 +28,10 @@ export default function ActionBox({ card }: { card: RatingCard }) {
 
   return (
     <div className={dimmed ? "opacity-50" : ""}>
-      <div className="rounded border border-zinc-700 bg-zinc-900/60 p-3 space-y-1.5 text-sm">
-        <div className="font-semibold text-amber-300">Action</div>
+      <div className="rounded border border-tm-rule-2 bg-tm-bg-2 p-3 space-y-1.5 text-sm">
+        <div className="font-semibold text-tm-warn">Action</div>
         {dimmed ? (
-          <div className="text-xs text-amber-400">
+          <div className="text-xs text-tm-warn">
             ⚠ R:R&lt;1.5 — wait for better entry
           </div>
         ) : null}
@@ -69,8 +69,8 @@ export default function ActionBox({ card }: { card: RatingCard }) {
 function ActionRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-xs">
-      <span className="text-zinc-500">{label}</span>
-      <span className="font-mono">{value}</span>
+      <span className="text-tm-fg-2">{label}</span>
+      <span className="font-mono text-tm-fg">{value}</span>
     </div>
   );
 }
