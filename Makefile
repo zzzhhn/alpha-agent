@@ -1,4 +1,4 @@
-.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance m3-acceptance
+.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance m3-acceptance m4a-acceptance
 
 test:
 	pytest tests/ -m "not slow" -v
@@ -81,3 +81,25 @@ m3-acceptance:
 	cd frontend && pnpm next lint
 	cd frontend && pnpm next build
 	@echo "M3 acceptance PASS (frontend builds cleanly)"
+
+m4a-acceptance:
+	@echo "==> Running M4a acceptance suite"
+	# Backend: signal fetcher + ohlcv endpoint tests
+	pytest tests/signals/test_yf_helpers.py tests/signals/test_factor.py \
+	       tests/signals/test_news.py tests/signals/test_earnings.py \
+	       tests/api/test_stock_ohlcv.py -v
+	# Frontend: deps clean, types clean, lint clean, builds
+	cd frontend && npm ci
+	cd frontend && npx tsc --noEmit
+	cd frontend && npx next lint
+	cd frontend && npx next build
+	# Smoke: hit the deployed endpoints to confirm production parity
+	@echo "==> Smoke: /api/stock/AAPL/ohlcv (deployed)"
+	@curl -sS --max-time 30 "https://alpha.bobbyzhong.com/api/stock/AAPL/ohlcv?period=6mo" \
+	  | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'  bars={len(d[\"bars\"])}, period={d[\"period\"]}')" \
+	  || (echo 'ohlcv smoke FAILED' && exit 1)
+	@echo "==> Smoke: /api/stock/AAPL has factor.raw.fundamentals"
+	@curl -sS --max-time 15 "https://alpha.bobbyzhong.com/api/stock/AAPL" \
+	  | python3 -c "import json,sys; d=json.load(sys.stdin); f=next((b for b in d['card']['breakdown'] if b['signal']=='factor'), None); assert f and isinstance(f['raw'], dict) and 'fundamentals' in f['raw'], 'factor.raw missing fundamentals'" \
+	  || (echo 'factor.raw smoke FAILED' && exit 1)
+	@echo "M4a acceptance PASS"
