@@ -91,3 +91,78 @@ async def post_brief(
         thesis=thesis,
         rendered_at=row["fetched_at"].isoformat(),
     )
+
+
+import asyncio
+
+from fastapi.responses import StreamingResponse
+
+from alpha_agent.llm.brief_streamer import stream_brief
+
+
+class StreamBriefRequest(BaseModel):
+    provider: Literal["openai", "anthropic", "kimi", "ollama"]
+    api_key: str = Field(min_length=1, repr=False)
+    model: str | None = None
+    base_url: str | None = None
+
+
+def _sse_format(event: dict) -> bytes:
+    """Serialize one event as a single SSE `data:` line. Keep newline-
+    delimited JSON inside the data field so the client parses
+    deterministically."""
+    return f"data: {json.dumps(event)}\n\n".encode("utf-8")
+
+
+@router.post("/{ticker}/stream")
+async def post_brief_stream(
+    payload: StreamBriefRequest,
+    ticker: str = Path(min_length=1, max_length=10),
+) -> StreamingResponse:
+    """SSE-streaming Rich brief. Client posts with BYOK key in body."""
+    ticker = ticker.upper()
+    pool = await get_db_pool()
+    row = await pool.fetchrow(
+        "SELECT ticker, rating, composite, breakdown, fetched_at "
+        "FROM daily_signals_fast WHERE ticker = $1 "
+        "ORDER BY fetched_at DESC LIMIT 1",
+        ticker,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
+
+    breakdown: list[dict] = json.loads(row["breakdown"]).get("breakdown", [])
+    composite = float(row["composite"]) if row["composite"] is not None else 0.0
+    rating = row["rating"] or "HOLD"
+
+    async def generator():
+        try:
+            async for event in stream_brief(
+                provider=payload.provider,
+                api_key=payload.api_key,
+                ticker=ticker,
+                rating=rating,
+                composite=composite,
+                breakdown=breakdown,
+                model=payload.model,
+                base_url=payload.base_url,
+            ):
+                yield _sse_format(event)
+                # tiny await so the runtime flushes
+                await asyncio.sleep(0)
+        except Exception as e:
+            # Sanitize: never echo the api_key. type(e).__name__ + str(e) is
+            # enough for the client to act on (429, auth, etc.).
+            yield _sse_format({
+                "type": "error",
+                "message": f"{type(e).__name__}: {str(e)[:200]}",
+            })
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",  # nginx; harmless on Vercel
+        },
+    )

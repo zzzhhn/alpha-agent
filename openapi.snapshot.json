@@ -2174,6 +2174,53 @@
         "title": "StockResponse",
         "type": "object"
       },
+      "StreamBriefRequest": {
+        "properties": {
+          "api_key": {
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "enum": [
+              "openai",
+              "anthropic",
+              "kimi",
+              "ollama"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key"
+        ],
+        "title": "StreamBriefRequest",
+        "type": "object"
+      },
       "Thesis": {
         "properties": {
           "bear": {
@@ -3085,6 +3132,59 @@
           }
         },
         "summary": "Post Brief",
+        "tags": [
+          "brief"
+        ]
+      }
+    },
+    "/api/brief/{ticker}/stream": {
+      "post": {
+        "description": "SSE-streaming Rich brief. Client posts with BYOK key in body.",
+        "operationId": "post_brief_stream_api_brief__ticker__stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "maxLength": 10,
+              "minLength": 1,
+              "title": "Ticker",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamBriefRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Brief Stream",
         "tags": [
           "brief"
         ]
