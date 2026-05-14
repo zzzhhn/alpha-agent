@@ -202,6 +202,16 @@ except Exception as e:
     _m2_load_errors["alerts"] = msg
     print(f"✗ alerts routes: {msg}", file=sys.stderr, flush=True)
 
+try:
+    from alpha_agent.api.routes.user import router as user_router
+    app.include_router(user_router)
+    print(f"✓ user routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    _m2_load_errors["user"] = msg
+    print(f"✗ user routes: {msg}", file=sys.stderr, flush=True)
+
 
 @app.get("/api/health")
 async def health() -> dict:
