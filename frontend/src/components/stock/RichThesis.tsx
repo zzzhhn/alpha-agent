@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Square, AlertTriangle } from "lucide-react";
-import { loadByok, hasByok } from "@/lib/byok";
+import { useSession } from "next-auth/react";
 import { streamBrief } from "@/lib/api/streamBrief";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
 
@@ -19,7 +19,7 @@ const EMPTY_SECTIONS: Sections = { summary: "", bull: "", bear: "" };
 
 export default function RichThesis({ ticker }: { ticker: string }) {
   const [locale, setLocale] = useState<Locale>("zh");
-  const [keyPresent, setKeyPresent] = useState(false);
+  const { status: authStatus } = useSession();
   const [status, setStatus] = useState<Status>("idle");
   const [sections, setSections] = useState<Sections>(EMPTY_SECTIONS);
   const [errMsg, setErrMsg] = useState<string>("");
@@ -27,15 +27,9 @@ export default function RichThesis({ ticker }: { ticker: string }) {
 
   useEffect(() => {
     setLocale(getLocaleFromStorage());
-    setKeyPresent(hasByok());
   }, []);
 
   const onGenerate = useCallback(async () => {
-    const creds = loadByok();
-    if (!creds) {
-      setKeyPresent(false);
-      return;
-    }
     setStatus("streaming");
     setSections(EMPTY_SECTIONS);
     setErrMsg("");
@@ -44,16 +38,7 @@ export default function RichThesis({ ticker }: { ticker: string }) {
     abortRef.current = ac;
 
     try {
-      for await (const ev of streamBrief(
-        ticker,
-        {
-          provider: creds.provider,
-          api_key: creds.apiKey,
-          model: creds.model,
-          base_url: creds.baseUrl,
-        },
-        ac.signal,
-      )) {
+      for await (const ev of streamBrief(ticker, {}, ac.signal)) {
         if (ev.type === "done") {
           setStatus("done");
           break;
@@ -83,13 +68,6 @@ export default function RichThesis({ ticker }: { ticker: string }) {
     abortRef.current?.abort();
   }, []);
 
-  // Re-read key presence whenever a storage event fires (multi-tab edit).
-  useEffect(() => {
-    const handler = () => setKeyPresent(hasByok());
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
-
   const hasContent =
     sections.summary || sections.bull || sections.bear;
 
@@ -100,7 +78,7 @@ export default function RichThesis({ ticker }: { ticker: string }) {
           <Sparkles aria-hidden className="w-4 h-4 text-tm-accent" strokeWidth={1.75} />
           {t(locale, "rich.title")}
         </h2>
-        {keyPresent ? (
+        {authStatus === "authenticated" ? (
           <div className="flex items-center gap-2">
             {status === "streaming" ? (
               <button
@@ -123,14 +101,14 @@ export default function RichThesis({ ticker }: { ticker: string }) {
               </button>
             )}
           </div>
-        ) : (
+        ) : authStatus === "unauthenticated" ? (
           <Link
-            href="/settings"
+            href={`/signin?callbackUrl=/stock/${ticker}`}
             className="text-xs text-tm-accent hover:underline"
           >
             {t(locale, "rich.no_key_hint")}
           </Link>
-        )}
+        ) : null}
       </div>
 
       {status === "streaming" ? (

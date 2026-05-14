@@ -3,7 +3,6 @@
 // SSE-via-fetch reader. EventSource is GET-only + no headers, so we POST
 // + read the ReadableStream + parse 'data: ' lines manually. Returns an
 // async generator yielding decoded events; caller `for await`s over it.
-import type { LLMProvider } from "@/lib/byok";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app";
@@ -14,20 +13,18 @@ export type BriefEvent =
   | { type: "error"; message: string };
 
 export interface StreamBriefBody {
-  provider: LLMProvider;
-  api_key: string;
-  model?: string;
-  base_url?: string;
+  model_override?: string;
 }
 
 export async function* streamBrief(
   ticker: string,
-  body: StreamBriefBody,
+  body: StreamBriefBody = {},
   signal?: AbortSignal,
 ): AsyncGenerator<BriefEvent, void, void> {
   const r = await fetch(`${API_BASE}/api/brief/${ticker.toUpperCase()}/stream`, {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: "include", // same-origin JWT cookie -> Bearer at the rewrite
     body: JSON.stringify(body),
     signal,
   });
