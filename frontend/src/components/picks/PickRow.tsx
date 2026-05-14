@@ -45,7 +45,7 @@ export default function PickRow({ rank, card }: { rank: number; card: RatingCard
         {(conf * 100).toFixed(0)}%
       </td>
       <td className="px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-muted">
-        {card.top_drivers.slice(0, 3).join(" · ")}
+        {(card.top_drivers ?? []).slice(0, 3).join(" · ")}
       </td>
     </tr>
   );
