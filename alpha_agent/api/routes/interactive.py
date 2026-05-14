@@ -195,7 +195,7 @@ async def translate_hypothesis(
 ) -> HypothesisTranslateResponse:
     """T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.
 
-    Phase 4 BYOK — `llm` is built from the authenticated user's stored
+    Phase 4 BYOK: `llm` is built from the authenticated user's stored
     BYOK row (decrypted server-side). Auth required; no X-LLM-* headers.
     """
 
