@@ -1,33 +1,31 @@
-"""LiteLLM-backed streaming generator for the Rich brief endpoint.
+"""Section-emitting generator for the Rich brief endpoint.
 
-Wraps the existing `litellm.acompletion(stream=True, ...)` interface so the
-FastAPI route can `async for` over normalized `{type, delta}` events without
-caring which provider (OpenAI / Anthropic / Kimi / Ollama) the user picked.
+This used to call `litellm.acompletion(stream=True, ...)` directly, which
+reimplemented provider routing and silently missed the Kimi-For-Coding
+User-Agent gate (Kimi allow-lists coding-agent UAs; LiteLLM's own UA gets
+rejected with a 400). The fix: reuse `_build_byok_client` - the single
+provider router that `get_llm_client` also uses - so Kimi goes through the
+hand-rolled `KimiClient` (correct UA, Anthropic-compat `/messages`) exactly
+like every other authenticated LLM route.
 
-Key handling: api_key is a request-only parameter. We pass it directly to
-LiteLLM and never store, never log, never include in error payloads. The
-exception path returns the type name + a sanitized message (no key prefix).
+Trade-off: the legacy `KimiClient` exposes only a one-shot `chat()`, no
+streaming. So the brief is fetched in one call, then split into
+`[SUMMARY]`/`[BULL]`/`[BEAR]` sections and emitted as discrete SSE events.
+The client UI is unchanged - it already keys off the section markers.
+
+Key handling: api_key is request-only. It is passed straight into the
+per-request client and never stored, logged, or echoed into error payloads.
 """
 from __future__ import annotations
 
-from typing import AsyncIterator, Literal
+import json
+from typing import AsyncIterator
 
-import litellm
-
-Provider = Literal["openai", "anthropic", "kimi", "ollama"]
-
-_DEFAULT_MODEL: dict[Provider, str] = {
-    "openai": "gpt-4o-mini",
-    "anthropic": "claude-3-5-haiku-latest",
-    "kimi": "openai/kimi-for-coding",
-    "ollama": "ollama/llama3.1",
-}
-_DEFAULT_BASE: dict[Provider, str | None] = {
-    "openai": None,
-    "anthropic": None,
-    "kimi": "https://api.kimi.com/coding/v1",
-    "ollama": "http://localhost:11434",
-}
+# `_build_byok_client` is the one place that knows Kimi must bypass LiteLLM.
+# Importing it (rather than re-deriving provider routing here) is what keeps
+# this module from drifting out of sync again.
+from alpha_agent.api.byok import _build_byok_client
+from alpha_agent.llm.base import Message
 
 SYSTEM_PROMPT = """You are a sober equity research analyst writing a brief for a retail trader.
 
@@ -43,9 +41,14 @@ Strict rules:
 - Do NOT include any prefatory or closing commentary outside the three sections.
 - Format each section header as `[SUMMARY]`, `[BULL]`, `[BEAR]` on its own line so the client can split sections deterministically."""
 
+_SECTION_MARKERS: tuple[tuple[str, str], ...] = (
+    ("[SUMMARY]", "summary"),
+    ("[BULL]", "bull"),
+    ("[BEAR]", "bear"),
+)
+
 
 def _build_user_prompt(ticker: str, rating: str, composite: float, breakdown: list[dict]) -> str:
-    import json
     return (
         f"Ticker: {ticker}\n"
         f"Rating: {rating}\n"
@@ -54,9 +57,40 @@ def _build_user_prompt(ticker: str, rating: str, composite: float, breakdown: li
     )
 
 
+def _split_sections(text: str) -> list[dict]:
+    """Split a full LLM response into ordered {type, delta} section events.
+
+    Sections are delimited by the `[SUMMARY]`/`[BULL]`/`[BEAR]` header
+    markers the system prompt mandates. Any text before the first marker is
+    attributed to `summary` (defensive: the model occasionally adds a stray
+    preface). If no markers are present at all, the whole response is
+    emitted as a single `summary` event so the client still renders it.
+    """
+    found = sorted(
+        (idx, marker, section)
+        for marker, section in _SECTION_MARKERS
+        if (idx := text.find(marker)) != -1
+    )
+    if not found:
+        body = text.strip()
+        return [{"type": "summary", "delta": body}] if body else []
+
+    events: list[dict] = []
+    pre = text[: found[0][0]].strip()
+    if pre:
+        events.append({"type": "summary", "delta": pre})
+    for i, (idx, marker, section) in enumerate(found):
+        start = idx + len(marker)
+        end = found[i + 1][0] if i + 1 < len(found) else len(text)
+        body = text[start:end].strip()
+        if body:
+            events.append({"type": section, "delta": body})
+    return events
+
+
 async def stream_brief(
     *,
-    provider: Provider,
+    provider: str,
     api_key: str,
     ticker: str,
     rating: str,
@@ -65,63 +99,36 @@ async def stream_brief(
     model: str | None = None,
     base_url: str | None = None,
 ) -> AsyncIterator[dict]:
-    """Async generator yielding {type, delta} dicts.
+    """Async generator yielding {type, delta} dicts, terminated by {type: "done"}.
 
-    Yields sections tagged by header markers in the LLM output: the streamer
-    tracks the current section as the LLM emits `[SUMMARY]` / `[BULL]` /
-    `[BEAR]` tokens. Final yield is `{type: "done"}`.
+    Builds a per-request LLM client via the shared `_build_byok_client`
+    router (so Kimi correctly bypasses LiteLLM), runs one `chat()` call, and
+    emits the result as `summary`/`bull`/`bear` section events.
 
     Raises:
-        RuntimeError on upstream failure (caller wraps into SSE error event).
+        Upstream client errors propagate to the caller, which wraps them
+        into a sanitized SSE error event.
     """
-    chosen_model = model or _DEFAULT_MODEL[provider]
-    chosen_base = base_url or _DEFAULT_BASE[provider]
+    client = _build_byok_client(
+        provider=provider,
+        api_key=api_key,
+        api_base=base_url,
+        model=model,
+    )
+    messages = [
+        Message(role="system", content=SYSTEM_PROMPT),
+        Message(
+            role="user",
+            content=_build_user_prompt(ticker, rating, composite, breakdown),
+        ),
+    ]
+    try:
+        response = await client.chat(messages, temperature=0.3, max_tokens=800)
+    finally:
+        close = getattr(client, "close", None)
+        if close is not None:
+            await close()
 
-    kwargs = {
-        "model": chosen_model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",
-             "content": _build_user_prompt(ticker, rating, composite, breakdown)},
-        ],
-        "temperature": 0.3,
-        "max_tokens": 800,
-        "stream": True,
-        "api_key": api_key,
-    }
-    if chosen_base:
-        kwargs["api_base"] = chosen_base
-
-    current = "summary"  # default until first header marker
-    buffer = ""
-
-    response = await litellm.acompletion(**kwargs)
-    async for chunk in response:
-        try:
-            tok = chunk.choices[0].delta.content
-        except (AttributeError, IndexError, TypeError):
-            tok = None
-        if not tok:
-            continue
-        buffer += tok
-        # Header markers split sections. We only flush after a complete
-        # marker so streaming doesn't render the marker itself.
-        for marker, section in (
-            ("[SUMMARY]", "summary"),
-            ("[BULL]", "bull"),
-            ("[BEAR]", "bear"),
-        ):
-            if marker in buffer:
-                # Anything before the marker belongs to the prior section
-                pre, _, rest = buffer.partition(marker)
-                if pre:
-                    yield {"type": current, "delta": pre}
-                current = section
-                buffer = rest
-        # Drain buffer in small chunks so the client renders smoothly.
-        if len(buffer) > 12:
-            yield {"type": current, "delta": buffer}
-            buffer = ""
-    if buffer:
-        yield {"type": current, "delta": buffer}
+    for event in _split_sections(response.content):
+        yield event
     yield {"type": "done"}
