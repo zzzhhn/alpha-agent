@@ -1,4 +1,4 @@
-.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance m3-acceptance m4a-acceptance
+.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance m3-acceptance m4a-acceptance m4b-acceptance m5-acceptance phase4b-acceptance
 
 test:
 	pytest tests/ -m "not slow" -v
@@ -147,3 +147,34 @@ m5-acceptance:
 	  "https://alpha.bobbyzhong.com/api/user/me"); \
 	  if [ "$$code" != "401" ]; then echo "expected 401 got $$code"; exit 1; fi
 	@echo "M5 acceptance PASS"
+
+phase4b-acceptance:
+	@echo "==> Running Phase 4b acceptance suite"
+	# Backend: the V003 migration test.
+	pytest tests/auth/test_migration_v003.py -v
+	# Frontend: deps clean, vitest suite, types clean, lint clean, builds.
+	cd frontend && npm ci
+	cd frontend && npm test
+	cd frontend && npx tsc --noEmit
+	cd frontend && npx next lint
+	cd frontend && npx next build
+	# Smoke: an unauthenticated backend route still rejects with 401
+	# (Phase 4b must not have weakened the backend auth contract).
+	@echo "==> Smoke: GET /api/user/me without auth -> 401"
+	@code=$$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+	  "https://alpha.bobbyzhong.com/api/user/me"); \
+	  if [ "$$code" != "401" ]; then echo "expected 401 got $$code"; exit 1; fi
+	# Smoke: the NextAuth providers endpoint lists credentials + google and
+	# NOT nodemailer (proves the auth.ts provider swap deployed).
+	@echo "==> Smoke: /api/auth/providers lists credentials + google, not nodemailer"
+	@body=$$(curl -sS --max-time 10 "https://alpha.bobbyzhong.com/api/auth/providers"); \
+	  echo "$$body" | grep -q '"credentials"' || (echo "providers missing credentials: $$body" && exit 1); \
+	  echo "$$body" | grep -q '"google"' || (echo "providers missing google: $$body" && exit 1); \
+	  if echo "$$body" | grep -q '"nodemailer"'; then echo "providers still lists nodemailer: $$body"; exit 1; fi
+	# Smoke: /api/auth/session returns JSON (not the FastAPI 404 HTML),
+	# confirms next.config.mjs still excludes /api/auth/* from the rewrite.
+	@echo "==> Smoke: /api/auth/session returns JSON"
+	@ctype=$$(curl -sS -o /dev/null -w "%{content_type}" --max-time 10 \
+	  "https://alpha.bobbyzhong.com/api/auth/session"); \
+	  case "$$ctype" in application/json*) ;; *) echo "expected JSON, got $$ctype"; exit 1;; esac
+	@echo "Phase 4b acceptance PASS"
