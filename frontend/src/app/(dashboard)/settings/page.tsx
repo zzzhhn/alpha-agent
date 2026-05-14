@@ -218,29 +218,29 @@ export default function SettingsPage() {
     setTestState({ kind: "idle" });
   }
 
-  // Live test — fires the actual /alpha/translate endpoint with the
-  // user's current draft credentials. We craft the headers manually
-  // from local form state (NOT from `byokHeaders()`) so the user can
-  // test BEFORE saving — useful for catching typos before persisting.
+  // Live test: saves the key server-side first via saveByokServer(), then
+  // calls /api/v1/alpha/translate same-origin so the Next.js middleware
+  // injects the auth Bearer header. The backend reads the just-saved key
+  // from user_byok; the old X-LLM-* headers are no longer used post-M5.
   async function handleTest() {
     if (!canSave) return;
     setTestState({ kind: "running" });
     const started = performance.now();
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:6008";
     try {
-      const res = await fetch(`${apiBase}/api/v1/alpha/translate`, {
+      await saveByokServer({
+        provider,
+        api_key: apiKey.trim(),
+        base_url: baseUrl.trim() || undefined,
+        model: model.trim() || undefined,
+      });
+      const res = await fetch("/api/v1/alpha/translate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-LLM-Provider": provider,
-          "X-LLM-API-Key": apiKey.trim(),
-          ...(baseUrl.trim() ? { "X-LLM-Base-URL": baseUrl.trim() } : {}),
-          ...(model.trim() ? { "X-LLM-Model": model.trim() } : {}),
         },
+        credentials: "include",
         body: JSON.stringify({
-          // budget_tokens enforced ≥ 500 by FastAPI; smaller would 422
-          // before the BYOK header check fires.
+          // budget_tokens enforced >= 500 by FastAPI; smaller would 422.
           text: "5-day mean reversion",
           universe: "SP500",
           budget_tokens: 500,
