@@ -1,8 +1,14 @@
 // frontend/src/lib/api/client.ts
 import type { paths } from "../../../api-types.gen";
 
+// Browser: same-origin "" so /api/* goes through the Next.js middleware
+// (which injects the auth Bearer header) and the next.config.mjs rewrite.
+// Server (SSR): the absolute backend URL, since middleware does not run on
+// server-component fetches. Auth-gated endpoints are only called client-side.
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app";
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app"
+    : "";
 
 type ApiError = { code: string; message: string; retry_after_sec?: number };
 

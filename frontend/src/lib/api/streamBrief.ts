@@ -4,8 +4,14 @@
 // + read the ReadableStream + parse 'data: ' lines manually. Returns an
 // async generator yielding decoded events; caller `for await`s over it.
 
+// Browser: same-origin "" so /api/* goes through the Next.js middleware
+// (which injects the auth Bearer header) and the next.config.mjs rewrite.
+// Server (SSR): the absolute backend URL, since middleware does not run on
+// server-component fetches. Auth-gated endpoints are only called client-side.
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app";
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app"
+    : "";
 
 export type BriefEvent =
   | { type: "summary" | "bull" | "bear"; delta: string }

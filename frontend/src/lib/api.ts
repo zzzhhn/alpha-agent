@@ -33,8 +33,14 @@ import type {
   ZooCorrelationResponse,
 } from "./types";
 
+// Browser: same-origin "" so /api/* goes through the Next.js middleware
+// (which injects the auth Bearer header) and the next.config.mjs rewrite.
+// Server (SSR): the absolute backend URL, since middleware does not run on
+// server-component fetches. Auth-gated endpoints are only called client-side.
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:6008";
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:6008"
+    : "";
 const API_PREFIX = `${BASE_URL}/api/v1`;
 
 class ApiError extends Error {

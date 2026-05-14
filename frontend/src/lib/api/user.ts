@@ -4,9 +4,14 @@
 // credentials: "include" so the same-origin NextAuth JWT cookie rides
 // along; the Next.js rewrite forwards it to FastAPI as the Bearer token.
 //
-// API_BASE mirrors the pattern in ./client.ts (same env var, same fallback).
+// Browser: same-origin "" so /api/* goes through the Next.js middleware
+// (which injects the auth Bearer header) and the next.config.mjs rewrite.
+// Server (SSR): the absolute backend URL, since middleware does not run on
+// server-component fetches. Auth-gated endpoints are only called client-side.
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app";
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app"
+    : "";
 
 export interface ByokGetResponse {
   provider: string;
