@@ -876,4 +876,14 @@ def _eval_node(node: ast.AST, data: dict[str, np.ndarray]) -> np.ndarray | float
             raise ValueError(f"unknown operator {node.func.id!r}")
         args = [_eval_node(a, data) for a in node.args]
         return fn(*args)
+    if isinstance(node, ast.UnaryOp):
+        # `-1` / `+0.5` parse to UnaryOp(USub|UAdd, Constant). Negation works
+        # on scalars and ndarrays alike via numpy's __neg__. validate_expression
+        # already gated the operand to a numeric literal.
+        operand = _eval_node(node.operand, data)
+        if isinstance(node.op, ast.USub):
+            return -operand
+        if isinstance(node.op, ast.UAdd):
+            return operand
+        raise ValueError(f"unsupported unary op {type(node.op).__name__}")
     raise ValueError(f"unsupported AST node {type(node).__name__}")

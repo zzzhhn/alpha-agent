@@ -107,6 +107,32 @@ def validate_expression(
             raise FactorSpecValidationError(
                 f"only numeric literals allowed (got {type(node.value).__name__})"
             )
+        # Python parses `-1` / `+0.5` as UnaryOp(USub|UAdd, Constant) -- there
+        # is no negative-literal node. Allow unary +/- *only* on a numeric
+        # literal so expressions like winsorize(returns, -3, 3) or
+        # multiply(-1, rank(x)) pass. Negating a whole sub-expression
+        # (`-rank(x)`) is still rejected -- use multiply(-1, expr) instead.
+        if isinstance(node, ast.UnaryOp):
+            if not isinstance(node.op, (ast.USub, ast.UAdd)):
+                raise FactorSpecValidationError(
+                    f"only unary +/- allowed (got {type(node.op).__name__})"
+                )
+            operand = node.operand
+            if not (
+                isinstance(operand, ast.Constant)
+                and isinstance(operand.value, (int, float))
+                and not isinstance(operand.value, bool)
+            ):
+                raise FactorSpecValidationError(
+                    "unary +/- is only allowed on a numeric literal "
+                    "(e.g. -0.5); to negate a sub-expression use "
+                    "multiply(-1, expr)"
+                )
+            continue
+        if isinstance(node, (ast.USub, ast.UAdd)):
+            # The op node itself, visited by ast.walk after its UnaryOp
+            # parent has already been validated above.
+            continue
         raise FactorSpecValidationError(
             f"disallowed AST node: {type(node).__name__}"
         )
@@ -170,6 +196,21 @@ def _node_to_dict(node: ast.AST) -> dict:
         raise FactorSpecValidationError(
             f"only numeric literals allowed (got {type(node.value).__name__})"
         )
+    if isinstance(node, ast.UnaryOp):
+        # validate_expression has already guaranteed op is USub/UAdd and the
+        # operand is a numeric literal. Fold the sign into the literal value
+        # so the frontend AST drawer needs no new node type.
+        if not isinstance(node.op, (ast.USub, ast.UAdd)):
+            raise FactorSpecValidationError(
+                f"only unary +/- allowed (got {type(node.op).__name__})"
+            )
+        inner = _node_to_dict(node.operand)
+        if inner["type"] != "literal":
+            raise FactorSpecValidationError(
+                "unary +/- is only allowed on a numeric literal"
+            )
+        sign = -1 if isinstance(node.op, ast.USub) else 1
+        return {"type": "literal", "value": inner["value"] * sign}
     raise FactorSpecValidationError(
         f"disallowed AST node: {type(node).__name__}"
     )
