@@ -5,8 +5,12 @@ const nextConfig = {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6008";
     return [
       {
-        source: "/api/:path*",
-        destination: `${apiUrl}/api/:path*`,
+        // Exclude /api/auth/* from this rewrite: NextAuth's own routes
+        // (/api/auth/session, /api/auth/signin/*, /api/auth/csrf, etc.)
+        // are handled frontend-native by src/app/api/auth/[...nextauth]/route.ts.
+        // All other /api/* paths proxy to the FastAPI backend as before.
+        source: "/api/:path((?!auth/).*)",
+        destination: `${apiUrl}/api/:path`,
       },
       {
         source: "/ws/:path*",
