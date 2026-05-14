@@ -26,6 +26,8 @@ dependencies = [
     "python-dotenv>=1.0",
     # yfinance internal HTML parsing (analyst/earnings) needs lxml
     "lxml>=4.9",
+    # M5 Phase 4: AES-256-GCM for server-side BYOK key encryption.
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]
