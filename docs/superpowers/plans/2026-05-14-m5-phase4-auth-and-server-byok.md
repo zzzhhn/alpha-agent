@@ -2177,19 +2177,30 @@ This step is the user's, not the implementer's. The implementer prints these ins
 > 2. Apply the V002 migration to the Neon production DB.
 > 3. Verify the Resend sending domain.
 
-- [ ] **Step 4: Deploy backend (auto) + frontend (manual)**
+- [ ] **Step 4: Deploy backend + frontend (both auto on git push)**
 
-Backend auto-deploys on git push. Frontend (rootDirectory=None) needs a manual deploy:
+As of 2026-05-14 the frontend Vercel project's `rootDirectory` was set to
+`frontend` (API PATCH after the M4b error-analysis). Both the backend
+(`alpha-agent`) and the frontend (`frontend`) Vercel projects now
+auto-deploy on `git push origin main` — no manual `vercel` invocation
+needed.
+
+Verify both deploys reach READY via the Vercel API or direct HTTP probe.
+If the Vercel API token is expired (403/empty response — see CLAUDE.md
+memory `feedback_vercel_authjson_token_expiry.md`), fall back to HTTP
+probes: `curl -I https://alpha.bobbyzhong.com/<route>`.
+
+If a manual frontend deploy is ever needed (e.g. a hotfix without a
+commit), run it **from the repo root**, NOT from `frontend/` — with
+`rootDirectory=frontend` set, running from `frontend/` would make Vercel
+look for `frontend/frontend` (the doubled-path trap, memory
+`feedback_vercel_root_directory_doubled_path.md`):
 
 ```bash
-cd /Users/a22309/Desktop/Side-projects/Artifacts/alpha-agent/frontend
+cd /Users/a22309/Desktop/Side-projects/Artifacts/alpha-agent
 VTOK=$(python3 -c "import json; print(json.load(open('/Users/a22309/Library/Application Support/com.vercel.cli/auth.json'))['token'])")
-vercel pull --yes --environment=production --token "$VTOK" --scope team_F2QuyPNaBdqEtaQ1LmBrASKG
-vercel build --prod --token "$VTOK"
-vercel deploy --prebuilt --prod --token "$VTOK" --scope team_F2QuyPNaBdqEtaQ1LmBrASKG 2>&1 | tail -6
+vercel deploy --prod --token "$VTOK" --scope team_F2QuyPNaBdqEtaQ1LmBrASKG 2>&1 | tail -6
 ```
-
-(The prebuilt workflow is used because the frontend project's source root is the repo root — the M4b F1 implementer established this path.)
 
 - [ ] **Step 5: Run the full acceptance target**
 
