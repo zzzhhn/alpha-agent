@@ -1,41 +1,32 @@
 """BYOK (Bring Your Own Key) FastAPI dependency.
 
-Open-source self-deploys of alpha-agent must NOT consume the platform
-operator's LLM quota. Visitors paste their own provider credentials in
-the frontend Settings page; those values flow as request headers and
-this module materializes a per-request `LLMClient` from them.
+Phase 4 server-side model: every authenticated route that calls an LLM uses
+`get_llm_client` as a FastAPI dependency. The dependency resolves the
+calling user's stored BYOK row from `user_byok`, decrypts the API key
+server-side with BYOK_MASTER_KEY, and constructs a per-request LLMClient.
 
-Headers consumed (all case-insensitive, all optional except api_key):
-  X-LLM-Provider   = "openai" | "kimi" | "ollama" | "anthropic"  (default: openai)
-  X-LLM-API-Key    = the provider key  (required unless platform fallback exists)
-  X-LLM-Base-URL   = optional override; e.g. for Ollama tunnels or LiteLLM proxies
-  X-LLM-Model      = model id within the provider; provider-specific defaults apply
+No LLM key ever leaves the server. The decrypted plaintext is only passed
+to `_build_byok_client` and immediately discarded after the client object
+is built - it is never logged, cached, or echoed in responses.
 
-Resolution order (per request):
-  1. If ALL required headers are present → build LiteLLMClient from headers.
-  2. Else if `app.state.llm` is set AND `ALPHACORE_REQUIRE_BYOK` is NOT "true"
-     → fall back to the platform LLM (development convenience; user has
-     `.env` configured locally).
-  3. Else → 401 with explicit "BYOK required" message + the header names
-     the client should send.
+Failure modes:
+  - No session -> 401 (from require_user dependency)
+  - No user_byok row -> 400 with a /settings redirect hint
+  - BYOK_MASTER_KEY missing -> 500
+  - Ciphertext tampered / wrong key -> 400
 
-Security notes:
-  * The key value is read once per request and only ever passed to
-    LiteLLM's `acompletion()`. It is never logged, written to disk,
-    cached, or echoed in responses. Code that adds new logging near the
-    LLM call path MUST scrub these headers.
-  * `app.state.llm` (when present) is the operator's fallback for local
-    dev; deploys to public URLs MUST set `ALPHACORE_REQUIRE_BYOK=true`
-    so step (2) is disabled.
+_build_byok_client and the provider constants are unchanged from M4.
 """
 from __future__ import annotations
 
 import logging
 import os
-from typing import Literal
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Depends, HTTPException
 
+from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.auth.crypto_box import CryptoError, decrypt
+from alpha_agent.auth.dependencies import require_user
 from alpha_agent.llm.base import LLMClient
 from alpha_agent.llm.litellm_client import LiteLLMClient
 
@@ -133,51 +124,45 @@ def _build_byok_client(
     )
 
 
-def get_llm_client(
-    request: Request,
-    x_llm_provider: str | None = Header(default=None),
-    x_llm_api_key: str | None = Header(default=None),
-    x_llm_base_url: str | None = Header(default=None),
-    x_llm_model: str | None = Header(default=None),
+async def get_llm_client(
+    user_id: int = Depends(require_user),
 ) -> LLMClient:
-    """FastAPI dependency. Returns a per-request LLM client.
+    """FastAPI dependency. Returns a per-request LLM client for the authenticated user.
 
-    Use as `llm: LLMClient = Depends(get_llm_client)` in any route handler
-    that needs to call `llm.chat()`.
+    Reads the user's encrypted BYOK row from user_byok, decrypts it with
+    BYOK_MASTER_KEY, and builds an LLMClient. Raises 400 if no key is stored,
+    500 if BYOK_MASTER_KEY is missing, 400 if decryption fails. Auth is
+    enforced by require_user (401 on missing/invalid token).
+
+    Use as `llm: LLMClient = Depends(get_llm_client)` in any route that calls llm.chat().
     """
-    # Path 1: BYOK headers fully provided.
-    if x_llm_api_key:
-        provider = (x_llm_provider or "openai").lower()
-        return _build_byok_client(
-            provider=provider,
-            api_key=x_llm_api_key,
-            api_base=x_llm_base_url,
-            model=x_llm_model,
+    pool = await get_db_pool()
+    row = await pool.fetchrow(
+        "SELECT provider, ciphertext, nonce, base_url, model "
+        "FROM user_byok WHERE user_id = $1 LIMIT 1",
+        user_id,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No BYOK key set; visit /settings to add one",
         )
 
-    # Path 2: fallback to platform LLM if BYOK is not required.
-    require_byok = os.environ.get("ALPHACORE_REQUIRE_BYOK", "false").lower() == "true"
-    platform_llm = getattr(request.app.state, "llm", None)
-    if not require_byok and platform_llm is not None:
-        return platform_llm
+    master = os.environ.get("BYOK_MASTER_KEY")
+    if not master:
+        raise HTTPException(status_code=500, detail="BYOK_MASTER_KEY not configured")
 
-    # Path 3: hard fail with a useful message.
-    raise HTTPException(
-        status_code=401,
-        detail={
-            "error": "byok_required",
-            "message": (
-                "This deployment requires you to bring your own LLM key. "
-                "Send the following headers with your request, or configure "
-                "them in the Settings page of the frontend."
-            ),
-            "required_headers": {
-                "X-LLM-Provider": "one of: openai, kimi, ollama, anthropic",
-                "X-LLM-API-Key": "your provider API key",
-            },
-            "optional_headers": {
-                "X-LLM-Base-URL": "override the provider's default endpoint",
-                "X-LLM-Model": "override the provider's default model id",
-            },
-        },
+    try:
+        plaintext_key = decrypt(row["ciphertext"], row["nonce"], master.encode("utf-8"))
+    except CryptoError:
+        raise HTTPException(
+            status_code=400,
+            detail="Stored key cannot be decrypted. Please re-save it in /settings.",
+        )
+
+    return _build_byok_client(
+        provider=row["provider"],
+        api_key=plaintext_key,
+        api_base=row["base_url"],
+        model=row["model"],
     )

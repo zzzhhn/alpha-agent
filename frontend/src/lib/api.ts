@@ -57,19 +57,15 @@ const MAX_RETRIES = 1;
 const RETRY_DELAY_MS = 600;
 
 async function _doFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  // BYOK — inject the user's LLM credentials as headers on every request.
-  // The backend dependency consumes them only for LLM-burning routes; on
-  // other routes it's a harmless no-op. We do this in `_doFetch` (the
-  // common path) rather than at each call site so we can never forget a
-  // route. See ./byok.ts.
-  // Lazy import keeps SSR-safe (byok.ts has window guards but the
-  // function lookup itself runs on import).
-  const { byokHeaders } = await import("./byok");
+  // Phase 4: credentials:"include" carries the NextAuth JWT cookie on
+  // same-origin requests; the Next.js rewrite forwards it to FastAPI as the
+  // Authorization Bearer token. The old X-LLM-* byokHeaders() injection is
+  // gone - the backend now reads the BYOK key server-side from user_byok.
   const response = await fetch(url, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...byokHeaders(),
       ...options?.headers,
     },
   });

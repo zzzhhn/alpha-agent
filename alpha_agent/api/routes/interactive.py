@@ -40,7 +40,6 @@ router = APIRouter(tags=["interactive"])
 import json as _json
 import re as _re
 
-from fastapi import Request as _Request
 
 from alpha_agent.core.factor_ast import (
     FactorSpecValidationError as _FactorSpecValidationError,
@@ -192,14 +191,12 @@ def _clip_field(d: dict, key: str, max_len: int) -> None:
 )
 async def translate_hypothesis(
     body: HypothesisTranslateRequest,
-    request: _Request,
     llm: _LLMClient = Depends(_get_llm_client),
 ) -> HypothesisTranslateResponse:
     """T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.
 
-    Phase 1 BYOK — `llm` is now per-request, built from the caller's
-    X-LLM-* headers (or platform fallback in dev). No more shared
-    `app.state.llm` to drain operator quota.
+    Phase 4 BYOK — `llm` is built from the authenticated user's stored
+    BYOK row (decrypted server-side). Auth required; no X-LLM-* headers.
     """
 
     user_payload = _json.dumps({"hypothesis": body.text, "universe": body.universe})

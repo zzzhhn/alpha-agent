@@ -30,7 +30,8 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t, type TranslationKey } from "@/lib/i18n";
 import { runFactorBacktest, translateHypothesis } from "@/lib/api";
 import { extractOps } from "@/lib/factor-spec";
-import { loadByok, PROVIDER_PRESETS } from "@/lib/byok";
+import { PROVIDER_PRESETS, type LLMProvider } from "@/lib/byok";
+import { getByok, type ByokGetResponse } from "@/lib/api/user";
 import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
 import {
   TmSubbar,
@@ -806,11 +807,15 @@ function LlmProvenancePane({
   readonly loading: boolean;
   readonly onRetranslate: () => void;
 }) {
-  const byok = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    return loadByok();
+  const [byok, setByok] = useState<ByokGetResponse | null>(null);
+  useEffect(() => {
+    getByok().then(setByok).catch(() => setByok(null));
   }, []);
-  const provider = byok?.provider;
+  const rawProvider = byok?.provider;
+  const provider: LLMProvider | undefined =
+    rawProvider && rawProvider in PROVIDER_PRESETS
+      ? (rawProvider as LLMProvider)
+      : undefined;
   const providerLabel = provider ? PROVIDER_PRESETS[provider].label : "platform default";
   const model = byok?.model || (provider ? PROVIDER_PRESETS[provider].defaultModel : "—");
   const totalTokens = result.llm_tokens.prompt + result.llm_tokens.completion;

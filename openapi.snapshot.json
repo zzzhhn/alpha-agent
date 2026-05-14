@@ -3794,12 +3794,12 @@
     },
     "/api/v1/alpha/translate": {
       "post": {
-        "description": "T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.\n\nPhase 1 BYOK \u2014 `llm` is now per-request, built from the caller's\nX-LLM-* headers (or platform fallback in dev). No more shared\n`app.state.llm` to drain operator quota.",
+        "description": "T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.\n\nPhase 4 BYOK \u2014 `llm` is built from the authenticated user's stored\nBYOK row (decrypted server-side). Auth required; no X-LLM-* headers.",
         "operationId": "translate_hypothesis_api_v1_alpha_translate_post",
         "parameters": [
           {
             "in": "header",
-            "name": "x-llm-provider",
+            "name": "authorization",
             "required": false,
             "schema": {
               "anyOf": [
@@ -3810,55 +3810,7 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Llm-Provider"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-llm-api-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Llm-Api-Key"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-llm-base-url",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Llm-Base-Url"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-llm-model",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Llm-Model"
+              "title": "Authorization"
             }
           }
         ],

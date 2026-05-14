@@ -3,11 +3,13 @@
 Locks the per-request resolution semantics so future refactors can't
 silently re-introduce the operator-pays-for-everyone bug.
 
-Resolution order under test:
-  1. BYOK headers present → per-request LiteLLMClient
-  2. No headers, REQUIRE_BYOK=false, platform LLM exists → platform fallback
-  3. No headers, REQUIRE_BYOK=true → 401
-  4. No headers, no platform LLM → 401
+Phase 4 server-side model (M5 E3b):
+  - get_llm_client is now an async FastAPI dependency gated by require_user.
+  - It reads user_byok from Postgres, decrypts with BYOK_MASTER_KEY, and
+    calls _build_byok_client.
+  - The old X-LLM-* header path and platform-fallback path are gone.
+
+_build_byok_client provider-construction tests are unchanged.
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
-from alpha_agent.api.byok import _build_byok_client, get_llm_client
+from alpha_agent.api.byok import _build_byok_client
 from alpha_agent.llm.litellm_client import LiteLLMClient
 
 
@@ -118,90 +120,137 @@ def test_user_overrides_take_precedence_over_defaults() -> None:
     assert c._model == "openai/gpt-4o-mini"
 
 
-# ── FastAPI dependency resolution ──
+# ── FastAPI dependency resolution (Phase 4 server-side BYOK) ──
+# The old X-LLM-* header path is gone. get_llm_client is now an async
+# dependency that reads user_byok from Postgres, decrypts with BYOK_MASTER_KEY,
+# and calls _build_byok_client. The tests below cover the key behaviors via
+# a full-stack TestClient fixture, matching test_alpha_translate_auth.py.
+#
+# Note: test_alpha_translate_auth.py is the canonical integration-level test
+# for the dependency resolution contract. These unit-style tests below add
+# coverage for the decrypt path and missing-master-key edge case.
+
+import base64
+import time
+
+import pytest as _pytest
+from fastapi.testclient import TestClient as _TC
+from jose import jwt as _jwt
+from unittest.mock import AsyncMock as _AsyncMock, MagicMock as _MagicMock
+
+_DEP_SECRET = "test-dep-secret-9876543210abcdef"
+_DEP_MASTER = base64.b64encode(b"fedcba9876543210fedcba9876543210").decode()
 
 
-def _make_request(platform_llm) -> MagicMock:
-    """Minimal Request mock — only `app.state.llm` is read by the dep."""
-    req = MagicMock()
-    req.app.state.llm = platform_llm
-    return req
-
-
-def test_dep_returns_byok_client_when_api_key_header_present(monkeypatch) -> None:
-    """When X-LLM-API-Key arrives, build a per-request client regardless of
-    platform fallback availability."""
-    monkeypatch.delenv("ALPHACORE_REQUIRE_BYOK", raising=False)
-    fake_platform = MagicMock(name="platform_llm")
-    req = _make_request(fake_platform)
-
-    out = get_llm_client(
-        request=req,
-        x_llm_provider="openai",
-        x_llm_api_key="sk-user-key",
-        x_llm_base_url=None,
-        x_llm_model=None,
+def _dep_auth(sub="99"):
+    now = int(time.time())
+    tok = _jwt.encode(
+        {"sub": sub, "iat": now, "exp": now + 3600},
+        _DEP_SECRET,
+        algorithm="HS256",
     )
-    # Per-request LiteLLMClient, NOT the platform fallback object.
-    assert isinstance(out, LiteLLMClient)
-    assert out is not fake_platform
-    # Verify the user's key landed in the constructed client (kept private,
-    # but accessed via the same attribute the production code reads).
-    assert out._api_key == "sk-user-key"
+    return {"Authorization": f"Bearer {tok}"}
 
 
-def test_dep_falls_back_to_platform_when_no_byok_headers_and_not_required(
-    monkeypatch,
-) -> None:
-    """Local dev convenience — admin's .env-configured platform LLM still
-    works when ALPHACORE_REQUIRE_BYOK is unset."""
-    monkeypatch.delenv("ALPHACORE_REQUIRE_BYOK", raising=False)
-    fake_platform = MagicMock(name="platform_llm")
-    req = _make_request(fake_platform)
+@_pytest.fixture
+def dep_client(monkeypatch):
+    monkeypatch.setenv("NEXTAUTH_SECRET", _DEP_SECRET)
+    monkeypatch.setenv("BYOK_MASTER_KEY", _DEP_MASTER)
+    from api.index import app
+    return _TC(app, raise_server_exceptions=False)
 
-    out = get_llm_client(
-        request=req,
-        x_llm_provider=None,
-        x_llm_api_key=None,
-        x_llm_base_url=None,
-        x_llm_model=None,
+
+def test_dep_builds_client_from_decrypted_byok(dep_client, monkeypatch) -> None:
+    """get_llm_client decrypts the stored row and passes plaintext to _build_byok_client.
+
+    Regression guard: the M5 E3b migration. Mirrors test_alpha_translate_auth.py
+    but at the _build_byok_client level to confirm the LiteLLMClient gets the
+    correct key and api_base.
+    """
+    from alpha_agent.auth.crypto_box import encrypt
+
+    ciphertext, nonce = encrypt("sk-dep-test-key", _DEP_MASTER.encode())
+    byok_row = {
+        "provider": "openai",
+        "ciphertext": ciphertext,
+        "nonce": nonce,
+        "model": "gpt-4o",
+        "base_url": None,
+    }
+    pool = _MagicMock()
+    pool.fetchrow = _AsyncMock(return_value=byok_row)
+    monkeypatch.setattr(
+        "alpha_agent.api.byok.get_db_pool",
+        _AsyncMock(return_value=pool),
     )
-    assert out is fake_platform
+
+    captured = {}
+
+    def fake_build(provider, api_key, api_base, model):
+        captured["api_key"] = api_key
+        captured["provider"] = provider
+        raise HTTPException(status_code=503, detail="sentinel")
+
+    monkeypatch.setattr("alpha_agent.api.byok._build_byok_client", fake_build)
+
+    # Use the translate endpoint as a probe - any LLM-burning route works.
+    r = dep_client.post(
+        "/api/v1/alpha/translate",
+        headers=_dep_auth(),
+        json={"text": "test hypothesis", "universe": "SP500"},
+    )
+    assert captured.get("api_key") == "sk-dep-test-key", (
+        f"Plaintext key not passed to _build_byok_client; got {captured.get('api_key')!r}"
+    )
+    assert captured.get("provider") == "openai"
+    assert r.status_code == 503
 
 
-def test_dep_rejects_when_no_byok_headers_and_require_byok_true(monkeypatch) -> None:
-    """Public deploys set ALPHACORE_REQUIRE_BYOK=true → platform fallback
-    is disabled even when a platform LLM is configured."""
-    monkeypatch.setenv("ALPHACORE_REQUIRE_BYOK", "true")
-    fake_platform = MagicMock(name="platform_llm")
-    req = _make_request(fake_platform)
-
-    with pytest.raises(HTTPException) as ei:
-        get_llm_client(
-            request=req,
-            x_llm_provider=None,
-            x_llm_api_key=None,
-            x_llm_base_url=None,
-            x_llm_model=None,
-        )
-    assert ei.value.status_code == 401
-    assert "byok_required" in str(ei.value.detail)
+def test_dep_400_when_no_byok_row(dep_client, monkeypatch) -> None:
+    """No user_byok row -> 400 mentioning /settings."""
+    pool = _MagicMock()
+    pool.fetchrow = _AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        "alpha_agent.api.byok.get_db_pool",
+        _AsyncMock(return_value=pool),
+    )
+    r = dep_client.post(
+        "/api/v1/alpha/translate",
+        headers=_dep_auth(),
+        json={"text": "test", "universe": "SP500"},
+    )
+    assert r.status_code == 400
+    assert "settings" in r.json()["detail"].lower()
 
 
-def test_dep_rejects_when_no_byok_headers_and_no_platform_llm(monkeypatch) -> None:
-    """The pure BYOK deploy: no platform LLM at all + no caller headers
-    → 401, no surprise 500 from None.chat()."""
-    monkeypatch.delenv("ALPHACORE_REQUIRE_BYOK", raising=False)
-    req = _make_request(None)
+def test_dep_500_when_master_key_missing(monkeypatch) -> None:
+    """If BYOK_MASTER_KEY is not set, the dependency returns 500."""
+    monkeypatch.setenv("NEXTAUTH_SECRET", _DEP_SECRET)
+    monkeypatch.delenv("BYOK_MASTER_KEY", raising=False)
+    from api.index import app
+    client = _TC(app, raise_server_exceptions=False)
 
-    with pytest.raises(HTTPException) as ei:
-        get_llm_client(
-            request=req,
-            x_llm_provider=None,
-            x_llm_api_key=None,
-            x_llm_base_url=None,
-            x_llm_model=None,
-        )
-    assert ei.value.status_code == 401
-    assert ei.value.detail["error"] == "byok_required"
-    assert "X-LLM-API-Key" in str(ei.value.detail)
+    from alpha_agent.auth.crypto_box import encrypt
+    # Dummy encrypt under a throwaway key just to produce a row shape.
+    _throwaway = base64.b64encode(b"x" * 32).decode()
+    ciphertext, nonce = encrypt("sk-x", _throwaway.encode())
+    byok_row = {
+        "provider": "openai",
+        "ciphertext": ciphertext,
+        "nonce": nonce,
+        "model": None,
+        "base_url": None,
+    }
+    pool = _MagicMock()
+    pool.fetchrow = _AsyncMock(return_value=byok_row)
+    monkeypatch.setattr(
+        "alpha_agent.api.byok.get_db_pool",
+        _AsyncMock(return_value=pool),
+    )
+    r = client.post(
+        "/api/v1/alpha/translate",
+        headers=_dep_auth(),
+        json={"text": "test", "universe": "SP500"},
+    )
+    assert r.status_code == 500
+    assert "BYOK_MASTER_KEY" in r.json()["detail"]
