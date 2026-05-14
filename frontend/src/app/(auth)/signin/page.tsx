@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
 
-export default function SignInPage() {
+function SignInForm() {
   const [locale, setLocale] = useState<Locale>("zh");
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -49,5 +49,13 @@ export default function SignInPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInForm />
+    </Suspense>
   );
 }
