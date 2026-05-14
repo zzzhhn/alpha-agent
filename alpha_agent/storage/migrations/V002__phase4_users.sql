@@ -5,8 +5,10 @@
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
-    -- NextAuth.js v5 Email provider expects these column names verbatim.
-    email_verified TIMESTAMPTZ,
+    -- @auth/pg-adapter issues SQL with double-quoted "emailVerified" (camelCase).
+    -- PostgreSQL double-quoted identifiers are case-sensitive, so the column
+    -- name must be stored with this exact casing.
+    "emailVerified" TIMESTAMPTZ,
     name TEXT,
     image TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -47,8 +49,9 @@ CREATE TABLE IF NOT EXISTS user_byok (
 );
 CREATE INDEX IF NOT EXISTS idx_user_byok_user ON user_byok (user_id);
 
--- NextAuth.js v5 standard table for email magic-link tokens.
-CREATE TABLE IF NOT EXISTS verification_tokens (
+-- @auth/pg-adapter uses the SINGULAR table name "verification_token" (no 's')
+-- in all its SQL: INSERT INTO verification_token and DELETE FROM verification_token.
+CREATE TABLE IF NOT EXISTS verification_token (
     identifier TEXT NOT NULL,
     token TEXT NOT NULL,
     expires TIMESTAMPTZ NOT NULL,

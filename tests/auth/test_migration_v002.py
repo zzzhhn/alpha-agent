@@ -21,7 +21,8 @@ def test_v002_declares_five_tables():
         "user_preferences",
         "user_watchlist",
         "user_byok",
-        "verification_tokens",
+        # @auth/pg-adapter uses singular "verification_token" (no trailing 's').
+        "verification_token",
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in sql, f"missing table {table}"
 
