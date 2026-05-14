@@ -3794,7 +3794,7 @@
     },
     "/api/v1/alpha/translate": {
       "post": {
-        "description": "T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.\n\nPhase 4 BYOK \u2014 `llm` is built from the authenticated user's stored\nBYOK row (decrypted server-side). Auth required; no X-LLM-* headers.",
+        "description": "T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.\n\nPhase 4 BYOK: `llm` is built from the authenticated user's stored\nBYOK row (decrypted server-side). Auth required; no X-LLM-* headers.",
         "operationId": "translate_hypothesis_api_v1_alpha_translate_post",
         "parameters": [
           {

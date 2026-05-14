@@ -112,7 +112,8 @@ export interface paths {
         put?: never;
         /**
          * Post Brief Stream
-         * @description SSE-streaming Rich brief. Client posts with BYOK key in body.
+         * @description SSE-streaming Rich brief. Auth required; BYOK key fetched + decrypted
+         *     server-side from the authenticated user's stored credentials.
          */
         post: operations["post_brief_stream_api_brief__ticker__stream_post"];
         delete?: never;
@@ -374,9 +375,8 @@ export interface paths {
          * Translate Hypothesis
          * @description T1 HypothesisTranslator: NL -> FactorSpec -> smoke IC.
          *
-         *     Phase 1 BYOK — `llm` is now per-request, built from the caller's
-         *     X-LLM-* headers (or platform fallback in dev). No more shared
-         *     `app.state.llm` to drain operator quota.
+         *     Phase 4 BYOK: `llm` is built from the authenticated user's stored
+         *     BYOK row (decrypted server-side). Auth required; no X-LLM-* headers.
          */
         post: operations["translate_hypothesis_api_v1_alpha_translate_post"];
         delete?: never;
@@ -1900,17 +1900,8 @@ export interface components {
         };
         /** StreamBriefRequest */
         StreamBriefRequest: {
-            /** Api Key */
-            api_key: string;
-            /** Base Url */
-            base_url?: string | null;
-            /** Model */
-            model?: string | null;
-            /**
-             * Provider
-             * @enum {string}
-             */
-            provider: "openai" | "anthropic" | "kimi" | "ollama";
+            /** Model Override */
+            model_override?: string | null;
         };
         /** Thesis */
         Thesis: {
@@ -2390,7 +2381,9 @@ export interface operations {
     post_brief_stream_api_brief__ticker__stream_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path: {
                 ticker: string;
             };
@@ -2829,10 +2822,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                "x-llm-provider"?: string | null;
-                "x-llm-api-key"?: string | null;
-                "x-llm-base-url"?: string | null;
-                "x-llm-model"?: string | null;
+                authorization?: string | null;
             };
             path?: never;
             cookie?: never;
