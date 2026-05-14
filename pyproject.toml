@@ -28,6 +28,8 @@ dependencies = [
     "lxml>=4.9",
     # M5 Phase 4: AES-256-GCM for server-side BYOK key encryption.
     "cryptography>=42",
+    # M5 Phase 4: verify NextAuth.js HS256 JWTs issued by the frontend.
+    "python-jose[cryptography]>=3.3",
 ]
 
 [project.optional-dependencies]
