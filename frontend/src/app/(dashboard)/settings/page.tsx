@@ -152,8 +152,12 @@ export default function SettingsPage() {
       setServerLast4(resp.last4);
       clearByok();
       setShowImportBanner(false);
-    } catch {
-      // On error leave banner visible so user can retry.
+    } catch (err) {
+      setTestState({
+        kind: "fail",
+        status: null,
+        message: err instanceof Error ? err.message : zh ? "导入失败" : "Import failed",
+      });
     } finally {
       setImportBusy(false);
     }
@@ -177,8 +181,12 @@ export default function SettingsPage() {
       a.download = "alpha-agent-export.json";
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      // Errors are non-critical; user can retry.
+    } catch (err) {
+      setTestState({
+        kind: "fail",
+        status: null,
+        message: err instanceof Error ? err.message : zh ? "导出失败" : "Export failed",
+      });
     } finally {
       setExportInProgress(false);
     }
@@ -190,7 +198,12 @@ export default function SettingsPage() {
     try {
       await deleteAccount();
       await signOut({ callbackUrl: "/signin" });
-    } catch {
+    } catch (err) {
+      setTestState({
+        kind: "fail",
+        status: null,
+        message: err instanceof Error ? err.message : zh ? "账号删除失败" : "Account deletion failed",
+      });
       setDeleteInProgress(false);
     }
   }

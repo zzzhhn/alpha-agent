@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path
@@ -183,10 +184,12 @@ async def post_brief_stream(
                 user_id, byok["provider"],
             )
         except Exception as e:
-            # Sanitize: never echo the api_key. type + truncated message only.
+            # Server-side observability: full error to stderr for Vercel logs.
+            print(f"brief stream error: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            # Client-facing message: safe generic text, no raw str(e) (key-leak risk).
             yield _sse_format({
                 "type": "error",
-                "message": f"{type(e).__name__}: {str(e)[:200]}",
+                "message": f"LLM request failed ({type(e).__name__}). Check your key in /settings.",
             })
 
     return StreamingResponse(

@@ -162,5 +162,7 @@ def test_brief_stream_surfaces_llm_error_in_sse(client, monkeypatch):
                        headers=_auth(), json={}) as r:
         chunks = b"".join(r.iter_bytes()).decode()
     err_lines = [ln for ln in chunks.splitlines() if "error" in ln]
-    assert any("rate limit" in ln for ln in err_lines)
+    # N2 fix: raw str(e) is no longer forwarded to the client (key-leak risk).
+    # The safe message includes only the exception class name, not the message text.
+    assert any("RuntimeError" in ln for ln in err_lines)
     assert any('"type": "error"' in ln or "'type': 'error'" in ln for ln in err_lines)
