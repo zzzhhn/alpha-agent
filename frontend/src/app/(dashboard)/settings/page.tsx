@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import {
@@ -34,8 +35,14 @@ import {
   clearByok,
   hasByok,
   loadByok,
-  saveByok,
+  saveByok as saveByokLocal,
 } from "@/lib/byok";
+import {
+  getByok,
+  saveByok as saveByokServer,
+  deleteAccount,
+  exportAccount,
+} from "@/lib/api/user";
 import { t } from "@/lib/i18n";
 import WeightsEditor from "@/components/settings/WeightsEditor";
 import WatchlistEditor from "@/components/settings/WatchlistEditor";
@@ -66,6 +73,15 @@ export default function SettingsPage() {
   const [revealKey, setRevealKey] = useState(false);
   const [testState, setTestState] = useState<TestState>({ kind: "idle" });
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // Server-side BYOK state
+  const [serverLast4, setServerLast4] = useState<string | null>(null);
+  // Import banner: shown when localStorage has a key but server does not
+  const [showImportBanner, setShowImportBanner] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  // Danger zone
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [exportInProgress, setExportInProgress] = useState(false);
 
   useEffect(() => {
     const c = loadByok();
@@ -76,19 +92,117 @@ export default function SettingsPage() {
     setModel(c.model ?? "");
   }, []);
 
+  // On mount: fetch server-side BYOK status and decide whether to show
+  // the import banner (localStorage has a key but server has none).
+  useEffect(() => {
+    getByok()
+      .then((resp) => {
+        if (resp) {
+          setServerLast4(resp.last4);
+        } else {
+          // Server has no key - show import banner if localStorage does.
+          const local = loadByok();
+          if (local) setShowImportBanner(true);
+        }
+      })
+      .catch(() => {
+        // Silently swallow network errors - import banner stays hidden.
+      });
+  }, []);
+
   const preset = PROVIDER_PRESETS[provider];
   const effectiveBase = baseUrl.trim() || preset.defaultBase;
   const effectiveModel = model.trim() || preset.defaultModel;
   const canSave = apiKey.trim().length > 4;
 
-  function handleSave() {
-    saveByok({
-      provider,
-      apiKey,
-      baseUrl: baseUrl.trim() || undefined,
-      model: model.trim() || undefined,
-    } satisfies ByokCredentials);
-    setSavedAt(new Date().toLocaleTimeString());
+  async function handleSave() {
+    // POST to server-side AES-256-GCM storage. Plaintext key is used
+    // only inside this call and not persisted to component state.
+    try {
+      const resp = await saveByokServer({
+        provider,
+        api_key: apiKey.trim(),
+        base_url: baseUrl.trim() || undefined,
+        model: model.trim() || undefined,
+      });
+      setServerLast4(resp.last4);
+      setSavedAt(new Date().toLocaleTimeString());
+      // Also keep localStorage in sync so byokHeaders() still works for
+      // existing code paths that read X-LLM-* headers from it.
+      saveByokLocal({
+        provider,
+        apiKey,
+        baseUrl: baseUrl.trim() || undefined,
+        model: model.trim() || undefined,
+      } satisfies ByokCredentials);
+    } catch (err) {
+      setSavedAt(null);
+      setTestState({
+        kind: "fail",
+        status: null,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  async function handleImport() {
+    const local = loadByok();
+    if (!local) {
+      setShowImportBanner(false);
+      return;
+    }
+    setImportBusy(true);
+    try {
+      const resp = await saveByokServer({
+        provider: local.provider,
+        api_key: local.apiKey,
+        base_url: local.baseUrl,
+        model: local.model,
+      });
+      setServerLast4(resp.last4);
+      clearByok();
+      setShowImportBanner(false);
+    } catch {
+      // On error leave banner visible so user can retry.
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  function handleDiscardImport() {
+    clearByok();
+    setShowImportBanner(false);
+  }
+
+  async function handleExport() {
+    setExportInProgress(true);
+    try {
+      const data = await exportAccount();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "alpha-agent-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Errors are non-critical; user can retry.
+    } finally {
+      setExportInProgress(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirm !== "DELETE") return;
+    setDeleteInProgress(true);
+    try {
+      await deleteAccount();
+      await signOut({ callbackUrl: "/signin" });
+    } catch {
+      setDeleteInProgress(false);
+    }
   }
 
   function handleClear() {
@@ -184,19 +298,42 @@ export default function SettingsPage() {
 
   return (
     <TmScreen>
+      {showImportBanner && (
+        <div className="flex items-center gap-3 border-b border-tm-rule bg-tm-accent-soft px-4 py-2 font-tm-mono text-[11px] text-tm-fg">
+          <span className="flex-1">
+            {t(locale, "settings.byok.import_banner")}
+          </span>
+          <button
+            type="button"
+            disabled={importBusy}
+            onClick={() => { void handleImport(); }}
+            className="border border-tm-accent bg-tm-accent px-3 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-white disabled:opacity-50"
+          >
+            {t(locale, "settings.byok.import_button")}
+          </button>
+          <button
+            type="button"
+            disabled={importBusy}
+            onClick={handleDiscardImport}
+            className="border border-tm-rule px-3 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg disabled:opacity-50"
+          >
+            {t(locale, "settings.byok.discard_button")}
+          </button>
+        </div>
+      )}
       <TmSubbar>
         <TmSubbarKV
           label={zh ? "存储" : "STORAGE"}
-          value="localStorage · browser-only"
+          value={serverLast4 ? `server · …${serverLast4}` : "server · none"}
         />
         <TmSubbarSep />
         <TmSubbarKV label={zh ? "服务商" : "PROVIDER"} value={provider} />
         <TmSubbarSep />
         <TmSubbarKV label="MODEL" value={effectiveModel} />
         <TmSubbarSpacer />
-        {savedAt && (
+        {savedAt && serverLast4 && (
           <TmStatusPill tone="ok">
-            {zh ? `已保存 ${savedAt}` : `SAVED ${savedAt}`}
+            {t(locale, "settings.byok.saved_as").replace("{last4}", serverLast4)}
           </TmStatusPill>
         )}
       </TmSubbar>
@@ -205,8 +342,8 @@ export default function SettingsPage() {
       <TmPane title="SETTINGS / BYOK" meta={preset.help}>
         <p className="px-3 py-2.5 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg-2">
           {zh
-            ? "你的 API key 只保存在本浏览器的 localStorage，每次请求作为 header 发送给后端用于调用大模型。alpha-agent 服务器从不存储或日志记录你的 key。"
-            : "Your API key is stored in this browser's localStorage and sent as a request header on each LLM call. The alpha-agent server never stores or logs your key."}
+            ? "你的 API key 经 AES-256-GCM 加密后保存在服务端。每次 LLM 请求时服务器解密并以 X-LLM-* header 形式传递给 LiteLLM，明文 key 不会被记录。"
+            : "Your API key is encrypted with AES-256-GCM and stored server-side. On each LLM call the server decrypts it and passes it as X-LLM-* headers to LiteLLM. The plaintext key is never logged."}
         </p>
       </TmPane>
 
@@ -387,6 +524,58 @@ export default function SettingsPage() {
         meta={zh ? "intraday cron 优先处理 + /alerts 显示" : "intraday cron prioritisation + /alerts display"}
       >
         <WatchlistEditor />
+      </TmPane>
+
+      {/* Danger zone */}
+      <TmPane
+        title={t(locale, "settings.danger.title").toUpperCase()}
+        meta={zh ? "不可撤销操作" : "irreversible actions"}
+      >
+        <div className="flex flex-col gap-4 px-3 py-3">
+          {/* Export */}
+          <div className="flex items-center gap-3">
+            <TmButton
+              variant="secondary"
+              onClick={() => { void handleExport(); }}
+              disabled={exportInProgress}
+            >
+              {exportInProgress
+                ? zh ? "导出中…" : "EXPORTING…"
+                : t(locale, "settings.danger.export").toUpperCase()}
+            </TmButton>
+            <span className="font-tm-mono text-[10.5px] text-tm-muted">
+              {zh ? "下载 JSON 数据包" : "downloads a JSON data bundle"}
+            </span>
+          </div>
+
+          {/* Delete account */}
+          <div className="flex flex-col gap-2 border border-red-800/40 bg-red-950/20 p-3">
+            <p className="font-tm-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-red-400">
+              {t(locale, "settings.danger.delete")}
+            </p>
+            <p className="font-tm-mono text-[10.5px] text-tm-muted">
+              {t(locale, "settings.danger.delete_confirm")}
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder="DELETE"
+                className="h-7 w-36 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none placeholder:text-tm-muted focus:border-red-500"
+              />
+              <TmButton
+                variant="ghost"
+                onClick={() => { void handleDeleteAccount(); }}
+                disabled={deleteConfirm !== "DELETE" || deleteInProgress}
+              >
+                {deleteInProgress
+                  ? zh ? "删除中…" : "DELETING…"
+                  : t(locale, "settings.danger.delete").toUpperCase()}
+              </TmButton>
+            </div>
+          </div>
+        </div>
       </TmPane>
     </TmScreen>
   );
