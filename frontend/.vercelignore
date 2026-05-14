@@ -1,0 +1,24 @@
+# Frontend Vercel project (rootDirectory = frontend/).
+#
+# This file MUST exist. Without it, Vercel falls back to the repo-root
+# .vercelignore, which excludes `frontend/` wholesale (that file is the
+# BACKEND Python project's bundle filter) -- deleting package.json before
+# `npm install` runs and failing the build with ENOENT / exit 254.
+#
+# Paths here are relative to frontend/. Keep package.json, package-lock.json,
+# src/, public/, and all config files. Only exclude build artifacts and
+# local-only files.
+
+node_modules/
+.next/
+.vercel/
+tsconfig.tsbuildinfo
+
+# Local env files -- Vercel injects env vars from project settings
+.env.local
+.env.production
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
