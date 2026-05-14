@@ -1,15 +1,34 @@
 # tests/api/test_brief_stream.py
+#
+# Phase 4 rewrite: provider + api_key no longer live in the request body.
+# Auth is required; BYOK is fetched server-side. Tests that relied on the
+# body-key contract are updated to the new auth-aware contract.
+import base64
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from jose import jwt
+
+_SECRET = "test-secret-not-real-0123456789"
+_MASTER = base64.b64encode(b"0123456789abcdef0123456789abcdef").decode()
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("NEXTAUTH_SECRET", _SECRET)
+    monkeypatch.setenv("BYOK_MASTER_KEY", _MASTER)
     from api.index import app
     return TestClient(app)
+
+
+def _auth(sub="42"):
+    now = int(time.time())
+    tok = jwt.encode({"sub": sub, "iat": now, "exp": now + 3600},
+                     _SECRET, algorithm="HS256")
+    return {"Authorization": f"Bearer {tok}"}
 
 
 def _make_row(ticker="AAPL"):
@@ -42,29 +61,45 @@ def _make_row(ticker="AAPL"):
     }
 
 
-async def _fake_stream():
+def _byok_row(provider="openai", model="gpt-4o-mini"):
+    from alpha_agent.auth.crypto_box import encrypt
+    ciphertext, nonce = encrypt("sk-test", _MASTER.encode())
+    return {
+        "provider": provider, "ciphertext": ciphertext, "nonce": nonce,
+        "model": model, "base_url": None,
+    }
+
+
+def _pool_with_byok(signal_row=None, byok=None):
+    """Return a mock pool that yields signal_row then byok_row on fetchrow calls."""
+    pool = MagicMock()
+    pool.fetchrow = AsyncMock(side_effect=[
+        signal_row if signal_row is not None else _make_row(),
+        byok if byok is not None else _byok_row(),
+    ])
+    pool.execute = AsyncMock()
+    return pool
+
+
+async def _fake_stream_tokens(**kwargs):
     """Mimics LiteLLM streaming chunk shape minimally."""
     for token in ["Apple", " is", " trading", " at", " 28.5x", "."]:
-        yield token
+        yield {"type": "summary", "delta": token}
+    yield {"type": "done"}
 
 
 def test_brief_stream_emits_sse_deltas(client, monkeypatch):
-    pool = MagicMock()
-    pool.fetchrow = AsyncMock(return_value=_make_row())
+    """SSE events are newline-delimited JSON with correct `data:` prefix."""
+    pool = _pool_with_byok()
     monkeypatch.setattr(
         "alpha_agent.api.routes.brief.get_db_pool",
         AsyncMock(return_value=pool),
     )
-    # Patch the streamer so the test doesn't need a real LLM key
-    async def fake_stream(*args, **kwargs):
-        async for tok in _fake_stream():
-            yield {"type": "summary", "delta": tok}
-        yield {"type": "done"}
     monkeypatch.setattr(
-        "alpha_agent.api.routes.brief.stream_brief", fake_stream,
+        "alpha_agent.api.routes.brief.stream_brief", _fake_stream_tokens,
     )
-    body = {"provider": "openai", "api_key": "sk-test"}
-    with client.stream("POST", "/api/brief/AAPL/stream", json=body) as r:
+    with client.stream("POST", "/api/brief/AAPL/stream",
+                       headers=_auth(), json={}) as r:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/event-stream")
         chunks = b"".join(r.iter_bytes()).decode()
@@ -82,38 +117,49 @@ def test_brief_stream_unknown_ticker_404(client, monkeypatch):
         "alpha_agent.api.routes.brief.get_db_pool",
         AsyncMock(return_value=pool),
     )
-    body = {"provider": "openai", "api_key": "sk-test"}
-    r = client.post("/api/brief/UNKN/stream", json=body)
+    r = client.post("/api/brief/UNKN/stream", headers=_auth(), json={})
     assert r.status_code == 404
 
 
-def test_brief_stream_missing_key_400(client):
-    """Body must include api_key. Pydantic rejects missing field."""
-    r = client.post("/api/brief/AAPL/stream", json={"provider": "openai"})
-    assert r.status_code == 422
-
-
-def test_brief_stream_invalid_provider_400(client):
-    body = {"provider": "ollama2", "api_key": "sk-test"}
-    r = client.post("/api/brief/AAPL/stream", json=body)
-    assert r.status_code == 422
-
-
-def test_brief_stream_surfaces_llm_error_in_sse(client, monkeypatch):
-    pool = MagicMock()
-    pool.fetchrow = AsyncMock(return_value=_make_row())
+def test_brief_stream_model_override_forwarded(client, monkeypatch):
+    """model_override in the body is forwarded to stream_brief, taking
+    precedence over the model stored in the byok row."""
+    pool = _pool_with_byok()
     monkeypatch.setattr(
         "alpha_agent.api.routes.brief.get_db_pool",
         AsyncMock(return_value=pool),
     )
+    captured = {}
+
+    async def capture_stream(*, model, **kwargs):
+        captured["model"] = model
+        yield {"type": "done"}
+
+    monkeypatch.setattr("alpha_agent.api.routes.brief.stream_brief", capture_stream)
+    with client.stream("POST", "/api/brief/AAPL/stream",
+                       headers=_auth(), json={"model_override": "gpt-4o"}) as r:
+        assert r.status_code == 200
+        b"".join(r.iter_bytes())
+    assert captured["model"] == "gpt-4o"
+
+
+def test_brief_stream_surfaces_llm_error_in_sse(client, monkeypatch):
+    """LLM errors are surfaced as SSE error events, not HTTP 500."""
+    pool = _pool_with_byok()
+    monkeypatch.setattr(
+        "alpha_agent.api.routes.brief.get_db_pool",
+        AsyncMock(return_value=pool),
+    )
+
     async def boom_stream(*args, **kwargs):
         raise RuntimeError("upstream LLM 429 rate limit")
         yield  # makes it a generator
+
     monkeypatch.setattr(
         "alpha_agent.api.routes.brief.stream_brief", boom_stream,
     )
-    body = {"provider": "openai", "api_key": "sk-test"}
-    with client.stream("POST", "/api/brief/AAPL/stream", json=body) as r:
+    with client.stream("POST", "/api/brief/AAPL/stream",
+                       headers=_auth(), json={}) as r:
         chunks = b"".join(r.iter_bytes()).decode()
     err_lines = [ln for ln in chunks.splitlines() if "error" in ln]
     assert any("rate limit" in ln for ln in err_lines)

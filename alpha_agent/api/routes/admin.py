@@ -19,8 +19,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from alpha_agent.auth.dependencies import require_user
 
 from alpha_agent.api.dependencies import get_db_pool
 
@@ -74,12 +76,8 @@ async def _cooldown_active(job: str) -> tuple[bool, datetime | None]:
 @router.post("/refresh", response_model=RefreshResponse)
 async def trigger_refresh(
     body: RefreshRequest,
-    x_refresh_auth: str | None = Header(default=None),
+    user_id: int = Depends(require_user),
 ) -> RefreshResponse:
-    secret = os.environ.get("REFRESH_SECRET")
-    if secret and x_refresh_auth != secret:
-        raise HTTPException(status_code=401, detail="invalid X-Refresh-Auth")
-
     gh_token = os.environ.get("GH_PAT")
     if not gh_token:
         return RefreshResponse(

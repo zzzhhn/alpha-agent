@@ -2176,12 +2176,7 @@
       },
       "StreamBriefRequest": {
         "properties": {
-          "api_key": {
-            "minLength": 1,
-            "title": "Api Key",
-            "type": "string"
-          },
-          "base_url": {
+          "model_override": {
             "anyOf": [
               {
                 "type": "string"
@@ -2190,34 +2185,9 @@
                 "type": "null"
               }
             ],
-            "title": "Base Url"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "provider": {
-            "enum": [
-              "openai",
-              "anthropic",
-              "kimi",
-              "ollama"
-            ],
-            "title": "Provider",
-            "type": "string"
+            "title": "Model Override"
           }
         },
-        "required": [
-          "provider",
-          "api_key"
-        ],
         "title": "StreamBriefRequest",
         "type": "object"
       },
@@ -3139,7 +3109,7 @@
     },
     "/api/brief/{ticker}/stream": {
       "post": {
-        "description": "SSE-streaming Rich brief. Client posts with BYOK key in body.",
+        "description": "SSE-streaming Rich brief. Auth required; BYOK key fetched + decrypted\nserver-side from the authenticated user's stored credentials.",
         "operationId": "post_brief_stream_api_brief__ticker__stream_post",
         "parameters": [
           {
@@ -3151,6 +3121,22 @@
               "minLength": 1,
               "title": "Ticker",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],

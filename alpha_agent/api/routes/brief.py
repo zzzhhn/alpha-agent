@@ -7,12 +7,15 @@ Spec §3.4.
 from __future__ import annotations
 
 import json
+import os
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.auth.crypto_box import CryptoError, decrypt
+from alpha_agent.auth.dependencies import require_user
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 
 router = APIRouter(prefix="/api/brief", tags=["brief"])
@@ -101,10 +104,10 @@ from alpha_agent.llm.brief_streamer import stream_brief
 
 
 class StreamBriefRequest(BaseModel):
-    provider: Literal["openai", "anthropic", "kimi", "ollama"]
-    api_key: str = Field(min_length=1, repr=False)
-    model: str | None = None
-    base_url: str | None = None
+    # Phase 4: the BYOK key is no longer in the body - it is read
+    # server-side from user_byok for the authenticated user. Only an
+    # optional model override remains.
+    model_override: str | None = None
 
 
 def _sse_format(event: dict) -> bytes:
@@ -118,8 +121,10 @@ def _sse_format(event: dict) -> bytes:
 async def post_brief_stream(
     payload: StreamBriefRequest,
     ticker: str = Path(min_length=1, max_length=10),
+    user_id: int = Depends(require_user),
 ) -> StreamingResponse:
-    """SSE-streaming Rich brief. Client posts with BYOK key in body."""
+    """SSE-streaming Rich brief. Auth required; BYOK key fetched + decrypted
+    server-side from the authenticated user's stored credentials."""
     ticker = ticker.upper()
     pool = await get_db_pool()
     row = await pool.fetchrow(
@@ -131,28 +136,54 @@ async def post_brief_stream(
     if row is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
 
+    byok = await pool.fetchrow(
+        "SELECT provider, ciphertext, nonce, model, base_url "
+        "FROM user_byok WHERE user_id = $1 LIMIT 1",
+        user_id,
+    )
+    if byok is None:
+        raise HTTPException(
+            status_code=400, detail="No BYOK key set; visit /settings to add one"
+        )
+
+    master = os.environ.get("BYOK_MASTER_KEY")
+    if not master:
+        raise HTTPException(status_code=500, detail="BYOK_MASTER_KEY not configured")
+
     breakdown: list[dict] = json.loads(row["breakdown"]).get("breakdown", [])
     composite = float(row["composite"]) if row["composite"] is not None else 0.0
     rating = row["rating"] or "HOLD"
 
     async def generator():
         try:
+            plaintext_key = decrypt(byok["ciphertext"], byok["nonce"], master.encode("utf-8"))
+        except CryptoError:
+            yield _sse_format({
+                "type": "error",
+                "message": "Stored key cannot be decrypted. Please re-save it in /settings.",
+            })
+            return
+        try:
             async for event in stream_brief(
-                provider=payload.provider,
-                api_key=payload.api_key,
+                provider=byok["provider"],
+                api_key=plaintext_key,
                 ticker=ticker,
                 rating=rating,
                 composite=composite,
                 breakdown=breakdown,
-                model=payload.model,
-                base_url=payload.base_url,
+                model=payload.model_override or byok["model"],
+                base_url=byok["base_url"],
             ):
                 yield _sse_format(event)
-                # tiny await so the runtime flushes
                 await asyncio.sleep(0)
+            # Stamp usage for the /settings "last used" display.
+            await pool.execute(
+                "UPDATE user_byok SET last_used_at = now() "
+                "WHERE user_id = $1 AND provider = $2",
+                user_id, byok["provider"],
+            )
         except Exception as e:
-            # Sanitize: never echo the api_key. type(e).__name__ + str(e) is
-            # enough for the client to act on (429, auth, etc.).
+            # Sanitize: never echo the api_key. type + truncated message only.
             yield _sse_format({
                 "type": "error",
                 "message": f"{type(e).__name__}: {str(e)[:200]}",
@@ -161,8 +192,5 @@ async def post_brief_stream(
     return StreamingResponse(
         generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-store",
-            "X-Accel-Buffering": "no",  # nginx; harmless on Vercel
-        },
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
