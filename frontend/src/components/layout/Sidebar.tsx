@@ -29,6 +29,7 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { useLocale } from "./LocaleProvider";
 import { t } from "@/lib/i18n";
+import SidebarAuthSlot from "./SidebarAuthSlot";
 
 interface NavItem {
   readonly id: string;
@@ -106,6 +107,8 @@ export function Sidebar() {
         />
         {t(locale, "brand.systemOnline" as Parameters<typeof t>[1])}
       </div>
+
+      <SidebarAuthSlot />
     </aside>
   );
 }

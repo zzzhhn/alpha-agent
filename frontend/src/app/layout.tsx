@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Inter_Tight } from "next/font/google";
+import { SessionProvider } from "next-auth/react";
 import "./globals.css";
 
 // Workstation aesthetic (Variation C) — fonts are self-hosted by Next.js
@@ -38,7 +39,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${jetbrainsMono.variable} ${interTight.variable}`}
     >
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <SessionProvider>{children}</SessionProvider>
+      </body>
     </html>
   );
 }
