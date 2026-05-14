@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Bell, Filter } from "lucide-react";
 import { fetchAlertsRecent, type AlertRow } from "@/lib/api/alertsFeed";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import WatchlistStar from "@/components/ui/WatchlistStar";
 
 function relativeTime(iso: string, locale: Locale): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -39,6 +41,7 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
   const [filter, setFilter] = useState<string>(ticker ?? "");
   const [rows, setRows] = useState<AlertRow[] | null>(null);
   const [err, setErr] = useState<string>("");
+  const { isWatched } = useWatchlist();
 
   useEffect(() => {
     setLocale(getLocaleFromStorage());
@@ -107,7 +110,13 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
                   {relativeTime(r.created_at, locale)}
                 </td>
                 <td className="px-2 py-1">
-                  <Link href={`/stock/${r.ticker}`} className="text-tm-fg hover:text-tm-accent font-mono">
+                  {isWatched(r.ticker) ? (
+                    <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" />
+                  ) : null}
+                  <Link
+                    href={`/stock/${r.ticker}`}
+                    className={`font-mono hover:text-tm-accent ${isWatched(r.ticker) ? "text-tm-accent" : "text-tm-fg"}`}
+                  >
                     {r.ticker}
                   </Link>
                 </td>

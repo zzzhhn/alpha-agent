@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import type { RatingCard } from "@/lib/api/picks";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import WatchlistStar from "@/components/ui/WatchlistStar";
 import RatingBadge from "./RatingBadge";
 import ActionBox from "./ActionBox";
 import LeanThesis from "./LeanThesis";
@@ -21,6 +23,8 @@ export default function StockCardLayout({
   card: RatingCard;
   stale: boolean;
 }) {
+  const { isWatched } = useWatchlist();
+  const watched = isWatched(card.ticker);
   return (
     <div className="grid grid-cols-12 gap-6 px-4 py-6">
       {/* Left rail (sticky) */}
@@ -34,7 +38,12 @@ export default function StockCardLayout({
           <span aria-hidden="true">←</span>
           <span>Back to Picks</span>
         </Link>
-        <div className="text-2xl font-bold text-tm-fg">{card.ticker}</div>
+        <div
+          className={`flex items-center gap-1.5 text-2xl font-bold ${watched ? "text-tm-accent" : "text-tm-fg"}`}
+        >
+          {watched ? <WatchlistStar className="h-5 w-5 text-tm-accent" /> : null}
+          <span>{card.ticker}</span>
+        </div>
         <RatingBadge
           rating={card.rating}
           confidence={card.confidence}

@@ -3,7 +3,13 @@ import PickRow from "./PickRow";
 
 const TH = "px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted select-none";
 
-export default function PicksTable({ picks }: { picks: RatingCard[] }) {
+export default function PicksTable({
+  picks,
+  isWatched,
+}: {
+  picks: RatingCard[];
+  isWatched?: (ticker: string) => boolean;
+}) {
   if (picks.length === 0) {
     return (
       <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
@@ -26,7 +32,12 @@ export default function PicksTable({ picks }: { picks: RatingCard[] }) {
       </thead>
       <tbody>
         {picks.map((card, i) => (
-          <PickRow key={card.ticker} rank={i + 1} card={card} />
+          <PickRow
+            key={card.ticker}
+            rank={i + 1}
+            card={card}
+            watched={isWatched?.(card.ticker) ?? false}
+          />
         ))}
       </tbody>
     </table>

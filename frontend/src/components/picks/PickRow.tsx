@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { RatingCard } from "@/lib/api/picks";
 import clsx from "clsx";
+import WatchlistStar from "@/components/ui/WatchlistStar";
 
 const TIER_COLOR: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -10,7 +11,15 @@ const TIER_COLOR: Record<string, string> = {
   SELL: "text-tm-neg",
 };
 
-export default function PickRow({ rank, card }: { rank: number; card: RatingCard }) {
+export default function PickRow({
+  rank,
+  card,
+  watched = false,
+}: {
+  rank: number;
+  card: RatingCard;
+  watched?: boolean;
+}) {
   // Defensive: backend may return null for composite/confidence when legacy
   // DB rows held NaN before storage sanitization landed.
   const composite = typeof card.composite_score === "number" && isFinite(card.composite_score)
@@ -26,6 +35,7 @@ export default function PickRow({ rank, card }: { rank: number; card: RatingCard
         {rank}
       </td>
       <td className="px-3 py-1.5 font-tm-mono text-[11px] font-semibold">
+        {watched ? <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" /> : null}
         <Link
           href={`/stock/${card.ticker}`}
           className="text-tm-accent hover:underline"

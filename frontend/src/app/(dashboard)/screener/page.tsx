@@ -37,6 +37,8 @@ import {
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import WatchlistStar from "@/components/ui/WatchlistStar";
 import {
   listZoo,
   readDirection,
@@ -1056,6 +1058,7 @@ function ResultsPane({
 }) {
   const { locale } = useLocale();
   const recs = result.recommendations;
+  const { isWatched } = useWatchlist();
   const subtitle = t(locale, "screener.results.subtitle").replace(
     "{n}",
     String(recs.length),
@@ -1158,6 +1161,9 @@ function ResultsPane({
                   </RCell>
                   <RCell>
                     <span className="font-semibold text-tm-accent">
+                      {isWatched(r.ticker) ? (
+                        <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" />
+                      ) : null}
                       {r.ticker}
                     </span>
                   </RCell>
