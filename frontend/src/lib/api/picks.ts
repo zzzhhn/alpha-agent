@@ -28,12 +28,20 @@ export interface RatingCard {
   breakdown: BreakdownEntry[];
   top_drivers: string[];
   top_drags: string[];
+  // True for a slow-only row: daily-pipeline data with rating/confidence
+  // derived (no fast factors), can be up to ~1 day old. Absent on the
+  // single-card /api/stock response, hence optional.
+  partial?: boolean;
 }
 
-export const fetchPicks = (limit = 20) =>
-  apiGet<{ picks: RatingCard[]; as_of: string | null; stale: boolean }>(
-    `/api/picks/lean?limit=${limit}`,
+export const fetchPicks = (limit = 50, search?: string) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const q = search?.trim();
+  if (q) params.set("search", q);
+  return apiGet<{ picks: RatingCard[]; as_of: string | null; stale: boolean }>(
+    `/api/picks/lean?${params.toString()}`,
   );
+};
 
 export const fetchStock = (ticker: string) =>
   apiGet<{ card: RatingCard; stale: boolean }>(

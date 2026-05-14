@@ -32,6 +32,14 @@ export default function PickRow({ rank, card }: { rank: number; card: RatingCard
         >
           {card.ticker}
         </Link>
+        {card.partial ? (
+          <span
+            className="ml-1.5 rounded bg-tm-bg-2 px-1 py-0.5 align-middle text-[8px] font-semibold uppercase tracking-wide text-tm-muted"
+            title="Slow-only row: daily pipeline data, no fast factors, may be up to ~1 day old"
+          >
+            partial
+          </span>
+        ) : null}
       </td>
       <td className="px-3 py-1.5 font-tm-mono text-[10.5px]">
         <span className={clsx("font-semibold", TIER_COLOR[card.rating] ?? "text-tm-fg-2")}>

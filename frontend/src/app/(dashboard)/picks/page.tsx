@@ -1,39 +1,17 @@
 import { fetchPicks } from "@/lib/api/picks";
-import PicksTable from "@/components/picks/PicksTable";
-import RefreshButton from "@/components/picks/RefreshButton";
-import { TmScreen, TmPane } from "@/components/tm/TmPane";
-import { TmSubbar, TmSubbarKV, TmSubbarSep, TmStatusPill } from "@/components/tm/TmSubbar";
+import PicksBrowser from "@/components/picks/PicksBrowser";
+import { TmScreen } from "@/components/tm/TmPane";
 
 export const dynamic = "force-dynamic";
 
 export default async function PicksPage() {
-  const data = await fetchPicks(20);
-  const asOf = data.as_of ? new Date(data.as_of).toLocaleString() : "—";
+  // Server-render the default top-50 board; PicksBrowser (client) layers
+  // debounced ticker search on top and re-queries /api/picks/lean.
+  const initialData = await fetchPicks(50);
 
   return (
     <TmScreen>
-      <TmSubbar>
-        <TmSubbarKV label="PICKS" value={`${data.picks.length} signals`} />
-        <TmSubbarSep />
-        <TmSubbarKV label="AS OF" value={asOf} />
-        {data.stale ? (
-          <>
-            <TmSubbarSep />
-            <TmStatusPill tone="err">DATA &gt; 24h OLD</TmStatusPill>
-          </>
-        ) : null}
-      </TmSubbar>
-
-      <div className="flex justify-end px-4 pt-3">
-        <RefreshButton />
-      </div>
-
-      <TmPane
-        title="TODAY'S PICKS"
-        meta={`sorted by composite score (desc) · top ${data.picks.length}`}
-      >
-        <PicksTable picks={data.picks} />
-      </TmPane>
+      <PicksBrowser initialData={initialData} />
     </TmScreen>
   );
 }
