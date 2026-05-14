@@ -29,13 +29,11 @@ import {
 } from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
 import {
-  type ByokCredentials,
   type LLMProvider,
   PROVIDER_PRESETS,
   clearByok,
   hasByok,
   loadByok,
-  saveByok as saveByokLocal,
 } from "@/lib/byok";
 import {
   getByok,
@@ -127,14 +125,6 @@ export default function SettingsPage() {
       });
       setServerLast4(resp.last4);
       setSavedAt(new Date().toLocaleTimeString());
-      // Also keep localStorage in sync so byokHeaders() still works for
-      // existing code paths that read X-LLM-* headers from it.
-      saveByokLocal({
-        provider,
-        apiKey,
-        baseUrl: baseUrl.trim() || undefined,
-        model: model.trim() || undefined,
-      } satisfies ByokCredentials);
     } catch (err) {
       setSavedAt(null);
       setTestState({
