@@ -1,9 +1,15 @@
-// Protected-route gate. /picks /stock /alerts stay public (spec B-tier);
-// only /settings requires a session. Unauthenticated access redirects to
-// /signin?callbackUrl=<original> so the user bounces straight back after
-// the magic-link round-trip.
-import { auth } from "@/auth";
+// frontend/src/middleware.ts
+//
+// Protected-route gate. Runs on the Edge runtime, so it builds its auth
+// instance from the edge-safe auth.config.ts (NO pg adapter, NO
+// nodemailer). /picks /stock /alerts stay public; /settings and /alpha
+// require a session. Unauthenticated access redirects to
+// /signin?callbackUrl=<original>.
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { authConfig } from "@/auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 const PROTECTED_PREFIXES = ["/settings", "/alpha"];
 
