@@ -126,3 +126,24 @@ m4b-acceptance:
 	  "https://alpha.bobbyzhong.com/api/brief/AAPL/stream"); \
 	  if [ "$$code" != "422" ]; then echo "expected 422 got $$code"; exit 1; fi
 	@echo "M4b acceptance PASS"
+
+m5-acceptance:
+	@echo "==> Running M5 acceptance suite"
+	# Backend: auth module + user routes + brief auth + alpha translate auth
+	pytest tests/auth/ tests/api/test_user_routes.py tests/api/test_brief_stream_auth.py tests/api/test_alpha_translate_auth.py -v
+	# Frontend: deps clean, types clean, lint clean, builds
+	cd frontend && npm ci
+	cd frontend && npx tsc --noEmit
+	cd frontend && npx next lint
+	cd frontend && npx next build
+	# Smoke: protected endpoints reject anonymous access
+	@echo "==> Smoke: POST /api/brief/AAPL/stream without auth -> 401"
+	@code=$$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+	  -X POST -H 'content-type: application/json' -d '{}' \
+	  "https://alpha.bobbyzhong.com/api/brief/AAPL/stream"); \
+	  if [ "$$code" != "401" ]; then echo "expected 401 got $$code"; exit 1; fi
+	@echo "==> Smoke: GET /api/user/me without auth -> 401"
+	@code=$$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+	  "https://alpha.bobbyzhong.com/api/user/me"); \
+	  if [ "$$code" != "401" ]; then echo "expected 401 got $$code"; exit 1; fi
+	@echo "M5 acceptance PASS"
