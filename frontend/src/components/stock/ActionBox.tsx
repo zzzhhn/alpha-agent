@@ -24,6 +24,22 @@ export default function ActionBox({ card }: { card: RatingCard }) {
     });
   }, [card]);
 
+  // Partial card (slow-only ticker): the entry/stop/target math needs the
+  // `technicals` factor's ATR + live price, which only the intraday pipeline
+  // produces. Show why instead of a box of placeholder dashes. useMemo above
+  // still runs (hooks must be unconditional); its all-null result is unused.
+  if (card.partial) {
+    return (
+      <div className="rounded border border-tm-rule-2 bg-tm-bg-2 p-3 text-sm">
+        <div className="font-semibold text-tm-warn">Action</div>
+        <p className="mt-1.5 text-xs leading-relaxed text-tm-muted">
+          Entry / stop / target need intraday data (ATR, live price). This
+          ticker is on the daily pipeline only, no intraday factors yet.
+        </p>
+      </div>
+    );
+  }
+
   const dimmed = action.rrRatio !== null && action.rrRatio < 1.5;
 
   return (
