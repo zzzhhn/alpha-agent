@@ -155,6 +155,16 @@ except Exception as e:
     print(f"✗ brief routes: {msg}", file=sys.stderr, flush=True)
 
 try:
+    from alpha_agent.api.routes.watchlist import router as watchlist_router
+    app.include_router(watchlist_router)
+    print(f"✓ watchlist routes loaded", file=sys.stderr, flush=True)
+except Exception as e:
+    import traceback
+    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+    _m2_load_errors["watchlist"] = msg
+    print(f"✗ watchlist routes: {msg}", file=sys.stderr, flush=True)
+
+try:
     from alpha_agent.api.routes.health import router as m2_health_router
     app.include_router(m2_health_router)
     print(f"✓ M2 health routes loaded", file=sys.stderr, flush=True)
