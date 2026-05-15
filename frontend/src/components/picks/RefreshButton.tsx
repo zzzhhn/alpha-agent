@@ -11,6 +11,41 @@ import { useCallback, useEffect, useState } from "react";
 import { triggerRefresh, fetchLastRefresh } from "@/lib/api/admin";
 import { t, getLocaleFromStorage } from "@/lib/i18n";
 
+// localStorage key for surviving a page refresh: the ETA progress bar
+// was driven purely by React state, so reloading the page dropped it.
+// We persist {at, etaMin} on successful dispatch and rehydrate on mount.
+const DISPATCH_KEY = "alpha-agent:dispatch";
+
+function loadDispatch(): { at: number; etaMin: number } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DISPATCH_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { at?: number; etaMin?: number };
+    if (typeof parsed.at !== "number" || typeof parsed.etaMin !== "number") {
+      return null;
+    }
+    // Grace window beyond ETA: a user returning days later should not
+    // still see a "done" hint from an ancient dispatch. Drop it.
+    if (Date.now() - parsed.at > (parsed.etaMin + 30) * 60_000) {
+      localStorage.removeItem(DISPATCH_KEY);
+      return null;
+    }
+    return { at: parsed.at, etaMin: parsed.etaMin };
+  } catch {
+    return null;
+  }
+}
+
+function saveDispatch(at: number, etaMin: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DISPATCH_KEY, JSON.stringify({ at, etaMin }));
+  } catch {
+    // Silent: localStorage can be unavailable in private mode.
+  }
+}
+
 function formatAge(iso: string | null, locale: "zh" | "en"): string {
   if (!iso) return locale === "zh" ? "暂无" : "never";
   const ms = Date.now() - new Date(iso).getTime();
@@ -78,8 +113,16 @@ export default function RefreshButton() {
   const [now, setNow] = useState(() => Date.now());
 
   // Sync locale on mount (i18n stores in localStorage so SSR can't read it).
+  // Also rehydrate any in-flight dispatch ETA from localStorage so the
+  // countdown bar survives a page refresh; loadDispatch drops anything
+  // beyond the ETA + 30min grace window.
   useEffect(() => {
     setLocale(getLocaleFromStorage());
+    const saved = loadDispatch();
+    if (saved != null) {
+      setEtaMin(saved.etaMin);
+      setDispatchedAt(saved.at);
+    }
   }, []);
 
   // Poll the lightweight /last_refresh endpoint on mount + every 60s so the
@@ -123,10 +166,12 @@ export default function RefreshButton() {
       const r = await triggerRefresh("fast_intraday");
       if (r.ok) {
         const eta = r.eta_minutes ?? 18;
+        const at = Date.now();
         setToast({ kind: "ok", min: eta });
         if (r.dispatched_at) setLastRun(r.dispatched_at);
         setEtaMin(eta);
-        setDispatchedAt(Date.now());
+        setDispatchedAt(at);
+        saveDispatch(at, eta);
         dispatched = true;
       } else if (r.reason?.toLowerCase().includes("cooldown")) {
         setToast({ kind: "cooldown" });
