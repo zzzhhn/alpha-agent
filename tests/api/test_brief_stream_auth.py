@@ -28,8 +28,10 @@ def _auth(sub="42"):
 
 
 def _signal_row():
+    # Shape matches the normalized row fetch_latest_signal selects.
     return {
-        "ticker": "AAPL", "rating": "OW", "composite": 1.2,
+        "ticker": "AAPL", "score": 1.2, "rating": "OW", "confidence": 0.7,
+        "partial": False,
         "breakdown": json.dumps({"breakdown": []}),
         "fetched_at": __import__("datetime").datetime(2026, 5, 14),
     }

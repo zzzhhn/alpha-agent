@@ -57,6 +57,11 @@ export default function StockCardLayout({
               ⚠ data &gt; 24h old
             </div>
           ) : null}
+          {card.partial ? (
+            <div className="rounded bg-tm-bg-2 px-2 py-1 text-tm-muted">
+              partial data: daily pipeline only, no intraday factors
+            </div>
+          ) : null}
         </div>
       </aside>
 

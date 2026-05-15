@@ -32,10 +32,14 @@ def _auth(sub="42"):
 
 
 def _make_row(ticker="AAPL"):
+    # Shape matches the normalized row fetch_latest_signal selects:
+    # ticker, score, rating, confidence, breakdown, fetched_at, partial.
     return {
         "ticker": ticker,
+        "score": 1.42,
         "rating": "OW",
-        "composite": 1.42,
+        "confidence": 0.85,
+        "partial": False,
         "breakdown": json.dumps({
             "breakdown": [
                 {"signal": "factor", "z": 1.5,

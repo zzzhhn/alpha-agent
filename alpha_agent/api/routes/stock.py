@@ -5,8 +5,6 @@ recent row is older than 24 hours.  Spec §7.2.
 """
 from __future__ import annotations
 
-import json
-import math
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -14,23 +12,9 @@ from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.signals.yf_helpers import extract_ohlcv, get_ticker
-
-
-def _safe_float(v, default: float = 0.0) -> float:
-    """NaN/Inf/None → default. Mirrors picks.py — legacy DB rows may
-    contain NaN composite/confidence written before storage-side
-    sanitization was added."""
-    if v is None:
-        return default
-    try:
-        f = float(v)
-        if math.isnan(f) or math.isinf(f):
-            return default
-        return f
-    except (TypeError, ValueError):
-        return default
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
 
@@ -44,6 +28,9 @@ class FullCard(BaseModel):
     top_drivers: list[str]
     top_drags: list[str]
     breakdown: list[dict]
+    # True for a slow-only ticker: daily-pipeline data, rating/confidence
+    # derived, no fast factors, can be up to ~1 day old.
+    partial: bool = False
 
 
 class StockResponse(BaseModel):
@@ -55,35 +42,31 @@ class StockResponse(BaseModel):
 async def get_stock(
     ticker: str = Path(min_length=1, max_length=10),
 ) -> StockResponse:
-    """Return the most-recent RatingCard for *ticker*."""
+    """Return the most-recent RatingCard for *ticker*.
+
+    Reads via fetch_latest_signal so a slow-only ticker (covered by the
+    daily pipeline but not the intraday cron, e.g. NVDA) resolves to a
+    partial card instead of 404ing.
+    """
     ticker = ticker.upper()
     pool = await get_db_pool()
-    row = await pool.fetchrow(
-        """
-        SELECT ticker, date, composite, rating, confidence, breakdown, fetched_at
-        FROM daily_signals_fast
-        WHERE ticker = $1
-        ORDER BY date DESC, fetched_at DESC
-        LIMIT 1
-        """,
-        ticker,
-    )
-    if row is None:
+    sig = await fetch_latest_signal(pool, ticker)
+    if sig is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
 
-    breakdown_data: list[dict] = json.loads(row["breakdown"]).get("breakdown", [])
-    fetched_at: datetime = row["fetched_at"]
+    fetched_at: datetime = sig["fetched_at"]
     stale = (datetime.now(UTC) - fetched_at) > timedelta(hours=24)
 
     card = FullCard(
-        ticker=row["ticker"],
-        rating=row["rating"] or "HOLD",
-        confidence=_safe_float(row["confidence"]),
-        composite_score=_safe_float(row["composite"]),
+        ticker=sig["ticker"],
+        rating=sig["rating"],
+        confidence=sig["confidence"],
+        composite_score=sig["score"],
         as_of=fetched_at.isoformat(),
-        top_drivers=top_drivers(breakdown_data),
-        top_drags=top_drags(breakdown_data),
-        breakdown=breakdown_data,
+        top_drivers=top_drivers(sig["breakdown"]),
+        top_drags=top_drags(sig["breakdown"]),
+        breakdown=sig["breakdown"],
+        partial=sig["partial"],
     )
     return StockResponse(card=card, stale=stale)
 

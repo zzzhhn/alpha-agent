@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.crypto_box import CryptoError, decrypt
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.fusion.attribution import top_drivers, top_drags
@@ -79,21 +80,16 @@ async def post_brief(
 
     ticker = ticker.upper()
     pool = await get_db_pool()
-    row = await pool.fetchrow(
-        "SELECT rating, breakdown, fetched_at FROM daily_signals_fast "
-        "WHERE ticker = $1 ORDER BY fetched_at DESC LIMIT 1",
-        ticker,
-    )
-    if row is None:
+    sig = await fetch_latest_signal(pool, ticker)
+    if sig is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
 
-    breakdown: list[dict] = json.loads(row["breakdown"]).get("breakdown", [])
-    thesis = _render_lean_thesis(row["rating"], breakdown)
+    thesis = _render_lean_thesis(sig["rating"], sig["breakdown"])
     return BriefResponse(
         ticker=ticker,
-        rating=row["rating"],
+        rating=sig["rating"],
         thesis=thesis,
-        rendered_at=row["fetched_at"].isoformat(),
+        rendered_at=sig["fetched_at"].isoformat(),
     )
 
 
@@ -128,13 +124,8 @@ async def post_brief_stream(
     server-side from the authenticated user's stored credentials."""
     ticker = ticker.upper()
     pool = await get_db_pool()
-    row = await pool.fetchrow(
-        "SELECT ticker, rating, composite, breakdown, fetched_at "
-        "FROM daily_signals_fast WHERE ticker = $1 "
-        "ORDER BY fetched_at DESC LIMIT 1",
-        ticker,
-    )
-    if row is None:
+    sig = await fetch_latest_signal(pool, ticker)
+    if sig is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
 
     byok = await pool.fetchrow(
@@ -151,9 +142,9 @@ async def post_brief_stream(
     if not master:
         raise HTTPException(status_code=500, detail="BYOK_MASTER_KEY not configured")
 
-    breakdown: list[dict] = json.loads(row["breakdown"]).get("breakdown", [])
-    composite = float(row["composite"]) if row["composite"] is not None else 0.0
-    rating = row["rating"] or "HOLD"
+    breakdown = sig["breakdown"]
+    composite = sig["score"]
+    rating = sig["rating"]
 
     async def generator():
         try:
