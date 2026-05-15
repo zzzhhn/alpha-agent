@@ -1,17 +1,26 @@
-"""Vercel serverless entry point — builds a lightweight FastAPI app directly.
+"""Vercel serverless entry point: builds a lightweight FastAPI app directly.
 
 Bypasses alpha_agent.api.app.create_app() which has compatibility issues
-with Vercel's Python runtime. Instead, we construct a minimal app here
-with only the dependencies needed for serverless mode.
+with Vercel's Python runtime. Router registration goes through a uniform
+_load(name, modpath) helper that records every attempt (loaded vs failed)
+in app.state.router_health. The /api/_health/routers endpoint surfaces
+that list so a silently-missing router is curl-visible, not buried in
+stderr only. Without the manifest, an ImportError in any one router is
+swallowed by per-block try/except and the deploy still goes READY with
+that route 404ing forever.
 """
 
+import importlib
 import os
 import sys
+import traceback
 
 os.environ.setdefault("SERVERLESS", "true")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from alpha_agent.core.types import RouterHealth
 
 app = FastAPI(title="AlphaCore Dashboard API", version="1.0.0")
 
@@ -22,7 +31,11 @@ app.add_middleware(
     allow_headers=["*", "Authorization"],
 )
 
-# ── Initialize app.state ────────────────────────────────────────────────
+# ── app.state init ──────────────────────────────────────────────────────
+app.state.router_health = []
+# Backward-compat dict for the legacy /api/_debug/load-errors endpoint.
+_m2_load_errors: dict[str, str] = {}
+
 try:
     from alpha_agent.config import get_settings
     from alpha_agent.api.cache import TTLCache
@@ -31,7 +44,6 @@ try:
     app.state.settings = settings
     app.state.cache = TTLCache()
 
-    # Try to create LLM client (may fail if API key missing etc.)
     try:
         from alpha_agent.llm.factory import create_llm_client
         app.state.llm = create_llm_client(settings)
@@ -43,11 +55,8 @@ try:
         print(f"⚠ LLM init failed: {app.state.llm_init_error}", file=sys.stderr, flush=True)
 
 except Exception as e:
-    import traceback
     print(f"✗ Settings init failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
-    # Bare minimum so routes don't crash on missing state
-    # Create a minimal settings-like object with defaults
     from types import SimpleNamespace
     app.state.settings = SimpleNamespace(
         dashboard_tickers=["NVDA", "AAPL", "TSLA"],
@@ -60,121 +69,48 @@ except Exception as e:
     app.state.llm = None
     app.state.llm_init_error = f"settings_init_failed: {type(e).__name__}: {e}"
 
-# ── Register routes ─────────────────────────────────────────────────────
-try:
-    from alpha_agent.api.routes.serverless import router as serverless_router
-    app.include_router(serverless_router)
-    print(f"✓ serverless routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    print(f"✗ serverless routes: {e}", file=sys.stderr, flush=True)
 
-try:
-    from alpha_agent.api.routes.system import router as system_router
-    app.include_router(system_router)
-    print(f"✓ system routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    print(f"✗ system routes: {e}", file=sys.stderr, flush=True)
+# ── Router registration via uniform _load helper ────────────────────────
+# Every router that the lambda should serve is enumerated below. _load
+# tracks every attempt in app.state.router_health (loaded=True/False
+# + the error text on failure), so /api/_health/routers shows BOTH what
+# loaded AND what silently dropped. Without this manifest, the per-block
+# try/except hides ImportError as a 404 forever (the watchlist trap of
+# 2026-05-15: the router code shipped, but its name was never enumerated
+# here, so it was simply absent from the lambda).
+def _load(name: str, modpath: str) -> None:
+    try:
+        router = importlib.import_module(modpath).router
+        app.include_router(router)
+        app.state.router_health.append(RouterHealth(name=name, loaded=True))
+        print(f"✓ {name} routes loaded", file=sys.stderr, flush=True)
+    except Exception as exc:
+        err = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+        app.state.router_health.append(
+            RouterHealth(name=name, loaded=False, error=err[:1500])
+        )
+        _m2_load_errors[name] = err
+        print(f"✗ {name} routes: {err}", file=sys.stderr, flush=True)
 
-try:
-    from alpha_agent.api.routes.interactive import router as interactive_router
-    app.include_router(interactive_router)
-    print(f"✓ interactive routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    print(f"✗ interactive routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
 
-try:
-    from alpha_agent.api.routes.data import router as data_router
-    app.include_router(data_router)
-    print(f"✓ data routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    print(f"✗ data routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
+_load("serverless",   "alpha_agent.api.routes.serverless")
+_load("system",       "alpha_agent.api.routes.system")
+_load("interactive",  "alpha_agent.api.routes.interactive")
+_load("data",         "alpha_agent.api.routes.data")
+_load("signal",       "alpha_agent.api.routes.signal")
+_load("screener",     "alpha_agent.api.routes.screener")
+_load("zoo",          "alpha_agent.api.routes.zoo")
+_load("picks",        "alpha_agent.api.routes.picks")
+_load("stock",        "alpha_agent.api.routes.stock")
+_load("brief",        "alpha_agent.api.routes.brief")
+_load("watchlist",    "alpha_agent.api.routes.watchlist")
+_load("m2_health",    "alpha_agent.api.routes.health")
+_load("cron_routes",  "alpha_agent.api.routes.cron_routes")
+_load("admin",        "alpha_agent.api.routes.admin")
+_load("alerts",       "alpha_agent.api.routes.alerts")
+_load("user",         "alpha_agent.api.routes.user")
 
-try:
-    from alpha_agent.api.routes.signal import router as signal_router
-    app.include_router(signal_router)
-    print(f"✓ signal routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    print(f"✗ signal routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
-
-try:
-    from alpha_agent.api.routes.screener import router as screener_router
-    app.include_router(screener_router)
-    print(f"✓ screener routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    print(f"✗ screener routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
-
-try:
-    from alpha_agent.api.routes.zoo import router as zoo_router
-    app.include_router(zoo_router)
-    print(f"✓ zoo routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    print(f"✗ zoo routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
-
-# ── M2 routers ─────────────────────────────────────────────────────────
-# Capture import errors into app.state so /api/_debug/load-errors can surface them.
-_m2_load_errors: dict[str, str] = {}
-
-try:
-    from alpha_agent.api.routes.picks import router as picks_router
-    app.include_router(picks_router)
-    print(f"✓ picks routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["picks"] = msg
-    print(f"✗ picks routes: {msg}", file=sys.stderr, flush=True)
-
-try:
-    from alpha_agent.api.routes.stock import router as stock_router
-    app.include_router(stock_router)
-    print(f"✓ stock routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["stock"] = msg
-    print(f"✗ stock routes: {msg}", file=sys.stderr, flush=True)
-
-try:
-    from alpha_agent.api.routes.brief import router as brief_router
-    app.include_router(brief_router)
-    print(f"✓ brief routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["brief"] = msg
-    print(f"✗ brief routes: {msg}", file=sys.stderr, flush=True)
-
-try:
-    from alpha_agent.api.routes.watchlist import router as watchlist_router
-    app.include_router(watchlist_router)
-    print(f"✓ watchlist routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["watchlist"] = msg
-    print(f"✗ watchlist routes: {msg}", file=sys.stderr, flush=True)
-
-try:
-    from alpha_agent.api.routes.health import router as m2_health_router
-    app.include_router(m2_health_router)
-    print(f"✓ M2 health routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["m2_health"] = msg
-    print(f"✗ M2 health routes: {msg}", file=sys.stderr, flush=True)
-
-# Probe asyncpg directly so we know if it's installed in the runtime
+# Probe asyncpg directly so we know it's installed in the runtime.
 try:
     import asyncpg  # noqa: F401
     _m2_load_errors["_asyncpg_import"] = "OK"
@@ -182,45 +118,6 @@ except Exception as e:
     _m2_load_errors["_asyncpg_import"] = f"{type(e).__name__}: {e}"
 
 app.state.m2_load_errors = _m2_load_errors
-
-try:
-    from alpha_agent.api.routes.cron_routes import router as cron_router
-    app.include_router(cron_router)
-    print(f"✓ cron routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    print(f"✗ cron routes: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
-
-try:
-    from alpha_agent.api.routes.admin import router as admin_router
-    app.include_router(admin_router)
-    print(f"✓ admin routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["admin"] = msg
-    print(f"✗ admin routes: {msg}", file=sys.stderr, flush=True)
-
-try:
-    from alpha_agent.api.routes.alerts import router as alerts_router
-    app.include_router(alerts_router)
-    print(f"✓ alerts routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["alerts"] = msg
-    print(f"✗ alerts routes: {msg}", file=sys.stderr, flush=True)
-
-try:
-    from alpha_agent.api.routes.user import router as user_router
-    app.include_router(user_router)
-    print(f"✓ user routes loaded", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-    _m2_load_errors["user"] = msg
-    print(f"✗ user routes: {msg}", file=sys.stderr, flush=True)
 
 
 @app.get("/api/health")
@@ -230,7 +127,9 @@ async def health() -> dict:
 
 @app.get("/api/_debug/load-errors")
 async def debug_load_errors() -> dict:
-    """Surface every M2 router cold-start ImportError + asyncpg probe result."""
+    """Surface every router cold-start ImportError + asyncpg probe result.
+    Kept for backward compat; prefer /api/_health/routers for the structured
+    loaded/failed manifest."""
     return getattr(app.state, "m2_load_errors", {})
 
 

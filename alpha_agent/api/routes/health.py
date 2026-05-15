@@ -1,9 +1,10 @@
 """Health endpoints — deployment ground truth for CLAUDE.md 三板斧.
 
-Three independent endpoints:
-  GET /api/_health        — DB ping + last cron timestamps
+Four independent endpoints:
+  GET /api/_health         — DB ping + last cron timestamps
   GET /api/_health/signals — per-signal error counts from error_log
-  GET /api/_health/cron   — last 5 runs per cron name
+  GET /api/_health/cron    — last 5 runs per cron name
+  GET /api/_health/routers — which routers loaded vs which silently failed
 
 All routes are decoupled from business routes so a broken picks/stock/brief
 does not prevent health-check from answering.  Spec §5.7.
@@ -12,10 +13,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.core.types import RouterHealth
 
 router = APIRouter(prefix="/api/_health", tags=["health"])
 
@@ -128,3 +130,25 @@ async def health_cron() -> dict[str, Any]:
             for r in rows
         ]
     return {"cron": out}
+
+
+@router.get("/routers")
+async def health_routers(request: Request) -> dict[str, Any]:
+    """Structured manifest of router cold-start outcomes.
+
+    Reads app.state.router_health (populated by the _load helper in both
+    entry points). Use this to detect a silently-missing route: per-block
+    try/except hides ImportError as a 404 forever, so the deploy goes
+    READY but the route never serves. Without this endpoint that failure
+    is invisible from curl. Returns {total, loaded, failed, routers[]}.
+    """
+    health: list[RouterHealth] = getattr(request.app.state, "router_health", [])
+    return {
+        "total": len(health),
+        "loaded": sum(1 for r in health if r.loaded),
+        "failed": sum(1 for r in health if not r.loaded),
+        "routers": [
+            {"name": r.name, "loaded": r.loaded, "error": r.error}
+            for r in health
+        ],
+    }
