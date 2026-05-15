@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/watchlist";
+import { syncWatchlistRemote } from "@/lib/api/watchlist";
 import { TmButton } from "@/components/tm/TmButton";
 
 const FORM_INPUT =
@@ -13,7 +14,13 @@ export default function WatchlistEditor() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setList(getWatchlist());
+    const initial = getWatchlist();
+    setList(initial);
+    // One-time reconcile: push whatever is in localStorage to the backend
+    // so the cron sees it. Covers pre-existing entries from before
+    // dual-write shipped. Future add/remove already dual-write via
+    // setWatchlist; this is the catch-up for the existing state.
+    void syncWatchlistRemote(initial);
   }, []);
 
   function handleAdd() {

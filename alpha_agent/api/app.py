@@ -235,6 +235,10 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.brief import router
         return router
 
+    def _import_watchlist():
+        from alpha_agent.api.routes.watchlist import router
+        return router
+
     def _import_m2_health():
         from alpha_agent.api.routes.health import router
         return router
@@ -246,6 +250,7 @@ def create_app() -> FastAPI:
     _load("picks", _import_picks)
     _load("stock", _import_stock)
     _load("brief", _import_brief)
+    _load("watchlist", _import_watchlist)
     _load("m2_health", _import_m2_health)
     _load("cron_routes", _import_cron_routes)
 

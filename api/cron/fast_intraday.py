@@ -69,7 +69,20 @@ async def handler(
     errors: list[dict] = []
     bucket = int(now.timestamp()) // 1800  # 30-min dedup window
 
-    universe = get_watchlist(top_n=limit if limit else 100, offset=offset or 0)
+    base_universe = get_watchlist(top_n=limit if limit else 100, offset=offset or 0)
+    # On the offset=0 shard, union in every user's stored watchlist tickers
+    # (from /api/watchlist's user_watchlist table) so a starred ticker gets
+    # intraday coverage even when it is not in the SP500 head. Other shards
+    # skip the union to avoid double-processing the same ticker across
+    # serverless invocations.
+    if (offset or 0) == 0:
+        wl_rows = await pool.fetch(
+            "SELECT DISTINCT ticker FROM user_watchlist"
+        )
+        extras = {r["ticker"] for r in wl_rows} - set(base_universe)
+        universe = base_universe + sorted(extras)
+    else:
+        universe = base_universe
 
     async def _per_ticker(t: str) -> str:
         # Fetch all 10 signals
