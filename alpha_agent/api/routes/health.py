@@ -152,3 +152,49 @@ async def health_routers(request: Request) -> dict[str, Any]:
             for r in health
         ],
     }
+
+
+_KNOWN_NEWS_SOURCES = (
+    "finnhub", "fmp", "rss_yahoo",
+    "truth_social", "fed_rss", "ofac_rss",
+)
+
+
+@router.get("/news_freshness")
+async def health_news_freshness() -> dict[str, Any]:
+    """Per-source last_fetched_at + 24h item count + LLM backlog.
+
+    Lets you tell at a glance whether one adapter has gone dark.
+    """
+    pool = await get_db_pool()
+    rows = await pool.fetch(
+        """
+        WITH all_tables AS (
+            SELECT source, fetched_at FROM news_items
+            UNION ALL
+            SELECT source, fetched_at FROM macro_events
+        )
+        SELECT source,
+               MAX(fetched_at) AS last_fetched_at,
+               COUNT(*) FILTER (WHERE fetched_at > now() - interval '24 hours')
+                   AS items_24h
+        FROM all_tables
+        WHERE source = ANY($1)
+        GROUP BY source
+        """,
+        list(_KNOWN_NEWS_SOURCES),
+    )
+    by_source = {r["source"]: r for r in rows}
+    sources = []
+    for name in _KNOWN_NEWS_SOURCES:
+        r = by_source.get(name)
+        sources.append({
+            "name": name,
+            "last_fetched_at": r["last_fetched_at"].isoformat() if r and r["last_fetched_at"] else None,
+            "items_24h": int(r["items_24h"]) if r else 0,
+        })
+    llm_backlog = await pool.fetchval(
+        "SELECT (SELECT count(*) FROM news_items WHERE llm_processed_at IS NULL) + "
+        "(SELECT count(*) FROM macro_events WHERE llm_processed_at IS NULL)"
+    )
+    return {"sources": sources, "llm_backlog": int(llm_backlog or 0)}
