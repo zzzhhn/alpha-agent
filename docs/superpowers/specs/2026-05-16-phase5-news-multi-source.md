@@ -1,4 +1,4 @@
-# Phase 5 — News Multi-Source Aggregation
+# Phase 5: News Multi-Source Aggregation
 
 **Date:** 2026-05-16
 **Status:** Spec approved, plan pending
