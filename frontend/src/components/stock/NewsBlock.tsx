@@ -1,17 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { RatingCard, NewsItem, NewsRaw } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale, type TranslationKey } from "@/lib/i18n";
-
-function decodeNewsRaw(raw: unknown): NewsItem[] {
-  if (typeof raw !== "object" || raw === null) return [];
-  const obj = raw as Partial<NewsRaw>;
-  return obj.headlines ?? [];
-}
+import type { RatingCard, NewsItemLite } from "@/lib/api/picks";
+import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
 
 function relativeTime(iso: string, locale: Locale): string {
-  if (!iso) return locale === "zh" ? "未知" : "—";
+  if (!iso) return locale === "zh" ? "未知" : "n/a";
   const ms = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(ms / 60000);
   if (mins < 60) return locale === "zh" ? `${mins} 分钟前` : `${mins}m ago`;
@@ -21,26 +15,17 @@ function relativeTime(iso: string, locale: Locale): string {
   return locale === "zh" ? `${days} 天前` : `${days}d ago`;
 }
 
-const SENTIMENT_TONE: Record<NewsItem["sentiment"], string> = {
+const SENTIMENT_TONE: Record<NonNullable<NewsItemLite["sentiment_label"]>, string> = {
   pos: "bg-tm-pos",
   neg: "bg-tm-neg",
   neu: "bg-tm-muted",
 };
 
-const SENTIMENT_LABEL: Record<NewsItem["sentiment"], TranslationKey> = {
-  pos: "news.sentiment_pos",
-  neg: "news.sentiment_neg",
-  neu: "news.sentiment_neu",
-};
-
 export default function NewsBlock({ card }: { card: RatingCard }) {
   const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  useEffect(() => { setLocale(getLocaleFromStorage()); }, []);
 
-  const news = card.breakdown.find((b) => b.signal === "news");
-  const items = decodeNewsRaw(news?.raw);
+  const items: NewsItemLite[] = card.news_items ?? [];
 
   if (items.length === 0) {
     return (
@@ -58,30 +43,28 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
       <h2 className="text-lg font-semibold mb-3 text-tm-fg">
         {t(locale, "news.title")}
       </h2>
-      <ul className="space-y-3">
-        {items.map((item, i) => (
-          <li key={`${item.link}-${i}`} className="flex gap-3 items-start">
-            <span
-              aria-label={t(locale, SENTIMENT_LABEL[item.sentiment])}
-              className={`mt-1.5 inline-block w-2 h-2 rounded-full shrink-0 ${SENTIMENT_TONE[item.sentiment]}`}
-            />
-            <div className="flex-1 min-w-0">
-              {item.link ? (
-                <a
-                  href={item.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-tm-fg hover:text-tm-accent line-clamp-2"
-                >
-                  {item.title}
-                </a>
-              ) : (
-                <div className="text-sm text-tm-fg line-clamp-2">{item.title}</div>
-              )}
-              <div className="text-xs text-tm-muted mt-1 flex gap-2">
-                <span>{item.publisher || "—"}</span>
-                <span>·</span>
-                <span>{relativeTime(item.published_at, locale)}</span>
+      <ul className="space-y-2">
+        {items.map((it) => (
+          <li key={it.id} className="flex gap-2 text-sm">
+            {it.sentiment_label ? (
+              <span className={`mt-1.5 inline-block h-2 w-2 rounded-full ${SENTIMENT_TONE[it.sentiment_label]}`} />
+            ) : (
+              <span className="mt-1.5 inline-block h-2 w-2 rounded-full bg-tm-bg-3" />
+            )}
+            <div className="flex-1">
+              <a
+                href={it.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-tm-fg hover:text-tm-accent"
+              >
+                {it.headline}
+              </a>
+              <div className="mt-0.5 flex items-center gap-2 text-xs text-tm-muted">
+                <span className="rounded bg-tm-bg-3 px-1.5 py-0.5 font-tm-mono text-[10px]">
+                  {it.source}
+                </span>
+                <span>{relativeTime(it.published_at, locale)}</span>
               </div>
             </div>
           </li>

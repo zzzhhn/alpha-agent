@@ -14,6 +14,7 @@ import PriceChart from "./PriceChart";
 import FundamentalsBlock from "./FundamentalsBlock";
 import CatalystsBlock from "./CatalystsBlock";
 import NewsBlock from "./NewsBlock";
+import MarketContextWidget from "./MarketContextWidget";
 import SourcesBlock from "./SourcesBlock";
 
 export default function StockCardLayout({
@@ -84,6 +85,7 @@ export default function StockCardLayout({
         <FundamentalsBlock card={card} />
         <CatalystsBlock card={card} />
         <NewsBlock card={card} />
+        <MarketContextWidget ticker={card.ticker} />
         <SourcesBlock card={card} />
       </main>
     </div>
