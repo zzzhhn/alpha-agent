@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+<channel>
+<title>Yahoo Finance - AAPL News</title>
+<link>https://finance.yahoo.com/quote/AAPL/</link>
+<description>Latest Apple Inc. news</description>
+<item>
+  <title>Apple Eyes AI Hardware Partnership With OpenAI</title>
+  <link>https://finance.yahoo.com/news/apple-openai-deal-123456.html</link>
+  <pubDate>Thu, 15 May 2026 18:00:00 +0000</pubDate>
+  <guid isPermaLink="false">yh-aapl-7104251</guid>
+  <description>Apple is in talks with OpenAI...</description>
+</item>
+<item>
+  <title>AAPL Up 2% After Q2 Beat</title>
+  <link>https://finance.yahoo.com/news/aapl-q2-789012.html</link>
+  <pubDate>Wed, 14 May 2026 17:30:00 +0000</pubDate>
+  <guid isPermaLink="false">yh-aapl-7104198</guid>
+  <description>Shares of Apple rose...</description>
+</item>
+</channel>
+</rss>
