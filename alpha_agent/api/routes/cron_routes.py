@@ -60,3 +60,32 @@ async def fast_intraday(
 async def alert_dispatcher() -> dict[str, Any]:
     from api.cron.alert_dispatcher import handler
     return await handler()
+
+
+@router.post("/news_per_ticker")
+@router.get("/news_per_ticker")
+async def cron_news_per_ticker(
+    limit: int | None = Query(None, ge=1, le=600),
+    offset: int | None = Query(None, ge=0, le=600),
+) -> dict[str, Any]:
+    """Walk SP500 + watchlist, call PerTickerAggregator, upsert
+    news_items. Limit + offset enable multi-shot sharding."""
+    from api.cron.news_pipeline import per_ticker_handler
+    return await per_ticker_handler(limit=limit, offset=offset)
+
+
+@router.post("/news_macro")
+@router.get("/news_macro")
+async def cron_news_macro() -> dict[str, Any]:
+    """Parallel-poll Truth/Fed/OFAC, upsert macro_events."""
+    from api.cron.news_pipeline import macro_handler
+    return await macro_handler()
+
+
+@router.post("/news_llm_enrich")
+@router.get("/news_llm_enrich")
+async def cron_news_llm_enrich() -> dict[str, Any]:
+    """Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK
+    LiteLLM, write results back."""
+    from api.cron.news_pipeline import llm_enrich_handler
+    return await llm_enrich_handler()
