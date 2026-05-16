@@ -1,0 +1,24 @@
+[
+  {
+    "category": "company",
+    "datetime": 1715783400,
+    "headline": "Apple Beats Q2 Earnings Expectations, Stock Climbs",
+    "id": 7104210,
+    "image": "https://image.cnbcfm.com/api/v1/image/sample.jpg",
+    "related": "AAPL",
+    "source": "CNBC",
+    "summary": "Apple reported earnings of $1.53 per share, beating consensus by $0.03...",
+    "url": "https://www.cnbc.com/2026/05/15/apple-q2-earnings.html"
+  },
+  {
+    "category": "company",
+    "datetime": 1715783200,
+    "headline": "AAPL: Buffett Trims Position, Berkshire Cuts Stake",
+    "id": 7104198,
+    "image": "",
+    "related": "AAPL",
+    "source": "Reuters",
+    "summary": "Berkshire Hathaway disclosed a smaller Apple position in its 13F filing...",
+    "url": "https://www.reuters.com/markets/us/berkshire-aapl.html"
+  }
+]
