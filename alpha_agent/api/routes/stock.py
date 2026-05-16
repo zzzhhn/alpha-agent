@@ -19,6 +19,16 @@ from alpha_agent.signals.yf_helpers import extract_ohlcv, get_ticker
 router = APIRouter(prefix="/api/stock", tags=["stock"])
 
 
+class NewsItemLite(BaseModel):
+    id: int
+    source: str
+    headline: str
+    url: str
+    published_at: str
+    sentiment_score: float | None
+    sentiment_label: str | None
+
+
 class FullCard(BaseModel):
     ticker: str
     rating: str
@@ -31,6 +41,7 @@ class FullCard(BaseModel):
     # True for a slow-only ticker: daily-pipeline data, rating/confidence
     # derived, no fast factors, can be up to ~1 day old.
     partial: bool = False
+    news_items: list[NewsItemLite] = []
 
 
 class StockResponse(BaseModel):
@@ -57,6 +68,30 @@ async def get_stock(
     fetched_at: datetime = sig["fetched_at"]
     stale = (datetime.now(UTC) - fetched_at) > timedelta(hours=24)
 
+    news_rows = await pool.fetch(
+        """
+        SELECT id, source, headline, url, published_at,
+               sentiment_score, sentiment_label
+        FROM news_items
+        WHERE ticker = $1
+        ORDER BY published_at DESC
+        LIMIT 20
+        """,
+        ticker,
+    )
+    news_items = [
+        NewsItemLite(
+            id=r["id"],
+            source=r["source"],
+            headline=r["headline"],
+            url=r["url"],
+            published_at=r["published_at"].isoformat(),
+            sentiment_score=r["sentiment_score"],
+            sentiment_label=r["sentiment_label"],
+        )
+        for r in news_rows
+    ]
+
     card = FullCard(
         ticker=sig["ticker"],
         rating=sig["rating"],
@@ -67,6 +102,7 @@ async def get_stock(
         top_drags=top_drags(sig["breakdown"]),
         breakdown=sig["breakdown"],
         partial=sig["partial"],
+        news_items=news_items,
     )
     return StockResponse(card=card, stale=stale)
 

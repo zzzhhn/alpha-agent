@@ -1311,6 +1311,14 @@
             "title": "Confidence",
             "type": "number"
           },
+          "news_items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NewsItemLite"
+            },
+            "title": "News Items",
+            "type": "array"
+          },
           "partial": {
             "default": false,
             "title": "Partial",
@@ -1661,6 +1669,166 @@
           "top_drags"
         ],
         "title": "LeanCard",
+        "type": "object"
+      },
+      "MacroContextItem": {
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "body_excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Excerpt"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "published_at": {
+            "title": "Published At",
+            "type": "string"
+          },
+          "sectors_extracted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sectors Extracted",
+            "type": "array"
+          },
+          "sentiment_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment Score"
+          },
+          "tickers_extracted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tickers Extracted",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "author",
+          "title",
+          "url",
+          "body_excerpt",
+          "published_at",
+          "sentiment_score",
+          "tickers_extracted",
+          "sectors_extracted"
+        ],
+        "title": "MacroContextItem",
+        "type": "object"
+      },
+      "MacroContextResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MacroContextItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MacroContextResponse",
+        "type": "object"
+      },
+      "NewsItemLite": {
+        "properties": {
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "published_at": {
+            "title": "Published At",
+            "type": "string"
+          },
+          "sentiment_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment Label"
+          },
+          "sentiment_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment Score"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "headline",
+          "url",
+          "published_at",
+          "sentiment_score",
+          "sentiment_label"
+        ],
+        "title": "NewsItemLite",
         "type": "object"
       },
       "OhlcvBar": {
@@ -3073,6 +3241,30 @@
         ]
       }
     },
+    "/api/_health/news_freshness": {
+      "get": {
+        "description": "Per-source last_fetched_at + 24h item count + LLM backlog.\n\nLets you tell at a glance whether one adapter has gone dark.",
+        "operationId": "health_news_freshness_api__health_news_freshness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health News Freshness Api  Health News Freshness Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health News Freshness",
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/api/_health/routers": {
       "get": {
         "description": "Structured manifest of router cold-start outcomes.\n\nReads app.state.router_health (populated by the _load helper in both\nentry points). Use this to detect a silently-missing route: per-block\ntry/except hides ImportError as a 404 forever, so the deploy goes\nREADY but the route never serves. Without this endpoint that failure\nis invisible from curl. Returns {total, loaded, failed, routers[]}.",
@@ -3451,6 +3643,240 @@
         ]
       }
     },
+    "/api/cron/news_llm_enrich": {
+      "get": {
+        "description": "Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK\nLiteLLM, write results back.",
+        "operationId": "cron_news_llm_enrich_api_cron_news_llm_enrich_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron News Llm Enrich Api Cron News Llm Enrich Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron News Llm Enrich",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK\nLiteLLM, write results back.",
+        "operationId": "cron_news_llm_enrich_api_cron_news_llm_enrich_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron News Llm Enrich Api Cron News Llm Enrich Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron News Llm Enrich",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/news_macro": {
+      "get": {
+        "description": "Parallel-poll Truth/Fed/OFAC, upsert macro_events.",
+        "operationId": "cron_news_macro_api_cron_news_macro_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron News Macro Api Cron News Macro Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron News Macro",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Parallel-poll Truth/Fed/OFAC, upsert macro_events.",
+        "operationId": "cron_news_macro_api_cron_news_macro_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron News Macro Api Cron News Macro Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron News Macro",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/news_per_ticker": {
+      "get": {
+        "description": "Walk SP500 + watchlist, call PerTickerAggregator, upsert\nnews_items. Limit + offset enable multi-shot sharding.",
+        "operationId": "cron_news_per_ticker_api_cron_news_per_ticker_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron News Per Ticker Api Cron News Per Ticker Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron News Per Ticker",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Walk SP500 + watchlist, call PerTickerAggregator, upsert\nnews_items. Limit + offset enable multi-shot sharding.",
+        "operationId": "cron_news_per_ticker_api_cron_news_per_ticker_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 600,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron News Per Ticker Api Cron News Per Ticker Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron News Per Ticker",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/slow_daily": {
       "get": {
         "description": "Run slow_daily cron. `limit=N` caps universe (\u2264300s Hobby budget).\n`offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables\nGH-Actions multi-shot full SP500 coverage (e.g. 4 \u00d7 {limit:140, offset:0/140/280/420}).",
@@ -3634,6 +4060,62 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/macro_context": {
+      "get": {
+        "operationId": "macro_context_api_macro_context_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "maxLength": 10,
+              "minLength": 1,
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MacroContextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Macro Context",
+        "tags": [
+          "news"
+        ]
       }
     },
     "/api/picks/lean": {

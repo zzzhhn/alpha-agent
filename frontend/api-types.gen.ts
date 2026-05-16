@@ -61,6 +61,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/_health/news_freshness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health News Freshness
+         * @description Per-source last_fetched_at + 24h item count + LLM backlog.
+         *
+         *     Lets you tell at a glance whether one adapter has gone dark.
+         */
+        get: operations["health_news_freshness_api__health_news_freshness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/_health/routers": {
         parameters: {
             query?: never;
@@ -204,6 +226,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/news_llm_enrich": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron News Llm Enrich
+         * @description Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK
+         *     LiteLLM, write results back.
+         */
+        get: operations["cron_news_llm_enrich_api_cron_news_llm_enrich_get"];
+        put?: never;
+        /**
+         * Cron News Llm Enrich
+         * @description Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK
+         *     LiteLLM, write results back.
+         */
+        post: operations["cron_news_llm_enrich_api_cron_news_llm_enrich_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/news_macro": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron News Macro
+         * @description Parallel-poll Truth/Fed/OFAC, upsert macro_events.
+         */
+        get: operations["cron_news_macro_api_cron_news_macro_get"];
+        put?: never;
+        /**
+         * Cron News Macro
+         * @description Parallel-poll Truth/Fed/OFAC, upsert macro_events.
+         */
+        post: operations["cron_news_macro_api_cron_news_macro_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/news_per_ticker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron News Per Ticker
+         * @description Walk SP500 + watchlist, call PerTickerAggregator, upsert
+         *     news_items. Limit + offset enable multi-shot sharding.
+         */
+        get: operations["cron_news_per_ticker_api_cron_news_per_ticker_get"];
+        put?: never;
+        /**
+         * Cron News Per Ticker
+         * @description Walk SP500 + watchlist, call PerTickerAggregator, upsert
+         *     news_items. Limit + offset enable multi-shot sharding.
+         */
+        post: operations["cron_news_per_ticker_api_cron_news_per_ticker_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/slow_daily": {
         parameters: {
             query?: never;
@@ -258,6 +356,23 @@ export interface paths {
         };
         /** Health */
         get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/macro_context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Macro Context */
+        get: operations["macro_context_api_macro_context_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1647,6 +1762,11 @@ export interface components {
             /** Confidence */
             confidence: number;
             /**
+             * News Items
+             * @default []
+             */
+            news_items: components["schemas"]["NewsItemLite"][];
+            /**
              * Partial
              * @default false
              */
@@ -1788,6 +1908,49 @@ export interface components {
             top_drags: string[];
             /** Top Drivers */
             top_drivers: string[];
+        };
+        /** MacroContextItem */
+        MacroContextItem: {
+            /** Author */
+            author: string | null;
+            /** Body Excerpt */
+            body_excerpt: string | null;
+            /** Id */
+            id: number;
+            /** Published At */
+            published_at: string;
+            /** Sectors Extracted */
+            sectors_extracted: string[];
+            /** Sentiment Score */
+            sentiment_score: number | null;
+            /** Tickers Extracted */
+            tickers_extracted: string[];
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+        };
+        /** MacroContextResponse */
+        MacroContextResponse: {
+            /** Items */
+            items: components["schemas"]["MacroContextItem"][];
+        };
+        /** NewsItemLite */
+        NewsItemLite: {
+            /** Headline */
+            headline: string;
+            /** Id */
+            id: number;
+            /** Published At */
+            published_at: string;
+            /** Sentiment Label */
+            sentiment_label: string | null;
+            /** Sentiment Score */
+            sentiment_score: number | null;
+            /** Source */
+            source: string;
+            /** Url */
+            url: string;
         };
         /** OhlcvBar */
         OhlcvBar: {
@@ -2428,6 +2591,28 @@ export interface operations {
             };
         };
     };
+    health_news_freshness_api__health_news_freshness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     health_routers_api__health_routers_get: {
         parameters: {
             query?: never;
@@ -2656,6 +2841,162 @@ export interface operations {
             };
         };
     };
+    cron_news_llm_enrich_api_cron_news_llm_enrich_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_news_llm_enrich_api_cron_news_llm_enrich_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_news_macro_api_cron_news_macro_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_news_macro_api_cron_news_macro_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_news_per_ticker_api_cron_news_per_ticker_get: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_news_per_ticker_api_cron_news_per_ticker_post: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     slow_daily_api_cron_slow_daily_get: {
         parameters: {
             query?: {
@@ -2764,6 +3105,38 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    macro_context_api_macro_context_get: {
+        parameters: {
+            query: {
+                ticker: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MacroContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

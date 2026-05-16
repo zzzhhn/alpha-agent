@@ -16,6 +16,16 @@ export interface BreakdownEntry {
   error: string | null;
 }
 
+export interface NewsItemLite {
+  id: number;
+  source: string;
+  headline: string;
+  url: string;
+  published_at: string;
+  sentiment_score: number | null;
+  sentiment_label: "pos" | "neg" | "neu" | null;
+}
+
 export interface RatingCard {
   ticker: string;
   rating: "BUY" | "OW" | "HOLD" | "UW" | "SELL";
@@ -32,6 +42,7 @@ export interface RatingCard {
   // derived (no fast factors), can be up to ~1 day old. Absent on the
   // single-card /api/stock response, hence optional.
   partial?: boolean;
+  news_items?: NewsItemLite[];
 }
 
 export const fetchPicks = (limit = 50, search?: string) => {
