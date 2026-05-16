@@ -40,13 +40,19 @@ async def slow_daily(
 async def fast_intraday(
     limit: int | None = Query(None, ge=1, le=600),
     offset: int | None = Query(None, ge=0, le=600),
+    tier: str = Query("full", pattern="^(full|tech|mid|slow)$"),
 ) -> dict[str, Any]:
     """Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).
     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
-    multi-shot coverage of the top tickers (e.g. 3 × {limit:75, offset:0/75/150}).
+    multi-shot coverage of the top tickers.
+
+    `tier`: which signal subset to refresh this run. full = all 10 modules
+    (legacy bootstrap); tech / mid / slow refresh only their named subset
+    and round-trip the rest from the previous breakdown (see
+    api/cron/fast_intraday.py docstring for the schedule design).
     """
     from api.cron.fast_intraday import handler
-    return await handler(limit=limit, offset=offset)
+    return await handler(limit=limit, offset=offset, tier=tier)
 
 
 @router.post("/alert_dispatcher")

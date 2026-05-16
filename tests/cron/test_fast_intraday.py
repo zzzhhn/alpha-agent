@@ -53,7 +53,7 @@ async def test_fast_intraday_writes_full_card(applied_db, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", applied_db)
     monkeypatch.setattr(
         "alpha_agent.universe.get_watchlist",
-        lambda top_n=100: ["AAPL", "MSFT"],
+        lambda top_n=100, offset=0: ["AAPL", "MSFT"],
     )
     patches = _patch_all_signals()
     for p in patches:
@@ -93,7 +93,7 @@ async def test_fast_intraday_emits_alert_on_rating_change(applied_db, monkeypatc
     monkeypatch.setenv("DATABASE_URL", applied_db)
     monkeypatch.setattr(
         "alpha_agent.universe.get_watchlist",
-        lambda top_n=100: ["AAPL"],
+        lambda top_n=100, offset=0: ["AAPL"],
     )
     today = datetime.now(UTC).date().isoformat()
 

@@ -61,6 +61,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/_health/routers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Routers
+         * @description Structured manifest of router cold-start outcomes.
+         *
+         *     Reads app.state.router_health (populated by the _load helper in both
+         *     entry points). Use this to detect a silently-missing route: per-block
+         *     try/except hides ImportError as a 404 forever, so the deploy goes
+         *     READY but the route never serves. Without this endpoint that failure
+         *     is invisible from curl. Returns {total, loaded, failed, routers[]}.
+         */
+        get: operations["health_routers_api__health_routers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/_health/signals": {
         parameters: {
             query?: never;
@@ -151,7 +177,12 @@ export interface paths {
          * Fast Intraday
          * @description Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).
          *     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
-         *     multi-shot coverage of the top tickers (e.g. 3 × {limit:75, offset:0/75/150}).
+         *     multi-shot coverage of the top tickers.
+         *
+         *     `tier`: which signal subset to refresh this run. full = all 10 modules
+         *     (legacy bootstrap); tech / mid / slow refresh only their named subset
+         *     and round-trip the rest from the previous breakdown (see
+         *     api/cron/fast_intraday.py docstring for the schedule design).
          */
         get: operations["fast_intraday_api_cron_fast_intraday_get"];
         put?: never;
@@ -159,7 +190,12 @@ export interface paths {
          * Fast Intraday
          * @description Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).
          *     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
-         *     multi-shot coverage of the top tickers (e.g. 3 × {limit:75, offset:0/75/150}).
+         *     multi-shot coverage of the top tickers.
+         *
+         *     `tier`: which signal subset to refresh this run. full = all 10 modules
+         *     (legacy bootstrap); tech / mid / slow refresh only their named subset
+         *     and round-trip the rest from the previous breakdown (see
+         *     api/cron/fast_intraday.py docstring for the schedule design).
          */
         post: operations["fast_intraday_api_cron_fast_intraday_post"];
         delete?: never;
@@ -239,7 +275,18 @@ export interface paths {
         };
         /**
          * Picks Lean
-         * @description Return top *limit* tickers sorted by composite_score DESC.
+         * @description Return tickers sorted by composite score DESC.
+         *
+         *     Unions two sources so the full ~557-ticker universe is reachable:
+         *       - daily_signals_fast: the 15-min intraday pipeline (~100 tickers),
+         *         full cards with stored rating + confidence.
+         *       - daily_signals_slow: the daily pipeline (full universe). It stores
+         *         only composite_partial + breakdown, so rating is derived via
+         *         map_to_tier and confidence via compute_confidence from the
+         *         breakdown z's. These rows are flagged partial=True.
+         *
+         *     A ticker present in fast is taken from fast (fresher and complete).
+         *     `search` does a case-insensitive substring match on the ticker.
          */
         get: operations["picks_lean_api_picks_lean_get"];
         put?: never;
@@ -260,6 +307,10 @@ export interface paths {
         /**
          * Get Stock
          * @description Return the most-recent RatingCard for *ticker*.
+         *
+         *     Reads via fetch_latest_signal so a slow-only ticker (covered by the
+         *     daily pipeline but not the intraday cron, e.g. NVDA) resolves to a
+         *     partial card instead of 404ing.
          */
         get: operations["get_stock_api_stock__ticker__get"];
         put?: never;
@@ -993,6 +1044,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/watchlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Watchlist
+         * @description Return the calling user's stored tickers, oldest-first.
+         */
+        get: operations["list_watchlist_api_watchlist_get"];
+        put?: never;
+        /**
+         * Replace Watchlist
+         * @description Replace the user's watchlist with `tickers` exactly.
+         *
+         *     Each ticker is upper-cased, deduped, and validated against the 1-5
+         *     uppercase-letter shape. Invalid entries are dropped silently rather
+         *     than 422ing the whole call (localStorage already holds the truth, the
+         *     backend copy is best-effort).
+         */
+        post: operations["replace_watchlist_api_watchlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz/routers": {
         parameters: {
             query?: never;
@@ -1566,6 +1646,11 @@ export interface components {
             composite_score: number;
             /** Confidence */
             confidence: number;
+            /**
+             * Partial
+             * @default false
+             */
+            partial: boolean;
             /** Rating */
             rating: string;
             /** Ticker */
@@ -1676,7 +1761,12 @@ export interface components {
         };
         /**
          * LeanCard
-         * @description Lean projection of a fast-signal row — no heavy breakdown list.
+         * @description Lean projection of a signal row, no heavy breakdown list.
+         *
+         *     `partial` marks a slow-only row: it comes from daily_signals_slow,
+         *     which stores composite_partial + breakdown but no rating/confidence,
+         *     so those two are derived here. Partial rows exclude the fast factors
+         *     and can be up to ~1 day old.
          */
         LeanCard: {
             /** As Of */
@@ -1685,6 +1775,11 @@ export interface components {
             composite_score: number;
             /** Confidence */
             confidence: number;
+            /**
+             * Partial
+             * @default false
+             */
+            partial: boolean;
             /** Rating */
             rating: string;
             /** Ticker */
@@ -2024,6 +2119,16 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** WatchlistPut */
+        WatchlistPut: {
+            /** Tickers */
+            tickers: string[];
+        };
+        /** WatchlistResponse */
+        WatchlistResponse: {
+            /** Tickers */
+            tickers: string[];
+        };
         /** _BasketEntry */
         _BasketEntry: {
             /** Ticker */
@@ -2323,6 +2428,28 @@ export interface operations {
             };
         };
     };
+    health_routers_api__health_routers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     health_signals_api__health_signals_get: {
         parameters: {
             query?: never;
@@ -2464,6 +2591,7 @@ export interface operations {
             query?: {
                 limit?: number | null;
                 offset?: number | null;
+                tier?: string;
             };
             header?: never;
             path?: never;
@@ -2498,6 +2626,7 @@ export interface operations {
             query?: {
                 limit?: number | null;
                 offset?: number | null;
+                tier?: string;
             };
             header?: never;
             path?: never;
@@ -2643,6 +2772,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                search?: string | null;
             };
             header?: never;
             path?: never;
@@ -3707,6 +3837,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CorrelationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_watchlist_api_watchlist_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_watchlist_api_watchlist_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistPut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistResponse"];
                 };
             };
             /** @description Validation Error */

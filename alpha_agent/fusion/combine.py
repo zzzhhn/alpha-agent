@@ -51,7 +51,12 @@ def combine(
             contribution = float(sc["z"]) * w_eff
         composite += contribution
         breakdown.append({
-            "signal": name, "z": sc["z"], "weight": w_orig,
+            "signal": name, "z": sc["z"],
+            # confidence is included so a tiered cron can round-trip the
+            # breakdown back into a sigs dict for combine() without losing
+            # the drop signal (confidence == 0 means "no data").
+            "confidence": sc["confidence"],
+            "weight": w_orig,
             "weight_effective": w_eff, "contribution": contribution,
             "raw": sc["raw"], "source": sc["source"],
             "timestamp": sc["as_of"].isoformat(),

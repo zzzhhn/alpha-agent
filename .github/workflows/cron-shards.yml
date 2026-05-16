@@ -18,18 +18,31 @@ on:
   schedule:
     # Daily SP500 slow refresh — 13:30 UTC = 09:30 ET pre-open (weekdays).
     - cron: '30 13 * * 1-5'
-    # Intraday fast refresh — every 2h during US market (14/16/18/20 UTC).
+    # Periodic full-10-signal bootstrap for top-240 — every 2h during market.
+    # Tier jobs (tech/mid/slow) cover the full 557 universe at higher
+    # cadence for their respective signal subsets; this run rebuilds
+    # the cached signals from scratch so any race-lost tier update is
+    # corrected within 2h.
     - cron: '0 14,16,18,20 * * 1-5'
+    # Tier: technicals only, all 557 + watchlist, every 15min during market.
+    - cron: '*/15 14-20 * * 1-5'
+    # Tier: options + analyst + premarket, all 557, hourly at :05 (stagger).
+    - cron: '5 14-20 * * 1-5'
+    # Tier: news + insider, all 557, every 4h at :10 (stagger).
+    - cron: '10 14,18 * * 1-5'
   workflow_dispatch:
     inputs:
       job:
         description: 'Which job to run manually'
         required: true
-        default: 'fast_intraday'
+        default: 'fast_tech'
         type: choice
         options:
           - slow_daily
           - fast_intraday
+          - fast_tech
+          - fast_mid
+          - fast_slow
           - both
 
 env:
@@ -75,6 +88,125 @@ jobs:
             sleep 30
           done
           echo "## fast_intraday summary" >> $GITHUB_STEP_SUMMARY
+          echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
+          echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+
+  # ─── Tier: technicals only, every 15min, all 557 + watchlist ───────────
+  fast_tech:
+    if: |
+      github.event.schedule == '*/15 14-20 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_tech')
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Tech-only refresh (8 shots × limit=75)
+        # 1 module/ticker × ~0.6s observed → 75 tickers ≈ 45s + cold start.
+        # 8 shots × (60s + 10s sleep) ≈ 9min wall, covers offset 0..600.
+        # Shorter sleep than full-fetch because fewer requests = less risk
+        # of triggering Yahoo IP rate-limit.
+        run: |
+          set -e
+          TOTAL_WRITTEN=0
+          TOTAL_ERRORS=0
+          for offset in 0 75 150 225 300 375 450 525; do
+            echo "::group::tech shot offset=$offset limit=75"
+            T0=$(date +%s)
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/fast_intraday?tier=tech&limit=75&offset=$offset")
+            DUR=$(( $(date +%s) - T0 ))
+            echo "HTTP=$HTTP duration=${DUR}s"
+            cat /tmp/shot.json | head -c 800
+            echo
+            if [ "$HTTP" != "200" ]; then
+              echo "::error::tech shot offset=$offset returned HTTP $HTTP after ${DUR}s"
+              exit 1
+            fi
+            WRITTEN=$(python3 -c "import json; print(json.load(open('/tmp/shot.json')).get('rows_written',0))")
+            ERRORS=$(python3 -c "import json; print(len(json.load(open('/tmp/shot.json')).get('errors',[])))")
+            TOTAL_WRITTEN=$((TOTAL_WRITTEN + WRITTEN))
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERRORS))
+            echo "::endgroup::"
+            sleep 10
+          done
+          echo "## fast_tech summary" >> $GITHUB_STEP_SUMMARY
+          echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
+          echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+
+  # ─── Tier: options + analyst + premarket, hourly at :05 ─────────────────
+  fast_mid:
+    if: |
+      github.event.schedule == '5 14-20 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_mid')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Mid-tier refresh (15 shots × limit=40)
+        # 3 modules/ticker × ~3s observed → 40 tickers ≈ 120s + cold start.
+        # 15 shots × (135s + 15s sleep) ≈ 37min wall, covers offset 0..600.
+        run: |
+          set -e
+          TOTAL_WRITTEN=0
+          TOTAL_ERRORS=0
+          for offset in 0 40 80 120 160 200 240 280 320 360 400 440 480 520 560; do
+            echo "::group::mid shot offset=$offset limit=40"
+            T0=$(date +%s)
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/fast_intraday?tier=mid&limit=40&offset=$offset")
+            DUR=$(( $(date +%s) - T0 ))
+            echo "HTTP=$HTTP duration=${DUR}s"
+            cat /tmp/shot.json | head -c 800
+            echo
+            if [ "$HTTP" != "200" ]; then
+              echo "::error::mid shot offset=$offset returned HTTP $HTTP after ${DUR}s"
+              exit 1
+            fi
+            WRITTEN=$(python3 -c "import json; print(json.load(open('/tmp/shot.json')).get('rows_written',0))")
+            ERRORS=$(python3 -c "import json; print(len(json.load(open('/tmp/shot.json')).get('errors',[])))")
+            TOTAL_WRITTEN=$((TOTAL_WRITTEN + WRITTEN))
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERRORS))
+            echo "::endgroup::"
+            sleep 15
+          done
+          echo "## fast_mid summary" >> $GITHUB_STEP_SUMMARY
+          echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
+          echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+
+  # ─── Tier: news + insider, every 4h at :10 ──────────────────────────────
+  fast_slow:
+    if: |
+      github.event.schedule == '10 14,18 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_slow')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Slow-tier refresh (10 shots × limit=60)
+        # 2 modules/ticker × ~2s observed → 60 tickers ≈ 120s + cold start.
+        # 10 shots × (135s + 15s sleep) ≈ 25min wall, covers offset 0..600.
+        run: |
+          set -e
+          TOTAL_WRITTEN=0
+          TOTAL_ERRORS=0
+          for offset in 0 60 120 180 240 300 360 420 480 540; do
+            echo "::group::slow-tier shot offset=$offset limit=60"
+            T0=$(date +%s)
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/fast_intraday?tier=slow&limit=60&offset=$offset")
+            DUR=$(( $(date +%s) - T0 ))
+            echo "HTTP=$HTTP duration=${DUR}s"
+            cat /tmp/shot.json | head -c 800
+            echo
+            if [ "$HTTP" != "200" ]; then
+              echo "::error::slow-tier shot offset=$offset returned HTTP $HTTP after ${DUR}s"
+              exit 1
+            fi
+            WRITTEN=$(python3 -c "import json; print(json.load(open('/tmp/shot.json')).get('rows_written',0))")
+            ERRORS=$(python3 -c "import json; print(len(json.load(open('/tmp/shot.json')).get('errors',[])))")
+            TOTAL_WRITTEN=$((TOTAL_WRITTEN + WRITTEN))
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERRORS))
+            echo "::endgroup::"
+            sleep 15
+          done
+          echo "## fast_slow summary" >> $GITHUB_STEP_SUMMARY
           echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
           echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
 
