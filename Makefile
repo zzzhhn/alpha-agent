@@ -1,4 +1,4 @@
-.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance m3-acceptance m4a-acceptance m4b-acceptance m5-acceptance phase4b-acceptance
+.PHONY: test test-storage test-signals test-fusion test-integration coverage refresh-fixtures m1-acceptance openapi-export openapi-check m2-acceptance m3-acceptance m4a-acceptance m4b-acceptance m5-acceptance phase4b-acceptance news-acceptance
 
 test:
 	pytest tests/ -m "not slow" -v
@@ -178,3 +178,46 @@ phase4b-acceptance:
 	  "https://alpha.bobbyzhong.com/api/auth/session"); \
 	  case "$$ctype" in application/json*) ;; *) echo "expected JSON, got $$ctype"; exit 1;; esac
 	@echo "Phase 4b acceptance PASS"
+
+news-acceptance:
+	@echo "==> Phase 5 news acceptance"
+	# Backend: schema + every adapter + aggregator + LLM worker + 2 routes.
+	pytest tests/storage/test_migration_v004.py tests/news/ \
+	  tests/api/test_macro_context.py tests/api/test_news_freshness.py -v
+	# Frontend: types/lint/build still clean after NewsBlock rewrite + widget.
+	cd frontend && npx tsc --noEmit
+	cd frontend && npx next lint
+	cd frontend && npx next build
+	# Smoke: all 6 sources visible (counts may be 0 pre-data).
+	@echo "==> Smoke: /api/_health/news_freshness lists 6 sources"
+	@code=$$(curl -sS -o /tmp/nf.json -w "%{http_code}" --max-time 15 \
+	  "https://alpha.bobbyzhong.com/api/_health/news_freshness"); \
+	  if [ "$$code" != "200" ]; then echo "expected 200 got $$code"; exit 1; fi; \
+	  python3 -c "import json; d=json.load(open('/tmp/nf.json')); \
+	  assert {s['name'] for s in d['sources']} == {'finnhub','fmp','rss_yahoo','truth_social','fed_rss','ofac_rss'}, d; \
+	  print('all 6 sources present:', [s['name'] for s in d['sources']])"
+	# Smoke: macro_context route registered (dual-entry validation).
+	@echo "==> Smoke: /api/macro_context registered for AAPL"
+	@code=$$(curl -sS -o /tmp/mc.json -w "%{http_code}" --max-time 15 \
+	  "https://alpha.bobbyzhong.com/api/macro_context?ticker=AAPL&limit=5"); \
+	  if [ "$$code" != "200" ]; then echo "expected 200 got $$code"; exit 1; fi; \
+	  echo "macro_context responded 200 (items may be empty pre-data)"
+	# Smoke: routers health shows macro_context loaded (dual-entry contract).
+	@echo "==> Smoke: /api/_health/routers includes macro_context"
+	@curl -sS "https://alpha.bobbyzhong.com/api/_health/routers" | \
+	  python3 -c "import sys,json; d=json.load(sys.stdin); \
+	  loaded=[r['name'] for r in d['routers'] if r['loaded']]; \
+	  assert 'macro_context' in loaded, ('macro_context NOT in loaded list', loaded); \
+	  print('macro_context router loaded')"
+	@echo ""
+	@echo "==> Manual UAT (user-runs, in order):"
+	@echo "  1. Apply for Finnhub free key at finnhub.io/register"
+	@echo "  2. Apply for FMP free key at site.financialmodelingprep.com/register"
+	@echo "  3. Add FINNHUB_API_KEY + FMP_API_KEY to Vercel alpha-agent env"
+	@echo "  4. Apply V004 to Neon: from .env source DATABASE_URL, then:"
+	@echo "     python -c \"import asyncio, os; from alpha_agent.storage.migrations.runner import apply_migrations; print(asyncio.run(apply_migrations(os.environ['DATABASE_URL'])))\""
+	@echo "  5. Run one-time macro backfill: python scripts/backfill_macro.py --days 30"
+	@echo "  6. From GitHub Actions UI, manually trigger 'news_macro' and 'news_per_ticker' once;"
+	@echo "     check the cron_runs table for ok=true, then let schedules go live."
+	@echo "  7. Open https://alpha.bobbyzhong.com/stock/AAPL and verify the"
+	@echo "     'Market-Moving Context' widget renders (may be empty until backfill + LLM enrich complete)."
