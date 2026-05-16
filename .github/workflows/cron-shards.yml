@@ -30,6 +30,14 @@ on:
     - cron: '5 14-20 * * 1-5'
     # Tier: news + insider, all 557, every 4h at :10 (stagger).
     - cron: '10 14,18 * * 1-5'
+    # News: per-ticker hourly during market (Finnhub primary + FMP failover + RSS)
+    - cron: '0 14-20 * * 1-5'
+    # News: Truth Social every 5 min (aligned with CNN mirror refresh), 24/7
+    - cron: '*/5 * * * *'
+    # News: Fed + OFAC hourly, 24/7
+    - cron: '0 * * * *'
+    # News: LLM enrich every 15 min, picks llm_processed_at IS NULL
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       job:
@@ -44,6 +52,9 @@ on:
           - fast_mid
           - fast_slow
           - both
+          - news_per_ticker
+          - news_macro
+          - news_llm_enrich
 
 env:
   BACKEND_BASE: https://alpha.bobbyzhong.com
@@ -254,3 +265,51 @@ jobs:
           echo "## slow_daily summary" >> $GITHUB_STEP_SUMMARY
           echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
           echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+
+  news_per_ticker:
+    if: |
+      github.event.schedule == '0 14-20 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'news_per_ticker')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: news per-ticker, 8 shots x limit=75
+        run: |
+          set -e
+          for offset in 0 75 150 225 300 375 450 525; do
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/news_per_ticker?limit=75&offset=$offset")
+            echo "offset=$offset HTTP=$HTTP"
+            cat /tmp/shot.json | head -c 400; echo
+            [ "$HTTP" = "200" ] || exit 1
+            sleep 10
+          done
+
+  news_macro:
+    if: |
+      github.event.schedule == '*/5 * * * *' ||
+      github.event.schedule == '0 * * * *' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'news_macro')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: news macro single shot
+        run: |
+          HTTP=$(curl -s --max-time 60 -o /tmp/shot.json -w "%{http_code}" \
+            "$BACKEND_BASE/api/cron/news_macro")
+          cat /tmp/shot.json | head -c 400; echo
+          [ "$HTTP" = "200" ] || exit 1
+
+  news_llm_enrich:
+    if: |
+      github.event.schedule == '*/15 * * * *' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'news_llm_enrich')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: news llm enrich single shot
+        run: |
+          HTTP=$(curl -s --max-time 300 -o /tmp/shot.json -w "%{http_code}" \
+            "$BACKEND_BASE/api/cron/news_llm_enrich")
+          cat /tmp/shot.json | head -c 400; echo
+          [ "$HTTP" = "200" ] || exit 1
