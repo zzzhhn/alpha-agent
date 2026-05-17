@@ -129,8 +129,13 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
         {sorted.map((b) => {
           const h = healthMap[b.signal];
           const tier: SignalHealthEntry["tier"] = h?.tier ?? "unknown";
-          const isDropped =
-            tier === "red" || (h?.weight_current ?? null) === 0;
+          // Only the genuinely auto-dropped (red) tier should visually
+          // grey out the row. insufficient_data also has weight_current
+          // = 0 by definition, but its semantic meaning is "framework
+          // alive, data accumulating" - dimming it reads as "this signal
+          // is broken" which misleads the user. The gray tier dot already
+          // communicates the early-life state without dimming.
+          const isDropped = tier === "red";
           const isInsufficient = tier === "insufficient_data";
           const rowTooltip = isDropped
             ? t(locale, "attribution.dropped_tooltip")

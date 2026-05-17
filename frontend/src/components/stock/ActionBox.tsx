@@ -103,7 +103,7 @@ function ActionRow({
     <div className="flex justify-between text-xs">
       <span className="inline-flex items-center gap-1 text-tm-fg-2">
         {label}
-        {tooltip ? <InfoTooltip content={tooltip} /> : null}
+        {tooltip ? <InfoTooltip content={tooltip} placement="right" /> : null}
       </span>
       <span className="font-mono text-tm-fg">{value}</span>
     </div>
