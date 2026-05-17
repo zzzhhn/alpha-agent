@@ -639,6 +639,42 @@ const translations = {
     "attribution.signal_label_calendar": "日历",
     "attribution.signal_label_macro": "宏观 (波动率)",
     "attribution.signal_label_political_impact": "政治",
+    /* Stock detail layout (StockCardLayout) */
+    "stock_layout.back_to_picks": "返回选股",
+    "stock_layout.as_of": "数据时间",
+    "stock_layout.stale_warning": "数据已超过 24 小时",
+    "stock_layout.partial_data": "部分数据：仅日线 pipeline，无 intraday 因子",
+    "stock_layout.signal_attribution": "信号归因",
+    /* ActionBox */
+    "actionbox.title": "操作建议",
+    "actionbox.partial_hint": "Entry / stop / target 需要 intraday 数据 (ATR、实时价)。该 ticker 当前只走日线 pipeline，暂无 intraday 因子。",
+    "actionbox.rr_warning": "R:R<1.5，建议等待更优入场点",
+    "actionbox.entry": "入场",
+    "actionbox.stop": "止损",
+    "actionbox.target": "目标",
+    "actionbox.rr": "R:R",
+    "actionbox.position": "仓位",
+    /* RichThesis additional */
+    "rich.stop_button": "停止",
+    /* SourcesBlock */
+    "sources.title": "数据来源与时间戳",
+    "sources.col_signal": "信号",
+    "sources.col_source": "来源",
+    "sources.col_timestamp": "时间戳",
+    /* PicksTable */
+    "picks_table.empty": "尚无选股 — cron 还未运行",
+    "picks_table.col_rank": "#",
+    "picks_table.col_ticker": "Ticker",
+    "picks_table.col_rating": "评级",
+    "picks_table.col_composite": "综合分",
+    "picks_table.col_confidence": "置信度",
+    "picks_table.col_top_drivers": "主要驱动",
+    "picks_table.partial_badge": "partial",
+    "picks_table.partial_tooltip": "仅日线 pipeline 数据，无 fast 因子，可能最旧 1 天",
+    /* AttributionTable additional headers */
+    "attribution.col_w": "权重",
+    "attribution.col_source": "来源",
+    "attribution.col_time": "时间",
   },
   en: {
     "stage.data": "Data Collection",
@@ -1269,6 +1305,42 @@ const translations = {
     "attribution.signal_label_calendar": "Calendar",
     "attribution.signal_label_macro": "Macro (Vol)",
     "attribution.signal_label_political_impact": "Political",
+    /* Stock detail layout (StockCardLayout) */
+    "stock_layout.back_to_picks": "Back to Picks",
+    "stock_layout.as_of": "as of",
+    "stock_layout.stale_warning": "data > 24h old",
+    "stock_layout.partial_data": "partial data: daily pipeline only, no intraday factors",
+    "stock_layout.signal_attribution": "Signal Attribution",
+    /* ActionBox */
+    "actionbox.title": "Action",
+    "actionbox.partial_hint": "Entry / stop / target need intraday data (ATR, live price). This ticker is on the daily pipeline only, no intraday factors yet.",
+    "actionbox.rr_warning": "R:R<1.5 - wait for better entry",
+    "actionbox.entry": "Entry",
+    "actionbox.stop": "Stop",
+    "actionbox.target": "Target",
+    "actionbox.rr": "R:R",
+    "actionbox.position": "Position",
+    /* RichThesis additional */
+    "rich.stop_button": "Stop",
+    /* SourcesBlock */
+    "sources.title": "Sources & Timestamps",
+    "sources.col_signal": "signal",
+    "sources.col_source": "source",
+    "sources.col_timestamp": "timestamp",
+    /* PicksTable */
+    "picks_table.empty": "No picks yet - cron hasn't run.",
+    "picks_table.col_rank": "#",
+    "picks_table.col_ticker": "Ticker",
+    "picks_table.col_rating": "Rating",
+    "picks_table.col_composite": "Composite",
+    "picks_table.col_confidence": "Confidence",
+    "picks_table.col_top_drivers": "Top drivers",
+    "picks_table.partial_badge": "partial",
+    "picks_table.partial_tooltip": "Slow-only row: daily pipeline data, no fast factors, may be up to ~1 day old",
+    /* AttributionTable additional headers */
+    "attribution.col_w": "w",
+    "attribution.col_source": "source",
+    "attribution.col_time": "time",
   },
 } as const;
 

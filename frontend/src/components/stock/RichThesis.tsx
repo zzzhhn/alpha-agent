@@ -87,7 +87,7 @@ export default function RichThesis({ ticker }: { ticker: string }) {
                 className="inline-flex items-center gap-1 rounded border border-tm-rule px-2 py-1 text-xs text-tm-fg hover:border-tm-neg"
               >
                 <Square aria-hidden className="w-3 h-3" strokeWidth={1.75} />
-                Stop
+                {t(locale, "rich.stop_button")}
               </button>
             ) : (
               <button

@@ -1,4 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
+import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
 import PickRow from "./PickRow";
 
 const TH = "px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted select-none";
@@ -10,10 +14,15 @@ export default function PicksTable({
   picks: RatingCard[];
   isWatched?: (ticker: string) => boolean;
 }) {
+  const [locale, setLocale] = useState<Locale>("zh");
+  useEffect(() => {
+    setLocale(getLocaleFromStorage());
+  }, []);
+
   if (picks.length === 0) {
     return (
       <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
-        No picks yet — cron hasn&apos;t run.
+        {t(locale, "picks_table.empty")}
       </div>
     );
   }
@@ -22,12 +31,12 @@ export default function PicksTable({
     <table className="w-full border-collapse">
       <thead className="border-b border-tm-rule bg-tm-bg-2">
         <tr>
-          <th className={`${TH} text-left w-8`}>#</th>
-          <th className={`${TH} text-left`}>Ticker</th>
-          <th className={`${TH} text-left`}>Rating</th>
-          <th className={`${TH} text-right`}>Composite</th>
-          <th className={`${TH} text-right`}>Confidence</th>
-          <th className={`${TH} text-left`}>Top drivers</th>
+          <th className={`${TH} text-left w-8`}>{t(locale, "picks_table.col_rank")}</th>
+          <th className={`${TH} text-left`}>{t(locale, "picks_table.col_ticker")}</th>
+          <th className={`${TH} text-left`}>{t(locale, "picks_table.col_rating")}</th>
+          <th className={`${TH} text-right`}>{t(locale, "picks_table.col_composite")}</th>
+          <th className={`${TH} text-right`}>{t(locale, "picks_table.col_confidence")}</th>
+          <th className={`${TH} text-left`}>{t(locale, "picks_table.col_top_drivers")}</th>
         </tr>
       </thead>
       <tbody>
@@ -37,6 +46,7 @@ export default function PicksTable({
             rank={i + 1}
             card={card}
             watched={isWatched?.(card.ticker) ?? false}
+            locale={locale}
           />
         ))}
       </tbody>

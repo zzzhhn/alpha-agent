@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
+import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
 import RatingBadge from "./RatingBadge";
 import ActionBox from "./ActionBox";
 import LeanThesis from "./LeanThesis";
@@ -26,6 +28,10 @@ export default function StockCardLayout({
 }) {
   const { isWatched } = useWatchlist();
   const watched = isWatched(card.ticker);
+  const [locale, setLocale] = useState<Locale>("zh");
+  useEffect(() => {
+    setLocale(getLocaleFromStorage());
+  }, []);
   return (
     <div className="grid grid-cols-12 gap-6 px-4 py-6">
       {/* Left rail (sticky) */}
@@ -37,7 +43,7 @@ export default function StockCardLayout({
           className="inline-flex items-center gap-1 text-xs text-tm-muted hover:text-tm-accent"
         >
           <span aria-hidden="true">←</span>
-          <span>Back to Picks</span>
+          <span>{t(locale, "stock_layout.back_to_picks")}</span>
         </Link>
         <div
           className={`flex items-center gap-1.5 text-2xl font-bold ${watched ? "text-tm-accent" : "text-tm-fg"}`}
@@ -52,15 +58,15 @@ export default function StockCardLayout({
         />
         <ActionBox card={card} />
         <div className="text-xs text-tm-muted space-y-0.5">
-          <div>as of {new Date(card.as_of).toLocaleString()}</div>
+          <div>{t(locale, "stock_layout.as_of")} {new Date(card.as_of).toLocaleString()}</div>
           {stale ? (
             <div className="rounded bg-tm-warn-soft px-2 py-1 text-tm-warn">
-              ⚠ data &gt; 24h old
+              ⚠ {t(locale, "stock_layout.stale_warning")}
             </div>
           ) : null}
           {card.partial ? (
             <div className="rounded bg-tm-bg-2 px-2 py-1 text-tm-muted">
-              partial data: daily pipeline only, no intraday factors
+              {t(locale, "stock_layout.partial_data")}
             </div>
           ) : null}
         </div>
@@ -71,7 +77,7 @@ export default function StockCardLayout({
         <LeanThesis card={card} />
         <RichThesis ticker={card.ticker} />
         <section>
-          <h2 className="text-lg font-semibold mb-3 text-tm-fg">Signal Attribution</h2>
+          <h2 className="text-lg font-semibold mb-3 text-tm-fg">{t(locale, "stock_layout.signal_attribution")}</h2>
           <div className="grid grid-cols-12 gap-4">
             <div className="col-span-4">
               <AttributionRadar card={card} />

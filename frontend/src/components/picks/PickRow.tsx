@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { RatingCard } from "@/lib/api/picks";
 import clsx from "clsx";
 import WatchlistStar from "@/components/ui/WatchlistStar";
+import { t, type Locale } from "@/lib/i18n";
 
 const TIER_COLOR: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -15,10 +16,12 @@ export default function PickRow({
   rank,
   card,
   watched = false,
+  locale = "zh",
 }: {
   rank: number;
   card: RatingCard;
   watched?: boolean;
+  locale?: Locale;
 }) {
   // Defensive: backend may return null for composite/confidence when legacy
   // DB rows held NaN before storage sanitization landed.
@@ -45,9 +48,9 @@ export default function PickRow({
         {card.partial ? (
           <span
             className="ml-1.5 rounded bg-tm-bg-2 px-1 py-0.5 align-middle text-[8px] font-semibold uppercase tracking-wide text-tm-muted"
-            title="Slow-only row: daily pipeline data, no fast factors, may be up to ~1 day old"
+            title={t(locale, "picks_table.partial_tooltip")}
           >
-            partial
+            {t(locale, "picks_table.partial_badge")}
           </span>
         ) : null}
       </td>

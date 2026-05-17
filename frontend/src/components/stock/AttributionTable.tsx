@@ -101,7 +101,7 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
             desc={desc}
             numeric
           >
-            w
+            {t(locale, "attribution.col_w")}
           </SortTh>
           <SortTh
             onClick={() => setSort("contribution")}
@@ -117,8 +117,8 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
           <th className="px-2 py-1.5 text-center text-tm-fg-2">
             {t(locale, "attribution.tier")}
           </th>
-          <th className="px-2 py-1.5 text-left text-tm-fg-2">source</th>
-          <th className="px-2 py-1.5 text-left text-tm-fg-2">time</th>
+          <th className="px-2 py-1.5 text-left text-tm-fg-2">{t(locale, "attribution.col_source")}</th>
+          <th className="px-2 py-1.5 text-left text-tm-fg-2">{t(locale, "attribution.col_time")}</th>
         </tr>
       </thead>
       <tbody>

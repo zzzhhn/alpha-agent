@@ -1,10 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import { deriveActionBox } from "@/lib/action-box";
+import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
 
 export default function ActionBox({ card }: { card: RatingCard }) {
+  const [locale, setLocale] = useState<Locale>("zh");
+  useEffect(() => {
+    setLocale(getLocaleFromStorage());
+  }, []);
   const action = useMemo(() => {
     const tech = card.breakdown.find((b) => b.signal === "technicals")?.raw as
       | { atr?: number; current_price?: number }
@@ -31,10 +36,9 @@ export default function ActionBox({ card }: { card: RatingCard }) {
   if (card.partial) {
     return (
       <div className="rounded border border-tm-rule-2 bg-tm-bg-2 p-3 text-sm">
-        <div className="font-semibold text-tm-warn">Action</div>
+        <div className="font-semibold text-tm-warn">{t(locale, "actionbox.title")}</div>
         <p className="mt-1.5 text-xs leading-relaxed text-tm-muted">
-          Entry / stop / target need intraday data (ATR, live price). This
-          ticker is on the daily pipeline only, no intraday factors yet.
+          {t(locale, "actionbox.partial_hint")}
         </p>
       </div>
     );
@@ -45,36 +49,36 @@ export default function ActionBox({ card }: { card: RatingCard }) {
   return (
     <div className={dimmed ? "opacity-50" : ""}>
       <div className="rounded border border-tm-rule-2 bg-tm-bg-2 p-3 space-y-1.5 text-sm">
-        <div className="font-semibold text-tm-warn">Action</div>
+        <div className="font-semibold text-tm-warn">{t(locale, "actionbox.title")}</div>
         {dimmed ? (
           <div className="text-xs text-tm-warn">
-            ⚠ R:R&lt;1.5 — wait for better entry
+            ⚠ {t(locale, "actionbox.rr_warning")}
           </div>
         ) : null}
         <ActionRow
-          label="Entry"
+          label={t(locale, "actionbox.entry")}
           value={
             action.entryLow != null
-              ? `${action.entryLow.toFixed(2)} – ${action.entryHigh!.toFixed(2)}`
+              ? `${action.entryLow.toFixed(2)} - ${action.entryHigh!.toFixed(2)}`
               : "—"
           }
         />
         <ActionRow
-          label="Stop"
+          label={t(locale, "actionbox.stop")}
           value={action.stop != null ? action.stop.toFixed(2) : "—"}
         />
         <ActionRow
-          label="Target"
+          label={t(locale, "actionbox.target")}
           value={action.target != null ? action.target.toFixed(2) : "—"}
         />
         <ActionRow
-          label="R:R"
+          label={t(locale, "actionbox.rr")}
           value={
             action.rrRatio != null ? `${action.rrRatio.toFixed(1)} : 1` : "—"
           }
         />
         <ActionRow
-          label="Position"
+          label={t(locale, "actionbox.position")}
           value={`${action.positionPct?.toFixed(1) ?? "—"}%`}
         />
       </div>
