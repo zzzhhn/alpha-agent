@@ -35,7 +35,15 @@ class TruthSocialAdapter:
         resp = await self._client.get(_SOURCE_URL)
         resp.raise_for_status()
         payload = resp.json()
-        truths = payload.get("truths", []) if isinstance(payload, dict) else []
+        # CNN mirror returns a bare array of truth objects at the top
+        # level. Earlier versions (and the spec fixture) used
+        # {"truths": [...]}; keep both shapes supported defensively.
+        if isinstance(payload, list):
+            truths = payload
+        elif isinstance(payload, dict):
+            truths = payload.get("truths") or payload.get("data") or []
+        else:
+            truths = []
         out: list[MacroEvent] = []
         for t in truths:
             ts = t.get("created_at")
