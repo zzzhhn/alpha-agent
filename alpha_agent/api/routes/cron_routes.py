@@ -82,10 +82,9 @@ async def cron_news_macro() -> dict[str, Any]:
     return await macro_handler()
 
 
-@router.post("/news_llm_enrich")
-@router.get("/news_llm_enrich")
-async def cron_news_llm_enrich() -> dict[str, Any]:
-    """Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK
-    LiteLLM, write results back."""
-    from api.cron.news_pipeline import llm_enrich_handler
-    return await llm_enrich_handler()
+# news_llm_enrich cron route removed 2026-05-17.
+# The previous cron-side handler called get_settings() -> create_llm_client()
+# which requires a global LLM key in the server env. That violates BYOK
+# (the platform deliberately does not hold a global key; each user supplies
+# their own). Read-time replacement: POST /api/news/enrich/{ticker} with
+# Depends(get_llm_client), which sources the caller's stored BYOK key.

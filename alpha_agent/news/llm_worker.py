@@ -91,6 +91,36 @@ async def enrich_pending(pool, row_limit: int = 100) -> tuple[int, int]:
     return n_proc, n_failed
 
 
+async def enrich_news_for_ticker(
+    pool, llm, ticker: str, row_limit: int = 100,
+) -> tuple[int, int]:
+    """BYOK per-ticker enrichment for the read-time path.
+
+    Caller supplies the LLM client (typically built from the user's
+    stored BYOK key via api.byok.get_llm_client). Only touches
+    news_items rows WHERE ticker = $1 AND llm_processed_at IS NULL.
+    Macro events use a separate dashboard-level enrich path (P1).
+
+    Returns (n_processed, n_failed_batches). row_limit caps how many
+    news_items a single user click can enqueue (token cost guard).
+    """
+    n_proc = 0
+    n_failed = 0
+    news = await pool.fetch(
+        "SELECT id, ticker, headline FROM news_items "
+        "WHERE ticker = $1 AND llm_processed_at IS NULL "
+        "ORDER BY id LIMIT $2",
+        ticker.upper(), int(row_limit),
+    )
+    for batch in _chunks(news, _BATCH_SIZE):
+        ok = await _enrich_news_batch(pool, llm, batch)
+        if ok:
+            n_proc += len(batch)
+        else:
+            n_failed += 1
+    return n_proc, n_failed
+
+
 def _chunks(seq, n):
     for i in range(0, len(seq), n):
         yield seq[i : i + n]

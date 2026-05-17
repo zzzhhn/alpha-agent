@@ -20,7 +20,6 @@ from alpha_agent.news.aggregator import MacroAggregator, PerTickerAggregator
 from alpha_agent.news.fed_adapter import FedRSSAdapter
 from alpha_agent.news.finnhub_adapter import FinnhubAdapter
 from alpha_agent.news.fmp_adapter import FMPAdapter
-from alpha_agent.news.llm_worker import enrich_pending
 from alpha_agent.news.ofac_adapter import OFACRSSAdapter
 from alpha_agent.news.queries import upsert_macro_events, upsert_news_items
 from alpha_agent.news.rss_adapter import RSSAdapter
@@ -103,12 +102,7 @@ async def macro_handler() -> dict[str, Any]:
     return {"ok": True, "rows_written": rows_written, "errors": []}
 
 
-async def llm_enrich_handler() -> dict[str, Any]:
-    pool = await get_pool(os.environ["DATABASE_URL"])
-    started_at = datetime.now(UTC)
-    n_processed, n_failed = await enrich_pending(pool, row_limit=100)
-    await _record_cron(
-        pool, "news_llm_enrich", started_at, n_processed,
-        [{"failed_batches": n_failed}] if n_failed else [],
-    )
-    return {"ok": True, "processed": n_processed, "failed_batches": n_failed}
+# llm_enrich_handler removed 2026-05-17 - BYOK architecture requires
+# user-context (which cron does not have). Read-time replacement lives
+# in alpha_agent/api/routes/news_enrich.py + enrich_news_for_ticker
+# in llm_worker.py.
