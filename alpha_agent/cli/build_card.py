@@ -17,7 +17,7 @@ from alpha_agent.fusion.weights import DEFAULT_WEIGHTS
 from alpha_agent.signals.base import safe_fetch
 
 
-# Ordered list of all 10 signal module names (matches DEFAULT_WEIGHTS keys).
+# Ordered list of all signal module names (matches DEFAULT_WEIGHTS keys).
 _SIGNAL_NAMES: list[str] = [
     "factor",
     "technicals",
@@ -29,6 +29,7 @@ _SIGNAL_NAMES: list[str] = [
     "premarket",
     "macro",
     "calendar",
+    "political_impact",
 ]
 
 
@@ -59,9 +60,10 @@ def _fixture_signal(name: str, ticker: str, as_of: datetime):
         "premarket": 0.7,
         "macro": 0.2,
         "calendar": 0.0,
+        "political_impact": 0.0,
     }
     z = _z_map.get(name, 0.5)
-    confidence = 0.0 if name == "calendar" else 0.80
+    confidence = 0.0 if name in ("calendar", "political_impact") else 0.80
     return SignalScore(
         ticker=ticker,
         z=z,

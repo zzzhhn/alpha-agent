@@ -7,16 +7,17 @@ from __future__ import annotations
 from typing import Mapping
 
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "factor":     0.30,
-    "technicals": 0.20,
-    "analyst":    0.10,
-    "earnings":   0.10,
-    "news":       0.10,
-    "insider":    0.05,
-    "options":    0.05,
-    "premarket":  0.05,
-    "macro":      0.05,
-    "calendar":   0.00,
+    "factor":           0.30,
+    "technicals":       0.20,
+    "analyst":          0.10,
+    "earnings":         0.10,
+    "news":             0.10,
+    "insider":          0.05,
+    "options":          0.05,
+    "premarket":        0.05,
+    "macro":            0.05,
+    "calendar":         0.00,
+    "political_impact": 0.00,
 }
 
 
