@@ -36,8 +36,9 @@ on:
     - cron: '*/5 * * * *'
     # News: Fed + OFAC hourly, 24/7
     - cron: '0 * * * *'
-    # News: LLM enrich every 15 min, picks llm_processed_at IS NULL
-    - cron: '*/15 * * * *'
+    # NOTE: news_llm_enrich cron removed 2026-05-17. BYOK architecture
+    # means cron has no user-context to source an LLM key. Enrichment
+    # moved to read-time path triggered by user with their own key.
   workflow_dispatch:
     inputs:
       job:
@@ -54,7 +55,6 @@ on:
           - both
           - news_per_ticker
           - news_macro
-          - news_llm_enrich
 
 env:
   BACKEND_BASE: https://alpha.bobbyzhong.com
@@ -300,16 +300,5 @@ jobs:
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
 
-  news_llm_enrich:
-    if: |
-      github.event.schedule == '*/15 * * * *' ||
-      (github.event_name == 'workflow_dispatch' && inputs.job == 'news_llm_enrich')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: news llm enrich single shot
-        run: |
-          HTTP=$(curl -s --max-time 300 -o /tmp/shot.json -w "%{http_code}" \
-            "$BACKEND_BASE/api/cron/news_llm_enrich")
-          cat /tmp/shot.json | head -c 400; echo
-          [ "$HTTP" = "200" ] || exit 1
+# news_llm_enrich job removed 2026-05-17 (BYOK architecture - enrich
+# moved to read-time path triggered by user with their own LLM key).
