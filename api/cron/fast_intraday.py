@@ -153,10 +153,19 @@ async def handler(
 
     async def _per_ticker(t: str) -> str:
         # Fetch fresh signals for this tier first (slow IO, no DB held).
-        fresh: dict[str, SignalScore] = {
-            name: _ALL_MODULES[name].fetch_signal(t, now)
-            for name in tier_modules
-        }
+        # Modules expose either sync fetch_signal or async afetch_signal;
+        # async-native ones (news, political_impact - query asyncpg pool
+        # directly) MUST be awaited, not asyncio.run'd, because we're
+        # already inside a running loop here. See feedback memory
+        # feedback_asyncio_run_in_async_context.md.
+        fresh: dict[str, SignalScore] = {}
+        for name in tier_modules:
+            mod = _ALL_MODULES[name]
+            afetch = getattr(mod, "afetch_signal", None)
+            if afetch is not None:
+                fresh[name] = await afetch(t, now)
+            else:
+                fresh[name] = mod.fetch_signal(t, now)
 
         # Read the existing row to drive bootstrap detection + alert diff.
         prev_row = await pool.fetchrow(
@@ -171,10 +180,13 @@ async def handler(
         # 10 signals populated. Costs an extra ~3s but only on first hit.
         if tier != "full" and prev_row is None:
             missing = [n for n in _ALL_MODULES if n not in fresh]
-            fresh.update({
-                name: _ALL_MODULES[name].fetch_signal(t, now)
-                for name in missing
-            })
+            for name in missing:
+                mod = _ALL_MODULES[name]
+                afetch = getattr(mod, "afetch_signal", None)
+                if afetch is not None:
+                    fresh[name] = await afetch(t, now)
+                else:
+                    fresh[name] = mod.fetch_signal(t, now)
 
         # Build the sigs dict combine() will see: fresh values for the
         # tier (or all 10 on bootstrap / full), cached values for the rest.

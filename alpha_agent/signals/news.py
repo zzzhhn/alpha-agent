@@ -147,6 +147,11 @@ def _fetch(ticker: str, as_of: datetime) -> SignalScore:
 
     safe_fetch (in fetch_signal below) catches the network/DB errors
     listed in signals.base._EXTERNAL_ERRORS; programming bugs propagate.
+
+    NOTE: only safe to call from a sync parent context (e.g. build_card.py
+    CLI). Async parent contexts (api/cron/fast_intraday._per_ticker) must
+    use afetch_signal below to avoid 'asyncio.run() cannot be called from
+    a running event loop' RuntimeError.
     """
     out = asyncio.run(compute_news_signal(ticker.upper()))
     # asyncio.run returns a dict; ensure as_of reflects the caller's clock
@@ -158,3 +163,19 @@ def _fetch(ticker: str, as_of: datetime) -> SignalScore:
 
 def fetch_signal(ticker: str, as_of: datetime) -> SignalScore:
     return safe_fetch(_fetch, ticker, as_of, source="news_items")
+
+
+async def afetch_signal(ticker: str, as_of: datetime) -> SignalScore:
+    """Async-native variant for async parent contexts (cron handlers).
+    Bypasses the asyncio.run() in _fetch which raises when a parent loop
+    is already running. Same SignalScore output shape as fetch_signal."""
+    try:
+        out = await compute_news_signal(ticker.upper())
+    except Exception as e:  # noqa: BLE001 - mirror safe_fetch surface
+        return SignalScore(
+            ticker=ticker, z=0.0, raw=None, confidence=0.0,
+            as_of=as_of, source="news_items",
+            error=f"{type(e).__name__}: {str(e)[:120]}",
+        )
+    out["as_of"] = as_of
+    return out
