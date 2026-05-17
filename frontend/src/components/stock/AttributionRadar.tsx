@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import type { RatingCard } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { getSignalDisplayLabel } from "@/lib/signal-labels";
 
 // Dynamic imports keep Recharts (~150KB gzip) out of the initial server chunk.
 // Per CLAUDE.md memory: wrap ResponsiveContainer in a fixed-height div.
@@ -22,28 +23,30 @@ const PolarAngleAxis = dynamic(
   () => import("recharts").then((m) => m.PolarAngleAxis),
   { ssr: false },
 );
+const PolarRadiusAxis = dynamic(
+  () => import("recharts").then((m) => m.PolarRadiusAxis),
+  { ssr: false },
+);
+const Tooltip = dynamic(
+  () => import("recharts").then((m) => m.Tooltip),
+  { ssr: false },
+);
 const ResponsiveContainer = dynamic(
   () => import("recharts").then((m) => m.ResponsiveContainer),
   { ssr: false },
 );
 
-// Display-label overrides for radar vertex names.
-// Backend signal names stay stable (`macro`, `political_impact`); only the
-// rendered label changes so users can tell "Macro (Vol)" apart from political
-// signals. i18n key takes precedence; falls back to this map; falls back to
-// the raw signal name.
-const SIGNAL_DISPLAY_LABEL: Record<string, Record<Locale, string>> = {
-  macro: { zh: "宏观 (波动率)", en: "Macro (Vol)" },
-  political_impact: { zh: "政治", en: "Political" },
-};
+// Fixed radar scale [0, 3] sigma so visualization stays stable across tickers
+// instead of auto-scaling to the largest z in the breakdown (which collapses
+// a typical card with 1-2 strong signals into a tiny shape near the center).
+const RADAR_MAX = 3;
 
-function displayName(signalName: string, locale: Locale): string {
-  const key = `attribution.signal_label_${signalName}`;
-  const translated = t(locale, key as Parameters<typeof t>[1]);
-  // t() returns the key itself when missing; treat that as a miss.
-  if (translated !== key) return translated;
-  const fallback = SIGNAL_DISPLAY_LABEL[signalName]?.[locale];
-  return fallback ?? signalName;
+// Negative z values are clamped to 0 on the radar. Radar charts naturally
+// cannot express negative radii without offset tricks that confuse readers;
+// negative signals are still fully visible in the AttributionTable column.
+function clampToRadar(z: number): number {
+  if (z <= 0) return 0;
+  return Math.min(z, RADAR_MAX);
 }
 
 export default function AttributionRadar({ card }: { card: RatingCard }) {
@@ -54,29 +57,50 @@ export default function AttributionRadar({ card }: { card: RatingCard }) {
   }, []);
 
   const data = card.breakdown.map((b) => ({
-    signal: displayName(b.signal, locale),
-    z: Math.abs(b.z ?? 0),
+    signal: getSignalDisplayLabel(b.signal, locale),
+    z_visible: clampToRadar(b.z ?? 0),
+    z_raw: b.z ?? 0,
   }));
   const composite = card.composite_score ?? 0;
 
   // Fixed-height parent required — ResponsiveContainer reads offsetWidth;
   // without it the container collapses to 0 in grid/flex parents (CLAUDE.md memory).
-  // Colors: mid-tone gray for grid/labels stays legible across both themes.
-  // Accent stroke is blue-500 which holds contrast on both light cream + dark bg.
   return (
     <div style={{ width: "100%", height: 280 }} className="text-tm-fg-2">
       <ResponsiveContainer>
-        <RadarChart data={data}>
+        <RadarChart data={data} outerRadius="75%">
           <PolarGrid stroke="#9ca3af" strokeOpacity={0.4} />
           <PolarAngleAxis
             dataKey="signal"
             tick={{ fontSize: 10, fill: "currentColor" }}
           />
+          <PolarRadiusAxis
+            domain={[0, RADAR_MAX]}
+            tickCount={4}
+            tick={{ fontSize: 9, fill: "currentColor" }}
+            angle={90}
+            tickFormatter={(v: number) => (v === 0 ? "0" : `${v}σ`)}
+          />
           <Radar
-            dataKey="z"
+            dataKey="z_visible"
             stroke="#3b82f6"
             fill="#3b82f6"
-            fillOpacity={0.25}
+            fillOpacity={0.45}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "rgba(15, 23, 42, 0.92)",
+              border: "1px solid #475569",
+              borderRadius: 4,
+              color: "#e2e8f0",
+              fontSize: 11,
+            }}
+            formatter={(_value, _name, item) => {
+              const payload = (item as unknown as { payload?: { z_raw?: number } } | undefined)?.payload;
+              const raw = payload?.z_raw ?? 0;
+              const sign = raw >= 0 ? "+" : "";
+              return [`${sign}${raw.toFixed(2)}σ`, "z"];
+            }}
           />
         </RadarChart>
       </ResponsiveContainer>

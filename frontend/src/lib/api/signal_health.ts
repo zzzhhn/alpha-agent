@@ -7,7 +7,7 @@ export interface SignalHealthEntry {
   live_ic_60d: number | null;
   live_ic_90d: number | null;
   weight_current: number | null;
-  tier: "green" | "yellow" | "red" | "unknown";
+  tier: "green" | "yellow" | "red" | "insufficient_data" | "unknown";
   last_success: string | null;
   last_error: string | null;
   error_count_24h: number;

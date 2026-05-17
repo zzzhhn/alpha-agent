@@ -8,6 +8,7 @@ import {
   type SignalHealthEntry,
 } from "@/lib/api/signal_health";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { getSignalDisplayLabel } from "@/lib/signal-labels";
 
 type SortKey = "signal" | "z" | "weight" | "contribution";
 
@@ -15,6 +16,7 @@ const TIER_DOT: Record<SignalHealthEntry["tier"], string> = {
   green: "bg-tm-pos",
   yellow: "bg-tm-warn",
   red: "bg-tm-neg",
+  insufficient_data: "bg-tm-muted",
   unknown: "bg-tm-muted",
 };
 
@@ -125,19 +127,24 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
           const tier: SignalHealthEntry["tier"] = h?.tier ?? "unknown";
           const isDropped =
             tier === "red" || (h?.weight_current ?? null) === 0;
-          const droppedTooltip = isDropped
+          const isInsufficient = tier === "insufficient_data";
+          const rowTooltip = isDropped
             ? t(locale, "attribution.dropped_tooltip")
-            : "";
+            : isInsufficient
+              ? t(locale, "attribution.insufficient_data_tooltip")
+              : "";
           return (
             <tr
               key={b.signal}
-              title={droppedTooltip}
+              title={rowTooltip}
               className={clsx(
                 "border-b border-tm-rule",
                 isDropped ? "opacity-40" : "",
               )}
             >
-              <td className="px-2 py-1 text-tm-fg">{b.signal}</td>
+              <td className="px-2 py-1 text-tm-fg">
+                {getSignalDisplayLabel(b.signal, locale)}
+              </td>
               <td className="px-2 py-1 text-right font-mono text-tm-fg">
                 {(() => {
                   const z = b.z ?? 0;
@@ -173,7 +180,7 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
                     "inline-block h-2 w-2 rounded-full",
                     TIER_DOT[tier],
                   )}
-                  title={droppedTooltip}
+                  title={rowTooltip}
                 />
               </td>
               <td className="px-2 py-1 text-tm-muted">{b.source}</td>

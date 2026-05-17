@@ -92,10 +92,13 @@ async def health_signals() -> HealthSignalsResponse:
     """Per-signal error summary + live IC, current weight, and tier color.
 
     Tier rule:
-      red     = reason == 'auto_dropped_low_ic' OR weight_current == 0.0
-      green   = min(ic_30d, ic_60d, ic_90d) > 0.02
-      yellow  = 0.01 < min(ics) <= 0.02
-      unknown = no IC data and not dropped
+      red                = reason == 'auto_dropped_low_ic' OR weight_current == 0.0
+      green              = min(ic_30d, ic_60d, ic_90d) > 0.02
+      yellow             = 0.01 < min(ics) <= 0.02
+      insufficient_data  = no IC history yet AND no weight row yet
+                           (framework alive, IC backtest needs > 10 obs
+                           per window which require ~30 trading days)
+      unknown            = mixed state not matching above (catch-all)
     """
     pool = await get_db_pool()
     out: list[SignalStatus] = []
@@ -153,6 +156,14 @@ async def health_signals() -> HealthSignalsResponse:
             tier = "green"
         elif ics and min(ics) > 0.01:
             tier = "yellow"
+        elif not ics and weight_row is None:
+            # No IC history at all AND no weight row yet: framework alive,
+            # waiting for IC backtest to accumulate enough trading-day
+            # observations. Distinguished from "unknown" (mixed state) so
+            # the UI can show "data accumulating" rather than the
+            # misleading red dot users would otherwise interpret as
+            # "signal dropped".
+            tier = "insufficient_data"
         else:
             tier = "unknown"
 
