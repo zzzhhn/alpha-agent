@@ -32,6 +32,7 @@ _SIGNAL_NAMES = [
     "premarket",
     "macro",
     "calendar",
+    "political_impact",
 ]
 
 
@@ -48,6 +49,11 @@ class SignalStatus(BaseModel):
     last_success: str | None
     last_error: str | None
     error_count_24h: int
+    live_ic_30d: float | None = None
+    live_ic_60d: float | None = None
+    live_ic_90d: float | None = None
+    weight_current: float | None = None
+    tier: str = "unknown"
 
 
 class HealthSignalsResponse(BaseModel):
@@ -83,7 +89,14 @@ async def health() -> HealthResponse:
 
 @router.get("/signals", response_model=HealthSignalsResponse)
 async def health_signals() -> HealthSignalsResponse:
-    """Per-signal error summary from the last 24 hours."""
+    """Per-signal error summary + live IC, current weight, and tier color.
+
+    Tier rule:
+      red     = reason == 'auto_dropped_low_ic' OR weight_current == 0.0
+      green   = min(ic_30d, ic_60d, ic_90d) > 0.02
+      yellow  = 0.01 < min(ics) <= 0.02
+      unknown = no IC data and not dropped
+    """
     pool = await get_db_pool()
     out: list[SignalStatus] = []
     for name in _SIGNAL_NAMES:
@@ -98,12 +111,62 @@ async def health_signals() -> HealthSignalsResponse:
             "WHERE component = $1 AND ts > now() - INTERVAL '24 hours'",
             comp,
         ) or 0
+
+        ic_30d_raw = await pool.fetchval(
+            "SELECT ic FROM signal_ic_history "
+            "WHERE signal_name = $1 AND window_days = 30 "
+            "ORDER BY computed_at DESC LIMIT 1",
+            name,
+        )
+        ic_60d_raw = await pool.fetchval(
+            "SELECT ic FROM signal_ic_history "
+            "WHERE signal_name = $1 AND window_days = 60 "
+            "ORDER BY computed_at DESC LIMIT 1",
+            name,
+        )
+        ic_90d_raw = await pool.fetchval(
+            "SELECT ic FROM signal_ic_history "
+            "WHERE signal_name = $1 AND window_days = 90 "
+            "ORDER BY computed_at DESC LIMIT 1",
+            name,
+        )
+        ic_30d = float(ic_30d_raw) if ic_30d_raw is not None else None
+        ic_60d = float(ic_60d_raw) if ic_60d_raw is not None else None
+        ic_90d = float(ic_90d_raw) if ic_90d_raw is not None else None
+
+        weight_row = await pool.fetchrow(
+            "SELECT weight, reason FROM signal_weight_current "
+            "WHERE signal_name = $1",
+            name,
+        )
+        weight_current = (
+            float(weight_row["weight"]) if weight_row is not None else None
+        )
+        reason = weight_row["reason"] if weight_row is not None else None
+
+        ics = [v for v in (ic_30d, ic_60d, ic_90d) if v is not None]
+        if reason == "auto_dropped_low_ic" or (
+            weight_current is not None and weight_current == 0.0
+        ):
+            tier = "red"
+        elif ics and min(ics) > 0.02:
+            tier = "green"
+        elif ics and min(ics) > 0.01:
+            tier = "yellow"
+        else:
+            tier = "unknown"
+
         out.append(
             SignalStatus(
                 name=name,
                 last_success=None,  # not yet tracked; M3 backlog
                 last_error=(last_err["err_message"] if last_err else None),
                 error_count_24h=count_24h,
+                live_ic_30d=ic_30d,
+                live_ic_60d=ic_60d,
+                live_ic_90d=ic_90d,
+                weight_current=weight_current,
+                tier=tier,
             )
         )
     return HealthSignalsResponse(signals=out)

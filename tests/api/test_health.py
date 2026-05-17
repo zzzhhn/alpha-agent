@@ -18,8 +18,11 @@ async def test_health_includes_db_status(client_with_db):
     assert body["db"] == "ok"
 
 
-async def test_health_signals_returns_10_rows(client_with_db, applied_db):
-    """All 10 signals listed even with no error_log entries (last_error=null)."""
+async def test_health_signals_returns_all_rows(client_with_db, applied_db):
+    """All 11 signals listed even with no error_log entries (last_error=null).
+
+    Phase 6a T10 added political_impact to _SIGNAL_NAMES.
+    """
     r = client_with_db.get("/api/_health/signals")
     assert r.status_code == 200
     sigs = r.json()["signals"]
@@ -35,6 +38,7 @@ async def test_health_signals_returns_10_rows(client_with_db, applied_db):
         "premarket",
         "macro",
         "calendar",
+        "political_impact",
     }
 
 
