@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchOhlcv, type OhlcvBar } from "@/lib/api/picks";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import IntradayDrawer from "./IntradayDrawer";
 
 // lightweight-charts v4 imports — keep dynamic to avoid SSR breakage (the
 // lib touches `document` at import time). The component itself is
@@ -28,6 +29,8 @@ export default function PriceChart({ ticker }: { ticker: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "empty" | "error">("loading");
   const [errMsg, setErrMsg] = useState<string>("");
+  // YYYY-MM-DD of the daily candle the user clicked; null = drawer closed.
+  const [drawerDate, setDrawerDate] = useState<string | null>(null);
 
   const renderChart = useCallback(async (bars: OhlcvBar[]) => {
     const el = containerRef.current;
@@ -89,7 +92,27 @@ export default function PriceChart({ ticker }: { ticker: string }) {
 
     chart.timeScale().fitContent();
 
-    // Resize handler — TradingView doesn't auto-resize.
+    // Daily-candle click handler: open the IntradayDrawer for that date.
+    // lightweight-charts v4 reports param.time as either a string
+    // ("YYYY-MM-DD" for BusinessDay-shaped data) or a number (Unix
+    // seconds for UTCTimestamp data). For our daily series we set
+    // `time` as YYYY-MM-DD strings above so the string branch is the
+    // hot path; the number branch is defensive.
+    chart.subscribeClick((param) => {
+      if (!param.time) return;
+      let dateStr: string;
+      if (typeof param.time === "string") {
+        dateStr = param.time;
+      } else if (typeof param.time === "number") {
+        const d = new Date(param.time * 1000);
+        dateStr = d.toISOString().slice(0, 10);
+      } else {
+        return;
+      }
+      setDrawerDate(dateStr);
+    });
+
+    // Resize handler. TradingView doesn't auto-resize.
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: el.clientWidth });
     });
@@ -151,6 +174,16 @@ export default function PriceChart({ ticker }: { ticker: string }) {
         ) : null}
         <div ref={containerRef} style={{ width: "100%", height: "100%", display: status === "ok" ? "block" : "none" }} />
       </div>
+      {status === "ok" ? (
+        <p className="mt-2 text-xs text-tm-muted">
+          {t(locale, "chart.click_for_intraday")}
+        </p>
+      ) : null}
+      <IntradayDrawer
+        ticker={ticker}
+        date={drawerDate}
+        onClose={() => setDrawerDate(null)}
+      />
     </section>
   );
 }

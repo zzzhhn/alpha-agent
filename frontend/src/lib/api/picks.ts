@@ -145,3 +145,27 @@ export const fetchOhlcv = (ticker: string, period = "6mo") =>
   apiGet<OhlcvResponse>(
     `/api/stock/${ticker.toUpperCase()}/ohlcv?period=${period}`,
   );
+
+// Minute-level intraday bars for a single calendar date. Backed by the
+// minute_bars rolling 30d cache; `out_of_range=true` means the date is
+// outside the retention window and the bars list will be empty.
+export interface MinuteBar {
+  ts: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number;
+}
+
+export interface MinuteBarsResponse {
+  ticker: string;
+  date: string;
+  bars: MinuteBar[];
+  out_of_range: boolean;
+}
+
+export const fetchMinuteBars = (ticker: string, date: string) =>
+  apiGet<MinuteBarsResponse>(
+    `/api/stock/${ticker.toUpperCase()}/minute_bars?date=${date}`,
+  );

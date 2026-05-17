@@ -709,6 +709,14 @@ const translations = {
     "attribution.col_w": "权重",
     "attribution.col_source": "来源",
     "attribution.col_time": "时间",
+    /* Intraday drawer (Phase 5: click daily candle for minute bars) */
+    "intraday.title": "分钟级数据",
+    "intraday.close": "关闭",
+    "intraday.empty": "该日无交易数据 (可能是周末/节假日)",
+    "intraday.out_of_range": "分钟级历史仅保留最近 30 天",
+    "intraday.loading": "加载中...",
+    "intraday.error": "加载失败",
+    "chart.click_for_intraday": "点击 K 线查看分钟数据",
   },
   en: {
     "stage.data": "Data Collection",
@@ -1409,6 +1417,14 @@ const translations = {
     "attribution.col_w": "w",
     "attribution.col_source": "source",
     "attribution.col_time": "time",
+    /* Intraday drawer (Phase 5: click daily candle for minute bars) */
+    "intraday.title": "Intraday minute bars",
+    "intraday.close": "Close",
+    "intraday.empty": "No trading data for this day (weekend / holiday?)",
+    "intraday.out_of_range": "Minute-level history limited to last 30 days",
+    "intraday.loading": "Loading...",
+    "intraday.error": "Failed to load",
+    "chart.click_for_intraday": "Click a candle for intraday minute bars",
   },
 } as const;
 

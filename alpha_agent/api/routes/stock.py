@@ -142,3 +142,89 @@ async def stock_ohlcv(
         period=period,
         bars=[OhlcvBar(**b) for b in bars],
     )
+
+
+class MinuteBar(BaseModel):
+    ts: str  # ISO 8601
+    open: float | None
+    high: float | None
+    low: float | None
+    close: float | None
+    volume: int
+
+
+class MinuteBarsResponse(BaseModel):
+    ticker: str
+    date: str
+    bars: list[MinuteBar]
+    # True if the requested date is older than the 30d rolling retention
+    # window of minute_bars (yfinance 1m retention limit). Frontend uses
+    # this to distinguish a "no data, day out of coverage" message from a
+    # "no data, weekend / holiday" message.
+    out_of_range: bool
+
+
+# Minute bars are kept on a rolling ~30 day window by minute_bars_puller.
+# yfinance only retains 1m bars for the last 7-30 days, so older dates
+# return an empty bars list with out_of_range=True instead of querying.
+_MINUTE_BARS_RETENTION_DAYS = 30
+
+
+@router.get("/{ticker}/minute_bars", response_model=MinuteBarsResponse)
+async def stock_minute_bars(
+    ticker: str,
+    date: str,  # YYYY-MM-DD
+) -> MinuteBarsResponse:
+    """Return all minute_bars for one ticker on one calendar date (UTC).
+
+    Returns empty bars list if date is older than the 30d rolling window
+    or no bars exist (e.g. weekend / holiday / out-of-coverage ticker).
+    Caller (frontend IntradayDrawer) renders an empty-state message.
+    """
+    ticker = ticker.upper()
+    try:
+        date_obj = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid date '{date}', expected YYYY-MM-DD",
+        ) from exc
+
+    today_utc = datetime.now(UTC).date()
+    out_of_range = date_obj < (today_utc - timedelta(days=_MINUTE_BARS_RETENTION_DAYS))
+    if out_of_range:
+        return MinuteBarsResponse(
+            ticker=ticker,
+            date=date,
+            bars=[],
+            out_of_range=True,
+        )
+
+    pool = await get_db_pool()
+    rows = await pool.fetch(
+        """
+        SELECT ts, open, high, low, close, volume FROM minute_bars
+        WHERE ticker = $1
+          AND (ts AT TIME ZONE 'UTC')::date = $2::date
+        ORDER BY ts ASC
+        """,
+        ticker,
+        date_obj,
+    )
+    bars = [
+        MinuteBar(
+            ts=r["ts"].isoformat(),
+            open=float(r["open"]) if r["open"] is not None else None,
+            high=float(r["high"]) if r["high"] is not None else None,
+            low=float(r["low"]) if r["low"] is not None else None,
+            close=float(r["close"]) if r["close"] is not None else None,
+            volume=int(r["volume"]) if r["volume"] is not None else 0,
+        )
+        for r in rows
+    ]
+    return MinuteBarsResponse(
+        ticker=ticker,
+        date=date,
+        bars=bars,
+        out_of_range=False,
+    )
