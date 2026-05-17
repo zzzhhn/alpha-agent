@@ -621,6 +621,12 @@ const translations = {
     "settings.weights.help": "每个信号的权重；总和应约等于 1.0。M3 阶段存于 localStorage，M4+ 同步至服务端。",
     "settings.watchlist.title": "Watchlist",
     "settings.watchlist.help": "追踪股票列表；intraday cron 优先处理 + /alerts 显示。本地存储，单用户。",
+    "attribution.signal": "信号",
+    "attribution.z": "z",
+    "attribution.contribution": "贡献",
+    "attribution.live_ic": "live IC (30d)",
+    "attribution.tier": "tier",
+    "attribution.dropped_tooltip": "本周期 IC < 0.02 自动 drop，weight = 0",
   },
   en: {
     "stage.data": "Data Collection",
@@ -1233,6 +1239,12 @@ const translations = {
     "settings.weights.help": "Per-signal weights; values should sum to approximately 1.0. Stored in localStorage during M3; synced to server in M4+.",
     "settings.watchlist.title": "Watchlist",
     "settings.watchlist.help": "Tickers to track; intraday cron prioritizes these + /alerts surfaces them. Stored locally, single-user.",
+    "attribution.signal": "Signal",
+    "attribution.z": "z",
+    "attribution.contribution": "Contribution",
+    "attribution.live_ic": "Live IC (30d)",
+    "attribution.tier": "Tier",
+    "attribution.dropped_tooltip": "Auto-dropped this cycle (IC < 0.02, weight = 0)",
   },
 } as const;
 
