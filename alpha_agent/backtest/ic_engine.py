@@ -31,7 +31,21 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
-from scipy.stats import spearmanr
+
+
+def _spearman_rho(xs, ys):
+    """Spearman rank correlation via numpy only (no scipy).
+    Returns NaN if degenerate (constant input)."""
+    xs = np.asarray(xs, dtype=float)
+    ys = np.asarray(ys, dtype=float)
+    if len(xs) < 2 or len(ys) < 2:
+        return float("nan")
+    rxs = np.argsort(np.argsort(xs)).astype(float)
+    rys = np.argsort(np.argsort(ys)).astype(float)
+    if np.std(rxs) == 0 or np.std(rys) == 0:
+        return float("nan")
+    return float(np.corrcoef(rxs, rys)[0, 1])
+
 
 # Active signals to backtest. Sourced from the production signal map
 # (alpha_agent.signals.*) plus the Phase 6a T6 political_impact signal.
@@ -112,7 +126,7 @@ async def compute_walk_forward_ic(
         return None
     xs = np.array([float(r["signal_z"]) for r in rows])
     ys = np.array([float(r["fwd_5d"]) for r in rows])
-    rho, _ = spearmanr(xs, ys)
+    rho = _spearman_rho(xs, ys)
     if rho is None or np.isnan(rho):
         return None
     return float(rho), len(xs)
