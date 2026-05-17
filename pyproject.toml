@@ -90,6 +90,14 @@ markers = ["slow: marks tests that hit external networks (deselect with '-m \"no
 target-version = "py312"
 line-length = 100
 
+[tool.ruff.lint]
+# E402 (import-not-at-top) - intentional in Vercel entry points where
+# os.environ.setdefault must precede fastapi import + in test files
+# patching env before importing the module under test.
+# E701 / E731 - cosmetic, not worth churn.
+# F841 - unused local assignments left for readability or future use.
+extend-ignore = ["E402", "E701", "E731", "F841"]
+
 [tool.setuptools.packages.find]
 include = ["alpha_agent*"]
 

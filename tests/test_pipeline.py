@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from unittest.mock import AsyncMock
 
 import pytest
 
-from alpha_agent.agents.backtest import BacktestAgent
 from alpha_agent.agents.evaluation import EvalAgent
-from alpha_agent.llm.base import LLMResponse, Message
+from alpha_agent.llm.base import LLMResponse
 from alpha_agent.pipeline.state import (
-    EvaluationDecision,
     FactorCandidate,
     FactorResult,
     Hypothesis,

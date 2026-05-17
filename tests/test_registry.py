@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from alpha_agent.pipeline.registry import FactorRecord, FactorRegistry
+from alpha_agent.pipeline.registry import FactorRegistry
 
 
 @pytest.fixture()

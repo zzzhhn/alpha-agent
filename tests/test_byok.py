@@ -13,14 +13,11 @@ _build_byok_client provider-construction tests are unchanged.
 """
 from __future__ import annotations
 
-import os
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
 from alpha_agent.api.byok import _build_byok_client
-from alpha_agent.llm.litellm_client import LiteLLMClient
 
 
 # ── Direct provider construction (no FastAPI machinery) ──

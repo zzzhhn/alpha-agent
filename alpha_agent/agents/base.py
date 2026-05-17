@@ -6,7 +6,6 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any
 
 from alpha_agent.llm.base import LLMClient
 from alpha_agent.pipeline.state import PipelineState

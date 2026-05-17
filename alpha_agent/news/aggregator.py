@@ -13,7 +13,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from alpha_agent.news.base import CircuitBreaker, NewsAdapter
+from alpha_agent.news.base import CircuitBreaker
 from alpha_agent.news.types import MacroEvent, NewsItem
 
 logger = logging.getLogger(__name__)

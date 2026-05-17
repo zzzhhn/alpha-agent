@@ -8,7 +8,7 @@ aggregator skips it without re-paying its timeout.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, UTC
 from typing import Any, Literal, Protocol, runtime_checkable
 

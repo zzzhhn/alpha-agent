@@ -11,7 +11,6 @@ Fix: get_engine() now runs `Base.metadata.create_all` once per process
 """
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 

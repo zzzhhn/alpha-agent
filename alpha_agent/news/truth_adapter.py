@@ -9,8 +9,7 @@ GitHub by swapping the URL constant.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Any
+from datetime import datetime
 
 from alpha_agent.news.base import make_client
 from alpha_agent.news.types import MacroEvent

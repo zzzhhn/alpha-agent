@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 

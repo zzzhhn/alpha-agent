@@ -16,7 +16,6 @@ import pandas as pd
 import pytest
 
 from alpha_agent.backtest.engine import BacktestEngine
-from alpha_agent.backtest.metrics import BacktestResult
 
 # ---------------------------------------------------------------------------
 # Fixtures — synthetic data generators

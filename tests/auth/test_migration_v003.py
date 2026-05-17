@@ -6,7 +6,6 @@ Mirrors tests/auth/test_migration_v002.py: pure file-content assertions,
 no live database connection."""
 from pathlib import Path
 
-import pytest
 
 _MIGRATION = (
     Path(__file__).parents[2]

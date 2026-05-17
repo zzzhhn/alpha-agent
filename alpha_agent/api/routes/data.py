@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from alpha_agent.factor_engine.factor_backtest import (
     BENCHMARK_TICKER,

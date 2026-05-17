@@ -4,7 +4,6 @@ import pytest
 from alpha_agent.storage.postgres import close_pool, get_pool
 from alpha_agent.storage.queries import (
     insert_signal_slow,
-    upsert_signal_fast,
     enqueue_alert,
     list_pending_alerts,
     mark_alert_dispatched,

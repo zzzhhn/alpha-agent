@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 
 from alpha_agent.core.exceptions import DataIntegrityError
-from alpha_agent.data.manager import BaseFetcher, DataFetcherManager
+from alpha_agent.data.manager import DataFetcherManager
 from alpha_agent.factor_engine.factor_backtest import _assert_trading_days
 
 

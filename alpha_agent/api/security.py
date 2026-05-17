@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from fastapi import HTTPException, Request, Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)

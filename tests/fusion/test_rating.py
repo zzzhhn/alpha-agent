@@ -1,5 +1,4 @@
 # tests/fusion/test_rating.py
-import math
 from alpha_agent.fusion.rating import map_to_tier, compute_confidence
 
 

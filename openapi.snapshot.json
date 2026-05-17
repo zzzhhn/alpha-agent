@@ -286,6 +286,29 @@
         "title": "DecayAlert",
         "type": "object"
       },
+      "EnrichResponse": {
+        "properties": {
+          "enriched": {
+            "title": "Enriched",
+            "type": "integer"
+          },
+          "failed_batches": {
+            "title": "Failed Batches",
+            "type": "integer"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "enriched",
+          "failed_batches"
+        ],
+        "title": "EnrichResponse",
+        "type": "object"
+      },
       "ExplainAstRequest": {
         "properties": {
           "expression": {
@@ -2298,9 +2321,58 @@
             ],
             "title": "Last Success"
           },
+          "live_ic_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Ic 30D"
+          },
+          "live_ic_60d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Ic 60D"
+          },
+          "live_ic_90d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Ic 90D"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "tier": {
+            "default": "unknown",
+            "title": "Tier",
+            "type": "string"
+          },
+          "weight_current": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Current"
           }
         },
         "required": [
@@ -3291,7 +3363,7 @@
     },
     "/api/_health/signals": {
       "get": {
-        "description": "Per-signal error summary from the last 24 hours.",
+        "description": "Per-signal error summary + live IC, current weight, and tier color.\n\nTier rule:\n  red     = reason == 'auto_dropped_low_ic' OR weight_current == 0.0\n  green   = min(ic_30d, ic_60d, ic_90d) > 0.02\n  yellow  = 0.01 < min(ics) <= 0.02\n  unknown = no IC data and not dropped",
         "operationId": "health_signals_api__health_signals_get",
         "responses": {
           "200": {
@@ -3643,17 +3715,16 @@
         ]
       }
     },
-    "/api/cron/news_llm_enrich": {
-      "get": {
-        "description": "Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK\nLiteLLM, write results back.",
-        "operationId": "cron_news_llm_enrich_api_cron_news_llm_enrich_get",
+    "/api/cron/ic_backtest_monthly": {
+      "post": {
+        "operationId": "ic_backtest_monthly_api_cron_ic_backtest_monthly_post",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Cron News Llm Enrich Api Cron News Llm Enrich Get",
+                  "title": "Response Ic Backtest Monthly Api Cron Ic Backtest Monthly Post",
                   "type": "object"
                 }
               }
@@ -3661,29 +3732,117 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Cron News Llm Enrich",
+        "summary": "Ic Backtest Monthly",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/minute_bars": {
+      "get": {
+        "description": "Pull 1-min bars for a slice of the SP500 universe and stamp cron_runs.\n\nSharded via limit/offset so a single Hobby invocation stays under the\n300s budget. Universe is read from daily_signals_slow (~557 tickers)\nand ordered alphabetically for deterministic slicing across shards.",
+        "operationId": "cron_minute_bars_api_cron_minute_bars_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 75,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Minute Bars Api Cron Minute Bars Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron Minute Bars",
         "tags": [
           "cron"
         ]
       },
       "post": {
-        "description": "Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK\nLiteLLM, write results back.",
-        "operationId": "cron_news_llm_enrich_api_cron_news_llm_enrich_post",
+        "description": "Pull 1-min bars for a slice of the SP500 universe and stamp cron_runs.\n\nSharded via limit/offset so a single Hobby invocation stays under the\n300s budget. Universe is read from daily_signals_slow (~557 tickers)\nand ordered alphabetically for deterministic slicing across shards.",
+        "operationId": "cron_minute_bars_api_cron_minute_bars_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 75,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Cron News Llm Enrich Api Cron News Llm Enrich Post",
+                  "title": "Response Cron Minute Bars Api Cron Minute Bars Post",
                   "type": "object"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "summary": "Cron News Llm Enrich",
+        "summary": "Cron Minute Bars",
         "tags": [
           "cron"
         ]
@@ -4113,6 +4272,66 @@
           }
         },
         "summary": "Macro Context",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/api/news/enrich/{ticker}": {
+      "post": {
+        "operationId": "enrich_api_news_enrich__ticker__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "maxLength": 10,
+              "minLength": 1,
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enrich",
         "tags": [
           "news"
         ]

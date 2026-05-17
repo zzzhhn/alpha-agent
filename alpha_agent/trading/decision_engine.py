@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 from alpha_agent.llm.base import LLMClient, LLMResponse, Message
 from alpha_agent.models.fusion import FusionResult

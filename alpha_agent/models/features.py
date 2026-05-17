@@ -8,7 +8,6 @@ Supports two output modes:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import TypedDict
 
 import numpy as np

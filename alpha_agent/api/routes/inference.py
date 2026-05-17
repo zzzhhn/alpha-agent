@@ -9,7 +9,6 @@ from fastapi import APIRouter, Request
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.models.features import compute_features
 from alpha_agent.models.fusion import fuse_predictions
-from alpha_agent.models.hmm import REGIME_LABELS_ZH
 from alpha_agent.models.trainer import get_or_train_models, _fetch_training_data
 from alpha_agent.models.xgboost_model import DirectionPrediction
 

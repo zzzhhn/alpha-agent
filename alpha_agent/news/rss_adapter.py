@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-from typing import Any
 
 import feedparser
 

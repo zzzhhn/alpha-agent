@@ -9,7 +9,6 @@ import pytest
 from alpha_agent.factor_engine.ast_nodes import (
     BinaryOpNode,
     CallNode,
-    ExprNode,
     FeatureNode,
     LiteralNode,
     UnaryOpNode,

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-import base64
 
 import streamlit as st
 

@@ -36,11 +36,9 @@ from alpha_agent.core.types import FactorSpec
 # them directly (zoo.py, screener.py, tests).
 from alpha_agent.factor_engine.kernel import (
     KernelParams,
-    KernelResult,
     SplitMetrics,
-    max_drawdown as _max_drawdown,
     run_kernel,
-    sector_neutralize_factor as _sector_neutralize_factor,
+    sector_neutralize_factor as _sector_neutralize_factor,  # noqa: F401  # re-export consumed by api.routes.signal + api.routes.screener
     spearman_ic as _spearman_ic,
     split_metrics as _split_metrics,
 )

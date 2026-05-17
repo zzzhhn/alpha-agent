@@ -163,7 +163,7 @@ class YFinanceProvider(DataProvider):
 
     def __init__(
         self,
-        cache: "ParquetCache | None" = None,
+        cache: "ParquetCache | None" = None,  # noqa: F821
         manager: DataFetcherManager | None = None,
     ) -> None:
         self._cache = cache

@@ -2,7 +2,6 @@
 """V002 migration applies cleanly and creates the 5 Phase 4 tables."""
 from pathlib import Path
 
-import pytest
 
 _MIGRATION = (
     Path(__file__).parents[2]

@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from alpha_agent.auth.dependencies import require_user

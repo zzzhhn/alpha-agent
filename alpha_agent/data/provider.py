@@ -64,7 +64,7 @@ class AKShareProvider(DataProvider):
     looked up in cache first and API results are written back after fetch.
     """
 
-    def __init__(self, cache: "ParquetCache | None" = None) -> None:
+    def __init__(self, cache: "ParquetCache | None" = None) -> None:  # noqa: F821
         self._cache = cache
 
     def fetch(

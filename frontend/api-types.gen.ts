@@ -118,7 +118,13 @@ export interface paths {
         };
         /**
          * Health Signals
-         * @description Per-signal error summary from the last 24 hours.
+         * @description Per-signal error summary + live IC, current weight, and tier color.
+         *
+         *     Tier rule:
+         *       red     = reason == 'auto_dropped_low_ic' OR weight_current == 0.0
+         *       green   = min(ic_30d, ic_60d, ic_90d) > 0.02
+         *       yellow  = 0.01 < min(ics) <= 0.02
+         *       unknown = no IC data and not dropped
          */
         get: operations["health_signals_api__health_signals_get"];
         put?: never;
@@ -226,7 +232,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/cron/news_llm_enrich": {
+    "/api/cron/ic_backtest_monthly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ic Backtest Monthly */
+        post: operations["ic_backtest_monthly_api_cron_ic_backtest_monthly_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/minute_bars": {
         parameters: {
             query?: never;
             header?: never;
@@ -234,18 +257,24 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Cron News Llm Enrich
-         * @description Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK
-         *     LiteLLM, write results back.
+         * Cron Minute Bars
+         * @description Pull 1-min bars for a slice of the SP500 universe and stamp cron_runs.
+         *
+         *     Sharded via limit/offset so a single Hobby invocation stays under the
+         *     300s budget. Universe is read from daily_signals_slow (~557 tickers)
+         *     and ordered alphabetically for deterministic slicing across shards.
          */
-        get: operations["cron_news_llm_enrich_api_cron_news_llm_enrich_get"];
+        get: operations["cron_minute_bars_api_cron_minute_bars_get"];
         put?: never;
         /**
-         * Cron News Llm Enrich
-         * @description Pick up to 100 llm_processed_at IS NULL rows, batch through BYOK
-         *     LiteLLM, write results back.
+         * Cron Minute Bars
+         * @description Pull 1-min bars for a slice of the SP500 universe and stamp cron_runs.
+         *
+         *     Sharded via limit/offset so a single Hobby invocation stays under the
+         *     300s budget. Universe is read from daily_signals_slow (~557 tickers)
+         *     and ordered alphabetically for deterministic slicing across shards.
          */
-        post: operations["cron_news_llm_enrich_api_cron_news_llm_enrich_post"];
+        post: operations["cron_minute_bars_api_cron_minute_bars_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -375,6 +404,23 @@ export interface paths {
         get: operations["macro_context_api_macro_context_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/news/enrich/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enrich */
+        post: operations["enrich_api_news_enrich__ticker__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1343,6 +1389,15 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** EnrichResponse */
+        EnrichResponse: {
+            /** Enriched */
+            enriched: number;
+            /** Failed Batches */
+            failed_batches: number;
+            /** Ticker */
+            ticker: string;
+        };
         /** ExplainAstRequest */
         ExplainAstRequest: {
             /** Expression */
@@ -2138,8 +2193,21 @@ export interface components {
             last_error: string | null;
             /** Last Success */
             last_success: string | null;
+            /** Live Ic 30D */
+            live_ic_30d?: number | null;
+            /** Live Ic 60D */
+            live_ic_60d?: number | null;
+            /** Live Ic 90D */
+            live_ic_90d?: number | null;
             /** Name */
             name: string;
+            /**
+             * Tier
+             * @default unknown
+             */
+            tier: string;
+            /** Weight Current */
+            weight_current?: number | null;
         };
         /** SmokeReport */
         SmokeReport: {
@@ -2841,7 +2909,7 @@ export interface operations {
             };
         };
     };
-    cron_news_llm_enrich_api_cron_news_llm_enrich_get: {
+    ic_backtest_monthly_api_cron_ic_backtest_monthly_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2863,9 +2931,12 @@ export interface operations {
             };
         };
     };
-    cron_news_llm_enrich_api_cron_news_llm_enrich_post: {
+    cron_minute_bars_api_cron_minute_bars_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2881,6 +2952,49 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_minute_bars_api_cron_minute_bars_post: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3128,6 +3242,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MacroContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enrich_api_news_enrich__ticker__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichResponse"];
                 };
             };
             /** @description Validation Error */

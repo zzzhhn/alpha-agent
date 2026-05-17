@@ -1,5 +1,4 @@
 import json
-from datetime import datetime, UTC
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

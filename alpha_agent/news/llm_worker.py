@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
 from alpha_agent.llm.base import Message
 from alpha_agent.news.queries import (

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from alpha_agent.agents.base import BaseAgent
-from alpha_agent.llm.base import LLMClient, Message
+from alpha_agent.llm.base import Message
 from alpha_agent.pipeline.state import PipelineState
 
 logger = logging.getLogger(__name__)
