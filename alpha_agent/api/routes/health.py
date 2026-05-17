@@ -148,7 +148,14 @@ async def health_signals() -> HealthSignalsResponse:
         reason = weight_row["reason"] if weight_row is not None else None
 
         ics = [v for v in (ic_30d, ic_60d, ic_90d) if v is not None]
-        if reason == "auto_dropped_low_ic" or (
+        # reason field carries the IC engine's intent verbatim. Order
+        # matters: insufficient_data must be checked before the generic
+        # weight==0 branch, otherwise the early-life "data accumulating"
+        # state gets misclassified as the post-mortem "auto-dropped" red
+        # tier and confuses users.
+        if reason == "insufficient_data":
+            tier = "insufficient_data"
+        elif reason == "auto_dropped_low_ic" or (
             weight_current is not None and weight_current == 0.0
         ):
             tier = "red"
@@ -157,12 +164,9 @@ async def health_signals() -> HealthSignalsResponse:
         elif ics and min(ics) > 0.01:
             tier = "yellow"
         elif not ics and weight_row is None:
-            # No IC history at all AND no weight row yet: framework alive,
-            # waiting for IC backtest to accumulate enough trading-day
-            # observations. Distinguished from "unknown" (mixed state) so
-            # the UI can show "data accumulating" rather than the
-            # misleading red dot users would otherwise interpret as
-            # "signal dropped".
+            # No IC history AND no weight row: framework alive but
+            # ic_backtest has never run for this signal. Same family as
+            # the explicit insufficient_data above, surface identically.
             tier = "insufficient_data"
         else:
             tier = "unknown"

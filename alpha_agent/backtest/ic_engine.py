@@ -139,8 +139,14 @@ async def run_monthly_ic_backtest(pool) -> int:
     signals whose weight row was upserted.
 
     Weight rule:
-      - any window with non-null IC counted; if min(IC) < threshold or no
-        window produced an IC, weight = 0 with reason "auto_dropped_low_ic".
+      - no window produced an IC at all (insufficient observations across
+        every window) -> weight = 0, reason = "insufficient_data". This
+        is the framework's "data accumulating" state; the UI distinguishes
+        it from auto_dropped_low_ic so users do not misread early-life
+        signals as "broken".
+      - any IC was computed but min(IC) < threshold -> weight = 0,
+        reason = "auto_dropped_low_ic". The signal had a fair shot and
+        failed.
       - else weight = mean(IC) * _DEFAULT_NORMALIZE, reason "ic_above_threshold".
     """
     now = datetime.now(UTC)
@@ -165,7 +171,10 @@ async def run_monthly_ic_backtest(pool) -> int:
             )
 
         valid_ics = [v for v in ics.values() if v is not None]
-        if not valid_ics or min(valid_ics) < _IC_THRESHOLD:
+        if not valid_ics:
+            weight = 0.0
+            reason = "insufficient_data"
+        elif min(valid_ics) < _IC_THRESHOLD:
             weight = 0.0
             reason = "auto_dropped_low_ic"
         else:
