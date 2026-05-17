@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Sparkles, Square, AlertTriangle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { streamBrief } from "@/lib/api/streamBrief";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 type Status = "idle" | "streaming" | "done" | "error" | "aborted";
 
@@ -18,16 +19,12 @@ interface Sections {
 const EMPTY_SECTIONS: Sections = { summary: "", bull: "", bear: "" };
 
 export default function RichThesis({ ticker }: { ticker: string }) {
-  const [locale, setLocale] = useState<Locale>("zh");
+  const { locale } = useLocale();
   const { status: authStatus } = useSession();
   const [status, setStatus] = useState<Status>("idle");
   const [sections, setSections] = useState<Sections>(EMPTY_SECTIONS);
   const [errMsg, setErrMsg] = useState<string>("");
   const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
 
   const onGenerate = useCallback(async () => {
     setStatus("streaming");

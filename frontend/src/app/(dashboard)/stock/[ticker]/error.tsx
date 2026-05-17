@@ -5,8 +5,8 @@
 // built-in "server-side exception" screen. notFound() is NOT caught here -
 // it has its own not-found boundary - so a genuinely missing ticker still
 // renders the 404 page rather than this.
-import { useEffect, useState } from "react";
-import { getLocaleFromStorage } from "@/lib/i18n";
+import { useEffect } from "react";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 export default function StockError({
   error,
@@ -15,10 +15,9 @@ export default function StockError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const [locale, setLocale] = useState<"zh" | "en">("zh");
+  const { locale } = useLocale();
 
   useEffect(() => {
-    setLocale(getLocaleFromStorage());
     console.error("stock route error:", error);
   }, [error]);
 

@@ -7,7 +7,8 @@ import {
   type MinuteBar,
   type MinuteBarsResponse,
 } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 // Modal that pops over the daily PriceChart when a user clicks a candle.
 // Renders an intraday minute candlestick chart for the selected date.
@@ -22,10 +23,7 @@ export default function IntradayDrawer({
   date: string | null;
   onClose: () => void;
 }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<

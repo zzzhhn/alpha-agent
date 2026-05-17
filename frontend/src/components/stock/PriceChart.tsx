@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchOhlcv, type OhlcvBar } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import IntradayDrawer from "./IntradayDrawer";
 
 // lightweight-charts v4 imports — keep dynamic to avoid SSR breakage (the
@@ -21,10 +22,7 @@ function sma(values: number[], window: number): (number | null)[] {
 }
 
 export default function PriceChart({ ticker }: { ticker: string }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "empty" | "error">("loading");

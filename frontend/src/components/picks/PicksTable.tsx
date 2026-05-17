@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import PickRow from "./PickRow";
 
 const TH = "px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted select-none";
@@ -14,10 +14,7 @@ export default function PicksTable({
   picks: RatingCard[];
   isWatched?: (ticker: string) => boolean;
 }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
 
   if (picks.length === 0) {
     return (

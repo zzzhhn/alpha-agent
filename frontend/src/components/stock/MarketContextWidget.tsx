@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { fetchMacroContext, type MacroContextItem } from "@/lib/api/macro";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 function authorLabel(author: string | null, locale: Locale): string {
   if (author === "trump") return t(locale, "market_context.author_trump");
@@ -29,11 +30,10 @@ function toneClass(score: number | null): string {
 }
 
 export default function MarketContextWidget({ ticker }: { ticker: string }) {
-  const [locale, setLocale] = useState<Locale>("zh");
+  const { locale } = useLocale();
   const [items, setItems] = useState<MacroContextItem[] | null>(null);
 
   useEffect(() => {
-    setLocale(getLocaleFromStorage());
     let cancelled = false;
     fetchMacroContext(ticker, 5)
       .then((r) => { if (!cancelled) setItems(r.items); })

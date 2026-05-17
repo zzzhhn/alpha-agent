@@ -4,8 +4,8 @@
 // the picks subtree (a malformed RatingCard, a failed fetchPicks, etc.)
 // bubbles to Next.js's built-in "Application error: a client-side exception"
 // white screen. This catches it and offers a retry instead.
-import { useEffect, useState } from "react";
-import { getLocaleFromStorage } from "@/lib/i18n";
+import { useEffect } from "react";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 export default function PicksError({
   error,
@@ -14,11 +14,9 @@ export default function PicksError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const [locale, setLocale] = useState<"zh" | "en">("zh");
+  const { locale } = useLocale();
 
   useEffect(() => {
-    // i18n locale lives in localStorage, unreadable during SSR; sync on mount.
-    setLocale(getLocaleFromStorage());
     // Keep the real error visible to anyone with the console open.
     console.error("picks route error:", error);
   }, [error]);

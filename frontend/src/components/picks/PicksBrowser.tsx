@@ -16,7 +16,7 @@ import {
   TmSubbarSep,
   TmStatusPill,
 } from "@/components/tm/TmSubbar";
-import { getLocaleFromStorage } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
 
 type PicksData = { picks: RatingCard[]; as_of: string | null; stale: boolean };
@@ -29,16 +29,11 @@ export default function PicksBrowser({
   const [data, setData] = useState<PicksData>(initialData);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [locale, setLocale] = useState<"zh" | "en">("zh");
+  const { locale } = useLocale();
   const mounted = useRef(false);
   // Called once here, threaded down as a prop, so the localStorage read +
   // storage listener happen per-table rather than per-row.
   const { isWatched } = useWatchlist();
-
-  useEffect(() => {
-    // i18n locale lives in localStorage, unreadable during SSR; sync on mount.
-    setLocale(getLocaleFromStorage());
-  }, []);
 
   const runSearch = useCallback(async (q: string) => {
     setLoading(true);

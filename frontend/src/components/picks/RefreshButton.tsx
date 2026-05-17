@@ -9,7 +9,8 @@
 // time against eta_minutes (no real per-ticker progress signal exists).
 import { useCallback, useEffect, useState } from "react";
 import { triggerRefresh, fetchLastRefresh } from "@/lib/api/admin";
-import { t, getLocaleFromStorage } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 // localStorage key for surviving a page refresh: the ETA progress bar
 // was driven purely by React state, so reloading the page dropped it.
@@ -103,7 +104,7 @@ function DispatchProgress({
 }
 
 export default function RefreshButton() {
-  const [locale, setLocale] = useState<"zh" | "en">("zh");
+  const { locale } = useLocale();
   const [toast, setToast] = useState<ToastState>({ kind: "idle" });
   const [lastRun, setLastRun] = useState<string | null>(null);
   // Dispatch ETA tracking: when a dispatch succeeds we record the wall-clock
@@ -112,12 +113,10 @@ export default function RefreshButton() {
   const [etaMin, setEtaMin] = useState(18);
   const [now, setNow] = useState(() => Date.now());
 
-  // Sync locale on mount (i18n stores in localStorage so SSR can't read it).
-  // Also rehydrate any in-flight dispatch ETA from localStorage so the
-  // countdown bar survives a page refresh; loadDispatch drops anything
-  // beyond the ETA + 30min grace window.
+  // Rehydrate any in-flight dispatch ETA from localStorage so the countdown
+  // bar survives a page refresh; loadDispatch drops anything beyond the ETA
+  // + 30min grace window.
   useEffect(() => {
-    setLocale(getLocaleFromStorage());
     const saved = loadDispatch();
     if (saved != null) {
       setEtaMin(saved.etaMin);

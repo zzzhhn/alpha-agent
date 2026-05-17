@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 export default function SourcesBlock({ card }: { card: RatingCard }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
   return (
     <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
       <h2 className="text-lg font-semibold mb-2 text-tm-fg">{t(locale, "sources.title")}</h2>

@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import { deriveActionBox } from "@/lib/action-box";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 export default function ActionBox({ card }: { card: RatingCard }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
   const action = useMemo(() => {
     const tech = card.breakdown.find((b) => b.signal === "technicals")?.raw as
       | { atr?: number; current_price?: number }

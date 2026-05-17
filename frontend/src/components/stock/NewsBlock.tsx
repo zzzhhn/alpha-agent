@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import type { RatingCard, NewsItemLite } from "@/lib/api/picks";
 import { enrichNewsForTicker } from "@/lib/api/news";
 import { ApiException } from "@/lib/api/client";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 function relativeTime(iso: string, locale: Locale): string {
   if (!iso) return locale === "zh" ? "未知" : "n/a";
@@ -32,9 +33,8 @@ type EnrichState =
   | { kind: "error"; msg: string };
 
 export default function NewsBlock({ card }: { card: RatingCard }) {
-  const [locale, setLocale] = useState<Locale>("zh");
+  const { locale } = useLocale();
   const [enrich, setEnrich] = useState<EnrichState>({ kind: "idle" });
-  useEffect(() => { setLocale(getLocaleFromStorage()); }, []);
 
   const items: NewsItemLite[] = card.news_items ?? [];
   const unenrichedCount = items.filter((it) => it.sentiment_label === null).length;

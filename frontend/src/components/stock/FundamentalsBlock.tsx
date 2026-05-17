@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { RatingCard, FactorRaw, FundamentalsData } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 function decodeFactorRaw(raw: unknown): FundamentalsData | null {
   // Pre-M4a rows had factor.raw = float (the z score). Tolerate that by
@@ -31,10 +31,7 @@ function fmtCurrency(v: number | null): string {
 }
 
 export default function FundamentalsBlock({ card }: { card: RatingCard }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
 
   const factor = card.breakdown.find((b) => b.signal === "factor");
   const fund = decodeFactorRaw(factor?.raw);

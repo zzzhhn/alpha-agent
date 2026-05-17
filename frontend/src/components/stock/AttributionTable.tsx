@@ -9,10 +9,9 @@ import {
 } from "@/lib/api/signal_health";
 import {
   t,
-  getLocaleFromStorage,
-  type Locale,
   type TranslationKey,
 } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
@@ -29,13 +28,12 @@ const TIER_DOT: Record<SignalHealthEntry["tier"], string> = {
 export default function AttributionTable({ card }: { card: RatingCard }) {
   const [sortKey, setSortKey] = useState<SortKey>("contribution");
   const [desc, setDesc] = useState(true);
-  const [locale, setLocale] = useState<Locale>("zh");
+  const { locale } = useLocale();
   const [healthMap, setHealthMap] = useState<Record<string, SignalHealthEntry>>(
     {},
   );
 
   useEffect(() => {
-    setLocale(getLocaleFromStorage());
     let cancelled = false;
     fetchSignalHealth()
       .then(({ signals }) => {

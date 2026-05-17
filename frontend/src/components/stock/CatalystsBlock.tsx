@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { RatingCard, EarningsRaw } from "@/lib/api/picks";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 function decodeEarnings(raw: unknown): EarningsRaw | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -22,10 +22,7 @@ function fmtCurrency(v: number | null): string {
 }
 
 export default function CatalystsBlock({ card }: { card: RatingCard }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
 
   const earnings = decodeEarnings(card.breakdown.find((b) => b.signal === "earnings")?.raw);
   const calendar = decodeCalendar(card.breakdown.find((b) => b.signal === "calendar")?.raw);

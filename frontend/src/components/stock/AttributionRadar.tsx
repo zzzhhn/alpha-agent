@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import type { RatingCard } from "@/lib/api/picks";
-import { getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 
 // Dynamic imports keep Recharts (~150KB gzip) out of the initial server chunk.
@@ -50,11 +49,7 @@ function clampToRadar(z: number): number {
 }
 
 export default function AttributionRadar({ card }: { card: RatingCard }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
 
   const data = card.breakdown.map((b) => ({
     signal: getSignalDisplayLabel(b.signal, locale),

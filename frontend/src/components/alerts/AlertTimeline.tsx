@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, Filter } from "lucide-react";
 import { fetchAlertsRecent, type AlertRow } from "@/lib/api/alertsFeed";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 
@@ -37,15 +38,11 @@ function typeLabel(t_: string, locale: Locale): string {
 }
 
 export default function AlertTimeline({ ticker }: { ticker?: string }) {
-  const [locale, setLocale] = useState<Locale>("zh");
+  const { locale } = useLocale();
   const [filter, setFilter] = useState<string>(ticker ?? "");
   const [rows, setRows] = useState<AlertRow[] | null>(null);
   const [err, setErr] = useState<string>("");
   const { isWatched } = useWatchlist();
-
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
 
   const load = useCallback(async () => {
     setErr("");

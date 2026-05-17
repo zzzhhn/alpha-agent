@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import RatingBadge from "./RatingBadge";
 import ActionBox from "./ActionBox";
 import LeanThesis from "./LeanThesis";
@@ -28,10 +28,7 @@ export default function StockCardLayout({
 }) {
   const { isWatched } = useWatchlist();
   const watched = isWatched(card.ticker);
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
   return (
     <div className="grid grid-cols-12 gap-6 px-4 py-6">
       {/* Left rail (sticky) */}

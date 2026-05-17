@@ -1,15 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import { renderLeanThesis } from "@/lib/thesis";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 export default function LeanThesis({ card }: { card: RatingCard }) {
-  const [locale, setLocale] = useState<Locale>("zh");
-  useEffect(() => {
-    setLocale(getLocaleFromStorage());
-  }, []);
+  const { locale } = useLocale();
   const thesis = renderLeanThesis(card);
   return (
     <section className="grid grid-cols-2 gap-4">
