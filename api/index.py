@@ -111,6 +111,7 @@ _load("alerts",       "alpha_agent.api.routes.alerts")
 _load("user",         "alpha_agent.api.routes.user")
 _load("macro_context", "alpha_agent.api.routes.macro_context")
 _load("news_enrich",   "alpha_agent.api.routes.news_enrich")
+_load("ic_backtest",   "alpha_agent.api.routes.ic_backtest")
 
 # Probe asyncpg directly so we know it's installed in the runtime.
 try:
