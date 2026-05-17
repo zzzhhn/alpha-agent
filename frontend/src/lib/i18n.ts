@@ -627,6 +627,8 @@ const translations = {
     "attribution.live_ic": "live IC (30d)",
     "attribution.tier": "tier",
     "attribution.dropped_tooltip": "本周期 IC < 0.02 自动 drop，weight = 0",
+    "attribution.signal_label_macro": "宏观 (波动率)",
+    "attribution.signal_label_political_impact": "政治",
   },
   en: {
     "stage.data": "Data Collection",
@@ -1245,6 +1247,8 @@ const translations = {
     "attribution.live_ic": "Live IC (30d)",
     "attribution.tier": "Tier",
     "attribution.dropped_tooltip": "Auto-dropped this cycle (IC < 0.02, weight = 0)",
+    "attribution.signal_label_macro": "Macro (Vol)",
+    "attribution.signal_label_political_impact": "Political",
   },
 } as const;
 
