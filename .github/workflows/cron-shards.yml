@@ -36,6 +36,10 @@ on:
     - cron: '*/5 * * * *'
     # News: Fed + OFAC hourly, 24/7
     - cron: '0 * * * *'
+    # Minute bars puller for event-study CAR, every 4h during market hours
+    - cron: '15 14,18 * * 1-5'
+    # IC backtest monthly, 1st of month 04:00 UTC
+    - cron: '0 4 1 * *'
     # NOTE: news_llm_enrich cron removed 2026-05-17. BYOK architecture
     # means cron has no user-context to source an LLM key. Enrichment
     # moved to read-time path triggered by user with their own key.
@@ -55,6 +59,8 @@ on:
           - both
           - news_per_ticker
           - news_macro
+          - minute_bars_puller
+          - ic_backtest_monthly
 
 env:
   BACKEND_BASE: https://alpha.bobbyzhong.com
@@ -297,6 +303,39 @@ jobs:
         run: |
           HTTP=$(curl -s --max-time 60 -o /tmp/shot.json -w "%{http_code}" \
             "$BACKEND_BASE/api/cron/news_macro")
+          cat /tmp/shot.json | head -c 400; echo
+          [ "$HTTP" = "200" ] || exit 1
+
+  minute_bars_puller:
+    if: |
+      github.event.schedule == '15 14,18 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'minute_bars_puller')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: pull SP500 minute bars (8 shots x limit=75)
+        run: |
+          set -e
+          for offset in 0 75 150 225 300 375 450 525; do
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/minute_bars?limit=75&offset=$offset")
+            echo "offset=$offset HTTP=$HTTP"
+            cat /tmp/shot.json | head -c 200; echo
+            [ "$HTTP" = "200" ] || exit 1
+            sleep 10
+          done
+
+  ic_backtest_monthly:
+    if: |
+      github.event.schedule == '0 4 1 * *' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'ic_backtest_monthly')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: monthly walk-forward IC backtest
+        run: |
+          HTTP=$(curl -s --max-time 600 -o /tmp/shot.json -w "%{http_code}" \
+            -X POST "$BACKEND_BASE/api/cron/ic_backtest_monthly")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
 

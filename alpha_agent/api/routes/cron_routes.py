@@ -14,9 +14,14 @@ Each route returns the handler's dict directly (200 with {ok, ...}).
 """
 from __future__ import annotations
 
+import json
+import os
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Query
+
+from alpha_agent.storage.postgres import get_pool
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
@@ -80,6 +85,74 @@ async def cron_news_macro() -> dict[str, Any]:
     """Parallel-poll Truth/Fed/OFAC, upsert macro_events."""
     from api.cron.news_pipeline import macro_handler
     return await macro_handler()
+
+
+@router.post("/minute_bars")
+@router.get("/minute_bars")
+async def cron_minute_bars(
+    limit: int = 75,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Pull 1-min bars for a slice of the SP500 universe and stamp cron_runs.
+
+    Sharded via limit/offset so a single Hobby invocation stays under the
+    300s budget. Universe is read from daily_signals_slow (~557 tickers)
+    and ordered alphabetically for deterministic slicing across shards.
+    """
+    from alpha_agent.data.minute_price import pull_and_store_minute_bars
+
+    started_at = datetime.now(UTC)
+    pool = await get_pool(os.environ["DATABASE_URL"])
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT DISTINCT ticker FROM daily_signals_slow ORDER BY ticker LIMIT $1 OFFSET $2",
+            limit,
+            offset,
+        )
+    tickers = [r["ticker"] for r in rows]
+
+    total_rows = 0
+    tickers_pulled = 0
+    error_count = 0
+    failed: list[dict[str, str]] = []
+    for ticker in tickers:
+        try:
+            written = await pull_and_store_minute_bars(pool, ticker)
+            total_rows += int(written or 0)
+            tickers_pulled += 1
+        except Exception as exc:
+            error_count += 1
+            if len(failed) < 20:
+                failed.append({"ticker": ticker, "error": f"{type(exc).__name__}: {exc}"})
+
+    details = json.dumps(
+        {
+            "tickers_pulled": tickers_pulled,
+            "rows_written": total_rows,
+            "offset": offset,
+            "limit": limit,
+            "error_count": error_count,
+            "failed_tickers": failed,
+        }
+    )
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, error_count, details) "
+            "VALUES ('minute_bars_pull', $1, now(), true, $2, $3::jsonb)",
+            started_at,
+            error_count,
+            details,
+        )
+
+    return {
+        "ok": True,
+        "tickers_pulled": tickers_pulled,
+        "rows_written": total_rows,
+        "offset": offset,
+        "limit": limit,
+        "error_count": error_count,
+    }
 
 
 # news_llm_enrich cron route removed 2026-05-17.
