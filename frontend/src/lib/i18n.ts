@@ -654,6 +654,40 @@ const translations = {
     "actionbox.target": "目标",
     "actionbox.rr": "R:R",
     "actionbox.position": "仓位",
+    /* ActionBox field tooltips */
+    "actionbox.tooltip_entry":
+      "建议入场价格区间。\n公式: current_price ± ATR(14) × 0.5\n表示在多大价格波动范围内入场较为合理。等待价格进入该区间再开仓。",
+    "actionbox.tooltip_stop":
+      "止损价位。\n公式: current_price − ATR(14) × 1.5\n触发该价位即承认入场错误,立刻退出避免更大亏损。",
+    "actionbox.tooltip_target":
+      "止盈目标价。\n公式: entry_mid + (entry_mid − stop) × R:R\n默认 R:R = 3 时, target = entry + 3 × risk\n达到该价位可以考虑分批止盈。",
+    "actionbox.tooltip_rr":
+      "风险回报比 (Reward:Risk)。\n公式: (target − entry_mid) / (entry_mid − stop)\n> 1.5 才值得入场;< 1.5 应等待更好的入场点。",
+    "actionbox.tooltip_position":
+      "仓位百分比 (相对于组合总资金)。\n公式: Kelly_fraction × confidence,限制在 [1%, 10%]\n根据信号置信度动态决定下注大小,避免过度集中。",
+    /* Signal row tooltips (AttributionTable) */
+    "signal_tooltip.factor":
+      "22 因子 Zoo 截面 z-score (动量/价值/规模/质量/低波)。\n学术基础: Fama-French 三/五因子 (1992/1993), Hou-Xue-Zhang q-factor (2015)\n数据源: factor_engine, 每日刷新。",
+    "signal_tooltip.technicals":
+      "多技术指标 (RSI/MACD/Stochastic) quorum 投票。\n学术基础: Jegadeesh-Titman (1993) 动量\n数据源: yfinance daily bars。",
+    "signal_tooltip.analyst":
+      "分析师目标价 + 评级变动。\n学术基础: Ramnath et al. (2008) forecast revision premium\n数据源: yfinance analyst data。",
+    "signal_tooltip.earnings":
+      "盈余意外 + PEAD (post-earnings-announcement drift)。\n学术基础: Bernard-Thomas (1989), Foster et al. (1984)\n数据源: yfinance earnings dates。",
+    "signal_tooltip.news":
+      "新闻情绪 (Tetlock 加权)。\nLLM-as-Judge 12 桶 (4 impact × 3 direction) + Loughran-McDonald 字典 fallback\n学术基础: Tetlock (2007), Loughran-McDonald (2011)\n数据源: news_items 表 (Finnhub/FMP/Yahoo)。",
+    "signal_tooltip.insider":
+      "SEC Form 4 内部人交易。\n区分常规交易 vs 机会主义交易,后者预测能力更强\n学术基础: Cohen-Malloy-Pomorski (2012) \"Decoding Inside Information\"\n数据源: SEC EDGAR。",
+    "signal_tooltip.options":
+      "隐含波动率 skew + 看跌/看涨比率。\n学术基础: Bali-Hovakimian (2009) IV-RV spread\n数据源: yfinance options chain。",
+    "signal_tooltip.premarket":
+      "盘前交易量 + 价格 gap。\n衡量隔夜消息引起的开盘异动\n数据源: yfinance pre-market bars。",
+    "signal_tooltip.macro":
+      "宏观波动率指标 (VIX, 行业 ETF spread)。\n学术基础: French-Schwert-Stambaugh (1987) volatility risk premium\n数据源: yfinance market data。",
+    "signal_tooltip.calendar":
+      "日历效应 (FOMC 临近、季节性、期权到期)。\n学术基础: Heston-Sadka (2008) seasonality\n数据源: 静态日历表 + Fed/FOMC schedule。",
+    "signal_tooltip.political_impact":
+      "政治事件影响 (Trump truth posts / Fed / OFAC)。\nLLM 抽取 ticker-event linkage,Tetlock 加权汇总\n学术基础: Wagner-Zeckhauser-Ziegler (2018) JFE\n数据源: macro_events 表 (truth_social / fed_rss / ofac_rss)。",
     /* RichThesis additional */
     "rich.stop_button": "停止",
     /* SourcesBlock */
@@ -1320,6 +1354,40 @@ const translations = {
     "actionbox.target": "Target",
     "actionbox.rr": "R:R",
     "actionbox.position": "Position",
+    /* ActionBox field tooltips */
+    "actionbox.tooltip_entry":
+      "Suggested entry price range.\nFormula: current_price ± ATR(14) × 0.5\nIndicates the price band where entering is statistically reasonable. Wait for price to fall in this range before opening a position.",
+    "actionbox.tooltip_stop":
+      "Stop-loss price.\nFormula: current_price - ATR(14) × 1.5\nIf price hits this level, exit the position to limit downside.",
+    "actionbox.tooltip_target":
+      "Profit target price.\nFormula: entry_mid + (entry_mid - stop) × R:R\nDefault R:R = 3 means target = entry + 3 × risk\nPartial profit-taking is reasonable once this level hits.",
+    "actionbox.tooltip_rr":
+      "Reward-to-Risk ratio.\nFormula: (target - entry_mid) / (entry_mid - stop)\nValues > 1.5 are tradeable; < 1.5 means wait for a better entry.",
+    "actionbox.tooltip_position":
+      "Position size as % of portfolio.\nFormula: Kelly_fraction × confidence, clipped to [1%, 10%]\nBet sizing scales with signal confidence to avoid over-concentration.",
+    /* Signal row tooltips (AttributionTable) */
+    "signal_tooltip.factor":
+      "22-factor zoo cross-sectional z-score (momentum, value, size, quality, low-vol).\nBacking: Fama-French 3/5-factor (1992/1993), Hou-Xue-Zhang q-factor (2015).\nSource: factor_engine, refreshed daily.",
+    "signal_tooltip.technicals":
+      "Multi-indicator quorum vote (RSI/MACD/Stochastic).\nBacking: Jegadeesh-Titman (1993) momentum.\nSource: yfinance daily bars.",
+    "signal_tooltip.analyst":
+      "Analyst target price + rating revisions.\nBacking: Ramnath et al. (2008) forecast revision premium.\nSource: yfinance analyst data.",
+    "signal_tooltip.earnings":
+      "Earnings surprise + post-earnings-announcement drift (PEAD).\nBacking: Bernard-Thomas (1989), Foster et al. (1984).\nSource: yfinance earnings dates.",
+    "signal_tooltip.news":
+      "News sentiment (Tetlock-weighted).\nLLM-as-Judge 12-bucket (4 impact × 3 direction) + Loughran-McDonald dictionary fallback.\nBacking: Tetlock (2007), Loughran-McDonald (2011).\nSource: news_items table (Finnhub/FMP/Yahoo).",
+    "signal_tooltip.insider":
+      "SEC Form 4 insider transactions.\nDistinguishes routine vs opportunistic trades; the latter has stronger predictive power.\nBacking: Cohen-Malloy-Pomorski (2012) \"Decoding Inside Information\".\nSource: SEC EDGAR.",
+    "signal_tooltip.options":
+      "Implied volatility skew + put-call ratio.\nBacking: Bali-Hovakimian (2009) IV-RV spread.\nSource: yfinance options chain.",
+    "signal_tooltip.premarket":
+      "Pre-market trading volume + price gap.\nMeasures overnight news-driven opening dislocations.\nSource: yfinance pre-market bars.",
+    "signal_tooltip.macro":
+      "Macro volatility indicators (VIX, sector ETF spreads).\nBacking: French-Schwert-Stambaugh (1987) volatility risk premium.\nSource: yfinance market data.",
+    "signal_tooltip.calendar":
+      "Calendar effects (FOMC proximity, seasonality, options expiry).\nBacking: Heston-Sadka (2008) seasonality.\nSource: static calendar table + Fed/FOMC schedule.",
+    "signal_tooltip.political_impact":
+      "Political event impact (Trump truths / Fed / OFAC).\nLLM extracts ticker-event linkage, Tetlock-weighted aggregation.\nBacking: Wagner-Zeckhauser-Ziegler (2018) JFE.\nSource: macro_events table (truth_social / fed_rss / ofac_rss).",
     /* RichThesis additional */
     "rich.stop_button": "Stop",
     /* SourcesBlock */

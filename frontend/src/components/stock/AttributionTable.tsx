@@ -7,8 +7,14 @@ import {
   fetchSignalHealth,
   type SignalHealthEntry,
 } from "@/lib/api/signal_health";
-import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import {
+  t,
+  getLocaleFromStorage,
+  type Locale,
+  type TranslationKey,
+} from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 type SortKey = "signal" | "z" | "weight" | "contribution";
 
@@ -143,7 +149,15 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
               )}
             >
               <td className="px-2 py-1 text-tm-fg">
-                {getSignalDisplayLabel(b.signal, locale)}
+                <span className="inline-flex items-center gap-1">
+                  {getSignalDisplayLabel(b.signal, locale)}
+                  <InfoTooltip
+                    content={t(
+                      locale,
+                      `signal_tooltip.${b.signal}` as TranslationKey,
+                    )}
+                  />
+                </span>
               </td>
               <td className="px-2 py-1 text-right font-mono text-tm-fg">
                 {(() => {

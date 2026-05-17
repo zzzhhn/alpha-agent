@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import { deriveActionBox } from "@/lib/action-box";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 export default function ActionBox({ card }: { card: RatingCard }) {
   const [locale, setLocale] = useState<Locale>("zh");
@@ -57,6 +58,7 @@ export default function ActionBox({ card }: { card: RatingCard }) {
         ) : null}
         <ActionRow
           label={t(locale, "actionbox.entry")}
+          tooltip={t(locale, "actionbox.tooltip_entry")}
           value={
             action.entryLow != null
               ? `${action.entryLow.toFixed(2)} - ${action.entryHigh!.toFixed(2)}`
@@ -65,20 +67,24 @@ export default function ActionBox({ card }: { card: RatingCard }) {
         />
         <ActionRow
           label={t(locale, "actionbox.stop")}
+          tooltip={t(locale, "actionbox.tooltip_stop")}
           value={action.stop != null ? action.stop.toFixed(2) : "—"}
         />
         <ActionRow
           label={t(locale, "actionbox.target")}
+          tooltip={t(locale, "actionbox.tooltip_target")}
           value={action.target != null ? action.target.toFixed(2) : "—"}
         />
         <ActionRow
           label={t(locale, "actionbox.rr")}
+          tooltip={t(locale, "actionbox.tooltip_rr")}
           value={
             action.rrRatio != null ? `${action.rrRatio.toFixed(1)} : 1` : "—"
           }
         />
         <ActionRow
           label={t(locale, "actionbox.position")}
+          tooltip={t(locale, "actionbox.tooltip_position")}
           value={`${action.positionPct?.toFixed(1) ?? "—"}%`}
         />
       </div>
@@ -86,10 +92,21 @@ export default function ActionBox({ card }: { card: RatingCard }) {
   );
 }
 
-function ActionRow({ label, value }: { label: string; value: string }) {
+function ActionRow({
+  label,
+  value,
+  tooltip,
+}: {
+  label: string;
+  value: string;
+  tooltip?: string;
+}) {
   return (
     <div className="flex justify-between text-xs">
-      <span className="text-tm-fg-2">{label}</span>
+      <span className="inline-flex items-center gap-1 text-tm-fg-2">
+        {label}
+        {tooltip ? <InfoTooltip content={tooltip} /> : null}
+      </span>
       <span className="font-mono text-tm-fg">{value}</span>
     </div>
   );
