@@ -48,6 +48,10 @@ class FullCard(BaseModel):
     # derived, no fast factors, can be up to ~1 day old.
     partial: bool = False
     news_items: list[NewsItemLite] = []
+    # B2 (2026-05-19): hysteresis band absorbed a tier flip today. Sticky
+    # `rating` differs from the raw threshold mapping; UI surfaces a small
+    # indicator so the user can see the band is currently active.
+    tier_flip_today: bool = False
 
 
 class StockResponse(BaseModel):
@@ -112,6 +116,7 @@ async def get_stock(
         breakdown=sig["breakdown"],
         partial=sig["partial"],
         news_items=news_items,
+        tier_flip_today=sig.get("tier_flip_today", False),
     )
     return StockResponse(card=card, stale=stale)
 

@@ -33,7 +33,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from alpha_agent.fusion.combine import combine
-from alpha_agent.fusion.rating import compute_confidence, map_to_tier
+from alpha_agent.fusion.rating import (
+    compute_confidence, map_to_tier, map_to_tier_with_band,
+)
 from alpha_agent.fusion.weights import DEFAULT_WEIGHTS
 from alpha_agent.orchestrator.alert_detector import detect_alerts
 from alpha_agent.orchestrator.batch_runner import run_batched
@@ -228,7 +230,14 @@ async def handler(
             b["z"] for b in result.breakdown if b["weight_effective"] > 0
         ]
         confidence = compute_confidence(contributing_zs)
-        rating = map_to_tier(result.composite)
+        # B2 (2026-05-19): hysteresis band over yesterday's tier to suppress
+        # threshold-adjacent wobble. raw_tier = legacy unbanded mapping;
+        # rating = sticky tier the user actually sees. tier_flip_today
+        # flags rows where the band saved a flip (transparency for the UI).
+        raw_tier = map_to_tier(result.composite)
+        prev_rating = prev_row["rating"] if prev_row is not None else None
+        rating = map_to_tier_with_band(result.composite, prev_rating)
+        tier_flip_today = bool(raw_tier != rating)
 
         # Prev card for alert diff
         prev_card: dict | None = None
@@ -261,7 +270,12 @@ async def handler(
 
         await upsert_signal_fast(
             pool, t, today, result.composite, rating, confidence,
-            {"breakdown": result.breakdown}, partial=False,
+            {
+                "breakdown": result.breakdown,
+                "tier_flip_today": tier_flip_today,
+                "raw_tier": raw_tier,
+            },
+            partial=False,
         )
 
         for alert in detect_alerts(prev_card, curr_card):

@@ -42,6 +42,17 @@ def _parse_breakdown(raw: object) -> list[dict]:
         return []
 
 
+def _parse_tier_flip(raw) -> bool:
+    """Pull the B2 hysteresis-band tier_flip_today flag out of the wrapped
+    breakdown JSON. False for slow-only rows (no band logic runs there)
+    and any row predating the B2 ship.
+    """
+    try:
+        return bool(json.loads(raw).get("tier_flip_today", False))  # type: ignore[arg-type]
+    except (TypeError, json.JSONDecodeError, AttributeError):
+        return False
+
+
 async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
     """Latest signal for one ticker, fast-preferred with slow fallback.
 
@@ -94,9 +105,13 @@ async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
             z for e in breakdown if isinstance((z := e.get("z")), (int, float))
         ]
         confidence = compute_confidence(z_values)
+        # No band logic on slow-only rows (the cron that writes them never
+        # sees a prev_rating to compare against). Always false.
+        tier_flip_today = False
     else:
         rating = row["rating"] or "HOLD"
         confidence = _safe_float(row["confidence"])
+        tier_flip_today = _parse_tier_flip(row["breakdown"])
 
     return {
         "ticker": row["ticker"],
@@ -106,4 +121,5 @@ async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
         "breakdown": breakdown,
         "fetched_at": row["fetched_at"],
         "partial": is_partial,
+        "tier_flip_today": tier_flip_today,
     }

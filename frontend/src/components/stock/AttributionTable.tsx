@@ -105,7 +105,20 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {card.tier_flip_today ? (
+          <span
+            title={
+              locale === "zh"
+                ? "今日复合分轻微越过 tier 阈值,no-trade band 抑制了翻转。set ALPHA_TIER_BAND_Z 调整带宽。"
+                : "Composite crossed a tier threshold marginally today; no-trade band suppressed the flip. Set ALPHA_TIER_BAND_Z to tune."
+            }
+            className="inline-flex items-center gap-1 rounded-md border border-tm-warn/40 bg-tm-warn/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-warn"
+          >
+            <span className="opacity-70">{locale === "zh" ? "无交易带" : "BAND"}</span>
+            <span className="font-semibold">{locale === "zh" ? "生效" : "ACTIVE"}</span>
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={() => setFactorMode(factorMode === "short" ? "long" : "short")}

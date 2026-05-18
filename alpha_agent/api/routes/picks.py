@@ -37,6 +37,10 @@ class LeanCard(BaseModel):
     top_drivers: list[str]
     top_drags: list[str]
     partial: bool = False
+    # B2 (2026-05-19): true when the no-trade band saved a tier flip today
+    # (raw_tier differed from sticky rating). UI surfaces a small indicator
+    # so the user knows hysteresis is currently absorbing wobble.
+    tier_flip_today: bool = False
 
 
 class PicksResponse(BaseModel):
@@ -150,9 +154,12 @@ async def picks_lean(
         cards: list[LeanCard] = []
         for r in rows:
             try:
-                breakdown_data: list[dict] = json.loads(r["breakdown"]).get("breakdown", [])
+                parsed_breakdown: dict = json.loads(r["breakdown"])
+                breakdown_data: list[dict] = parsed_breakdown.get("breakdown", [])
+                tier_flip_today: bool = bool(parsed_breakdown.get("tier_flip_today", False))
             except (TypeError, json.JSONDecodeError):
                 breakdown_data = []
+                tier_flip_today = False
             score = _safe_float(r["score"], 0.0)
             is_partial = bool(r["partial"])
             if is_partial:
@@ -205,6 +212,7 @@ async def picks_lean(
                     top_drivers=top_drivers(breakdown_data),
                     top_drags=top_drags(breakdown_data),
                     partial=is_partial,
+                    tier_flip_today=tier_flip_today,
                 )
             )
 

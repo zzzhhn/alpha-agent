@@ -48,6 +48,10 @@ export interface RatingCard {
   // derived (no fast factors), can be up to ~1 day old. Absent on the
   // single-card /api/stock response, hence optional.
   partial?: boolean;
+  // B2 (2026-05-19): true when the hysteresis no-trade band absorbed a
+  // tier flip today (raw unbanded mapping differed from the sticky rating
+  // the user sees). Surfaced as a small badge for transparency.
+  tier_flip_today?: boolean;
   news_items?: NewsItemLite[];
 }
 
