@@ -166,7 +166,22 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
             {t(locale, "attribution.contribution")}
           </SortTh>
           <th className="px-2 py-1.5 text-right text-tm-fg-2">
-            {t(locale, "attribution.live_ic")}
+            <span className="inline-flex items-center gap-1">
+              {t(locale, "attribution.live_ic")}
+              <InfoTooltip content={t(locale, "attribution.tooltip_rank_ic")} />
+            </span>
+          </th>
+          <th className="px-2 py-1.5 text-right text-tm-fg-2">
+            <span className="inline-flex items-center gap-1">
+              {t(locale, "attribution.icir")}
+              <InfoTooltip content={t(locale, "attribution.tooltip_icir")} />
+            </span>
+          </th>
+          <th className="px-2 py-1.5 text-right text-tm-fg-2">
+            <span className="inline-flex items-center gap-1">
+              {t(locale, "attribution.ir")}
+              <InfoTooltip content={t(locale, "attribution.tooltip_ir")} />
+            </span>
           </th>
           <th className="px-2 py-1.5 text-center text-tm-fg-2">
             {t(locale, "attribution.tier")}
@@ -236,9 +251,26 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
                   return `${c >= 0 ? "+" : ""}${c.toFixed(2)}`;
                 })()}
               </td>
-              <td className="px-2 py-1 text-right font-mono text-tm-fg">
+              <td
+                className="px-2 py-1 text-right font-mono text-tm-fg"
+                title={
+                  typeof h?.n_obs_30d === "number" && h.n_obs_30d > 0
+                    ? `n_obs=${h.n_obs_30d}`
+                    : undefined
+                }
+              >
                 {typeof h?.live_ic_30d === "number"
-                  ? h.live_ic_30d.toFixed(3)
+                  ? `${h.live_ic_30d >= 0 ? "+" : ""}${h.live_ic_30d.toFixed(3)}`
+                  : "-"}
+              </td>
+              <td className="px-2 py-1 text-right font-mono text-tm-fg">
+                {typeof h?.icir_30d === "number"
+                  ? `${h.icir_30d >= 0 ? "+" : ""}${h.icir_30d.toFixed(2)}`
+                  : "-"}
+              </td>
+              <td className="px-2 py-1 text-right font-mono text-tm-fg">
+                {typeof h?.ir_30d === "number"
+                  ? `${h.ir_30d >= 0 ? "+" : ""}${h.ir_30d.toFixed(2)}`
                   : "-"}
               </td>
               <td className="px-2 py-1 text-center">

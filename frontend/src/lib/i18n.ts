@@ -624,8 +624,16 @@ const translations = {
     "attribution.signal": "信号",
     "attribution.z": "z",
     "attribution.contribution": "贡献",
-    "attribution.live_ic": "live IC (30d)",
+    "attribution.live_ic": "Rank IC (30d)",
+    "attribution.icir": "ICIR",
+    "attribution.ir": "IR",
     "attribution.tier": "tier",
+    "attribution.tooltip_rank_ic":
+      "Spearman 秩相关 IC,最近 30 天滚动窗口。\n公式: corr(rank(信号 z), rank(未来 5 日收益))\n>0.02 视为有效信号,<0 视为反向。鼠标悬停看 n_obs 样本量。",
+    "attribution.tooltip_icir":
+      "信息系数 信息比率 (Information Coefficient Information Ratio),信号稳定性度量。\n公式: ICIR = IC_mean / IC_std (过去 90 个 IC 观察点)\n|ICIR| > 0.5 信号一致,> 1.0 institutional-grade。",
+    "attribution.tooltip_ir":
+      "年化信息比率。\n公式: IR = ICIR × √(252 / 30) ≈ ICIR × 2.9\n>3.0 = 信号年化贡献相对其波动率高,机构通用阈值 IR > 0.75 即可入选 multi-factor 组合。",
     "attribution.dropped_tooltip": "本周期 IC < 0.02 自动 drop，weight = 0",
     "attribution.insufficient_data_tooltip": "数据积累中：需要至少 30 个交易日的 IC 历史才能评级",
     "attribution.signal_label_factor": "因子",
@@ -1332,8 +1340,16 @@ const translations = {
     "attribution.signal": "Signal",
     "attribution.z": "z",
     "attribution.contribution": "Contribution",
-    "attribution.live_ic": "Live IC (30d)",
+    "attribution.live_ic": "Rank IC (30d)",
+    "attribution.icir": "ICIR",
+    "attribution.ir": "IR",
     "attribution.tier": "Tier",
+    "attribution.tooltip_rank_ic":
+      "Spearman rank IC, rolling 30-day window.\nFormula: corr(rank(signal z), rank(forward 5-day return))\n>0.02 is a usable signal; <0 indicates inverted alpha. Hover the cell for n_obs.",
+    "attribution.tooltip_icir":
+      "Information Coefficient Information Ratio — signal stability gauge.\nFormula: ICIR = IC_mean / IC_std (across the last 90 IC observations)\n|ICIR| > 0.5 = consistent; > 1.0 = institutional-grade.",
+    "attribution.tooltip_ir":
+      "Annualized Information Ratio.\nFormula: IR = ICIR × √(252 / 30) ≈ ICIR × 2.9\n>3.0 = strong risk-adjusted signal contribution; institutional sell-side benchmark for multi-factor inclusion is IR > 0.75.",
     "attribution.dropped_tooltip": "Auto-dropped this cycle (IC < 0.02, weight = 0)",
     "attribution.insufficient_data_tooltip": "Data accumulating: needs at least 30 trading days of IC history",
     "attribution.signal_label_factor": "Factor",

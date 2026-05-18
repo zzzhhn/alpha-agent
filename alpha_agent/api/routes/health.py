@@ -54,10 +54,67 @@ class SignalStatus(BaseModel):
     live_ic_90d: float | None = None
     weight_current: float | None = None
     tier: str = "unknown"
+    # B1 (2026-05-19) joint diagnostics on the 30d window — surfaced in
+    # AttributionTable next to live_ic_30d so the user sees not just the
+    # latest IC but its stability (ICIR), annualized info ratio (IR), and
+    # sample size (n_obs). All three derived on-the-fly from
+    # signal_ic_history aggregation (no new table). Null when history
+    # has fewer than 2 observations for the window.
+    icir_30d: float | None = None
+    ir_30d: float | None = None
+    n_obs_30d: int = 0
 
 
 class HealthSignalsResponse(BaseModel):
     signals: list[SignalStatus]
+
+
+async def _compute_signal_metrics(
+    pool, name: str, window_days: int,
+) -> dict[str, Any]:
+    """Pull recent IC observations for (signal, window) and derive joint
+    diagnostics from the time series in one round-trip.
+
+    Returns dict with keys:
+      - ic_latest: most-recent IC value (None when no history)
+      - icir: ic_mean / ic_std (annualization-agnostic ratio of mean to
+        std-dev across observations; higher = more consistent)
+      - ir: icir × √(252 / window_days), the annualized Information Ratio
+      - n_obs: count of observations used (capped at 90, the LIMIT below)
+
+    Both icir and ir are None when the time series has fewer than 2 valid
+    observations or when the std is degenerate (constant IC). Caller
+    (health_signals) attaches these to SignalStatus alongside the legacy
+    live_ic_* fields without breaking the schema.
+    """
+    import math as _math
+
+    import numpy as _np
+
+    rows = await pool.fetch(
+        "SELECT ic FROM signal_ic_history "
+        "WHERE signal_name = $1 AND window_days = $2 "
+        "ORDER BY computed_at DESC LIMIT 90",
+        name, window_days,
+    )
+    if not rows:
+        return {"ic_latest": None, "icir": None, "ir": None, "n_obs": 0}
+    ics = [float(r["ic"]) for r in rows if r["ic"] is not None]
+    ic_latest = ics[0] if ics else None
+    n_obs = len(ics)
+    if n_obs < 2:
+        return {"ic_latest": ic_latest, "icir": None, "ir": None, "n_obs": n_obs}
+    arr = _np.asarray(ics, dtype=float)
+    arr = arr[~_np.isnan(arr)]
+    if arr.size < 2:
+        return {"ic_latest": ic_latest, "icir": None, "ir": None, "n_obs": n_obs}
+    mu = float(_np.mean(arr))
+    sd = float(_np.std(arr, ddof=1))
+    if sd <= 1e-9:
+        return {"ic_latest": ic_latest, "icir": None, "ir": None, "n_obs": n_obs}
+    icir = mu / sd
+    ir = icir * _math.sqrt(252.0 / float(window_days))
+    return {"ic_latest": ic_latest, "icir": icir, "ir": ir, "n_obs": n_obs}
 
 
 @router.get("", response_model=HealthResponse)
@@ -115,12 +172,12 @@ async def health_signals() -> HealthSignalsResponse:
             comp,
         ) or 0
 
-        ic_30d_raw = await pool.fetchval(
-            "SELECT ic FROM signal_ic_history "
-            "WHERE signal_name = $1 AND window_days = 30 "
-            "ORDER BY computed_at DESC LIMIT 1",
-            name,
-        )
+        # B1: pull last 90 IC observations for the 30d window in one
+        # round-trip; derive latest IC + ICIR + IR + n_obs from the same
+        # time series (saves 1 SQL call vs the legacy 3-fetchval shape).
+        # 60d / 90d windows remain single-fetchval for backwards compat.
+        metrics_30d = await _compute_signal_metrics(pool, name, 30)
+        ic_30d = metrics_30d["ic_latest"]
         ic_60d_raw = await pool.fetchval(
             "SELECT ic FROM signal_ic_history "
             "WHERE signal_name = $1 AND window_days = 60 "
@@ -133,7 +190,6 @@ async def health_signals() -> HealthSignalsResponse:
             "ORDER BY computed_at DESC LIMIT 1",
             name,
         )
-        ic_30d = float(ic_30d_raw) if ic_30d_raw is not None else None
         ic_60d = float(ic_60d_raw) if ic_60d_raw is not None else None
         ic_90d = float(ic_90d_raw) if ic_90d_raw is not None else None
 
@@ -182,6 +238,9 @@ async def health_signals() -> HealthSignalsResponse:
                 live_ic_90d=ic_90d,
                 weight_current=weight_current,
                 tier=tier,
+                icir_30d=metrics_30d["icir"],
+                ir_30d=metrics_30d["ir"],
+                n_obs_30d=metrics_30d["n_obs"],
             )
         )
     return HealthSignalsResponse(signals=out)
