@@ -23,6 +23,7 @@ per-page fetch. yfinance is the data source (already in deps, no key).
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 import numpy as np
@@ -30,36 +31,76 @@ import numpy as np
 from alpha_agent.signals.base import SignalScore, safe_fetch
 from alpha_agent.signals.yf_helpers import extract_fundamentals, get_ticker
 
-# Default composite expression.
+# Two factor expressions coexist (added 2026-05-18 after user feedback):
 #
-# Methodology (updated 2026-05-18 from 12d/60d short-term reversal blend to
-# 12-month risk-managed momentum):
-#   - 252-day momentum (12 months, the academic standard from Jegadeesh-Titman
-#     1993 and refined in Asness-Moskowitz-Pedersen 2013 "Value & Momentum
-#     Everywhere"). The classic 12-1 skips the most recent month to dodge
-#     1-month reversal contamination; the AST has no `ts_delay` skip helper
-#     wired into this expression yet, so we use plain 12m mean as Phase 1.
-#   - 126-day volatility (6 months, matching the vol-scaling window in
-#     Daniel-Moskowitz 2016 "Momentum Crashes" risk-managed momentum). The
-#     rank-vol leg acts as the Frazzini-Pedersen 2014 BAB-style defensive
-#     overlay — high-vol names get penalized so the composite is partially
-#     crash-hedged.
+# 1. SHORT_TERM_FACTOR_EXPR — original 12d momentum + 60d vol blend. Suited
+#    for swing trading (days to ~2 weeks holding) and intraday-adjacent
+#    rotation strategies. This is the platform's historical default and the
+#    one most users actually trade against because the news/technicals/
+#    premarket signals in the composite are also short-window.
+#
+# 2. LONG_TERM_FACTOR_EXPR — 252d momentum + 126d vol per the 2026-05-18
+#    academic modernization (Jegadeesh-Titman 1993 / Asness-Moskowitz-Pedersen
+#    2013 "Value & Momentum Everywhere" 12-month momentum + Daniel-Moskowitz
+#    2016 / Frazzini-Pedersen 2014 6-month vol crash-hedge). Suited for
+#    monthly-to-quarterly position holding where the academic literature is
+#    well-validated. The classic 12-1 skip is Phase X TBD (needs ts_delay in
+#    the expression DSL).
+#
+# Active mode is controlled by ALPHA_FACTOR_MODE env var:
+#   "short" (default): use SHORT_TERM_FACTOR_EXPR — matches the rest of the
+#                       composite's short-window signals (news 24h, technicals
+#                       daily, premarket overnight, earnings 14d decay).
+#   "long":            use LONG_TERM_FACTOR_EXPR — for users running a more
+#                       academic/medium-term framework.
 #
 # Function-call form (subtract/rank/ts_mean/ts_std) is required because the
 # factor engine AST only accepts function calls, not BinOp nodes. Production
 # cron was silently producing factor.raw=null until M4a F1 smoke caught this.
 #
-# Phase X TBD: swap to true DM-2016 risk-managed momentum via a `ts_delay`-
-# wrapped 12m signal divided by ex-ante vol forecast, plus an Asness-Frazzini-
-# Pedersen 2019 Quality-Minus-Junk leg. Both need new operator support
-# (ts_delay in expression DSL + quality-factor data feed).
-DEFAULT_FACTOR_EXPR = "subtract(rank(ts_mean(returns, 252)), rank(ts_std(returns, 126)))"
+# Phase 2 TBD: surface a per-user UI toggle (Picks/Stock header) that flips
+# this env-var-driven default. Requires (a) fast_intraday cron to compute
+# BOTH factor_short_z and factor_long_z per ticker and persist both in
+# breakdown.raw (so toggle is instant, no recompute), and (b) a user_settings
+# table OR localStorage-backed preference. Until Phase 2 ships, env-var
+# default applies platform-wide.
+SHORT_TERM_FACTOR_EXPR = (
+    "subtract(rank(ts_mean(returns, 12)), rank(ts_std(returns, 60)))"
+)
+LONG_TERM_FACTOR_EXPR = (
+    "subtract(rank(ts_mean(returns, 252)), rank(ts_std(returns, 126)))"
+)
 
 
-def _evaluate_for_universe(as_of: datetime, expr: str = DEFAULT_FACTOR_EXPR) -> dict[str, float]:
+def _resolve_default_expr() -> str:
+    """Resolve the active factor expression from ALPHA_FACTOR_MODE env var.
+    Defaults to 'short' (the platform's historical default + the only mode
+    that aligns with the rest of the short-window signal composite).
+
+    Reads env on every call so tests + per-invocation overrides work. The
+    env lookup is sub-microsecond so cost is negligible vs the factor
+    panel evaluation that follows."""
+    mode = os.environ.get("ALPHA_FACTOR_MODE", "short").strip().lower()
+    return LONG_TERM_FACTOR_EXPR if mode == "long" else SHORT_TERM_FACTOR_EXPR
+
+
+# Backward-compat alias: existing imports + tests that reference
+# DEFAULT_FACTOR_EXPR keep working. New code should call _resolve_default_expr()
+# or pass an explicit `expr` to _evaluate_for_universe.
+DEFAULT_FACTOR_EXPR = _resolve_default_expr()
+
+
+def _evaluate_for_universe(as_of: datetime, expr: str | None = None) -> dict[str, float]:
     """Returns {ticker: z_score} on as_of's date row.
     Wraps factor_engine.kernel.evaluate_cross_section.
+
+    `expr` defaults to whatever ALPHA_FACTOR_MODE env var resolves to
+    (short → SHORT_TERM_FACTOR_EXPR, long → LONG_TERM_FACTOR_EXPR).
+    Explicit `expr` argument overrides the env var (used by screener,
+    hypothesis lab, and Phase 2 per-user toggle).
     """
+    if expr is None:
+        expr = _resolve_default_expr()
     from alpha_agent.factor_engine.factor_backtest import _load_panel
     from alpha_agent.factor_engine.kernel import evaluate_cross_section
     from alpha_agent.core.types import FactorSpec

@@ -50,6 +50,68 @@ def test_factor_signal_fundamentals_unavailable_keeps_z():
     assert out["raw"]["fundamentals"] is None
 
 
+def test_factor_mode_short_uses_12d_60d_expression(monkeypatch):
+    """Regression for 2026-05-18 user-flagged regression: switching factor.py
+    default to 252d/126d (academic long-momentum) misaligned the platform's
+    short-line/intraday users since the rest of the composite (news 24h,
+    technicals daily, premarket overnight) is short-window. ALPHA_FACTOR_MODE
+    env var now gates the default; 'short' (default) restores 12d/60d."""
+    from alpha_agent.signals.factor import (
+        SHORT_TERM_FACTOR_EXPR, _resolve_default_expr,
+    )
+
+    monkeypatch.setenv("ALPHA_FACTOR_MODE", "short")
+    assert _resolve_default_expr() == SHORT_TERM_FACTOR_EXPR
+    assert "ts_mean(returns, 12)" in SHORT_TERM_FACTOR_EXPR
+    assert "ts_std(returns, 60)" in SHORT_TERM_FACTOR_EXPR
+
+    # Unset → still defaults to short (platform's safe default).
+    monkeypatch.delenv("ALPHA_FACTOR_MODE", raising=False)
+    assert _resolve_default_expr() == SHORT_TERM_FACTOR_EXPR
+
+
+def test_factor_mode_long_switches_to_252d_126d(monkeypatch):
+    from alpha_agent.signals.factor import (
+        LONG_TERM_FACTOR_EXPR, _resolve_default_expr,
+    )
+
+    monkeypatch.setenv("ALPHA_FACTOR_MODE", "long")
+    assert _resolve_default_expr() == LONG_TERM_FACTOR_EXPR
+    assert "ts_mean(returns, 252)" in LONG_TERM_FACTOR_EXPR
+    assert "ts_std(returns, 126)" in LONG_TERM_FACTOR_EXPR
+
+    # Case-insensitive + whitespace-tolerant
+    monkeypatch.setenv("ALPHA_FACTOR_MODE", "  LONG  ")
+    assert _resolve_default_expr() == LONG_TERM_FACTOR_EXPR
+
+
+def test_factor_explicit_expr_overrides_env_mode(monkeypatch):
+    """Explicit `expr` arg to _evaluate_for_universe wins over env var,
+    so screener / hypothesis lab / Phase 2 per-user toggle still work
+    even when global mode is 'short'."""
+    from unittest.mock import MagicMock
+    from alpha_agent.signals.factor import _evaluate_for_universe
+
+    monkeypatch.setenv("ALPHA_FACTOR_MODE", "short")
+    custom_expr = "rank(ts_mean(returns, 30))"  # explicit 30d momentum
+
+    captured = {}
+
+    def fake_eval(panel, spec, as_of_index):
+        captured["expression"] = spec.expression
+        return {"AAPL": 1.0}
+
+    with patch(
+        "alpha_agent.factor_engine.factor_backtest._load_panel",
+        return_value=MagicMock(),
+    ), patch(
+        "alpha_agent.factor_engine.kernel.evaluate_cross_section",
+        side_effect=fake_eval,
+    ):
+        _evaluate_for_universe(datetime.now(UTC), expr=custom_expr)
+    assert captured["expression"] == custom_expr
+
+
 def test_factor_spec_construction_does_not_raise():
     """Regression guard for the M4a F1 finding.
 
