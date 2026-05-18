@@ -6,7 +6,7 @@
 // anywhere in the full ~557-ticker universe (including slow-only "partial"
 // rows) is reachable, not just the top of the default board.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPicks, type RatingCard } from "@/lib/api/picks";
+import { fetchPicks, type FactorMode, type RatingCard } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
 import RefreshButton from "./RefreshButton";
 import { TmPane } from "@/components/tm/TmPane";
@@ -21,6 +21,14 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 
 type PicksData = { picks: RatingCard[]; as_of: string | null; stale: boolean };
 
+const FACTOR_MODE_KEY = "alpha:factor_mode";
+
+function readModePref(): FactorMode {
+  if (typeof window === "undefined") return "short";
+  const v = window.localStorage.getItem(FACTOR_MODE_KEY);
+  return v === "long" ? "long" : "short";
+}
+
 export default function PicksBrowser({
   initialData,
 }: {
@@ -29,38 +37,71 @@ export default function PicksBrowser({
   const [data, setData] = useState<PicksData>(initialData);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  // SHORT (12d/60d, default — short-line/intraday-aligned) vs LONG (252d/126d,
+  // academic Jegadeesh-Titman / Daniel-Moskowitz). Init from localStorage so
+  // the user's pick survives refreshes. SSR-safe via the readModePref guard.
+  const [factorMode, setFactorMode] = useState<FactorMode>("short");
   const { locale } = useLocale();
   const mounted = useRef(false);
   // Called once here, threaded down as a prop, so the localStorage read +
   // storage listener happen per-table rather than per-row.
   const { isWatched } = useWatchlist();
 
-  const runSearch = useCallback(async (q: string) => {
-    setLoading(true);
-    try {
-      // No query: default top-50 board. Query: widen to the full universe
-      // so the match is found wherever it ranks.
-      const trimmed = q.trim();
-      const next = await fetchPicks(trimmed ? 600 : 50, trimmed || undefined);
-      setData(next);
-    } catch {
-      // Keep the last good data on a transient failure; a hard failure is
-      // caught by the route-level error.tsx.
-    } finally {
-      setLoading(false);
-    }
+  // Hydrate mode preference once after mount (avoid SSR/CSR mismatch).
+  useEffect(() => {
+    setFactorMode(readModePref());
   }, []);
 
-  // Debounce the search input. Skip the mount fire so initialData renders
-  // immediately without a redundant re-fetch.
+  const runSearch = useCallback(
+    async (q: string, mode: FactorMode) => {
+      setLoading(true);
+      try {
+        // No query: default top-50 board. Query: widen to the full universe
+        // so the match is found wherever it ranks.
+        const trimmed = q.trim();
+        const next = await fetchPicks(
+          trimmed ? 600 : 50,
+          trimmed || undefined,
+          mode,
+        );
+        setData(next);
+      } catch {
+        // Keep the last good data on a transient failure; a hard failure is
+        // caught by the route-level error.tsx.
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  // Debounce the search input + re-fire when factorMode flips. Skip the
+  // mount fire so initialData renders immediately without a redundant
+  // re-fetch — but the post-hydration mode flip DOES fire a re-fetch if
+  // the user's stored pref is "long" (different from SSR's "short" default).
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
+      // First effect run after hydration: only re-fetch if mode differs
+      // from the SSR default of "short".
+      if (factorMode === "long") {
+        runSearch(search, factorMode);
+      }
       return;
     }
-    const id = setTimeout(() => runSearch(search), 300);
+    const id = setTimeout(() => runSearch(search, factorMode), 300);
     return () => clearTimeout(id);
-  }, [search, runSearch]);
+  }, [search, factorMode, runSearch]);
+
+  const onModeToggle = useCallback(() => {
+    setFactorMode((prev) => {
+      const next: FactorMode = prev === "short" ? "long" : "short";
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(FACTOR_MODE_KEY, next);
+      }
+      return next;
+    });
+  }, []);
 
   const searching = search.trim().length > 0;
   const count = data.picks.length;
@@ -84,6 +125,11 @@ export default function PicksBrowser({
             : "真实信号优先，其后覆盖完整 universe（partial 行数据可能最旧 1 天）",
           loading: "搜索中…",
           empty: "没有匹配的 ticker",
+          modeLabel: "因子模式",
+          modeShort: "短线 (12d/60d)",
+          modeLong: "长线 (252d/126d)",
+          modeTip:
+            "短线模式 = 12 日动量减 3 月波动,跟新闻/技术面/盘前同时间维度,适合 swing/intraday。长线 = 12 月动量减 6 月波动,适合月度/季度持仓。点击切换。",
         }
       : {
           picks: "PICKS",
@@ -97,6 +143,11 @@ export default function PicksBrowser({
             : "real signals first, then the full universe (partial rows can be ~1d old)",
           loading: "Searching...",
           empty: "No matching ticker",
+          modeLabel: "FACTOR MODE",
+          modeShort: "Short (12d/60d)",
+          modeLong: "Long (252d/126d)",
+          modeTip:
+            "Short = 12d momentum − 3mo vol, aligned with news/technicals/premarket horizon, suited for swing/intraday. Long = 12mo momentum − 6mo vol, suited for monthly/quarterly holding. Click to toggle.",
         };
 
   return (
@@ -105,6 +156,19 @@ export default function PicksBrowser({
         <TmSubbarKV label={copy.picks} value={copy.signals} />
         <TmSubbarSep />
         <TmSubbarKV label={copy.asOf} value={asOf} />
+        <TmSubbarSep />
+        <button
+          type="button"
+          onClick={onModeToggle}
+          title={copy.modeTip}
+          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-accent transition hover:bg-tm-accent/20 focus:outline-none focus:ring-1 focus:ring-tm-accent"
+          aria-label={copy.modeLabel}
+        >
+          <span className="opacity-70">{copy.modeLabel}</span>
+          <span className="font-semibold">
+            {factorMode === "short" ? copy.modeShort : copy.modeLong}
+          </span>
+        </button>
         {data.stale ? (
           <>
             <TmSubbarSep />

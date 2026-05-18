@@ -64,6 +64,7 @@ def _safe_float(v: float | None, default: float = 0.0) -> float:
 async def picks_lean(
     limit: int = Query(50, ge=1, le=600),
     search: str | None = Query(None, max_length=12),
+    mode: str = Query("short", pattern="^(short|long)$"),
 ) -> PicksResponse:
     """Return tickers sorted by composite score DESC.
 
@@ -77,6 +78,15 @@ async def picks_lean(
 
     A ticker present in fast is taken from fast (fresher and complete).
     `search` does a case-insensitive substring match on the ticker.
+
+    `mode` (Phase 2 dual-factor): "short" (default, 12d/60d momentum-vol,
+    aligned with the rest of the short-window composite) or "long"
+    (252d/126d academic Jegadeesh-Titman/Daniel-Moskowitz framework). When
+    "long", the picks list is re-ranked in Python using factor.raw.z_long
+    (populated by fast_intraday's universe-wide eval) instead of the stored
+    short-mode composite. SQL ordering is unchanged; we re-sort in Python
+    after the score swap. Rows without z_long (legacy / partial) keep their
+    original composite under either mode.
     """
     import traceback
     try:
@@ -157,6 +167,34 @@ async def picks_lean(
             else:
                 rating = r["rating"] or "HOLD"
                 confidence = _safe_float(r["confidence"], 0.0)
+            # Phase 2 long-mode re-rank: when mode=="long", look up
+            # factor.raw.z_long and re-compute the composite contribution.
+            # Old factor contribution gets subtracted, new long-z contribution
+            # added. rating is re-derived from the new score. Rows missing
+            # z_long (legacy data before the dual-eval landed, or slow-only
+            # partial rows where fast_intraday hasn't run yet) keep their
+            # short-mode score unchanged so the UI never shows a "missing"
+            # state during the rollout window.
+            if mode == "long" and not is_partial:
+                for entry in breakdown_data:
+                    if entry.get("signal") != "factor":
+                        continue
+                    raw = entry.get("raw")
+                    if not isinstance(raw, dict) or "z_long" not in raw:
+                        break
+                    new_z = _safe_float(raw.get("z_long"), 0.0)
+                    old_z = _safe_float(entry.get("z"), 0.0)
+                    w_eff = _safe_float(entry.get("weight_effective"), 0.0)
+                    # Score delta from swapping factor contribution
+                    score = score + w_eff * (new_z - old_z)
+                    # Update the breakdown entry in-place so top_drivers/
+                    # top_drags reflect the long-mode ranking and the UI
+                    # AttributionTable shows the active factor.z value.
+                    entry["z"] = new_z
+                    entry["contribution"] = w_eff * new_z
+                    rating = map_to_tier(score)
+                    break
+
             cards.append(
                 LeanCard(
                     ticker=r["ticker"],
@@ -169,6 +207,11 @@ async def picks_lean(
                     partial=is_partial,
                 )
             )
+
+        # SQL ordered by short-mode composite; after long-mode swap the
+        # short order is stale. Re-sort in Python (partial-last preserved).
+        if mode == "long":
+            cards.sort(key=lambda c: (c.partial, -c.composite_score))
 
         return PicksResponse(picks=cards, as_of=most_recent, stale=stale)
     except Exception as e:

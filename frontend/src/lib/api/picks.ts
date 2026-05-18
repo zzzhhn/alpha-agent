@@ -45,8 +45,14 @@ export interface RatingCard {
   news_items?: NewsItemLite[];
 }
 
-export const fetchPicks = (limit = 50, search?: string) => {
-  const params = new URLSearchParams({ limit: String(limit) });
+export type FactorMode = "short" | "long";
+
+export const fetchPicks = (
+  limit = 50,
+  search?: string,
+  mode: FactorMode = "short",
+) => {
+  const params = new URLSearchParams({ limit: String(limit), mode });
   const q = search?.trim();
   if (q) params.set("search", q);
   return apiGet<{ picks: RatingCard[]; as_of: string | null; stale: boolean }>(
@@ -97,6 +103,12 @@ export interface FundamentalsData {
 
 export interface FactorRaw {
   z: number;
+  // Phase 2 dual-mode: z_short = 12d/60d (short-window, default), z_long =
+  // 252d/126d (academic Jegadeesh-Titman / Daniel-Moskowitz framework).
+  // The active mode's value lives in `z`; both alternatives are persisted
+  // so the UI toggle can re-display without round-tripping the cron.
+  z_short?: number;
+  z_long?: number;
   fundamentals: FundamentalsData | null;
 }
 

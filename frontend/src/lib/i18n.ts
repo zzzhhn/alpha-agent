@@ -667,27 +667,27 @@ const translations = {
       "仓位百分比 (相对于组合总资金)。\n公式: Kelly_fraction × confidence,限制在 [1%, 10%]\n根据信号置信度动态决定下注大小,避免过度集中。",
     /* Signal row tooltips (AttributionTable) */
     "signal_tooltip.factor":
-      "22 因子 Zoo 截面 z-score (动量/价值/规模/质量/低波)。\n学术基础: Fama-French 三/五因子 (1992/1993), Hou-Xue-Zhang q-factor (2015)\n数据源: factor_engine, 每日刷新。",
+      "Momentum 减 vol 截面 z-score。\n当前模式由顶部 toggle 控制:SHORT (12d/60d, 适合短线/日内, 跟新闻/技术面/盘前同时间维度) 或 LONG (252d/126d, 适合月度/季度持仓)。\n学术: Jegadeesh-Titman (1993) momentum + Asness-Moskowitz-Pedersen (2013) 《Value & Momentum Everywhere》 + Daniel-Moskowitz (2016) 《Momentum Crashes》 风险管理 + Frazzini-Pedersen (2014) 《Betting Against Beta》 低波防御。\n数据: factor_engine,每日刷新。",
     "signal_tooltip.technicals":
-      "多技术指标 (RSI/MACD/Stochastic) quorum 投票。\n学术基础: Jegadeesh-Titman (1993) 动量\n数据源: yfinance daily bars。",
+      "RSI(14) + MACD + ATR/价 + 50d/200d MA 距离的等权 tanh-z 复合。\n学术: Han-Yang-Zhou (2013, JFQA) 《A New Anomaly: TA Profitability》 验证 MA 趋势信号在 low-price/illiquid 股票上有 alpha + Neely-Rapach-Tu-Zhou (2014, Mgmt Sci) TA 改进股权溢价预测 + Moskowitz-Ooi-Pedersen (2012) Time Series Momentum (MA50/200 是 TSMOM 代理)。\n数据: yfinance 日线 OHLCV。",
     "signal_tooltip.analyst":
-      "分析师目标价 + 评级变动。\n学术基础: Ramnath et al. (2008) forecast revision premium\n数据源: yfinance analyst data。",
+      "yfinance 共识评级 [-2,+2] + 目标价 upside [-1,+1] 平均。\n学术: So (2013, JFE) 《Predicting Analyst Forecast Errors》 — 评级 *变动* 比 *水平* 含更多 alpha (revision-momentum, Phase X 待实施) + Engelberg-McLean-Pontiff (2018, JoF) 《Anomalies and News》 + Womack (1996) 历史锚。\n数据: yfinance .info recommendationKey + targetMeanPrice。",
     "signal_tooltip.earnings":
-      "盈余意外 + PEAD (post-earnings-announcement drift)。\n学术基础: Bernard-Thomas (1989), Foster et al. (1984)\n数据源: yfinance earnings dates。",
+      "Surprise × proximity-decay。Surprise 用 Foster-Olsen-Shevlin (1984) SUE 标准化:除以 ≥4 季度历史 surprise std (floor 0.05),sparse-history 回退到 0.20 cap。\n学术: Hartzmark-Shue (2018, JoF) 《Tough Act to Follow》 对比效应 (Phase X 加 peer-mean 调整) + Foster-Olsen-Shevlin (1984) SUE 教科书标准 + Ball-Brown (1968) PEAD 经典。\n数据: yfinance Ticker.earnings_dates + .calendar。",
     "signal_tooltip.news":
-      "新闻情绪 (Tetlock 加权)。\nLLM-as-Judge 12 桶 (4 impact × 3 direction) + Loughran-McDonald 字典 fallback\n学术基础: Tetlock (2007), Loughran-McDonald (2011)\n数据源: news_items 表 (Finnhub/FMP/Yahoo)。",
+      "24h 新闻按 Tetlock-style 离散桶加权:impact ∈ {0, 0.3, 0.7, 1.0} × direction ∈ {-1, 0, +1}。LLM-as-Judge 优先,Loughran-McDonald 字典 fallback。\n学术: Ke-Kelly-Xiu (2019, NBER 26186) SESTM (Sentiment Extraction via Screening and Topic Modeling) 优于 LM 字典,3x long-short Sharpe 在 Dow Jones Newswires — 现代 sentiment 锚 + Lopez-Lira-Tang (2023, arXiv) GPT-4 头条 sentiment 超越 FinBERT (Phase X TBD swap) + Tetlock (2007) 历史锚。\n数据: news_items 表 (Finnhub/FMP/Yahoo RSS,BYOK 模式下 Finnhub/FMP graceful skip 无 key)。",
     "signal_tooltip.insider":
-      "SEC Form 4 内部人交易。\n区分常规交易 vs 机会主义交易,后者预测能力更强\n学术基础: Cohen-Malloy-Pomorski (2012) \"Decoding Inside Information\"\n数据源: SEC EDGAR。",
+      "SEC Form 4 30d 净美元价值的 sigmoid。\n学术: Cohen-Malloy-Pomorski (2012, JoF) 《Decoding Inside Information》 — 区分 routine (可预测无信息, alpha ≈ 0) vs opportunistic (不规律时点,~10%/年 alpha, ~82bps/月)。Phase X 加入分类器 + Alldredge-Cicero (2015) 注意力优化 + Seyhun (1986/1998) / Lakonishok-Lee (2001) 历史锚。\n数据: SEC EDGAR。",
     "signal_tooltip.options":
-      "隐含波动率 skew + 看跌/看涨比率。\n学术基础: Bali-Hovakimian (2009) IV-RV spread\n数据源: yfinance options chain。",
+      "Put/Call volume ratio + IV percentile (后者 placeholder)。\n学术: Cremers-Weinbaum (2010, JFQA) 《Deviations from Put-Call Parity》 — IV_call - IV_put ATM spread 比裸 PCR 更干净, ~50bps/周 long-short alpha。Phase X 用 vs (volatility spread) 替换 IV percentile + Xing-Zhang-Zhao (2010) smirk 替代 + Pan-Poteshman (2006) 历史 PCR 锚。\n数据: yfinance options chain。",
     "signal_tooltip.premarket":
-      "盘前交易量 + 价格 gap。\n衡量隔夜消息引起的开盘异动\n数据源: yfinance pre-market bars。",
+      "(preMarketPrice − prevClose) / ATR14, 衡量隔夜消息定价进开盘的强度。\n学术: Berkman-Koch-Tuttle-Zhang (2012, JFQA) 《Paying Attention》 — 系统化拆解 overnight 与 intraday 收益, 验证 pre-market gap 持续性 + Lou-Polk-Skouras (2019, JFE) 《Tug of War》 美股 premium 几乎全在隔夜段 + Bogousslavsky (2021, JFE) momentum 是隔夜现象, reversal 是日内现象。\n数据: yfinance pre-market bars (仅 9:30 ET 前有效)。",
     "signal_tooltip.macro":
-      "宏观波动率指标 (VIX, 行业 ETF spread)。\n学术基础: French-Schwert-Stambaugh (1987) volatility risk premium\n数据源: yfinance market data。",
+      "DGS10-DGS2 yield curve slope + DXY z + VIX z 等权 tanh。\n学术: Adrian-Crump-Moench (2013, JFE) 《Pricing the Term Structure》 — ACM 分解将 10Y-2Y 拆为 expected-policy-rate vs term-premium,后者预测能力更强;Phase X 换 ACM term premium z + Chicago Fed NFCI 金融条件覆盖 + Baker-Bloom-Davis (2016, QJE) EPU 政策不确定指数 + Bauer-Swanson (2023, AER) FOMC 效应。\n数据: FRED 数据快照 + 每日 lru_cache 刷新。",
     "signal_tooltip.calendar":
-      "日历效应 (FOMC 临近、季节性、期权到期)。\n学术基础: Heston-Sadka (2008) seasonality\n数据源: 静态日历表 + Fed/FOMC schedule。",
+      "FOMC 临近 / 季节性 / 期权到期等事件邻近性的复合。\n学术: Heston-Sadka (2008) seasonality 锚。\n数据: 静态日历表 + Fed/FOMC schedule。",
     "signal_tooltip.political_impact":
-      "政治事件影响 (Trump truth posts / Fed / OFAC)。\nLLM 抽取 ticker-event linkage,Tetlock 加权汇总\n学术基础: Wagner-Zeckhauser-Ziegler (2018) JFE\n数据源: macro_events 表 (truth_social / fed_rss / ofac_rss)。",
+      "macro_events 表 7d 窗口内 ticker 出现的政治事件,Tetlock-style 桶加权。\n学术: Baker-Bloom-Davis (2016, QJE 131(4)) 《Measuring Economic Policy Uncertainty》 — EPU 指数, Fed/IMF/BIS 标准, daily 更新 policyuncertainty.com + Hassan-Hollander-vanLent-Tahoun (2019, QJE 134(4)) 《Firm-Level Political Risk》 — earnings-call NLP 抽取公司级政治风险, firmlevelrisk.com + Manela-Moreira (2017, JFE) NVIX 尾部风险 + Wagner-Zeckhauser-Ziegler (2018, JFE) 政治事件对个股影响 + Tetlock (2007) 离散桶加权。\nPhase X TBD: 加入 firm-EPU beta 回归 z = 0.5 * tetlock + 0.5 * (-beta * delta_EPU_z)。\n数据: macro_events 表 (truth_social / fed_rss / ofac_rss)。",
     /* RichThesis additional */
     "rich.stop_button": "停止",
     /* SourcesBlock */
@@ -1375,27 +1375,27 @@ const translations = {
       "Position size as % of portfolio.\nFormula: Kelly_fraction × confidence, clipped to [1%, 10%]\nBet sizing scales with signal confidence to avoid over-concentration.",
     /* Signal row tooltips (AttributionTable) */
     "signal_tooltip.factor":
-      "22-factor zoo cross-sectional z-score (momentum, value, size, quality, low-vol).\nBacking: Fama-French 3/5-factor (1992/1993), Hou-Xue-Zhang q-factor (2015).\nSource: factor_engine, refreshed daily.",
+      "Cross-sectional momentum-minus-vol z-score. Active mode controlled by the toggle in the page header: SHORT (12d momentum + 60d vol, suited for swing/intraday — same time horizon as the news/technicals/premarket legs) or LONG (252d + 126d, suited for monthly-quarterly holding).\nBacking: Jegadeesh-Titman (1993) momentum + Asness-Moskowitz-Pedersen (2013) \"Value & Momentum Everywhere\" + Daniel-Moskowitz (2016) \"Momentum Crashes\" risk management + Frazzini-Pedersen (2014) \"Betting Against Beta\" low-vol defensive overlay.\nSource: factor_engine, refreshed every cron run.",
     "signal_tooltip.technicals":
-      "Multi-indicator quorum vote (RSI/MACD/Stochastic).\nBacking: Jegadeesh-Titman (1993) momentum.\nSource: yfinance daily bars.",
+      "Equal-weight tanh-z composite of RSI(14) + MACD + ATR/price + 50d/200d MA distance.\nBacking: Han-Yang-Zhou (2013, JFQA) \"A New Anomaly: TA Profitability\" — MA-based trend signals deliver alpha on low-price/illiquid US stocks + Neely-Rapach-Tu-Zhou (2014, Mgmt Sci) TA improves equity-premium forecasts beyond macro vars + Moskowitz-Ooi-Pedersen (2012) \"Time Series Momentum\" (MA50/200 are TSMOM proxies).\nSource: yfinance daily OHLCV.",
     "signal_tooltip.analyst":
-      "Analyst target price + rating revisions.\nBacking: Ramnath et al. (2008) forecast revision premium.\nSource: yfinance analyst data.",
+      "yfinance consensus recommendation mapped to [-2,+2] + target upside [-1,+1], averaged.\nBacking: So (2013, JFE) \"Predicting Analyst Forecast Errors\" — *changes* in forecasts (revision-momentum) carry more alpha than *levels*; Phase X adds target-revision term + Engelberg-McLean-Pontiff (2018, JoF) \"Anomalies and News\" + Womack (1996) historical anchor.\nSource: yfinance .info recommendationKey + targetMeanPrice.",
     "signal_tooltip.earnings":
-      "Earnings surprise + post-earnings-announcement drift (PEAD).\nBacking: Bernard-Thomas (1989), Foster et al. (1984).\nSource: yfinance earnings dates.",
+      "Surprise × proximity-decay. Surprise standardized via Foster-Olsen-Shevlin (1984) SUE: divided by ≥4q historical surprise std (floored at 0.05), fallback to 0.20 cap when history is sparse.\nBacking: Hartzmark-Shue (2018, JoF) \"Tough Act to Follow\" contrast effects (Phase X adds peer-mean adjustment) + Foster-Olsen-Shevlin (1984) textbook SUE standard + Ball-Brown (1968) PEAD foundational.\nSource: yfinance Ticker.earnings_dates + .calendar.",
     "signal_tooltip.news":
-      "News sentiment (Tetlock-weighted).\nLLM-as-Judge 12-bucket (4 impact × 3 direction) + Loughran-McDonald dictionary fallback.\nBacking: Tetlock (2007), Loughran-McDonald (2011).\nSource: news_items table (Finnhub/FMP/Yahoo).",
+      "24h news weighted via Tetlock-style discrete buckets: impact ∈ {0, 0.3, 0.7, 1.0} × direction ∈ {-1, 0, +1}. LLM-as-Judge primary, Loughran-McDonald dictionary fallback.\nBacking: Ke-Kelly-Xiu (2019, NBER 26186) SESTM (Sentiment Extraction via Screening and Topic Modeling) — beats LM dictionary by ~3x long-short Sharpe on Dow Jones Newswires (modern sentiment anchor) + Lopez-Lira-Tang (2023, arXiv) GPT-4 headline sentiment beats FinBERT (Phase X TBD swap) + Tetlock (2007) historical anchor.\nSource: news_items table (Finnhub/FMP/Yahoo RSS; Finnhub/FMP gracefully skipped if no platform API key under BYOK).",
     "signal_tooltip.insider":
-      "SEC Form 4 insider transactions.\nDistinguishes routine vs opportunistic trades; the latter has stronger predictive power.\nBacking: Cohen-Malloy-Pomorski (2012) \"Decoding Inside Information\".\nSource: SEC EDGAR.",
+      "SEC Form 4 30d net dollar value, sigmoid normalized.\nBacking: Cohen-Malloy-Pomorski (2012, JoF) \"Decoding Inside Information\" — distinguishes routine (predictable, no info, alpha ≈ 0) vs opportunistic (irregular timing, ~10%/yr alpha, ~82bps/mo). Phase X adds classifier + Alldredge-Cicero (2015) attentive insider refinement + Seyhun (1986/1998) / Lakonishok-Lee (2001) historical anchors.\nSource: SEC EDGAR.",
     "signal_tooltip.options":
-      "Implied volatility skew + put-call ratio.\nBacking: Bali-Hovakimian (2009) IV-RV spread.\nSource: yfinance options chain.",
+      "Put/call volume ratio + IV percentile (placeholder).\nBacking: Cremers-Weinbaum (2010, JFQA) \"Deviations from Put-Call Parity\" — IV_call - IV_put ATM spread is cleaner than raw PCR, ~50bps/wk long-short alpha. Phase X replaces IV percentile with the volatility-spread (vs = IV_call_ATM - IV_put_ATM) + Xing-Zhang-Zhao (2010) smirk alternative + Pan-Poteshman (2006) historical PCR anchor.\nSource: yfinance options chain.",
     "signal_tooltip.premarket":
-      "Pre-market trading volume + price gap.\nMeasures overnight news-driven opening dislocations.\nSource: yfinance pre-market bars.",
+      "(preMarketPrice − prevClose) / ATR14, measures overnight news pricing-in at the open.\nBacking: Berkman-Koch-Tuttle-Zhang (2012, JFQA) \"Paying Attention\" — systematic overnight vs intraday return decomposition, validates premarket gap persistence + Lou-Polk-Skouras (2019, JFE) \"Tug of War\" US equity premium is almost entirely overnight + Bogousslavsky (2021, JFE) momentum is overnight, reversal is intraday.\nSource: yfinance pre-market bars (only meaningful pre 9:30 ET).",
     "signal_tooltip.macro":
-      "Macro volatility indicators (VIX, sector ETF spreads).\nBacking: French-Schwert-Stambaugh (1987) volatility risk premium.\nSource: yfinance market data.",
+      "Equal-weight tanh of DGS10-DGS2 yield curve slope + DXY z + VIX z.\nBacking: Adrian-Crump-Moench (2013, JFE) \"Pricing the Term Structure\" — ACM decomposes 10Y-2Y into expected-policy-rate vs term-premium; the latter has stronger predictive power. Phase X swaps slope for ACM term-premium z + Chicago Fed NFCI financial conditions overlay + Baker-Bloom-Davis (2016, QJE) EPU policy uncertainty + Bauer-Swanson (2023, AER) FOMC effect.\nSource: FRED snapshot + daily lru_cache refresh.",
     "signal_tooltip.calendar":
-      "Calendar effects (FOMC proximity, seasonality, options expiry).\nBacking: Heston-Sadka (2008) seasonality.\nSource: static calendar table + Fed/FOMC schedule.",
+      "Composite of FOMC proximity / seasonality / options expiry event proximity.\nBacking: Heston-Sadka (2008) seasonality anchor.\nSource: static calendar table + Fed/FOMC schedule.",
     "signal_tooltip.political_impact":
-      "Political event impact (Trump truths / Fed / OFAC).\nLLM extracts ticker-event linkage, Tetlock-weighted aggregation.\nBacking: Wagner-Zeckhauser-Ziegler (2018) JFE.\nSource: macro_events table (truth_social / fed_rss / ofac_rss).",
+      "macro_events table 7d-window political events where the ticker appears, Tetlock-style bucket-weighted.\nBacking: Baker-Bloom-Davis (2016, QJE 131(4)) \"Measuring Economic Policy Uncertainty\" — EPU index, Fed/IMF/BIS standard, daily-updated at policyuncertainty.com + Hassan-Hollander-vanLent-Tahoun (2019, QJE 134(4)) \"Firm-Level Political Risk\" — earnings-call NLP extracts firm-level political risk, firmlevelrisk.com + Manela-Moreira (2017, JFE) NVIX tail-risk + Wagner-Zeckhauser-Ziegler (2018, JFE) political-event impact on individual stocks + Tetlock (2007) discrete-bucket weighting.\nPhase X TBD: add firm-EPU beta regression term z = 0.5 * tetlock + 0.5 * (-beta * delta_EPU_z).\nSource: macro_events table (truth_social / fed_rss / ofac_rss).",
     /* RichThesis additional */
     "rich.stop_button": "Stop",
     /* SourcesBlock */

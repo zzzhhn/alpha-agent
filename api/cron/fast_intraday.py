@@ -151,6 +151,28 @@ async def handler(
     else:
         universe = base_universe
 
+    # Phase 2 dual-factor: compute LONG_TERM mode universe-wide ONCE per
+    # shard (panel load + cross-section eval are universe-level operations,
+    # not per-ticker). The SHORT mode value flows through normally as
+    # factor.z; we patch z_long into breakdown.raw post-combine so the
+    # picks lean endpoint can offer a ?mode=long re-rank without recomputing.
+    # Best-effort: if long eval fails, z_long stays absent and the UI
+    # gracefully falls back to single-mode display.
+    long_factor_scores: dict[str, float] = {}
+    if "factor" in tier_modules:
+        try:
+            from alpha_agent.signals.factor import (
+                LONG_TERM_FACTOR_EXPR, _evaluate_for_universe,
+            )
+            long_factor_scores = _evaluate_for_universe(
+                now, expr=LONG_TERM_FACTOR_EXPR,
+            )
+        except Exception as exc:
+            errors.append({
+                "ticker": "_UNIVERSE_",
+                "err": f"long_factor_eval_failed: {type(exc).__name__}: {exc}"[:200],
+            })
+
     async def _per_ticker(t: str) -> str:
         # Fetch fresh signals for this tier first (slow IO, no DB held).
         # Modules expose either sync fetch_signal or async afetch_signal;
@@ -223,6 +245,19 @@ async def handler(
             "composite_score": result.composite,
             "breakdown": result.breakdown,
         }
+
+        # Phase 2 dual-factor patch: attach z_long to factor breakdown raw so
+        # picks lean endpoint can re-rank on mode=long without recompute.
+        if t in long_factor_scores:
+            for bd_entry in result.breakdown:
+                if bd_entry.get("signal") == "factor":
+                    raw = bd_entry.get("raw")
+                    if isinstance(raw, dict):
+                        raw["z_long"] = float(long_factor_scores[t])
+                        # Also stash z_short = current z explicitly for clarity;
+                        # frontend can read either without inferring active mode.
+                        raw["z_short"] = float(bd_entry.get("z") or 0.0)
+                    break
 
         await upsert_signal_fast(
             pool, t, today, result.composite, rating, confidence,
