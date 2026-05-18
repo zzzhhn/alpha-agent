@@ -1,5 +1,26 @@
 """Insider trading signal from SEC EDGAR Form 4 last 30 days.
-Net dollar value (purchases - sales); sigmoid normalized."""
+Net dollar value (purchases - sales); sigmoid normalized.
+
+Academic anchors (added 2026-05-18):
+- Primary modern reference: Cohen, Malloy, Pomorski (2012, JoF 67(3))
+  "Decoding Inside Information" — distinguishes *routine* (predictable,
+  scheduled, no info) from *opportunistic* (irregular timing, info-loaded)
+  insider trades. Opportunistic buys earn ~10%/yr alpha; routine trades
+  earn ~0. Our current aggregation mixes both and dilutes signal.
+- Attention refinement: Alldredge & Cicero (2015, JFE 115(1)) "Attentive
+  Insider Trading" — insiders monitoring outside info generate larger
+  profits; refinable with premium SEC EDGAR access logs.
+- Firm-level trait: Ali & Hirshleifer (2017, JFE 126(3)) "Opportunism as
+  a Firm and Managerial Trait" — firm-level opportunism score complements
+  per-trade classification.
+- Historical anchors: Seyhun (1986, JFE; 1998 book "Investment
+  Intelligence from Insider Trading") foundational US insider alpha;
+  Lakonishok & Lee (2001, RFS 14(1)) systematic insider sort returns.
+
+Phase X TBD: add routine-vs-opportunistic classifier — simplest version
+flags an insider as "routine" if their trade-month-of-year SD < threshold
+(trades cluster in same calendar months). Score:
+  z = tanh(opportunistic_net / 500k) + 0.3 * tanh(routine_net / 1M)"""
 from __future__ import annotations
 
 from datetime import datetime

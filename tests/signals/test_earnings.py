@@ -57,3 +57,45 @@ def test_no_upcoming_calendar_returns_null_fields():
     assert out["raw"]["surprise_pct"] > 0
     assert out["raw"]["next_date"] is None
     assert out["raw"]["eps_estimate"] is None
+
+
+def test_sue_uses_historical_std_when_4q_available():
+    """Regression for Foster-Olsen-Shevlin SUE: with 4+ quarters of low-vol
+    surprise history (sigma ≈ 0.05), a +20% surprise should now score much
+    higher than under the legacy 0.20 cap. Without history, fallback to
+    0.20 preserves prior behavior."""
+    info = {"epsActual": 1.20, "epsEstimate": 1.00}
+    # 5 prior quarters with tiny ±2% surprises → sigma ≈ 0.02 (floored to 0.05)
+    quarterly_dates = pd.DatetimeIndex(
+        [datetime.now(UTC) - timedelta(days=90 * i) for i in range(5)]
+    )
+    edates = pd.DataFrame(
+        {
+            "Reported EPS": [1.20, 1.02, 0.98, 1.02, 0.99],
+            "EPS Estimate": [1.00, 1.00, 1.00, 1.00, 1.00],
+        },
+        index=quarterly_dates,
+    )
+    with patch("alpha_agent.signals.earnings.get_ticker",
+               return_value=_ticker_mock(info, edates, None)):
+        out = fetch_signal("AAPL", datetime.now(UTC))
+    # +20% surprise with sigma_floor=0.05 → SUE = 4.0 (clipped to 3.0)
+    # vs legacy 0.20 cap → SUE = 1.0. New score must be meaningfully higher.
+    assert out["z"] > 1.5, (
+        f"SUE-standardized z should be >1.5 with low historical sigma, got {out['z']}"
+    )
+
+
+def test_sue_falls_back_to_legacy_cap_when_sparse_history():
+    """One quarter of history → not enough for SUE → uses 0.20 fallback,
+    preserving legacy behavior (z ≈ 0.7 = 1.0 * exp(-5/14))."""
+    info = {"epsActual": 1.20, "epsEstimate": 1.00}
+    edates = pd.DataFrame(
+        {"Reported EPS": [1.20], "EPS Estimate": [1.00]},
+        index=pd.DatetimeIndex([datetime.now(UTC) - timedelta(days=5)]),
+    )
+    with patch("alpha_agent.signals.earnings.get_ticker",
+               return_value=_ticker_mock(info, edates, None)):
+        out = fetch_signal("AAPL", datetime.now(UTC))
+    # surprise/0.20 = 1.0, proximity = exp(-5/14) ≈ 0.70, z ≈ 0.70
+    assert 0.5 < out["z"] < 0.9, f"Legacy cap should give z≈0.70, got {out['z']}"

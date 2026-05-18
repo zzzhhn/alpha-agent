@@ -23,9 +23,23 @@ Methodology (Phase 6a spec):
      0.5 if some LLM and some LM fallback
      0.3 if pure LM fallback or zero events
 
-Citation: Wagner-Zeckhauser-Ziegler (2018) JFE for political-event impact
-on individual stock returns; Tetlock (2007) for the discrete-bucket
-weighting; Loughran-McDonald (2011) for the dictionary fallback.
+Academic anchors (2020-2025 modernization, 2026-05-18):
+- Primary modern reference: Baker, Bloom, Davis (2016, QJE 131(4)) "Measuring
+  Economic Policy Uncertainty" — EPU index is the institutional standard
+  (Fed/IMF/BIS), daily-updated free download at policyuncertainty.com.
+- Firm-level political risk: Hassan, Hollander, van Lent, Tahoun (2019, QJE
+  134(4)) "Firm-Level Political Risk: Measurement and Effects" — earnings-call
+  NLP extracts firm-specific political risk; data at firmlevelrisk.com.
+- Tail-risk proxy: Manela & Moreira (2017, JFE 123(1)) "News Implied
+  Volatility and Disaster Concerns" — NVIX complements EPU for tail events.
+- Historical anchors: Wagner-Zeckhauser-Ziegler (2018, JFE) political-event
+  impact on individual stock returns; Tetlock (2007, JoF) discrete-bucket
+  weighting; Loughran-McDonald (2011, JoF) dictionary fallback.
+
+Phase X TBD: add a beta-to-EPU regression term:
+  z = 0.5 * tetlock_bucket_score + 0.5 * (-firm_epu_beta * delta_epu_z)
+where the negative sign captures EPU shock pricing (high-EPU-beta names
+underperform on positive EPU innovations).
 """
 from __future__ import annotations
 

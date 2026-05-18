@@ -7,6 +7,24 @@ Sub-indicators (each z-scored cross-section, then equal-weighted):
   - 50d MA distance: short-term trend
   - 200d MA distance: long-term trend
 Spec §3.1 weight 0.20.
+
+Academic anchors (added 2026-05-18):
+- Primary defense of TA: Han, Yang, Zhou (2013, JFQA 48(5)) "A New Anomaly:
+  The Cross-Sectional Profitability of Technical Analysis" — MA-based trend
+  signals deliver economically large alpha on low-priced/illiquid US stocks.
+  Validates the MA50/MA200 distance components specifically.
+- TA-improves-forecasts: Neely, Rapach, Tu, Zhou (2014, Mgmt Sci 60(7))
+  "Forecasting the Equity Risk Premium: The Role of Technical Indicators"
+  — TA indicators improve equity-premium forecasts beyond macro variables.
+- Time-series momentum framing: Moskowitz, Ooi, Pedersen (2012, JFE 104(2))
+  "Time Series Momentum" — MA50/MA200 distance terms are essentially TSMOM
+  proxies; cite this if reframing the trend components.
+
+Phase X TBD: (a) drop ATR from the cross-sectional z (ATR is more useful as
+position-sizing input than alpha component — Carver 2015 "Systematic Trading",
+Pedersen 2015 "Efficiently Inefficient"). (b) Replace RSI(14) with a
+1-month reversal signal (Jegadeesh 1990, JoF; Lehmann 1990, QJE) which has
+stronger academic backing for short-horizon mean-reversion.
 """
 from __future__ import annotations
 

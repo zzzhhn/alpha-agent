@@ -22,8 +22,23 @@ Backward compat:
 - Public sync entry stays fetch_signal(ticker, as_of) per signals.base
   contract; used by cli/build_card.py registry.
 
-Citations: Tetlock (2007) JoF for discrete-bucket weighting;
-Loughran-McDonald (2011) JoF for the financial dictionary fallback.
+Academic anchors (2020-2025 modernization, 2026-05-18):
+- Primary modern reference: Ke, Kelly, Xiu (2019, NBER WP 26186) "Predicting
+  Returns with Text Data" introduces SESTM (Supervised Sentiment Extraction
+  via Screening + Topic Modeling), which outperforms the LM dictionary on
+  Dow Jones Newswires by ~3x long-short Sharpe. Direct successor to Tetlock.
+- LLM-era successor: Lopez-Lira & Tang (2023, SSRN 4412788) "Can ChatGPT
+  Forecast Stock Price Movements?" — first evidence that GPT-3.5/4 headline
+  sentiment beats both LM and FinBERT on US cross-section.
+- Practical baseline: Araci (2019, arXiv:1908.10063) "FinBERT" — open-source
+  BERT fine-tuned on Financial PhraseBank; deterministic alternative to GPT.
+- Historical anchors: Tetlock (2007, JoF) discrete-bucket weighting;
+  Loughran-McDonald (2011, JoF) financial dictionary (used as LM fallback).
+
+Phase X TBD: replace LM dictionary fallback with FinBERT (HuggingFace
+ProsusAI/finbert) or SESTM-style supervised vocabulary screening on our own
+news_items + realized-return labels. Both require either (a) new heavy ML
+dependency on Vercel lambda or (b) a dedicated inference microservice.
 """
 from __future__ import annotations
 

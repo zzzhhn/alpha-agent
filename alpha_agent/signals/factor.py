@@ -3,6 +3,19 @@
 The "value" we expose as z is the cross-sectional z-score of the
 default composite factor (Pure-Alpha pick from spec §3.1: weight 0.30).
 
+Academic anchors (2020-2025 modernization, 2026-05-18):
+- Momentum leg: Jegadeesh-Titman (1993) classic, refined as 12-1 in
+  Asness-Moskowitz-Pedersen (2013, JoF) "Value & Momentum Everywhere".
+- Vol leg: Frazzini-Pedersen (2014, JFE) "Betting Against Beta" formalizes
+  the defensive premium; Daniel-Moskowitz (2016, JFE) "Momentum Crashes"
+  motivates the 6-month vol scaling that crash-hedges momentum strategies.
+- Composite construction philosophy: Asness-Frazzini-Pedersen (2013) JFE
+  "The Devil in HML's Details" — discusses rank-then-combine vs raw-then-z
+  trade-offs that our rank()/subtract pattern follows.
+- Phase X TBD upgrades (deferred until operator + data infra extends):
+  Asness-Frazzini-Pedersen (2019, RAR) "Quality Minus Junk" for a QMJ
+  factor leg; Hou-Xue-Zhang (2015, RFS) q-factor for composite weighting.
+
 M4a: raw payload upgraded from `float` (just the z score) to
 `{z: float, fundamentals: dict | None}` so FundamentalsBlock has real
 P/E, market cap, dividend yield etc. to render without a separate
@@ -17,10 +30,30 @@ import numpy as np
 from alpha_agent.signals.base import SignalScore, safe_fetch
 from alpha_agent.signals.yf_helpers import extract_fundamentals, get_ticker
 
-# Use function-call form (subtract) instead of infix `-` because the factor
-# engine AST only accepts function calls, not BinOp nodes. Production cron
-# was silently producing factor.raw=null until M4a F1 smoke caught this.
-DEFAULT_FACTOR_EXPR = "subtract(rank(ts_mean(returns, 12)), rank(ts_std(returns, 60)))"
+# Default composite expression.
+#
+# Methodology (updated 2026-05-18 from 12d/60d short-term reversal blend to
+# 12-month risk-managed momentum):
+#   - 252-day momentum (12 months, the academic standard from Jegadeesh-Titman
+#     1993 and refined in Asness-Moskowitz-Pedersen 2013 "Value & Momentum
+#     Everywhere"). The classic 12-1 skips the most recent month to dodge
+#     1-month reversal contamination; the AST has no `ts_delay` skip helper
+#     wired into this expression yet, so we use plain 12m mean as Phase 1.
+#   - 126-day volatility (6 months, matching the vol-scaling window in
+#     Daniel-Moskowitz 2016 "Momentum Crashes" risk-managed momentum). The
+#     rank-vol leg acts as the Frazzini-Pedersen 2014 BAB-style defensive
+#     overlay — high-vol names get penalized so the composite is partially
+#     crash-hedged.
+#
+# Function-call form (subtract/rank/ts_mean/ts_std) is required because the
+# factor engine AST only accepts function calls, not BinOp nodes. Production
+# cron was silently producing factor.raw=null until M4a F1 smoke caught this.
+#
+# Phase X TBD: swap to true DM-2016 risk-managed momentum via a `ts_delay`-
+# wrapped 12m signal divided by ex-ante vol forecast, plus an Asness-Frazzini-
+# Pedersen 2019 Quality-Minus-Junk leg. Both need new operator support
+# (ts_delay in expression DSL + quality-factor data feed).
+DEFAULT_FACTOR_EXPR = "subtract(rank(ts_mean(returns, 252)), rank(ts_std(returns, 126)))"
 
 
 def _evaluate_for_universe(as_of: datetime, expr: str = DEFAULT_FACTOR_EXPR) -> dict[str, float]:

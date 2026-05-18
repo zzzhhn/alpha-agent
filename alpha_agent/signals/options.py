@@ -1,4 +1,26 @@
-"""Options sentiment from put/call volume ratio + IV percentile."""
+"""Options sentiment from put/call volume ratio + IV percentile.
+
+Academic anchors (added 2026-05-18):
+- Primary modern reference: Cremers & Weinbaum (2010, JFQA 45(2))
+  "Deviations from Put-Call Parity and Stock Return Predictability" —
+  volatility spread (IV_call - IV_put for matched ATM strikes) is
+  theoretically cleaner than raw PCR. Under put-call parity it should be
+  zero; persistent deviation indicates directional information. Long-short
+  on IV spread earns ~50bps/month alpha. Tractable from yfinance option_chain.
+- Skew-based alternative: Xing, Zhang, Zhao (2010, JFQA 45(3)) "What Does
+  the Individual Option Volatility Smirk Tell Us?" — OTM put skew predicts
+  negative returns; needs wide option chain to compute reliably.
+- Companion triangulation: Bali & Hovakimian (2009, Mgmt Sci 55(11))
+  "Volatility Spreads and Expected Stock Returns" — replicates CW 2010 on
+  different sample.
+- Historical anchor: Pan & Poteshman (2006, RFS 19(3)) "The Information in
+  Option Volume for Future Stock Prices" foundational PCR predictability.
+
+Phase X TBD: replace placeholder IV-percentile term with Cremers-Weinbaum
+volatility spread. New composite:
+  z = 0.4 * (-pcr_z) + 0.6 * tanh(vs / 0.02)
+where vs = mean(IV_call_ATM - IV_put_ATM) for nearest-expiry ATM strikes.
+"""
 from __future__ import annotations
 
 from datetime import datetime
