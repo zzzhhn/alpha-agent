@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MousePointerClick } from "lucide-react";
 import { fetchOhlcv, type OhlcvBar } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
@@ -150,9 +151,19 @@ export default function PriceChart({ ticker }: { ticker: string }) {
 
   return (
     <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
-      <h2 className="text-lg font-semibold mb-3 text-tm-fg">
-        {t(locale, "chart.title")} · {ticker}
-      </h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-tm-fg">
+          {t(locale, "chart.title")} · {ticker}
+        </h2>
+        {status === "ok" ? (
+          <div className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/30 bg-tm-accent/10 px-2.5 py-1 text-sm text-tm-accent">
+            <MousePointerClick className="h-4 w-4" strokeWidth={1.75} />
+            <span className="font-medium">
+              {t(locale, "chart.click_for_intraday")}
+            </span>
+          </div>
+        ) : null}
+      </div>
       {/* Fixed-height parent: lightweight-charts reads offsetWidth/Height at
           init; collapsing to 0 in a flex/grid parent kills the canvas
           (CLAUDE.md memory feedback_recharts_responsive_container_zero_width.md). */}
@@ -172,11 +183,6 @@ export default function PriceChart({ ticker }: { ticker: string }) {
         ) : null}
         <div ref={containerRef} style={{ width: "100%", height: "100%", display: status === "ok" ? "block" : "none" }} />
       </div>
-      {status === "ok" ? (
-        <p className="mt-2 text-xs text-tm-muted">
-          {t(locale, "chart.click_for_intraday")}
-        </p>
-      ) : null}
       <IntradayDrawer
         ticker={ticker}
         date={drawerDate}

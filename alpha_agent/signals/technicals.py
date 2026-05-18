@@ -59,12 +59,21 @@ def _fetch(ticker: str, as_of: datetime) -> SignalScore:
             error=f"insufficient history ({len(df)} rows)",
         )
     close = df["Close"]
+    atr_dollar = _atr(df)
+    current_price = float(close.iloc[-1])
     components = {
         "rsi": _rsi(close),
         "macd": _macd_hist(close),
-        "atr": _atr(df) / float(close.iloc[-1]),
-        "ma50_dist": float(close.iloc[-1] / close.rolling(50).mean().iloc[-1] - 1),
-        "ma200_dist": float(close.iloc[-1] / close.rolling(200).mean().iloc[-1] - 1),
+        # `atr` is kept as a ratio for the atr_z formula (tanh(ratio*50)).
+        # `atr_dollar` + `current_price` are the dollar-unit fields the
+        # ActionBox frontend consumes to compute entry/stop/target. Before
+        # 2026-05-18 only the ratio was exposed; deriveActionBox treated it
+        # as dollars and entry/stop differed by cents not $-units.
+        "atr": atr_dollar / current_price,
+        "atr_dollar": atr_dollar,
+        "current_price": current_price,
+        "ma50_dist": float(current_price / close.rolling(50).mean().iloc[-1] - 1),
+        "ma200_dist": float(current_price / close.rolling(200).mean().iloc[-1] - 1),
     }
     rsi_z = (components["rsi"] - 50) / 20
     macd_z = np.tanh(components["macd"] / max(close.std(), 1e-6))

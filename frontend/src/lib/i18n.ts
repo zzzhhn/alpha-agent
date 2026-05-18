@@ -716,7 +716,7 @@ const translations = {
     "intraday.out_of_range": "分钟级历史仅保留最近 30 天",
     "intraday.loading": "加载中...",
     "intraday.error": "加载失败",
-    "chart.click_for_intraday": "点击 K 线查看分钟数据",
+    "chart.click_for_intraday": "点击任意 K 线 → 查看该日分钟走势",
   },
   en: {
     "stage.data": "Data Collection",
@@ -1424,7 +1424,7 @@ const translations = {
     "intraday.out_of_range": "Minute-level history limited to last 30 days",
     "intraday.loading": "Loading...",
     "intraday.error": "Failed to load",
-    "chart.click_for_intraday": "Click a candle for intraday minute bars",
+    "chart.click_for_intraday": "Click any candle → drill into intraday bars",
   },
 } as const;
 

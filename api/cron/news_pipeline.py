@@ -29,11 +29,19 @@ from alpha_agent.storage.postgres import get_pool
 
 
 def _per_ticker_aggregator() -> PerTickerAggregator:
-    return PerTickerAggregator([
-        FinnhubAdapter(api_key=os.environ["FINNHUB_API_KEY"]),
-        FMPAdapter(api_key=os.environ["FMP_API_KEY"]),
-        RSSAdapter(),
-    ])
+    # Graceful skip on missing API keys. The platform runs in BYOK mode for
+    # LLM calls (no global key by design — see feedback_byok_cron_architectural_tension.md);
+    # the same constraint applies to platform news adapters when an env var
+    # is intentionally unset. Hard `os.environ["X"]` raises KeyError → 500
+    # on every shard, silently leaving news_items empty (observed 2026-05-18).
+    # RSS has no key and is always included.
+    adapters: list = []
+    if finnhub_key := os.environ.get("FINNHUB_API_KEY"):
+        adapters.append(FinnhubAdapter(api_key=finnhub_key))
+    if fmp_key := os.environ.get("FMP_API_KEY"):
+        adapters.append(FMPAdapter(api_key=fmp_key))
+    adapters.append(RSSAdapter())
+    return PerTickerAggregator(adapters)
 
 
 def _macro_aggregator() -> MacroAggregator:

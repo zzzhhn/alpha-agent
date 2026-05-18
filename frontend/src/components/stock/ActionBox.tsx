@@ -11,7 +11,7 @@ export default function ActionBox({ card }: { card: RatingCard }) {
   const { locale } = useLocale();
   const action = useMemo(() => {
     const tech = card.breakdown.find((b) => b.signal === "technicals")?.raw as
-      | { atr?: number; current_price?: number }
+      | { atr?: number; atr_dollar?: number; current_price?: number }
       | undefined;
     const analyst = card.breakdown.find((b) => b.signal === "analyst")?.raw as
       | { target?: number; current?: number }
@@ -19,6 +19,7 @@ export default function ActionBox({ card }: { card: RatingCard }) {
     return deriveActionBox({
       currentPrice: tech?.current_price ?? analyst?.current ?? null,
       atr14: tech?.atr ?? null,
+      atrDollar: tech?.atr_dollar ?? null,
       analystTarget: analyst?.target ?? null,
       high180d: null,
       confidence:
