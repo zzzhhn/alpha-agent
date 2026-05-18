@@ -27,7 +27,7 @@ from typing import AsyncIterator
 from alpha_agent.api.byok import _build_byok_client
 from alpha_agent.llm.base import Message
 
-SYSTEM_PROMPT = """You are a sober equity research analyst writing a brief for a retail trader.
+_SYSTEM_PROMPT_BASE = """You are a sober equity research analyst writing a brief for a retail trader.
 
 You will receive a JSON blob containing the latest signal breakdown for ONE ticker. Your job is to produce three sections in this exact order:
 
@@ -39,7 +39,34 @@ Strict rules:
 - If a field is null or missing in the breakdown, do NOT fabricate it. Say "data thin" or omit the bullet.
 - Do NOT recommend specific trades, position sizes, or stops. Stick to thesis quality.
 - Do NOT include any prefatory or closing commentary outside the three sections.
-- Format each section header as `[SUMMARY]`, `[BULL]`, `[BEAR]` on its own line so the client can split sections deterministically."""
+- Format each section header as `[SUMMARY]`, `[BULL]`, `[BEAR]` on its own line so the client can split sections deterministically.
+{language_directive}"""
+
+
+def _build_system_prompt(language: str) -> str:
+    """Inject a language directive at the bottom of the base prompt.
+
+    language="zh" → entire output in 简体中文 (section markers stay ASCII
+    so the client-side splitter remains deterministic). Anything else
+    defaults to English. Phase 312 (2026-05-19) bilingual feature; prior
+    SYSTEM_PROMPT constant remains exposed as the English default for any
+    external import.
+    """
+    if language == "zh":
+        directive = (
+            "- Write the SUMMARY, BULL, and BEAR section bodies in 简体中文. "
+            "Keep the `[SUMMARY]` / `[BULL]` / `[BEAR]` markers themselves "
+            "in ASCII so the client-side splitter still works. Numbers, "
+            "tickers, and field names stay in English."
+        )
+    else:
+        directive = "- Write everything in clear, professional English."
+    return _SYSTEM_PROMPT_BASE.format(language_directive=directive)
+
+
+# Back-compat: callers that imported the bare constant still get the English
+# prompt. The streamer below now resolves per-request via _build_system_prompt.
+SYSTEM_PROMPT = _build_system_prompt("en")
 
 _SECTION_MARKERS: tuple[tuple[str, str], ...] = (
     ("[SUMMARY]", "summary"),
@@ -98,12 +125,17 @@ async def stream_brief(
     breakdown: list[dict],
     model: str | None = None,
     base_url: str | None = None,
+    language: str = "en",
 ) -> AsyncIterator[dict]:
     """Async generator yielding {type, delta} dicts, terminated by {type: "done"}.
 
     Builds a per-request LLM client via the shared `_build_byok_client`
     router (so Kimi correctly bypasses LiteLLM), runs one `chat()` call, and
     emits the result as `summary`/`bull`/`bear` section events.
+
+    `language` ("zh" | "en") controls the language of the section bodies;
+    the [SUMMARY]/[BULL]/[BEAR] markers themselves stay ASCII so the
+    client-side splitter still works regardless of language.
 
     Raises:
         Upstream client errors propagate to the caller, which wraps them
@@ -116,7 +148,7 @@ async def stream_brief(
         model=model,
     )
     messages = [
-        Message(role="system", content=SYSTEM_PROMPT),
+        Message(role="system", content=_build_system_prompt(language)),
         Message(
             role="user",
             content=_build_user_prompt(ticker, rating, composite, breakdown),

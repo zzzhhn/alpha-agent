@@ -86,11 +86,24 @@ async def upsert_macro_events(
 async def update_news_item_llm(
     pool: asyncpg.Pool, item_id: int,
     sentiment_score: float | None, sentiment_label: str | None,
+    reasoning_text: str | None = None,
+    reasoning_lang: str | None = None,
 ) -> None:
+    """Persist the LLM-scored news_items row.
+
+    `reasoning_text` + `reasoning_lang` are V007 additions (2026-05-19) so
+    the per-headline LLM commentary can surface in the UI alongside the
+    sentiment dot. Both default to None for back-compat with callers that
+    haven't been updated.
+    """
     await pool.execute(
-        "UPDATE news_items SET sentiment_score=$1, sentiment_label=$2, "
-        "llm_processed_at=now() WHERE id=$3",
-        sentiment_score, sentiment_label, item_id,
+        "UPDATE news_items "
+        "SET sentiment_score=$1, sentiment_label=$2, "
+        "    reasoning_text=$3, reasoning_lang=$4, "
+        "    llm_processed_at=now() "
+        "WHERE id=$5",
+        sentiment_score, sentiment_label,
+        reasoning_text, reasoning_lang, item_id,
     )
 
 

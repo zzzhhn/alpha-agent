@@ -42,11 +42,14 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
   const onEnrich = async () => {
     setEnrich({ kind: "loading" });
     try {
-      const res = await enrichNewsForTicker(card.ticker);
+      // Pass the user's active locale so the LLM writes the reasoning
+      // text in zh or en matching the UI; otherwise a 中文 user gets
+      // English commentary by default.
+      const res = await enrichNewsForTicker(card.ticker, locale);
       setEnrich({ kind: "done", count: res.enriched });
       // Page reload is the robust path: parent layout refetches the stock
-      // card and any newly-enriched sentiment colours render. In-place
-      // splice is a follow-up polish, not required for correctness.
+      // card and any newly-enriched sentiment colours + reasoning_text
+      // render. In-place splice is a follow-up polish, not required.
       setTimeout(() => window.location.reload(), 1500);
     } catch (e) {
       if (e instanceof ApiException && e.status === 400) {
@@ -84,7 +87,7 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
           />
         ) : null}
       </div>
-      <ul className="space-y-2">
+      <ul className="space-y-3">
         {items.map((it) => (
           <li key={it.id} className="flex gap-2 text-sm">
             {it.sentiment_label ? (
@@ -107,6 +110,14 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
                 </span>
                 <span>{relativeTime(it.published_at, locale)}</span>
               </div>
+              {it.reasoning_text ? (
+                <p
+                  lang={it.reasoning_lang ?? undefined}
+                  className="mt-1 rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-2 py-1 text-xs leading-relaxed text-tm-fg-2"
+                >
+                  {it.reasoning_text}
+                </p>
+              ) : null}
             </div>
           </li>
         ))}

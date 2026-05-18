@@ -20,6 +20,11 @@ export type BriefEvent =
 
 export interface StreamBriefBody {
   model_override?: string;
+  // Phase 312 (2026-05-19): bilingual Rich Brief. RichThesis sends the
+  // user's active locale (or the in-component tab pick) so the LLM
+  // writes the brief in the matching language. Defaults to English at
+  // the backend when omitted.
+  language?: "zh" | "en";
 }
 
 export async function* streamBrief(

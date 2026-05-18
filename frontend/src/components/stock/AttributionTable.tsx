@@ -14,6 +14,8 @@ import {
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { useFactorMode } from "@/hooks/useFactorMode";
+import { applyFactorMode } from "@/lib/picks-mode";
 
 type SortKey = "signal" | "z" | "weight" | "contribution";
 
@@ -32,6 +34,7 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
   const [healthMap, setHealthMap] = useState<Record<string, SignalHealthEntry>>(
     {},
   );
+  const [factorMode, setFactorMode] = useFactorMode();
 
   useEffect(() => {
     let cancelled = false;
@@ -51,8 +54,17 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
     };
   }, []);
 
+  // Apply factor-mode swap before sort so contribution-sort respects the
+  // active mode. Picks endpoint already does composite re-rank server-side
+  // when invoked with ?mode=long, but the single-card /api/stock response
+  // does not — this swap is the per-component equivalent for stock detail.
+  const breakdownForMode = useMemo(
+    () => applyFactorMode(card.breakdown, factorMode),
+    [card.breakdown, factorMode],
+  );
+
   const sorted = useMemo(() => {
-    const out = [...card.breakdown];
+    const out = [...breakdownForMode];
     out.sort((a, b) => {
       const rawA = (a as unknown as Record<string, unknown>)[sortKey];
       const rawB = (b as unknown as Record<string, unknown>)[sortKey];
@@ -69,7 +81,7 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
         : String(rawA).localeCompare(String(rawB));
     });
     return out;
-  }, [card.breakdown, sortKey, desc]);
+  }, [breakdownForMode, sortKey, desc]);
 
   const setSort = (k: SortKey) => {
     if (sortKey === k) {
@@ -80,9 +92,34 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
     }
   };
 
+  // Locale-aware label strings for the mode toggle pill. Kept inline (not
+  // in i18n.ts) since it's a small, component-local concern; the canonical
+  // factor mode docs live in signal_tooltip.factor.
+  const modeLabel = locale === "zh" ? "因子模式" : "FACTOR MODE";
+  const modeShortLabel = locale === "zh" ? "短线" : "Short";
+  const modeLongLabel = locale === "zh" ? "长线" : "Long";
+  const modeTip =
+    locale === "zh"
+      ? "切换因子档的时间维度。短线 12d/60d 跟其他短窗口信号同步;长线 252d/126d 是学术经典。同步影响 Picks 排序 + 雷达图。"
+      : "Toggle the factor signal's time horizon. Short (12d/60d) aligns with the other short-window legs; Long (252d/126d) is the academic standard. Syncs across Picks ranking + Radar.";
+
   return (
-    <table className="w-full text-xs border-collapse">
-      <thead>
+    <div className="space-y-2">
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setFactorMode(factorMode === "short" ? "long" : "short")}
+          title={modeTip}
+          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-accent transition hover:bg-tm-accent/20"
+        >
+          <span className="opacity-70">{modeLabel}</span>
+          <span className="font-semibold">
+            {factorMode === "short" ? modeShortLabel : modeLongLabel}
+          </span>
+        </button>
+      </div>
+      <table className="w-full text-xs border-collapse">
+        <thead>
         <tr className="text-tm-fg-2 border-b border-tm-rule">
           <SortTh
             onClick={() => setSort("signal")}
@@ -211,7 +248,8 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
           );
         })}
       </tbody>
-    </table>
+      </table>
+    </div>
   );
 }
 

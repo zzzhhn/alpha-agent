@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import type { RatingCard } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import { useFactorMode } from "@/hooks/useFactorMode";
+import { applyFactorModeToCard } from "@/lib/picks-mode";
 
 // Dynamic imports keep Recharts (~150KB gzip) out of the initial server chunk.
 // Per CLAUDE.md memory: wrap ResponsiveContainer in a fixed-height div.
@@ -50,13 +52,18 @@ function clampToRadar(z: number): number {
 
 export default function AttributionRadar({ card }: { card: RatingCard }) {
   const { locale } = useLocale();
+  const [factorMode] = useFactorMode();
+  // Apply mode swap so the factor petal + composite footer reflect the
+  // active toggle. Same useFactorMode hook subscribes to localStorage so a
+  // flip on /picks (or via AttributionTable's pill) re-renders this radar.
+  const modedCard = applyFactorModeToCard(card, factorMode);
 
-  const data = card.breakdown.map((b) => ({
+  const data = modedCard.breakdown.map((b) => ({
     signal: getSignalDisplayLabel(b.signal, locale),
     z_visible: clampToRadar(b.z ?? 0),
     z_raw: b.z ?? 0,
   }));
-  const composite = card.composite_score ?? 0;
+  const composite = modedCard.composite_score ?? 0;
 
   // Fixed-height parent required — ResponsiveContainer reads offsetWidth;
   // without it the container collapses to 0 in grid/flex parents (CLAUDE.md memory).

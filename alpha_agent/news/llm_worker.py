@@ -26,14 +26,39 @@ logger = logging.getLogger(__name__)
 _BATCH_SIZE = 15
 _MAX_TOKENS = 2000
 
-_NEWS_SYSTEM = (
-    "You score per-ticker financial news sentiment. For each headline in "
-    "the user message, return a JSON array element of shape "
-    '{"id": <int>, "sentiment_score": <float in [-1,1]>, '
-    '"sentiment_label": "pos"|"neg"|"neu"}. Be conservative: "company '
-    'beats earnings" is +0.4 to +0.6, not 1.0. Use 1.0/-1.0 only for '
-    "genuinely landmark events. Output the JSON array only, no prose."
-)
+def _news_system_prompt(lang: str = "en") -> str:
+    """Build the news-scoring system prompt with reasoning, in the
+    requested user locale.
+
+    Adds a `reasoning` field per item (2-3 sentence analysis) on top of the
+    legacy `sentiment_score` + `sentiment_label`. The reasoning text gives
+    the user a substantive analysis next to the color dot — addresses the
+    2026-05-19 feedback that the LLM enrich button "only shows red/green/gray".
+
+    lang = "zh" → reasoning in 简体中文. Anything else → English.
+    """
+    reasoning_lang = "简体中文" if lang == "zh" else "English"
+    reasoning_directive = (
+        f"Write the `reasoning` field in {reasoning_lang}. "
+        "2-3 sentences total: (1) what the headline means for this ticker, "
+        "(2) why it warrants your sentiment score, (3) one concrete watch-out "
+        "or follow-on signal. Skip generic boilerplate."
+    )
+    return (
+        "You score per-ticker financial news sentiment and write a brief "
+        "analyst commentary. For each headline in the user message, return "
+        "a JSON array element of shape "
+        '{"id": <int>, "sentiment_score": <float in [-1,1]>, '
+        '"sentiment_label": "pos"|"neg"|"neu", "reasoning": <string>}. '
+        'Be conservative on the score: "company beats earnings" is +0.4 to '
+        "+0.6, not 1.0. Use 1.0/-1.0 only for genuinely landmark events. "
+        f"{reasoning_directive} "
+        "Output the JSON array only, no prose."
+    )
+
+
+# Back-compat constant for any external import; defaults to English.
+_NEWS_SYSTEM = _news_system_prompt("en")
 
 _MACRO_SYSTEM = (
     "You analyze political/policy/geopolitical events for US-equity "
@@ -91,7 +116,7 @@ async def enrich_pending(pool, row_limit: int = 100) -> tuple[int, int]:
 
 
 async def enrich_news_for_ticker(
-    pool, llm, ticker: str, row_limit: int = 100,
+    pool, llm, ticker: str, row_limit: int = 100, lang: str = "en",
 ) -> tuple[int, int]:
     """BYOK per-ticker enrichment for the read-time path.
 
@@ -99,6 +124,10 @@ async def enrich_news_for_ticker(
     stored BYOK key via api.byok.get_llm_client). Only touches
     news_items rows WHERE ticker = $1 AND llm_processed_at IS NULL.
     Macro events use a separate dashboard-level enrich path (P1).
+
+    `lang` controls the language of the `reasoning` field on each row
+    ("zh" or "en"; defaults to English). Frontend passes the user's
+    active locale so the analyst commentary matches the UI.
 
     Returns (n_processed, n_failed_batches). row_limit caps how many
     news_items a single user click can enqueue (token cost guard).
@@ -112,7 +141,7 @@ async def enrich_news_for_ticker(
         ticker.upper(), int(row_limit),
     )
     for batch in _chunks(news, _BATCH_SIZE):
-        ok = await _enrich_news_batch(pool, llm, batch)
+        ok = await _enrich_news_batch(pool, llm, batch, lang=lang)
         if ok:
             n_proc += len(batch)
         else:
@@ -125,18 +154,21 @@ def _chunks(seq, n):
         yield seq[i : i + n]
 
 
-async def _enrich_news_batch(pool, llm, batch) -> bool:
+async def _enrich_news_batch(pool, llm, batch, lang: str = "en") -> bool:
     user_payload = "\n".join(
         f'{{"id": {r["id"]}, "ticker": "{r["ticker"]}", '
         f'"headline": {json.dumps(r["headline"])}}}'
         for r in batch
     )
     messages = [
-        Message(role="system", content=_NEWS_SYSTEM),
+        Message(role="system", content=_news_system_prompt(lang)),
         Message(role="user", content=user_payload),
     ]
     try:
-        resp = await llm.chat(messages, temperature=0.0, max_tokens=_MAX_TOKENS)
+        # Bumped from 2000 → 3000 to fit ~2-3 sentence reasoning per row at
+        # batch=15. If the model truncates mid-array the whole batch parse
+        # fails and the rows stay pending for next click.
+        resp = await llm.chat(messages, temperature=0.0, max_tokens=3000)
         parsed = json.loads(resp.content)
     except Exception as exc:
         logger.warning("news llm enrich batch failed: %s: %s",
@@ -148,10 +180,18 @@ async def _enrich_news_batch(pool, llm, batch) -> bool:
         if p is None:
             continue
         try:
+            reasoning_raw = p.get("reasoning")
+            reasoning_text = (
+                str(reasoning_raw).strip()
+                if reasoning_raw not in (None, "")
+                else None
+            )
             await update_news_item_llm(
                 pool, int(row["id"]),
                 float(p.get("sentiment_score")) if p.get("sentiment_score") is not None else None,
                 p.get("sentiment_label"),
+                reasoning_text=reasoning_text,
+                reasoning_lang=lang if reasoning_text else None,
             )
         except Exception as exc:
             logger.warning("news llm update failed row=%s: %s: %s",

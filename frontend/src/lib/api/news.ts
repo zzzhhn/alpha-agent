@@ -11,8 +11,14 @@ export interface EnrichResponse {
   failed_batches: number;
 }
 
-export const enrichNewsForTicker = (ticker: string) =>
+/**
+ * `lang` controls the language of the per-headline reasoning text the LLM
+ * writes into news_items.reasoning_text. Frontend passes the user's
+ * active locale ("zh" or "en") so the analyst commentary matches the UI.
+ * Defaults to English when omitted (matches the backend default).
+ */
+export const enrichNewsForTicker = (ticker: string, lang: "zh" | "en" = "en") =>
   apiPost<EnrichResponse, void>(
-    `/api/news/enrich/${ticker.toUpperCase()}`,
+    `/api/news/enrich/${ticker.toUpperCase()}?lang=${lang}`,
     undefined as unknown as void,
   );

@@ -27,6 +27,12 @@ class NewsItemLite(BaseModel):
     published_at: str
     sentiment_score: float | None
     sentiment_label: str | None
+    # V007 (2026-05-19): per-headline LLM-written commentary, surfaced in
+    # NewsBlock alongside the sentiment dot so the user sees the *why* not
+    # just the color. `reasoning_lang` tracks which locale the LLM was asked
+    # to write in ("zh"|"en") so the UI can set the lang= attribute.
+    reasoning_text: str | None = None
+    reasoning_lang: str | None = None
 
 
 class FullCard(BaseModel):
@@ -71,7 +77,8 @@ async def get_stock(
     news_rows = await pool.fetch(
         """
         SELECT id, source, headline, url, published_at,
-               sentiment_score, sentiment_label
+               sentiment_score, sentiment_label,
+               reasoning_text, reasoning_lang
         FROM news_items
         WHERE ticker = $1
         ORDER BY published_at DESC
@@ -88,6 +95,8 @@ async def get_stock(
             published_at=r["published_at"].isoformat(),
             sentiment_score=r["sentiment_score"],
             sentiment_label=r["sentiment_label"],
+            reasoning_text=r["reasoning_text"],
+            reasoning_lang=r["reasoning_lang"],
         )
         for r in news_rows
     ]

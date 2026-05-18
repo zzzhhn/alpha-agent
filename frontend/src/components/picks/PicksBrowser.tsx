@@ -18,16 +18,11 @@ import {
 } from "@/components/tm/TmSubbar";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
+// Shared hook so a flip on Stock detail's AttributionTable / Radar
+// propagates back here via the storage event broadcast inside the hook.
+import { useFactorMode } from "@/hooks/useFactorMode";
 
 type PicksData = { picks: RatingCard[]; as_of: string | null; stale: boolean };
-
-const FACTOR_MODE_KEY = "alpha:factor_mode";
-
-function readModePref(): FactorMode {
-  if (typeof window === "undefined") return "short";
-  const v = window.localStorage.getItem(FACTOR_MODE_KEY);
-  return v === "long" ? "long" : "short";
-}
 
 export default function PicksBrowser({
   initialData,
@@ -38,19 +33,14 @@ export default function PicksBrowser({
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   // SHORT (12d/60d, default — short-line/intraday-aligned) vs LONG (252d/126d,
-  // academic Jegadeesh-Titman / Daniel-Moskowitz). Init from localStorage so
-  // the user's pick survives refreshes. SSR-safe via the readModePref guard.
-  const [factorMode, setFactorMode] = useState<FactorMode>("short");
+  // academic). Hook handles SSR-safe hydration + cross-tab + same-tab storage
+  // event broadcast so AttributionTable's pill on Stock detail flips here.
+  const [factorMode, setFactorMode] = useFactorMode();
   const { locale } = useLocale();
   const mounted = useRef(false);
   // Called once here, threaded down as a prop, so the localStorage read +
   // storage listener happen per-table rather than per-row.
   const { isWatched } = useWatchlist();
-
-  // Hydrate mode preference once after mount (avoid SSR/CSR mismatch).
-  useEffect(() => {
-    setFactorMode(readModePref());
-  }, []);
 
   const runSearch = useCallback(
     async (q: string, mode: FactorMode) => {
@@ -94,14 +84,8 @@ export default function PicksBrowser({
   }, [search, factorMode, runSearch]);
 
   const onModeToggle = useCallback(() => {
-    setFactorMode((prev) => {
-      const next: FactorMode = prev === "short" ? "long" : "short";
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(FACTOR_MODE_KEY, next);
-      }
-      return next;
-    });
-  }, []);
+    setFactorMode(factorMode === "short" ? "long" : "short");
+  }, [factorMode, setFactorMode]);
 
   const searching = search.trim().length > 0;
   const count = data.picks.length;

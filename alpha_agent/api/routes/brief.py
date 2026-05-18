@@ -105,6 +105,11 @@ class StreamBriefRequest(BaseModel):
     # server-side from user_byok for the authenticated user. Only an
     # optional model override remains.
     model_override: str | None = None
+    # Phase 312 (2026-05-19): bilingual brief. Frontend RichThesis sends
+    # the user's active locale (or the tab toggle's pick) so the LLM
+    # writes summary/bull/bear in the matching language. Defaults to
+    # English when the client doesn't send the field (back-compat).
+    language: Literal["zh", "en"] = "en"
 
 
 def _sse_format(event: dict) -> bytes:
@@ -165,6 +170,7 @@ async def post_brief_stream(
                 breakdown=breakdown,
                 model=payload.model_override or byok["model"],
                 base_url=byok["base_url"],
+                language=payload.language,
             ):
                 yield _sse_format(event)
                 await asyncio.sleep(0)

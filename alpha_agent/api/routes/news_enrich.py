@@ -15,7 +15,7 @@ On success: returns counts of how many news_items were processed.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel
 
 from alpha_agent.api.byok import get_llm_client
@@ -35,9 +35,17 @@ class EnrichResponse(BaseModel):
 @router.post("/enrich/{ticker}", response_model=EnrichResponse)
 async def enrich(
     ticker: str = Path(min_length=1, max_length=10),
+    lang: str = Query("en", pattern="^(en|zh)$"),
     llm: LLMClient = Depends(get_llm_client),
 ) -> EnrichResponse:
+    """Run the BYOK LLM enrichment over un-processed news_items for `ticker`.
+
+    `lang` controls the language of the per-headline reasoning text the LLM
+    writes into news_items.reasoning_text (V007 column). The frontend
+    NewsBlock passes the user's active locale so the analyst commentary
+    matches the UI; older clients that don't send it default to English.
+    """
     pool = await get_db_pool()
     t = ticker.upper()
-    n_proc, n_failed = await enrich_news_for_ticker(pool, llm, t)
+    n_proc, n_failed = await enrich_news_for_ticker(pool, llm, t, lang=lang)
     return EnrichResponse(ticker=t, enriched=n_proc, failed_batches=n_failed)

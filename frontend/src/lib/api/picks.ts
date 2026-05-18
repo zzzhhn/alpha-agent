@@ -24,6 +24,12 @@ export interface NewsItemLite {
   published_at: string;
   sentiment_score: number | null;
   sentiment_label: "pos" | "neg" | "neu" | null;
+  // V007 (2026-05-19): per-headline LLM commentary surfaced beneath the
+  // headline so the user gets the *why* (not just the red/green/gray dot).
+  // reasoning_lang = the locale the LLM wrote in ("zh"|"en") — used for the
+  // <p lang=> attribute, no auto-translation.
+  reasoning_text?: string | null;
+  reasoning_lang?: string | null;
 }
 
 export interface RatingCard {
