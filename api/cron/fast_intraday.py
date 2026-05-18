@@ -268,12 +268,32 @@ async def handler(
                         raw["z_short"] = float(bd_entry.get("z") or 0.0)
                     break
 
+        # B5 (2026-05-19): GEX intraday regime as conditioning variable.
+        # Computed inline rather than via _ALL_MODULES because regime is
+        # a "this is a buy-dip day vs a trend day" classifier surfaced
+        # alongside the signals, not a contributing alpha signal that
+        # combine() should weight. None on chain fetch / NaN failure.
+        gex_info: dict | None = None
+        if tier == "full":
+            try:
+                from alpha_agent.signals.gex import compute_gex as _gex
+                gex_info = _gex(t, now)
+            except Exception as exc:  # noqa: BLE001 — yfinance raises arbitrary types
+                # GEX failure must not break the rest of the cron cycle.
+                # Logged silently here; the next tick re-tries.
+                from alpha_agent.signals.gex import logger as _gex_logger
+                _gex_logger.warning(
+                    "gex outer failure ticker=%s: %s: %s",
+                    t, type(exc).__name__, exc,
+                )
+
         await upsert_signal_fast(
             pool, t, today, result.composite, rating, confidence,
             {
                 "breakdown": result.breakdown,
                 "tier_flip_today": tier_flip_today,
                 "raw_tier": raw_tier,
+                "gex_info": gex_info,
             },
             partial=False,
         )

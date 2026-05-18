@@ -52,6 +52,11 @@ class FullCard(BaseModel):
     # `rating` differs from the raw threshold mapping; UI surfaces a small
     # indicator so the user can see the band is currently active.
     tier_flip_today: bool = False
+    # B5 (2026-05-19): GEX intraday regime classifier. None when option
+    # chain unavailable / fetch failed gracefully. Surfaced as a badge
+    # on the stock detail page header to disambiguate "buy-dip works"
+    # (regime=pinned) from "trend continuation" (regime=volatile).
+    gex_info: dict | None = None
 
 
 class StockResponse(BaseModel):
@@ -117,6 +122,7 @@ async def get_stock(
         partial=sig["partial"],
         news_items=news_items,
         tier_flip_today=sig.get("tier_flip_today", False),
+        gex_info=sig.get("gex_info"),
     )
     return StockResponse(card=card, stale=stale)
 

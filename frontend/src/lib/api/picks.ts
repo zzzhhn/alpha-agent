@@ -52,7 +52,21 @@ export interface RatingCard {
   // tier flip today (raw unbanded mapping differed from the sticky rating
   // the user sees). Surfaced as a small badge for transparency.
   tier_flip_today?: boolean;
+  // B5 (2026-05-19): GEX intraday regime classifier. Null when option
+  // chain unavailable for this ticker. Surfaced as a header pill so the
+  // user disambiguates "buy-the-dip works" (pinned) from "trend
+  // continuation" (volatile). Conditioning variable only — not folded
+  // into composite_score.
+  gex_info?: GexInfo | null;
   news_items?: NewsItemLite[];
+}
+
+export interface GexInfo {
+  regime: "pinned" | "volatile" | "mixed";
+  signed_notional: number;
+  n_strikes: number;
+  dominant_expiry: string;
+  spot: number;
 }
 
 export type FactorMode = "short" | "long";

@@ -53,6 +53,19 @@ def _parse_tier_flip(raw) -> bool:
         return False
 
 
+def _parse_gex_info(raw) -> dict | None:
+    """Pull the B5 gex_info dict from the wrapped breakdown JSON. None for
+    slow-only rows (cron writes the JSON), rows predating B5, or rows
+    where the GEX fetch was empty / failed gracefully."""
+    try:
+        info = json.loads(raw).get("gex_info")  # type: ignore[union-attr]
+        if not isinstance(info, dict):
+            return None
+        return info
+    except (TypeError, json.JSONDecodeError, AttributeError):
+        return None
+
+
 async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
     """Latest signal for one ticker, fast-preferred with slow fallback.
 
@@ -108,10 +121,12 @@ async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
         # No band logic on slow-only rows (the cron that writes them never
         # sees a prev_rating to compare against). Always false.
         tier_flip_today = False
+        gex_info = None
     else:
         rating = row["rating"] or "HOLD"
         confidence = _safe_float(row["confidence"])
         tier_flip_today = _parse_tier_flip(row["breakdown"])
+        gex_info = _parse_gex_info(row["breakdown"])
 
     return {
         "ticker": row["ticker"],
@@ -122,4 +137,5 @@ async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
         "fetched_at": row["fetched_at"],
         "partial": is_partial,
         "tier_flip_today": tier_flip_today,
+        "gex_info": gex_info,
     }

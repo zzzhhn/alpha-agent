@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import type { RatingCard } from "@/lib/api/picks";
+import type { GexInfo, RatingCard } from "@/lib/api/picks";
+import type { Locale } from "@/lib/i18n";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import { t } from "@/lib/i18n";
@@ -53,6 +54,9 @@ export default function StockCardLayout({
           confidence={card.confidence}
           composite={card.composite_score}
         />
+        {card.gex_info ? (
+          <GexBadge info={card.gex_info} locale={locale} />
+        ) : null}
         <ActionBox card={card} />
         <div className="text-xs text-tm-muted space-y-0.5">
           <div>{t(locale, "stock_layout.as_of")} {new Date(card.as_of).toLocaleString()}</div>
@@ -91,6 +95,58 @@ export default function StockCardLayout({
         <MarketContextWidget ticker={card.ticker} />
         <SourcesBlock card={card} />
       </main>
+    </div>
+  );
+}
+
+
+/**
+ * B5 GEX regime pill. Three states:
+ *   pinned   (signed_notional > +band) — dealers net-long gamma, "buy
+ *            weakness / sell strength", low realized vol expected;
+ *            green pill, signals "buy-the-dip works today".
+ *   volatile (signed_notional < −band) — dealers net-short gamma,
+ *            "buy strength / sell weakness", trend continuation;
+ *            warn pill, signals "trend day, avoid mean reversion".
+ *   mixed    (within ±band) — neutral, no actionable regime signal.
+ *
+ * Notional rendered in $B / $M depending on magnitude for legibility.
+ */
+function GexBadge({ info, locale }: { info: GexInfo; locale: Locale }) {
+  const absNotional = Math.abs(info.signed_notional);
+  const fmtNotional =
+    absNotional >= 1e9
+      ? `${(info.signed_notional / 1e9).toFixed(1)}B`
+      : absNotional >= 1e6
+        ? `${(info.signed_notional / 1e6).toFixed(0)}M`
+        : `${info.signed_notional.toFixed(0)}`;
+  const sign = info.signed_notional >= 0 ? "+$" : "−$";
+  const display = `${sign}${fmtNotional.replace(/^-/, "")}`;
+
+  const tone = {
+    pinned: "border-tm-pos/40 bg-tm-pos/10 text-tm-pos",
+    volatile: "border-tm-warn/40 bg-tm-warn/10 text-tm-warn",
+    mixed: "border-tm-rule bg-tm-bg-2 text-tm-muted",
+  }[info.regime];
+
+  const label = {
+    zh: { pinned: "钉住", volatile: "趋势", mixed: "中性" },
+    en: { pinned: "PINNED", volatile: "VOLATILE", mixed: "MIXED" },
+  }[locale][info.regime];
+
+  const tip =
+    locale === "zh"
+      ? `GEX 衡量做市商净 gamma 暴露。钉住=做市商净多头 gamma 倾向于反向交易(买跌卖涨),volatile=做市商净空头 gamma 倾向于追涨杀跌。\n当前 signed_notional=${display},n_strikes=${info.n_strikes},dominant_expiry=${info.dominant_expiry}。ALPHA_GEX_REGIME_BAND_USD 调整阈值。`
+      : `GEX measures dealer net-gamma exposure. PINNED = dealers net-long gamma, reversion-friendly (buy dip / sell rip). VOLATILE = dealers net-short gamma, trend continuation. signed_notional=${display}, n_strikes=${info.n_strikes}, dominant_expiry=${info.dominant_expiry}. Tune via ALPHA_GEX_REGIME_BAND_USD.`;
+
+  return (
+    <div
+      title={tip}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-tm-mono text-[10px] ${tone}`}
+    >
+      <span className="opacity-70">GEX</span>
+      <span className="font-semibold">{label}</span>
+      <span className="opacity-60">{display}</span>
     </div>
   );
 }
