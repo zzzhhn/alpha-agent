@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MousePointerClick } from "lucide-react";
-import { fetchOhlcv, type OhlcvBar } from "@/lib/api/picks";
+import { fetchChartEvents, fetchOhlcv, type ChartEvent, type OhlcvBar } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import IntradayDrawer from "./IntradayDrawer";
+import ExplainRangePanel from "./ExplainRangePanel";
 
 // lightweight-charts v4 imports — keep dynamic to avoid SSR breakage (the
 // lib touches `document` at import time). The component itself is
@@ -31,7 +32,7 @@ export default function PriceChart({ ticker }: { ticker: string }) {
   // YYYY-MM-DD of the daily candle the user clicked; null = drawer closed.
   const [drawerDate, setDrawerDate] = useState<string | null>(null);
 
-  const renderChart = useCallback(async (bars: OhlcvBar[]) => {
+  const renderChart = useCallback(async (bars: OhlcvBar[], events: ChartEvent[]) => {
     const el = containerRef.current;
     if (!el) return;
     el.innerHTML = "";
@@ -91,6 +92,41 @@ export default function PriceChart({ ticker }: { ticker: string }) {
 
     chart.timeScale().fitContent();
 
+    // B4 (2026-05-19): event markers per type. lightweight-charts v4
+    // setMarkers attaches to a series; we attach to the candle series so
+    // markers anchor to the day's price. Shape + colour per type makes
+    // category readable at a glance:
+    //   news               = aboveBar circle (neutral fg)
+    //   macro_political    = belowBar square (accent)
+    //   macro_geopolitical = belowBar triangle (warn)
+    // Tooltip-on-hover surfaces the headline (lightweight-charts ships
+    // marker text in the built-in tooltip when chart.subscribeCrosshairMove
+    // is used; v1 keeps the simple title-as-text path that already shows).
+    if (events.length) {
+      const dayBars = new Set(validBars.map((b) => b.date));
+      const markers = events
+        .map((e) => {
+          const day = e.ts.slice(0, 10);
+          if (!dayBars.has(day)) return null;
+          const sentiment = e.sentiment_score ?? 0;
+          const color = sentiment > 0.1 ? "#16a34a" : sentiment < -0.1 ? "#dc2626" : "#9ca3af";
+          const shape =
+            e.type === "news" ? "circle"
+            : e.type === "macro_political" ? "square"
+            : "arrowDown";
+          const position = e.type === "news" ? "aboveBar" : "belowBar";
+          return {
+            time: day,
+            position: position as "aboveBar" | "belowBar",
+            color,
+            shape: shape as "circle" | "square" | "arrowDown",
+            text: e.headline.length > 60 ? e.headline.slice(0, 57) + "..." : e.headline,
+          };
+        })
+        .filter((m): m is NonNullable<typeof m> => m !== null);
+      candle.setMarkers(markers);
+    }
+
     // Daily-candle click handler: open the IntradayDrawer for that date.
     // lightweight-charts v4 reports param.time as either a string
     // ("YYYY-MM-DD" for BusinessDay-shaped data) or a number (Unix
@@ -129,13 +165,25 @@ export default function PriceChart({ ticker }: { ticker: string }) {
     (async () => {
       setStatus("loading");
       try {
-        const r = await fetchOhlcv(ticker);
+        // Fetch chart bars + events in parallel. Event fetch is
+        // non-blocking — if it fails, render chart without markers
+        // (degraded gracefully; news data simply doesn't overlay).
+        const today = new Date().toISOString().slice(0, 10);
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const from = sixMonthsAgo.toISOString().slice(0, 10);
+        const [r, evRes] = await Promise.all([
+          fetchOhlcv(ticker),
+          fetchChartEvents(ticker, from, today).catch(() => ({
+            ticker, from_ts: from, to_ts: today, events: [],
+          })),
+        ]);
         if (cancelled) return;
         if (!r.bars.length) {
           setStatus("empty");
           return;
         }
-        cleanup = await renderChart(r.bars);
+        cleanup = await renderChart(r.bars, evRes.events);
         setStatus("ok");
       } catch (e) {
         if (cancelled) return;
@@ -188,6 +236,7 @@ export default function PriceChart({ ticker }: { ticker: string }) {
         date={drawerDate}
         onClose={() => setDrawerDate(null)}
       />
+      {status === "ok" ? <ExplainRangePanel ticker={ticker} /> : null}
     </section>
   );
 }

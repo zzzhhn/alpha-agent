@@ -205,3 +205,51 @@ export const fetchMinuteBars = (ticker: string, date: string) =>
   apiGet<MinuteBarsResponse>(
     `/api/stock/${ticker.toUpperCase()}/minute_bars?date=${date}`,
   );
+
+
+// B4 (2026-05-19) — Event-on-chart + LLM range explanation.
+
+export interface ChartEvent {
+  ts: string;
+  type: "news" | "macro_political" | "macro_geopolitical";
+  headline: string;
+  url: string | null;
+  sentiment_score: number | null;
+  sentiment_label: string | null;
+}
+
+export interface ChartEventsResponse {
+  ticker: string;
+  from_ts: string;
+  to_ts: string;
+  events: ChartEvent[];
+}
+
+export const fetchChartEvents = (
+  ticker: string,
+  fromTs: string,
+  toTs: string,
+) =>
+  apiGet<ChartEventsResponse>(
+    `/api/stock/${ticker.toUpperCase()}/events?from_ts=${fromTs}&to_ts=${toTs}`,
+  );
+
+export interface ExplainRangeResponse {
+  ticker: string;
+  from_ts: string;
+  to_ts: string;
+  explanation: string;
+  event_count: number;
+  cache: "hit" | "miss";
+}
+
+export const explainRange = (
+  ticker: string,
+  fromTs: string,
+  toTs: string,
+  language: "zh" | "en",
+) =>
+  apiPost<ExplainRangeResponse, Record<string, never>>(
+    `/api/stock/${ticker.toUpperCase()}/explain_range?from_ts=${fromTs}&to_ts=${toTs}&language=${language}`,
+    {},
+  );

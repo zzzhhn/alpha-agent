@@ -8,12 +8,15 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
+from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.api.signal_lookup import fetch_latest_signal
+from alpha_agent.auth.dependencies import require_user
 from alpha_agent.fusion.attribution import top_drivers, top_drags
+from alpha_agent.llm.base import LLMClient, Message
 from alpha_agent.signals.yf_helpers import extract_ohlcv, get_ticker
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
@@ -125,6 +128,223 @@ async def get_stock(
         gex_info=sig.get("gex_info"),
     )
     return StockResponse(card=card, stale=stale)
+
+
+# ---------------------------------------------------------------------------
+# B4 (2026-05-19) Event-on-chart + LLM "why" explanation
+# ---------------------------------------------------------------------------
+
+
+class ChartEvent(BaseModel):
+    """One event marker for the PriceChart overlay. `type` drives the
+    glyph + colour the lightweight-charts setMarkers call renders.
+    sentiment_score and sentiment_label come from the LLM-enrich step
+    (Phase 5b read-time path) and are nullable for un-enriched rows."""
+    ts: str
+    type: Literal["news", "macro_political", "macro_geopolitical"]
+    headline: str
+    url: str | None = None
+    sentiment_score: float | None = None
+    sentiment_label: str | None = None
+
+
+class ChartEventsResponse(BaseModel):
+    ticker: str
+    from_ts: str
+    to_ts: str
+    events: list[ChartEvent]
+
+
+@router.get("/{ticker}/events", response_model=ChartEventsResponse)
+async def get_events(
+    ticker: str = Path(min_length=1, max_length=10),
+    from_ts: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    to_ts: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+) -> ChartEventsResponse:
+    """Return timestamped events for a ticker within [from_ts, to_ts].
+
+    Pulls from news_items (per-ticker direct) UNION macro_events
+    (per-ticker via tickers_extracted array containment from the LLM
+    enrich step). Capped at 200 events per request so a single chart
+    overlay never explodes — older time ranges that exceed the cap
+    are truncated newest-first.
+    """
+    ticker = ticker.upper()
+    pool = await get_db_pool()
+    try:
+        from_d = datetime.strptime(from_ts, "%Y-%m-%d").replace(tzinfo=UTC)
+        to_d = datetime.strptime(to_ts, "%Y-%m-%d").replace(tzinfo=UTC) + timedelta(days=1)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"date parse: {exc}")
+
+    news_rows = await pool.fetch(
+        """
+        SELECT published_at, headline, url, sentiment_score, sentiment_label
+        FROM news_items
+        WHERE ticker = $1 AND published_at >= $2 AND published_at < $3
+        ORDER BY published_at DESC
+        LIMIT 200
+        """,
+        ticker, from_d, to_d,
+    )
+
+    # macro events use Postgres array containment on tickers_extracted —
+    # the LLM enrich step writes that array. Tickers w/o LLM enrich yet
+    # simply won't surface macro events; that's the correct degraded
+    # behaviour (the user can hit the LLM enrich button on news to bootstrap).
+    macro_rows = await pool.fetch(
+        """
+        SELECT published_at, title, url, author, sentiment_score
+        FROM macro_events
+        WHERE $1 = ANY(tickers_extracted)
+          AND published_at >= $2 AND published_at < $3
+        ORDER BY published_at DESC
+        LIMIT 200
+        """,
+        ticker, from_d, to_d,
+    )
+
+    events: list[ChartEvent] = []
+    for r in news_rows:
+        events.append(ChartEvent(
+            ts=r["published_at"].isoformat(),
+            type="news",
+            headline=r["headline"],
+            url=r["url"],
+            sentiment_score=r["sentiment_score"],
+            sentiment_label=r["sentiment_label"],
+        ))
+    for r in macro_rows:
+        # Author = "Trump" / "Fed" / etc. classifies political vs geopolitical
+        author = (r["author"] or "").lower()
+        ev_type: Literal["news", "macro_political", "macro_geopolitical"]
+        if author in {"trump", "potus", "harris"} or "politic" in author:
+            ev_type = "macro_political"
+        else:
+            ev_type = "macro_geopolitical"
+        events.append(ChartEvent(
+            ts=r["published_at"].isoformat(),
+            type=ev_type,
+            headline=r["title"],
+            url=r["url"],
+            sentiment_score=r["sentiment_score"],
+        ))
+
+    # Newest first across the union, capped.
+    events.sort(key=lambda e: e.ts, reverse=True)
+    events = events[:200]
+
+    return ChartEventsResponse(
+        ticker=ticker, from_ts=from_ts, to_ts=to_ts, events=events,
+    )
+
+
+class ExplainRangeResponse(BaseModel):
+    ticker: str
+    from_ts: str
+    to_ts: str
+    explanation: str
+    event_count: int
+    cache: Literal["hit", "miss"] = "miss"
+
+
+@router.post("/{ticker}/explain_range", response_model=ExplainRangeResponse)
+async def explain_range(
+    ticker: str = Path(min_length=1, max_length=10),
+    from_ts: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    to_ts: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    language: Literal["zh", "en"] = Query("en"),
+    user_id: int = Depends(require_user),
+    llm: LLMClient = Depends(get_llm_client),
+) -> ExplainRangeResponse:
+    """B4 lasso replacement (v1): LLM-generated 3-sentence explanation
+    of which events most likely drove a price move within the user's
+    selected window. Cached via B3 (per-user, key folds in from_ts,
+    to_ts, language, top headlines hash) so a re-click on the same
+    range is sub-100ms and zero BYOK spend.
+    """
+    ticker = ticker.upper()
+    pool = await get_db_pool()
+
+    events_resp = await get_events(ticker=ticker, from_ts=from_ts, to_ts=to_ts)
+    if not events_resp.events:
+        return ExplainRangeResponse(
+            ticker=ticker, from_ts=from_ts, to_ts=to_ts,
+            explanation=("无可见事件 in 此时间段;价格变动可能由因子/技术面驱动。"
+                          if language == "zh" else
+                          "No visible news / macro events in this range; "
+                          "price move likely factor- or technicals-driven."),
+            event_count=0, cache="miss",
+        )
+
+    # Build the user-prompt context. Keep it compact: top-10 events by
+    # absolute sentiment score (or newest if score missing) so the LLM
+    # focuses on signal rather than noise.
+    def _score_key(e: ChartEvent) -> float:
+        return abs(e.sentiment_score) if e.sentiment_score is not None else 0.0
+    sorted_events = sorted(events_resp.events, key=_score_key, reverse=True)[:10]
+    bullets = "\n".join(
+        f"- [{e.ts[:10]}] {e.type}: {e.headline[:140]}"
+        f"  (sent={e.sentiment_score:+.2f})" if e.sentiment_score is not None
+        else f"- [{e.ts[:10]}] {e.type}: {e.headline[:140]}"
+        for e in sorted_events
+    )
+
+    system = (
+        "你是一位冷静的股票分析师。给定一支股票在某段时间内发生的事件列表,"
+        "用 2-3 句中文给出最可能影响价格的事件 +ranking。不要捏造数据,只用提供的事件。"
+        if language == "zh" else
+        "You are a sober equity analyst. Given a ticker and a list of events "
+        "in a time window, identify in 2-3 sentences which events most likely "
+        "moved the price. Do not invent data — use only events provided."
+    )
+    user = (
+        f"Ticker: {ticker}\nWindow: {from_ts} to {to_ts}\n"
+        f"Events ({len(sorted_events)} of {len(events_resp.events)} total, "
+        f"ranked by |sentiment|):\n{bullets}"
+    )
+    messages = [Message(role="system", content=system), Message(role="user", content=user)]
+
+    # B3 cache wrap
+    from alpha_agent.llm.cache import (
+        CACHE_TTL_DEFAULT, cache_key, cached_response, store_response,
+    )
+
+    key = cache_key(
+        model=getattr(llm, "_model", "byok"),
+        messages=messages,
+        variant=f"{ticker}|{from_ts}|{to_ts}|{language}|n={len(sorted_events)}",
+    )
+    cached_text = await cached_response(pool, user_id, key)
+    if cached_text is not None:
+        return ExplainRangeResponse(
+            ticker=ticker, from_ts=from_ts, to_ts=to_ts,
+            explanation=cached_text, event_count=len(events_resp.events),
+            cache="hit",
+        )
+
+    try:
+        resp = await llm.chat(messages, temperature=0.3, max_tokens=400)
+    finally:
+        close = getattr(llm, "close", None)
+        if close is not None:
+            await close()
+
+    text = (resp.content or "").strip()
+    if text:
+        await store_response(
+            pool, user_id, key,
+            getattr(llm, "_model", "byok"), text,
+            ttl=CACHE_TTL_DEFAULT,
+        )
+    return ExplainRangeResponse(
+        ticker=ticker, from_ts=from_ts, to_ts=to_ts,
+        explanation=text or "LLM 返回空响应。",
+        event_count=len(events_resp.events), cache="miss",
+    )
+
+
+# ---------------------------------------------------------------------------
 
 
 class OhlcvBar(BaseModel):
