@@ -22,14 +22,19 @@ Backward compat:
 - Public sync entry stays fetch_signal(ticker, as_of) per signals.base
   contract; used by cli/build_card.py registry.
 
-Academic anchors (2020-2025 modernization, 2026-05-18):
+Academic anchors (2020-2025 modernization, 2026-05-18; metadata verified
+via WebSearch against SSRN/NBER/journal databases on 2026-05-18):
 - Primary modern reference: Ke, Kelly, Xiu (2019, NBER WP 26186) "Predicting
-  Returns with Text Data" introduces SESTM (Supervised Sentiment Extraction
-  via Screening + Topic Modeling), which outperforms the LM dictionary on
-  Dow Jones Newswires by ~3x long-short Sharpe. Direct successor to Tetlock.
-- LLM-era successor: Lopez-Lira & Tang (2023, SSRN 4412788) "Can ChatGPT
-  Forecast Stock Price Movements?" — first evidence that GPT-3.5/4 headline
-  sentiment beats both LM and FinBERT on US cross-section.
+  Returns with Text Data" introduces SESTM ("Sentiment Extraction via
+  Screening and Topic Modeling", pronounced "system"), which outperforms
+  the LM dictionary on Dow Jones Newswires. Direct successor to Tetlock.
+  https://www.nber.org/papers/w26186
+- LLM-era successor: Lopez-Lira & Tang (2023, arXiv:2304.07619 / SSRN
+  4412788) "Can ChatGPT Forecast Stock Price Movements? Return Predictability
+  and Large Language Models" — first evidence that GPT-3.5/4 headline
+  sentiment beats both LM and FinBERT on US cross-section. Still a working
+  paper as of 2026-05-18 (latest revision Oct 2025 on arXiv); no journal
+  placement yet.
 - Practical baseline: Araci (2019, arXiv:1908.10063) "FinBERT" — open-source
   BERT fine-tuned on Financial PhraseBank; deterministic alternative to GPT.
 - Historical anchors: Tetlock (2007, JoF) discrete-bucket weighting;
