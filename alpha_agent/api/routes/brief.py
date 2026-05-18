@@ -171,6 +171,13 @@ async def post_brief_stream(
                 model=payload.model_override or byok["model"],
                 base_url=byok["base_url"],
                 language=payload.language,
+                # B3 cache wiring: per-user, per-(ticker, fetched_at-date,
+                # language). The as_of date is folded into the variant
+                # so a brief regenerated tomorrow gets a fresh hash even
+                # if the signal breakdown happens to round to the same z.
+                pool=pool,
+                user_id=user_id,
+                cache_variant=f"{ticker}|{sig['fetched_at'].date().isoformat()}|{payload.language}",
             ):
                 yield _sse_format(event)
                 await asyncio.sleep(0)

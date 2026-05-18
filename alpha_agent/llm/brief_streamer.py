@@ -170,6 +170,9 @@ async def stream_brief(
     model: str | None = None,
     base_url: str | None = None,
     language: str = "en",
+    pool=None,
+    user_id: int | None = None,
+    cache_variant: str | None = None,
 ) -> AsyncIterator[dict]:
     """Async generator yielding {type, delta} dicts, terminated by {type: "done"}.
 
@@ -198,17 +201,63 @@ async def stream_brief(
             content=_build_user_prompt(ticker, rating, composite, breakdown),
         ),
     ]
+    # B3 (2026-05-19): per-user LLM response cache. The route layer hands
+    # us pool + user_id + cache_variant (ticker|date|language fold so a
+    # brief from a different date or in a different language gets its
+    # own cache slot). Caching is opt-in — when pool/user_id are absent
+    # the streamer behaves as before and burns a fresh LLM call every time.
+    cache_enabled = pool is not None and user_id is not None
+    key: str | None = None
+    if cache_enabled:
+        # Late import keeps the public stream_brief signature import-cheap
+        # for callers that never touch the cache (CLI / test fixtures).
+        # CACHE_TTL_DEFAULT + store_response are re-imported below at the
+        # write site so the read-path import set stays minimal.
+        from alpha_agent.llm.cache import cache_key, cached_response
+
+        key = cache_key(
+            model=model or provider,
+            messages=messages,
+            variant=cache_variant or f"{ticker}|{language}",
+        )
+        cached_text = await cached_response(pool, user_id, key)
+        if cached_text is not None:
+            # Hit: replay the cached text through the splitter. Same
+            # downstream event shape, sub-100ms latency. Skip the BYOK
+            # round-trip entirely.
+            replay_splitter = _StreamSplitter()
+            for ev in replay_splitter.feed(cached_text):
+                yield ev
+            for ev in replay_splitter.flush():
+                yield ev
+            yield {"type": "done", "cache": "hit"}
+            return
+
     splitter = _StreamSplitter()
+    accumulated = ""
     try:
         async for chunk in client.stream_chat(
             messages, temperature=0.3, max_tokens=800,
         ):
+            accumulated += chunk
             for ev in splitter.feed(chunk):
                 yield ev
         for ev in splitter.flush():
             yield ev
+        # Only persist after a successful stream — partial / aborted
+        # responses must not pollute the cache. Caller's try/finally
+        # ensures close() still fires below.
+        if cache_enabled and key is not None and accumulated.strip():
+            from alpha_agent.llm.cache import (
+                CACHE_TTL_DEFAULT, store_response,
+            )
+            await store_response(
+                pool, user_id, key,
+                model or provider, accumulated,
+                ttl=CACHE_TTL_DEFAULT,
+            )
     finally:
         close = getattr(client, "close", None)
         if close is not None:
             await close()
-    yield {"type": "done"}
+    yield {"type": "done", "cache": "miss"}

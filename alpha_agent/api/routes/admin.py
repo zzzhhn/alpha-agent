@@ -143,3 +143,24 @@ async def last_refresh() -> dict:
             ts = ts.replace(tzinfo=UTC)
         out[r["cron_name"]] = ts.isoformat() if ts else None
     return out
+
+
+@router.get("/cache_stats")
+async def cache_stats_endpoint(user_id: int = Depends(require_user)) -> dict:
+    """B3 (2026-05-19) LLM cache observability — per-user rows + bytes +
+    last-write timestamp. Auth-gated so a public deploy never leaks
+    other users' cache pressure to a probing endpoint. A purge knob is
+    intentionally absent — purge runs lazily on read filter; a future
+    cron can call llm.cache.purge_expired() if storage grows."""
+    from alpha_agent.llm.cache import cache_stats, purge_expired
+
+    pool = await get_db_pool()
+    # Opportunistic sweep, cheap (indexed on expires_at).
+    purged = await purge_expired(pool)
+    rows = await cache_stats(pool)
+    own = next((r for r in rows if r["user_id"] == user_id), None)
+    return {
+        "own": own,
+        "all_users": rows,
+        "purged_this_call": purged,
+    }
