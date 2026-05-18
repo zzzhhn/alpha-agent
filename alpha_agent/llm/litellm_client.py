@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import AsyncIterator
 
 import litellm
 
@@ -123,6 +124,38 @@ class LiteLLMClient(LLMClient):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
         )
+
+    async def stream_chat(
+        self,
+        messages: list[Message],
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> AsyncIterator[str]:
+        """Yield text deltas via LiteLLM's native streaming.
+
+        litellm.acompletion(stream=True) returns an async iterator of
+        ModelResponseStream chunks, each shaped like a Chat Completion
+        chunk: chunk.choices[0].delta.content holds the next text piece
+        (None or "" on metadata-only frames). We skip empties and emit
+        the rest; the splitter at the brief layer takes care of section
+        marker detection across chunks.
+        """
+        payload_messages = [{"role": m.role, "content": m.content} for m in messages]
+        response = await litellm.acompletion(
+            messages=payload_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            **self._kwargs(),
+        )
+        async for chunk in response:
+            try:
+                delta = chunk.choices[0].delta
+            except (AttributeError, IndexError):
+                continue
+            text = getattr(delta, "content", None)
+            if text:
+                yield text
 
     async def is_available(self) -> bool:
         """Smoke-test the configured provider by issuing a 1-token completion.

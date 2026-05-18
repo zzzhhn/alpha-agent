@@ -13,7 +13,9 @@ Access is gated by User-Agent: the server allow-lists known coding agents
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import AsyncIterator
 
 import httpx
 
@@ -85,6 +87,66 @@ class KimiClient(LLMClient):
             prompt_tokens=usage.get("input_tokens", 0),
             completion_tokens=usage.get("output_tokens", 0),
         )
+
+    async def stream_chat(
+        self,
+        messages: list[Message],
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> AsyncIterator[str]:
+        """Yield text deltas as Kimi generates them via Anthropic-compat SSE.
+
+        Anthropic event types we care about:
+          - content_block_delta { delta: { type: "text_delta", text: "..." } }
+            → emit text
+          - message_stop → terminate
+          - ping / message_start / content_block_start / content_block_stop /
+            message_delta → ignored (no user-visible content)
+
+        Lines that don't parse as JSON, lack a known event type, or are
+        empty are silently skipped; the loop continues until the server
+        closes the stream or message_stop fires. Caller wraps any upstream
+        HTTP error.
+        """
+        system_prompts = [m.content for m in messages if m.role == "system"]
+        convo = [
+            {"role": m.role, "content": m.content}
+            for m in messages
+            if m.role in ("user", "assistant")
+        ]
+        payload: dict[str, object] = {
+            "model": self._model,
+            "messages": convo,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        if system_prompts:
+            payload["system"] = "\n\n".join(system_prompts)
+
+        async with self._client.stream(
+            "POST", "/messages", json=payload,
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                # Anthropic SSE format is: `event: <type>\ndata: <json>\n\n`
+                # We only need the `data:` lines; `event:` lines are
+                # informational metadata that duplicates `type` inside data.
+                if not line.startswith("data:"):
+                    continue
+                payload_str = line[5:].lstrip()
+                if not payload_str or payload_str == "[DONE]":
+                    continue
+                try:
+                    evt = json.loads(payload_str)
+                except json.JSONDecodeError:
+                    continue
+                if evt.get("type") == "content_block_delta":
+                    delta = evt.get("delta") or {}
+                    text = delta.get("text", "") if delta.get("type") == "text_delta" else ""
+                    if text:
+                        yield text
+                elif evt.get("type") == "message_stop":
+                    break
 
     async def is_available(self) -> bool:
         try:

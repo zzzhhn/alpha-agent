@@ -1,17 +1,21 @@
 """Section-emitting generator for the Rich brief endpoint.
 
-This used to call `litellm.acompletion(stream=True, ...)` directly, which
-reimplemented provider routing and silently missed the Kimi-For-Coding
-User-Agent gate (Kimi allow-lists coding-agent UAs; LiteLLM's own UA gets
-rejected with a 400). The fix: reuse `_build_byok_client` - the single
-provider router that `get_llm_client` also uses - so Kimi goes through the
-hand-rolled `KimiClient` (correct UA, Anthropic-compat `/messages`) exactly
-like every other authenticated LLM route.
-
-Trade-off: the legacy `KimiClient` exposes only a one-shot `chat()`, no
-streaming. So the brief is fetched in one call, then split into
-`[SUMMARY]`/`[BULL]`/`[BEAR]` sections and emitted as discrete SSE events.
-The client UI is unchanged - it already keys off the section markers.
+Architecture (2026-05-19 true-streaming upgrade):
+1. The provider client is built via `_build_byok_client` — the single
+   provider router shared with `get_llm_client`. Kimi goes through the
+   hand-rolled KimiClient (Anthropic-compat /messages with the UA gate
+   honored); everything else routes through LiteLLMClient.
+2. We call `client.stream_chat(...)` which yields raw text chunks as the
+   LLM generates them. KimiClient + LiteLLMClient both have native SSE
+   streaming; any future client without a streaming path inherits the
+   default fallback in LLMClient.base (one yield of the full chat()
+   response — preserves behaviour for non-streaming providers).
+3. A `_StreamSplitter` (below) buffers the incoming text and detects
+   `[SUMMARY]`/`[BULL]`/`[BEAR]` section markers on the fly, emitting
+   {type, delta} events as soon as enough characters have arrived to be
+   unambiguously past a marker boundary. This is what makes the UI
+   actually paint tokens as the LLM emits them, rather than waiting for
+   the full response and bursting all events at the end.
 
 Key handling: api_key is request-only. It is passed straight into the
 per-request client and never stored, logged, or echoed into error payloads.
@@ -26,6 +30,82 @@ from typing import AsyncIterator
 # this module from drifting out of sync again.
 from alpha_agent.api.byok import _build_byok_client
 from alpha_agent.llm.base import Message
+
+
+_SECTION_MARKERS: tuple[tuple[str, str], ...] = (
+    ("[SUMMARY]", "summary"),
+    ("[BULL]", "bull"),
+    ("[BEAR]", "bear"),
+)
+_MAX_MARKER_LEN = max(len(m) for m, _ in _SECTION_MARKERS)
+
+
+class _StreamSplitter:
+    """Token-streaming marker router for Rich Brief.
+
+    Buffers incoming chunks and emits {type, delta} events as soon as
+    enough text has arrived to be unambiguously past a section boundary.
+    Holds back up to `_MAX_MARKER_LEN` characters at the buffer tail so a
+    marker split across two chunks (e.g. "[SUM" then "MARY]\\n") is not
+    misclassified as belonging to the prior section.
+
+    Pre-marker prose (rare: model occasionally adds a stray preface) is
+    attributed to `summary`, matching the prior post-hoc splitter's
+    behaviour so the client never sees a "no section yet" delta.
+    """
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._current_section: str | None = None
+
+    def feed(self, chunk: str) -> list[dict]:
+        events: list[dict] = []
+        self._buf += chunk
+        while True:
+            best_idx = -1
+            best_marker_len = 0
+            best_section: str | None = None
+            for marker, section in _SECTION_MARKERS:
+                idx = self._buf.find(marker)
+                if idx != -1 and (best_idx == -1 or idx < best_idx):
+                    best_idx = idx
+                    best_marker_len = len(marker)
+                    best_section = section
+            if best_idx == -1:
+                # No complete marker visible. Emit everything except the
+                # last MAX_MARKER_LEN chars (which might be a partial
+                # marker still arriving). On the first chunk before any
+                # marker fires we attribute to summary.
+                hold = _MAX_MARKER_LEN
+                if len(self._buf) > hold:
+                    emit = self._buf[:-hold]
+                    self._buf = self._buf[-hold:]
+                    target = self._current_section or "summary"
+                    if emit:
+                        events.append({"type": target, "delta": emit})
+                return events
+            prefix = self._buf[:best_idx]
+            if prefix:
+                target = self._current_section or "summary"
+                events.append({"type": target, "delta": prefix})
+            self._current_section = best_section
+            tail_start = best_idx + best_marker_len
+            # Trim a leading newline immediately after the marker for
+            # cleaner section text; harmless if absent.
+            if (
+                tail_start < len(self._buf)
+                and self._buf[tail_start] == "\n"
+            ):
+                tail_start += 1
+            self._buf = self._buf[tail_start:]
+
+    def flush(self) -> list[dict]:
+        if not self._buf:
+            return []
+        target = self._current_section or "summary"
+        out = [{"type": target, "delta": self._buf}]
+        self._buf = ""
+        return out
 
 _SYSTEM_PROMPT_BASE = """You are a sober equity research analyst writing a brief for a retail trader.
 
@@ -68,13 +148,6 @@ def _build_system_prompt(language: str) -> str:
 # prompt. The streamer below now resolves per-request via _build_system_prompt.
 SYSTEM_PROMPT = _build_system_prompt("en")
 
-_SECTION_MARKERS: tuple[tuple[str, str], ...] = (
-    ("[SUMMARY]", "summary"),
-    ("[BULL]", "bull"),
-    ("[BEAR]", "bear"),
-)
-
-
 def _build_user_prompt(ticker: str, rating: str, composite: float, breakdown: list[dict]) -> str:
     return (
         f"Ticker: {ticker}\n"
@@ -84,35 +157,6 @@ def _build_user_prompt(ticker: str, rating: str, composite: float, breakdown: li
     )
 
 
-def _split_sections(text: str) -> list[dict]:
-    """Split a full LLM response into ordered {type, delta} section events.
-
-    Sections are delimited by the `[SUMMARY]`/`[BULL]`/`[BEAR]` header
-    markers the system prompt mandates. Any text before the first marker is
-    attributed to `summary` (defensive: the model occasionally adds a stray
-    preface). If no markers are present at all, the whole response is
-    emitted as a single `summary` event so the client still renders it.
-    """
-    found = sorted(
-        (idx, marker, section)
-        for marker, section in _SECTION_MARKERS
-        if (idx := text.find(marker)) != -1
-    )
-    if not found:
-        body = text.strip()
-        return [{"type": "summary", "delta": body}] if body else []
-
-    events: list[dict] = []
-    pre = text[: found[0][0]].strip()
-    if pre:
-        events.append({"type": "summary", "delta": pre})
-    for i, (idx, marker, section) in enumerate(found):
-        start = idx + len(marker)
-        end = found[i + 1][0] if i + 1 < len(found) else len(text)
-        body = text[start:end].strip()
-        if body:
-            events.append({"type": section, "delta": body})
-    return events
 
 
 async def stream_brief(
@@ -154,13 +198,17 @@ async def stream_brief(
             content=_build_user_prompt(ticker, rating, composite, breakdown),
         ),
     ]
+    splitter = _StreamSplitter()
     try:
-        response = await client.chat(messages, temperature=0.3, max_tokens=800)
+        async for chunk in client.stream_chat(
+            messages, temperature=0.3, max_tokens=800,
+        ):
+            for ev in splitter.feed(chunk):
+                yield ev
+        for ev in splitter.flush():
+            yield ev
     finally:
         close = getattr(client, "close", None)
         if close is not None:
             await close()
-
-    for event in _split_sections(response.content):
-        yield event
     yield {"type": "done"}
