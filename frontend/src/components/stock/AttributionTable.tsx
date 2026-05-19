@@ -284,10 +284,7 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
               </td>
               <td className="px-2 py-1 text-tm-muted">{b.source}</td>
               <td className="px-2 py-1 text-tm-muted">
-                {new Date(b.timestamp).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {formatTimestamp(b.timestamp)}
               </td>
             </tr>
           );
@@ -296,6 +293,16 @@ export default function AttributionTable({ card }: { card: RatingCard }) {
       </table>
     </div>
   );
+}
+
+// Defensive timestamp formatter: legacy rows or partial responses can carry
+// empty / malformed timestamp strings; `new Date("").toLocaleTimeString()`
+// would render literal "Invalid Date" otherwise.
+function formatTimestamp(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function SortTh({

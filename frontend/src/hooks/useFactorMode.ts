@@ -26,13 +26,16 @@ function readModePref(): FactorMode {
 export function useFactorMode(): [FactorMode, (next: FactorMode) => void] {
   const [mode, setMode] = useState<FactorMode>("short");
 
-  // Hydrate after mount + subscribe to cross-tab storage events.
+  // Hydrate after mount + subscribe to cross-tab storage events. Skip the
+  // listener when oldValue === newValue so the setter's own synthetic event
+  // (intended to notify SIBLING components in the same tab) does not also
+  // fire a redundant setMode on the setter's own component.
   useEffect(() => {
     setMode(readModePref());
     const onStorage = (e: StorageEvent) => {
-      if (e.key === FACTOR_MODE_KEY) {
-        setMode(e.newValue === "long" ? "long" : "short");
-      }
+      if (e.key !== FACTOR_MODE_KEY) return;
+      if (e.oldValue === e.newValue) return;
+      setMode(e.newValue === "long" ? "long" : "short");
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -44,13 +47,16 @@ export function useFactorMode(): [FactorMode, (next: FactorMode) => void] {
   const setModeAndPersist = useCallback((next: FactorMode) => {
     setMode(next);
     if (typeof window !== "undefined") {
+      const prev = window.localStorage.getItem(FACTOR_MODE_KEY);
       window.localStorage.setItem(FACTOR_MODE_KEY, next);
       // Manually dispatch a same-tab storage event so other components in
       // this tab listening via this hook also update. The native storage
-      // event only fires for OTHER tabs.
+      // event only fires for OTHER tabs. Include oldValue so the listener
+      // can detect no-op flips and skip its redundant setMode.
       window.dispatchEvent(
         new StorageEvent("storage", {
           key: FACTOR_MODE_KEY,
+          oldValue: prev,
           newValue: next,
         }),
       );

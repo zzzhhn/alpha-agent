@@ -31,6 +31,9 @@ export default function PriceChart({ ticker }: { ticker: string }) {
   const [errMsg, setErrMsg] = useState<string>("");
   // YYYY-MM-DD of the daily candle the user clicked; null = drawer closed.
   const [drawerDate, setDrawerDate] = useState<string | null>(null);
+  // Stable reference so IntradayDrawer's keydown-listener effect does not
+  // tear down + re-bind on every PriceChart render (e.g. status changes).
+  const handleDrawerClose = useCallback(() => setDrawerDate(null), []);
 
   const renderChart = useCallback(async (bars: OhlcvBar[], events: ChartEvent[]) => {
     const el = containerRef.current;
@@ -234,7 +237,7 @@ export default function PriceChart({ ticker }: { ticker: string }) {
       <IntradayDrawer
         ticker={ticker}
         date={drawerDate}
-        onClose={() => setDrawerDate(null)}
+        onClose={handleDrawerClose}
       />
       {status === "ok" ? <ExplainRangePanel ticker={ticker} /> : null}
     </section>

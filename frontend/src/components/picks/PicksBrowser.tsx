@@ -42,8 +42,15 @@ export default function PicksBrowser({
   // storage listener happen per-table rather than per-row.
   const { isWatched } = useWatchlist();
 
+  // Generation counter discards stale fetch results when the user types
+  // quickly. Without it, the response for "NV" can arrive AFTER "NVDA" and
+  // overwrite the narrower result set with broader data, making subsequent
+  // clicks navigate to the wrong ticker.
+  const reqIdRef = useRef(0);
+
   const runSearch = useCallback(
     async (q: string, mode: FactorMode) => {
+      const reqId = ++reqIdRef.current;
       setLoading(true);
       try {
         // No query: default top-50 board. Query: widen to the full universe
@@ -54,12 +61,13 @@ export default function PicksBrowser({
           trimmed || undefined,
           mode,
         );
+        if (reqId !== reqIdRef.current) return;
         setData(next);
       } catch {
         // Keep the last good data on a transient failure; a hard failure is
         // caught by the route-level error.tsx.
       } finally {
-        setLoading(false);
+        if (reqId === reqIdRef.current) setLoading(false);
       }
     },
     [],

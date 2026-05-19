@@ -64,7 +64,7 @@ export default function StockCardLayout({
         ) : null}
         <ActionBox card={card} />
         <div className="text-xs text-tm-muted space-y-0.5">
-          <div>{t(locale, "stock_layout.as_of")} {new Date(card.as_of).toLocaleString()}</div>
+          <div>{t(locale, "stock_layout.as_of")} {formatAsOf(card.as_of)}</div>
           {stale ? (
             <div className="rounded bg-tm-warn-soft px-2 py-1 text-tm-warn">
               ⚠ {t(locale, "stock_layout.stale_warning")}
@@ -110,6 +110,19 @@ export default function StockCardLayout({
       </main>
     </div>
   );
+}
+
+
+/**
+ * Guard against malformed / empty as_of strings. A stale cached response
+ * from before a schema change can land with an empty string, and
+ * `new Date("").toLocaleString()` renders the literal "Invalid Date" on
+ * every browser — visible to the user as a broken sidebar.
+ */
+function formatAsOf(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleString();
 }
 
 
