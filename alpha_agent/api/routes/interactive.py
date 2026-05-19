@@ -658,6 +658,46 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
 
 
 # ---------------------------------------------------------------------------
+# B7 (2026-05-19) — Alpha158 short-horizon seed library
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/v1/factors/library")
+async def factors_library(
+    horizon_max: int = 20,
+    category: str | None = None,
+) -> dict:
+    """Return the curated Alpha158 short-horizon factor seed library.
+
+    Surgical default: horizon_max=20 (trading days) keeps the response
+    aligned with the SHORT factor-mode user. Bump to 252 for the full
+    set if/when LONG mode users land. Category filter is optional.
+    """
+    from alpha_agent.factors.alpha158 import filter_library
+
+    seeds = filter_library(
+        horizon_max=horizon_max if horizon_max > 0 else None,
+        category=category,  # type: ignore[arg-type]
+    )
+    return {
+        "horizon_max": horizon_max,
+        "category": category,
+        "count": len(seeds),
+        "seeds": [
+            {
+                "name": s.name,
+                "expression": s.expression,
+                "lookback": s.lookback,
+                "category": s.category,
+                "description_zh": s.description_zh,
+                "description_en": s.description_en,
+            }
+            for s in seeds
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
 # B6 (2026-05-19) — single-file HTML tearsheet export
 # ---------------------------------------------------------------------------
 
