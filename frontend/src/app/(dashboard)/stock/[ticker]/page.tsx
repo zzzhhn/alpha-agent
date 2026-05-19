@@ -4,7 +4,10 @@ import { ApiException } from "@/lib/api/client";
 import StockCardLayout from "@/components/stock/StockCardLayout";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+// Page is dynamic by data dependency (the await below); the force-dynamic
+// directive was an over-precaution that defeated Next.js Data Cache. With
+// it gone, the per-ticker fetch is cached for 60s + tagged so the cron can
+// revalidate explicitly when ratings change.
 
 export default async function StockPage({
   params,
@@ -12,7 +15,11 @@ export default async function StockPage({
   params: { ticker: string };
 }) {
   try {
-    const { card, stale } = await fetchStock(params.ticker);
+    const ticker = params.ticker.toUpperCase();
+    const { card, stale } = await fetchStock(ticker, {
+      revalidate: 60,
+      tags: [`stock-${ticker}`],
+    });
     return <StockCardLayout card={card} stale={stale} />;
   } catch (e) {
     // A 404 means the ticker is in neither signals table, so render the

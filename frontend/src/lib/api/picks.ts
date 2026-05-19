@@ -1,5 +1,5 @@
 // frontend/src/lib/api/picks.ts
-import { apiGet, apiPost } from "./client";
+import { apiGet, apiPost, type ApiGetOptions } from "./client";
 
 export interface BreakdownEntry {
   signal: string;
@@ -79,18 +79,21 @@ export const fetchPicks = (
   limit = 50,
   search?: string,
   mode: FactorMode = "short",
+  opts?: ApiGetOptions,
 ) => {
   const params = new URLSearchParams({ limit: String(limit), mode });
   const q = search?.trim();
   if (q) params.set("search", q);
   return apiGet<{ picks: RatingCard[]; as_of: string | null; stale: boolean }>(
     `/api/picks/lean?${params.toString()}`,
+    opts,
   );
 };
 
-export const fetchStock = (ticker: string) =>
+export const fetchStock = (ticker: string, opts?: ApiGetOptions) =>
   apiGet<{ card: RatingCard; stale: boolean }>(
     `/api/stock/${ticker.toUpperCase()}`,
+    opts,
   );
 
 export interface BriefRequest {
