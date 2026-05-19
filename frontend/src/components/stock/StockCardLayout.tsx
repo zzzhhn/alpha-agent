@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { GexInfo, RatingCard } from "@/lib/api/picks";
+import type { SignalHealthEntry } from "@/lib/api/signal_health";
 import type { Locale } from "@/lib/i18n";
 import LetterGradeRibbon from "./LetterGradeRibbon";
 import PersonaPanel from "./PersonaPanel";
@@ -25,9 +26,14 @@ import SourcesBlock from "./SourcesBlock";
 export default function StockCardLayout({
   card,
   stale,
+  healthMap,
 }: {
   card: RatingCard;
   stale: boolean;
+  // Forwarded down to AttributionTable so the per-page client fetch of
+  // /api/_health/signals is eliminated. Empty object when the upstream
+  // RSC fetch failed (table degrades gracefully to "-" cells).
+  healthMap: Record<string, SignalHealthEntry>;
 }) {
   const { isWatched } = useWatchlist();
   const watched = isWatched(card.ticker);
@@ -94,7 +100,7 @@ export default function StockCardLayout({
               <AttributionRadar card={card} />
             </div>
             <div className="col-span-8">
-              <AttributionTable card={card} />
+              <AttributionTable card={card} healthMap={healthMap} />
             </div>
           </div>
         </section>

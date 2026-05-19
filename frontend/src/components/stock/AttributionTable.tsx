@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import type { RatingCard } from "@/lib/api/picks";
-import {
-  fetchSignalHealth,
-  type SignalHealthEntry,
-} from "@/lib/api/signal_health";
+import type { SignalHealthEntry } from "@/lib/api/signal_health";
 import {
   t,
   type TranslationKey,
@@ -27,32 +24,20 @@ const TIER_DOT: Record<SignalHealthEntry["tier"], string> = {
   unknown: "bg-tm-muted",
 };
 
-export default function AttributionTable({ card }: { card: RatingCard }) {
+export default function AttributionTable({
+  card,
+  healthMap,
+}: {
+  card: RatingCard;
+  // Pre-fetched in the parent RSC (Next Data Cache, 1h revalidate) so
+  // every stock page used to re-fire /api/_health/signals client-side.
+  // Empty map = upstream fetch failed; cells gracefully render "-".
+  healthMap: Record<string, SignalHealthEntry>;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>("contribution");
   const [desc, setDesc] = useState(true);
   const { locale } = useLocale();
-  const [healthMap, setHealthMap] = useState<Record<string, SignalHealthEntry>>(
-    {},
-  );
   const [factorMode, setFactorMode] = useFactorMode();
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchSignalHealth()
-      .then(({ signals }) => {
-        if (cancelled) return;
-        const m: Record<string, SignalHealthEntry> = {};
-        for (const s of signals) m[s.name] = s;
-        setHealthMap(m);
-      })
-      .catch(() => {
-        // Tolerant: leave healthMap empty so the table still renders;
-        // live IC + tier cells fall back to "-" / unknown dot.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Apply factor-mode swap before sort so contribution-sort respects the
   // active mode. Picks endpoint already does composite re-rank server-side

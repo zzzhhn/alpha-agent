@@ -1,5 +1,5 @@
 // frontend/src/lib/api/signal_health.ts
-import { apiGet } from "./client";
+import { apiGet, type ApiGetOptions } from "./client";
 
 export interface SignalHealthEntry {
   name: string;
@@ -21,5 +21,5 @@ export interface SignalHealthEntry {
   n_obs_30d?: number;
 }
 
-export const fetchSignalHealth = () =>
-  apiGet<{ signals: SignalHealthEntry[] }>("/api/_health/signals");
+export const fetchSignalHealth = (opts?: ApiGetOptions) =>
+  apiGet<{ signals: SignalHealthEntry[] }>("/api/_health/signals", opts);

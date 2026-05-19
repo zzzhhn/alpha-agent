@@ -1,5 +1,6 @@
 // frontend/src/app/(dashboard)/stock/[ticker]/page.tsx
 import { fetchStock } from "@/lib/api/picks";
+import { fetchSignalHealth, type SignalHealthEntry } from "@/lib/api/signal_health";
 import { ApiException } from "@/lib/api/client";
 import StockCardLayout from "@/components/stock/StockCardLayout";
 import { notFound } from "next/navigation";
@@ -16,11 +17,23 @@ export default async function StockPage({
 }) {
   try {
     const ticker = params.ticker.toUpperCase();
-    const { card, stale } = await fetchStock(ticker, {
-      revalidate: 60,
-      tags: [`stock-${ticker}`],
-    });
-    return <StockCardLayout card={card} stale={stale} />;
+    // Fetch stock card + global signal_health in parallel. signal_health
+    // is ticker-agnostic so a single 1h-cached entry serves the whole
+    // app; previously every stock page re-fetched it client-side.
+    const [{ card, stale }, healthResult] = await Promise.all([
+      fetchStock(ticker, {
+        revalidate: 60,
+        tags: [`stock-${ticker}`],
+      }),
+      fetchSignalHealth({ revalidate: 3600, tags: ["signal-health"] }).catch(
+        () => ({ signals: [] as SignalHealthEntry[] }),
+      ),
+    ]);
+    const healthMap: Record<string, SignalHealthEntry> = {};
+    for (const s of healthResult.signals) healthMap[s.name] = s;
+    return (
+      <StockCardLayout card={card} stale={stale} healthMap={healthMap} />
+    );
   } catch (e) {
     // A 404 means the ticker is in neither signals table, so render the
     // not-found page. The old check keyed off e.message.includes("No
