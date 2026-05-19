@@ -14,16 +14,11 @@
  * same persona within 24h is sub-100ms and zero LLM spend.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import { apiGet, apiPost } from "@/lib/api/client";
+import { apiPost } from "@/lib/api/client";
 import { useLocale } from "@/components/layout/LocaleProvider";
-
-interface PersonaMeta {
-  name: string;
-  label: string;
-  signals: string[];
-}
+import { getPersonas } from "@/lib/personas";
 
 interface ExplainResponse {
   ticker: string;
@@ -36,17 +31,15 @@ type Status = "idle" | "loading" | "done" | "error";
 
 export default function PersonaPanel({ ticker }: { ticker: string }) {
   const { locale } = useLocale();
-  const [personas, setPersonas] = useState<PersonaMeta[]>([]);
+  // Persona metadata is static config (7 entries, name+label+signals);
+  // moved from a per-page GET /api/stock/personas fetch into a local
+  // constant so the panel renders immediately without a network round
+  // trip. LLM commentary stays click-gated through onExplain below.
+  const personas = useMemo(() => getPersonas(locale), [locale]);
   const [active, setActive] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<ExplainResponse | null>(null);
   const [errMsg, setErrMsg] = useState("");
-
-  useEffect(() => {
-    apiGet<{ personas: PersonaMeta[] }>(`/api/stock/personas?language=${locale}`)
-      .then((d) => setPersonas(d.personas))
-      .catch(() => setPersonas([]));
-  }, [locale]);
 
   const onExplain = useCallback(
     async (name: string) => {
