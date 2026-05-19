@@ -79,6 +79,18 @@ async def save_byok(
     ciphertext, nonce = encrypt(body.api_key, master.encode("utf-8"))
     last4 = body.api_key[-4:]
     pool = await get_db_pool()
+
+    # B9 (2026-05-19): snapshot the prior non-secret BYOK coordinates so
+    # the change_log can render a diff card for the user. Secret material
+    # (ciphertext/nonce) is intentionally OUT of the log — only the
+    # operationally-rollback-safe fields (provider/model/base_url) are
+    # journaled.
+    prior = await pool.fetchrow(
+        "SELECT provider, model, base_url FROM user_byok "
+        "WHERE user_id = $1 LIMIT 1",
+        user_id,
+    )
+
     await pool.execute(
         """
         INSERT INTO user_byok
@@ -94,6 +106,21 @@ async def save_byok(
         """,
         user_id, body.provider, ciphertext, nonce, last4, body.model, body.base_url,
     )
+
+    # B9 change-log writes are best-effort (a logger failure must not
+    # block the BYOK save the user actually pressed Save on).
+    try:
+        from alpha_agent.settings.change_log import record_change
+
+        for field, old, new in [
+            ("byok.provider", prior["provider"] if prior else None, body.provider),
+            ("byok.model", prior["model"] if prior else None, body.model),
+            ("byok.base_url", prior["base_url"] if prior else None, body.base_url),
+        ]:
+            if old != new:
+                await record_change(pool, user_id, field, old, new)
+    except Exception:  # noqa: BLE001 — log-write failure is non-fatal
+        pass
     from datetime import UTC, datetime
 
     return ByokSaveResponse(
@@ -179,3 +206,83 @@ async def export_account(user_id: int = Depends(require_user)) -> dict:
             for b in byok
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# B9 (2026-05-19) — settings change log + 1-click rollback
+# ---------------------------------------------------------------------------
+
+
+@router.get("/settings/history")
+async def settings_history(
+    limit: int = 50,
+    user_id: int = Depends(require_user),
+) -> dict:
+    """Recent config edits for the authenticated user, newest first.
+    Drives the diff card UI in /settings (mirrors AlertList.tsx pattern)."""
+    from alpha_agent.settings.change_log import fetch_history
+
+    pool = await get_db_pool()
+    rows = await fetch_history(pool, user_id, limit=min(max(limit, 1), 200))
+    return {"changes": rows}
+
+
+@router.post("/settings/rollback/{change_id}")
+async def settings_rollback(
+    change_id: int,
+    user_id: int = Depends(require_user),
+) -> dict:
+    """Re-apply the `old_value` of a historical change as a new write,
+    journaled as source='rollback' with rollback_of=change_id pointing
+    back at the original row.
+
+    Restricted to ROLLBACK_SAFE_FIELDS — secret material (BYOK
+    ciphertext) is never round-tripped through this path. To rotate a
+    key, the user must re-enter it via /settings/byok manually.
+    """
+    from alpha_agent.settings.change_log import (
+        ROLLBACK_SAFE_FIELDS, fetch_change, record_change,
+    )
+
+    pool = await get_db_pool()
+    change = await fetch_change(pool, user_id, change_id)
+    if change is None:
+        raise HTTPException(status_code=404, detail=f"change {change_id} not found")
+    field = change["field"]
+    if field not in ROLLBACK_SAFE_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"field {field!r} not rollback-safe; manual re-entry required",
+        )
+    target = change["old_value"]
+
+    # Apply the rollback to the actual settings table. For now only
+    # byok.* fields are rollback-safe; weight-override rollback wires in
+    # at B9.1 when the weight UI ships.
+    if field == "byok.provider":
+        await pool.execute(
+            "UPDATE user_byok SET provider = $1 WHERE user_id = $2",
+            target, user_id,
+        )
+    elif field == "byok.model":
+        await pool.execute(
+            "UPDATE user_byok SET model = $1 WHERE user_id = $2",
+            target, user_id,
+        )
+    elif field == "byok.base_url":
+        await pool.execute(
+            "UPDATE user_byok SET base_url = $1 WHERE user_id = $2",
+            target, user_id,
+        )
+
+    # Journal the rollback as its own row (preserves append-only audit
+    # invariant). new_value here is the value we just re-applied; the
+    # natural diff = (current_value_before_rollback → target).
+    log_id = await record_change(
+        pool, user_id, field,
+        old_value=change["new_value"],
+        new_value=target,
+        source="rollback",
+        rollback_of=change_id,
+    )
+    return {"ok": True, "rollback_change_id": log_id, "applied_value": target}

@@ -44,6 +44,7 @@ import {
 import { t } from "@/lib/i18n";
 import WeightsEditor from "@/components/settings/WeightsEditor";
 import WatchlistEditor from "@/components/settings/WatchlistEditor";
+import ChangeLog from "@/components/settings/ChangeLog";
 
 type TestState =
   | { kind: "idle" }
@@ -527,6 +528,14 @@ export default function SettingsPage() {
         meta={zh ? "intraday cron 优先处理 + /alerts 显示" : "intraday cron prioritisation + /alerts display"}
       >
         <WatchlistEditor />
+      </TmPane>
+
+      {/* B9 (2026-05-19) — settings change log + 1-click rollback */}
+      <TmPane
+        title="CHANGE LOG"
+        meta={zh ? "BYOK / 模型 / API base 的变更历史 + 一键回滚" : "BYOK / model / base_url change history + 1-click rollback"}
+      >
+        <ChangeLog />
       </TmPane>
 
       {/* Danger zone */}
