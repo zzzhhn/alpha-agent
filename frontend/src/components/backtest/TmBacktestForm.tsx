@@ -43,6 +43,10 @@ export interface BacktestFormParams {
   readonly maskEarningsWindow: boolean;
   readonly neutralize: "none" | "sector";
   readonly benchmarkTicker: "SPY" | "RSP";
+  // A2 (2026-05-19): default true (corrected); flip false for the
+  // legacy lookahead-biased reproduction. Backend response echoes via
+  // `survivorship_corrected` so the user can verify the toggle took.
+  readonly applySurvivorshipMask: boolean;
 }
 
 interface TmBacktestFormProps {
@@ -107,6 +111,10 @@ export function TmBacktestForm({
   // default; user can still untick to keep responses tiny.
   const [includeBreakdown, setIncludeBreakdown] = useState(true);
   const [maskEarningsWindow, setMaskEarningsWindow] = useState(false);
+  // A2 (2026-05-19): default on. Flipping it off reproduces legacy
+  // lookahead-biased numbers so the user can quantify the survivorship-
+  // bias contribution via 2 runs.
+  const [applySurvivorshipMask, setApplySurvivorshipMask] = useState(true);
   const [neutralize, setNeutralize] = useState<"none" | "sector">(
     initialConfig?.neutralize ?? "none",
   );
@@ -134,6 +142,7 @@ export function TmBacktestForm({
         maskEarningsWindow: false,
         neutralize: "none",
         benchmarkTicker: "SPY",
+        applySurvivorshipMask: true,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,6 +180,7 @@ export function TmBacktestForm({
       maskEarningsWindow,
       neutralize,
       benchmarkTicker,
+      applySurvivorshipMask,
     });
   }
 
@@ -327,6 +337,22 @@ export function TmBacktestForm({
             <span>{t(locale, "backtest.form.maskEarnings")}</span>
             <span className="text-[10.5px] text-tm-muted">
               {t(locale, "backtest.form.maskEarningsHint")}
+            </span>
+          </label>
+          <label className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-fg">
+            <input
+              type="checkbox"
+              checked={applySurvivorshipMask}
+              onChange={(e) => setApplySurvivorshipMask(e.target.checked)}
+              className="cursor-pointer accent-[var(--tm-accent)]"
+            />
+            <span>
+              {locale === "zh" ? "应用 SP500 成员 mask (生存偏差修正)" : "Apply SP500 membership mask"}
+            </span>
+            <span className="text-[10.5px] text-tm-muted">
+              {locale === "zh"
+                ? "默认开。关闭后对照运行可量化生存偏差贡献。"
+                : "Default on. Toggle off + re-run to quantify the survivorship-bias contribution."}
             </span>
           </label>
         </div>

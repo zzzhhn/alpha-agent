@@ -144,6 +144,7 @@ export default function BacktestPage() {
       mask_earnings_window: p.maskEarningsWindow,
       neutralize: p.neutralize,
       benchmark_ticker: p.benchmarkTicker,
+      apply_survivorship_mask: p.applySurvivorshipMask,
     });
     if (res.error || !res.data) {
       setError(res.error ?? "unknown error");

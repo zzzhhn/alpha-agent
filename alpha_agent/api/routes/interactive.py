@@ -371,6 +371,16 @@ class FactorBacktestRequest(BaseModel):
         description="Benchmark for alpha/beta regression. SPY = cap-weighted "
                     "(Mag-7 dominated), RSP = equal-weight SP500. Long-only equal-"
                     "weight baskets are far closer to RSP's regime than SPY's.")
+    # A2 (2026-05-19) — opt out of point-in-time SP500 membership masking.
+    # Default True (corrected); flip False to reproduce the legacy result
+    # for delta comparison. survivorship_corrected in the response echoes
+    # which mode produced the numbers.
+    apply_survivorship_mask: bool = Field(default=True,
+        description="When True (default) applies point-in-time SP500 membership "
+                    "mask so delisted tickers do not appear in the universe on dates "
+                    "they were not constituents. Toggle off to reproduce legacy lookahead-"
+                    "biased results for delta comparison; survivorship_corrected in "
+                    "the response echoes the active mode.")
 
 
 class _SplitMetricsModel(BaseModel):

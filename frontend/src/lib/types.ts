@@ -311,6 +311,10 @@ export interface FactorBacktestRequest {
   readonly earnings_window_days?: number; // T3.C v4: 0–5, mask half-width
   readonly neutralize?: "none" | "sector"; // Bundle A.2 v4: sector-neutral mode
   readonly benchmark_ticker?: "SPY" | "RSP";  // v4: alt benchmark for α/β regression
+  // A2 (2026-05-19): opt-out of point-in-time SP500 membership masking.
+  // Default true (corrected); flip false to reproduce legacy lookahead-biased
+  // result for delta comparison. survivorship_corrected echoes the active mode.
+  readonly apply_survivorship_mask?: boolean;
 }
 
 export interface WalkForwardWindow {

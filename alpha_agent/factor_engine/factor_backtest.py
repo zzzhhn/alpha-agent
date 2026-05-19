@@ -687,6 +687,7 @@ def run_factor_backtest(
     earnings_window_days: int = 1,
     neutralize: Neutralize = "none",
     benchmark_ticker: str = BENCHMARK_TICKER,
+    apply_survivorship_mask: bool = True,
 ) -> FactorBacktestResult:
     """Run a cross-sectional backtest for the given FactorSpec.
 
@@ -766,6 +767,15 @@ def run_factor_backtest(
         )
 
     panel = _load_panel()
+    # A2 (2026-05-19): legacy-comparison knob — null out the membership
+    # mask when the caller opts out of survivorship correction so the
+    # downstream kernel runs against the full (including-delisted-when-
+    # parquet-has-them) panel. User runs twice (with / without) and the
+    # KPI strip diffs the metrics; survivorship_corrected flag in the
+    # response echoes which mode produced these numbers.
+    if not apply_survivorship_mask and panel.is_member is not None:
+        import dataclasses as _dc
+        panel = _dc.replace(panel, is_member=None)
     T, N = panel.close.shape
 
     # Resolve benchmark close series. Default = panel.benchmark_close (SPY);
