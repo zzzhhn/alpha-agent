@@ -16,6 +16,7 @@ from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.fusion.attribution import top_drivers, top_drags
+from alpha_agent.fusion.grades import compute_dimension_grades
 from alpha_agent.llm.base import LLMClient, Message
 from alpha_agent.signals.yf_helpers import extract_ohlcv, get_ticker
 
@@ -60,6 +61,11 @@ class FullCard(BaseModel):
     # on the stock detail page header to disambiguate "buy-dip works"
     # (regime=pinned) from "trend continuation" (regime=volatile).
     gex_info: dict | None = None
+    # B8 (2026-05-19): per-dimension letter grades derived from breakdown
+    # z's. Six dimensions (Momentum/Technical/Sentiment/Catalyst/Insider/
+    # Flow) each receive an A+ to F grade so the user reads SeekingAlpha-
+    # style at-a-glance without monthly fundamental ingest.
+    dimension_grades: dict[str, str] = {}
 
 
 class StockResponse(BaseModel):
@@ -126,6 +132,7 @@ async def get_stock(
         news_items=news_items,
         tier_flip_today=sig.get("tier_flip_today", False),
         gex_info=sig.get("gex_info"),
+        dimension_grades=compute_dimension_grades(sig["breakdown"]),
     )
     return StockResponse(card=card, stale=stale)
 

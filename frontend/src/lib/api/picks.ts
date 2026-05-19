@@ -58,6 +58,10 @@ export interface RatingCard {
   // continuation" (volatile). Conditioning variable only — not folded
   // into composite_score.
   gex_info?: GexInfo | null;
+  // B8 (2026-05-19): per-dimension letter grades (Momentum / Technical /
+  // Sentiment / Catalyst / Insider / Flow), each A+ to F derived from
+  // breakdown z-scores. Empty dimensions render as "—".
+  dimension_grades?: Record<string, string>;
   news_items?: NewsItemLite[];
 }
 

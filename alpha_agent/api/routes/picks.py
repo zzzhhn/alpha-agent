@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
+from alpha_agent.fusion.grades import compute_dimension_grades
 from alpha_agent.fusion.rating import compute_confidence, map_to_tier
 
 router = APIRouter(prefix="/api/picks", tags=["picks"])
@@ -41,6 +42,9 @@ class LeanCard(BaseModel):
     # (raw_tier differed from sticky rating). UI surfaces a small indicator
     # so the user knows hysteresis is currently absorbing wobble.
     tier_flip_today: bool = False
+    # B8 (2026-05-19): per-dimension letter grades from breakdown z's so
+    # the picks table can show A+/A/B/.../F at-a-glance per row.
+    dimension_grades: dict[str, str] = {}
 
 
 class PicksResponse(BaseModel):
@@ -213,6 +217,7 @@ async def picks_lean(
                     top_drags=top_drags(breakdown_data),
                     partial=is_partial,
                     tier_flip_today=tier_flip_today,
+                    dimension_grades=compute_dimension_grades(breakdown_data),
                 )
             )
 

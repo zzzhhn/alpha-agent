@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { GexInfo, RatingCard } from "@/lib/api/picks";
 import type { Locale } from "@/lib/i18n";
+import LetterGradeRibbon from "./LetterGradeRibbon";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import { t } from "@/lib/i18n";
@@ -56,6 +57,9 @@ export default function StockCardLayout({
         />
         {card.gex_info ? (
           <GexBadge info={card.gex_info} locale={locale} />
+        ) : null}
+        {card.dimension_grades && Object.keys(card.dimension_grades).length > 0 ? (
+          <LetterGradeRibbon grades={card.dimension_grades} locale={locale} />
         ) : null}
         <ActionBox card={card} />
         <div className="text-xs text-tm-muted space-y-0.5">
