@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MousePointerClick } from "lucide-react";
-import { fetchChartEvents, fetchOhlcv, type ChartEvent, type OhlcvBar } from "@/lib/api/picks";
+import type { ChartEvent, OhlcvBar } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import IntradayDrawer from "./IntradayDrawer";
@@ -11,6 +11,10 @@ import ExplainRangePanel from "./ExplainRangePanel";
 // lightweight-charts v4 imports — keep dynamic to avoid SSR breakage (the
 // lib touches `document` at import time). The component itself is
 // client-only via "use client".
+//
+// Tier 4 #1 (2026-05-19): OHLCV + event data moved to RSC; this component
+// no longer fetches anything. Pure renderer over the bars/events props
+// the parent page resolved in its Promise.all.
 
 function sma(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = [];
@@ -23,7 +27,15 @@ function sma(values: number[], window: number): (number | null)[] {
   return out;
 }
 
-export default function PriceChart({ ticker }: { ticker: string }) {
+export default function PriceChart({
+  ticker,
+  bars,
+  events,
+}: {
+  ticker: string;
+  bars: OhlcvBar[];
+  events: ChartEvent[];
+}) {
   const { locale } = useLocale();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -162,31 +174,25 @@ export default function PriceChart({ ticker }: { ticker: string }) {
     };
   }, []);
 
+  // Bars + events arrive as props from the RSC; we still need a client
+  // effect to: (a) dynamic-import lightweight-charts (touches `document`
+  // at import-time → can't SSR), (b) measure the container's clientWidth,
+  // (c) bind ResizeObserver. No network IO here anymore.
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     let cancelled = false;
     (async () => {
+      if (!bars.length) {
+        setStatus("empty");
+        return;
+      }
       setStatus("loading");
       try {
-        // Fetch chart bars + events in parallel. Event fetch is
-        // non-blocking — if it fails, render chart without markers
-        // (degraded gracefully; news data simply doesn't overlay).
-        const today = new Date().toISOString().slice(0, 10);
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        const from = sixMonthsAgo.toISOString().slice(0, 10);
-        const [r, evRes] = await Promise.all([
-          fetchOhlcv(ticker),
-          fetchChartEvents(ticker, from, today).catch(() => ({
-            ticker, from_ts: from, to_ts: today, events: [],
-          })),
-        ]);
-        if (cancelled) return;
-        if (!r.bars.length) {
-          setStatus("empty");
+        cleanup = await renderChart(bars, events);
+        if (cancelled) {
+          cleanup?.();
           return;
         }
-        cleanup = await renderChart(r.bars, evRes.events);
         setStatus("ok");
       } catch (e) {
         if (cancelled) return;
@@ -198,7 +204,7 @@ export default function PriceChart({ ticker }: { ticker: string }) {
       cancelled = true;
       cleanup?.();
     };
-  }, [ticker, renderChart]);
+  }, [bars, events, renderChart]);
 
   return (
     <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">

@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import type { GexInfo, RatingCard } from "@/lib/api/picks";
+import type {
+  ChartEvent,
+  GexInfo,
+  OhlcvBar,
+  RatingCard,
+} from "@/lib/api/picks";
 import type { SignalHealthEntry } from "@/lib/api/signal_health";
 import type { Locale } from "@/lib/i18n";
 import LetterGradeRibbon from "./LetterGradeRibbon";
@@ -27,6 +32,8 @@ export default function StockCardLayout({
   card,
   stale,
   healthMap,
+  bars,
+  chartEvents,
 }: {
   card: RatingCard;
   stale: boolean;
@@ -34,6 +41,11 @@ export default function StockCardLayout({
   // /api/_health/signals is eliminated. Empty object when the upstream
   // RSC fetch failed (table degrades gracefully to "-" cells).
   healthMap: Record<string, SignalHealthEntry>;
+  // Pre-fetched on the RSC, passed to PriceChart so the chart paints
+  // on first hydration tick rather than after a second client fetch.
+  // Empty bars = upstream fetch failed; PriceChart shows the empty state.
+  bars: OhlcvBar[];
+  chartEvents: ChartEvent[];
 }) {
   const { isWatched } = useWatchlist();
   const watched = isWatched(card.ticker);
@@ -107,7 +119,12 @@ export default function StockCardLayout({
         {/* Same remount-on-ticker discipline as RichThesis: persona result */}
         {/* state must not bleed across tickers. */}
         <PersonaPanel key={card.ticker} ticker={card.ticker} />
-        <PriceChart ticker={card.ticker} />
+        <PriceChart
+          key={card.ticker}
+          ticker={card.ticker}
+          bars={bars}
+          events={chartEvents}
+        />
         <FundamentalsBlock card={card} />
         <CatalystsBlock card={card} />
         <NewsBlock card={card} />

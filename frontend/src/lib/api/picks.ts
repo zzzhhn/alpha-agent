@@ -184,9 +184,14 @@ export interface OhlcvResponse {
   bars: OhlcvBar[];
 }
 
-export const fetchOhlcv = (ticker: string, period = "6mo") =>
+export const fetchOhlcv = (
+  ticker: string,
+  period = "6mo",
+  opts?: ApiGetOptions,
+) =>
   apiGet<OhlcvResponse>(
     `/api/stock/${ticker.toUpperCase()}/ohlcv?period=${period}`,
+    opts,
   );
 
 // Minute-level intraday bars for a single calendar date. Backed by the
@@ -236,9 +241,11 @@ export const fetchChartEvents = (
   ticker: string,
   fromTs: string,
   toTs: string,
+  opts?: ApiGetOptions,
 ) =>
   apiGet<ChartEventsResponse>(
     `/api/stock/${ticker.toUpperCase()}/events?from_ts=${fromTs}&to_ts=${toTs}`,
+    opts,
   );
 
 export interface ExplainRangeResponse {
