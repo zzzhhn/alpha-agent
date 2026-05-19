@@ -24,6 +24,9 @@ const SIGNAL_DISPLAY_LABEL_FALLBACK: Record<string, Record<Locale, string>> = {
   macro: { zh: "宏观 (波动率)", en: "Macro (Vol)" },
   calendar: { zh: "日历", en: "Calendar" },
   political_impact: { zh: "政治", en: "Political" },
+  // A3 (2026-05-19) split: geopolitical_impact carries tariff / Fed /
+  // sanctions / regulatory rows that used to be bundled into political.
+  geopolitical_impact: { zh: "地缘 (关税/Fed)", en: "Geopolitical" },
 };
 
 export function getSignalDisplayLabel(

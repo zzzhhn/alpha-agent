@@ -29,14 +29,33 @@ _MACRO_FIXTURE = [
 
 
 @pytest.mark.asyncio
-async def test_tesla_with_two_macro_events():
+async def test_tesla_political_lane_only_after_a3_split():
+    """A3 (2026-05-19): political_impact now filters to political category
+    only. Row 1 ('Trump praises Tesla manufacturing') is political; row 2
+    ('Trump signals tariff on Chinese imports') matches a geopolitical
+    keyword (tariff) and reroutes to geopolitical_impact. So political
+    sees n=1 here, not 2."""
     with patch("alpha_agent.signals.political_impact._query_recent_macro",
                return_value=_MACRO_FIXTURE):
         sig = await compute_political_impact_signal("TSLA")
-    assert sig["raw"]["n"] == 2
-    assert sig["confidence"] >= 0.7
-    # weighted: (1.0 * 1 + 0.7 * -1) / 2 = 0.15
-    assert abs(sig["raw"]["mean_sent"] - 0.15) < 0.05
+    assert sig["raw"]["n"] == 1
+    assert sig["raw"]["category"] == "political"
+    assert sig["confidence"] >= 0.5  # LLM bucket present on the kept row
+    # Single row: impact=high (1.0) * direction=bullish (+1) = 1.0
+    assert abs(sig["raw"]["mean_sent"] - 1.0) < 0.05
+
+
+@pytest.mark.asyncio
+async def test_tesla_geopolitical_lane_after_a3_split():
+    """A3 sibling test: the tariff row routes to geopolitical_impact."""
+    from alpha_agent.signals.geopolitical_impact import compute_geopolitical_impact_signal
+    with patch("alpha_agent.signals.geopolitical_impact._query_recent_macro",
+               return_value=_MACRO_FIXTURE):
+        sig = await compute_geopolitical_impact_signal("TSLA")
+    assert sig["raw"]["n"] == 1
+    assert sig["raw"]["category"] == "geopolitical"
+    # Single row: impact=medium (0.7) * direction=bearish (-1) = -0.7
+    assert abs(sig["raw"]["mean_sent"] - (-0.7)) < 0.05
 
 
 @pytest.mark.asyncio

@@ -647,6 +647,7 @@ const translations = {
     "attribution.signal_label_calendar": "日历",
     "attribution.signal_label_macro": "宏观 (波动率)",
     "attribution.signal_label_political_impact": "政治",
+    "attribution.signal_label_geopolitical_impact": "地缘 (关税/Fed)",
     /* Stock detail layout (StockCardLayout) */
     "stock_layout.back_to_picks": "返回选股",
     "stock_layout.as_of": "数据时间",
@@ -695,7 +696,9 @@ const translations = {
     "signal_tooltip.calendar":
       "FOMC 临近 / 季节性 / 期权到期等事件邻近性的复合。\n学术: Heston-Sadka (2008) seasonality 锚。\n数据: 静态日历表 + Fed/FOMC schedule。",
     "signal_tooltip.political_impact":
-      "macro_events 表 7d 窗口内 ticker 出现的政治事件,Tetlock-style 桶加权。\n学术: Baker-Bloom-Davis (2016, QJE 131(4)) 《Measuring Economic Policy Uncertainty》 — EPU 指数, Fed/IMF/BIS 标准, daily 更新 policyuncertainty.com + Hassan-Hollander-vanLent-Tahoun (2019, QJE 134(4)) 《Firm-Level Political Risk》 — earnings-call NLP 抽取公司级政治风险, firmlevelrisk.com + Manela-Moreira (2017, JFE) NVIX 尾部风险 + Wagner-Zeckhauser-Ziegler (2018, JFE) 政治事件对个股影响 + Tetlock (2007) 离散桶加权。\nPhase X TBD: 加入 firm-EPU beta 回归 z = 0.5 * tetlock + 0.5 * (-beta * delta_EPU_z)。\n数据: macro_events 表 (truth_social / fed_rss / ofac_rss)。",
+      "macro_events 表 7d 窗口内,**仅政治事件**(政客言论/竞选/选举/参议院众议院),Tetlock-style 桶加权。A3 (2026-05-19) 与 geopolitical_impact 分离 — 关税/Fed/制裁/监管 等政策动作流入 geopolitical_impact 信号。\n学术: Baker-Bloom-Davis (2016, QJE 131(4)) 《Measuring Economic Policy Uncertainty》 + Hassan-Hollander-vanLent-Tahoun (2019, QJE 134(4)) 《Firm-Level Political Risk》 + Wagner-Zeckhauser-Ziegler (2018, JFE) 政治事件对个股影响 + Tetlock (2007) 离散桶加权。\n数据: macro_events 表 (truth_social / 政客 RSS)。",
+    "signal_tooltip.geopolitical_impact":
+      "A3 (2026-05-19) 新信号: macro_events 7d 窗口的 **政策动作**(关税 / 制裁 / Fed 利率 / 监管),Tetlock-style 桶加权。与 political_impact 分离的理由: 2025-26 关税+Fed 周期下,政策动作是美股短线主导驱动,需独立归因 lane。\n学术: Baker-Bloom-Davis (2016, QJE) EPU + Adrian-Crump-Moench (2013, JFE) ACM 期限溢价(关税通过期限溢价传导)。\n分类规则: cheap 字符串匹配 (event_classifier.py),关键词重叠时 geopolitical 优先(政策动作 > 政治包装)。\nPhase X TBD: 独立的 firm-EPU vs firm-VIX beta 回归,把货币不确定性 vs 股权不确定性两条传导路径拆开。\n数据: macro_events 表 (fed_rss / ofac_rss / 政策行动者 RSS)。",
     /* RichThesis additional */
     "rich.stop_button": "停止",
     /* SourcesBlock */
@@ -1363,6 +1366,7 @@ const translations = {
     "attribution.signal_label_calendar": "Calendar",
     "attribution.signal_label_macro": "Macro (Vol)",
     "attribution.signal_label_political_impact": "Political",
+    "attribution.signal_label_geopolitical_impact": "Geopolitical",
     /* Stock detail layout (StockCardLayout) */
     "stock_layout.back_to_picks": "Back to Picks",
     "stock_layout.as_of": "as of",
@@ -1411,7 +1415,9 @@ const translations = {
     "signal_tooltip.calendar":
       "Composite of FOMC proximity / seasonality / options expiry event proximity.\nBacking: Heston-Sadka (2008) seasonality anchor.\nSource: static calendar table + Fed/FOMC schedule.",
     "signal_tooltip.political_impact":
-      "macro_events table 7d-window political events where the ticker appears, Tetlock-style bucket-weighted.\nBacking: Baker-Bloom-Davis (2016, QJE 131(4)) \"Measuring Economic Policy Uncertainty\" — EPU index, Fed/IMF/BIS standard, daily-updated at policyuncertainty.com + Hassan-Hollander-vanLent-Tahoun (2019, QJE 134(4)) \"Firm-Level Political Risk\" — earnings-call NLP extracts firm-level political risk, firmlevelrisk.com + Manela-Moreira (2017, JFE) NVIX tail-risk + Wagner-Zeckhauser-Ziegler (2018, JFE) political-event impact on individual stocks + Tetlock (2007) discrete-bucket weighting.\nPhase X TBD: add firm-EPU beta regression term z = 0.5 * tetlock + 0.5 * (-beta * delta_EPU_z).\nSource: macro_events table (truth_social / fed_rss / ofac_rss).",
+      "macro_events table 7d window, **politician-quote / campaign-cycle events only**, Tetlock-style bucket-weighted. A3 (2026-05-19) split from geopolitical_impact, which now carries the tariff / Fed / sanctions / regulatory action lane.\nBacking: Baker-Bloom-Davis (2016, QJE 131(4)) EPU + Hassan-Hollander-vanLent-Tahoun (2019, QJE 134(4)) firm-level political risk + Wagner-Zeckhauser-Ziegler (2018, JFE) political-event impact + Tetlock (2007) discrete-bucket weighting.\nSource: macro_events (truth_social / politician RSS).",
+    "signal_tooltip.geopolitical_impact":
+      "A3 (2026-05-19) new signal: macro_events 7d-window **policy actions** (tariffs / sanctions / Fed rate moves / regulatory). Split from political_impact because in the 2025-26 cycle policy actions are the dominant short-term US-equity mover and deserve their own attribution lane.\nBacking: Baker-Bloom-Davis (2016, QJE) EPU + Adrian-Crump-Moench (2013, JFE) ACM term premium (tariff shocks transmit through term-premium).\nClassifier: cheap string matching in event_classifier.py; on keyword overlap geopolitical wins (the action overrides the rhetorical wrapping).\nPhase X TBD: separate firm-EPU vs firm-VIX beta regressions to split monetary-uncertainty from equity-uncertainty channels.\nSource: macro_events (fed_rss / ofac_rss / policy-action RSS).",
     /* RichThesis additional */
     "rich.stop_button": "Stop",
     /* SourcesBlock */

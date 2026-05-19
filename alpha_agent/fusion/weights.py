@@ -18,6 +18,12 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "macro":            0.05,
     "calendar":         0.00,
     "political_impact": 0.00,
+    # A3 (2026-05-19): split from political_impact. Geopolitical actions
+    # (tariff / Fed / sanctions / regulatory) move markets via different
+    # channel than political rhetoric. Weight stays 0 in v1 (display-only)
+    # so the split is purely informational until backtest shows whether
+    # to upweight; flip 0.05+ once ic_backtest_monthly has 90d of history.
+    "geopolitical_impact": 0.00,
 }
 
 

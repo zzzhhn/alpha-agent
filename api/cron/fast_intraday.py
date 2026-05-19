@@ -44,10 +44,12 @@ from alpha_agent.signals import (
     calendar as cal,
     earnings,
     factor,
+    geopolitical_impact,
     insider,
     macro,
     news,
     options,
+    political_impact,
     premarket,
     technicals,
 )
@@ -66,6 +68,8 @@ _ALL_MODULES = {
     "premarket": premarket,
     "macro": macro,
     "calendar": cal,
+    "political_impact": political_impact,
+    "geopolitical_impact": geopolitical_impact,
 }
 
 # Tier -> the signal modules that tier refreshes this run.

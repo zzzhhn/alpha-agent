@@ -48,6 +48,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
+from alpha_agent.news.event_classifier import classify_event
 from alpha_agent.news.lm_dictionary import score_text
 from alpha_agent.signals.base import SignalScore, safe_fetch
 from alpha_agent.storage.postgres import get_pool
@@ -80,25 +81,31 @@ async def _query_recent_macro(ticker: str) -> list[dict]:
 
 
 async def compute_political_impact_signal(ticker: str) -> dict[str, Any]:
-    """Async core: query macro_events, apply LLM-as-Judge + LM fallback,
-    return a SignalScore-shaped dict.
+    """Async core: query macro_events, **filter to political-category
+    only** (politician quotes / campaign cycle), apply LLM-as-Judge + LM
+    fallback, return a SignalScore-shaped dict.
 
-    Exposed as a separate async coroutine so tests can monkeypatch
-    _query_recent_macro cleanly without spinning up an event loop in the
-    sync wrapper.
+    A3 (2026-05-19) split: this signal now excludes tariff / Fed /
+    sanctions / regulatory events — those flow to the sibling
+    geopolitical_impact signal. Both signals share the same underlying
+    macro_events query; the classifier is applied row-by-row in Python.
     """
-    items = await _query_recent_macro(ticker.upper())
+    all_items = await _query_recent_macro(ticker.upper())
+    items = [
+        it for it in all_items
+        if classify_event(it.get("author"), it.get("title"), it.get("body")) == "political"
+    ]
     as_of = datetime.now(UTC)
 
     if not items:
         return SignalScore(
             ticker=ticker.upper(),
             z=0.0,
-            raw={"n": 0, "mean_sent": 0.0, "events": []},
+            raw={"n": 0, "mean_sent": 0.0, "events": [], "category": "political"},
             confidence=0.3,
             as_of=as_of,
             source="macro_events",
-            error="no macro events in last 7d",
+            error="no political events in last 7d",
         )
 
     llm_count = 0
@@ -144,7 +151,8 @@ async def compute_political_impact_signal(ticker: str) -> dict[str, Any]:
     return SignalScore(
         ticker=ticker.upper(),
         z=z,
-        raw={"n": n, "mean_sent": float(mean_sent), "events": events_out[:10]},
+        raw={"n": n, "mean_sent": float(mean_sent),
+             "events": events_out[:10], "category": "political"},
         confidence=confidence,
         as_of=as_of,
         source="macro_events",
