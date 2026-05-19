@@ -5,6 +5,7 @@ recent row is older than 24 hours.  Spec §7.2.
 """
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -349,6 +350,149 @@ async def explain_range(
         explanation=text or "LLM 返回空响应。",
         event_count=len(events_resp.events), cache="miss",
     )
+
+
+# ---------------------------------------------------------------------------
+# A1 (2026-05-19) — Persona-as-prompt LLM commentary per signal camp
+# ---------------------------------------------------------------------------
+
+
+class PersonaExplainResponse(BaseModel):
+    ticker: str
+    persona: str
+    explanation: str
+    cache: Literal["hit", "miss"] = "miss"
+
+
+@router.post(
+    "/{ticker}/persona/{persona_name}/explain",
+    response_model=PersonaExplainResponse,
+)
+async def persona_explain(
+    ticker: str = Path(min_length=1, max_length=10),
+    persona_name: str = Path(min_length=2, max_length=24),
+    language: Literal["zh", "en"] = Query("en"),
+    user_id: int = Depends(require_user),
+    llm: LLMClient = Depends(get_llm_client),
+) -> PersonaExplainResponse:
+    """Render a named persona's commentary for one ticker.
+
+    Critical (per backlog A1): this MUST stay on the detail-drawer-open
+    path only. The cron must never fan persona calls per ticker per day
+    — 7 personas × N tickers × M days would 7x the BYOK token spend
+    with zero marginal UX gain. Cron path is the AttributionTable z
+    payload; LLM persona text is read-time-on-demand only.
+
+    Cached via B3 per (user, ticker, persona, language, as_of_date) so
+    re-clicks on the same persona within 24h are sub-100ms.
+    """
+    from alpha_agent.llm.cache import (
+        CACHE_TTL_DEFAULT, cache_key, cached_response, store_response,
+    )
+    from alpha_agent.personas import get_persona
+    from alpha_agent.personas.registry import render_system_prompt
+
+    ticker = ticker.upper()
+    persona = get_persona(persona_name)
+    if persona is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"persona {persona_name!r} not registered",
+        )
+
+    pool = await get_db_pool()
+    sig = await fetch_latest_signal(pool, ticker)
+    if sig is None:
+        raise HTTPException(status_code=404, detail=f"no rating for {ticker}")
+
+    # Subset the breakdown to the persona's scope so the LLM doesn't
+    # waste tokens on signals outside the camp. Pass raw payloads
+    # along where available so the persona can quote concrete numbers
+    # (headlines, ATR values, etc.).
+    scoped = [
+        b for b in sig["breakdown"]
+        if b.get("signal") in persona.signals
+    ]
+    if not scoped:
+        return PersonaExplainResponse(
+            ticker=ticker, persona=persona.name,
+            explanation=(
+                "该 persona 关注的信号当前为空。"
+                if language == "zh" else
+                "No data for this persona's signals right now."
+            ),
+            cache="miss",
+        )
+
+    user_payload = json.dumps(
+        {
+            "ticker": ticker,
+            "rating": sig["rating"],
+            "composite": sig["score"],
+            "signals_in_scope": [
+                {"signal": b["signal"], "z": b.get("z"), "raw": b.get("raw")}
+                for b in scoped
+            ],
+        },
+        default=str,
+    )
+
+    system = render_system_prompt(persona, language)
+    messages = [
+        Message(role="system", content=system),
+        Message(role="user", content=user_payload),
+    ]
+
+    fetched_date = sig["fetched_at"].date().isoformat()
+    key = cache_key(
+        model=getattr(llm, "_model", "byok"),
+        messages=messages,
+        variant=f"{ticker}|{persona.name}|{language}|{fetched_date}",
+    )
+    cached_text = await cached_response(pool, user_id, key)
+    if cached_text is not None:
+        return PersonaExplainResponse(
+            ticker=ticker, persona=persona.name,
+            explanation=cached_text, cache="hit",
+        )
+
+    try:
+        resp = await llm.chat(messages, temperature=0.3, max_tokens=300)
+    finally:
+        close = getattr(llm, "close", None)
+        if close is not None:
+            await close()
+
+    text = (resp.content or "").strip()
+    if text:
+        await store_response(
+            pool, user_id, key,
+            getattr(llm, "_model", "byok"), text,
+            ttl=CACHE_TTL_DEFAULT,
+        )
+    return PersonaExplainResponse(
+        ticker=ticker, persona=persona.name,
+        explanation=text or "LLM 返回空响应。",
+        cache="miss",
+    )
+
+
+@router.get("/personas")
+async def list_personas(language: Literal["zh", "en"] = Query("en")) -> dict:
+    """Public discovery endpoint — UI uses this to render the persona
+    chip row on the stock detail page."""
+    from alpha_agent.personas import PERSONAS
+
+    return {
+        "personas": [
+            {
+                "name": p.name,
+                "label": p.label_zh if language == "zh" else p.label_en,
+                "signals": list(p.signals),
+            }
+            for p in PERSONAS.values()
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

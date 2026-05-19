@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { GexInfo, RatingCard } from "@/lib/api/picks";
 import type { Locale } from "@/lib/i18n";
 import LetterGradeRibbon from "./LetterGradeRibbon";
+import PersonaPanel from "./PersonaPanel";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import { t } from "@/lib/i18n";
@@ -92,6 +93,7 @@ export default function StockCardLayout({
             </div>
           </div>
         </section>
+        <PersonaPanel ticker={card.ticker} />
         <PriceChart ticker={card.ticker} />
         <FundamentalsBlock card={card} />
         <CatalystsBlock card={card} />
