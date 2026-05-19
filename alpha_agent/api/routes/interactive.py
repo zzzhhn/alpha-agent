@@ -556,7 +556,7 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             neutralize=body.neutralize,
             benchmark_ticker=body.benchmark_ticker,
         )
-    except FileNotFoundError as exc:
+    except FileNotFoundError as exc:  # noqa: F841 — pattern duplicated below
         raise HTTPException(503, f"Panel data missing: {exc}") from exc
     except ImportError as exc:
         raise HTTPException(
@@ -654,4 +654,45 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             if result.regime_breakdown else None
         ),
         neutralize=result.neutralize,
+    )
+
+
+# ---------------------------------------------------------------------------
+# B6 (2026-05-19) — single-file HTML tearsheet export
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/v1/factor/backtest/export", response_class=None)
+async def factor_backtest_export(
+    body: FactorBacktestRequest,
+    factor_name: str = "factor",
+    lang: str = "en",
+):
+    """Run the same backtest as /api/v1/factor/backtest, then render a
+    self-contained HTML tearsheet (no matplotlib / no plotly) for download.
+
+    Frontend Export button calls this with the active config + the user's
+    factor_name + locale. Response is text/html with Content-Disposition
+    attachment so the browser triggers a save dialog. The .html file
+    works offline as long as the user has internet on first open
+    (Chart.js loads from cdn.jsdelivr.net).
+    """
+    from fastapi.responses import Response
+
+    from alpha_agent.report.tearsheet_html import render_tearsheet
+
+    # Reuse factor_backtest() so the export path stays in lock-step with
+    # the live result (no risk of diverging metric formulae).
+    response = await factor_backtest(body)
+    payload = response.model_dump() if hasattr(response, "model_dump") else dict(response)
+
+    html = render_tearsheet(payload, factor_name=factor_name, locale=lang)
+    safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in factor_name)
+    return Response(
+        content=html,
+        media_type="text/html",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}_tearsheet.html"',
+            "Cache-Control": "no-store",
+        },
     )

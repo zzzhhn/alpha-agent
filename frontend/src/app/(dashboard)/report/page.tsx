@@ -358,6 +358,55 @@ export default function ReportPage() {
             {t(locale, "report.exportPdf")}
           </TmButton>
         )}
+        {primary && (
+          <TmButton
+            variant="ghost"
+            onClick={async () => {
+              // B6 (2026-05-19): self-contained HTML tearsheet download.
+              // POST the live config to /backtest/export, get back a
+              // streamed HTML body, trigger browser save dialog. Works
+              // offline once the user has Chart.js cached.
+              const res = await fetch(
+                `/api/v1/factor/backtest/export?factor_name=${encodeURIComponent(primary.name)}&lang=${locale}`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({
+                    spec: {
+                      name: primary.name,
+                      hypothesis: primary.name,
+                      expression: expr,
+                      operators_used: [...extractOps(expr)],
+                      lookback: 12,
+                      universe: "SP500",
+                      justification: "tearsheet export",
+                    },
+                    direction: config.direction,
+                    transaction_cost_bps: config.transactionCostBps,
+                    neutralize: config.neutralize,
+                    benchmark_ticker: config.benchmarkTicker,
+                    include_breakdown: false,
+                  }),
+                },
+              );
+              if (!res.ok) {
+                alert(`Export failed: HTTP ${res.status}`);
+                return;
+              }
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${primary.name}_tearsheet.html`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="-my-1 px-2"
+          >
+            {locale === "zh" ? "下载 HTML" : "Export HTML"}
+          </TmButton>
+        )}
       </TmSubbar>
 
       <ReportPickerPane
