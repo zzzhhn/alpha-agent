@@ -81,7 +81,12 @@ export default function StockCardLayout({
       {/* Right scroll */}
       <main className="col-span-9 space-y-8">
         <LeanThesis card={card} />
-        <RichThesis ticker={card.ticker} />
+        {/* key={ticker} forces remount on SPA ticker change so RichThesis's */}
+        {/* internal state (sections / cachedByLang / status) is reset and any */}
+        {/* in-flight SSE stream is aborted via the unmount path. Without the */}
+        {/* key, useState carries over and the stale brief from the prior */}
+        {/* ticker renders briefly under the new ticker's heading. */}
+        <RichThesis key={card.ticker} ticker={card.ticker} />
         <section>
           <h2 className="text-lg font-semibold mb-3 text-tm-fg">{t(locale, "stock_layout.signal_attribution")}</h2>
           <div className="grid grid-cols-12 gap-4">
@@ -93,7 +98,9 @@ export default function StockCardLayout({
             </div>
           </div>
         </section>
-        <PersonaPanel ticker={card.ticker} />
+        {/* Same remount-on-ticker discipline as RichThesis: persona result */}
+        {/* state must not bleed across tickers. */}
+        <PersonaPanel key={card.ticker} ticker={card.ticker} />
         <PriceChart ticker={card.ticker} />
         <FundamentalsBlock card={card} />
         <CatalystsBlock card={card} />

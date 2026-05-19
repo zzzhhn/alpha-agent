@@ -43,6 +43,17 @@ export default function RichThesis({ ticker }: { ticker: string }) {
     setBriefLang(locale);
   }, [locale]);
 
+  // Defense-in-depth: even with key={ticker} on the parent (which already
+  // unmounts this component on ticker change), guarantee any in-flight SSE
+  // stream is aborted when ticker changes inside the same component instance.
+  // Prevents orphan stream writes after a quick back-and-forth navigation
+  // where React might reuse the fibre before the unmount path fires.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [ticker]);
+
   const onGenerate = useCallback(
     async (lang: Lang = briefLang) => {
       setStatus("streaming");
