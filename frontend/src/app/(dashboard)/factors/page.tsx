@@ -41,7 +41,7 @@ import {
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
-import { listZoo, removeFromZoo, type ZooEntry } from "@/lib/factor-zoo";
+import { listZoo, removeFromZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
 import {
   runZooCorrelation,
   listServerFactors,
@@ -314,6 +314,9 @@ export default function FactorsPage() {
   const [decay, setDecay] = useState<readonly DecayAlert[]>([]);
 
   async function refresh() {
+    // Cold-start seed before the first Zoo read so a new user sees the
+    // curated factors instead of an empty Zoo. Flag-guarded → no-op after.
+    seedZooIfFirstRun();
     try {
       const [r1, r2] = await Promise.all([
         listServerFactors(200),

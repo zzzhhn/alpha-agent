@@ -41,6 +41,7 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import {
   listZoo,
+  seedZooIfFirstRun,
   readDirection,
   type ZooEntry,
   type ZooDirection,
@@ -108,6 +109,7 @@ export default function ScreenerPage() {
   // Initial Zoo load + sectors fetch + universe count + handoff prefill.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    seedZooIfFirstRun();
     const entries = listZoo();
     setZoo(entries);
 

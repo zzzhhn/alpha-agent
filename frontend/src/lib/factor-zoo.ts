@@ -41,6 +41,10 @@ export interface ZooEntry {
   readonly topPct?: number;          // 0.01-0.50
   readonly bottomPct?: number;       // 0.01-0.50
   readonly transactionCostBps?: number;
+  // P2-4: true for the factors AlphaCore seeds into a brand-new user's Zoo
+  // so Screener / Report / Zoo aren't empty on first visit. User-deletable
+  // like any entry; the one-time seed flag prevents re-seeding deletions.
+  readonly curated?: boolean;
 }
 
 /** Resolve a Zoo entry's direction with the legacy default. */
@@ -70,7 +74,88 @@ export function readConfig(entry: ZooEntry): {
 }
 
 const STORAGE_KEY = "alphacore.factor.zoo.v1";
+const SEED_FLAG_KEY = "alphacore.factor.zoo.seeded.v1";
 const MAX_ENTRIES = 50;
+
+// Cold-start seed: the 3 strongest curated factors (mirrors the PURE/
+// MARGINAL-tier picks from FACTOR_EXAMPLES). Seeded once into a new user's
+// Zoo so Screener / Report / Zoo work on first visit instead of dead-ending
+// on "Zoo is empty". Metrics are the 2026-05-08 v3-panel measurements.
+const CURATED_SEED: readonly Omit<ZooEntry, "id" | "savedAt">[] = [
+  {
+    name: "Earnings Yield (E/P)",
+    expression:
+      "rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))",
+    hypothesis:
+      "Long high earnings yield (net income / market cap), short low — long_short Basu 1977 value",
+    intuition:
+      "PURE ALPHA tier: α-t=+2.29, α-p=0.022, β=-0.10, SR=+1.52. Shorting overvalued growth nets out sector beta, leaving clean alpha.",
+    direction: "long_short",
+    neutralize: "none",
+    benchmarkTicker: "SPY",
+    topPct: 0.3,
+    bottomPct: 0.3,
+    headlineMetrics: { testSharpe: 1.52, totalReturn: 0.258, testIc: 0.011 },
+    curated: true,
+  },
+  {
+    name: "Volume Z-Score 20d",
+    expression: "ts_zscore(volume, 20)",
+    hypothesis:
+      "20-day volume z-score — abnormal-trading signal; long_short + sector-neutral isolates the alpha",
+    intuition:
+      "PURE ALPHA tier: α-t=+2.03, α-p=0.043, β=+0.03, SR=+2.93 (highest in batch). 'Unusual volume precedes price.'",
+    direction: "long_short",
+    neutralize: "sector",
+    benchmarkTicker: "SPY",
+    topPct: 0.3,
+    bottomPct: 0.3,
+    headlineMetrics: { testSharpe: 2.93, totalReturn: 0.186, testIc: 0.0107 },
+    curated: true,
+  },
+  {
+    name: "Dollar Volume Z-Score 60d",
+    expression: "ts_zscore(dollar_volume, 60)",
+    hypothesis:
+      "60-day dollar volume z-score — better attention proxy than raw volume; β near zero",
+    intuition:
+      "MARGINAL tier: α-t=+1.88, α-p=0.060, β=-0.087, SR=+2.04. Highly correlated with Volume Z-Score 20d — don't stack both.",
+    direction: "long_short",
+    neutralize: "none",
+    benchmarkTicker: "SPY",
+    topPct: 0.3,
+    bottomPct: 0.3,
+    headlineMetrics: { testSharpe: 2.04, totalReturn: 0.131, testIc: 0.0119 },
+    curated: true,
+  },
+];
+
+/**
+ * One-time cold-start seed. On a brand-new browser (no seed flag), inserts
+ * the curated factors the user hasn't already saved, then sets the flag so
+ * deletions are never re-seeded. Idempotent + safe to call from multiple
+ * pages — the flag guards it. No-ops on the server / when storage is off.
+ */
+export function seedZooIfFirstRun(): void {
+  if (!isBrowser()) return;
+  try {
+    if (window.localStorage.getItem(SEED_FLAG_KEY)) return;
+    const existing = readRaw();
+    const existingExprs = new Set(existing.map((e) => e.expression));
+    const seeds: ZooEntry[] = CURATED_SEED.filter(
+      (s) => !existingExprs.has(s.expression),
+    ).map((s, i) => ({
+      ...s,
+      id: generateId(),
+      // Stagger savedAt so listZoo's desc sort keeps the seed order.
+      savedAt: new Date(Date.now() - i).toISOString(),
+    }));
+    if (seeds.length > 0) writeRaw([...seeds, ...existing]);
+    window.localStorage.setItem(SEED_FLAG_KEY, new Date().toISOString());
+  } catch {
+    // storage disabled — skip seeding; the UI still works (just empty Zoo)
+  }
+}
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";

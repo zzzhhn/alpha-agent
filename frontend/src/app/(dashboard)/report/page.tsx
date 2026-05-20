@@ -62,7 +62,7 @@ import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
 import { TmCompareEquityChart } from "@/components/charts/TmCompareEquityChart";
 import { TmTopBottomTable } from "@/components/signal/TmTopBottomTable";
 import { TmExposureChart } from "@/components/signal/TmExposureChart";
-import { listZoo, type ZooEntry } from "@/lib/factor-zoo";
+import { listZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
 import {
   dailyReturns,
   sortinoRatio,
@@ -177,6 +177,7 @@ export default function ReportPage() {
   const [config, setConfig] = useState<ReportConfig>(DEFAULT_REPORT_CONFIG);
 
   useEffect(() => {
+    seedZooIfFirstRun();
     setZoo(listZoo());
   }, []);
 
