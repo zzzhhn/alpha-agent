@@ -1345,17 +1345,26 @@ function OperatorUsagePane({
       }))
       .sort((a, b) => b.count - a.count)
       .slice(0, TOP_OPS_DISPLAY);
+    // P2-2 fix: family share is the fraction of TOTAL operator usage, so
+    // the distribution sums to 100%. The old `count / history.length`
+    // exceeded 100% (the review's "math 200%") whenever a single history
+    // entry used 2+ ops of the same family — e.g. sub + div = 2 math ops
+    // in a 1-entry history → 2/1 = 200%, and the bar overflowed too.
+    const totalFamilyCount = Array.from(familyCounts.values()).reduce(
+      (a, c) => a + c,
+      0,
+    );
     const familyRanked = Array.from(familyCounts.entries())
       .map(([family, count]) => ({
         family,
         count,
-        share: history.length > 0 ? count / history.length : 0,
+        share: totalFamilyCount > 0 ? count / totalFamilyCount : 0,
       }))
       .sort((a, b) => b.count - a.count);
-    const totalFamilyShare = familyRanked.reduce((a, f) => a + f.share, 0);
-    const concentration = familyRanked.length > 0 && totalFamilyShare > 0
-      ? familyRanked[0].share / totalFamilyShare
-      : 0;
+    // Shares already sum to 1, so the top family's share IS the
+    // concentration.
+    const concentration =
+      familyRanked.length > 0 ? familyRanked[0].share : 0;
     return { ranked, familyRanked, concentration };
   }, [history]);
   const currentOps = currentSpec
