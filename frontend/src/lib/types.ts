@@ -265,6 +265,12 @@ export interface SmokeReport {
   readonly rows_valid: number;
   readonly ic_spearman: number;
   readonly runtime_ms: number;
+  // P0-1: cross-sectional std of the evaluated factor. degenerate=true means
+  // the factor collapsed to a (near-)constant — zero cross-sectional signal —
+  // so Save-to-Zoo / Run-backtest must be disabled. Optional for resilience
+  // against any in-flight response from before the backend field landed.
+  readonly factor_std?: number;
+  readonly degenerate?: boolean;
 }
 
 export interface HypothesisTranslateResponse {

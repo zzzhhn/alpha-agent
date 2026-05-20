@@ -172,6 +172,10 @@ const translations = {
     "zoo.corr.warningsHeader": "{n} 对近重复因子（|corr| > 0.8）",
     "zoo.runBacktest": "运行完整回测",
     "alpha.runBacktest": "运行完整回测 →",
+    "alpha.degenerateTitle": "退化因子：零截面信号",
+    "alpha.degenerateBody": "该表达式求值后是（近似）常数（factor_std ≈ 0），不携带任何截面信息。无法保存到 Zoo 或回测。请修改假设，使 spread/ratio 的两臂在字段、回看窗口、算子或系数上至少有一处不同。",
+    "alpha.degenerateBlocked": "退化因子（零方差），已阻止回测。",
+    "alpha.labelFactorStd": "FACTOR STD",
 
     /* Phase 2: Factor Analytics + Gate Editor */
     "nav.factors": "因子分析",
@@ -896,6 +900,10 @@ const translations = {
     "zoo.corr.warningsHeader": "{n} near-duplicate pair(s) (|corr| > 0.8)",
     "zoo.runBacktest": "Run full backtest",
     "alpha.runBacktest": "Run full backtest →",
+    "alpha.degenerateTitle": "Degenerate factor: zero cross-sectional signal",
+    "alpha.degenerateBody": "This expression evaluates to a (near-)constant (factor_std ≈ 0) and carries no cross-sectional information. It cannot be saved to Zoo or backtested. Revise the hypothesis so the two arms of the spread/ratio differ in at least one of: field, lookback window, operator, or coefficient.",
+    "alpha.degenerateBlocked": "Degenerate factor (zero variance) — backtest blocked.",
+    "alpha.labelFactorStd": "FACTOR STD",
 
     "nav.factors": "Factor Analytics",
     "nav.gates": "Gate Editor",

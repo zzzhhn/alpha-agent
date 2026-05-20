@@ -148,6 +148,13 @@ export default function AlphaPage() {
 
   async function onBacktest() {
     if (!result) return;
+    // Single functional gate for both backtest entry points (subbar jump +
+    // this pane's Run button): a zero-variance factor must never reach the
+    // backtest engine.
+    if (result.smoke.degenerate) {
+      setBacktestError(t(locale, "alpha.degenerateBlocked"));
+      return;
+    }
     setBacktesting(true);
     setBacktestError(null);
     const response = await runFactorBacktest({ spec: result.spec, direction });
@@ -255,12 +262,18 @@ export default function AlphaPage() {
         {error && !byokRequired && (
           <TmStatusPill tone="err">ERROR</TmStatusPill>
         )}
+        {result?.smoke.degenerate && (
+          <TmStatusPill tone="err">DEGENERATE</TmStatusPill>
+        )}
         {result && (
+          // Degenerate (zero-variance) factors must not reach Zoo — they carry
+          // no cross-sectional signal and would pollute the library.
           <ZooSaveButton
             name={result.spec.name}
             expression={result.spec.expression}
             hypothesis={result.spec.hypothesis}
             intuition={result.spec.justification}
+            disabled={result.smoke.degenerate ?? false}
             headlineMetrics={
               backtest
                 ? {
@@ -282,6 +295,7 @@ export default function AlphaPage() {
           <TmButton
             variant="ghost"
             onClick={jumpToBacktest}
+            disabled={result.smoke.degenerate ?? false}
             className="-my-1 px-2"
           >
             {t(locale, "alpha.runBacktest")}
@@ -551,7 +565,19 @@ function TranslateResultPane({
   const { locale } = useLocale();
   const icAccent =
     Math.abs(result.smoke.ic_spearman) >= 0.03 ? "pos" : "default";
+  const degenerate = result.smoke.degenerate ?? false;
   return (
+    <>
+      {degenerate && (
+        <div className="mb-3 rounded border border-tm-neg/50 bg-tm-neg/10 px-4 py-3">
+          <div className="font-tm-mono text-[11px] font-semibold uppercase tracking-wide text-tm-neg">
+            ⚠ {t(locale, "alpha.degenerateTitle")}
+          </div>
+          <p className="mt-1 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+            {t(locale, "alpha.degenerateBody")}
+          </p>
+        </div>
+      )}
     <TmCols2>
       <TmPane title="TRANSLATE.SPEC" meta="LLM → FactorSpec">
         <dl
@@ -601,6 +627,16 @@ function TranslateResultPane({
             sub="non-NaN cells"
           />
           <TmKpi
+            label={t(locale, "alpha.labelFactorStd")}
+            value={
+              result.smoke.factor_std != null
+                ? result.smoke.factor_std.toExponential(2)
+                : "—"
+            }
+            tone={degenerate ? "neg" : "default"}
+            sub="0 = degenerate"
+          />
+          <TmKpi
             label={t(locale, "alpha.labelRuntime")}
             value={`${result.smoke.runtime_ms.toFixed(1)}ms`}
             sub="server-side eval"
@@ -613,6 +649,7 @@ function TranslateResultPane({
         </TmKpiGrid>
       </TmPane>
     </TmCols2>
+    </>
   );
 }
 
