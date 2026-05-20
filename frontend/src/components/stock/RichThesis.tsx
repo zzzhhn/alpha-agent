@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, Square, AlertTriangle } from "lucide-react";
+import { Sparkles, Square, AlertTriangle, Lock } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { streamBrief } from "@/lib/api/streamBrief";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { useHasByok } from "@/hooks/useHasByok";
 
 type Status = "idle" | "streaming" | "done" | "error" | "aborted";
 type Lang = "zh" | "en";
@@ -22,6 +23,9 @@ const EMPTY_SECTIONS: Sections = { summary: "", bull: "", bear: "" };
 export default function RichThesis({ ticker }: { ticker: string }) {
   const { locale } = useLocale();
   const { status: authStatus } = useSession();
+  // BYOK gate: authenticated but no key → show a lock + Settings link
+  // instead of a Generate button that would just error.
+  const { hasKey, loading: keyLoading } = useHasByok();
   const [status, setStatus] = useState<Status>("idle");
   const [sections, setSections] = useState<Sections>(EMPTY_SECTIONS);
   const [errMsg, setErrMsg] = useState<string>("");
@@ -138,7 +142,16 @@ export default function RichThesis({ ticker }: { ticker: string }) {
           <Sparkles aria-hidden className="w-4 h-4 text-tm-accent" strokeWidth={1.75} />
           {t(locale, "rich.title")}
         </h2>
-        {authStatus === "authenticated" ? (
+        {authStatus === "authenticated" && !keyLoading && !hasKey ? (
+          <Link
+            href="/settings"
+            className="inline-flex items-center gap-1 text-xs text-tm-muted hover:text-tm-accent"
+            title={t(locale, "rich.byok_locked")}
+          >
+            <Lock aria-hidden className="w-3 h-3" strokeWidth={1.75} />
+            {t(locale, "rich.byok_configure")}
+          </Link>
+        ) : authStatus === "authenticated" ? (
           <div className="flex items-center gap-2">
             {/* Phase 312 zh/en tab. Disabled during streaming to avoid a
                 mid-stream abort + race; user can still abort via the Stop

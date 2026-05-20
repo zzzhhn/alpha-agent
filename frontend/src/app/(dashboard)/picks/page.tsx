@@ -1,5 +1,6 @@
 import { fetchPicks } from "@/lib/api/picks";
 import PicksBrowser from "@/components/picks/PicksBrowser";
+import OnboardingBanner from "@/components/layout/OnboardingBanner";
 import { TmScreen } from "@/components/tm/TmPane";
 
 // Page is dynamic by virtue of its server fetch, so we don't need the
@@ -17,6 +18,7 @@ export default async function PicksPage() {
 
   return (
     <TmScreen>
+      <OnboardingBanner />
       <PicksBrowser initialData={initialData} />
     </TmScreen>
   );
