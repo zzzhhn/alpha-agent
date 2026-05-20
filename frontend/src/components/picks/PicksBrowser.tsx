@@ -6,7 +6,12 @@
 // anywhere in the full ~557-ticker universe (including slow-only "partial"
 // rows) is reachable, not just the top of the default board.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPicks, type FactorMode, type RatingCard } from "@/lib/api/picks";
+import {
+  fetchPicks,
+  type FactorMode,
+  type PicksSide,
+  type RatingCard,
+} from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
 import RefreshButton from "./RefreshButton";
 import { TmPane } from "@/components/tm/TmPane";
@@ -36,6 +41,11 @@ export default function PicksBrowser({
   // academic). Hook handles SSR-safe hydration + cross-tab + same-tab storage
   // event broadcast so AttributionTable's pill on Stock detail flips here.
   const [factorMode, setFactorMode] = useFactorMode();
+  // P1-2: long = top-N by composite (highest-conviction longs, the SSR
+  // default), short = bottom-N (most bearish UW/SELL names the top view
+  // never surfaces). Local state — not persisted; each visit starts on
+  // the long board.
+  const [side, setSide] = useState<PicksSide>("long");
   const { locale } = useLocale();
   const mounted = useRef(false);
   // Called once here, threaded down as a prop, so the localStorage read +
@@ -49,7 +59,7 @@ export default function PicksBrowser({
   const reqIdRef = useRef(0);
 
   const runSearch = useCallback(
-    async (q: string, mode: FactorMode) => {
+    async (q: string, mode: FactorMode, sideArg: PicksSide) => {
       const reqId = ++reqIdRef.current;
       setLoading(true);
       try {
@@ -60,6 +70,7 @@ export default function PicksBrowser({
           trimmed ? 600 : 50,
           trimmed || undefined,
           mode,
+          sideArg,
         );
         if (reqId !== reqIdRef.current) return;
         setData(next);
@@ -73,27 +84,29 @@ export default function PicksBrowser({
     [],
   );
 
-  // Debounce the search input + re-fire when factorMode flips. Skip the
-  // mount fire so initialData renders immediately without a redundant
-  // re-fetch — but the post-hydration mode flip DOES fire a re-fetch if
-  // the user's stored pref is "long" (different from SSR's "short" default).
+  // Debounce the search input + re-fire when factorMode / side flips. Skip
+  // the mount fire so initialData renders immediately without a redundant
+  // re-fetch — but a post-hydration flip away from the SSR defaults
+  // (factorMode="short", side="long") DOES fire a re-fetch.
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
-      // First effect run after hydration: only re-fetch if mode differs
-      // from the SSR default of "short".
-      if (factorMode === "long") {
-        runSearch(search, factorMode);
+      if (factorMode === "long" || side !== "long") {
+        runSearch(search, factorMode, side);
       }
       return;
     }
-    const id = setTimeout(() => runSearch(search, factorMode), 300);
+    const id = setTimeout(() => runSearch(search, factorMode, side), 300);
     return () => clearTimeout(id);
-  }, [search, factorMode, runSearch]);
+  }, [search, factorMode, side, runSearch]);
 
   const onModeToggle = useCallback(() => {
     setFactorMode(factorMode === "short" ? "long" : "short");
   }, [factorMode, setFactorMode]);
+
+  const onSideToggle = useCallback(() => {
+    setSide((s) => (s === "long" ? "short" : "long"));
+  }, []);
 
   const searching = search.trim().length > 0;
   const count = data.picks.length;
@@ -122,6 +135,15 @@ export default function PicksBrowser({
           modeLong: "长线 (252d/126d)",
           modeTip:
             "短线模式 = 12 日动量减 3 月波动,跟新闻/技术面/盘前同时间维度,适合 swing/intraday。长线 = 12 月动量减 6 月波动,适合月度/季度持仓。点击切换。",
+          sideLabel: "方向",
+          sideLong: "做多榜",
+          sideShort: "做空榜",
+          sideTip:
+            "做多榜 = composite 最高的票(最强 conviction longs)。做空榜 = composite 最低的票(最弱 / UW/SELL tier),默认榜单看不到它们因为排在 universe 底部。点击切换。",
+          metaLong:
+            "composite 最高优先(真实信号优先,partial 行数据可能最旧 1 天)",
+          metaShort:
+            "composite 最低优先 — universe 底部的看空候选(UW/SELL),默认做多榜不显示",
         }
       : {
           picks: "PICKS",
@@ -140,6 +162,15 @@ export default function PicksBrowser({
           modeLong: "Long (252d/126d)",
           modeTip:
             "Short = 12d momentum − 3mo vol, aligned with news/technicals/premarket horizon, suited for swing/intraday. Long = 12mo momentum − 6mo vol, suited for monthly/quarterly holding. Click to toggle.",
+          sideLabel: "SIDE",
+          sideLong: "Longs",
+          sideShort: "Shorts",
+          sideTip:
+            "Longs = the highest-composite names (strongest conviction). Shorts = the lowest-composite names (weakest / UW/SELL tier), which the default board never surfaces because they rank at the bottom of the universe. Click to toggle.",
+          metaLong:
+            "highest composite first (real signals first; partial rows can be ~1d old)",
+          metaShort:
+            "lowest composite first — the bottom-of-universe short candidates (UW/SELL) the long board hides",
         };
 
   return (
@@ -161,6 +192,23 @@ export default function PicksBrowser({
             {factorMode === "short" ? copy.modeShort : copy.modeLong}
           </span>
         </button>
+        <TmSubbarSep />
+        <button
+          type="button"
+          onClick={onSideToggle}
+          title={copy.sideTip}
+          className={
+            side === "short"
+              ? "inline-flex items-center gap-1.5 rounded-md border border-tm-neg/40 bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-neg transition hover:bg-tm-neg/20 focus:outline-none focus:ring-1 focus:ring-tm-neg"
+              : "inline-flex items-center gap-1.5 rounded-md border border-tm-pos/40 bg-tm-pos/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-pos transition hover:bg-tm-pos/20 focus:outline-none focus:ring-1 focus:ring-tm-pos"
+          }
+          aria-label={copy.sideLabel}
+        >
+          <span className="opacity-70">{copy.sideLabel}</span>
+          <span className="font-semibold">
+            {side === "short" ? copy.sideShort : copy.sideLong}
+          </span>
+        </button>
         {data.stale ? (
           <>
             <TmSubbarSep />
@@ -173,7 +221,16 @@ export default function PicksBrowser({
         <RefreshButton />
       </div>
 
-      <TmPane title={copy.paneTitle} meta={copy.paneMeta}>
+      <TmPane
+        title={copy.paneTitle}
+        meta={
+          searching
+            ? copy.paneMeta
+            : side === "short"
+              ? copy.metaShort
+              : copy.metaLong
+        }
+      >
         <div className="flex items-center gap-2 px-3 py-2">
           <input
             type="text"

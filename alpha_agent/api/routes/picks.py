@@ -73,8 +73,16 @@ async def picks_lean(
     limit: int = Query(50, ge=1, le=600),
     search: str | None = Query(None, max_length=12),
     mode: str = Query("short", pattern="^(short|long)$"),
+    side: str = Query("long", pattern="^(long|short)$"),
 ) -> PicksResponse:
-    """Return tickers sorted by composite score DESC.
+    """Return tickers ranked by composite score.
+
+    `side` (P1-2 two-sided view): "long" (default) returns the top-N by
+    composite DESC — the highest-conviction longs. "short" returns the
+    bottom-N by composite ASC — the most bearish names (UW/SELL tier),
+    which the default long view never surfaces because they rank at the
+    bottom of the universe. Same data + same pipeline; only the sort
+    direction + LIMIT slice differ.
 
     Unions two sources so the full ~557-ticker universe is reachable:
       - daily_signals_fast: the 15-min intraday pipeline (~100 tickers),
@@ -100,6 +108,10 @@ async def picks_lean(
     try:
         pool = await get_db_pool()
         search_norm = search.strip().upper() if search and search.strip() else None
+        # side=short surfaces the bottom of the ranking (most bearish). The
+        # direction is a controlled literal derived from the pattern-validated
+        # `side`, never raw user input, so the f-string interpolation is safe.
+        score_dir = "ASC" if side == "short" else "DESC"
         # DISTINCT ON reduces each table to its latest row per ticker, then
         # UNION ALL stitches them with fast taking precedence (NOT EXISTS
         # drops slow rows whose ticker already came from fast). Dedup, the
@@ -112,7 +124,7 @@ async def picks_lean(
         # Net effect: the default top-N view stays all-real (240 fast
         # cards), partial rows only surface on search or a high limit.
         rows = await pool.fetch(
-            """
+            f"""
             WITH fast_latest AS (
                 SELECT DISTINCT ON (ticker)
                     ticker, composite AS score, rating,
@@ -143,7 +155,7 @@ async def picks_lean(
                    fetched_at, partial
             FROM combined
             WHERE ($2::text IS NULL OR ticker ILIKE '%' || $2 || '%')
-            ORDER BY partial ASC, score DESC
+            ORDER BY partial ASC, score {score_dir}
             LIMIT $1
             """,
             limit,
@@ -222,9 +234,13 @@ async def picks_lean(
             )
 
         # SQL ordered by short-mode composite; after long-mode swap the
-        # short order is stale. Re-sort in Python (partial-last preserved).
+        # short order is stale. Re-sort in Python (partial-last preserved),
+        # respecting side: long = score DESC, short = score ASC.
         if mode == "long":
-            cards.sort(key=lambda c: (c.partial, -c.composite_score))
+            if side == "short":
+                cards.sort(key=lambda c: (c.partial, c.composite_score))
+            else:
+                cards.sort(key=lambda c: (c.partial, -c.composite_score))
 
         return PicksResponse(picks=cards, as_of=most_recent, stale=stale)
     except Exception as e:

@@ -10,7 +10,7 @@ import { TmScreen } from "@/components/tm/TmPane";
 export default async function PicksPage() {
   // Server-render the default top-50 board; PicksBrowser (client) layers
   // debounced ticker search on top and re-queries /api/picks/lean.
-  const initialData = await fetchPicks(50, undefined, undefined, {
+  const initialData = await fetchPicks(50, undefined, undefined, "long", {
     revalidate: 60,
     tags: ["picks-lean"],
   });

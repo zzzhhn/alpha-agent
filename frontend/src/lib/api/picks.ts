@@ -74,14 +74,18 @@ export interface GexInfo {
 }
 
 export type FactorMode = "short" | "long";
+// P1-2 two-sided view: "long" = top-N by composite (highest conviction),
+// "short" = bottom-N by composite (most bearish UW/SELL names).
+export type PicksSide = "long" | "short";
 
 export const fetchPicks = (
   limit = 50,
   search?: string,
   mode: FactorMode = "short",
+  side: PicksSide = "long",
   opts?: ApiGetOptions,
 ) => {
-  const params = new URLSearchParams({ limit: String(limit), mode });
+  const params = new URLSearchParams({ limit: String(limit), mode, side });
   const q = search?.trim();
   if (q) params.set("search", q);
   return apiGet<{ picks: RatingCard[]; as_of: string | null; stale: boolean }>(
