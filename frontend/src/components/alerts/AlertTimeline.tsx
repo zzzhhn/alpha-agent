@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bell, Filter } from "lucide-react";
 import { fetchAlertsRecent, type AlertRow } from "@/lib/api/alertsFeed";
@@ -37,9 +37,20 @@ function typeLabel(t_: string, locale: Locale): string {
   return translated === key ? t_ : translated;
 }
 
+// Same (ticker, type) alerts within this window collapse to one row + a
+// count. The backend dedup_bucket can still emit adjacent buckets (e.g.
+// 6h-ago + 7h-ago), which reads as spam; this folds clustered repeats while
+// keeping genuinely separate events (a flare-up now vs days ago) distinct.
+const DEDUP_WINDOW_MS = 60 * 60 * 1000;
+
+interface DisplayRow extends AlertRow {
+  count: number;
+}
+
 export default function AlertTimeline({ ticker }: { ticker?: string }) {
   const { locale } = useLocale();
   const [filter, setFilter] = useState<string>(ticker ?? "");
+  const [typeFilter, setTypeFilter] = useState<string>("");
   const [rows, setRows] = useState<AlertRow[] | null>(null);
   const [err, setErr] = useState<string>("");
   const { isWatched } = useWatchlist();
@@ -62,6 +73,42 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
     load();
   }, [load]);
 
+  // Distinct alert types actually present (the type filter is client-side
+  // over the loaded rows; the backend feed only filters by ticker). No
+  // fabricated/stub types — the dropdown reflects what really exists.
+  const availableTypes = useMemo(
+    () => (rows ? Array.from(new Set(rows.map((r) => r.type))).sort() : []),
+    [rows],
+  );
+
+  // Apply the client-side type filter, then collapse clustered duplicates.
+  const displayRows = useMemo<DisplayRow[] | null>(() => {
+    if (!rows) return null;
+    const filtered = typeFilter
+      ? rows.filter((r) => r.type === typeFilter)
+      : rows;
+    const sorted = [...filtered].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+    const out: DisplayRow[] = [];
+    for (const r of sorted) {
+      // Fold into a more-recent kept alert of the same (ticker,type) if it
+      // is within the dedup window. `out` is most-recent-first, so the
+      // first match is the freshest kept representative.
+      const rep = out.find(
+        (o) =>
+          o.ticker === r.ticker &&
+          o.type === r.type &&
+          new Date(o.created_at).getTime() - new Date(r.created_at).getTime() <=
+            DEDUP_WINDOW_MS,
+      );
+      if (rep) rep.count += 1;
+      else out.push({ ...r, count: 1 });
+    }
+    return out;
+  }, [rows, typeFilter]);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -72,6 +119,19 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
           placeholder={t(locale, "alerts.filter_placeholder")}
           className="rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 text-sm text-tm-fg w-64"
         />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 text-sm text-tm-fg"
+          aria-label={t(locale, "alerts.col_type")}
+        >
+          <option value="">{t(locale, "alerts.filter_all_types")}</option>
+          {availableTypes.map((ty) => (
+            <option key={ty} value={ty}>
+              {typeLabel(ty, locale)}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={load}
@@ -83,9 +143,9 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
 
       {err ? (
         <div className="text-sm text-tm-neg">Error: {err}</div>
-      ) : rows == null ? (
+      ) : displayRows == null ? (
         <div className="text-sm text-tm-muted">{locale === "zh" ? "加载中…" : "Loading…"}</div>
-      ) : rows.length === 0 ? (
+      ) : displayRows.length === 0 ? (
         <div className="flex items-center gap-2 text-sm text-tm-muted">
           <Bell aria-hidden className="w-4 h-4" strokeWidth={1.75} />
           {t(locale, "alerts.empty")}
@@ -101,17 +161,30 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-tm-rule">
+            {displayRows.map((r) => (
+              <tr
+                key={r.id}
+                className="border-b border-tm-rule transition-colors hover:bg-tm-bg-2"
+              >
                 <td className="px-2 py-1 text-tm-muted whitespace-nowrap">
                   {relativeTime(r.created_at, locale)}
+                  {r.count > 1 ? (
+                    <span
+                      className="ml-1.5 rounded bg-tm-bg-3 px-1 text-[10px] text-tm-fg-2"
+                      title={t(locale, "alerts.dedup_hint")}
+                    >
+                      ×{r.count}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-2 py-1">
                   {isWatched(r.ticker) ? (
                     <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" />
                   ) : null}
+                  {/* Deep-link to the stock detail's News section so the
+                      alert is an action start, not a dead end. */}
                   <Link
-                    href={`/stock/${r.ticker}`}
+                    href={`/stock/${r.ticker}#news`}
                     className={`font-mono hover:text-tm-accent ${isWatched(r.ticker) ? "text-tm-accent" : "text-tm-fg"}`}
                   >
                     {r.ticker}

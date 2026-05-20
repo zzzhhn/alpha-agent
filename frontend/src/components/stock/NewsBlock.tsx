@@ -63,7 +63,7 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
 
   if (items.length === 0) {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+      <section id="news" className="rounded border border-tm-rule bg-tm-bg-2 p-4">
         <h2 className="text-lg font-semibold mb-2 text-tm-fg">
           {t(locale, "news.title")}
         </h2>
@@ -73,7 +73,7 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
   }
 
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+    <section id="news" className="rounded border border-tm-rule bg-tm-bg-2 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-tm-fg">
           {t(locale, "news.title")}
