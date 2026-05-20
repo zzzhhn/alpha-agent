@@ -12,10 +12,13 @@ Run locally with the prod DATABASE_URL in .env:
     uv run python scripts/backfill_company_profiles_zh.py --tickers AAPL,MSFT,NVDA
     uv run python scripts/backfill_company_profiles_zh.py --limit 50
 
-  --tickers  pre-fetch English profiles for these tickers (via yfinance)
-             before translating, so they exist in the table even if no one
-             has browsed them yet. Without it, only already-cached rows
-             (lazy-filled by /profile views) get translated.
+  --tickers  pre-fetch English profiles for these tickers by hitting the
+             DEPLOYED /profile endpoint, which lazy-fills EN into the DB
+             using the production yfinance access (the local machine's IP
+             is easily rate-limited on yfinance .info, so we deliberately
+             don't pull yfinance here). Without --tickers, only rows
+             already cached (by browsing) get translated.
+  --base-url deployed app base (default https://alpha.bobbyzhong.com).
   --limit    cap how many rows to translate this run (default 1000).
 
 Idempotent: only rows with summary_en and no summary_zh are translated, so
@@ -28,6 +31,7 @@ import asyncio
 import os
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -35,12 +39,10 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alpha_agent.signals.yf_helpers import extract_profile, get_ticker  # noqa: E402
 from alpha_agent.storage.postgres import get_pool  # noqa: E402
 from alpha_agent.storage.queries import (  # noqa: E402
     list_profiles_missing_zh,
     set_company_profile_zh,
-    upsert_company_profile_en,
 )
 
 _PROMPT = (
@@ -70,35 +72,33 @@ def _translate(summary_en: str) -> str | None:
     return out or None
 
 
-async def _prefetch_en(pool, tickers: list[str]) -> None:
+def _prefetch_en_via_prod(tickers: list[str], base_url: str) -> None:
+    """Trigger the deployed /profile endpoint per ticker so production
+    yfinance lazy-fills EN into the DB. We don't pull yfinance locally —
+    the local IP rate-limits on .info almost immediately."""
     for tk in tickers:
         tk = tk.strip().upper()
         if not tk:
             continue
+        url = f"{base_url.rstrip('/')}/api/stock/{tk}/profile?lang=en"
         try:
-            prof = extract_profile(get_ticker(tk).info or {})
-            await upsert_company_profile_en(
-                pool, tk,
-                name=prof["name"], sector=prof["sector"],
-                industry=prof["industry"], summary_en=prof["summary"],
-                website=prof["website"], country=prof["country"],
-                employees=prof["employees"],
-            )
-            print(f"  prefetched EN: {tk}" + ("" if prof["summary"] else " (no summary)"))
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                ok = resp.status == 200
+            print(f"  prefetched EN via prod: {tk}" + ("" if ok else " (non-200)"))
         except Exception as exc:  # noqa: BLE001
             print(f"  prefetch failed {tk}: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
-async def main(tickers: list[str], limit: int) -> None:
+async def main(tickers: list[str], base_url: str, limit: int) -> None:
     load_dotenv(ROOT / ".env")
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         sys.exit("DATABASE_URL not set. Add it to .env or export it before running.")
+    if tickers:
+        print(f"Pre-fetching EN for {len(tickers)} ticker(s) via {base_url}...")
+        _prefetch_en_via_prod(tickers, base_url)
     pool = await get_pool(db_url)
     try:
-        if tickers:
-            print(f"Pre-fetching EN for {len(tickers)} ticker(s)...")
-            await _prefetch_en(pool, tickers)
         rows = await list_profiles_missing_zh(pool, limit)
         print(f"{len(rows)} row(s) need a Chinese translation.")
         ok = 0
@@ -118,8 +118,9 @@ async def main(tickers: list[str], limit: int) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tickers", default="", help="comma-separated tickers to pre-fetch EN for")
+    ap.add_argument("--tickers", default="", help="comma-separated tickers to pre-fetch EN for (via prod endpoint)")
+    ap.add_argument("--base-url", default="https://alpha.bobbyzhong.com", help="deployed app base URL")
     ap.add_argument("--limit", type=int, default=1000)
     args = ap.parse_args()
     tickers = [t for t in args.tickers.split(",") if t.strip()] if args.tickers else []
-    asyncio.run(main(tickers, args.limit))
+    asyncio.run(main(tickers, args.base_url, args.limit))
