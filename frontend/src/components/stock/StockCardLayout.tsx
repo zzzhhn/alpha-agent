@@ -17,6 +17,7 @@ import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import RatingBadge from "./RatingBadge";
 import ActionBox from "./ActionBox";
+import CompanyProfile from "./CompanyProfile";
 import LeanThesis from "./LeanThesis";
 import RichThesis from "./RichThesis";
 import AttributionRadar from "./AttributionRadar";
@@ -81,6 +82,9 @@ export default function StockCardLayout({
           <LetterGradeRibbon grades={card.dimension_grades} locale={locale} />
         ) : null}
         <ActionBox card={card} />
+        {/* Company "About" card directly below the Action card, per request.
+            key remounts it on ticker change so its async state never bleeds. */}
+        <CompanyProfile key={card.ticker} ticker={card.ticker} />
         <div className="text-xs text-tm-muted space-y-0.5">
           <div>{t(locale, "stock_layout.as_of")} {formatAsOf(card.as_of)}</div>
           {stale ? (

@@ -261,6 +261,25 @@ export interface ExplainRangeResponse {
   cache: "hit" | "miss";
 }
 
+// Company "About" card (yfinance Ticker.info). All fields optional — a
+// delisted/obscure ticker may have none, in which case the card hides.
+export interface CompanyProfile {
+  ticker: string;
+  name: string | null;
+  sector: string | null;
+  industry: string | null;
+  summary: string | null;
+  website: string | null;
+  country: string | null;
+  employees: number | null;
+}
+
+export const fetchProfile = (ticker: string, opts?: ApiGetOptions) =>
+  apiGet<CompanyProfile>(
+    `/api/stock/${ticker.toUpperCase()}/profile`,
+    opts,
+  );
+
 export const explainRange = (
   ticker: string,
   fromTs: string,

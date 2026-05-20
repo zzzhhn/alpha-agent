@@ -77,6 +77,32 @@ def extract_fundamentals(info: dict) -> dict[str, float | None]:
     }
 
 
+def extract_profile(info: dict) -> dict[str, object | None]:
+    """Pluck the company-profile fields from yfinance Ticker.info for the
+    stock-detail "About" card. All optional — a delisted/obscure ticker may
+    have none, in which case the frontend hides the card."""
+    def _s(key: str) -> str | None:
+        v = info.get(key)
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
+
+    return {
+        "name": _s("longName") or _s("shortName"),
+        "sector": _s("sector"),
+        "industry": _s("industry"),
+        "summary": _s("longBusinessSummary"),
+        "website": _s("website"),
+        "country": _s("country"),
+        "employees": (
+            int(info["fullTimeEmployees"])
+            if isinstance(info.get("fullTimeEmployees"), (int, float))
+            else None
+        ),
+    }
+
+
 def _classify_sentiment(title: str) -> str:
     """Keyword-rule sentiment. M4a does not call an LLM here; M4b can replace
     this with a Rich-brief enrichment step that scores headlines via the user's

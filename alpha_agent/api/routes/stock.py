@@ -6,8 +6,11 @@ recent row is older than 24 hours.  Spec §7.2.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+
+_log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
@@ -19,7 +22,11 @@ from alpha_agent.auth.dependencies import require_user
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import compute_dimension_grades
 from alpha_agent.llm.base import LLMClient, Message
-from alpha_agent.signals.yf_helpers import extract_ohlcv, get_ticker
+from alpha_agent.signals.yf_helpers import (
+    extract_ohlcv,
+    extract_profile,
+    get_ticker,
+)
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
 
@@ -533,6 +540,35 @@ async def stock_ohlcv(
         period=period,
         bars=[OhlcvBar(**b) for b in bars],
     )
+
+
+class CompanyProfile(BaseModel):
+    ticker: str
+    name: str | None = None
+    sector: str | None = None
+    industry: str | None = None
+    summary: str | None = None
+    website: str | None = None
+    country: str | None = None
+    employees: int | None = None
+
+
+@router.get("/{ticker}/profile", response_model=CompanyProfile)
+async def stock_profile(ticker: str) -> CompanyProfile:
+    """Company "About" card data (name, sector, industry, business summary)
+    from yfinance Ticker.info. Static-ish, so the frontend fetches it
+    progressively and the backend's get_ticker TTL cache absorbs repeats.
+    Failures degrade to all-null fields (frontend hides the card) rather
+    than erroring the stock page."""
+    ticker = ticker.upper()
+    try:
+        info = get_ticker(ticker).info or {}
+        return CompanyProfile(ticker=ticker, **extract_profile(info))
+    except Exception as exc:  # noqa: BLE001 — profile is non-critical; never 500
+        # Surface to logs so a systemic yfinance outage (all cards vanishing)
+        # is diagnosable, while the null response keeps the page working.
+        _log.warning("profile fetch failed for %s: %s: %s", ticker, type(exc).__name__, exc)
+        return CompanyProfile(ticker=ticker)
 
 
 class MinuteBar(BaseModel):
