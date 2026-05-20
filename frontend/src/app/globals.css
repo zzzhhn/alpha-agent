@@ -312,17 +312,20 @@ body {
   --tm-bg-3: #ebebe6;
   --tm-fg: #161a20;
   --tm-fg-2: #41464f;
-  --tm-muted: #828891;
+  --tm-muted: #6b7079;        /* P1-5: darkened from #828891 (3.2:1) → ~4.3:1 on cream */
   --tm-rule: #d8d8d2;
   --tm-rule-2: #c0c0b8;
-  --tm-accent: #0c8a4f;       /* deeper green for light contrast */
-  --tm-accent-soft: rgba(12, 138, 79, 0.10);
+  /* P1-5: #0c8a4f green was ~3.5:1 on the cream bg — below WCAG AA (4.5:1)
+     for normal text. #0a7344 is ~5.3:1 on cream / ~5.9:1 on white while
+     staying unmistakably green, preserving the research-paper palette. */
+  --tm-accent: #0a7344;
+  --tm-accent-soft: rgba(10, 115, 68, 0.10);
   --tm-warn: #b06a06;
   --tm-warn-soft: rgba(176, 106, 6, 0.10);
   --tm-neg: #b91c1c;
   --tm-neg-soft: rgba(185, 28, 28, 0.10);
   --tm-info: #1e63cc;
-  --tm-pos: #0c8a4f;
+  --tm-pos: #0a7344;
 }
 
 /* Keyframes shared with the workstation chrome — single definition so
