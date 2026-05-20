@@ -68,9 +68,13 @@ import type {
   HypothesisTranslateResponse,
 } from "@/lib/types";
 
+// P1-4: the only panel that exists is SP500 v3 (factor_universe_sp500_v3
+// .parquet); /data, /signal, /backtest all run on it. CSI300/CSI500 were
+// vestigial options with no backing data — selecting one mislabelled a
+// spec whose backtest still ran on SP500. Removed so the universe is
+// consistent across every module. (FactorUniverse keeps the CSI members
+// for back-compat with any saved CSI-labelled specs.)
 const UNIVERSE_OPTIONS: readonly { value: FactorUniverse; label: string }[] = [
-  { value: "CSI300", label: "CSI300" },
-  { value: "CSI500", label: "CSI500" },
   { value: "SP500", label: "S&P500" },
   { value: "custom", label: "Custom" },
 ];
@@ -85,7 +89,7 @@ export default function AlphaPage() {
   const { locale } = useLocale();
   const router = useRouter();
   const [text, setText] = useState("");
-  const [universe, setUniverse] = useState<FactorUniverse>("CSI500");
+  const [universe, setUniverse] = useState<FactorUniverse>("SP500");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<HypothesisTranslateResponse | null>(null);

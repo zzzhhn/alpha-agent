@@ -116,7 +116,7 @@ Output rules:
      "expression": "<Python call syntax using ALLOWED_OPS>",
      "operators_used": [<exact set of ops used in expression>],
      "lookback": <int 5-252>,
-     "universe": "<CSI300|CSI500|SP500|custom>",
+     "universe": "<SP500|custom>",
      "justification": "<<=400 chars, why this captures the hypothesis>"
    }}
 
@@ -161,9 +161,9 @@ is already captured by a single rank(X): high X → high rank, low X → low ran
 Do NOT write sub(rank(X), rank(X)). Either emit rank(X) alone, or if a genuine
 two-leg spread is intended, the legs must reference different fields/windows.
 
-Example input: {{"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "CSI500"}}
+Example input: {{"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "SP500"}}
 Example output:
-{{"name":"low_turn_roe_up","hypothesis":"Mid-caps with low turnover and rising ROE.","expression":"sub(rank(ts_mean(div(volume,close),20)),rank(ts_zscore(returns,20)))","operators_used":["sub","rank","ts_mean","div","ts_zscore"],"lookback":20,"universe":"CSI500","justification":"Inverse-turnover proxy via rolling volume/close; ROE proxy via short-term return zscore; cross-sectional rank removes scale."}}
+{{"name":"low_turn_roe_up","hypothesis":"Mid-caps with low turnover and rising ROE.","expression":"sub(rank(ts_mean(div(volume,close),20)),rank(ts_zscore(returns,20)))","operators_used":["sub","rank","ts_mean","div","ts_zscore"],"lookback":20,"universe":"SP500","justification":"Inverse-turnover proxy via rolling volume/close; ROE proxy via short-term return zscore; cross-sectional rank removes scale."}}
 """
 
 
