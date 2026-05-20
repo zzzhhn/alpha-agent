@@ -25,10 +25,12 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [expanded, setExpanded] = useState(false);
 
+  // Refetch on locale change so the summary switches zh ↔ en (the backend
+  // returns summary_zh for lang=zh when a translation exists, else en).
   useEffect(() => {
     let cancelled = false;
     setStatus("loading");
-    fetchProfile(ticker)
+    fetchProfile(ticker, locale)
       .then((p) => {
         if (cancelled) return;
         setProfile(p);
@@ -41,7 +43,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
     return () => {
       cancelled = true;
     };
-  }, [ticker]);
+  }, [ticker, locale]);
 
   const copy =
     locale === "zh"
@@ -51,6 +53,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
           showLess: "收起",
           employees: "员工",
           site: "官网",
+          pendingZh: "中文翻译待补,以下为英文原文",
         }
       : {
           title: "About",
@@ -58,6 +61,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
           showLess: "Show less",
           employees: "Employees",
           site: "Website",
+          pendingZh: "",
         };
 
   if (status === "loading") {
@@ -93,10 +97,17 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
       {subtitle ? (
         <div className="text-xs text-tm-fg-2">{subtitle}</div>
       ) : null}
+      {summary && locale === "zh" && profile.summary_lang === "en" ? (
+        <div className="text-[10px] italic text-tm-muted">{copy.pendingZh}</div>
+      ) : null}
       {summary ? (
         <p
           className={`text-xs leading-relaxed text-tm-fg-2 ${
-            isLong && !expanded ? "line-clamp-4" : ""
+            isLong && !expanded
+              ? "line-clamp-4"
+              : isLong
+                ? "max-h-48 overflow-y-auto pr-1"
+                : ""
           }`}
         >
           {summary}

@@ -146,3 +146,82 @@ async def log_error(
         """,
         layer, component, ticker, err_type, err_message, _dumps(context or {}),
     )
+
+
+# ── company_profiles (V010): cached stock-detail "About" card ───────────────
+
+
+async def get_company_profile(
+    pool: asyncpg.Pool, ticker: str
+) -> asyncpg.Record | None:
+    """Return the cached profile row, or None if this ticker isn't cached yet."""
+    return await pool.fetchrow(
+        "SELECT * FROM company_profiles WHERE ticker = $1", ticker.upper()
+    )
+
+
+async def upsert_company_profile_en(
+    pool: asyncpg.Pool,
+    ticker: str,
+    *,
+    name: str | None,
+    sector: str | None,
+    industry: str | None,
+    summary_en: str | None,
+    website: str | None,
+    country: str | None,
+    employees: int | None,
+) -> None:
+    """Insert/refresh the English (yfinance-sourced) fields. Leaves
+    summary_zh + translated_at untouched so an existing translation
+    survives an EN refresh."""
+    await pool.execute(
+        """
+        INSERT INTO company_profiles
+            (ticker, name, sector, industry, summary_en, website, country,
+             employees, fetched_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+        ON CONFLICT (ticker) DO UPDATE SET
+            name = EXCLUDED.name,
+            sector = EXCLUDED.sector,
+            industry = EXCLUDED.industry,
+            summary_en = EXCLUDED.summary_en,
+            website = EXCLUDED.website,
+            country = EXCLUDED.country,
+            employees = EXCLUDED.employees,
+            fetched_at = now()
+        """,
+        ticker.upper(), name, sector, industry, summary_en, website,
+        country, employees,
+    )
+
+
+async def set_company_profile_zh(
+    pool: asyncpg.Pool, ticker: str, summary_zh: str
+) -> None:
+    """Backfill the Chinese translation (run by the offline translate script)."""
+    await pool.execute(
+        """
+        UPDATE company_profiles
+        SET summary_zh = $2, translated_at = now()
+        WHERE ticker = $1
+        """,
+        ticker.upper(), summary_zh,
+    )
+
+
+async def list_profiles_missing_zh(
+    pool: asyncpg.Pool, limit: int = 1000
+) -> list[asyncpg.Record]:
+    """Rows that have an English summary but no Chinese translation yet —
+    the work queue for the offline backfill script."""
+    return await pool.fetch(
+        """
+        SELECT ticker, summary_en FROM company_profiles
+        WHERE summary_en IS NOT NULL AND summary_en <> ''
+          AND (summary_zh IS NULL OR summary_zh = '')
+        ORDER BY ticker
+        LIMIT $1
+        """,
+        limit,
+    )

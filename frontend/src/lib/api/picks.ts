@@ -269,14 +269,21 @@ export interface CompanyProfile {
   sector: string | null;
   industry: string | null;
   summary: string | null;
+  // Actual language of `summary`. When the UI is in zh but this is "en",
+  // the Chinese translation hasn't been backfilled yet — show a note.
+  summary_lang: "zh" | "en" | null;
   website: string | null;
   country: string | null;
   employees: number | null;
 }
 
-export const fetchProfile = (ticker: string, opts?: ApiGetOptions) =>
+export const fetchProfile = (
+  ticker: string,
+  lang: "zh" | "en" = "en",
+  opts?: ApiGetOptions,
+) =>
   apiGet<CompanyProfile>(
-    `/api/stock/${ticker.toUpperCase()}/profile`,
+    `/api/stock/${ticker.toUpperCase()}/profile?lang=${lang}`,
     opts,
   );
 

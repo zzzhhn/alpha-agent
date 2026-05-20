@@ -17,6 +17,10 @@ from pydantic import BaseModel
 
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.storage.queries import (
+    get_company_profile,
+    upsert_company_profile_en,
+)
 from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.fusion.attribution import top_drivers, top_drags
@@ -548,27 +552,78 @@ class CompanyProfile(BaseModel):
     sector: str | None = None
     industry: str | None = None
     summary: str | None = None
+    # Actual language of `summary` — lets the frontend show a "translation
+    # pending" note when zh was requested but only en is available yet.
+    summary_lang: Literal["zh", "en"] | None = None
     website: str | None = None
     country: str | None = None
     employees: int | None = None
 
 
 @router.get("/{ticker}/profile", response_model=CompanyProfile)
-async def stock_profile(ticker: str) -> CompanyProfile:
-    """Company "About" card data (name, sector, industry, business summary)
-    from yfinance Ticker.info. Static-ish, so the frontend fetches it
-    progressively and the backend's get_ticker TTL cache absorbs repeats.
-    Failures degrade to all-null fields (frontend hides the card) rather
-    than erroring the stock page."""
+async def stock_profile(
+    ticker: str,
+    lang: Literal["zh", "en"] = Query("en"),
+) -> CompanyProfile:
+    """Company "About" card. DB-cached (company_profiles, V010): the first
+    request per ticker pulls yfinance once and stores the EN fields;
+    subsequent reads serve from the DB so we never re-scrape. `summary` is
+    locale-appropriate — summary_zh when lang=zh and a translation exists
+    (backfilled offline by scripts/backfill_company_profiles_zh.py), else
+    summary_en. Never 500s: DB failures fall back to a direct yfinance pull,
+    and a total failure returns all-null fields (the card hides)."""
     ticker = ticker.upper()
     try:
-        info = get_ticker(ticker).info or {}
-        return CompanyProfile(ticker=ticker, **extract_profile(info))
+        pool = await get_db_pool()
+        row = await get_company_profile(pool, ticker)
+        if row is None:
+            # Cache miss → pull yfinance once, persist EN, serve EN.
+            prof = extract_profile(get_ticker(ticker).info or {})
+            await upsert_company_profile_en(
+                pool, ticker,
+                name=prof["name"], sector=prof["sector"],
+                industry=prof["industry"], summary_en=prof["summary"],
+                website=prof["website"], country=prof["country"],
+                employees=prof["employees"],
+            )
+            return CompanyProfile(
+                ticker=ticker,
+                summary_lang="en" if prof["summary"] else None,
+                **prof,
+            )
+        # Cache hit → resolve the summary for the requested locale.
+        if lang == "zh" and row["summary_zh"]:
+            summary, summary_lang = row["summary_zh"], "zh"
+        else:
+            summary = row["summary_en"]
+            summary_lang = "en" if row["summary_en"] else None
+        return CompanyProfile(
+            ticker=ticker,
+            name=row["name"],
+            sector=row["sector"],
+            industry=row["industry"],
+            summary=summary,
+            summary_lang=summary_lang,
+            website=row["website"],
+            country=row["country"],
+            employees=row["employees"],
+        )
     except Exception as exc:  # noqa: BLE001 — profile is non-critical; never 500
-        # Surface to logs so a systemic yfinance outage (all cards vanishing)
-        # is diagnosable, while the null response keeps the page working.
-        _log.warning("profile fetch failed for %s: %s: %s", ticker, type(exc).__name__, exc)
-        return CompanyProfile(ticker=ticker)
+        _log.warning(
+            "profile DB path failed for %s: %s: %s",
+            ticker, type(exc).__name__, exc,
+        )
+        # DB unavailable — still try a direct (uncached) yfinance pull so a
+        # DB hiccup doesn't blank the card app-wide.
+        try:
+            prof = extract_profile(get_ticker(ticker).info or {})
+            return CompanyProfile(
+                ticker=ticker,
+                summary_lang="en" if prof["summary"] else None,
+                **prof,
+            )
+        except Exception:  # noqa: BLE001
+            return CompanyProfile(ticker=ticker)
 
 
 class MinuteBar(BaseModel):
