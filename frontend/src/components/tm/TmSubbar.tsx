@@ -30,7 +30,9 @@ export function TmSubbar({ children, className }: TmSubbarProps) {
   return (
     <div
       className={clsx(
-        "flex min-h-[28px] items-center gap-3 bg-tm-bg-2 px-3 py-1 font-tm-mono text-[10.5px] tracking-[0.04em] text-tm-muted",
+        // P3-5: flex-wrap so the status strip reflows onto multiple rows on
+        // narrow screens instead of overflowing / clipping.
+        "flex min-h-[28px] flex-wrap items-center gap-x-3 gap-y-1 bg-tm-bg-2 px-3 py-1 font-tm-mono text-[10.5px] tracking-[0.04em] text-tm-muted",
         className,
       )}
     >

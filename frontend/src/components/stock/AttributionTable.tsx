@@ -137,7 +137,10 @@ export default function AttributionTable({
           {t(locale, "attribution.ic_accumulating")}
         </div>
       ) : null}
-      <table className="w-full text-xs border-collapse">
+      {/* P3-5: 10-column table scrolls horizontally on narrow screens
+          instead of overflowing the card. */}
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-xs border-collapse">
         <thead>
         <tr className="text-tm-fg-2 border-b border-tm-rule">
           <SortTh
@@ -297,6 +300,7 @@ export default function AttributionTable({
         })}
       </tbody>
       </table>
+      </div>
     </div>
   );
 }

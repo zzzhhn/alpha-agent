@@ -52,9 +52,12 @@ export default function StockCardLayout({
   const watched = isWatched(card.ticker);
   const { locale } = useLocale();
   return (
-    <div className="grid grid-cols-12 gap-6 px-4 py-6">
-      {/* Left rail (sticky) */}
-      <aside className="col-span-3 sticky top-4 self-start space-y-4">
+    // P3-5: single column on mobile, 3+9 split from lg up. The sidebar is
+    // only sticky on lg — when stacked above the main column on mobile,
+    // sticky would pin it awkwardly.
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 px-4 py-6">
+      {/* Left rail (sticky on lg) */}
+      <aside className="lg:col-span-3 lg:sticky lg:top-4 self-start space-y-4">
         {/* Back-to-picks: small affordance because direct URL access (e.g. */}
         {/* shared link) leaves no history entry → router.back() would no-op. */}
         <Link
@@ -101,7 +104,7 @@ export default function StockCardLayout({
       </aside>
 
       {/* Right scroll */}
-      <main className="col-span-9 space-y-8">
+      <main className="lg:col-span-9 space-y-8 min-w-0">
         <LeanThesis card={card} />
         {/* key={ticker} forces remount on SPA ticker change so RichThesis's */}
         {/* internal state (sections / cachedByLang / status) is reset and any */}
@@ -111,11 +114,11 @@ export default function StockCardLayout({
         <RichThesis key={card.ticker} ticker={card.ticker} />
         <section>
           <h2 className="text-lg font-semibold mb-3 text-tm-fg">{t(locale, "stock_layout.signal_attribution")}</h2>
-          <div className="grid grid-cols-12 gap-4">
-            <div className="col-span-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-4">
               <AttributionRadar card={card} />
             </div>
-            <div className="col-span-8">
+            <div className="md:col-span-8 min-w-0">
               <AttributionTable card={card} healthMap={healthMap} />
             </div>
           </div>
