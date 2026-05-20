@@ -72,15 +72,26 @@ const config: Config = {
         },
       },
       fontFamily: {
+        // P3-3: default sans = a SANS Chinese stack for data/body
+        // readability. Titles keep Songti via the h1,h2 rule in globals.css.
         sans: [
+          "PingFang SC",
+          "Source Han Sans SC",
+          "Noto Sans CJK SC",
+          "Microsoft YaHei",
+          "Inter Variable",
+          "Inter",
+          "-apple-system",
+          "sans-serif",
+        ],
+        // Explicit Songti serif utility for any heading/title that needs it
+        // beyond the automatic h1/h2 rule.
+        "tm-serif": [
           "Songti SC",
           "Source Han Serif SC",
           "Noto Serif CJK SC",
           "STSong",
           "SimSun",
-          "Inter Variable",
-          "Inter",
-          "-apple-system",
           "serif",
         ],
         mono: ["SF Mono", "Fira Code", "monospace"],

@@ -132,7 +132,11 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', 'Inter Variable', 'Inter', -apple-system, system-ui, serif;
+  /* P3-3: data/body text uses a SANS Chinese stack — serif Songti at the
+     small sizes in dense data tables hurt readability (Bloomberg/FactSet
+     are all-sans). Songti is preserved for titles via the h1,h2 rule below
+     so the research-paper character stays on headings only. */
+  font-family: 'PingFang SC', 'Source Han Sans SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -140,6 +144,17 @@ body {
   transition:
     background 0.3s,
     color 0.3s;
+}
+
+/* P3-3: keep the research-paper Songti serif on section/page titles only.
+   Headings are large enough that the serif reads well, and it preserves the
+   distinctive character the all-serif body previously carried. Workstation
+   mono labels (font-tm-mono) and data tables are unaffected. Opt out with
+   the `font-tm-mono` / `font-tm-sans` utilities where a heading must not be
+   serif (e.g. a TmPane mono title). */
+h1,
+h2 {
+  font-family: 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', 'Inter Variable', 'Inter', -apple-system, system-ui, serif;
 }
 
 /* ═══════════════════ Scrollbar ═══════════════════ */
