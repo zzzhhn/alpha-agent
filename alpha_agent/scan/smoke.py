@@ -27,6 +27,12 @@ class SmokeResult:
     rows_valid: int
     ic_spearman: float
     runtime_ms: float
+    # Cross-sectional std of the evaluated factor on the IC tail window. A
+    # near-zero value means the expression collapsed to a (near-)constant
+    # (e.g. multiply(0, x), or a self-cancelling combination the AST guard
+    # didn't structurally catch). Surfaced so the API can flag degenerate
+    # factors before they reach Zoo / backtest.
+    factor_std: float = 0.0
 
 
 def _synthetic_panel(lookback: int, n_tickers: int, seed: int) -> dict[str, np.ndarray]:
@@ -132,13 +138,26 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
     if factor.ndim == 1:
         factor = factor.reshape(-1, 1)
 
+    # Degeneracy gauge: std over the whole evaluated factor. nanstd of an
+    # all-NaN or constant array is 0 (or NaN, normalized to 0) — both signal
+    # "no cross-sectional information".
+    with np.errstate(all="ignore"):
+        factor_std = float(np.nanstd(factor))
+    if not np.isfinite(factor_std):
+        factor_std = 0.0
+
     fwd_ret = np.vstack(
         [np.diff(np.log(close), axis=0), np.full((1, close.shape[1]), np.nan)]
     )
 
     tail = 10
     if factor.shape[0] < tail + 1:
-        return SmokeResult(rows_valid=0, ic_spearman=float("nan"), runtime_ms=runtime_ms)
+        return SmokeResult(
+            rows_valid=0,
+            ic_spearman=float("nan"),
+            runtime_ms=runtime_ms,
+            factor_std=factor_std,
+        )
 
     factor_tail = factor[-(tail + 1) : -1]
     fwd_tail = fwd_ret[-(tail + 1) : -1]
@@ -164,4 +183,5 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
         rows_valid=int(valid.sum()),
         ic_spearman=ic,
         runtime_ms=float(runtime_ms),
+        factor_std=factor_std,
     )

@@ -59,6 +59,15 @@ class FactorSpecValidationError(ValueError):
     """Raised when a FactorSpec.expression fails AST validation."""
 
 
+# Binary ops that collapse to a constant when both arguments are structurally
+# identical: sub(x, x) ≡ 0, div(x, x) ≡ 1. Either way the factor carries zero
+# cross-sectional information. The LLM commonly emits this when mimicking the
+# sub(rank(...), rank(...)) spread idiom but filling both arms identically
+# (observed: the Basu E/P example translated to sub(rank(div(ni,cap)),
+# rank(div(ni,cap)))). Caught here so it can never reach smoke/Zoo/backtest.
+_DEGENERATE_BINARY_OPS: frozenset[str] = frozenset({"sub", "subtract", "div", "divide"})
+
+
 def validate_expression(
     expression: str, declared_ops: Iterable[str]
 ) -> frozenset[str]:
@@ -93,6 +102,24 @@ def validate_expression(
             for kw in node.keywords:
                 raise FactorSpecValidationError(
                     f"keyword arguments not allowed (found {kw.arg!r})"
+                )
+            # Degenerate self-operation guard. ast.dump gives a canonical
+            # structural string; equal dumps => the two arms are the same
+            # sub-expression => constant output.
+            if (
+                node.func.id in _DEGENERATE_BINARY_OPS
+                and len(node.args) == 2
+                and ast.dump(node.args[0]) == ast.dump(node.args[1])
+            ):
+                collapses_to = (
+                    "0" if node.func.id in {"sub", "subtract"} else "the constant 1"
+                )
+                raise FactorSpecValidationError(
+                    f"degenerate expression: {node.func.id}(x, x) collapses to "
+                    f"{collapses_to}; the two arguments are structurally identical, "
+                    "so the factor carries no cross-sectional signal. A spread or "
+                    "ratio factor must differ in at least one of: field, lookback "
+                    "window, operator, or coefficient."
                 )
             continue
         if isinstance(node, ast.Name):

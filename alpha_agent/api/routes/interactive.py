@@ -9,6 +9,7 @@ research mental model.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -63,6 +64,11 @@ class SmokeReport(BaseModel):
     rows_valid: int
     ic_spearman: float
     runtime_ms: float
+    # Cross-sectional std of the evaluated factor. degenerate=True means the
+    # factor collapsed to a (near-)constant — zero cross-sectional signal —
+    # so the frontend must disable "Save to Zoo" / "Run backtest" and warn.
+    factor_std: float = 0.0
+    degenerate: bool = False
 
 
 class HypothesisTranslateResponse(BaseModel):
@@ -145,6 +151,15 @@ Op signatures:
 
 lookback must be >= the largest ts_* window in the expression.
 operators_used must exactly equal the set of ops actually called.
+
+Degenerate-expression rule (STRICT): the two arms of a sub()/div() spread MUST
+differ in at least one of {{field, lookback window, operator, coefficient}}. Never
+emit sub(x, x) or div(x, x) where the two arguments are structurally identical —
+it collapses to a constant (0 or 1), carries zero cross-sectional signal, and is
+rejected by the validator. For a "high X long, low X short" hypothesis the spread
+is already captured by a single rank(X): high X → high rank, low X → low rank.
+Do NOT write sub(rank(X), rank(X)). Either emit rank(X) alone, or if a genuine
+two-leg spread is intended, the legs must reference different fields/windows.
 
 Example input: {{"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "CSI500"}}
 Example output:
@@ -253,6 +268,13 @@ async def translate_hypothesis(
             rows_valid=smoke.rows_valid,
             ic_spearman=smoke.ic_spearman,
             runtime_ms=smoke.runtime_ms,
+            factor_std=smoke.factor_std,
+            # Constant output (std ≈ 0) or a non-finite IC both mean the
+            # factor carries no usable cross-sectional signal. This is the
+            # defense-in-depth net for degenerate expressions the AST guard
+            # didn't structurally catch (e.g. multiply(0, x)).
+            degenerate=(smoke.factor_std < 1e-9)
+            or (not math.isfinite(smoke.ic_spearman)),
         ),
         llm_tokens={
             "prompt": llm_resp.prompt_tokens,
