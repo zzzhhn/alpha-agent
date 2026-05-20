@@ -633,6 +633,8 @@ const translations = {
     "attribution.icir": "ICIR",
     "attribution.ir": "IR",
     "attribution.tier": "tier",
+    "attribution.ic_accumulating":
+      "Rank IC / ICIR / IR 暂未就绪：滚动 IC 历史正在累积。这三列由 IC 回测引擎按交易日写入，约需 30 个交易日的信号观测才会显示。在此之前显示 “—” 属正常，并非缺失或错误。",
     "attribution.tooltip_rank_ic":
       "Spearman 秩相关 IC,最近 30 天滚动窗口。\n公式: corr(rank(信号 z), rank(未来 5 日收益))\n>0.02 视为有效信号,<0 视为反向。鼠标悬停看 n_obs 样本量。",
     "attribution.tooltip_icir":
@@ -1357,6 +1359,8 @@ const translations = {
     "attribution.icir": "ICIR",
     "attribution.ir": "IR",
     "attribution.tier": "Tier",
+    "attribution.ic_accumulating":
+      "Rank IC / ICIR / IR not yet available: the rolling IC history is still accumulating. These three columns are written per trading day by the IC backtest engine and need ~30 trading days of signal observations before they populate. Until then, “—” is expected, not missing or broken.",
     "attribution.tooltip_rank_ic":
       "Spearman rank IC, rolling 30-day window.\nFormula: corr(rank(signal z), rank(forward 5-day return))\n>0.02 is a usable signal; <0 indicates inverted alpha. Hover the cell for n_obs.",
     "attribution.tooltip_icir":

@@ -88,6 +88,22 @@ export default function AttributionTable({
       ? "切换因子档的时间维度。短线 12d/60d 跟其他短窗口信号同步;长线 252d/126d 是学术经典。同步影响 Picks 排序 + 雷达图。"
       : "Toggle the factor signal's time horizon. Short (12d/60d) aligns with the other short-window legs; Long (252d/126d) is the academic standard. Syncs across Picks ranking + Radar.";
 
+  // Honest empty-state for the Rank IC / ICIR / IR columns. signal_ic_history
+  // is populated by the IC backtest engine; until that pipeline has
+  // accumulated enough observations, every signal returns
+  // tier="insufficient_data" / n_obs=0 and these three columns are all "—".
+  // Without this note 12 rows of bare "—" read as "broken / forgotten"
+  // rather than "accumulating".
+  const icAvailable = sorted.some((b) => {
+    const h = healthMap[b.signal];
+    return (
+      h != null &&
+      (typeof h.icir_30d === "number" ||
+        typeof h.ir_30d === "number" ||
+        typeof h.live_ic_30d === "number")
+    );
+  });
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-end gap-2">
@@ -116,6 +132,11 @@ export default function AttributionTable({
           </span>
         </button>
       </div>
+      {!icAvailable ? (
+        <div className="rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
+          {t(locale, "attribution.ic_accumulating")}
+        </div>
+      ) : null}
       <table className="w-full text-xs border-collapse">
         <thead>
         <tr className="text-tm-fg-2 border-b border-tm-rule">
