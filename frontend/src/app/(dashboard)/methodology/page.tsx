@@ -325,11 +325,21 @@ function DataTab({
   const u = universes?.universes[0];
 
   if (!u || !coverage) {
+    // P3-4: skeleton instead of bare "Loading..." text. The first load is a
+    // cold parquet+coverage compute (~12s); a structural placeholder reads
+    // as "loading" rather than "stuck". Repeat loads are instant (localStorage
+    // cache in lib/api.ts).
     return (
-      <TmPane title="PANEL.OVERVIEW">
-        <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
-          {t(locale, "common.loading")}
-        </p>
+      <TmPane title="PANEL.OVERVIEW" meta={t(locale, "common.loading")}>
+        <div className="grid grid-cols-2 gap-px bg-tm-rule md:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="bg-tm-bg-2 px-3 py-3 space-y-2">
+              <div className="h-2.5 w-16 animate-pulse rounded bg-tm-bg-3" />
+              <div className="h-4 w-12 animate-pulse rounded bg-tm-bg-3" />
+              <div className="h-2 w-20 animate-pulse rounded bg-tm-bg-3" />
+            </div>
+          ))}
+        </div>
       </TmPane>
     );
   }

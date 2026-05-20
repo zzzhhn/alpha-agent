@@ -318,6 +318,51 @@ interface CacheOpts {
   readonly force?: boolean;
 }
 
+// P3-2: the in-memory promise cache below survives client-side navigation
+// but resets on a full page reload, so the heavy /data/universe + coverage
+// endpoints (~12s cold) pay the cost again on every hard refresh. Persist
+// them in localStorage too — the panel is static (changes only on a
+// parquet rebuild + redeploy), so a 6h TTL is safe and makes hard reloads
+// instant.
+const _LS_TTL_MS = 6 * 60 * 60 * 1000;
+const _LS_UNIVERSE = "alphacore.data.universe.v1";
+const _LS_COVERAGE_PREFIX = "alphacore.data.coverage.v1.";
+
+function _lsGet<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { at: number; data: T };
+    if (Date.now() - parsed.at > _LS_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function _lsSet<T>(key: string, data: T): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+  } catch {
+    // storage full / disabled — in-memory cache still applies
+  }
+}
+
+function _lsDel(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function _okResponse<T>(data: T): ApiResponse<T> {
+  return { data, error: null, timestamp: new Date().toISOString() };
+}
+
 let _universeCache: Promise<ApiResponse<UniverseListResponse>> | null = null;
 let _catalogCache: Promise<ApiResponse<OperandCatalogResponse>> | null = null;
 const _coverageCache = new Map<string, Promise<ApiResponse<CoverageResponse>>>();
@@ -336,13 +381,25 @@ function _wrapCache<T>(
 }
 
 export function fetchUniverses(opts?: CacheOpts) {
-  if (opts?.force) _universeCache = null;
+  if (opts?.force) {
+    _universeCache = null;
+    _lsDel(_LS_UNIVERSE);
+  }
   if (!_universeCache) {
-    _universeCache = _wrapCache(
-      _universeCache,
-      () => fetchJson<UniverseListResponse>("/data/universe"),
-      () => { _universeCache = null; },
-    );
+    const cached = opts?.force ? null : _lsGet<UniverseListResponse>(_LS_UNIVERSE);
+    if (cached) {
+      _universeCache = Promise.resolve(_okResponse(cached));
+    } else {
+      _universeCache = _wrapCache(
+        _universeCache,
+        () =>
+          fetchJson<UniverseListResponse>("/data/universe").then((r) => {
+            if (r.data) _lsSet(_LS_UNIVERSE, r.data);
+            return r;
+          }),
+        () => { _universeCache = null; },
+      );
+    }
   }
   return _universeCache;
 }
@@ -378,15 +435,25 @@ export function fetchCoverage(
   universeId = "SP500_subset",
   opts?: CacheOpts,
 ) {
-  if (opts?.force) _coverageCache.delete(universeId);
+  const lsKey = _LS_COVERAGE_PREFIX + universeId;
+  if (opts?.force) {
+    _coverageCache.delete(universeId);
+    _lsDel(lsKey);
+  }
   let p = _coverageCache.get(universeId);
   if (!p) {
-    p = fetchJson<CoverageResponse>(
-      `/data/coverage?universe_id=${encodeURIComponent(universeId)}`,
-    ).then((r) => {
-      if (r.error) _coverageCache.delete(universeId);
-      return r;
-    });
+    const cached = opts?.force ? null : _lsGet<CoverageResponse>(lsKey);
+    if (cached) {
+      p = Promise.resolve(_okResponse(cached));
+    } else {
+      p = fetchJson<CoverageResponse>(
+        `/data/coverage?universe_id=${encodeURIComponent(universeId)}`,
+      ).then((r) => {
+        if (r.error) _coverageCache.delete(universeId);
+        else if (r.data) _lsSet(lsKey, r.data);
+        return r;
+      });
+    }
     _coverageCache.set(universeId, p);
   }
   return p;
@@ -397,6 +464,17 @@ export function invalidateDataCache() {
   _universeCache = null;
   _catalogCache = null;
   _coverageCache.clear();
+  _lsDel(_LS_UNIVERSE);
+  if (typeof window !== "undefined") {
+    try {
+      // Clear every persisted coverage entry (any universeId).
+      Object.keys(window.localStorage)
+        .filter((k) => k.startsWith(_LS_COVERAGE_PREFIX))
+        .forEach((k) => window.localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /* ── P3: Signal Layer ── */

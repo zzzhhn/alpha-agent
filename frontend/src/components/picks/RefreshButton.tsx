@@ -124,8 +124,12 @@ export default function RefreshButton() {
     }
   }, []);
 
-  // Poll the lightweight /last_refresh endpoint on mount + every 60s so the
-  // "X min ago" badge stays roughly current without page reload.
+  // Keep the "X min ago" badge current. P3-1: the timestamp itself only
+  // changes when a cron runs (a few times/day), and /last_refresh is a slow
+  // round-trip (Neon cold connection, ~1-2s for 100 bytes). So fetch the
+  // timestamp once + re-fetch only every 5 min, while ticking a local clock
+  // every 60s so the badge text increments WITHOUT a network call. Net:
+  // ~5x fewer /last_refresh round-trips, badge stays live.
   useEffect(() => {
     let cancelled = false;
     const fetchAge = async () => {
@@ -137,10 +141,14 @@ export default function RefreshButton() {
       }
     };
     fetchAge();
-    const id = setInterval(fetchAge, 60_000);
+    const fetchId = setInterval(fetchAge, 300_000); // re-fetch every 5 min
+    const tickId = setInterval(() => {
+      if (!cancelled) setNow(Date.now()); // local re-render → fmtAge recomputes
+    }, 60_000);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearInterval(fetchId);
+      clearInterval(tickId);
     };
   }, []);
 
