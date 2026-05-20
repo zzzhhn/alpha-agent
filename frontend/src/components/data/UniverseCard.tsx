@@ -30,8 +30,10 @@
  */
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type {
@@ -361,6 +363,12 @@ interface SectorBucket {
   readonly key: string;
   readonly label: string;
   readonly tickers: readonly string[];
+  // True for the null-sector bucket. These are overwhelmingly tickers that
+  // delisted / merged during the panel window (yfinance returns no GICS
+  // sector for them). The v3 panel deliberately retains them to remove
+  // survivorship bias; surfacing that as a labelled bucket + tooltip turns
+  // what looked like "missing data" into the methodology selling point.
+  readonly isDelisted?: boolean;
 }
 
 const UNKNOWN_SECTOR = "Unknown";
@@ -397,6 +405,7 @@ function bucketTickers(universe: UniverseInfo): SectorBucket[] {
       key: sec,
       label: sec,
       tickers,
+      isDelisted: sec === UNKNOWN_SECTOR,
     }));
 }
 
@@ -433,25 +442,46 @@ function SectorBlock({
   bucket: SectorBucket;
   isFirst: boolean;
 }) {
+  const { locale } = useLocale();
   const initiallyOpen = bucket.tickers.length < COLLAPSE_THRESHOLD;
   const [open, setOpen] = useState(initiallyOpen);
+
+  const displayLabel = bucket.isDelisted
+    ? t(locale, "data.delistedBucket")
+    : bucket.label;
 
   return (
     <div
       className={`flex flex-col ${isFirst ? "" : "border-t border-tm-rule"}`}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 bg-tm-bg-2 px-3 py-1.5 text-left font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 transition-colors hover:text-tm-fg"
-        aria-expanded={open}
-      >
-        <span className="w-3 text-tm-muted" aria-hidden="true">
-          {open ? "▾" : "▸"}
-        </span>
-        <span className="font-semibold text-tm-accent">{bucket.label}</span>
-        <span className="text-tm-muted">· {bucket.tickers.length}</span>
-      </button>
+      {/* Toggle button + (for the delisted bucket) tooltip/link kept as flex
+          siblings, not nested — an <a>/InfoTooltip inside a <button> is
+          invalid interactive nesting. */}
+      <div className="flex items-center bg-tm-bg-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex flex-1 items-center gap-2 px-3 py-1.5 text-left font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 transition-colors hover:text-tm-fg"
+          aria-expanded={open}
+        >
+          <span className="w-3 text-tm-muted" aria-hidden="true">
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="font-semibold text-tm-accent">{displayLabel}</span>
+          <span className="text-tm-muted">· {bucket.tickers.length}</span>
+        </button>
+        {bucket.isDelisted ? (
+          <div className="flex items-center gap-1.5 pr-3">
+            <InfoTooltip content={t(locale, "data.delistedTooltip")} />
+            <Link
+              href="/methodology"
+              className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted underline-offset-2 hover:text-tm-accent hover:underline"
+            >
+              {t(locale, "data.delistedLink")}
+            </Link>
+          </div>
+        ) : null}
+      </div>
       {open && (
         <div
           className="grid gap-px bg-tm-rule p-px"
