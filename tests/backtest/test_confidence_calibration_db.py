@@ -1,6 +1,6 @@
 # tests/backtest/test_confidence_calibration_db.py
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
