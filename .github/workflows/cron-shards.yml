@@ -40,6 +40,11 @@ on:
     - cron: '15 14,18 * * 1-5'
     # IC backtest monthly, 1st of month 04:00 UTC
     - cron: '0 4 1 * *'
+    # Self-loop daily: append today's daily_prices (forward-return source)
+    # then run the walk-forward IC backtest so signal_ic_history +
+    # signal_weight_current stay current. 14:00 UTC = 30min after slow_daily
+    # so the day's closes exist; weekdays only.
+    - cron: '0 14 * * 1-5'
     # NOTE: news_llm_enrich cron removed 2026-05-17. BYOK architecture
     # means cron has no user-context to source an LLM key. Enrichment
     # moved to read-time path triggered by user with their own key.
@@ -61,6 +66,7 @@ on:
           - news_macro
           - minute_bars_puller
           - ic_backtest_monthly
+          - daily_prices_puller
 
 env:
   BACKEND_BASE: https://alpha.bobbyzhong.com
@@ -337,6 +343,48 @@ jobs:
           HTTP=$(curl -s --max-time 600 -o /tmp/shot.json -w "%{http_code}" \
             -X POST "$BACKEND_BASE/api/cron/ic_backtest_monthly")
           cat /tmp/shot.json | head -c 400; echo
+          [ "$HTTP" = "200" ] || exit 1
+
+  # ─── Self-loop daily: daily_prices append + walk-forward IC backtest ────
+  # Phase 1a forward-return foundation. Appends today's close for all 557
+  # tickers into daily_prices (the IC engine's forward-return source), then
+  # runs the IC backtest so signal_ic_history + signal_weight_current stay
+  # current (the run has a skip-recent-1hr guard, so a daily cadence on top
+  # of the monthly job is safe and idempotent).
+  daily_prices_puller:
+    if: |
+      github.event.schedule == '0 14 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'daily_prices_puller')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: append today's daily_prices (8 shots × limit=75)
+        run: |
+          set -e
+          TOTAL_UPDATED=0
+          TOTAL_ERRORS=0
+          for offset in 0 75 150 225 300 375 450 525; do
+            echo "::group::daily_prices shot offset=$offset limit=75"
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/daily_prices?limit=75&offset=$offset")
+            echo "offset=$offset HTTP=$HTTP"
+            cat /tmp/shot.json | head -c 600; echo
+            [ "$HTTP" = "200" ] || exit 1
+            UPDATED=$(python3 -c "import json; print(json.load(open('/tmp/shot.json')).get('updated',0))")
+            ERRORS=$(python3 -c "import json; print(json.load(open('/tmp/shot.json')).get('error_count',0))")
+            TOTAL_UPDATED=$((TOTAL_UPDATED + UPDATED))
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERRORS))
+            echo "::endgroup::"
+            sleep 10
+          done
+          echo "## daily_prices summary" >> $GITHUB_STEP_SUMMARY
+          echo "- updated total: $TOTAL_UPDATED" >> $GITHUB_STEP_SUMMARY
+          echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+      - name: run walk-forward IC backtest (populate IC history + weights)
+        run: |
+          HTTP=$(curl -s --max-time 600 -o /tmp/ic.json -w "%{http_code}" \
+            -X POST "$BACKEND_BASE/api/cron/ic_backtest_monthly")
+          cat /tmp/ic.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
 
 # news_llm_enrich job removed 2026-05-17 (BYOK architecture - enrich
