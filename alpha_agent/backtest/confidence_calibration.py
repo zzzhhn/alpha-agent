@@ -112,3 +112,29 @@ def apply_calibration(raw_confidence: float, cal_map: dict | None) -> float:
         return raw
     mapped = float(np.interp(raw, xs, ys))
     return min(mapped, raw)
+
+
+def reliability_and_brier(pairs: list[tuple[float, int]], n_buckets: int = 10) -> list[dict]:
+    """Bucket pairs by stated confidence into n_buckets equal-width [0,1] bins;
+    per bucket report realized hit_rate, Brier (mean (confidence - hit)^2), and
+    count. Empty buckets are reported with n=0 so the reliability curve is dense."""
+    edges = np.linspace(0.0, 1.0, n_buckets + 1)
+    out: list[dict] = []
+    confs = np.array([p[0] for p in pairs], dtype=float)
+    hits = np.array([p[1] for p in pairs], dtype=float)
+    for i in range(n_buckets):
+        lo, hi = float(edges[i]), float(edges[i + 1])
+        # last bucket is closed on the right so confidence == 1.0 lands somewhere.
+        in_bin = (confs >= lo) & (confs < hi) if i < n_buckets - 1 else (confs >= lo) & (confs <= hi)
+        n = int(in_bin.sum())
+        if n == 0:
+            out.append({"lo": lo, "hi": hi, "hit_rate": None, "brier": None, "n": 0})
+            continue
+        c_in, h_in = confs[in_bin], hits[in_bin]
+        out.append({
+            "lo": lo, "hi": hi,
+            "hit_rate": float(h_in.mean()),
+            "brier": float(np.mean((c_in - h_in) ** 2)),
+            "n": n,
+        })
+    return out

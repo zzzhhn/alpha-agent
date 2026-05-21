@@ -45,3 +45,21 @@ def test_apply_calibration_is_suppress_only():
 def test_apply_calibration_identity_when_no_map():
     assert apply_calibration(0.77, None) == pytest.approx(0.77)
     assert apply_calibration(0.77, {"x": [], "y": []}) == pytest.approx(0.77)
+
+
+from alpha_agent.backtest.confidence_calibration import reliability_and_brier  # noqa: E402
+
+
+def test_reliability_buckets_hit_rate_and_brier():
+    # Two clear buckets: conf 0.1 (hit-rate 0.0) and conf 0.9 (hit-rate 1.0).
+    pairs = [(0.1, 0)] * 10 + [(0.9, 1)] * 10
+    buckets = reliability_and_brier(pairs, n_buckets=10)
+    by = {(b["lo"], b["hi"]): b for b in buckets if b["n"] > 0}
+    low = next(b for k, b in by.items() if k[0] <= 0.1 < k[1])
+    high = next(b for k, b in by.items() if k[0] <= 0.9 < k[1])
+    assert low["hit_rate"] == pytest.approx(0.0)
+    assert high["hit_rate"] == pytest.approx(1.0)
+    # Brier in the 0.1 bucket: mean((0.1-0)^2) = 0.01; in 0.9 bucket: (0.9-1)^2 = 0.01.
+    assert low["brier"] == pytest.approx(0.01)
+    assert high["brier"] == pytest.approx(0.01)
+    assert low["n"] == 10 and high["n"] == 10
