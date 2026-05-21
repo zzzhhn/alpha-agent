@@ -23,8 +23,11 @@ async def handler(limit: int | None = None, offset: int | None = None) -> dict[s
     start = offset or 0
     end = (start + limit) if limit else len(tickers)
     n = 0
+    error_count = 0
+    errors: list[str] = []
     for tk in tickers[start:end]:
         try:
+            # 5d window ensures a row exists even on Mondays / post-holiday.
             df = get_ticker(tk).history(period="5d")
             if df is None or df.empty:
                 continue
@@ -32,6 +35,17 @@ async def handler(limit: int | None = None, offset: int | None = None) -> dict[s
             close = df["Close"].iloc[-1]
             await upsert_daily_close(pool, tk, ts.date().isoformat(), float(close))
             n += 1
-        except Exception:  # noqa: BLE001
-            continue
-    return {"cron": "daily_prices", "updated": n, "range": [start, end]}
+        except Exception as exc:  # noqa: BLE001
+            # Surface per-ticker failures (rate-limit, schema drift) instead of
+            # swallowing them: a silent skip is indistinguishable from "no close
+            # yet today" and would silently degrade the IC dataset.
+            error_count += 1
+            if len(errors) < 10:
+                errors.append(f"{tk}: {type(exc).__name__}: {exc}")
+    return {
+        "cron": "daily_prices",
+        "updated": n,
+        "range": [start, end],
+        "error_count": error_count,
+        "errors": errors,
+    }
