@@ -76,3 +76,51 @@ async def test_shadow_does_not_become_live_until_streak(pool):
     shadow_exists = await pool.fetchval(
         "SELECT count(*) FROM signal_weight_current WHERE signal_name='siga' AND status='shadow'")
     assert shadow_exists == 1
+
+
+from alpha_agent.backtest.adaptive_weights import _maybe_rollback  # noqa: E402
+
+
+async def _set_live(pool, weights):
+    for sig, w in weights.items():
+        await pool.execute(
+            "INSERT INTO signal_weight_current (signal_name,status,weight,last_updated,reason) "
+            "VALUES ($1,'live',$2,now(),'seed') "
+            "ON CONFLICT (signal_name,status) DO UPDATE SET weight=EXCLUDED.weight",
+            sig, w,
+        )
+
+
+@pytest.mark.asyncio
+async def test_rollback_fires_when_live_ic_degrades_below_baseline(pool):
+    await _seed_market(pool)  # siga drives the return; sigb is noise
+    # Live currently weights ONLY the noise signal -> low composite IC.
+    await _set_live(pool, {"siga": 0.0, "sigb": 0.20})
+    # A prior promotion claimed baseline_ic=0.95, old_value = the good weights.
+    await pool.execute(
+        "INSERT INTO config_change_log (user_id, field, old_value, new_value, source) "
+        "VALUES (0,'signal_weights',$1,$2,'auto_promote')",
+        json.dumps({"siga": 0.20, "sigb": 0.0}),
+        json.dumps({"weights": {"siga": 0.0, "sigb": 0.20}, "baseline_ic": 0.95}),
+    )
+    rolled = await _maybe_rollback(pool)
+    assert rolled is True
+    live = {r["signal_name"]: float(r["weight"]) for r in await pool.fetch(
+        "SELECT signal_name, weight FROM signal_weight_current WHERE status='live'")}
+    assert live["siga"] == pytest.approx(0.20)  # restored to the good weights
+    journ = await pool.fetchrow(
+        "SELECT rollback_of, source FROM config_change_log WHERE source='auto_rollback'")
+    assert journ is not None and journ["rollback_of"] is not None
+
+
+@pytest.mark.asyncio
+async def test_no_rollback_within_tolerance(pool):
+    await _seed_market(pool)
+    await _set_live(pool, {"siga": 0.20, "sigb": 0.0})  # good weights -> high IC
+    await pool.execute(
+        "INSERT INTO config_change_log (user_id, field, old_value, new_value, source) "
+        "VALUES (0,'signal_weights',$1,$2,'auto_promote')",
+        json.dumps({"siga": 0.10, "sigb": 0.0}),
+        json.dumps({"weights": {"siga": 0.20, "sigb": 0.0}, "baseline_ic": 0.95}),
+    )
+    assert await _maybe_rollback(pool) is False

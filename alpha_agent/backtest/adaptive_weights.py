@@ -205,8 +205,48 @@ async def _promote(pool, weights: dict[str, float], baseline_ic, now, reason: st
 
 
 async def _maybe_rollback(pool) -> bool:
-    # Temporary stub; Task 7 replaces this body with the real rollback logic.
-    return False
+    """If the current live composite IC has fallen more than DEGRADE_TOL below
+    the baseline_ic recorded at the last promotion, restore that promotion's
+    prior weights and journal a rollback_of row. Cold-start seeds (baseline_ic
+    is None) are never rolled back."""
+    row = await pool.fetchrow(
+        """
+        SELECT id, old_value, new_value FROM config_change_log
+        WHERE field = 'signal_weights' AND source IN ('auto_promote', 'cold_start_seed')
+          AND id NOT IN (
+            SELECT rollback_of FROM config_change_log WHERE rollback_of IS NOT NULL
+          )
+        ORDER BY id DESC LIMIT 1
+        """
+    )
+    if row is None:
+        return False
+    baseline_ic = json.loads(row["new_value"]).get("baseline_ic")
+    if baseline_ic is None:
+        return False
+    live_w = await _weights_by_status(pool, "live")
+    live_ic = await composite_ic(pool, live_w, 90)
+    # None means degenerate/zero-information composite (e.g. all weights on a
+    # zero-variance signal). Treat it as a worst-case IC to allow rollback.
+    effective_ic = live_ic if live_ic is not None else float("-inf")
+    if effective_ic >= baseline_ic - DEGRADE_TOL:
+        return False
+    prev = json.loads(row["old_value"])
+    now = datetime.now(UTC)
+    for sig, w in prev.items():
+        await pool.execute(
+            "INSERT INTO signal_weight_current (signal_name,status,weight,last_updated,reason) "
+            "VALUES ($1,'live',$2,$3,'auto_rollback') "
+            "ON CONFLICT (signal_name,status) DO UPDATE SET "
+            "weight=EXCLUDED.weight, last_updated=EXCLUDED.last_updated, reason=EXCLUDED.reason",
+            sig, w, now,
+        )
+    await pool.execute(
+        "INSERT INTO config_change_log (user_id, field, old_value, new_value, source, rollback_of) "
+        "VALUES (0,'signal_weights',$1,$2,'auto_rollback',$3)",
+        json.dumps(live_w), json.dumps(prev), row["id"],
+    )
+    return True
 
 
 async def apply_adaptive_weights(pool, active_signals) -> dict:
