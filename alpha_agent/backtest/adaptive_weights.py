@@ -7,9 +7,12 @@ promotes/rolls-back via config_change_log. Replaces the raw mean(IC) rule.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from collections import defaultdict
+from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
+
+from alpha_agent.backtest.ic_engine import _MIN_OBS, _spearman_rho
 
 # Tuning constants (Phase 1b decisions 2026-05-21).
 HALF_LIFE_DAYS: float = 30.0    # slow EWMA: weights track stable predictive power
@@ -93,3 +96,61 @@ def apply_floor_or_drop(
     if cb >= max_bad:
         return 0.0, cb, True
     return float(floor), cb, False
+
+
+async def composite_ic(
+    pool, weights: dict[str, float], window_days: int, fwd_days: int = 5
+) -> float | None:
+    """Spearman IC of the weighted-sum composite signal vs the forward
+    `fwd_days`-trading-day return, over recent (ticker, as_of) points.
+
+    The composite per (ticker, as_of) is sum(weights[signal] * z) across that
+    row's breakdown; the forward return comes from daily_prices via the same
+    LEAD(close, 5) the per-signal IC uses. Returns None below _MIN_OBS points
+    or if Spearman is degenerate.
+    """
+    now = datetime.now(UTC)
+    window_start = (now - timedelta(days=window_days)).date()
+    fwd_cutoff = (now - timedelta(days=fwd_days)).date()
+    rows = await pool.fetch(
+        """
+        WITH sig AS (
+            SELECT f.ticker, f.date AS as_of,
+                   elem->>'signal' AS signal_name,
+                   (elem->>'z')::double precision AS z
+            FROM daily_signals_fast f
+            CROSS JOIN LATERAL jsonb_array_elements(f.breakdown->'breakdown') AS elem
+            WHERE f.date >= $1 AND f.date <= $2 AND (elem->>'z') IS NOT NULL
+        ),
+        fwd AS (
+            SELECT ticker, date, close AS ce,
+                   LEAD(close, 5) OVER (PARTITION BY ticker ORDER BY date) AS cx
+            FROM daily_prices
+        )
+        SELECT s.ticker, s.as_of, s.signal_name, s.z,
+               (fwd.cx / fwd.ce - 1)::double precision AS fwd_5d
+        FROM sig s
+        JOIN fwd ON fwd.ticker = s.ticker AND fwd.date = s.as_of
+        WHERE fwd.ce > 0 AND fwd.cx IS NOT NULL
+        """,
+        window_start, fwd_cutoff,
+    )
+    comp: dict[tuple, float] = defaultdict(float)
+    fwd_ret: dict[tuple, float] = {}
+    for r in rows:
+        key = (r["ticker"], r["as_of"])
+        comp[key] += weights.get(r["signal_name"], 0.0) * float(r["z"])
+        fwd_ret[key] = float(r["fwd_5d"])
+    if len(comp) < _MIN_OBS:
+        return None
+    keys = list(comp)
+    comp_vals = [comp[k] for k in keys]
+    fwd_vals = [fwd_ret[k] for k in keys]
+    if np.std(comp_vals) < 1e-9:
+        # Constant composite (e.g. all weights zero for present signals):
+        # no predictive content; Spearman is undefined.
+        return None
+    rho = _spearman_rho(comp_vals, fwd_vals)
+    if rho is None or np.isnan(rho):
+        return None
+    return float(rho)
