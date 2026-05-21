@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.backtest.confidence_calibration import run_calibration
 from alpha_agent.backtest.ic_engine import run_monthly_ic_backtest
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
@@ -27,8 +28,14 @@ async def ic_backtest_monthly() -> dict[str, Any]:
     pool = await get_db_pool()
     started_at = datetime.now(UTC)
     n = await run_monthly_ic_backtest(pool)
-    from alpha_agent.backtest.confidence_calibration import run_calibration
-    calib = await run_calibration(pool)
+    # Calibration is a secondary diagnostic: the IC backtest above is the
+    # primary job (it feeds the live weight path and has already committed).
+    # A calibration failure must NOT fail the whole cron, but it must be
+    # surfaced (not swallowed) so it stays visible in the response.
+    try:
+        calib: dict[str, Any] = await run_calibration(pool)
+    except Exception as exc:  # noqa: BLE001
+        calib = {"error": f"{type(exc).__name__}: {exc}"}
     # Stamp cron_runs (same pattern as other cron handlers).
     await pool.execute(
         """
