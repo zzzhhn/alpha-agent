@@ -216,6 +216,17 @@ async def apply_adaptive_weights(pool, active_signals) -> dict:
     now = datetime.now(UTC)
     rolled_back = await _maybe_rollback(pool)
 
+    # Global cold start = the table has no live rows at all (first-ever run).
+    # Only then do we skip the change-cap: capping from current=0 collapses
+    # every candidate to the same min-step (CAP_MIN_REF * CHANGE_CAP_FRAC)
+    # regardless of ICIR, which would erase the relative ranking we are seeding.
+    # A NEW signal added later (others already live) is NOT a global cold start,
+    # so it ramps gradually from 0 via the cap rather than jumping to an
+    # uncapped weight.
+    is_cold_start = (await pool.fetchval(
+        "SELECT count(*) FROM signal_weight_current WHERE status='live'"
+    )) == 0
+
     for sig in active_signals:
         icir = await _gather_icir(pool, sig)
         raw_target = max(icir, 0.0) * ICIR_NORMALIZE if icir is not None else 0.0
@@ -227,10 +238,7 @@ async def apply_adaptive_weights(pool, active_signals) -> dict:
         cur_w = float(live["weight"]) if live else 0.0
         cur_cb = int(live["consecutive_bad_windows"]) if live else 0
         floored, new_cb, _dropped = apply_floor_or_drop(raw_target, icir, cur_cb)
-        # Skip the change-cap on first-ever seeding (no prior live row): the cap
-        # would collapse all candidates to the same min-step (CAP_MIN_REF *
-        # CHANGE_CAP_FRAC) regardless of ICIR magnitude, defeating relative ranking.
-        capped = floored if live is None else apply_change_cap(cur_w, floored)
+        capped = floored if is_cold_start else apply_change_cap(cur_w, floored)
         await pool.execute(
             "INSERT INTO signal_weight_current "
             "(signal_name, status, weight, last_updated, reason, consecutive_bad_windows, shadow_streak) "
@@ -247,7 +255,10 @@ async def apply_adaptive_weights(pool, active_signals) -> dict:
     if not live_w:
         await _promote(pool, shadow_w, baseline_ic=None, now=now, reason="cold_start_seed")
         await pool.execute("UPDATE signal_weight_current SET shadow_streak=0 WHERE status='shadow'")
-        return {"promoted": True, "reason": "cold_start", "rolled_back": rolled_back}
+        return {
+            "promoted": True, "reason": "cold_start",
+            "ic_live": None, "ic_shadow": None, "rolled_back": rolled_back,
+        }
 
     ic_live = await composite_ic(pool, live_w, 90)
     ic_shadow = await composite_ic(pool, shadow_w, 90)
