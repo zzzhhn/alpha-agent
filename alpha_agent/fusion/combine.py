@@ -46,12 +46,15 @@ class CombineResult:
 async def load_weights(pool) -> dict[str, float]:
     """Read current per-signal weights from `signal_weight_current`.
 
-    Returns {signal_name: weight} for every row. If the table is empty
+    Only rows with status='live' are returned; shadow candidate rows are
+    excluded so they cannot leak into live fusion and corrupt the composite.
+
+    Returns {signal_name: weight} for live rows. If no live rows exist
     (cold start before the first monthly IC backtest run), falls back to
     DEFAULT_WEIGHTS so the cron pipeline still produces a composite.
     """
     rows = await pool.fetch(
-        "SELECT signal_name, weight FROM signal_weight_current"
+        "SELECT signal_name, weight FROM signal_weight_current WHERE status = 'live'"
     )
     if not rows:
         return dict(DEFAULT_WEIGHTS)
