@@ -4,13 +4,15 @@ Schema adaptation note: the plan's example SQL referenced
 daily_signals_fast(ticker, as_of, signal_name, z) + daily_prices(ticker, ts, close)
 but the real V001 schema is daily_signals_fast(ticker, date, composite,
 breakdown JSONB, ...) where individual signal z's live inside breakdown.
-V005 adds minute_bars (ticker, ts, close) as the only price store.
+The forward return leg reads daily_prices(ticker, date, close) via
+LEAD(close, 5) OVER (PARTITION BY ticker ORDER BY date) — 5 trading days
+ahead, not 5 calendar days.
 
 The seed helper inserts:
   1. daily_signals_fast row with breakdown = [{signal, z, ...}] containing
      the signal_name being tested
-  2. Two minute_bars rows (entry at as_of, exit at as_of + 5 days)
-     whose close ratio reproduces the target forward 5d return.
+  2. Six consecutive daily_prices rows (as_of through as_of+5 days) whose
+     close[as_of+5] / close[as_of] reproduces the target forward 5d return.
 """
 from __future__ import annotations
 
@@ -76,26 +78,23 @@ async def _seed_pair(pool, ticker, as_of, signal_val, ret_5d, signal_name="news"
         json.dumps(breakdown_payload),
         as_of,
     )
-    entry_ts = as_of
-    exit_ts = as_of + timedelta(days=5)
+    # daily_prices: 6 consecutive calendar days (one row per day). The IC
+    # engine's LEAD(close, 5) over (ticker ORDER BY date) maps the as_of row
+    # to the 6th day, so close[as_of]=entry, close[as_of+5]=exit reproduces
+    # the target forward-5 return. Days 1-4 are flat at entry (unused by LEAD).
     entry_close = 100.0
     exit_close = entry_close * (1.0 + float(ret_5d))
-    await pool.execute(
-        """
-        INSERT INTO minute_bars (ticker, ts, open, high, low, close, volume, fetched_at)
-        VALUES ($1, $2, $3, $3, $3, $3, 1000, now())
-        ON CONFLICT (ticker, ts) DO UPDATE SET close = EXCLUDED.close
-        """,
-        ticker, entry_ts, entry_close,
-    )
-    await pool.execute(
-        """
-        INSERT INTO minute_bars (ticker, ts, open, high, low, close, volume, fetched_at)
-        VALUES ($1, $2, $3, $3, $3, $3, 1000, now())
-        ON CONFLICT (ticker, ts) DO UPDATE SET close = EXCLUDED.close
-        """,
-        ticker, exit_ts, exit_close,
-    )
+    closes = [entry_close, entry_close, entry_close, entry_close, entry_close, exit_close]
+    for offset, close in enumerate(closes):
+        d = (as_of + timedelta(days=offset)).date()
+        await pool.execute(
+            """
+            INSERT INTO daily_prices (ticker, date, close)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+            """,
+            ticker, d, close,
+        )
 
 
 async def test_walk_forward_ic_strict_lookahead_free(pool):

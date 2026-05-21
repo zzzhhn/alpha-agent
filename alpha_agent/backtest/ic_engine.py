@@ -18,13 +18,14 @@ Schema adaptation note (plan vs reality):
     and daily_prices(ticker, ts, close). Real V001 schema is
     daily_signals_fast(ticker, date, composite, breakdown JSONB, ...)
     where individual signal entries live inside breakdown as a JSON list
-    of objects {signal, z, confidence, ...}. There is no daily_prices
-    table; V005 minute_bars(ticker, ts, close) is the only price store.
+    of objects {signal, z, confidence, ...}.
 
-  - The walk-forward query therefore unnests the breakdown JSONB, filters
-    by signal name, and joins entry/exit minute_bars rows at ts = date
-    and ts = date + 5 days. If callers need intra-day price granularity
-    they can extend the entry/exit join to take the last close on the day.
+  - The walk-forward query unnests the breakdown JSONB, filters by signal
+    name, and computes the forward return via LEAD(close, 5) OVER
+    (PARTITION BY ticker ORDER BY date) on daily_prices. Because
+    daily_prices only ever holds trading days, LEAD(close, 5) is exactly
+    5 trading days ahead. Rows where close_exit IS NULL (no observable
+    exit yet) are naturally excluded, enforcing the walk-forward guarantee.
 """
 from __future__ import annotations
 
@@ -82,9 +83,10 @@ async def compute_walk_forward_ic(
 
     Walk-forward guarantee:
       - signal as_of (date) is restricted to [now - window_days, now - 5d]
-        so every forward return ts (= as_of + 5d) is observable in the past.
-      - forward return uses minute_bars at as_of (entry) and as_of + 5d
-        (exit). The engine never references now() in the return leg.
+        so every forward return window is observable in the past.
+      - forward return uses daily_prices: entry close at as_of, exit close
+        via LEAD(close, 5) (5 trading days ahead). Rows with no observable
+        exit (close_exit IS NULL) are excluded by the WHERE clause.
     """
     now = datetime.now(UTC)
     window_start = (now - timedelta(days=window_days)).date()
@@ -105,18 +107,24 @@ async def compute_walk_forward_ic(
               AND f.date >= $2
               AND f.date <= $3
               AND (elem->>'z') IS NOT NULL
+        ),
+        fwd AS (
+            SELECT
+                ticker,
+                date,
+                close AS close_entry,
+                LEAD(close, 5) OVER (PARTITION BY ticker ORDER BY date) AS close_exit
+            FROM daily_prices
         )
         SELECT
             s.signal_z,
-            (p_end.close / p_start.close - 1)::double precision AS fwd_5d
+            (fwd.close_exit / fwd.close_entry - 1)::double precision AS fwd_5d
         FROM sig s
-        JOIN minute_bars p_start
-          ON p_start.ticker = s.ticker
-         AND (p_start.ts AT TIME ZONE 'UTC')::date = s.as_of
-        JOIN minute_bars p_end
-          ON p_end.ticker = s.ticker
-         AND (p_end.ts AT TIME ZONE 'UTC')::date = (s.as_of + interval '5 days')::date
-        WHERE p_start.close > 0
+        JOIN fwd
+          ON fwd.ticker = s.ticker
+         AND fwd.date = s.as_of
+        WHERE fwd.close_entry > 0
+          AND fwd.close_exit IS NOT NULL
         """,
         signal_name,
         window_start,
