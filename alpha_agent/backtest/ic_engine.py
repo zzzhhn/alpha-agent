@@ -1,13 +1,13 @@
-"""Walk-forward IC backtest engine + dynamic signal weight writer.
+"""Walk-forward IC backtest engine + adaptive weight orchestration.
 
 For each active signal x window in {30, 60, 90} days, computes Spearman
 rank IC between (signal value at as_of, forward 5-day return) over the
 window of as_of dates. Strict walk-forward: never uses any data from
 after as_of in either side of the IC calculation.
 
-Weight rule (Phase 6a spec decision 6):
-  - if min(ic_30d, ic_60d, ic_90d) < 0.02 -> weight = 0 (auto_dropped_low_ic)
-  - else weight = mean(ics) * vol_normalize_factor(signal_name)
+Weight production (Phase 1b): after the IC-history loop, calls
+``apply_adaptive_weights`` (EWMA-ICIR + change-cap + floor/hard-drop +
+shadow/promote/rollback). The old inline mean-IC rule has been removed.
 
 Citation: walk-forward methodology follows MacKinlay (1997). Spearman
 chosen over Pearson per Tetlock 2007 convention (more robust to
@@ -144,29 +144,20 @@ async def compute_walk_forward_ic(
 
 async def run_monthly_ic_backtest(pool) -> int:
     """For each active signal: compute IC over 3 windows, write each
-    successful (signal, window) to signal_ic_history, then upsert the
-    aggregated weight to signal_weight_current. Returns the count of
-    signals whose weight row was upserted.
+    successful (signal, window) to signal_ic_history. Returns the count
+    of signals whose IC history was processed.
 
-    Weight rule:
-      - no window produced an IC at all (insufficient observations across
-        every window) -> weight = 0, reason = "insufficient_data". This
-        is the framework's "data accumulating" state; the UI distinguishes
-        it from auto_dropped_low_ic so users do not misread early-life
-        signals as "broken".
-      - any IC was computed but min(IC) < threshold -> weight = 0,
-        reason = "auto_dropped_low_ic". The signal had a fair shot and
-        failed.
-      - else weight = mean(IC) * _DEFAULT_NORMALIZE, reason "ic_above_threshold".
+    Weight production is delegated entirely to the Phase 1b adaptive layer
+    (EWMA-ICIR + change-cap + floor/hard-drop + shadow/promote/rollback)
+    via ``apply_adaptive_weights``, which is called once after the IC-history
+    loop completes.  The old inline mean-IC weight rule has been removed.
+
+    Skip-recent guard: signals whose weight row was updated within the last
+    hour are skipped so multiple short-lived cron invocations can resume
+    from where the previous one was killed (Vercel hobby 5-min function cap).
     """
     now = datetime.now(UTC)
     updated = 0
-    # Skip signals whose weight row was upserted within the last hour to
-    # let multiple short-lived cron invocations resume from where the
-    # previous one was killed (Vercel hobby 5-min function cap, full
-    # 11-signal scan takes longer on a large daily_signals_fast table).
-    # Monthly cron fires once per month; the recent-skip is harmless then
-    # because last_updated will be ~30 days old by next fire.
     skip_threshold = now - timedelta(hours=1)
     for sig_name in _ACTIVE_SIGNALS:
         existing = await pool.fetchval(
@@ -175,14 +166,11 @@ async def run_monthly_ic_backtest(pool) -> int:
         )
         if existing is not None and existing > skip_threshold:
             continue
-        ics: dict[int, float | None] = {}
         for w in _WINDOWS:
             result = await compute_walk_forward_ic(pool, sig_name, w)
             if result is None:
-                ics[w] = None
                 continue
             ic, n_obs = result
-            ics[w] = ic
             await pool.execute(
                 """
                 INSERT INTO signal_ic_history
@@ -192,28 +180,8 @@ async def run_monthly_ic_backtest(pool) -> int:
                 """,
                 sig_name, w, ic, n_obs, now,
             )
-
-        valid_ics = [v for v in ics.values() if v is not None]
-        if not valid_ics:
-            weight = 0.0
-            reason = "insufficient_data"
-        elif min(valid_ics) < _IC_THRESHOLD:
-            weight = 0.0
-            reason = "auto_dropped_low_ic"
-        else:
-            weight = float(np.mean(valid_ics) * _DEFAULT_NORMALIZE)
-            reason = "ic_above_threshold"
-        await pool.execute(
-            """
-            INSERT INTO signal_weight_current
-                (signal_name, weight, last_updated, reason)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (signal_name) DO UPDATE SET
-                weight = EXCLUDED.weight,
-                last_updated = EXCLUDED.last_updated,
-                reason = EXCLUDED.reason
-            """,
-            sig_name, weight, now, reason,
-        )
         updated += 1
+
+    from alpha_agent.backtest.adaptive_weights import apply_adaptive_weights
+    await apply_adaptive_weights(pool, _ACTIVE_SIGNALS)
     return updated

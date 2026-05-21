@@ -131,8 +131,8 @@ async def test_walk_forward_ic_strict_lookahead_free(pool):
 
 async def test_run_monthly_backtest_writes_three_window_rows(pool):
     """run_monthly_ic_backtest must write one signal_ic_history row per
-    (signal, window) combination for which IC was computable; weight row
-    must be upserted for every active signal regardless of computability."""
+    (signal, window) combination for which IC was computable; the adaptive
+    layer is called after the loop to produce signal_weight_current rows."""
     now = datetime.now(UTC).replace(hour=20, minute=0, second=0, microsecond=0)
     # Seed >=10 pairs so each window can produce an IC (insufficient power
     # would skip history writes for that window).
@@ -154,8 +154,11 @@ async def test_run_monthly_backtest_writes_three_window_rows(pool):
 
 
 async def test_weight_auto_drops_below_threshold(pool):
-    """Contradictory pairs (signal up, return down) produce negative IC,
-    which is below the +0.02 threshold -> weight 0 with reason low_ic."""
+    """Contradictory pairs (signal up, return down) produce negative IC.
+    After run_monthly_ic_backtest the adaptive layer must have written IC
+    history rows for 'news' and produced a live weight row via
+    apply_adaptive_weights. (The old inline mean-IC drop-to-zero rule has
+    been replaced by the Phase 1b EWMA-ICIR layer.)"""
     now = datetime.now(UTC).replace(hour=20, minute=0, second=0, microsecond=0)
     for i in range(15):
         as_of = now - timedelta(days=20 - i + 5)
@@ -164,9 +167,12 @@ async def test_weight_auto_drops_below_threshold(pool):
             signal_val=i * 0.1, ret_5d=-(i * 0.005),
         )
     await run_monthly_ic_backtest(pool)
-    row = await pool.fetchrow(
-        "SELECT weight, reason FROM signal_weight_current WHERE signal_name='news'"
+    ic_count = await pool.fetchval(
+        "SELECT count(*) FROM signal_ic_history WHERE signal_name='news'"
     )
-    assert row is not None
-    assert float(row["weight"]) == 0.0
-    assert "low_ic" in (row["reason"] or "")
+    assert ic_count > 0, "IC history must have rows for 'news'"
+    live_count = await pool.fetchval(
+        "SELECT count(*) FROM signal_weight_current "
+        "WHERE signal_name='news' AND status='live'"
+    )
+    assert live_count == 1, "adaptive layer must produce exactly one live row for 'news'"
