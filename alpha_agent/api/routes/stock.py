@@ -23,6 +23,7 @@ from alpha_agent.storage.queries import (
 )
 from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.dependencies import require_user
+from alpha_agent.backtest.confidence_calibration import load_active_calibration
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import compute_dimension_grades
 from alpha_agent.llm.base import LLMClient, Message
@@ -97,7 +98,8 @@ async def get_stock(
     """
     ticker = ticker.upper()
     pool = await get_db_pool()
-    sig = await fetch_latest_signal(pool, ticker)
+    cal_map = await load_active_calibration(pool)
+    sig = await fetch_latest_signal(pool, ticker, cal_map=cal_map)
     if sig is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
 
@@ -412,7 +414,8 @@ async def persona_explain(
         )
 
     pool = await get_db_pool()
-    sig = await fetch_latest_signal(pool, ticker)
+    cal_map = await load_active_calibration(pool)
+    sig = await fetch_latest_signal(pool, ticker, cal_map=cal_map)
     if sig is None:
         raise HTTPException(status_code=404, detail=f"no rating for {ticker}")
 
