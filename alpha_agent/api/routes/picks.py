@@ -107,7 +107,10 @@ async def picks_lean(
     import traceback
     try:
         pool = await get_db_pool()
-        from alpha_agent.backtest.confidence_calibration import load_active_calibration
+        from alpha_agent.backtest.confidence_calibration import (
+            apply_calibration,
+            load_active_calibration,
+        )
         cal_map = await load_active_calibration(pool)
         search_norm = search.strip().upper() if search and search.strip() else None
         # side=short surfaces the bottom of the ranking (most bearish). The
@@ -190,8 +193,13 @@ async def picks_lean(
                 ]
                 confidence = calibrated_confidence(z_values, cal_map)
             else:
+                # Fast row: confidence was computed (raw) at write time by the
+                # fast cron and stored. Re-apply the calibration map at read
+                # time so the dominant fast path is calibrated too (the stored
+                # value is a raw compute_confidence output, so this is the
+                # intended single application, not double-calibration).
                 rating = r["rating"] or "HOLD"
-                confidence = _safe_float(r["confidence"], 0.0)
+                confidence = apply_calibration(_safe_float(r["confidence"], 0.0), cal_map)
             # Phase 2 long-mode re-rank: when mode=="long", look up
             # factor.raw.z_long and re-compute the composite contribution.
             # Old factor contribution gets subtracted, new long-z contribution

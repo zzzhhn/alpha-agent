@@ -18,6 +18,7 @@ import math
 
 import asyncpg
 
+from alpha_agent.backtest.confidence_calibration import apply_calibration
 from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
 
 
@@ -133,8 +134,11 @@ async def fetch_latest_signal(
         tier_flip_today = False
         gex_info = None
     else:
+        # Fast row: stored confidence is a raw compute_confidence value from
+        # write time; re-apply the calibration map at read time (single
+        # application, not double-calibration) so fast rows are calibrated too.
         rating = row["rating"] or "HOLD"
-        confidence = _safe_float(row["confidence"])
+        confidence = apply_calibration(_safe_float(row["confidence"]), cal_map)
         tier_flip_today = _parse_tier_flip(row["breakdown"])
         gex_info = _parse_gex_info(row["breakdown"])
 
