@@ -36,7 +36,7 @@ async def pool(applied_db):
 
 
 async def _seed_pair(pool, ticker, as_of, signal_val, ret_5d, signal_name="news"):
-    """Insert one (ticker, as_of) signal row plus the entry/exit minute_bars
+    """Insert one (ticker, as_of) signal row plus the daily_prices closes
     needed to reproduce a forward 5d return of `ret_5d`.
 
     Schema notes:
@@ -44,7 +44,8 @@ async def _seed_pair(pool, ticker, as_of, signal_val, ret_5d, signal_name="news"
         for a ticker. Tests vary either ticker or date to satisfy this.
       - breakdown stored as JSON object with a `breakdown` list of signal entries
         (mirrors what fetch_latest_signal expects via _parse_breakdown).
-      - minute_bars close uses entry=100.0 baseline; exit=100.0*(1+ret_5d).
+      - daily_prices close uses entry=100.0 baseline; the 6th row (LEAD 5 ahead)
+        is exit=100.0*(1+ret_5d).
     """
     breakdown_payload = {
         "breakdown": [

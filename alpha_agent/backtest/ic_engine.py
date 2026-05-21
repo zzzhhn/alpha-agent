@@ -85,8 +85,10 @@ async def compute_walk_forward_ic(
       - signal as_of (date) is restricted to [now - window_days, now - 5d]
         so every forward return window is observable in the past.
       - forward return uses daily_prices: entry close at as_of, exit close
-        via LEAD(close, 5) (5 trading days ahead). Rows with no observable
-        exit (close_exit IS NULL) are excluded by the WHERE clause.
+        via LEAD(close, 5) (5 trading days ahead, assuming no missing rows
+        for the ticker; a gap shifts the real interval but never crashes).
+        Rows with no observable exit (close_exit IS NULL) are excluded by
+        the WHERE clause.
     """
     now = datetime.now(UTC)
     window_start = (now - timedelta(days=window_days)).date()

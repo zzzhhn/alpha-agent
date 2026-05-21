@@ -41,23 +41,24 @@ async def _seed(pool, ticker, as_of: date, z: float, closes: list[float]):
 
 @pytest.mark.asyncio
 async def test_ic_uses_5_trading_day_lead_and_is_positive(pool):
-    # Three tickers; higher z -> higher realized fwd-5-row return. A perfect
-    # monotone relationship should give Spearman IC = 1.0.
+    # 12 tickers with STRICTLY monotone z -> fwd-5-row return (no ties in
+    # either axis), so the Spearman rank IC is deterministically 1.0 regardless
+    # of the DB row-return order. _MIN_OBS is 10 in the engine, so 12 clears it.
+    # close[as_of]=100; the 6th close (LEAD 5 rows ahead) encodes the return.
     base = date.today() - timedelta(days=40)
-    # close[as_of]=100, close 5 rows later encodes the return: bigger z -> bigger jump.
-    await _seed(pool, "AAA", base, z=-1.0, closes=[100, 100, 100, 100, 100, 100])  # +0%
-    await _seed(pool, "BBB", base, z=0.0, closes=[100, 100, 100, 100, 100, 105])   # +5%
-    await _seed(pool, "CCC", base, z=1.0, closes=[100, 100, 100, 100, 100, 110])   # +10%
-    # _MIN_OBS is 10 in the engine; lower it for the test via monkeypatch is
-    # cleaner, but here we seed 12 tickers to clear the floor instead.
-    for k in range(9):
-        z = (k - 4) / 4.0
-        await _seed(pool, f"T{k}", base, z=z, closes=[100, 100, 100, 100, 100, 100 + z * 10])
+    for k in range(12):
+        z = (k - 5.5) / 6.0  # 12 distinct values, strictly increasing
+        pct = z * 0.1        # strictly increasing forward return, no ties
+        exit_close = 100.0 * (1.0 + pct)
+        await _seed(
+            pool, f"T{k:02d}", base, z=z,
+            closes=[100, 100, 100, 100, 100, exit_close],
+        )
     result = await compute_walk_forward_ic(pool, "factor", 90)
     assert result is not None
     ic, n_obs = result
     assert n_obs >= 10
-    assert ic > 0.9  # near-perfect monotone z -> fwd return
+    assert ic > 0.99  # strictly monotone z -> fwd return gives Spearman = 1.0
 
 
 @pytest.mark.asyncio
@@ -67,5 +68,7 @@ async def test_ic_excludes_as_of_without_5_day_exit(pool):
     recent = date.today()
     await _seed(pool, "ZZZ", recent, z=0.5, closes=[100, 101])  # only 2 days, no +5 exit
     result = await compute_walk_forward_ic(pool, "factor", 90)
-    # Only the seedless recent row exists -> below _MIN_OBS -> None.
+    # ZZZ as_of = today > fwd_cutoff (today - 5d), so it is excluded by the sig
+    # CTE's date filter; even without that, LEAD(close, 5) over 2 rows is NULL.
+    # Either way zero observations remain -> below _MIN_OBS -> None.
     assert result is None
