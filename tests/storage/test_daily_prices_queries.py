@@ -30,3 +30,12 @@ async def test_upsert_daily_close_skips_nonpositive(pool):
         "SELECT close FROM daily_prices WHERE ticker = 'NVDA' AND date = '2026-01-06'"
     )
     assert row is None
+
+
+@pytest.mark.asyncio
+async def test_upsert_daily_close_skips_negative_and_none(pool):
+    # Negative and None are the other two bad-data branches of the guard.
+    await upsert_daily_close(pool, "AMD", "2026-01-07", -1.0)
+    await upsert_daily_close(pool, "AMD", "2026-01-08", None)
+    rows = await pool.fetch("SELECT 1 FROM daily_prices WHERE ticker = 'AMD'")
+    assert rows == []

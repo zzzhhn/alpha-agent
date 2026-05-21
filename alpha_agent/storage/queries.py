@@ -231,10 +231,12 @@ async def list_profiles_missing_zh(
 
 
 async def upsert_daily_close(
-    pool: asyncpg.Pool, ticker: str, date: str, close: float
+    pool: asyncpg.Pool, ticker: str, date: str, close: float | None
 ) -> None:
-    """Insert/replace one daily close. Skips non-positive closes (yfinance
-    gap rows) so the IC engine's return ratio never divides by zero."""
+    """Insert/replace one daily close. Skips None / non-positive closes
+    (yfinance gap rows) so the IC engine's return ratio never divides by
+    zero. None is annotated explicitly because yfinance history rows can
+    carry a missing Close."""
     if close is None or close <= 0:
         return
     await pool.execute(
