@@ -33,7 +33,15 @@ def compute_ewma_icir(
     """
     if len(points) < 2:
         return None
-    pts = sorted(points, key=lambda p: p[0])
+    # Normalize every timestamp to a date up front: callers mix datetime (DB
+    # timestamptz `computed_at`) and date (tests), and date-vs-datetime compares
+    # raise TypeError in sort/subtraction. Age is computed in whole days anyway,
+    # so coercing datetime -> date is lossless here.
+    norm = [
+        (ts.date() if isinstance(ts, datetime) else ts, float(ic))
+        for ts, ic in points
+    ]
+    pts = sorted(norm, key=lambda p: p[0])
     latest = pts[-1][0]
     lam = 0.5 ** (1.0 / half_life_days)
     ws, ics = [], []
