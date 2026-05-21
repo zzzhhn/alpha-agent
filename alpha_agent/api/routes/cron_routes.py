@@ -155,6 +155,18 @@ async def cron_minute_bars(
     }
 
 
+@router.post("/daily_prices")
+@router.get("/daily_prices")
+async def cron_daily_prices(
+    limit: int | None = Query(None, ge=1, le=600),
+    offset: int | None = Query(None, ge=0, le=600),
+) -> dict[str, Any]:
+    """Append today's close for the universe into daily_prices (the
+    forward-return source for the walk-forward IC engine)."""
+    from api.cron.daily_prices import handler
+    return await handler(limit=limit, offset=offset)
+
+
 # news_llm_enrich cron route removed 2026-05-17.
 # The previous cron-side handler called get_settings() -> create_llm_client()
 # which requires a global LLM key in the server env. That violates BYOK
