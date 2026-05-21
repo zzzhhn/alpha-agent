@@ -5,14 +5,13 @@
 -- only a rolling 7-day cache and so cannot serve 30/60/90-day windows).
 -- One row per ticker per trading day; the IC engine derives the forward
 -- 5 trading-day return via LEAD(close, 5) over (ticker ordered by date).
+-- The PRIMARY KEY (ticker, date) implicitly creates a unique B-tree index on
+-- those columns, which already serves both the PK equality lookups and the
+-- IC engine's LEAD(close, 5) OVER (PARTITION BY ticker ORDER BY date) scan.
+-- No separate index is needed.
 CREATE TABLE IF NOT EXISTS daily_prices (
     ticker text NOT NULL,
     date date NOT NULL,
     close double precision NOT NULL,
     PRIMARY KEY (ticker, date)
 );
-
--- The IC query windows by ticker ordered by date; this index serves both
--- the PK lookups and the window scan.
-CREATE INDEX IF NOT EXISTS idx_daily_prices_ticker_date
-    ON daily_prices (ticker, date);
