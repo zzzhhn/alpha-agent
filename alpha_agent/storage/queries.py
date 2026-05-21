@@ -225,3 +225,23 @@ async def list_profiles_missing_zh(
         """,
         limit,
     )
+
+
+# ── daily_prices (V011): one close per ticker per calendar day ───────────────
+
+
+async def upsert_daily_close(
+    pool: asyncpg.Pool, ticker: str, date: str, close: float
+) -> None:
+    """Insert/replace one daily close. Skips non-positive closes (yfinance
+    gap rows) so the IC engine's return ratio never divides by zero."""
+    if close is None or close <= 0:
+        return
+    await pool.execute(
+        """
+        INSERT INTO daily_prices (ticker, date, close)
+        VALUES ($1, $2::text::date, $3)
+        ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+        """,
+        ticker.upper(), date, float(close),
+    )
