@@ -33,3 +33,49 @@ def test_recent_points_dominate_with_short_half_life():
     # (negative) end, so ICIR must be negative.
     icir = compute_ewma_icir(_series([0.3, 0.2, -0.2, -0.3]), half_life_days=2)
     assert icir is not None and icir < 0
+
+
+# ---------------------------------------------------------------------------
+# Task 3: apply_change_cap and apply_floor_or_drop
+# ---------------------------------------------------------------------------
+from alpha_agent.backtest.adaptive_weights import (  # noqa: E402
+    apply_change_cap,
+    apply_floor_or_drop,
+)
+
+
+def test_change_cap_clamps_upward_move():
+    # current=0.10, cap=0.15 -> max_step = 0.15 * max(0.10, 0.05) = 0.015.
+    assert apply_change_cap(0.10, 0.50, cap_frac=0.15) == pytest.approx(0.115)
+
+
+def test_change_cap_clamps_downward_move():
+    assert apply_change_cap(0.10, 0.0, cap_frac=0.15) == pytest.approx(0.085)
+
+
+def test_change_cap_lets_dropped_signal_re_grow_slowly():
+    # current=0 -> reference is CAP_MIN_REF=0.05 -> max_step = 0.15*0.05 = 0.0075.
+    assert apply_change_cap(0.0, 0.30, cap_frac=0.15) == pytest.approx(0.0075)
+
+
+def test_floor_shrinks_on_single_bad_window_not_zero():
+    # icir <= 0 is a bad window; with cb below the max, weight shrinks to the
+    # floor (not a hard zero) and the bad counter increments.
+    w, cb, dropped = apply_floor_or_drop(
+        raw_target=0.0, icir=-0.3, consecutive_bad=0, floor=0.02, max_bad=3
+    )
+    assert w == pytest.approx(0.02) and cb == 1 and dropped is False
+
+
+def test_hard_drop_after_max_consecutive_bad():
+    w, cb, dropped = apply_floor_or_drop(
+        raw_target=0.0, icir=-0.1, consecutive_bad=2, floor=0.02, max_bad=3
+    )
+    assert w == 0.0 and cb == 3 and dropped is True
+
+
+def test_good_window_resets_counter_and_keeps_target():
+    w, cb, dropped = apply_floor_or_drop(
+        raw_target=0.18, icir=1.2, consecutive_bad=2, floor=0.02, max_bad=3
+    )
+    assert w == pytest.approx(0.18) and cb == 0 and dropped is False

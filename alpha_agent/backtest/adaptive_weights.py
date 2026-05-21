@@ -58,3 +58,38 @@ def compute_ewma_icir(
     if std < 1e-9:
         return None
     return mean / std
+
+
+def apply_change_cap(
+    current: float, target: float, cap_frac: float = CHANGE_CAP_FRAC
+) -> float:
+    """Clamp `target` so it moves at most `cap_frac` of the reference weight
+    away from `current`. The reference is max(|current|, CAP_MIN_REF) so a
+    dropped (0-weight) signal can still re-grow slowly instead of being stuck."""
+    max_step = cap_frac * max(abs(current), CAP_MIN_REF)
+    lo, hi = current - max_step, current + max_step
+    return float(min(max(target, lo), hi))
+
+
+def apply_floor_or_drop(
+    raw_target: float,
+    icir: float | None,
+    consecutive_bad: int,
+    floor: float = WEIGHT_FLOOR,
+    max_bad: int = MAX_BAD_WINDOWS,
+) -> tuple[float, int, bool]:
+    """Diversification floor with hard-drop hysteresis.
+
+    A bad window (icir is None or <= 0) shrinks the signal toward `floor`
+    rather than to a hard zero, incrementing the consecutive-bad counter; only
+    after `max_bad` consecutive bad windows does the weight hard-drop to 0. A
+    good window (icir > 0) keeps the positive raw target and resets the counter.
+    Returns (weight, new_consecutive_bad, dropped).
+    """
+    bad = icir is None or icir <= 0
+    if not bad:
+        return float(raw_target), 0, False
+    cb = consecutive_bad + 1
+    if cb >= max_bad:
+        return 0.0, cb, True
+    return float(floor), cb, False
