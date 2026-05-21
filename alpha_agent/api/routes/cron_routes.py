@@ -160,11 +160,14 @@ async def cron_minute_bars(
 async def cron_daily_prices(
     limit: int | None = Query(None, ge=1, le=600),
     offset: int | None = Query(None, ge=0, le=600),
+    period: str = Query("5d"),
 ) -> dict[str, Any]:
-    """Append today's close for the universe into daily_prices (the
-    forward-return source for the walk-forward IC engine)."""
+    """Append daily closes for the universe into daily_prices (the
+    forward-return source for the walk-forward IC engine). `period` defaults
+    to the daily "5d" append; pass a longer period (e.g. 3y) over offset
+    slices to backfill history from the production backend."""
     from api.cron.daily_prices import handler
-    return await handler(limit=limit, offset=offset)
+    return await handler(limit=limit, offset=offset, period=period)
 
 
 # news_llm_enrich cron route removed 2026-05-17.

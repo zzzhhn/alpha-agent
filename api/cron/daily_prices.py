@@ -1,8 +1,15 @@
 # api/cron/daily_prices.py
-"""Daily append of today's close for the universe into daily_prices.
+"""Append daily closes for the universe into daily_prices.
 
 Mirrors the minute_bars cron pattern. Hobby function budget is ~300s, so
 this supports limit/offset multi-shot like the other crons.
+
+`period` selects the yfinance history window: the default "5d" is the daily
+append (every row in the short window is upserted, which idempotently
+refreshes any provisionally-settled recent closes). A longer period (e.g.
+"3y") turns the same endpoint into a backfill driver: it must run from the
+production backend because local-IP yfinance is rate-limited. Drive a
+backfill by curling this endpoint with ?period=3y over offset slices.
 """
 from __future__ import annotations
 
@@ -16,7 +23,11 @@ from alpha_agent.storage.postgres import get_pool
 from alpha_agent.storage.queries import upsert_daily_close
 
 
-async def handler(limit: int | None = None, offset: int | None = None) -> dict[str, Any]:
+async def handler(
+    limit: int | None = None,
+    offset: int | None = None,
+    period: str = "5d",
+) -> dict[str, Any]:
     started_at = datetime.now(UTC)
     pool = await get_pool(os.environ["DATABASE_URL"])
     rows = await pool.fetch(
@@ -30,14 +41,17 @@ async def handler(limit: int | None = None, offset: int | None = None) -> dict[s
     errors: list[str] = []
     for tk in tickers[start:end]:
         try:
-            # 5d window ensures a row exists even on Mondays / post-holiday.
-            df = get_ticker(tk).history(period="5d")
+            df = get_ticker(tk).history(period=period)
             if df is None or df.empty:
                 continue
-            ts = df.index[-1]
-            close = df["Close"].iloc[-1]
-            await upsert_daily_close(pool, tk, ts.date().isoformat(), float(close))
-            n += 1
+            # Upsert every row in the window: for "5d" this idempotently
+            # refreshes recent closes; for a backfill period it loads history.
+            for ts, row in df.iterrows():
+                close = row.get("Close")
+                if close is None:
+                    continue
+                await upsert_daily_close(pool, tk, ts.date().isoformat(), float(close))
+                n += 1
         except Exception as exc:  # noqa: BLE001
             # Surface per-ticker failures (rate-limit, schema drift) instead of
             # swallowing them: a silent skip is indistinguishable from "no close
