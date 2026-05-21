@@ -6,7 +6,9 @@ this supports limit/offset multi-shot like the other crons.
 """
 from __future__ import annotations
 
+import json
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 from alpha_agent.signals.yf_helpers import get_ticker
@@ -15,12 +17,13 @@ from alpha_agent.storage.queries import upsert_daily_close
 
 
 async def handler(limit: int | None = None, offset: int | None = None) -> dict[str, Any]:
+    started_at = datetime.now(UTC)
     pool = await get_pool(os.environ["DATABASE_URL"])
     rows = await pool.fetch(
         "SELECT DISTINCT ticker FROM daily_signals_slow ORDER BY ticker"
     )
     tickers = [r["ticker"] for r in rows]
-    start = offset or 0
+    start = offset if offset is not None else 0
     end = (start + limit) if limit else len(tickers)
     n = 0
     error_count = 0
@@ -42,6 +45,18 @@ async def handler(limit: int | None = None, offset: int | None = None) -> dict[s
             error_count += 1
             if len(errors) < 10:
                 errors.append(f"{tk}: {type(exc).__name__}: {exc}")
+    # Stamp cron_runs for observability, mirroring the other cron handlers.
+    await pool.execute(
+        "INSERT INTO cron_runs "
+        "(cron_name, started_at, finished_at, ok, error_count, details) "
+        "VALUES ($1, $2, $3, $4, $5, $6::jsonb)",
+        "daily_prices",
+        started_at,
+        datetime.now(UTC),
+        error_count == 0,
+        error_count,
+        json.dumps({"updated": n, "range": [start, end], "errors": errors}),
+    )
     return {
         "cron": "daily_prices",
         "updated": n,
