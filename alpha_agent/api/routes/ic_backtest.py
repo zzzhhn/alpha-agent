@@ -27,6 +27,8 @@ async def ic_backtest_monthly() -> dict[str, Any]:
     pool = await get_db_pool()
     started_at = datetime.now(UTC)
     n = await run_monthly_ic_backtest(pool)
+    from alpha_agent.backtest.confidence_calibration import run_calibration
+    calib = await run_calibration(pool)
     # Stamp cron_runs (same pattern as other cron handlers).
     await pool.execute(
         """
@@ -37,4 +39,4 @@ async def ic_backtest_monthly() -> dict[str, Any]:
         started_at,
         f'{{"signals_updated": {n}}}',
     )
-    return {"ok": True, "signals_updated": n}
+    return {"ok": True, "signals_updated": n, "calibration": calib}

@@ -51,3 +51,38 @@ async def test_gather_excludes_hold_and_pairs_confidence_with_hit(pool):
     assert 0.8 in by_conf and by_conf[0.8] == 1   # BUY hit -> 1
     assert 0.6 in by_conf and by_conf[0.6] == 0   # SELL miss -> 0
     assert 0.9 not in by_conf                      # HOLD excluded
+
+
+# ---------------------------------------------------------------------------
+# T5: run_calibration orchestrator + load_active_calibration
+# ---------------------------------------------------------------------------
+from alpha_agent.backtest.confidence_calibration import (  # noqa: E402
+    load_active_calibration,
+    run_calibration,
+)
+
+
+@pytest.mark.asyncio
+async def test_run_calibration_stores_applied_map_when_enough_pairs(pool):
+    base = date.today() - timedelta(days=30)
+    # 60 overconfident pairs: BUY at confidence 0.9 but only ~half hit.
+    for i in range(60):
+        rating = "BUY" if i % 2 == 0 else "SELL"
+        # BUY with negative return = miss; SELL with negative = hit -> ~50% hit at conf 0.9
+        await _seed(pool, f"T{i:02d}", base, rating, 0.9, -0.02)
+    res = await run_calibration(pool)
+    assert res["n_pairs"] >= 50 and res["applied"] is True
+    cal = await load_active_calibration(pool)
+    assert cal is not None and cal["x"]
+    # The active map suppresses the overconfident 0.9 region.
+    from alpha_agent.backtest.confidence_calibration import apply_calibration
+    assert apply_calibration(0.9, cal) < 0.9
+
+
+@pytest.mark.asyncio
+async def test_run_calibration_identity_when_too_few_pairs(pool):
+    base = date.today() - timedelta(days=30)
+    await _seed(pool, "AAA", base, "BUY", 0.8, 0.05)  # 1 pair, < MIN_PAIRS
+    res = await run_calibration(pool)
+    assert res["applied"] is False
+    assert await load_active_calibration(pool) is None  # nothing applied yet

@@ -8,6 +8,7 @@ cron appends a fresh calibration row; the read path loads the latest.
 """
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
@@ -138,3 +139,35 @@ def reliability_and_brier(pairs: list[tuple[float, int]], n_buckets: int = 10) -
             "n": n,
         })
     return out
+
+
+async def run_calibration(pool) -> dict:
+    """Gather (confidence, hit) pairs over the rolling window, fit the isotonic
+    map, compute the reliability/Brier diagnostics, and append a row to
+    confidence_calibration. `applied` is False when below MIN_PAIRS (the map is
+    stored as empty so the loader treats it as identity)."""
+    pairs = await gather_confidence_hits(pool)
+    cal_map = isotonic_fit(pairs)
+    buckets = reliability_and_brier(pairs)
+    applied = cal_map is not None
+    await pool.execute(
+        "INSERT INTO confidence_calibration (as_of, isotonic_map, buckets, n_pairs, applied) "
+        "VALUES (now(), $1::jsonb, $2::jsonb, $3, $4)",
+        json.dumps(cal_map or {"x": [], "y": []}),
+        json.dumps(buckets),
+        len(pairs), applied,
+    )
+    return {"n_pairs": len(pairs), "applied": applied}
+
+
+async def load_active_calibration(pool) -> dict | None:
+    """Most recent APPLIED calibration map, or None (identity) if none exists.
+    Read once per request on the live path and passed to apply_calibration."""
+    row = await pool.fetchrow(
+        "SELECT isotonic_map FROM confidence_calibration "
+        "WHERE applied = true ORDER BY as_of DESC LIMIT 1"
+    )
+    if row is None:
+        return None
+    m = json.loads(row["isotonic_map"])
+    return m if m.get("x") else None
