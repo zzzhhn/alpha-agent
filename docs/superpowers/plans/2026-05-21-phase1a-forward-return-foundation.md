@@ -33,13 +33,26 @@
 
 ```python
 # tests/storage/test_migration_v011.py
+#
+# Fixture note: `applied_db` (from tests/storage/conftest.py) is a DSN STRING
+# with all migrations applied, NOT a pool. The established pattern is to build
+# a pool via get_pool(applied_db) (see tests/backtest/test_ic_engine.py) or to
+# connect with asyncpg directly (see tests/storage/test_migration_v006.py).
 import pytest
+
+from alpha_agent.storage.postgres import close_pool, get_pool
+
+
+@pytest.fixture
+async def pool(applied_db):
+    p = await get_pool(applied_db)
+    yield p
+    await close_pool()
 
 
 @pytest.mark.asyncio
-async def test_daily_prices_table_exists_and_upserts(applied_db):
-    # applied_db is an asyncpg pool with all migrations applied.
-    await applied_db.execute(
+async def test_daily_prices_table_exists_and_upserts(pool):
+    await pool.execute(
         """
         INSERT INTO daily_prices (ticker, date, close)
         VALUES ('AAPL', '2026-01-02', 185.5)
@@ -47,14 +60,14 @@ async def test_daily_prices_table_exists_and_upserts(applied_db):
         """
     )
     # Upsert (same PK) must replace, not error.
-    await applied_db.execute(
+    await pool.execute(
         """
         INSERT INTO daily_prices (ticker, date, close)
         VALUES ('AAPL', '2026-01-02', 190.0)
         ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
         """
     )
-    row = await applied_db.fetchrow(
+    row = await pool.fetchrow(
         "SELECT close FROM daily_prices WHERE ticker = 'AAPL' AND date = '2026-01-02'"
     )
     assert row["close"] == pytest.approx(190.0)
@@ -114,24 +127,32 @@ git commit -m "feat(db): V011 daily_prices table for forward-return IC source"
 # tests/storage/test_daily_prices_queries.py
 import pytest
 
+from alpha_agent.storage.postgres import close_pool, get_pool
 from alpha_agent.storage.queries import upsert_daily_close
 
 
+@pytest.fixture
+async def pool(applied_db):
+    p = await get_pool(applied_db)
+    yield p
+    await close_pool()
+
+
 @pytest.mark.asyncio
-async def test_upsert_daily_close_inserts_and_replaces(applied_db):
-    await upsert_daily_close(applied_db, "MSFT", "2026-01-05", 410.0)
-    await upsert_daily_close(applied_db, "MSFT", "2026-01-05", 415.0)  # same PK
-    row = await applied_db.fetchrow(
+async def test_upsert_daily_close_inserts_and_replaces(pool):
+    await upsert_daily_close(pool, "MSFT", "2026-01-05", 410.0)
+    await upsert_daily_close(pool, "MSFT", "2026-01-05", 415.0)  # same PK
+    row = await pool.fetchrow(
         "SELECT close FROM daily_prices WHERE ticker = 'MSFT' AND date = '2026-01-05'"
     )
     assert row["close"] == pytest.approx(415.0)
 
 
 @pytest.mark.asyncio
-async def test_upsert_daily_close_skips_nonpositive(applied_db):
+async def test_upsert_daily_close_skips_nonpositive(pool):
     # A zero/negative close is bad data (yfinance gap); the helper must skip it.
-    await upsert_daily_close(applied_db, "NVDA", "2026-01-06", 0.0)
-    row = await applied_db.fetchrow(
+    await upsert_daily_close(pool, "NVDA", "2026-01-06", 0.0)
+    row = await pool.fetchrow(
         "SELECT close FROM daily_prices WHERE ticker = 'NVDA' AND date = '2026-01-06'"
     )
     assert row is None
@@ -188,12 +209,23 @@ git commit -m "feat(db): upsert_daily_close helper with non-positive guard"
 
 ```python
 # tests/backtest/test_ic_engine_daily_prices.py
+#
+# Fixture note: `applied_db` is a DSN string; build a pool via get_pool
+# (mirrors the existing tests/backtest/test_ic_engine.py `pool` fixture).
 import json
 from datetime import date, timedelta
 
 import pytest
 
 from alpha_agent.backtest.ic_engine import compute_walk_forward_ic
+from alpha_agent.storage.postgres import close_pool, get_pool
+
+
+@pytest.fixture
+async def pool(applied_db):
+    p = await get_pool(applied_db)
+    yield p
+    await close_pool()
 
 
 async def _seed(pool, ticker, as_of: date, z: float, closes: list[float]):
@@ -218,20 +250,20 @@ async def _seed(pool, ticker, as_of: date, z: float, closes: list[float]):
 
 
 @pytest.mark.asyncio
-async def test_ic_uses_5_trading_day_lead_and_is_positive(applied_db):
+async def test_ic_uses_5_trading_day_lead_and_is_positive(pool):
     # Three tickers; higher z -> higher realized fwd-5-row return. A perfect
     # monotone relationship should give Spearman IC = 1.0.
     base = date.today() - timedelta(days=40)
     # close[as_of]=100, close 5 rows later encodes the return: bigger z -> bigger jump.
-    await _seed(applied_db, "AAA", base, z=-1.0, closes=[100, 100, 100, 100, 100, 100])  # +0%
-    await _seed(applied_db, "BBB", base, z=0.0, closes=[100, 100, 100, 100, 100, 105])   # +5%
-    await _seed(applied_db, "CCC", base, z=1.0, closes=[100, 100, 100, 100, 100, 110])   # +10%
+    await _seed(pool, "AAA", base, z=-1.0, closes=[100, 100, 100, 100, 100, 100])  # +0%
+    await _seed(pool, "BBB", base, z=0.0, closes=[100, 100, 100, 100, 100, 105])   # +5%
+    await _seed(pool, "CCC", base, z=1.0, closes=[100, 100, 100, 100, 100, 110])   # +10%
     # _MIN_OBS is 10 in the engine; lower it for the test via monkeypatch is
     # cleaner, but here we seed 12 tickers to clear the floor instead.
     for k in range(9):
         z = (k - 4) / 4.0
-        await _seed(applied_db, f"T{k}", base, z=z, closes=[100, 100, 100, 100, 100, 100 + z * 10])
-    result = await compute_walk_forward_ic(applied_db, "factor", 90)
+        await _seed(pool, f"T{k}", base, z=z, closes=[100, 100, 100, 100, 100, 100 + z * 10])
+    result = await compute_walk_forward_ic(pool, "factor", 90)
     assert result is not None
     ic, n_obs = result
     assert n_obs >= 10
@@ -239,12 +271,12 @@ async def test_ic_uses_5_trading_day_lead_and_is_positive(applied_db):
 
 
 @pytest.mark.asyncio
-async def test_ic_excludes_as_of_without_5_day_exit(applied_db):
+async def test_ic_excludes_as_of_without_5_day_exit(pool):
     # An as_of whose 5th-ahead trading-day close does not exist yet must be
     # excluded (walk-forward: never peek at an unobservable exit).
     recent = date.today()
-    await _seed(applied_db, "ZZZ", recent, z=0.5, closes=[100, 101])  # only 2 days, no +5 exit
-    result = await compute_walk_forward_ic(applied_db, "factor", 90)
+    await _seed(pool, "ZZZ", recent, z=0.5, closes=[100, 101])  # only 2 days, no +5 exit
+    result = await compute_walk_forward_ic(pool, "factor", 90)
     # Only the seedless recent row exists -> below _MIN_OBS -> None.
     assert result is None
 ```
@@ -304,10 +336,46 @@ Also update the docstring "Schema adaptation note" and the forward-return bullet
 Run: `uv run pytest tests/backtest/test_ic_engine_daily_prices.py -v`
 Expected: PASS (both tests).
 
-- [ ] **Step 5: Run the existing IC-engine tests to confirm no regression**
+- [ ] **Step 5: Migrate the existing IC-engine test off `minute_bars`**
 
-Run: `uv run pytest tests/ -k "ic_engine or ic_backtest" -v`
-Expected: PASS (or pre-existing DB-less skips unchanged). Note any test that seeded `minute_bars` for IC; if one exists, update it to seed `daily_prices` the same way as the new test.
+`tests/backtest/test_ic_engine.py` exists and its `_seed_pair` helper seeds two
+`minute_bars` rows (entry at `as_of`, exit at `as_of + 5 days`). Once Step 3
+rewires the SQL to read `daily_prices`, those three tests
+(`test_walk_forward_ic_strict_lookahead_free`,
+`test_run_monthly_backtest_writes_three_window_rows`,
+`test_weight_auto_drops_below_threshold`) will see 0 observations and fail.
+
+In `tests/backtest/test_ic_engine.py`, replace the two `minute_bars` INSERT
+blocks at the end of `_seed_pair` (the `entry_ts`/`exit_ts` section, roughly
+lines 79-98) with six consecutive daily `daily_prices` rows so that
+`LEAD(close, 5)` over the ticker maps `as_of` to the exit close:
+
+```python
+    # daily_prices: 6 consecutive calendar days (one row per day). The IC
+    # engine's LEAD(close, 5) over (ticker ORDER BY date) maps the as_of row
+    # to the 6th day, so close[as_of]=entry, close[as_of+5]=exit reproduces
+    # the target forward-5 return. Days 1-4 are flat at entry (unused by LEAD).
+    entry_close = 100.0
+    exit_close = entry_close * (1.0 + float(ret_5d))
+    closes = [entry_close, entry_close, entry_close, entry_close, entry_close, exit_close]
+    for offset, close in enumerate(closes):
+        d = (as_of + timedelta(days=offset)).date()
+        await pool.execute(
+            """
+            INSERT INTO daily_prices (ticker, date, close)
+            VALUES ($1, $2::date, $3)
+            ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+            """,
+            ticker, d.isoformat(), close,
+        )
+```
+
+Update the module docstring's "Schema adaptation note" (lines 3-13) to say the
+forward leg now reads `daily_prices` via `LEAD(close, 5)` rather than two
+`minute_bars` rows.
+
+Then run: `uv run pytest tests/backtest/test_ic_engine.py tests/backtest/test_ic_engine_daily_prices.py -v`
+Expected: all PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -354,10 +422,18 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alpha_agent.data.universe import load_universe_tickers  # noqa: E402
 from alpha_agent.signals.yf_helpers import get_ticker  # noqa: E402
 from alpha_agent.storage.postgres import get_pool  # noqa: E402
 from alpha_agent.storage.queries import upsert_daily_close  # noqa: E402
+
+
+async def _load_universe(pool) -> list[str]:
+    """Universe = distinct tickers in daily_signals_slow (~557), the same
+    source the minute_bars cron uses for deterministic coverage."""
+    rows = await pool.fetch(
+        "SELECT DISTINCT ticker FROM daily_signals_slow ORDER BY ticker"
+    )
+    return [r["ticker"] for r in rows]
 
 
 async def _backfill_one(pool, ticker: str, period: str) -> int:
@@ -379,9 +455,9 @@ async def main(tickers: list[str], period: str) -> None:
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         sys.exit("DATABASE_URL not set. Add it to .env before running.")
-    if not tickers:
-        tickers = list(load_universe_tickers())
     pool = await get_pool(db_url)
+    if not tickers:
+        tickers = await _load_universe(pool)
     try:
         total = 0
         for tk in tickers:
@@ -421,7 +497,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from alpha_agent.data.universe import load_universe_tickers
 from alpha_agent.signals.yf_helpers import get_ticker
 from alpha_agent.storage.postgres import get_pool
 from alpha_agent.storage.queries import upsert_daily_close
@@ -429,7 +504,10 @@ from alpha_agent.storage.queries import upsert_daily_close
 
 async def handler(limit: int | None = None, offset: int | None = None) -> dict[str, Any]:
     pool = await get_pool(os.environ["DATABASE_URL"])
-    tickers = list(load_universe_tickers())
+    rows = await pool.fetch(
+        "SELECT DISTINCT ticker FROM daily_signals_slow ORDER BY ticker"
+    )
+    tickers = [r["ticker"] for r in rows]
     start = offset or 0
     end = (start + limit) if limit else len(tickers)
     n = 0
@@ -530,16 +608,30 @@ uv run python scripts/backfill_daily_prices.py --period 3y
 After the backfill + one IC run, confirm the loop produced real data:
 
 ```bash
-# IC history now has rows (was empty pre-Phase-1a):
-uv run python -c "import asyncio, os; from dotenv import load_dotenv; load_dotenv(); import asyncpg; \
-print(asyncio.run(asyncpg.connect(os.environ['DATABASE_URL']).__await__()) ) " 2>/dev/null || true
-curl -s "https://alpha.bobbyzhong.com/api/_health/signals" | python3 -m json.tool | grep -E "n_obs_30d|icir_30d" | head
+# 1. daily_prices has rows + signal_ic_history populated (was empty pre-Phase-1a):
+uv run python -c "
+import asyncio, os, asyncpg
+from dotenv import load_dotenv
+load_dotenv()
+async def main():
+    c = await asyncpg.connect(os.environ['DATABASE_URL'])
+    dp = await c.fetchval('SELECT count(*) FROM daily_prices')
+    ic = await c.fetchval('SELECT count(*) FROM signal_ic_history')
+    print(f'daily_prices rows={dp}  signal_ic_history rows={ic}')
+    await c.close()
+asyncio.run(main())
+"
+# 2. Health endpoint surfaces real IC (not all-null):
+curl -s 'https://alpha.bobbyzhong.com/api/_health/signals' | python3 -m json.tool | grep -E 'n_obs_30d|icir_30d' | head
 ```
-Expected: at least some signals show `n_obs_30d > 0` and non-null `icir_30d` (real IC, not all-null). On the stock detail page, the AttributionTable Rank IC / ICIR / IR columns now show numbers for signals that cleared `_MIN_OBS`, and the "accumulating" banner disappears for those.
+Expected: `daily_prices rows` in the thousands, `signal_ic_history rows > 0`, and at
+least some signals show `n_obs_30d > 0` with non-null `icir_30d`. On the stock detail
+page, the AttributionTable Rank IC / ICIR / IR columns now show numbers for signals
+that cleared `_MIN_OBS`, and the "accumulating" banner disappears for those.
 
 - [ ] **Step 6: Commit any verification fixups**
 
-If acceptance surfaced a shape mismatch (e.g. `load_universe_tickers` name, or the `daily_signals_fast` PK for the test seed), fix it and commit:
+If acceptance surfaced any remaining shape mismatch against the prod schema, fix it and commit:
 
 ```bash
 git add -A && git commit -m "fix(ic): align Phase 1a wiring with real schema shapes"
@@ -551,7 +643,7 @@ git add -A && git commit -m "fix(ic): align Phase 1a wiring with real schema sha
 
 **Spec coverage (Phase 1a only):** daily_prices table (Task 1), forward-return rewire to daily_prices with trading-day offset (Task 3), population/backfill (Task 4), daily cron wiring (Task 5), real-shape acceptance (Task 5 Step 5). Covered. Phases 1b/1c/2 are intentionally separate plans.
 
-**Placeholder scan:** No TBD/TODO. Two flagged confirmations (the `load_universe_tickers` loader name, and whether any existing IC test seeds `minute_bars`) are explicit verification steps with the fix instruction inline, not placeholders.
+**Placeholder scan:** No TBD/TODO. The two originally-flagged confirmations are now resolved against the real codebase: the universe loader is the inline `SELECT DISTINCT ticker FROM daily_signals_slow` query (no `load_universe_tickers` exists), and the existing `tests/backtest/test_ic_engine.py` `_seed_pair` is migrated off `minute_bars` to `daily_prices` in Task 3 Step 5 with concrete code. The `applied_db` fixture is a DSN string, so all new tests build a pool via `get_pool(applied_db)`.
 
 **Type consistency:** `upsert_daily_close(pool, ticker, date, close)` defined in Task 2 is used identically in the backfill script + cron handler (Task 4). The `daily_prices(ticker, date, close)` columns match across migration, helper, IC query, and tests. `compute_walk_forward_ic(pool, signal_name, window_days)` signature is unchanged (only its SQL body changes), so `run_monthly_ic_backtest` keeps working.
 
