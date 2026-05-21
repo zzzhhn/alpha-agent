@@ -18,7 +18,7 @@ import math
 
 import asyncpg
 
-from alpha_agent.fusion.rating import compute_confidence, map_to_tier
+from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
 
 
 def _safe_float(v: object, default: float = 0.0) -> float:
@@ -66,13 +66,23 @@ def _parse_gex_info(raw) -> dict | None:
         return None
 
 
-async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
+async def fetch_latest_signal(
+    pool: asyncpg.Pool,
+    ticker: str,
+    *,
+    cal_map: dict | None = None,
+) -> dict | None:
     """Latest signal for one ticker, fast-preferred with slow fallback.
 
     Returns a normalized dict with keys ticker, score, rating, confidence,
     breakdown (parsed list[dict]), fetched_at, partial - or None if the
     ticker is in neither table. rating/confidence are always populated:
     taken from the fast row, or derived for a slow-only (partial) row.
+
+    cal_map: optional Phase 1c calibration map (suppress-only). Callers that
+    already hold a pool should load it once with load_active_calibration(pool)
+    and pass it in; callers that omit it get identity behaviour (raw confidence
+    unchanged), which is the correct default for routes that do not yet load it.
     """
     ticker = ticker.upper()
     row = await pool.fetchrow(
@@ -117,7 +127,7 @@ async def fetch_latest_signal(pool: asyncpg.Pool, ticker: str) -> dict | None:
         z_values = [
             z for e in breakdown if isinstance((z := e.get("z")), (int, float))
         ]
-        confidence = compute_confidence(z_values)
+        confidence = calibrated_confidence(z_values, cal_map)
         # No band logic on slow-only rows (the cron that writes them never
         # sees a prev_rating to compare against). Always false.
         tier_flip_today = False

@@ -86,3 +86,23 @@ async def test_run_calibration_identity_when_too_few_pairs(pool):
     res = await run_calibration(pool)
     assert res["applied"] is False
     assert await load_active_calibration(pool) is None  # nothing applied yet
+
+
+# ---------------------------------------------------------------------------
+# T6: calibrated_confidence on live read path
+# ---------------------------------------------------------------------------
+from alpha_agent.fusion.rating import calibrated_confidence, compute_confidence  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_calibrated_confidence_suppresses_via_active_map(pool):
+    base = date.today() - timedelta(days=30)
+    for i in range(60):
+        rating = "BUY" if i % 2 == 0 else "SELL"
+        await _seed(pool, f"T{i:02d}", base, rating, 0.9, -0.02)
+    await run_calibration(pool)
+    cal = await load_active_calibration(pool)
+    zs = [3.0, 3.0, 3.0]  # high-agreement z's -> high raw confidence
+    raw = compute_confidence(zs)
+    calibrated = calibrated_confidence(zs, cal)
+    assert calibrated <= raw  # suppress-only: never inflates

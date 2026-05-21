@@ -12,7 +12,7 @@ from typing import Any
 from alpha_agent.core.types import BreakdownEntry, RatingCard
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.combine import combine
-from alpha_agent.fusion.rating import compute_confidence, map_to_tier
+from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
 from alpha_agent.fusion.weights import DEFAULT_WEIGHTS
 from alpha_agent.signals.base import safe_fetch
 
@@ -105,7 +105,7 @@ def build_card(
     result = combine(signals, DEFAULT_WEIGHTS)
     tier = map_to_tier(result.composite)
     zs = [signals[n]["z"] for n in _SIGNAL_NAMES if signals[n]["confidence"] > 0]
-    confidence = compute_confidence(zs)
+    confidence = calibrated_confidence(zs, None)
     drivers = top_drivers(result.breakdown)
     drags = top_drags(result.breakdown)
 

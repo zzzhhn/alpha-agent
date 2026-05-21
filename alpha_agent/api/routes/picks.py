@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import compute_dimension_grades
-from alpha_agent.fusion.rating import compute_confidence, map_to_tier
+from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
 
 router = APIRouter(prefix="/api/picks", tags=["picks"])
 
@@ -107,6 +107,8 @@ async def picks_lean(
     import traceback
     try:
         pool = await get_db_pool()
+        from alpha_agent.backtest.confidence_calibration import load_active_calibration
+        cal_map = await load_active_calibration(pool)
         search_norm = search.strip().upper() if search and search.strip() else None
         # side=short surfaces the bottom of the ranking (most bearish). The
         # direction is a controlled literal derived from the pattern-validated
@@ -186,7 +188,7 @@ async def picks_lean(
                     z for e in breakdown_data
                     if isinstance((z := e.get("z")), (int, float))
                 ]
-                confidence = compute_confidence(z_values)
+                confidence = calibrated_confidence(z_values, cal_map)
             else:
                 rating = r["rating"] or "HOLD"
                 confidence = _safe_float(r["confidence"], 0.0)

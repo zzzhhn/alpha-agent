@@ -108,3 +108,10 @@ def compute_confidence(zs: Iterable[float]) -> float:
         return 0.0
     var = float(np.var(arr))
     return float(1.0 / (1.0 + var))
+
+
+def calibrated_confidence(zs: Iterable[float], cal_map=None) -> float:
+    """compute_confidence passed through the Phase 1c calibration map
+    (suppress overconfidence only). cal_map=None -> raw confidence unchanged."""
+    from alpha_agent.backtest.confidence_calibration import apply_calibration
+    return apply_calibration(compute_confidence(zs), cal_map)
