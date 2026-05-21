@@ -305,7 +305,10 @@ async def apply_adaptive_weights(pool, active_signals) -> dict:
     ic_live = await composite_ic(pool, live_w, 90)
     ic_shadow = await composite_ic(pool, shadow_w, 90)
     promoted = False
-    if ic_shadow is not None and (ic_live is None or ic_shadow >= ic_live):
+    # Require the shadow to have positive predictive power before counting it
+    # toward promotion: when live IC is unmeasurable (None, common in early
+    # operation), a negative-IC shadow must NOT accumulate streak and promote.
+    if ic_shadow is not None and ic_shadow > 0.0 and (ic_live is None or ic_shadow >= ic_live):
         await pool.execute("UPDATE signal_weight_current SET shadow_streak=shadow_streak+1 WHERE status='shadow'")
         streak = await pool.fetchval("SELECT min(shadow_streak) FROM signal_weight_current WHERE status='shadow'")
         if streak is not None and streak >= SHADOW_PROMOTE_STREAK:

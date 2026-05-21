@@ -195,7 +195,7 @@ async def health_signals() -> HealthSignalsResponse:
 
         weight_row = await pool.fetchrow(
             "SELECT weight, reason FROM signal_weight_current "
-            "WHERE signal_name = $1",
+            "WHERE signal_name = $1 AND status = 'live'",
             name,
         )
         weight_current = (

@@ -161,7 +161,8 @@ async def run_monthly_ic_backtest(pool) -> int:
     skip_threshold = now - timedelta(hours=1)
     for sig_name in _ACTIVE_SIGNALS:
         existing = await pool.fetchval(
-            "SELECT last_updated FROM signal_weight_current WHERE signal_name = $1",
+            "SELECT last_updated FROM signal_weight_current "
+            "WHERE signal_name = $1 AND status = 'live'",
             sig_name,
         )
         if existing is not None and existing > skip_threshold:
