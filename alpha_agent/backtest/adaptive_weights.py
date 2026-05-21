@@ -7,6 +7,7 @@ promotes/rolls-back via config_change_log. Replaces the raw mean(IC) rule.
 """
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
@@ -154,3 +155,110 @@ async def composite_ic(
     if rho is None or np.isnan(rho):
         return None
     return float(rho)
+
+
+DEGRADE_TOL: float = 0.05  # live composite IC may dip this far below baseline before rollback
+
+
+async def _gather_icir(pool, signal_name: str, windows=(30, 60, 90)) -> float | None:
+    """Mean of per-window EWMA-ICIR over signal_ic_history; None if no window
+    has >= 2 points (insufficient history for a risk ratio)."""
+    icirs = []
+    for w in windows:
+        rows = await pool.fetch(
+            "SELECT computed_at, ic FROM signal_ic_history "
+            "WHERE signal_name=$1 AND window_days=$2 ORDER BY computed_at",
+            signal_name, w,
+        )
+        v = compute_ewma_icir([(r["computed_at"], float(r["ic"])) for r in rows])
+        if v is not None:
+            icirs.append(v)
+    return float(np.mean(icirs)) if icirs else None
+
+
+async def _weights_by_status(pool, status: str) -> dict[str, float]:
+    rows = await pool.fetch(
+        "SELECT signal_name, weight FROM signal_weight_current WHERE status=$1", status
+    )
+    return {r["signal_name"]: float(r["weight"]) for r in rows}
+
+
+async def _promote(pool, weights: dict[str, float], baseline_ic, now, reason: str) -> None:
+    """Copy candidate weights into the live rows and journal the change so a
+    later degradation can roll back to the prior live weights."""
+    prev = await _weights_by_status(pool, "live")
+    for sig, w in weights.items():
+        await pool.execute(
+            "INSERT INTO signal_weight_current (signal_name, status, weight, last_updated, reason) "
+            "VALUES ($1,'live',$2,$3,$4) "
+            "ON CONFLICT (signal_name, status) DO UPDATE SET "
+            "weight=EXCLUDED.weight, last_updated=EXCLUDED.last_updated, reason=EXCLUDED.reason",
+            sig, w, now, reason,
+        )
+    await pool.execute(
+        "INSERT INTO config_change_log (user_id, field, old_value, new_value, source) "
+        "VALUES (0, 'signal_weights', $1, $2, $3)",
+        json.dumps(prev),
+        json.dumps({"weights": weights, "baseline_ic": baseline_ic}),
+        reason,
+    )
+
+
+async def _maybe_rollback(pool) -> bool:
+    # Temporary stub; Task 7 replaces this body with the real rollback logic.
+    return False
+
+
+async def apply_adaptive_weights(pool, active_signals) -> dict:
+    """Daily adaptive-weight step: rollback check, candidate -> shadow, then
+    promote shadow -> live once it holds non-degrading for SHADOW_PROMOTE_STREAK
+    days. On a cold start (no live rows) the candidate seeds live directly."""
+    now = datetime.now(UTC)
+    rolled_back = await _maybe_rollback(pool)
+
+    for sig in active_signals:
+        icir = await _gather_icir(pool, sig)
+        raw_target = max(icir, 0.0) * ICIR_NORMALIZE if icir is not None else 0.0
+        live = await pool.fetchrow(
+            "SELECT weight, consecutive_bad_windows FROM signal_weight_current "
+            "WHERE signal_name=$1 AND status='live'",
+            sig,
+        )
+        cur_w = float(live["weight"]) if live else 0.0
+        cur_cb = int(live["consecutive_bad_windows"]) if live else 0
+        floored, new_cb, _dropped = apply_floor_or_drop(raw_target, icir, cur_cb)
+        # Skip the change-cap on first-ever seeding (no prior live row): the cap
+        # would collapse all candidates to the same min-step (CAP_MIN_REF *
+        # CHANGE_CAP_FRAC) regardless of ICIR magnitude, defeating relative ranking.
+        capped = floored if live is None else apply_change_cap(cur_w, floored)
+        await pool.execute(
+            "INSERT INTO signal_weight_current "
+            "(signal_name, status, weight, last_updated, reason, consecutive_bad_windows, shadow_streak) "
+            "VALUES ($1,'shadow',$2,$3,'shadow_candidate',$4, "
+            "COALESCE((SELECT shadow_streak FROM signal_weight_current WHERE signal_name=$1 AND status='shadow'),0)) "
+            "ON CONFLICT (signal_name, status) DO UPDATE SET "
+            "weight=EXCLUDED.weight, last_updated=EXCLUDED.last_updated, "
+            "consecutive_bad_windows=EXCLUDED.consecutive_bad_windows",
+            sig, capped, now, new_cb,
+        )
+
+    live_w = await _weights_by_status(pool, "live")
+    shadow_w = await _weights_by_status(pool, "shadow")
+    if not live_w:
+        await _promote(pool, shadow_w, baseline_ic=None, now=now, reason="cold_start_seed")
+        await pool.execute("UPDATE signal_weight_current SET shadow_streak=0 WHERE status='shadow'")
+        return {"promoted": True, "reason": "cold_start", "rolled_back": rolled_back}
+
+    ic_live = await composite_ic(pool, live_w, 90)
+    ic_shadow = await composite_ic(pool, shadow_w, 90)
+    promoted = False
+    if ic_shadow is not None and (ic_live is None or ic_shadow >= ic_live):
+        await pool.execute("UPDATE signal_weight_current SET shadow_streak=shadow_streak+1 WHERE status='shadow'")
+        streak = await pool.fetchval("SELECT min(shadow_streak) FROM signal_weight_current WHERE status='shadow'")
+        if streak is not None and streak >= SHADOW_PROMOTE_STREAK:
+            await _promote(pool, shadow_w, baseline_ic=ic_shadow, now=now, reason="auto_promote")
+            await pool.execute("UPDATE signal_weight_current SET shadow_streak=0 WHERE status='shadow'")
+            promoted = True
+    else:
+        await pool.execute("UPDATE signal_weight_current SET shadow_streak=0 WHERE status='shadow'")
+    return {"promoted": promoted, "ic_live": ic_live, "ic_shadow": ic_shadow, "rolled_back": rolled_back}
