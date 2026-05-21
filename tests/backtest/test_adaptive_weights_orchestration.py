@@ -94,14 +94,16 @@ async def _set_live(pool, weights):
 @pytest.mark.asyncio
 async def test_rollback_fires_when_live_ic_degrades_below_baseline(pool):
     await _seed_market(pool)  # siga drives the return; sigb is noise
-    # Live currently weights ONLY the noise signal -> low composite IC.
-    await _set_live(pool, {"siga": 0.0, "sigb": 0.20})
+    # Live weights siga NEGATIVELY -> the composite anti-correlates with the
+    # forward return -> a measurably negative composite IC (~ -1.0), a genuine
+    # degradation (not an unmeasurable constant composite).
+    await _set_live(pool, {"siga": -0.20, "sigb": 0.0})
     # A prior promotion claimed baseline_ic=0.95, old_value = the good weights.
     await pool.execute(
         "INSERT INTO config_change_log (user_id, field, old_value, new_value, source) "
         "VALUES (0,'signal_weights',$1,$2,'auto_promote')",
         json.dumps({"siga": 0.20, "sigb": 0.0}),
-        json.dumps({"weights": {"siga": 0.0, "sigb": 0.20}, "baseline_ic": 0.95}),
+        json.dumps({"weights": {"siga": -0.20, "sigb": 0.0}, "baseline_ic": 0.95}),
     )
     rolled = await _maybe_rollback(pool)
     assert rolled is True

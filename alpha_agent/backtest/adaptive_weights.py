@@ -226,10 +226,12 @@ async def _maybe_rollback(pool) -> bool:
         return False
     live_w = await _weights_by_status(pool, "live")
     live_ic = await composite_ic(pool, live_w, 90)
-    # None means degenerate/zero-information composite (e.g. all weights on a
-    # zero-variance signal). Treat it as a worst-case IC to allow rollback.
-    effective_ic = live_ic if live_ic is not None else float("-inf")
-    if effective_ic >= baseline_ic - DEGRADE_TOL:
+    # Conservative: a None live IC means we cannot measure degradation (either
+    # too few observations, or a degenerate constant composite). Do NOT roll
+    # back on an unmeasurable IC, otherwise transient early-life data sparsity
+    # (< _MIN_OBS) would trigger spurious rollbacks. Only a measurably-lower
+    # composite IC than the baseline justifies reverting.
+    if live_ic is None or live_ic >= baseline_ic - DEGRADE_TOL:
         return False
     prev = json.loads(row["old_value"])
     now = datetime.now(UTC)
