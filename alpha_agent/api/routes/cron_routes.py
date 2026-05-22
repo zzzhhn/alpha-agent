@@ -183,6 +183,37 @@ async def cron_daily_prices(
     return await handler(limit=limit, offset=offset, period=period)
 
 
+@router.post("/methodology_proposer")
+@router.get("/methodology_proposer")
+async def cron_methodology_proposer() -> dict[str, Any]:
+    """Phase 2a: daily statistics-driven methodology proposer. Enumerates
+    single-knob config candidates, validates each on purged walk-forward OOS
+    folds with trial-count deflation, and queues survivors as pending
+    config_change_log rows for human approval (Phase 2b). Stays dormant
+    (proposes nothing) until enough daily_prices history accrues to validate.
+    Nothing auto-applies."""
+    from alpha_agent.evolution.proposer import run_proposer
+
+    pool = await get_pool(os.environ["DATABASE_URL"])
+    started_at = datetime.now(UTC)
+    result = await run_proposer(pool)
+    details = json.dumps(
+        {
+            "evaluated": result.get("evaluated", 0),
+            "proposed": result.get("proposed", 0),
+            "dormant": result.get("dormant", False),
+        }
+    )
+    await pool.execute(
+        "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, error_count, details) "
+        "VALUES ($1, $2, now(), true, 0, $3::jsonb)",
+        "methodology_proposer",
+        started_at,
+        details,
+    )
+    return {"ok": True, **result}
+
+
 # news_llm_enrich cron route removed 2026-05-17.
 # The previous cron-side handler called get_settings() -> create_llm_client()
 # which requires a global LLM key in the server env. That violates BYOK

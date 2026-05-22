@@ -50,6 +50,10 @@ on:
     # NOTE: news_llm_enrich cron removed 2026-05-17. BYOK architecture
     # means cron has no user-context to source an LLM key. Enrichment
     # moved to read-time path triggered by user with their own key.
+    # Phase 2a methodology proposer: runs 30 min after daily_prices_puller
+    # so IC history and forward returns are already updated before proposer
+    # enumerates candidates. Weekdays only.
+    - cron: '30 22 * * 1-5'
   workflow_dispatch:
     inputs:
       job:
@@ -69,6 +73,7 @@ on:
           - minute_bars_puller
           - ic_backtest_monthly
           - daily_prices_puller
+          - methodology_proposer
 
 env:
   BACKEND_BASE: https://alpha.bobbyzhong.com
@@ -387,6 +392,20 @@ jobs:
           HTTP=$(curl -s --max-time 600 -o /tmp/ic.json -w "%{http_code}" \
             -X POST "$BACKEND_BASE/api/cron/ic_backtest_monthly")
           cat /tmp/ic.json | head -c 400; echo
+          [ "$HTTP" = "200" ] || exit 1
+
+  methodology_proposer:
+    if: |
+      github.event.schedule == '30 22 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'methodology_proposer')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: run Phase 2a methodology proposer (single shot)
+        run: |
+          HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            -X POST "$BACKEND_BASE/api/cron/methodology_proposer")
+          cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
 
 # news_llm_enrich job removed 2026-05-17 (BYOK architecture - enrich
