@@ -63,6 +63,7 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
       { id: "picks", href: "/picks", labelKey: "nav.picks" },
       { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
       { id: "alerts", href: "/alerts", labelKey: "nav.alerts" },
+      { id: "evolution", href: "/evolution", labelKey: "nav.evolution" },
     ],
   },
   {

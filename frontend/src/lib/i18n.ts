@@ -461,10 +461,16 @@ const translations = {
 
     /* M3: Picks + Alerts + Stock detail + Settings extensions */
     "nav.picks": "今日推荐",
+    "nav.evolution": "演化监控",
     "nav.group.research": "研究",
     "nav.group.decisions": "决策",
     "nav.group.reference": "参考",
     "nav.alerts": "警报",
+    "evolution.icTrend": "信号 IC 趋势",
+    "evolution.calibration": "置信度校准",
+    "evolution.weights": "自适应权重",
+    "evolution.changes": "变更历史",
+    "evolution.proposals": "方法论提案",
     "picks.title": "今日推荐",
     "picks.empty": "尚无推荐 — cron 还未运行",
     "picks.stale": "数据已超过 24 小时",
@@ -1197,10 +1203,16 @@ const translations = {
 
     /* M3: Picks + Alerts + Stock detail + Settings extensions */
     "nav.picks": "Picks",
+    "nav.evolution": "Evolution",
     "nav.group.research": "RESEARCH",
     "nav.group.decisions": "DECISIONS",
     "nav.group.reference": "REFERENCE",
     "nav.alerts": "Alerts",
+    "evolution.icTrend": "Signal IC Trend",
+    "evolution.calibration": "Confidence Calibration",
+    "evolution.weights": "Adaptive Weights",
+    "evolution.changes": "Change History",
+    "evolution.proposals": "Methodology Proposals",
     "picks.title": "Today's Picks",
     "picks.empty": "No picks yet — cron hasn't run",
     "picks.stale": "Data is over 24 hours old",
