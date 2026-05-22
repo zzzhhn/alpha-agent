@@ -8,6 +8,8 @@ from typing import Iterable, Literal
 
 import numpy as np
 
+from alpha_agent.config_store import get_config
+
 Tier = Literal["BUY", "OW", "HOLD", "UW", "SELL"]
 
 # Tier thresholds. Centralized constant so the band logic below stays in
@@ -28,28 +30,38 @@ def map_to_tier(composite: float) -> Tier:
     # enough info to take a side" matches the spec contract.
     if composite is None or (isinstance(composite, float) and math.isnan(composite)):
         return "HOLD"
-    if composite > 1.5:
+    t = get_config(
+        "rating.tier_thresholds",
+        {"buy": 1.5, "ow": 0.5, "hold": -0.5, "uw": -1.5},
+    )
+    if composite > t["buy"]:
         return "BUY"
-    if composite > 0.5:
+    if composite > t["ow"]:
         return "OW"
-    if composite >= -0.5:
+    if composite >= t["hold"]:
         return "HOLD"
-    if composite >= -1.5:
+    if composite >= t["uw"]:
         return "UW"
     return "SELL"
 
 
 def _resolve_band_width() -> float:
-    """Read ALPHA_TIER_BAND_Z env var with safe default 0.15.
+    """Read rating.no_trade_band from config store, falling back to
+    ALPHA_TIER_BAND_Z env var (default 0.15).
 
-    Env-driven keeps the knob admin-only for v1 (single-user dev). When
-    multi-user shipping arrives, swap for a user_settings lookup.
+    Config store takes precedence when a DB row is set; env var is the
+    historic default so behavior is byte-identical with a cold cache.
     """
     raw = os.environ.get("ALPHA_TIER_BAND_Z", "0.15").strip()
     try:
-        band = float(raw)
+        env_default = float(raw)
     except ValueError:
-        return 0.15
+        env_default = 0.15
+    # Reject negative or absurdly wide env defaults before passing them as
+    # the fallback; the config value gets the same clamp below.
+    if not 0 <= env_default <= 0.5:
+        env_default = 0.15
+    band = get_config("rating.no_trade_band", env_default)
     # Reject negative or absurdly wide bands (1.0 would collapse the
     # entire HOLD-to-OW transition).
     if not 0 <= band <= 0.5:
@@ -79,14 +91,19 @@ def map_to_tier_with_band(
     raw_tier = map_to_tier(composite)
     if prev_tier is None or prev_tier == raw_tier or band <= 0:
         return raw_tier
+    # Source cutoffs from config so band ranges stay consistent with map_to_tier.
+    t = get_config(
+        "rating.tier_thresholds",
+        {"buy": 1.5, "ow": 0.5, "hold": -0.5, "uw": -1.5},
+    )
     # Build the hysteresis-extended bounds of prev_tier: each tier widens
     # by `band` on the side where it would otherwise lose to a neighbour.
     bounds = {
-        "BUY":  (1.5 - band, math.inf),
-        "OW":   (0.5 - band, 1.5 + band),
-        "HOLD": (-0.5 - band, 0.5 + band),
-        "UW":   (-1.5 - band, -0.5 + band),
-        "SELL": (-math.inf, -1.5 + band),
+        "BUY":  (t["buy"]  - band, math.inf),
+        "OW":   (t["ow"]   - band, t["buy"]  + band),
+        "HOLD": (t["hold"] - band, t["ow"]   + band),
+        "UW":   (t["uw"]   - band, t["hold"] + band),
+        "SELL": (-math.inf,        t["uw"]   + band),
     }
     if prev_tier not in bounds:
         return raw_tier
