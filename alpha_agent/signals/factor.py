@@ -28,6 +28,7 @@ from datetime import datetime
 
 import numpy as np
 
+from alpha_agent.config_store import get_config
 from alpha_agent.signals.base import SignalScore, safe_fetch
 from alpha_agent.signals.yf_helpers import extract_fundamentals, get_ticker
 
@@ -80,7 +81,7 @@ def _resolve_default_expr() -> str:
     Reads env on every call so tests + per-invocation overrides work. The
     env lookup is sub-microsecond so cost is negligible vs the factor
     panel evaluation that follows."""
-    mode = os.environ.get("ALPHA_FACTOR_MODE", "short").strip().lower()
+    mode = get_config("factor.mode", os.environ.get("ALPHA_FACTOR_MODE", "short")).strip().lower()
     return LONG_TERM_FACTOR_EXPR if mode == "long" else SHORT_TERM_FACTOR_EXPR
 
 

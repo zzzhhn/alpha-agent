@@ -8,6 +8,7 @@ import pandas as pd
 
 from alpha_agent.agents.base import BaseAgent
 from alpha_agent.backtest.engine import BacktestEngine
+from alpha_agent.config_store import get_config
 from alpha_agent.factor_engine.evaluator import ExprEvaluator
 from alpha_agent.factor_engine.parser import ExprParser, ParseError
 from alpha_agent.pipeline.state import FactorResult, PipelineState
@@ -15,7 +16,9 @@ from alpha_agent.pipeline.state import FactorResult, PipelineState
 logger = logging.getLogger(__name__)
 
 # Thresholds for a factor to "pass"
-_IC_THRESHOLD = 0.02
+# _IC_THRESHOLD is read at call time via get_config so it can be adjusted
+# without a restart (Phase 2-pre runtime config). The historic hardcoded value
+# 0.02 is the default so behaviour is unchanged until a DB row is set.
 _ICIR_THRESHOLD = 0.5
 
 
@@ -51,7 +54,7 @@ class BacktestAgent(BaseAgent):
                 bt_result = self._engine.run(factor_values, self._data)
 
                 passed = (
-                    abs(bt_result.ic_mean) > _IC_THRESHOLD
+                    abs(bt_result.ic_mean) > get_config("signal.ic_accept_threshold", 0.02)
                     and abs(bt_result.icir) > _ICIR_THRESHOLD
                 )
 
