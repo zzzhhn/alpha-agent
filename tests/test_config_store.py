@@ -38,3 +38,11 @@ async def test_object_valued_knob_roundtrips(pool):
     await config_store.set_config(pool, "rating.tier_thresholds", thresholds, user_id=0, source="test")
     await config_store.refresh_config(pool)
     assert config_store.get_config("rating.tier_thresholds", {})["buy"] == pytest.approx(1.4)
+
+
+def test_get_config_respects_falsy_default():
+    # A legitimately falsy default (0.0 / False) must be returned, not treated
+    # as "no default" (the sentinel fix). 'unknown.key' has no DEFAULTS entry.
+    config_store._CACHE.clear()
+    assert config_store.get_config("unknown.key", 0.0) == 0.0
+    assert config_store.get_config("unknown.key", False) is False

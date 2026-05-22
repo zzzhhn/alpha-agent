@@ -22,6 +22,7 @@ DEFAULTS: dict[str, Any] = {
 }
 
 _CACHE: dict[str, Any] = {}
+_SENTINEL = object()  # distinguishes "no default passed" from a falsy default (0/False/[])
 
 
 async def refresh_config(pool) -> None:
@@ -36,12 +37,14 @@ async def refresh_config(pool) -> None:
     _CACHE.update(fresh)
 
 
-def get_config(key: str, default: Any = None) -> Any:
+def get_config(key: str, default: Any = _SENTINEL) -> Any:
     """Synchronous cache read. Falls back to the cached value, else the
-    caller's default (the historic hardcoded value), else the DEFAULTS table."""
+    caller's default (the historic hardcoded value), else the DEFAULTS table.
+    A sentinel default lets a caller pass a legitimately falsy default
+    (0 / False / []) without it being treated as 'no default'."""
     if key in _CACHE:
         return _CACHE[key]
-    if default is not None:
+    if default is not _SENTINEL:
         return default
     return DEFAULTS.get(key)
 
