@@ -258,6 +258,10 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.ic_backtest import router
         return router
 
+    def _import_evolution():
+        from alpha_agent.api.routes.evolution import router
+        return router
+
     _load("picks", _import_picks)
     _load("stock", _import_stock)
     _load("brief", _import_brief)
@@ -267,6 +271,7 @@ def create_app() -> FastAPI:
     _load("macro_context", _import_macro_context)
     _load("news_enrich", _import_news_enrich)
     _load("ic_backtest", _import_ic_backtest)
+    _load("evolution", _import_evolution)
 
     if not SERVERLESS:
         def _import_websocket():
