@@ -31,6 +31,10 @@ import type {
   ExplainAstResponse,
   ZooCorrelationRequest,
   ZooCorrelationResponse,
+  IcTrendResponse,
+  EvolutionWeightsResponse,
+  EvolutionCalibration,
+  EvolutionChangesResponse,
 } from "./types";
 
 // Browser: same-origin "" so /api/* goes through the Next.js middleware
@@ -591,4 +595,22 @@ export function getDecayAlerts(opts?: {
   if (opts?.decay_threshold) params.set("decay_threshold", String(opts.decay_threshold));
   const qs = params.toString();
   return fetchJson<DecayAlert[]>(`/factors/decay_alerts${qs ? "?" + qs : ""}`);
+}
+
+/* ── Phase 2c: Evolution Dashboard ── */
+
+export function getEvolutionIcTrend(windowDays = 30) {
+  return fetchJson<IcTrendResponse>(`/evolution/ic_trend?window_days=${windowDays}`);
+}
+
+export function getEvolutionWeights() {
+  return fetchJson<EvolutionWeightsResponse>(`/evolution/weights`);
+}
+
+export function getEvolutionCalibration() {
+  return fetchJson<EvolutionCalibration>(`/evolution/calibration`);
+}
+
+export function getEvolutionChanges(limit = 50) {
+  return fetchJson<EvolutionChangesResponse>(`/evolution/changes?limit=${limit}`);
 }
