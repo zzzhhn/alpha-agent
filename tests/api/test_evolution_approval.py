@@ -41,6 +41,13 @@ async def _seed_pending(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_reject_nonexistent_proposal_404(authed_client, applied_db):
+    # No row with this id: reject must 404, not return a misleading ok=true.
+    r = authed_client.post("/api/evolution/proposals/999999/reject", headers=_auth())
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
 async def test_list_pending_proposals(authed_client, applied_db):
     await _seed_pending(applied_db)
     body = authed_client.get("/api/evolution/proposals").json()

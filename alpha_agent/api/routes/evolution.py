@@ -188,10 +188,15 @@ async def reject(
 ) -> dict[str, Any]:
     """Mark the proposal rejected without applying any config change."""
     pool = await get_db_pool()
-    await pool.execute(
+    status = await pool.execute(
         "UPDATE config_change_log SET status='rejected' WHERE id=$1 AND status='pending'",
         proposal_id,
     )
+    # asyncpg returns a command tag like "UPDATE 1"; 0 rows means the proposal
+    # was missing or already decided. Surface a 404 instead of a misleading
+    # ok=true (mirrors the approve guard).
+    if status.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(404, "proposal not found or not pending")
     return {"ok": True}
 
 
