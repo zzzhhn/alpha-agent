@@ -54,6 +54,7 @@ from alpha_agent.signals import (
     technicals,
 )
 from alpha_agent.signals.base import SignalScore
+from alpha_agent.config_store import refresh_config
 from alpha_agent.storage.postgres import get_pool
 from alpha_agent.storage.queries import enqueue_alert, log_error, upsert_signal_fast
 
@@ -141,6 +142,7 @@ async def handler(
     from alpha_agent.universe import get_watchlist
 
     pool = await get_pool(os.environ["DATABASE_URL"])
+    await refresh_config(pool)
     now = datetime.now(UTC)
     today = now.date().isoformat()
     started_at = now

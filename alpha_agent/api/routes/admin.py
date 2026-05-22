@@ -14,15 +14,17 @@ the request fails to even reach the GH API (network error).
 """
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from alpha_agent.auth.dependencies import require_user
+from alpha_agent.config_store import DEFAULTS, set_config
 
 from alpha_agent.api.dependencies import get_db_pool
 
@@ -143,6 +145,43 @@ async def last_refresh() -> dict:
             ts = ts.replace(tzinfo=UTC)
         out[r["cron_name"]] = ts.isoformat() if ts else None
     return out
+
+
+class ConfigSetRequest(BaseModel):
+    key: str
+    value: Any
+
+
+@router.get("/config")
+async def get_config_knobs() -> dict:
+    """List all engine_config rows with decoded values.
+
+    Unauthenticated (read-only, same policy as /last_refresh).
+    """
+    pool = await get_db_pool()
+    rows = await pool.fetch("SELECT key, value FROM engine_config ORDER BY key")
+    result = []
+    for r in rows:
+        v = r["value"]
+        decoded = json.loads(v) if isinstance(v, str) else v
+        result.append({"key": r["key"], "value": decoded})
+    return {"config": result}
+
+
+@router.post("/config")
+async def set_config_knob(
+    body: ConfigSetRequest,
+    user_id: int = Depends(require_user),
+) -> dict:
+    """Upsert a single engine_config knob + journal the change.
+
+    Only keys present in config_store.DEFAULTS are accepted (400 otherwise).
+    """
+    if body.key not in DEFAULTS:
+        raise HTTPException(status_code=400, detail=f"unknown config key: {body.key!r}")
+    pool = await get_db_pool()
+    await set_config(pool, body.key, body.value, user_id=user_id, source="manual")
+    return {"ok": True}
 
 
 @router.get("/cache_stats")

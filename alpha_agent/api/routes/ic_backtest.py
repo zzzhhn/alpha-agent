@@ -19,6 +19,7 @@ from fastapi import APIRouter
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.backtest.confidence_calibration import run_calibration
 from alpha_agent.backtest.ic_engine import run_monthly_ic_backtest
+from alpha_agent.config_store import refresh_config
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
@@ -26,6 +27,7 @@ router = APIRouter(prefix="/api/cron", tags=["cron"])
 @router.post("/ic_backtest_monthly")
 async def ic_backtest_monthly() -> dict[str, Any]:
     pool = await get_db_pool()
+    await refresh_config(pool)
     started_at = datetime.now(UTC)
     n = await run_monthly_ic_backtest(pool)
     # Calibration is a secondary diagnostic: the IC backtest above is the

@@ -15,6 +15,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
+from alpha_agent.config_store import refresh_config
 from alpha_agent.fusion.combine import combine
 from alpha_agent.fusion.weights import DEFAULT_WEIGHTS, normalize_weights
 from alpha_agent.orchestrator.batch_runner import run_batched
@@ -51,6 +52,7 @@ async def handler(
     from alpha_agent.universe import SP500_UNIVERSE
 
     pool = await get_pool(os.environ["DATABASE_URL"])
+    await refresh_config(pool)
     today = datetime.now(UTC).date().isoformat()
     now = datetime.now(UTC)
     started_at = now
