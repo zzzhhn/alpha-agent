@@ -69,7 +69,7 @@ async def evaluate_candidate(pool, delta: "ConfigDelta") -> "CandidateResult | N
     Delta application: config_store._CACHE is patched in-memory for the
     duration of the evaluation, then restored in a finally block. This
     approach was chosen because:
-      (a) run_kernel does not accept config overrides as params -- it
+      (a) run_kernel does not accept config overrides as params; it
           delegates expression-selection to _resolve_default_expr() which
           reads _CACHE synchronously.
       (b) _CACHE is a simple module-level dict, making try/finally restore
@@ -80,8 +80,6 @@ async def evaluate_candidate(pool, delta: "ConfigDelta") -> "CandidateResult | N
     Returns None when usable history yields fewer than MIN_FOLDS folds with
     _MIN_ROWS_PER_FOLD rows each (dormant-when-starved guard).
     """
-    import pandas as pd
-
     from alpha_agent import config_store
     from alpha_agent.core.types import FactorSpec
     from alpha_agent.factor_engine.factor_backtest import _Panel
@@ -185,8 +183,15 @@ async def evaluate_candidate(pool, delta: "ConfigDelta") -> "CandidateResult | N
         rng = np.random.default_rng(seed=0)
 
         for train_idx, test_idx in usable_folds:
-            all_idx = sorted(set(train_idx) | set(test_idx))
-            sub_close = close_arr[all_idx, :]
+            # Stack train rows FIRST, then test rows, so the kernel's
+            # train_ratio boundary lands exactly on the train/test partition.
+            # A plain sorted index union would re-sort into calendar order and
+            # for early folds (test block at the front) the kernel would train
+            # on the OOS block and test on train data, corrupting the OOS
+            # metrics. train_idx is ascending so within-train ordering (needed
+            # for momentum lookbacks) is preserved; the embargo gap sits at the
+            # train/test seam.
+            sub_close = np.vstack([close_arr[train_idx, :], close_arr[test_idx, :]])
             sub_T = sub_close.shape[0]
 
             # Build a minimal _Panel. open/high/low/volume are synthetic
@@ -214,9 +219,9 @@ async def evaluate_candidate(pool, delta: "ConfigDelta") -> "CandidateResult | N
                 benchmark_close=bench,
             )
 
-            # train_ratio: the test rows are at the END of all_idx (since
-            # purged_fold_indices produces contiguous blocks and test_idx > train_idx
-            # for a forward walk). Map the OOS boundary to a train_ratio.
+            # train rows occupy [0, n_train) of the stacked panel, test rows
+            # occupy [n_train, n_train + n_test). train_ratio maps the kernel's
+            # split exactly to that seam.
             n_train = len(train_idx)
             n_test = len(test_idx)
             train_ratio = float(n_train) / float(n_train + n_test)

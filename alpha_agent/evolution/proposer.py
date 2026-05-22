@@ -57,7 +57,11 @@ async def run_proposer(pool, user_id: int = 0) -> dict:
         if r is not None:
             results.append(r)
 
-    n_trials = len(results)
+    # Deflation denominator is the honest number of configs we TRIED (the full
+    # enumerated count), not just the ones that scored. Candidates that returned
+    # None still consumed a selection-bias trial; undercounting them would
+    # shrink the haircut and flatter the survivors.
+    n_trials = len(candidates)
     base_mean = float(np.mean(base.sharpes))
     all_means = [float(np.mean(r.sharpes)) for r in results]
 
@@ -71,7 +75,7 @@ async def run_proposer(pool, user_id: int = 0) -> dict:
             await _write_pending(pool, current, r, defl, n_trials, user_id)
             proposed += 1
 
-    return {"evaluated": n_trials, "proposed": proposed, "dormant": False}
+    return {"evaluated": len(results), "proposed": proposed, "dormant": False}
 
 
 async def _write_pending(

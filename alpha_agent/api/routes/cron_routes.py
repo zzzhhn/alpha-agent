@@ -196,7 +196,20 @@ async def cron_methodology_proposer() -> dict[str, Any]:
 
     pool = await get_pool(os.environ["DATABASE_URL"])
     started_at = datetime.now(UTC)
-    result = await run_proposer(pool)
+    try:
+        result = await run_proposer(pool)
+    except Exception as exc:  # noqa: BLE001
+        # A proposer failure must leave an ok=false row so it stays visible in
+        # cron_runs (a swallowed failure would silently never propose).
+        err = f"{type(exc).__name__}: {exc}"
+        await pool.execute(
+            "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, error_count, details) "
+            "VALUES ($1, $2, now(), false, 1, $3::jsonb)",
+            "methodology_proposer",
+            started_at,
+            json.dumps({"error": err}),
+        )
+        raise
     details = json.dumps(
         {
             "evaluated": result.get("evaluated", 0),
