@@ -2,7 +2,7 @@
 // Read-only Evolution dashboard client (Phase 2c). Targets the /api/evolution
 // backend router via apiGet (full /api path), matching signal_health.ts etc.
 // NOT the /api/v1 fetchJson client in lib/api.ts.
-import { apiGet, type ApiGetOptions } from "./client";
+import { apiGet, apiPost, type ApiGetOptions } from "./client";
 
 export interface IcTrendPoint {
   computed_at: string;
@@ -68,3 +68,31 @@ export const fetchEvolutionCalibration = (opts?: ApiGetOptions) =>
 
 export const fetchEvolutionChanges = (limit = 50, opts?: ApiGetOptions) =>
   apiGet<EvolutionChangesResponse>(`/api/evolution/changes?limit=${limit}`, opts);
+
+// Proposal types for methodology-proposal approval workflow (Phase 2b).
+export interface Proposal {
+  id: number;
+  field: string;
+  old_value: unknown;
+  new_value: unknown;
+  evidence: Record<string, unknown>;
+  changed_at: string;
+  status: string;
+}
+export interface ProposalsResponse {
+  proposals: Proposal[];
+}
+
+// Auth for these mutations is handled automatically by the Next.js middleware,
+// which injects the Bearer token on same-origin /api/* requests (browser-side).
+export const fetchProposals = (opts?: ApiGetOptions) =>
+  apiGet<ProposalsResponse>("/api/evolution/proposals", opts);
+
+export const approveProposal = (id: number) =>
+  apiPost<unknown, Record<string, never>>(`/api/evolution/proposals/${id}/approve`, {});
+
+export const rejectProposal = (id: number) =>
+  apiPost<unknown, Record<string, never>>(`/api/evolution/proposals/${id}/reject`, {});
+
+export const rollbackChange = (id: number) =>
+  apiPost<unknown, Record<string, never>>(`/api/evolution/proposals/${id}/rollback`, {});
