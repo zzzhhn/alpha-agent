@@ -9,6 +9,8 @@ import {
   type EvolutionChangesResponse,
 } from "@/lib/api/evolution";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import { IcTrendChart } from "@/components/evolution/IcTrendChart";
+import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
 
 // Server component — fetches all four evolution endpoints in parallel and
 // renders placeholder section containers. Task 5/6 will replace the
@@ -56,10 +58,7 @@ export default async function EvolutionPage() {
               {icTrend.series.length !== 1 ? "s" : ""} · {icTrend.window_days}
               d rolling window
             </p>
-            {/* Task 5: IcTrendChart */}
-            <p className="mt-1 font-tm-mono text-[10.5px] text-tm-muted">
-              Chart placeholder — Task 5 replaces this with IcTrendChart.
-            </p>
+            <IcTrendChart series={icTrend.series} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
@@ -90,10 +89,7 @@ export default async function EvolutionPage() {
                 Calibration accumulating ({calibration.n_pairs}/50 pairs)
               </p>
             )}
-            {/* Task 5: CalibrationChart */}
-            <p className="mt-1 font-tm-mono text-[10.5px] text-tm-muted">
-              Chart placeholder — Task 5 replaces this with CalibrationChart.
-            </p>
+            <ReliabilityChart calibration={calibration} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
