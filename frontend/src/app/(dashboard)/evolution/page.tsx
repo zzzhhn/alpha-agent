@@ -3,44 +3,55 @@ import {
   fetchEvolutionWeights,
   fetchEvolutionCalibration,
   fetchEvolutionChanges,
+  fetchProposals,
   type IcTrendResponse,
   type EvolutionWeightsResponse,
   type EvolutionCalibration,
   type EvolutionChangesResponse,
+  type ProposalsResponse,
 } from "@/lib/api/evolution";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { IcTrendChart } from "@/components/evolution/IcTrendChart";
 import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
 import { WeightDeltaTable } from "@/components/evolution/WeightDeltaTable";
 import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
+import { ProposalsTable } from "@/components/evolution/ProposalsTable";
 
-// Server component — fetches all four evolution endpoints in parallel and
-// renders placeholder section containers. Task 5/6 will replace the
-// placeholder divs with real charts and tables.
+// Server component — fetches all evolution endpoints in parallel and renders
+// section containers. ProposalsTable (Phase 2b) replaces the old placeholder.
 
 async function fetchAllEvolution(): Promise<{
   icTrend: IcTrendResponse | null;
   weights: EvolutionWeightsResponse | null;
   calibration: EvolutionCalibration | null;
   changes: EvolutionChangesResponse | null;
+  proposals: ProposalsResponse | null;
 }> {
-  const [icTrend, weights, calibration, changes] = await Promise.allSettled([
-    fetchIcTrend(30, { revalidate: 60, tags: ["evolution-ic-trend"] }),
-    fetchEvolutionWeights({ revalidate: 60, tags: ["evolution-weights"] }),
-    fetchEvolutionCalibration({ revalidate: 60, tags: ["evolution-calibration"] }),
-    fetchEvolutionChanges(50, { revalidate: 60, tags: ["evolution-changes"] }),
-  ]);
+  const [icTrend, weights, calibration, changes, proposals] =
+    await Promise.allSettled([
+      fetchIcTrend(30, { revalidate: 60, tags: ["evolution-ic-trend"] }),
+      fetchEvolutionWeights({ revalidate: 60, tags: ["evolution-weights"] }),
+      fetchEvolutionCalibration({
+        revalidate: 60,
+        tags: ["evolution-calibration"],
+      }),
+      fetchEvolutionChanges(50, { revalidate: 60, tags: ["evolution-changes"] }),
+      fetchProposals({ revalidate: 0, tags: ["evolution-proposals"] }),
+    ]);
 
   return {
     icTrend: icTrend.status === "fulfilled" ? icTrend.value : null,
     weights: weights.status === "fulfilled" ? weights.value : null,
-    calibration: calibration.status === "fulfilled" ? calibration.value : null,
+    calibration:
+      calibration.status === "fulfilled" ? calibration.value : null,
     changes: changes.status === "fulfilled" ? changes.value : null,
+    proposals: proposals.status === "fulfilled" ? proposals.value : null,
   };
 }
 
 export default async function EvolutionPage() {
-  const { icTrend, weights, calibration, changes } = await fetchAllEvolution();
+  const { icTrend, weights, calibration, changes, proposals } =
+    await fetchAllEvolution();
 
   return (
     <TmScreen>
@@ -148,16 +159,24 @@ export default async function EvolutionPage() {
         )}
       </TmPane>
 
-      {/* ── Section 5: Pending Methodology Proposals (disabled) ────── */}
+      {/* ── Section 5: Methodology Proposals ──────────────────────── */}
       <TmPane
         title="METHODOLOGY PROPOSALS"
-        meta="pending · Phase 2"
+        meta={
+          proposals
+            ? `${proposals.proposals.length} proposal${proposals.proposals.length !== 1 ? "s" : ""}`
+            : "unavailable"
+        }
       >
-        <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
-          Coming in Phase 2 (proposer + approval workflow). This section will
-          list pending and approved methodology change proposals once the
-          proposer and approval pipeline is implemented.
-        </p>
+        <div className="px-3 py-2.5">
+          {proposals ? (
+            <ProposalsTable proposals={proposals.proposals} />
+          ) : (
+            <p className="font-tm-mono text-[11px] text-tm-neg">
+              Failed to load proposals.
+            </p>
+          )}
+        </div>
       </TmPane>
     </TmScreen>
   );
