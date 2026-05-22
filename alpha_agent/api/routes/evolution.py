@@ -1,7 +1,8 @@
-"""Read-only Evolution self-analysis endpoints.
+"""Evolution self-analysis endpoints.
 
-Surfaces data already produced by the self-loop (Phases 1a/1b/1c) for the
-/evolution dashboard. No writes, no analysis logic. Mirrors health.py style.
+Surfaces data produced by the self-loop (Phases 1a/1b/1c) for the /evolution
+dashboard, and exposes human-gated mutations (approve/reject/rollback) for
+methodology proposals written by the proposer (Phase 2a/2b).
 """
 from __future__ import annotations
 
@@ -9,9 +10,11 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.auth.dependencies import require_user
+from alpha_agent.config_store import set_config
 
 router = APIRouter(prefix="/api/evolution", tags=["evolution"])
 
@@ -125,3 +128,93 @@ async def changes(
             for r in rows
         ]
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 2b: human-gated approval layer for methodology proposals
+# ---------------------------------------------------------------------------
+
+
+@router.get("/proposals")
+async def proposals() -> dict[str, Any]:
+    """List all pending methodology proposals from the proposer."""
+    pool = await get_db_pool()
+    rows = await pool.fetch(
+        "SELECT id, field, old_value, new_value, evidence, changed_at, status "
+        "FROM config_change_log WHERE status = 'pending' ORDER BY changed_at DESC"
+    )
+    return {
+        "proposals": [
+            {
+                "id": r["id"],
+                "field": r["field"],
+                "old_value": _decode_jsonb(r["old_value"]) if r["old_value"] else None,
+                "new_value": _decode_jsonb(r["new_value"]),
+                "evidence": _decode_jsonb(r["evidence"]) if r["evidence"] else {},
+                "changed_at": r["changed_at"].isoformat(),
+                "status": r["status"],
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post("/proposals/{proposal_id}/approve")
+async def approve(
+    proposal_id: int,
+    user_id: int = Depends(require_user),
+) -> dict[str, Any]:
+    """Apply the proposed knob change and mark the proposal approved."""
+    pool = await get_db_pool()
+    row = await pool.fetchrow(
+        "SELECT field, new_value FROM config_change_log WHERE id=$1 AND status='pending'",
+        proposal_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="proposal not found or not pending")
+    new_value = _decode_jsonb(row["new_value"])
+    await set_config(pool, row["field"], new_value, user_id=user_id, source="approved")
+    await pool.execute(
+        "UPDATE config_change_log SET status='approved' WHERE id=$1",
+        proposal_id,
+    )
+    return {"ok": True, "applied": {row["field"]: new_value}}
+
+
+@router.post("/proposals/{proposal_id}/reject")
+async def reject(
+    proposal_id: int,
+    user_id: int = Depends(require_user),
+) -> dict[str, Any]:
+    """Mark the proposal rejected without applying any config change."""
+    pool = await get_db_pool()
+    await pool.execute(
+        "UPDATE config_change_log SET status='rejected' WHERE id=$1 AND status='pending'",
+        proposal_id,
+    )
+    return {"ok": True}
+
+
+@router.post("/proposals/{proposal_id}/rollback")
+async def rollback(
+    proposal_id: int,
+    user_id: int = Depends(require_user),
+) -> dict[str, Any]:
+    """Re-apply the old_value of an approved proposal, journaling a rollback row."""
+    pool = await get_db_pool()
+    row = await pool.fetchrow(
+        "SELECT field, old_value FROM config_change_log WHERE id=$1 AND status='approved'",
+        proposal_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="approved change not found")
+    old_value = _decode_jsonb(row["old_value"]) if row["old_value"] else None
+    await set_config(pool, row["field"], old_value, user_id=user_id, source="rollback")
+    # Tag the new rollback row with rollback_of pointing at the original proposal.
+    await pool.execute(
+        "UPDATE config_change_log SET rollback_of=$1 "
+        "WHERE id=(SELECT max(id) FROM config_change_log WHERE field=$2 AND source='rollback')",
+        proposal_id,
+        row["field"],
+    )
+    return {"ok": True, "reverted": {row["field"]: old_value}}
