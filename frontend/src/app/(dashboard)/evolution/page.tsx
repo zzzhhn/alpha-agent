@@ -11,6 +11,8 @@ import {
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { IcTrendChart } from "@/components/evolution/IcTrendChart";
 import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
+import { WeightDeltaTable } from "@/components/evolution/WeightDeltaTable";
+import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
 
 // Server component — fetches all four evolution endpoints in parallel and
 // renders placeholder section containers. Task 5/6 will replace the
@@ -113,10 +115,7 @@ export default async function EvolutionPage() {
               {weights.weights.length} signal weight
               {weights.weights.length !== 1 ? "s" : ""}
             </p>
-            {/* Task 6: WeightsTable */}
-            <p className="mt-1 font-tm-mono text-[10.5px] text-tm-muted">
-              Table placeholder — Task 6 replaces this with WeightsTable.
-            </p>
+            <WeightDeltaTable weights={weights.weights} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
@@ -140,10 +139,7 @@ export default async function EvolutionPage() {
               {changes.changes.length} change record
               {changes.changes.length !== 1 ? "s" : ""}
             </p>
-            {/* Task 6: ChangesTable */}
-            <p className="mt-1 font-tm-mono text-[10.5px] text-tm-muted">
-              Table placeholder — Task 6 replaces this with ChangesTable.
-            </p>
+            <ChangeHistoryTable changes={changes.changes} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
