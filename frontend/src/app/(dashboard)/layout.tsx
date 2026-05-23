@@ -24,6 +24,7 @@ import { type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { LocaleProvider } from "@/components/layout/LocaleProvider";
+import { ToastProvider, ToastViewport } from "@/components/ui/toast";
 
 interface DashboardLayoutProps {
   readonly children: ReactNode;
@@ -33,18 +34,21 @@ export default function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
   return (
-    <LocaleProvider>
-      <div className="flex h-screen flex-col bg-tm-bg text-tm-fg">
-        <Topbar />
-        <div className="grid min-h-0 flex-1 grid-cols-[200px_1fr]">
-          <Sidebar />
-          {/* No padding on <main> — pages render edge-to-edge as
-              workstation screens (TmScreen establishes the bg-tm-bg
-              "floor" itself). Pages still using the legacy layout can
-              add their own px/py inside their root. */}
-          <main className="min-w-0 overflow-y-auto">{children}</main>
+    <ToastProvider>
+      <LocaleProvider>
+        <div className="flex h-screen flex-col bg-tm-bg text-tm-fg">
+          <Topbar />
+          <div className="grid min-h-0 flex-1 grid-cols-[200px_1fr]">
+            <Sidebar />
+            {/* No padding on <main> — pages render edge-to-edge as
+                workstation screens (TmScreen establishes the bg-tm-bg
+                "floor" itself). Pages still using the legacy layout can
+                add their own px/py inside their root. */}
+            <main className="min-w-0 overflow-y-auto">{children}</main>
+          </div>
         </div>
-      </div>
-    </LocaleProvider>
+      </LocaleProvider>
+      <ToastViewport />
+    </ToastProvider>
   );
 }
