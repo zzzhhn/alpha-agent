@@ -155,6 +155,14 @@ export function useBacktestSession() {
         const updated = [newRun, ...rs];
         return updated.slice(0, MAX_RECENT_RUNS);
       });
+      // After eviction, if the pinned baseline was evicted, clear it so
+      // the baselineRun memo doesn't silently fall through to recentRuns[1]
+      // (a different run) and produce misleading delta arrows.
+      setBaselineRunId((prev) => {
+        if (prev === null) return null;
+        const updated = [newRun, ...recentRuns].slice(0, MAX_RECENT_RUNS);
+        return updated.some((r) => r.id === prev) ? prev : null;
+      });
       setRunState({ kind: "ok", result });
     } catch (e) {
       setRunState({
@@ -162,7 +170,7 @@ export function useBacktestSession() {
         message: e instanceof Error ? e.message : String(e),
       });
     }
-  }, [params, specMeta]);
+  }, [params, specMeta, recentRuns]);
 
   const refillFromRun = useCallback(
     (runId: string) => {
@@ -176,9 +184,15 @@ export function useBacktestSession() {
     setBaselineRunId((prev) => (prev === runId ? null : runId));
   }, []);
 
+  // currentRun reflects the most recent completed run regardless of in-flight
+  // run state. During a re-run, runState transitions to "running" but
+  // recentRuns[0] still holds the last completed run — keeping the VerdictBar
+  // and Evidence panes populated until the new result lands. The `isRunning`
+  // flag handles loading-overlay UX. On error, the last successful run stays
+  // visible; the error is surfaced via runState.
   const currentRun = useMemo(
-    () => (runState.kind === "ok" ? (recentRuns[0] ?? null) : null),
-    [runState, recentRuns],
+    () => recentRuns[0] ?? null,
+    [recentRuns],
   );
 
   const baselineRun = useMemo(() => {
