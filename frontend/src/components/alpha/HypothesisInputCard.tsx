@@ -2,6 +2,8 @@
 
 import { ChevronDown, History, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 import type { FactorUniverse } from "@/lib/types";
 
 // ---- Prop types ----
@@ -49,6 +51,7 @@ const UNIVERSES: FactorUniverse[] = ["SP500", "CSI300", "CSI500", "custom"];
 // ---- Component ----
 
 export function HypothesisInputCard(p: Props) {
+  const { locale } = useLocale();
   const [historyOpen, setHistoryOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
@@ -73,7 +76,7 @@ export function HypothesisInputCard(p: Props) {
       {/* Header row: section title + History popover trigger */}
       <header className="flex items-center justify-between">
         <h2 className="font-tm-mono text-[11px] font-semibold tracking-widest text-tm-fg">
-          HYPOTHESIS INPUT
+          {t(locale, "alpha.input.title" as Parameters<typeof t>[1])}
         </h2>
 
         {/* History popover */}
@@ -81,10 +84,11 @@ export function HypothesisInputCard(p: Props) {
           <button
             type="button"
             onClick={() => setHistoryOpen((o) => !o)}
+            aria-label={t(locale, "alpha.input.historyBtn" as Parameters<typeof t>[1])}
             className="inline-flex items-center gap-1 rounded border border-tm-rule px-2 py-1 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
           >
             <History className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>HISTORY</span>
+            <span>{t(locale, "alpha.input.historyBtn" as Parameters<typeof t>[1])}</span>
             <ChevronDown
               className={`h-3 w-3 transition-transform ${historyOpen ? "rotate-180" : ""}`}
               strokeWidth={1.75}
@@ -95,7 +99,7 @@ export function HypothesisInputCard(p: Props) {
             <div className="absolute right-0 top-full z-10 mt-1 max-h-[400px] w-[380px] overflow-y-auto rounded border border-tm-rule bg-tm-bg-2 shadow-lg">
               {p.history.length === 0 ? (
                 <div className="px-3 py-4 font-tm-mono text-[11px] text-tm-muted">
-                  No saved hypotheses yet.
+                  {t(locale, "alpha.historyEmpty" as Parameters<typeof t>[1])}
                 </div>
               ) : (
                 <ul>
@@ -113,14 +117,14 @@ export function HypothesisInputCard(p: Props) {
                           {h.request.text}
                         </div>
                         {h.result?.spec?.expression && (
-                          <code className="mt-0.5 block truncate font-tm-mono text-[10px] text-tm-muted">
+                          <code className="mt-0.5 block truncate font-mono text-[10px] text-tm-muted">
                             {h.result.spec.expression}
                           </code>
                         )}
                         <div className="mt-1 font-tm-mono text-[10px] text-tm-muted">
                           {h.timestamp}
                           {h.isFavorite && (
-                            <span className="ml-2 text-tm-warn">★</span>
+                            <span className="ml-2 text-tm-warn">&#9733;</span>
                           )}
                         </div>
                       </button>
@@ -137,16 +141,17 @@ export function HypothesisInputCard(p: Props) {
       <textarea
         value={p.text}
         onChange={(e) => p.onTextChange(e.target.value)}
-        placeholder="e.g. 12-month momentum minus 6-month volatility, neutralized by sector"
+        placeholder={t(locale, "alpha.placeholder" as Parameters<typeof t>[1])}
+        aria-label={t(locale, "alpha.input.title" as Parameters<typeof t>[1])}
         className="min-h-[96px] resize-y rounded border border-tm-rule bg-tm-bg-3 p-3 font-tm-mono text-sm text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none disabled:opacity-50"
         disabled={p.disabled}
       />
 
-      {/* Example chips — only when textarea is empty */}
+      {/* Example chips -- only when textarea is empty */}
       {empty && p.examples.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-tm-mono text-[10px] text-tm-muted">
-            EXAMPLES:
+            {t(locale, "alpha.input.examplesLabel" as Parameters<typeof t>[1])}
           </span>
           {p.examples.map((ex) => (
             <button
@@ -165,7 +170,7 @@ export function HypothesisInputCard(p: Props) {
       {/* Footer row: char count + universe selector + primary action */}
       <div className="flex items-center justify-between gap-3">
         <div className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
-          {p.text.length} chars
+          {p.text.length} {t(locale, "alpha.input.chars" as Parameters<typeof t>[1])}
         </div>
 
         <div className="flex items-center gap-2">
@@ -175,6 +180,7 @@ export function HypothesisInputCard(p: Props) {
             onChange={(e) =>
               p.onUniverseChange(e.target.value as FactorUniverse)
             }
+            aria-label={t(locale, "alpha.universe" as Parameters<typeof t>[1])}
             className="rounded border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-fg focus:border-tm-accent focus:outline-none"
           >
             {UNIVERSES.map((u) => (
@@ -191,7 +197,7 @@ export function HypothesisInputCard(p: Props) {
             disabled={p.disabled || empty}
             className="rounded bg-tm-accent px-4 py-2 font-tm-mono text-sm font-semibold text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            TRANSLATE &amp; BACKTEST
+            {t(locale, "alpha.input.submitFull" as Parameters<typeof t>[1])}
           </button>
         </div>
       </div>

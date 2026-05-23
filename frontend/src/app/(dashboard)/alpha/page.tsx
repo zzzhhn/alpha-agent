@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 import { FACTOR_EXAMPLES } from "@/components/alpha/FactorExamples";
 import { AnalyticsAccordion } from "@/components/alpha/AnalyticsAccordion";
 import { EvidencePaneGrid } from "@/components/alpha/EvidencePaneGrid";
@@ -83,7 +84,7 @@ export default function AlphaPage() {
     const expression = translate.spec.expression;
     // Guard: don't re-save if already in Zoo; surface a friendly info instead.
     if (isInZoo(expression)) {
-      toast.info("Already saved to Zoo");
+      toast.info(t(locale, "alpha.verdict.saveToZoo" as Parameters<typeof t>[1]));
       return;
     }
 
@@ -110,16 +111,19 @@ export default function AlphaPage() {
         intuition: translate.spec.justification,
         headlineMetrics,
       });
-      toast.success("Saved to Zoo", {
+      toast.success(t(locale, "alpha.zoo.savedToast" as Parameters<typeof t>[1]), {
         action: {
-          label: "Undo",
+          label: t(locale, "alpha.zoo.undo" as Parameters<typeof t>[1]),
           onClick: () => removeFromZoo(saved.id),
         },
       });
     } catch (e) {
-      toast.error(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        t(locale, "alpha.verdict.saveFailed" as Parameters<typeof t>[1]) +
+          (e instanceof Error ? e.message : String(e))
+      );
     }
-  }, [translate, chain.state, toast]);
+  }, [translate, chain.state, toast, locale]);
 
   return (
     <main className="flex flex-col gap-4 p-4">

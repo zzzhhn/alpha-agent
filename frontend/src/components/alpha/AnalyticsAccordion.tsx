@@ -2,6 +2,8 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 import type { HypothesisTranslateResponse } from "@/lib/types";
 
 interface Props {
@@ -12,9 +14,9 @@ interface AutoFlags {
   degenerate: boolean;
 }
 
-function computeFlags(t: HypothesisTranslateResponse): AutoFlags {
+function computeFlags(tr: HypothesisTranslateResponse): AutoFlags {
   return {
-    degenerate: t.smoke?.degenerate === true,
+    degenerate: tr.smoke?.degenerate === true,
   };
 }
 
@@ -23,6 +25,7 @@ function computeFlags(t: HypothesisTranslateResponse): AutoFlags {
 const ADDITIONAL_PANE_COUNT = 3;
 
 export function AnalyticsAccordion({ translate }: Props) {
+  const { locale } = useLocale();
   const flags = useMemo<AutoFlags>(
     () => (translate ? computeFlags(translate) : { degenerate: false }),
     [translate],
@@ -34,26 +37,32 @@ export function AnalyticsAccordion({ translate }: Props) {
 
   const autoExpandedCount = flags.degenerate ? 1 : 0;
 
+  function accordionLabel(): string {
+    if (autoExpandedCount > 0) {
+      return showAll
+        ? t(locale, "alpha.analytics.hideAdditional" as Parameters<typeof t>[1])
+        : t(locale, "alpha.analytics.showMore" as Parameters<typeof t>[1]).replace("{n}", String(ADDITIONAL_PANE_COUNT));
+    }
+    return showAll
+      ? t(locale, "alpha.analytics.hideAll" as Parameters<typeof t>[1])
+      : t(locale, "alpha.analytics.showAll" as Parameters<typeof t>[1]).replace("{n}", String(ADDITIONAL_PANE_COUNT));
+  }
+
   return (
     <section className="flex flex-col gap-2">
       {flags.degenerate && <DegenerateWarningPane translate={translate} />}
 
       <button
         onClick={() => setShowAll((s) => !s)}
-        className="inline-flex w-fit items-center gap-1 text-xs text-tm-fg-2 hover:text-tm-fg"
+        aria-label={accordionLabel()}
+        className="inline-flex w-fit items-center gap-1 font-tm-mono text-xs text-tm-fg-2 hover:text-tm-fg"
       >
         {showAll ? (
           <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
         ) : (
           <ChevronRight className="h-3 w-3" strokeWidth={1.75} />
         )}
-        {autoExpandedCount > 0
-          ? showAll
-            ? "Hide additional analysis"
-            : `Show ${ADDITIONAL_PANE_COUNT} more analysis panes`
-          : showAll
-          ? `Hide analysis (${ADDITIONAL_PANE_COUNT} panes)`
-          : `Show analysis (${ADDITIONAL_PANE_COUNT} panes)`}
+        {accordionLabel()}
       </button>
 
       {showAll && (
@@ -74,21 +83,18 @@ function DegenerateWarningPane({
 }: {
   translate: HypothesisTranslateResponse;
 }) {
+  const { locale } = useLocale();
   return (
     <div className="rounded border border-tm-warn/40 bg-tm-warn/10 p-3 text-xs text-tm-warn">
-      <div className="font-semibold uppercase tracking-wide">
-        Degenerate factor warning
+      <div className="font-tm-mono font-semibold uppercase tracking-wide">
+        {t(locale, "alpha.analytics.degenerateTitle" as Parameters<typeof t>[1])}
       </div>
-      <div className="mt-1 text-tm-fg-2">
-        The smoke probe detected a degenerate factor. Cross-sectional variance
-        is near zero, meaning the factor assigns nearly identical values to
-        all stocks in the universe. Downstream backtest metrics such as IC and
-        Sharpe are unreliable when the signal has no spread. Common causes:
-        constant feature input, division by a near-zero denominator, or a
-        cross-sectional operation applied to a universe that is too small.
+      <div className="mt-1 font-tm-mono text-tm-fg-2">
+        {t(locale, "alpha.analytics.degenerateWarningBody" as Parameters<typeof t>[1])}
       </div>
-      <div className="mt-2 text-[11px] text-tm-muted">
-        rows_valid={translate.smoke?.rows_valid ?? "n/a"}
+      <div className="mt-2 font-mono text-[11px] text-tm-muted">
+        {t(locale, "alpha.analytics.degenerateFooter" as Parameters<typeof t>[1])}=
+        {translate.smoke?.rows_valid ?? "n/a"}
         {" · "}
         factor_std=
         {translate.smoke?.factor_std !== undefined
@@ -105,37 +111,36 @@ function SmokeDetailPane({
 }: {
   translate: HypothesisTranslateResponse;
 }) {
+  const { locale } = useLocale();
   const s = translate.smoke;
   if (!s) return null;
   return (
     <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 text-xs text-tm-fg-2">
-      <div className="mb-2 font-semibold uppercase tracking-wide text-tm-fg">
-        Smoke detail
+      <div className="mb-2 font-tm-mono font-semibold uppercase tracking-wide text-tm-fg">
+        {t(locale, "alpha.analytics.smokeDetail" as Parameters<typeof t>[1])}
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 font-tm-mono">
         <div>
           ic_spearman:{" "}
           <span
-            className={
-              s.ic_spearman >= 0 ? "text-tm-pos" : "text-tm-neg"
-            }
+            className={`font-mono ${s.ic_spearman >= 0 ? "text-tm-pos" : "text-tm-neg"}`}
           >
             {s.ic_spearman.toFixed(4)}
           </span>
         </div>
         <div>
-          rows_valid: <span className="text-tm-fg">{s.rows_valid}</span>
+          {t(locale, "alpha.pane.rowsValid" as Parameters<typeof t>[1])}:{" "}
+          <span className="font-mono text-tm-fg">{s.rows_valid}</span>
         </div>
         <div>
-          runtime: <span className="text-tm-fg">{s.runtime_ms} ms</span>
+          {t(locale, "alpha.pane.runtime" as Parameters<typeof t>[1])}:{" "}
+          <span className="font-mono text-tm-fg">{s.runtime_ms} ms</span>
         </div>
         {s.factor_std !== undefined && (
           <div>
             factor_std:{" "}
             <span
-              className={
-                s.degenerate ? "text-tm-warn" : "text-tm-fg"
-              }
+              className={`font-mono ${s.degenerate ? "text-tm-warn" : "text-tm-fg"}`}
             >
               {s.factor_std.toFixed(4)}
             </span>
@@ -143,8 +148,8 @@ function SmokeDetailPane({
         )}
         {s.degenerate !== undefined && (
           <div>
-            degenerate:{" "}
-            <span className={s.degenerate ? "text-tm-warn" : "text-tm-pos"}>
+            {t(locale, "alpha.analytics.degenerate" as Parameters<typeof t>[1])}:{" "}
+            <span className={`font-mono ${s.degenerate ? "text-tm-warn" : "text-tm-pos"}`}>
               {s.degenerate ? "yes" : "no"}
             </span>
           </div>
@@ -161,29 +166,30 @@ function LlmProvenancePane({
 }: {
   translate: HypothesisTranslateResponse;
 }) {
+  const { locale } = useLocale();
   const { prompt, completion } = translate.llm_tokens;
   const total = prompt + completion;
   return (
     <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 text-xs text-tm-fg-2">
-      <div className="mb-2 font-semibold uppercase tracking-wide text-tm-fg">
-        LLM token usage
+      <div className="mb-2 font-tm-mono font-semibold uppercase tracking-wide text-tm-fg">
+        {t(locale, "alpha.analytics.llmProvenance" as Parameters<typeof t>[1])}
       </div>
-      <div className="grid grid-cols-3 gap-x-4 gap-y-1">
+      <div className="grid grid-cols-3 gap-x-4 gap-y-1 font-tm-mono">
         <div>
-          prompt: <span className="text-tm-fg">{prompt.toLocaleString()}</span>
+          prompt:{" "}
+          <span className="font-mono text-tm-fg">{prompt.toLocaleString()}</span>
         </div>
         <div>
           completion:{" "}
-          <span className="text-tm-fg">{completion.toLocaleString()}</span>
+          <span className="font-mono text-tm-fg">{completion.toLocaleString()}</span>
         </div>
         <div>
-          total: <span className="text-tm-fg">{total.toLocaleString()}</span>
+          total:{" "}
+          <span className="font-mono text-tm-fg">{total.toLocaleString()}</span>
         </div>
       </div>
-      <div className="mt-2 text-[11px] text-tm-muted">
-        Token counts are for this translation run only. Provider and model
-        are determined by your BYOK configuration and are not included in
-        the server response.
+      <div className="mt-2 font-tm-mono text-[11px] text-tm-muted">
+        {t(locale, "alpha.analytics.llmTokenNote" as Parameters<typeof t>[1])}
       </div>
     </div>
   );
@@ -195,30 +201,31 @@ function OperatorUsagePane({
 }: {
   translate: HypothesisTranslateResponse;
 }) {
+  const { locale } = useLocale();
   const ops = translate.spec.operators_used;
   return (
     <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 text-xs text-tm-fg-2">
-      <div className="mb-2 font-semibold uppercase tracking-wide text-tm-fg">
-        Operator usage
+      <div className="mb-2 font-tm-mono font-semibold uppercase tracking-wide text-tm-fg">
+        {t(locale, "alpha.analytics.operatorUsage" as Parameters<typeof t>[1])}
       </div>
       {ops.length === 0 ? (
-        <span className="text-tm-muted">none detected</span>
+        <span className="font-tm-mono text-tm-muted">
+          {t(locale, "alpha.analytics.opsEmpty" as Parameters<typeof t>[1])}
+        </span>
       ) : (
         <div className="flex flex-wrap gap-1">
           {ops.map((op) => (
             <span
               key={op}
-              className="rounded-full border border-tm-rule px-2 py-0.5 text-[11px] text-tm-fg"
+              className="rounded-full border border-tm-rule px-2 py-0.5 font-mono text-[11px] text-tm-fg"
             >
               {op}
             </span>
           ))}
         </div>
       )}
-      <div className="mt-2 text-[11px] text-tm-muted">
-        Operators extracted from the translated expression for this spec.
-        Full frequency ranking across history is available in the
-        Operator.Usage pane on the main analytics panel.
+      <div className="mt-2 font-tm-mono text-[11px] text-tm-muted">
+        {t(locale, "alpha.analytics.opsNote" as Parameters<typeof t>[1])}
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 "use client";
 
 import { AlertCircle, Check, Loader2 } from "lucide-react";
+import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 import type { ChainState, ThresholdEval, VerdictMetrics } from "./types";
 
 interface Props {
@@ -13,16 +15,18 @@ interface Props {
 }
 
 const MARK = {
-  ok: <span className="ml-1 text-tm-pos">✓</span>,
-  warn: <span className="ml-1 text-tm-warn">⚠</span>,
-  bad: <span className="ml-1 text-tm-neg">✗</span>,
+  ok: <span className="ml-1 text-tm-pos">&#10003;</span>,
+  warn: <span className="ml-1 text-tm-warn">&#9888;</span>,
+  bad: <span className="ml-1 text-tm-neg">&#10007;</span>,
 };
 
 export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTranslate }: Props) {
+  const { locale } = useLocale();
+
   if (state.kind === "idle") {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 text-sm text-tm-muted">
-        Submit a hypothesis above to start.
+      <section className="rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm text-tm-muted">
+        {t(locale, "alpha.verdict.idle" as Parameters<typeof t>[1])}
       </section>
     );
   }
@@ -30,15 +34,18 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
   if (state.kind === "translate_error") {
     return (
       <section className="flex items-center justify-between rounded border border-tm-neg/40 bg-tm-neg/10 px-4 py-3">
-        <div className="flex items-center gap-2 text-sm text-tm-neg">
+        <div className="flex items-center gap-2 font-tm-mono text-sm text-tm-neg">
           <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          <span>Translate failed: {state.message}</span>
+          <span>
+            {t(locale, "alpha.verdict.translateFailed" as Parameters<typeof t>[1])}
+            {state.message}
+          </span>
         </div>
         <button
           onClick={onReTranslate}
-          className="rounded border border-tm-neg/60 px-3 py-1 text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
+          className="rounded border border-tm-neg/60 px-3 py-1 font-tm-mono text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
         >
-          Re-translate
+          {t(locale, "alpha.verdict.retranslate" as Parameters<typeof t>[1])}
         </button>
       </section>
     );
@@ -46,11 +53,14 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
 
   const loading = state.kind === "translating" || state.kind === "backtesting";
   const stageText =
-    state.kind === "translating" ? "Translating... (ETA ~10s)" :
-    state.kind === "backtesting" ? "Backtesting..." : null;
+    state.kind === "translating"
+      ? t(locale, "alpha.verdict.translating" as Parameters<typeof t>[1])
+      : state.kind === "backtesting"
+      ? t(locale, "alpha.verdict.backtesting" as Parameters<typeof t>[1])
+      : null;
 
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 text-sm">
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         {loading && (
           <span className="flex items-center gap-1.5 text-tm-fg-2">
@@ -59,36 +69,47 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
           </span>
         )}
         {metrics.ic !== null && (
-          <span title={thresholds.ic?.threshold ?? ""} className="cursor-help text-tm-fg">
+          <span
+            title={thresholds.ic?.threshold ?? t(locale, "alpha.verdict.icThreshold" as Parameters<typeof t>[1])}
+            className="cursor-help text-tm-fg"
+          >
             IC={metrics.ic.toFixed(4)}
             {thresholds.ic && MARK[thresholds.ic.status]}
           </span>
         )}
         {metrics.sharpe !== null && (
-          <span title={thresholds.sharpe?.threshold ?? ""} className="cursor-help text-tm-fg">
+          <span
+            title={thresholds.sharpe?.threshold ?? t(locale, "alpha.verdict.sharpeThreshold" as Parameters<typeof t>[1])}
+            className="cursor-help text-tm-fg"
+          >
             Sharpe={metrics.sharpe.toFixed(2)}
             {thresholds.sharpe && MARK[thresholds.sharpe.status]}
           </span>
         )}
         {metrics.maxDrawdown !== null && (
-          <span title={thresholds.maxDrawdown?.threshold ?? ""} className="cursor-help text-tm-fg">
+          <span
+            title={thresholds.maxDrawdown?.threshold ?? t(locale, "alpha.verdict.maxDdThreshold" as Parameters<typeof t>[1])}
+            className="cursor-help text-tm-fg"
+          >
             maxDD={(metrics.maxDrawdown * 100).toFixed(0)}%
             {thresholds.maxDrawdown && MARK[thresholds.maxDrawdown.status]}
           </span>
         )}
         {state.kind === "backtest_error" && (
           <span className="text-tm-warn">
-            Backtest failed: {state.message.slice(0, 80)}
+            {t(locale, "alpha.backtest.errorPrefix" as Parameters<typeof t>[1])}
+            {state.message.slice(0, 80)}
           </span>
         )}
       </div>
       {canSave && (
         <button
           onClick={onSave}
-          className="inline-flex items-center gap-1 rounded bg-tm-accent px-3 py-1.5 text-sm font-semibold text-tm-bg hover:opacity-90"
+          aria-label={t(locale, "alpha.verdict.saveToZoo" as Parameters<typeof t>[1])}
+          className="inline-flex items-center gap-1 rounded bg-tm-accent px-3 py-1.5 font-tm-mono text-sm font-semibold text-tm-bg hover:opacity-90"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
-          SAVE TO ZOO
+          {t(locale, "alpha.verdict.saveToZoo" as Parameters<typeof t>[1])}
         </button>
       )}
     </section>
