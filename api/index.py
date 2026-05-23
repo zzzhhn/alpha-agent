@@ -123,10 +123,47 @@ except Exception as e:
 
 app.state.m2_load_errors = _m2_load_errors
 
+# Phase 3a: load the AST whitelist union (built-ins + extended_operators) at
+# cold start so newly approved operators are accepted by the validator from
+# request 0. Surface any failure via app.state.allowed_ops_refresh_error so
+# /api/healthz/ast can report it (silent-exception anti-pattern: a missed
+# refresh would silently reject any non-builtin operator with no signal).
+try:
+    import asyncio
+    _db_url = os.environ.get("DATABASE_URL")
+    if _db_url:
+        from alpha_agent.core.factor_ast import refresh_allowed_ops
+        asyncio.run(refresh_allowed_ops(_db_url))
+        app.state.allowed_ops_refresh_error = None
+        print("✓ AST whitelist union loaded", file=sys.stderr, flush=True)
+    else:
+        app.state.allowed_ops_refresh_error = "no DATABASE_URL: whitelist is builtin-only"
+except Exception as e:
+    app.state.allowed_ops_refresh_error = f"{type(e).__name__}: {e}"
+    print(f"⚠ AST whitelist refresh failed: {app.state.allowed_ops_refresh_error}",
+          file=sys.stderr, flush=True)
+
 
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "service": "alphacore", "mode": "serverless"}
+
+
+@app.get("/api/healthz/ast")
+async def healthz_ast() -> dict:
+    """Phase 3a: surface the AST whitelist size + any startup-refresh error.
+    Duplicated here because api/index.py bypasses create_app() (dual-entry rule)."""
+    try:
+        from alpha_agent.core.factor_ast import BUILTIN_OPS, get_allowed_ops
+        ops = get_allowed_ops()
+        return {
+            "builtin_ops_count": len(BUILTIN_OPS),
+            "allowed_ops_count": len(ops),
+            "extended_ops_count": len(ops - BUILTIN_OPS),
+            "refresh_error": getattr(app.state, "allowed_ops_refresh_error", None),
+        }
+    except Exception as exc:  # noqa: BLE001 - surface to the response, not swallow
+        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 @app.get("/api/_debug/load-errors")
