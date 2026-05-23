@@ -5,6 +5,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { proposeFactors, type ProposeResult } from "@/lib/api/factor-lab";
 
+function _explain(r: ProposeResult): string {
+  if (r.dormant) {
+    return "Insufficient daily_prices history for the validator (or cost-guard tripped). The LLM was not called; no tokens spent.";
+  }
+  if (r.evaluated === 0) {
+    return "The LLM returned no usable proposals (JSON parse or empty list). Try again.";
+  }
+  if (r.proposed === 0) {
+    return `${r.evaluated} candidate(s) evaluated; none beat the current expression's deflated Sharpe baseline, so nothing was queued. This is expected when the LLM cannot find genuine alpha against the live factor.`;
+  }
+  return `${r.proposed} candidate(s) queued as pending below. Review and Approve to apply.`;
+}
+
 export function ProposeButton({ n = 5 }: { n?: number }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -44,18 +57,27 @@ export function ProposeButton({ n = 5 }: { n?: number }) {
       </button>
 
       {result && (
-        <div className="font-tm-mono text-[10px] text-tm-fg-2">
-          Evaluated {result.evaluated}, proposed {result.proposed}
-          {result.dormant && (
-            <span className="ml-2 inline-flex items-center rounded border border-tm-warn/40 bg-tm-warn/10 px-1.5 py-0 font-tm-mono text-[9px] leading-[18px] text-tm-warn">
-              dormant (insufficient history)
+        <div className="flex flex-col gap-1 rounded border border-tm-line bg-tm-card px-3 py-2 text-sm">
+          <div className="flex items-baseline gap-2">
+            <span className="text-base font-semibold text-tm-fg-1">
+              {result.proposed} / {result.evaluated} proposed
             </span>
-          )}
+            {result.dormant && (
+              <span className="inline-flex items-center rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-0.5 text-xs text-tm-warn">
+                dormant
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-tm-fg-2">
+            {_explain(result)}
+          </p>
         </div>
       )}
 
       {error && (
-        <div className="font-tm-mono text-[10px] text-tm-neg">{error}</div>
+        <div className="rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 text-sm text-tm-neg">
+          {error}
+        </div>
       )}
     </div>
   );
