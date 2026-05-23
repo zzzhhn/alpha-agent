@@ -19,6 +19,9 @@ DEFAULTS: dict[str, Any] = {
     "rating.no_trade_band": 0.15,
     "factor.mode": "short",
     "signal.ic_accept_threshold": 0.02,
+    # Phase 3a: free-form factor expression. None = fall back to factor.mode
+    # short/long preset (full backward compat). Set via Phase 3d Approve.
+    "factor.custom_expression": None,
 }
 
 _CACHE: dict[str, Any] = {}
