@@ -329,6 +329,26 @@ def create_app() -> FastAPI:
             "refresh_error": getattr(application.state, "allowed_ops_refresh_error", None),
         }
 
+    @application.get("/api/healthz/sandbox")
+    async def healthz_sandbox() -> dict:
+        """Phase 3b: report SandboxRunner pool health. The pool is created
+        lazily on first call; idle pool is normal. If pool instantiation
+        fails (e.g. multiprocessing blocked in this runtime), the response
+        still returns 200 with init_error populated so callers can see why."""
+        runner = getattr(application.state, "sandbox_runner", None)
+        if runner is None:
+            try:
+                from alpha_agent.evolution.sandbox import SandboxRunner
+                runner = SandboxRunner()
+                application.state.sandbox_runner = runner
+                application.state.sandbox_init_error = None
+            except Exception as exc:  # noqa: BLE001 - surfaced in response per anti-silent rule
+                application.state.sandbox_init_error = f"{type(exc).__name__}: {exc}"
+                return {"init_error": application.state.sandbox_init_error}
+        stat = runner.stat()
+        stat["init_error"] = getattr(application.state, "sandbox_init_error", None)
+        return stat
+
     # Redirect root and /qcore to Vercel Next.js frontend
     _FRONTEND_URL = "https://frontend-delta-three-81.vercel.app"
 

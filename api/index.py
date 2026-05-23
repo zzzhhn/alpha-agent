@@ -166,6 +166,24 @@ async def healthz_ast() -> dict:
         return {"error": f"{type(exc).__name__}: {exc}"}
 
 
+@app.get("/api/healthz/sandbox")
+async def healthz_sandbox() -> dict:
+    """Phase 3b: SandboxRunner pool health. See create_app() version for docs."""
+    runner = getattr(app.state, "sandbox_runner", None)
+    if runner is None:
+        try:
+            from alpha_agent.evolution.sandbox import SandboxRunner
+            runner = SandboxRunner()
+            app.state.sandbox_runner = runner
+            app.state.sandbox_init_error = None
+        except Exception as exc:
+            app.state.sandbox_init_error = f"{type(exc).__name__}: {exc}"
+            return {"init_error": app.state.sandbox_init_error}
+    stat = runner.stat()
+    stat["init_error"] = getattr(app.state, "sandbox_init_error", None)
+    return stat
+
+
 @app.get("/api/_debug/load-errors")
 async def debug_load_errors() -> dict:
     """Surface every router cold-start ImportError + asyncpg probe result.
