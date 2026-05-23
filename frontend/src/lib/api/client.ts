@@ -10,11 +10,20 @@ const API_BASE =
     ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app"
     : "";
 
-type ApiError = { code: string; message: string; retry_after_sec?: number };
+// Backend may use the standard envelope { code, message } OR FastAPI's default
+// { detail }. Both are accepted; ApiException normalizes them so consumers
+// always see a non-empty Error.message.
+type ApiError = {
+  code?: string;
+  message?: string;
+  detail?: string;
+  retry_after_sec?: number;
+};
 
 export class ApiException extends Error {
   constructor(public status: number, public body: ApiError) {
-    super(body.message);
+    const inner = body?.message ?? body?.detail;
+    super(inner ? `HTTP ${status}: ${inner}` : `HTTP ${status}`);
   }
 }
 

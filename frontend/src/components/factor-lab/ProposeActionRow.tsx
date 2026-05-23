@@ -103,23 +103,34 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
         </div>
       ) : null}
 
-      {state.kind === "error" ? (
-        <div className="rounded border border-tm-neg/60 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] text-tm-neg">
-          <div>
-            {t(locale, "factorLab.propose.errorPrefix")}
-            {": "}
-            {parseFactorError(state.message).summary}
-          </div>
-          <details className="mt-1 text-tm-muted">
-            <summary className="cursor-pointer text-[10px]">
-              {t(locale, "backtest.verdict.errorDetails")}
-            </summary>
-            <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all text-[10px]">
-              {state.message}
-            </pre>
-          </details>
-        </div>
-      ) : null}
+      {state.kind === "error"
+        ? (() => {
+            const parsed = parseFactorError(state.message);
+            const summary =
+              parsed.summary || state.message || `Unknown error`;
+            const hasDetail =
+              parsed.detail != null && parsed.detail !== summary;
+            return (
+              <div className="rounded border border-tm-neg/60 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] text-tm-neg">
+                <div>
+                  {t(locale, "factorLab.propose.errorPrefix")}
+                  {": "}
+                  {summary}
+                </div>
+                {hasDetail ? (
+                  <details className="mt-1 text-tm-muted">
+                    <summary className="cursor-pointer text-[10px]">
+                      {t(locale, "backtest.verdict.errorDetails")}
+                    </summary>
+                    <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all text-[10px]">
+                      {parsed.detail}
+                    </pre>
+                  </details>
+                ) : null}
+              </div>
+            );
+          })()
+        : null}
     </div>
   );
 }
