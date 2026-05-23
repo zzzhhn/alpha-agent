@@ -23,11 +23,11 @@
  * anyway, so a naive regex extraction is sufficient.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2, Play } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { extractOps } from "@/lib/factor-spec";
+import { extractOps, isAllowedOp, suggestOp } from "@/lib/factor-spec";
 import type { FactorUniverse } from "@/lib/types";
 import type { BacktestMode, BacktestParams, DirectionMode } from "./types";
 
@@ -66,7 +66,19 @@ export function BacktestFormSticky({
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const exprEmpty = params.expression.trim().length === 0;
-  const runDisabled = exprEmpty || isRunning;
+  // Catch typos like `ts_means` BEFORE the backend bounces a verbose 422.
+  // operatorsUsed is recomputed in updateExpression via extractOps, so this
+  // stays in lockstep with the textarea. Each entry is paired with its
+  // nearest-neighbor suggestion (Levenshtein ≤2) when one exists.
+  const unknownOps = useMemo(
+    () =>
+      params.operatorsUsed
+        .filter((op) => !isAllowedOp(op))
+        .map((op) => ({ op, suggestion: suggestOp(op) })),
+    [params.operatorsUsed],
+  );
+  const hasUnknownOps = unknownOps.length > 0;
+  const runDisabled = exprEmpty || isRunning || hasUnknownOps;
 
   function updateExpression(next: string) {
     // Keep operators_used coherent with expression text. The hook reads
@@ -101,7 +113,34 @@ export function BacktestFormSticky({
           rows={1}
           aria-label={t(locale, "backtest.form.title")}
           className="min-h-[36px] w-full resize-y rounded border border-tm-rule bg-tm-bg-3 px-3 py-2 font-tm-mono text-[12px] leading-relaxed text-tm-fg outline-none transition-[min-height,border-color] placeholder:text-tm-muted focus:min-h-[96px] focus:border-tm-accent"
+          aria-invalid={hasUnknownOps || undefined}
+          aria-describedby={hasUnknownOps ? "backtest-unknown-ops" : undefined}
         />
+
+        {/* Inline validation — unknown ops before backend 422 */}
+        {hasUnknownOps && (
+          <div
+            id="backtest-unknown-ops"
+            role="alert"
+            className="flex flex-col gap-1 rounded border border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-[11px] text-tm-warn"
+          >
+            {unknownOps.map(({ op, suggestion }) => (
+              <div key={op}>
+                <span>{t(locale, "backtest.form.unknownOp")}: </span>
+                <code className="rounded bg-tm-bg-3 px-1 py-0.5 text-tm-fg">{op}</code>
+                {suggestion !== null && (
+                  <>
+                    <span> — {t(locale, "backtest.form.didYouMean")} </span>
+                    <code className="rounded bg-tm-bg-3 px-1 py-0.5 text-tm-pos">
+                      {suggestion}
+                    </code>
+                    <span>?</span>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Row 2 — quick params + RUN button (always visible) */}
         <div className="flex flex-wrap items-end gap-3">
