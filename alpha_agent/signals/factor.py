@@ -74,13 +74,15 @@ LONG_TERM_FACTOR_EXPR = (
 
 
 def _resolve_default_expr() -> str:
-    """Resolve the active factor expression from ALPHA_FACTOR_MODE env var.
-    Defaults to 'short' (the platform's historical default + the only mode
-    that aligns with the rest of the short-window signal composite).
+    """Resolve the active factor expression. Precedence order (Phase 3a):
+       1. factor.custom_expression knob (set by Phase 3d Approve when an LLM
+          proposal lands). Non-empty string wins.
+       2. factor.mode preset ("short" or "long") from config or env var.
 
-    Reads env on every call so tests + per-invocation overrides work. The
-    env lookup is sub-microsecond so cost is negligible vs the factor
-    panel evaluation that follows."""
+    Reads on every call so tests + per-invocation overrides work."""
+    custom = get_config("factor.custom_expression", None)
+    if custom:  # non-None AND non-empty (forgiveness: empty string falls through)
+        return custom
     mode = get_config("factor.mode", os.environ.get("ALPHA_FACTOR_MODE", "short")).strip().lower()
     return LONG_TERM_FACTOR_EXPR if mode == "long" else SHORT_TERM_FACTOR_EXPR
 
