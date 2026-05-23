@@ -106,11 +106,16 @@ async def _run_startup_healthcheck(app: FastAPI) -> None:
 async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     _ensure_initialized(application)
     await _run_startup_healthcheck(application)
+    # Phase 3a: load the AST whitelist union (built-ins + extended_operators).
+    # Surface failures via app.state.allowed_ops_refresh_error so /healthz/ast
+    # can report them; logger.warning alone is the silent-exception anti-pattern.
+    application.state.allowed_ops_refresh_error = None
     db_url = os.environ.get("DATABASE_URL")
     if db_url:
         try:
             await refresh_allowed_ops(db_url)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - surfaced via /healthz/ast
+            application.state.allowed_ops_refresh_error = f"{type(exc).__name__}: {exc}"
             logger.warning(
                 "refresh_allowed_ops failed at startup: %s: %s",
                 type(exc).__name__, exc,
@@ -305,6 +310,21 @@ def create_app() -> FastAPI:
     async def healthz_routers() -> list[RouterHealth]:
         """Return per-router load status. Curl this to prove what is mounted."""
         return getattr(application.state, "router_health", [])
+
+    @application.get("/healthz/ast")
+    async def healthz_ast() -> dict:
+        """Phase 3a: surface the AST whitelist size + any startup-refresh
+        error. If allowed_ops_refresh_error is non-null the union with
+        extended_operators did not load (built-ins still serve, but newly
+        approved operators will be rejected until the next refresh)."""
+        from alpha_agent.core.factor_ast import BUILTIN_OPS, get_allowed_ops
+        ops = get_allowed_ops()
+        return {
+            "builtin_ops_count": len(BUILTIN_OPS),
+            "allowed_ops_count": len(ops),
+            "extended_ops_count": len(ops - BUILTIN_OPS),
+            "refresh_error": getattr(application.state, "allowed_ops_refresh_error", None),
+        }
 
     # Redirect root and /qcore to Vercel Next.js frontend
     _FRONTEND_URL = "https://frontend-delta-three-81.vercel.app"
