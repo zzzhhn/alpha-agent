@@ -53,7 +53,7 @@ export default async function FactorLabPage() {
       >
         <div className="px-3 py-2.5">
           {diagnostic ? (
-            <pre className="overflow-x-auto rounded bg-tm-card p-3 font-mono text-[11px] text-tm-fg">
+            <pre className="overflow-x-auto rounded bg-tm-bg-2 p-3 font-mono text-[11px] text-tm-fg">
               {diagnostic.current_expression}
             </pre>
           ) : (

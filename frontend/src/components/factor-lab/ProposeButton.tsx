@@ -57,9 +57,9 @@ export function ProposeButton({ n = 5 }: { n?: number }) {
       </button>
 
       {result && (
-        <div className="flex flex-col gap-1 rounded border border-tm-line bg-tm-card px-3 py-2 text-sm">
+        <div className="flex flex-col gap-1 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2 text-sm">
           <div className="flex items-baseline gap-2">
-            <span className="text-base font-semibold text-tm-fg-1">
+            <span className="text-base font-semibold text-tm-fg">
               {result.proposed} / {result.evaluated} proposed
             </span>
             {result.dormant && (

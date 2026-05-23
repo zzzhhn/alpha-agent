@@ -249,7 +249,7 @@ export function PendingFactorProposalsTable({
                                   {op.signature}
                                 </span>
                               </div>
-                              <pre className="overflow-x-auto rounded bg-tm-card p-2 font-mono text-[9px] text-tm-fg-2">
+                              <pre className="overflow-x-auto rounded bg-tm-bg-2 p-2 font-mono text-[9px] text-tm-fg-2">
                                 {op.python_impl}
                               </pre>
                             </div>
