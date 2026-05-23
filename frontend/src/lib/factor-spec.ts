@@ -118,6 +118,92 @@ export function extractOps(expr: string): readonly string[] {
 }
 
 /**
+ * Operands (data column identifiers) allowed in factor expressions.
+ *
+ * Single source of truth: alpha_agent/core/factor_ast.py:57-86
+ * (`_ALLOWED_OPERANDS` frozenset, 45 entries).
+ *
+ * Keep this list in sync with the backend. Unlike operators (which are
+ * Pydantic-Literal-validated as a structured field on FactorSpec), operands
+ * are embedded in the `expression` string and validated at AST walk time —
+ * the backend returns HTTP 400 with a `detail` message
+ * `"spec invalid: unknown operand 'X'; allowed: [...]"` for unknown names.
+ */
+export const ALLOWED_OPERANDS: ReadonlySet<string> = new Set<string>([
+  // T1 (always available) — 7
+  "close", "open", "high", "low", "volume", "returns", "vwap",
+  // T2 metadata — 6
+  "cap", "sector", "industry", "subindustry", "exchange", "currency",
+  // T2 derived dollar-volume windows — 7
+  "adv5", "adv10", "adv20", "adv60", "adv120", "adv180", "dollar_volume",
+  // T2 fundamentals — initial 8
+  "revenue", "net_income_adjusted", "ebitda", "eps",
+  "equity", "assets", "free_cash_flow", "gross_profit",
+  // T2 fundamentals — 12 expanded
+  "current_assets", "current_liabilities",
+  "long_term_debt", "short_term_debt",
+  "cash_and_equivalents", "retained_earnings", "goodwill",
+  "operating_income", "cost_of_goods_sold", "ebit",
+  "operating_cash_flow", "investing_cash_flow",
+  // T1.5a (v4) Compustat additions — 2
+  "shares_outstanding", "total_liabilities",
+  // Bundle C.3 (v4) — insider Form 4 alt-alpha — 3
+  "insider_net_dollars", "insider_n_buys", "insider_n_sells",
+]);
+
+/** Check whether `name` is a known data column identifier. */
+export function isAllowedOperand(name: string): boolean {
+  return ALLOWED_OPERANDS.has(name);
+}
+
+/**
+ * Suggest the nearest valid operand by Levenshtein distance.
+ * Returns the closest match if distance ≤ 2, else null.
+ *
+ * Reuses the module-level `levenshtein` helper.
+ */
+export function suggestOperand(name: string): string | null {
+  let bestOp: string | null = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+  ALLOWED_OPERANDS.forEach((op) => {
+    const d = levenshtein(name, op);
+    if (d < bestDist) {
+      bestDist = d;
+      bestOp = op;
+    }
+  });
+  return bestOp !== null && bestDist <= 2 ? bestOp : null;
+}
+
+/**
+ * Extract operand identifiers (leaf names) from an expression string.
+ *
+ * An operand is a bare identifier NOT followed by `(` — i.e. a Name AST
+ * node, not a function call. The negative-lookahead `(?!\s*\()` filters
+ * out operator call sites.
+ *
+ * Example: `rank(ts_mean(returns, 12))` → `["returns"]`
+ *
+ * False positives the regex CAN produce (must be filtered by the
+ * ALLOWED_OPERANDS membership check downstream):
+ * - Python reserved literals like `True`, `False`, `None` are extracted
+ *   but rightly flagged as "unknown" — they're not valid in this DSL.
+ * - Operator names that appear without parentheses (very rare, since the
+ *   grammar requires them to be called) would slip through; the backend
+ *   permits them as `ast.Name` matches in `_ALLOWED_OPS` (factor_ast.py:157),
+ *   so we accept the same — they pass `isAllowedOp` too. To stay aligned,
+ *   downstream consumers should filter `extractOperands` results through
+ *   `isAllowedOperand(o) || isAllowedOp(o)` before flagging as unknown.
+ */
+export function extractOperands(expr: string): readonly string[] {
+  const re = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b(?!\s*\()/g;
+  const set = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(expr))) set.add(m[1]);
+  return Array.from(set);
+}
+
+/**
  * Default lookback (in days) for FactorSpec.lookback when the page
  * doesn't expose its own slider. Matches the platform default; see
  * `core/types.py::FactorSpec.lookback` (Pydantic ge=5 le=252).

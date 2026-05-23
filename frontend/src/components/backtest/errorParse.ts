@@ -35,6 +35,25 @@ interface PydanticIssue {
 const MAX_SUMMARY_LEN = 140;
 
 export function parseBacktestError(message: string): ParsedError {
+  // 400 "spec invalid: unknown operand 'X'; allowed: [...]" — emitted by
+  // alpha_agent/core/factor_ast.py:159-161 and HTTP-wrapped at
+  // alpha_agent/api/routes/signal.py:154-155. Match BEFORE the 422 JSON path
+  // because the 400 detail string also contains a `[...]` (the allowed list),
+  // which would otherwise trigger the JSON.parse fallthrough below.
+  const operandMatch = message.match(/unknown operand '([^']+)'/);
+  if (operandMatch) {
+    return {
+      kind: "validation",
+      summary: truncate(
+        `Unknown operand: ${operandMatch[1]}`,
+        MAX_SUMMARY_LEN,
+      ),
+      detail: message,
+      badField: "expression.operand",
+      badValue: operandMatch[1],
+    };
+  }
+
   // FastAPI 422 bodies always start with "["; if we don't see one anywhere
   // in the string, treat as opaque (network error / runtime exception copy).
   const jsonStart = message.indexOf("[");

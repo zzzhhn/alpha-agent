@@ -247,8 +247,14 @@ export function BacktestVerdictBar({
       !!parsed.badField &&
       parsed.badField.startsWith("operators_used") &&
       !!parsed.badValue;
+    const isUnknownOperand =
+      parsed.kind === "validation" &&
+      parsed.badField === "expression.operand" &&
+      !!parsed.badValue;
     const headline = isUnknownOperator
       ? `${t(locale, "backtest.verdict.unknownOp")}: ${parsed.badValue}`
+      : isUnknownOperand
+      ? `${t(locale, "backtest.verdict.unknownOperand")}: ${parsed.badValue}`
       : parsed.summary;
     const showDetail = parsed.detail !== null && parsed.detail !== parsed.summary;
     return (
