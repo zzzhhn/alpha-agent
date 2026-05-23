@@ -31,6 +31,7 @@ dependencies = [
     # M5 Phase 4: verify NextAuth.js HS256 JWTs issued by the frontend.
     "python-jose[cryptography]>=3.3",
     "feedparser>=6.0.10",
+    "pyseccomp ; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
