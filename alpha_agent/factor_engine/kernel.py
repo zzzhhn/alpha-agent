@@ -114,13 +114,14 @@ def build_data_dict(panel: "_Panel") -> dict[str, np.ndarray]:
     return data
 
 
-def evaluate_factor_full(panel: "_Panel", spec: "FactorSpec") -> np.ndarray:
+def evaluate_factor_full(panel: "_Panel", spec: "FactorSpec",
+                         extra_ops: dict | None = None) -> np.ndarray:
     """Run a FactorSpec against the panel and return the (T, N) factor values.
 
     T1.5b (v4): if the panel carries an `is_member` mask, non-member cells in
     the final factor array are NaN'd out so they cannot enter the long/short
     basket and cannot contaminate cross-sectional IC. The mask is applied
-    AFTER operator evaluation — per-ticker time-series ops (ts_mean, ts_std,
+    AFTER operator evaluation -- per-ticker time-series ops (ts_mean, ts_std,
     etc.) keep using full price history, but the trading decision only sees
     cells where the ticker was an actual SP500 constituent.
 
@@ -129,6 +130,10 @@ def evaluate_factor_full(panel: "_Panel", spec: "FactorSpec") -> np.ndarray:
     distorts ranks by ~4% (4 movers out of 98); for full SP500 with delisted
     tickers this matters more and would require row-by-row re-ranking.
 
+    Phase 3c: extra_ops is forwarded to the vectorized evaluator so LLM-authored
+    operators (dispatched via SandboxRunner) can be used in the expression.
+    Default None keeps all existing callers backward compatible.
+
     Raises:
         ValueError: factor expression evaluates to an unexpected shape.
         Any exception raised by `eval_factor`: propagated with original type
@@ -136,7 +141,7 @@ def evaluate_factor_full(panel: "_Panel", spec: "FactorSpec") -> np.ndarray:
     """
     T, N = panel.close.shape
     data = build_data_dict(panel)
-    factor = np.asarray(eval_factor(spec.expression, data), dtype=np.float64)
+    factor = np.asarray(eval_factor(spec.expression, data, extra_ops), dtype=np.float64)
     if factor.shape != (T, N):
         raise ValueError(
             f"factor expression produced shape {factor.shape}, expected ({T}, {N})"
@@ -446,23 +451,28 @@ def run_kernel(
     spec: "FactorSpec",
     params: KernelParams,
     earnings_mask: np.ndarray | None = None,
+    extra_ops: dict | None = None,
 ) -> KernelResult:
-    """Pure backtest pipeline: factor → weights → daily ret → equity → split metrics.
+    """Pure backtest pipeline: factor -> weights -> daily ret -> equity -> split metrics.
 
     No disk IO. `panel` is already loaded; `earnings_mask`, if provided, is a
     pre-computed (T, N) bool array (True = zero-out weight that day) that the
-    caller built from `_load_earnings_mask`. Walk-forward windows, α/β, regime
-    classification, and DB persist all live in the wrapper — they consume
+    caller built from `_load_earnings_mask`. Walk-forward windows, a/b, regime
+    classification, and DB persist all live in the wrapper -- they consume
     `KernelResult.daily_ret`, `factor`, `fwd_returns`, `weights`, `train_end`.
 
     Numerical output is byte-equal to the pre-A5 in-line implementation in
     `run_factor_backtest`: code blocks were moved here verbatim, only the
     private helper names (`_split_metrics`, `_sector_neutralize_factor`,
     `_spearman_ic`) were swapped for the public kernel exports.
+
+    Phase 3c: extra_ops is forwarded through evaluate_factor_full -> vectorized.evaluate
+    so LLM-authored operators can run inside the kernel pipeline. Default None
+    preserves backward compatibility for all existing callers.
     """
     T, N = panel.close.shape
 
-    factor = evaluate_factor_full(panel, spec)
+    factor = evaluate_factor_full(panel, spec, extra_ops)
 
     if params.neutralize == "sector":
         if panel.sector is not None:

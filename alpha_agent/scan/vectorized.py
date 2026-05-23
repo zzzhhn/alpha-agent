@@ -848,18 +848,23 @@ OPS: dict[str, Callable[..., np.ndarray]] = {
 # ── Safe evaluator (AST walker, no eval/exec) ───────────────────────────────
 
 
-def evaluate(expression: str, data: dict[str, np.ndarray]) -> np.ndarray:
+def evaluate(expression: str, data: dict[str, np.ndarray],
+             extra_ops: dict | None = None) -> np.ndarray:
     """Evaluate a pre-AST-validated FactorSpec expression via explicit dispatch.
 
     The expression has already passed alpha_agent.core.factor_ast.validate_expression,
     but this evaluator re-walks the AST and dispatches through OPS explicitly.
-    No eval/exec — every node type is matched and rejected on mismatch.
+    No eval/exec -- every node type is matched and rejected on mismatch.
+
+    Phase 3c: extra_ops is checked AFTER the built-in OPS table so a caller-
+    provided op cannot shadow built-ins (built-ins win conflicts).
     """
     tree = ast.parse(expression, mode="eval")
-    return _eval_node(tree.body, data)
+    return _eval_node(tree.body, data, extra_ops)
 
 
-def _eval_node(node: ast.AST, data: dict[str, np.ndarray]) -> np.ndarray | float | int:
+def _eval_node(node: ast.AST, data: dict[str, np.ndarray],
+               extra_ops: dict | None = None) -> "np.ndarray | float | int":
     if isinstance(node, ast.Constant):
         if isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
             return node.value
@@ -872,15 +877,17 @@ def _eval_node(node: ast.AST, data: dict[str, np.ndarray]) -> np.ndarray | float
         if not isinstance(node.func, ast.Name):
             raise ValueError("only direct function calls supported")
         fn = OPS.get(node.func.id)
+        if fn is None and extra_ops is not None:
+            fn = extra_ops.get(node.func.id)
         if fn is None:
             raise ValueError(f"unknown operator {node.func.id!r}")
-        args = [_eval_node(a, data) for a in node.args]
+        args = [_eval_node(a, data, extra_ops) for a in node.args]
         return fn(*args)
     if isinstance(node, ast.UnaryOp):
         # `-1` / `+0.5` parse to UnaryOp(USub|UAdd, Constant). Negation works
         # on scalars and ndarrays alike via numpy's __neg__. validate_expression
         # already gated the operand to a numeric literal.
-        operand = _eval_node(node.operand, data)
+        operand = _eval_node(node.operand, data, extra_ops)
         if isinstance(node.op, ast.USub):
             return -operand
         if isinstance(node.op, ast.UAdd):
