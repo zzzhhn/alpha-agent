@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.config import get_settings
 from alpha_agent.core.exceptions import ProviderUnavailableError
+from alpha_agent.core.factor_ast import refresh_allowed_ops
 from alpha_agent.core.types import RouterHealth
 from alpha_agent.llm.factory import create_llm_client
 
@@ -105,6 +106,15 @@ async def _run_startup_healthcheck(app: FastAPI) -> None:
 async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     _ensure_initialized(application)
     await _run_startup_healthcheck(application)
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        try:
+            await refresh_allowed_ops(db_url)
+        except Exception as exc:
+            logger.warning(
+                "refresh_allowed_ops failed at startup: %s: %s",
+                type(exc).__name__, exc,
+            )
     yield
     llm = getattr(application.state, "llm", None)
     if llm and hasattr(llm, "close"):

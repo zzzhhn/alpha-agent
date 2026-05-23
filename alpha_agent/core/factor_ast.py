@@ -17,7 +17,38 @@ from collections.abc import Iterable
 
 from alpha_agent.core.types import AllowedOperator
 
-_ALLOWED_OPS: frozenset[str] = frozenset(AllowedOperator.__args__)
+# Phase 3a: the whitelist is the static built-ins UNION any operator names
+# registered in extended_operators (Phase 3 LLM-authored, sandboxed at runtime).
+# BUILTIN_OPS stays a fixed frozenset; the dynamic union is held in _ALLOWED_OPS
+# and refreshed via refresh_allowed_ops(pool_or_dsn) at server startup and after
+# each Phase 3d Approve. Validation reads _ALLOWED_OPS off the module (no DB hit
+# on hot path).
+BUILTIN_OPS: frozenset[str] = frozenset(AllowedOperator.__args__)
+_ALLOWED_OPS: frozenset[str] = BUILTIN_OPS
+
+
+def get_allowed_ops() -> frozenset[str]:
+    """Read the current whitelist (built-ins UNION registered extended ops)."""
+    return _ALLOWED_OPS
+
+
+async def refresh_allowed_ops(pool_or_dsn) -> None:
+    """Rebuild _ALLOWED_OPS from BUILTIN_OPS UNION extended_operators.name.
+    Call at server startup and after a Phase 3d Approve so newly-registered
+    names become validate-able without a server restart. Accepts either an
+    asyncpg pool OR a DSN string (tests pass DSN; runtime passes pool)."""
+    import asyncpg
+    global _ALLOWED_OPS
+    if isinstance(pool_or_dsn, str):
+        conn = await asyncpg.connect(pool_or_dsn)
+        try:
+            rows = await conn.fetch("SELECT name FROM extended_operators")
+        finally:
+            await conn.close()
+    else:
+        rows = await pool_or_dsn.fetch("SELECT name FROM extended_operators")
+    extended = frozenset(r["name"] for r in rows)
+    _ALLOWED_OPS = BUILTIN_OPS | extended
 
 # T1 operands (in current factor_universe_1y.parquet — OHLCV + derived).
 # T2 operands (sector / industry / cap / fundamentals) become accepted once
