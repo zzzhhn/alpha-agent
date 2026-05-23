@@ -311,12 +311,15 @@ def create_app() -> FastAPI:
         """Return per-router load status. Curl this to prove what is mounted."""
         return getattr(application.state, "router_health", [])
 
-    @application.get("/healthz/ast")
+    @application.get("/api/healthz/ast")
     async def healthz_ast() -> dict:
         """Phase 3a: surface the AST whitelist size + any startup-refresh
         error. If allowed_ops_refresh_error is non-null the union with
         extended_operators did not load (built-ins still serve, but newly
-        approved operators will be rejected until the next refresh)."""
+        approved operators will be rejected until the next refresh).
+        Lives under /api/ so the Vercel rewrite forwards it to FastAPI;
+        a sibling /healthz/routers exists but is currently only reachable
+        in local dev (the rewrite is /api/(.*) only)."""
         from alpha_agent.core.factor_ast import BUILTIN_OPS, get_allowed_ops
         ops = get_allowed_ops()
         return {
