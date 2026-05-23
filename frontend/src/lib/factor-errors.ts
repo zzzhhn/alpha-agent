@@ -1,16 +1,9 @@
-/**
- * errorParse — backtest 422 / runtime error parser (T-debug pass).
- *
- * The session hook prepends "HTTP <code>: " (or yields a raw Error.message)
- * before storing the message string on `RunState.error`. FastAPI 422 bodies
- * serialize as a JSON array of {type, loc, msg, input, ctx} objects; we want
- * a single short summary (for toast + VerdictBar headline) plus the raw
- * detail (for VerdictBar's collapsible <details>).
- *
- * Output is language-neutral on purpose — VerdictBar special-cases the
- * "unknown operator" pattern with a localized prefix; everything else falls
- * back to the English summary (still better than dumping the JSON array).
- */
+// frontend/src/lib/factor-errors.ts
+//
+// Shared error parser for the factor engine UI surface.
+// Consumed by /backtest (4 panes + page.tsx) and /factor-lab (ProposeActionRow).
+// Handles the FastAPI 422 literal_error envelope and the 400 detail message
+// shape that the AST validator produces.
 
 export interface ParsedError {
   readonly kind: "validation" | "network" | "unknown";
@@ -34,7 +27,7 @@ interface PydanticIssue {
 
 const MAX_SUMMARY_LEN = 140;
 
-export function parseBacktestError(message: string): ParsedError {
+export function parseFactorError(message: string): ParsedError {
   // 400 "spec invalid: unknown operand 'X'; allowed: [...]" — emitted by
   // alpha_agent/core/factor_ast.py:159-161 and HTTP-wrapped at
   // alpha_agent/api/routes/signal.py:154-155. Match BEFORE the 422 JSON path

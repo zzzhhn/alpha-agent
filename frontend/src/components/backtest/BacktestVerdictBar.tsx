@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { parseBacktestError } from "./errorParse";
+import { parseFactorError } from "@/lib/factor-errors";
 import type {
   MetricDelta,
   Run,
@@ -241,7 +241,7 @@ export function BacktestVerdictBar({
   //    + Re-run. Full raw message is gated behind <details> so the page no
   //    longer dumps the FastAPI 422 whitelist on first paint.
   if (runState.kind === "error") {
-    const parsed = parseBacktestError(runState.message);
+    const parsed = parseFactorError(runState.message);
     const isUnknownOperator =
       parsed.kind === "validation" &&
       !!parsed.badField &&

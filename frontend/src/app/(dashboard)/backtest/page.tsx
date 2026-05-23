@@ -30,7 +30,7 @@ import { BacktestVerdictBar } from "@/components/backtest/BacktestVerdictBar";
 import { BacktestEvidenceGrid } from "@/components/backtest/BacktestEvidenceGrid";
 import { BacktestAnalyticsGroups } from "@/components/backtest/BacktestAnalyticsGroups";
 import { RecentRunsTable } from "@/components/backtest/RecentRunsTable";
-import { parseBacktestError } from "@/components/backtest/errorParse";
+import { parseFactorError } from "@/lib/factor-errors";
 import { addToZoo, removeFromZoo } from "@/lib/factor-zoo";
 import type { Run } from "@/components/backtest/types";
 
@@ -151,7 +151,7 @@ export default function BacktestPage() {
     const raw = session.runState.message;
     if (lastErrorToastedRef.current === raw) return;
     lastErrorToastedRef.current = raw;
-    const parsed = parseBacktestError(raw);
+    const parsed = parseFactorError(raw);
     toast.error(
       `${t(locale, "backtest.verdict.errorPrefix")}${parsed.summary}`,
     );
