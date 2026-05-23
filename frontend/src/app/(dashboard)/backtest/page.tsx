@@ -30,6 +30,7 @@ import { BacktestVerdictBar } from "@/components/backtest/BacktestVerdictBar";
 import { BacktestEvidenceGrid } from "@/components/backtest/BacktestEvidenceGrid";
 import { BacktestAnalyticsGroups } from "@/components/backtest/BacktestAnalyticsGroups";
 import { RecentRunsTable } from "@/components/backtest/RecentRunsTable";
+import { parseBacktestError } from "@/components/backtest/errorParse";
 import { addToZoo, removeFromZoo } from "@/lib/factor-zoo";
 import type { Run } from "@/components/backtest/types";
 
@@ -69,6 +70,11 @@ export default function BacktestPage() {
   // Auto-run guard: prefill triggers exactly one runOnce after params land.
   const autoRanRef = useRef(false);
   const pendingAutoRunRef = useRef(false);
+
+  // Toast dedupe: store the last error message we surfaced via toast so
+  // unrelated re-renders (locale toggle, recentRuns mutation, etc.) don't
+  // re-fire the same toast.
+  const lastErrorToastedRef = useRef<string | null>(null);
 
   // 1) Consume sessionStorage prefill once on mount → drive params + specMeta.
   useEffect(() => {
@@ -132,6 +138,24 @@ export default function BacktestPage() {
       void session.runOnce();
     }
   }, [session.params.expression, session.runState.kind, session.runOnce, session]);
+
+  // 3) Surface backtest errors as a toast — but only the parsed summary,
+  //    NOT the full 422 envelope (which now lives behind <details> in the
+  //    VerdictBar). Dedupe by raw message so renders triggered by unrelated
+  //    state changes (locale toggle, etc.) don't re-fire the same toast.
+  useEffect(() => {
+    if (session.runState.kind !== "error") {
+      lastErrorToastedRef.current = null;
+      return;
+    }
+    const raw = session.runState.message;
+    if (lastErrorToastedRef.current === raw) return;
+    lastErrorToastedRef.current = raw;
+    const parsed = parseBacktestError(raw);
+    toast.error(
+      `${t(locale, "backtest.verdict.errorPrefix")}${parsed.summary}`,
+    );
+  }, [session.runState, toast, locale]);
 
   // Save-to-Zoo: works for the current run (no arg) or any past run (by id).
   const handleSaveToZoo = useCallback(

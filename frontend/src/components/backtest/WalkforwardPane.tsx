@@ -63,9 +63,9 @@ function EmptyMessage({ text }: { readonly text: string }) {
   );
 }
 
-function ErrorMessage({ text }: { readonly text: string }) {
+function ErrorPlaceholder({ text }: { readonly text: string }) {
   return (
-    <div className="flex h-[220px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-neg">
+    <div className="flex h-32 w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
       {text}
     </div>
   );
@@ -91,9 +91,13 @@ export function WalkforwardPane({ runState, currentRun }: Props) {
     );
   }
   if (runState.kind === "error") {
+    // Detail lives in <BacktestVerdictBar/>. Panes show a minimal pointer
+    // so the same 422 message isn't repeated 3+ times down the page.
     return (
       <TmPane title={title}>
-        <ErrorMessage text={runState.message} />
+        <ErrorPlaceholder
+          text={t(locale, "backtest.evidence.errorPlaceholder")}
+        />
       </TmPane>
     );
   }

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { parseBacktestError } from "./errorParse";
 import type {
   MetricDelta,
   Run,
@@ -236,24 +237,48 @@ export function BacktestVerdictBar({
     );
   }
 
-  // 3. error — red bar with prefix + message + Re-run.
+  // 3. error — red bar with parsed summary + optional collapsible detail
+  //    + Re-run. Full raw message is gated behind <details> so the page no
+  //    longer dumps the FastAPI 422 whitelist on first paint.
   if (runState.kind === "error") {
+    const parsed = parseBacktestError(runState.message);
+    const isUnknownOperator =
+      parsed.kind === "validation" &&
+      !!parsed.badField &&
+      parsed.badField.startsWith("operators_used") &&
+      !!parsed.badValue;
+    const headline = isUnknownOperator
+      ? `${t(locale, "backtest.verdict.unknownOp")}: ${parsed.badValue}`
+      : parsed.summary;
+    const showDetail = parsed.detail !== null && parsed.detail !== parsed.summary;
     return (
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded border border-tm-neg/40 bg-tm-neg/10 px-4 py-3">
-        <div className="flex items-center gap-2 font-tm-mono text-sm text-tm-neg">
-          <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          <span>
-            {t(locale, "backtest.verdict.errorPrefix")}
-            {runState.message}
-          </span>
+      <section className="flex flex-col gap-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-4 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-2 font-tm-mono text-sm text-tm-neg">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+            <span className="break-words">
+              {t(locale, "backtest.verdict.errorPrefix")}
+              {headline}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onReRun}
+            className="rounded border border-tm-neg/60 px-3 py-1 font-tm-mono text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
+          >
+            {t(locale, "backtest.verdict.reRun")}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onReRun}
-          className="rounded border border-tm-neg/60 px-3 py-1 font-tm-mono text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
-        >
-          {t(locale, "backtest.verdict.reRun")}
-        </button>
+        {showDetail ? (
+          <details className="font-tm-mono text-xs text-tm-muted">
+            <summary className="cursor-pointer select-none hover:text-tm-fg-2">
+              {t(locale, "backtest.verdict.errorDetails")}
+            </summary>
+            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-[11px] leading-snug">
+              {parsed.detail}
+            </pre>
+          </details>
+        ) : null}
       </section>
     );
   }
