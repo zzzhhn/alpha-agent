@@ -36,6 +36,11 @@
 | Sandbox model | Subprocess + RLIMIT + seccomp (linux prod) / restricted-globals fallback (macOS dev) |
 | Trigger UX | System diagnostic auto-populates prompt, admin clicks Propose (no free-form admin prompt in v1) |
 | Live expression storage | New `factor.custom_expression` knob; overrides `factor.mode` short/long preset when set |
+| Default proposal batch size N | 5 candidates per click (broader exploration; tradeoff is higher BYOK token cost the admin pays once) |
+| Per-operator sandbox timeout | 30 s per evaluation (wider than the 5 s draft; some legitimate operators on a 252-day panel may need more); validator-total cap stays ~10 min |
+| pyseccomp dependency | Hard dependency on Linux (CI + prod); macOS dev skips seccomp and uses RLIMIT + restricted globals + timeout fallback. CI runs the Linux profile so prod parity is guaranteed |
+| Rollback semantics for new operators | Operators stay registered after rollback (already journaled, reproducibility). Only `factor.custom_expression` reverts |
+| Code-tier model | 3 layers only: rejected / pending / approved. Approved operators ALWAYS run in subprocess sandbox forever (no Promote-to-inline tier). Performance is mitigated via persistent worker pool + shared-memory IPC, dropping single-call cost from ~50 ms (fork-per-call) to ~5 ms (warm worker + shared mem) |
 
 ## 4. Architecture
 
@@ -114,18 +119,20 @@ async def propose_factors(
   }]}
   ```
 - Naming rule enforced server-side: every new operator must match `^lf_[a-z_][a-z0-9_]{1,30}$`. The `lf_` prefix prevents collision with the 68 built-ins.
-- One retry on JSON parse failure. Hard token cap (e.g. 5000 output tokens). Hard wall-clock cap on the LLM call (60 s).
+- One retry on JSON parse failure. Hard token cap (e.g. 8000 output tokens, to accommodate N=5 proposals with operator code). Hard wall-clock cap on the LLM call (60 s).
+- Default `n=5` (admin-tunable per call up to a hard cap of 8).
 
 ### 5.3 Subprocess sandbox
 Directory: `alpha_agent/evolution/sandbox/`
 
-- `runner.py`: `class SandboxRunner` with `evaluate(op_code: str, op_name: str, columns: dict[str, np.ndarray]) -> np.ndarray | SandboxError`. Spawns one subprocess per operator-evaluation request. Communicates via pickled numpy over `subprocess.PIPE` with a per-call timeout (default 5 s).
+- `runner.py`: `class SandboxRunner` manages a **persistent worker pool** (size configurable, default 2). Each worker is a long-lived subprocess that handles many sequential `evaluate(op_code, op_name, columns)` calls. Arrays cross the IPC seam via `multiprocessing.shared_memory` (zero-copy for large ndarrays); only the op_code string and dtype/shape metadata go through `pipe.send_pyobj`. Per-call timeout: 30 s.
 - `worker.py`: the subprocess entrypoint.
-  - Linux prod: sets `RLIMIT_CPU=10`, `RLIMIT_AS=1G`, `RLIMIT_NPROC=0`, `RLIMIT_NOFILE=8`; installs a seccomp filter via `pyseccomp` allowing only `read, write, mmap, brk, futex, sigreturn, exit_group, rt_sigaction`. No `fork`, `execve`, `open`, `socket`, `connect`.
-  - macOS dev fallback: `RLIMIT_CPU` + `subprocess.run(timeout=...)` + restricted `__builtins__`. Documented explicitly as a dev-only weakening; CI runs the Linux profile.
-  - `exec` runs the operator inside a globals dict containing only `numpy as np`, the bound operand arrays, and a minimal helper set. No `import`, no `__builtins__.open`, no attribute access on builtins beyond a whitelist.
-- IPC payload format: msgpack or pickle (pickle is fine because the subprocess is the consumer, not the source). Arrays passed as raw bytes plus dtype/shape.
-- Vectorization: per-row dispatch into the subprocess would be ~250 ms per ticker per timestep. Mitigation: the kernel calls each operator at the COLUMN level (one ndarray pass per ticker, or one matrix pass per panel timestep); we spawn one subprocess per OPERATOR EVALUATION (i.e. one call per panel-level invocation), not per row. Typical validation cost: 3 candidates × 3 folds × ~5 column evaluations × 50 ms = ~2.25 s subprocess overhead.
+  - Linux prod (hard pyseccomp dep): sets `RLIMIT_CPU=60`, `RLIMIT_AS=1G`, `RLIMIT_NPROC=0`, `RLIMIT_NOFILE=8`; installs a seccomp filter via `pyseccomp` allowing only `read, write, mmap, mremap, brk, futex, sigreturn, exit_group, rt_sigaction, shm_open` (last one for the shared-memory ndarray channel). No `fork`, `execve`, `open` (writable), `socket`, `connect`.
+  - macOS dev fallback: `RLIMIT_CPU` + per-call `signal.alarm()` timeout + restricted `__builtins__`. NO seccomp on macOS. Documented explicitly as dev-only; CI runs the Linux profile so prod parity is enforced.
+  - `exec` runs each operator inside a FRESH globals dict per call (`{"np": numpy, "__builtins__": _RESTRICTED_BUILTINS, ...bound_args}`), so worker reuse never carries operator-A's state into operator-B. No `import`, no `__builtins__.open`, no attribute access on builtins beyond a whitelist.
+  - Worker recycling: after every 1000 calls OR 10 minutes wall-clock OR any uncaught exception, the worker is killed and respawned. Bounds blast radius from any future sandbox escape.
+- IPC payload: op_code (str) + op_name + arg metadata go via pickle over a pipe; ndarrays are zero-copy via `multiprocessing.shared_memory`. Single-call latency target ~5 ms (warm worker), ~50 ms (cold spawn at pool init).
+- Vectorization: per-row dispatch into the subprocess would be ~250 ms per ticker per timestep. Mitigation: the kernel calls each operator at the COLUMN level (one ndarray pass per ticker, or one matrix pass per panel timestep); one IPC round-trip per operator invocation per panel-pass, not per row. Typical validation cost (N=5 candidates × 3 folds × ~5 column evaluations × 5 ms warm IPC) ~375 ms total subprocess overhead.
 
 ### 5.4 Validator (extends Phase 2a)
 File: `alpha_agent/evolution/factor_validation.py`
@@ -178,7 +185,7 @@ CREATE INDEX idx_factor_proposals_status_created
 ### 5.6 extended_operators registry
 - New table `extended_operators(name PRIMARY KEY, signature text, python_impl text, doc text, registered_at timestamptz, registered_by bigint, source_proposal_id bigint REFERENCES factor_proposals(id))`.
 - On approval the implementation is INSERTed once; subsequent identical reproposals are detected by `python_impl` hash and dedup.
-- The `ExprEvaluator` at module load merges this table into its dispatch table as ALWAYS-SANDBOXED routes. No in-process exec of LLM-authored code, ever, even after approval. The cost of permanent sandboxing is acceptable because (a) approved operators are at most a small handful and (b) the sandbox is column-batched.
+- The `ExprEvaluator` at module load merges this table into its dispatch table as ALWAYS-SANDBOXED routes (routed through the persistent worker pool). No in-process exec of LLM-authored code, ever, even after approval. The cost of permanent sandboxing is acceptable because (a) approved operators are a small handful, (b) the sandbox is column-batched, (c) the worker pool keeps warm processes so single-call latency is ~5 ms not ~50 ms, and (d) there is no Promote-to-inline tier (decision locked 2026-05-23: pure permanent sandbox).
 - The AST validator `_ALLOWED_OPS` becomes `_BUILTIN_OPS | _load_extended_op_names()`, computed at module load. Reload on operator add.
 
 ### 5.7 factor.custom_expression knob
@@ -228,7 +235,8 @@ Client helpers go into `frontend/src/lib/api/factor-lab.ts` (mirrors `lib/api/ev
 
 | Risk | Mitigation |
 |------|-----------|
-| Sandbox IPC overhead slows IC engine | Column-batched dispatch (one subprocess call per panel-level op invocation, not per row); validation cap ~10 min per propose click |
+| Sandbox IPC overhead slows IC engine | Persistent worker pool + shared-memory ndarray IPC drops single-call to ~5 ms; column-batched dispatch (one subprocess call per panel-level op invocation, not per row); validation cap ~10 min per propose click |
+| Worker reuse leaks state across operators | Fresh globals dict per call + worker recycle after 1000 calls / 10 min / any uncaught exception |
 | macOS dev parity with Linux seccomp | Document the gap; CI runs the Linux profile; dev sandbox uses RLIMIT + restricted globals + timeout (good enough for dev iteration; prod parity guaranteed in CI) |
 | DSR-lite trial inflation with new operators | Each proposal counts as 1 trial, regardless of how many new ops it bundles (conservative; matches 2a's accounting) |
 | LLM hallucinates a built-in operator name with new code | The `lf_` prefix is enforced server-side; mismatch rejects the proposal pre-AST |
@@ -246,12 +254,13 @@ Each sub-phase is independently mergeable and testable. Recommended order:
 
 Each sub-phase will get its own implementation plan via `superpowers:writing-plans` once this spec is approved.
 
-## 9. Open Questions for User Sign-off
+## 9. Open Questions for User Sign-off (resolved 2026-05-23)
 
-1. **Default proposal batch size N**: 3 (matches Phase 2a's `MAX_PROPOSALS_PER_DAY=3`)? Or larger (e.g. 5) for richer exploration at higher BYOK token cost?
-2. **Per-operator hard timeout in sandbox**: 5 s default. OK? (Lower means slow new operators get filtered; higher means the validator run can stretch.)
-3. **CI seccomp profile**: should `pyseccomp` be a hard dependency, or `optional-dependencies` with the sandbox auto-detecting and refusing to start in unprivileged-without-pyseccomp envs?
-4. **Rollback semantics for new operators**: I propose "operators stay registered after rollback (already journaled, reproducibility)". Confirm?
+1. **Default proposal batch size N**: `5`. Hard cap 8 per call.
+2. **Per-operator sandbox timeout**: `30 s` per operator evaluation (wider than the 5 s draft; validator-total cap stays ~10 min).
+3. **`pyseccomp` dependency level**: hard dep on Linux (CI + prod); macOS dev falls back to RLIMIT + restricted globals + timeout (no seccomp on Darwin). CI gate enforces prod profile.
+4. **Rollback semantics for new operators**: operators stay registered after rollback; only `factor.custom_expression` reverts.
+5. **Tier model**: 3 layers (rejected / pending / approved), no Promote-to-inline tier. Approved operators always sandboxed forever, with persistent worker pool + shared-memory IPC keeping single-call cost ~5 ms.
 
 ## 10. Out of Scope (deferred)
 
