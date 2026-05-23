@@ -14,6 +14,7 @@ without paying for the LLM call. Forgiveness UX: do not waste user tokens
 on a deploy that cannot produce a valid result."""
 from __future__ import annotations
 
+import asyncio
 import json
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -73,6 +74,17 @@ async def post_propose(
 
     try:
         raw_proposals = await propose_factors(llm_client, diagnostic, n=n)
+    except asyncio.TimeoutError as exc:
+        # propose_factors uses asyncio.wait_for(timeout=_WALL_CLOCK_S=240s).
+        # Surface as a clean 504 so the client gets an actionable error message
+        # instead of an opaque 500 with empty body (CLAUDE.md silent-exception
+        # anti-pattern). Wall-clock exceeded usually means Kimi-for-Coding
+        # response stream slow or model overloaded; smaller n or a retry
+        # typically clears it.
+        raise HTTPException(
+            status_code=504,
+            detail=f"LLM proposer timed out after wall clock; retry or reduce n",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=502,

@@ -27,7 +27,13 @@ from alpha_agent.llm.base import LLMClient, Message
 _LF_NAME = re.compile(r"^lf_[a-z_][a-z0-9_]{1,30}$")
 _HARD_N_CAP = 8
 _OUTPUT_TOKEN_CAP = 8000
-_WALL_CLOCK_S = 60
+# 240s wall clock to cover Kimi-for-Coding generating up to _OUTPUT_TOKEN_CAP
+# tokens (observed 60-90s typical, 150s p99). Sits well under the Vercel
+# function maxDuration (300s) so the lambda can return a clean 504 instead
+# of being killed mid-response. Increased from 60s after 2026-05-24 incident:
+# 60s was below Kimi's typical 8000-token generation time, asyncio.TimeoutError
+# was bubbling up unhandled and the user saw an opaque 500 with empty body.
+_WALL_CLOCK_S = 240
 
 
 @dataclass(frozen=True)
