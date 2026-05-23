@@ -8,7 +8,49 @@ import {
   rollbackFactorProposal,
   type FactorProposal,
 } from "@/lib/api/factor-lab";
-import { StatusBadge } from "./PendingFactorProposalsTable";
+
+// ── Status badge ───────────────────────────────────────────────────────────
+
+const STATUS_STYLE: Record<
+  string,
+  { border: string; bg: string; text: string }
+> = {
+  pending: {
+    border: "border-tm-warn/40",
+    bg: "bg-tm-warn/10",
+    text: "text-tm-warn",
+  },
+  approved: {
+    border: "border-tm-pos/40",
+    bg: "bg-tm-pos/10",
+    text: "text-tm-pos",
+  },
+  rejected: {
+    border: "border-tm-rule",
+    bg: "bg-tm-bg-3/40",
+    text: "text-tm-fg-2",
+  },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const style = STATUS_STYLE[status] ?? {
+    border: "border-tm-rule",
+    bg: "bg-tm-bg-3/40",
+    text: "text-tm-fg-2",
+  };
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center rounded border px-1.5 py-0 font-tm-mono text-[9px] leading-[18px]",
+        style.border,
+        style.bg,
+        style.text,
+      )}
+    >
+      {status}
+    </span>
+  );
+}
 
 // ── Copy button ────────────────────────────────────────────────────────────
 
