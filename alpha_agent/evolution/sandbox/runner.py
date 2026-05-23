@@ -12,6 +12,7 @@ accumulates state or destabilizes the worker over time."""
 from __future__ import annotations
 
 import multiprocessing as mp
+import os
 import time
 from dataclasses import dataclass, field
 from multiprocessing import shared_memory
@@ -20,12 +21,21 @@ from typing import Any
 import numpy as np
 
 from alpha_agent.evolution.sandbox.errors import SandboxError, SandboxErrorKind
-from alpha_agent.evolution.sandbox.worker import worker_main
+from alpha_agent.evolution.sandbox.worker import eval_op_inprocess, worker_main
 
 POOL_SIZE_DEFAULT = 2
 RECYCLE_AFTER_CALLS = 1000
 RECYCLE_AFTER_SECONDS = 600
 _IPC_POLL_TIMEOUT_S = 35  # slightly above the worker's 30s alarm
+
+# Vercel Python serverless cannot spawn a multiprocessing pool with shared
+# memory; /dev/shm is not writable in the function sandbox and the spawn
+# context hangs on shared_memory.SharedMemory(create=True). When SERVERLESS
+# is set (api/index.py defaults it to "true"), bypass the subprocess pool
+# entirely and run operator eval in-process via eval_op_inprocess. AutoDL or
+# any non-Vercel deployment leaves SERVERLESS unset and gets the full
+# subprocess sandbox.
+_SERVERLESS = os.environ.get("SERVERLESS", "").lower() == "true"
 
 
 @dataclass
@@ -46,7 +56,11 @@ class SandboxRunner:
         self._workers: list[_WorkerHandle | None] = [None] * pool_size
         self._next_idx = 0
         self._total_calls = 0
-        self._ctx = mp.get_context("spawn")
+        self._serverless = _SERVERLESS
+        # In serverless mode the spawn context is never used; skipping the
+        # initialization avoids importing multiprocessing.popen_spawn_posix
+        # which itself touches platform features the Vercel sandbox blocks.
+        self._ctx = None if self._serverless else mp.get_context("spawn")
 
     def _spawn(self) -> _WorkerHandle:
         parent_conn, child_conn = self._ctx.Pipe()
@@ -87,10 +101,22 @@ class SandboxRunner:
                  args: dict[str, Any],
                  kwargs: dict | None = None,
                  expected_shape: tuple | None = None) -> np.ndarray | SandboxError:
+        self._total_calls += 1
+        if self._serverless:
+            # In-process exec branch: no subprocess pool, no shared memory.
+            # eval_op_inprocess returns either an ndarray or a SandboxError
+            # with the same kind discriminants the subprocess path returns,
+            # so downstream consumers see one contract regardless of mode.
+            return eval_op_inprocess(  # type: ignore[return-value]
+                op_code=op_code,
+                op_name=op_name,
+                args=args,
+                kwargs=kwargs,
+                expected_shape=expected_shape,
+            )
         idx = self._next_idx
         self._next_idx = (self._next_idx + 1) % self.pool_size
         h = self._get_worker(idx)
-        self._total_calls += 1
         h.calls += 1
         in_shms: list[shared_memory.SharedMemory] = []
         arg_specs: dict[str, Any] = {}
@@ -171,6 +197,9 @@ class SandboxRunner:
         }
 
     def close(self) -> None:
+        if self._serverless:
+            # No pool to tear down.
+            return
         for h in self._workers:
             if h is not None:
                 self._kill(h)

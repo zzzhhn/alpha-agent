@@ -214,6 +214,70 @@ def _process_one(msg: dict) -> dict:
                 pass
 
 
+def eval_op_inprocess(
+    op_code: str,
+    op_name: str,
+    args: dict[str, Any],
+    kwargs: dict | None = None,
+    expected_shape: tuple | None = None,
+) -> "np.ndarray | object":
+    """Execute op_code in restricted globals IN THE CALLING PROCESS.
+
+    Used by SandboxRunner when SERVERLESS=true (Vercel Python runtime cannot
+    spawn the multiprocessing worker pool because /dev/shm is unavailable in
+    the function sandbox). Sacrifices process-level isolation for runtime
+    compatibility; defense-in-depth via restricted __builtins__ + restricted
+    __import__ still applies, and the Vercel function itself is sandboxed at
+    a higher level.
+
+    Returns either an ndarray result or a SandboxError. Does NOT use shared
+    memory, does NOT install RLIMIT/seccomp (those would affect the main
+    FastAPI process), does NOT use SIGALRM (the Vercel function maxDuration
+    of 300s caps runaway code instead)."""
+    from alpha_agent.evolution.sandbox.errors import SandboxError, SandboxErrorKind
+
+    try:
+        ns: dict[str, Any] = {"np": np, "__builtins__": _restricted_builtins()}
+        exec(compile(op_code, "<sandbox-inprocess>", "exec"), ns)
+    except Exception as e:  # noqa: BLE001 - structured error
+        return SandboxError(
+            SandboxErrorKind.EXCEPTION,
+            f"compile/exec failed: {type(e).__name__}: {e}",
+            op_name,
+        )
+
+    fn = ns.get(op_name)
+    if not callable(fn):
+        return SandboxError(
+            SandboxErrorKind.SIGNATURE_MISMATCH,
+            f"no callable named {op_name!r} in op_code",
+            op_name,
+        )
+
+    try:
+        result = fn(**args, **(kwargs or {}))
+    except Exception as e:  # noqa: BLE001 - structured error
+        return SandboxError(
+            SandboxErrorKind.EXCEPTION,
+            f"{type(e).__name__}: {e}\n{traceback.format_exc()[:1500]}",
+            op_name,
+        )
+
+    if not isinstance(result, np.ndarray):
+        return SandboxError(
+            SandboxErrorKind.SHAPE_MISMATCH,
+            f"op returned {type(result).__name__}, expected ndarray",
+            op_name,
+        )
+    if expected_shape is not None and tuple(result.shape) != tuple(expected_shape):
+        return SandboxError(
+            SandboxErrorKind.SHAPE_MISMATCH,
+            f"expected {tuple(expected_shape)}, got {tuple(result.shape)}",
+            op_name,
+        )
+    return result.copy()
+
+
 def worker_main(conn: Connection) -> None:
     while True:
         try:
