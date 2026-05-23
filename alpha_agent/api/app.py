@@ -277,6 +277,10 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.evolution import router
         return router
 
+    def _import_factor_lab():
+        from alpha_agent.api.routes.factor_lab import router
+        return router
+
     def _import_admin():
         from alpha_agent.api.routes.admin import router
         return router
@@ -291,6 +295,7 @@ def create_app() -> FastAPI:
     _load("news_enrich", _import_news_enrich)
     _load("ic_backtest", _import_ic_backtest)
     _load("evolution", _import_evolution)
+    _load("factor_lab", _import_factor_lab)
     _load("admin", _import_admin)
 
     if not SERVERLESS:
