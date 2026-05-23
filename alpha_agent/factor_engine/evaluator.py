@@ -64,6 +64,13 @@ def _ts_apply(
 class ExprEvaluator:
     """Walk an AST and evaluate it against a MultiIndex stock DataFrame."""
 
+    def __init__(self, extra_ops: dict | None = None) -> None:
+        """Phase 3c: optional dispatch table for caller-provided operators
+        (LLM-proposed factors routed through the subprocess sandbox). Each
+        entry maps an op name -> callable(*series_args) -> pd.Series. Checked
+        AFTER built-ins so a malicious proposal cannot shadow them."""
+        self._extra_ops: dict = dict(extra_ops or {})
+
     def evaluate(self, node: ExprNode, data: pd.DataFrame) -> pd.DataFrame:
         """Return a DataFrame with column ``factor`` and the same index as *data*."""
         series = self._eval(node, data)
@@ -157,6 +164,12 @@ class ExprEvaluator:
             x = _to_series(self._eval(args[1], data), data.index)
             y = _to_series(self._eval(args[2], data), data.index)
             return pd.Series(np.where(cond, x, y), index=data.index)
+
+        # Phase 3c: caller-provided ops (sandboxed at runtime). Checked LAST
+        # so a same-named entry never shadows a built-in.
+        if fname in self._extra_ops:
+            evaluated = [_to_series(self._eval(a, data), data.index) for a in args]
+            return self._extra_ops[fname](*evaluated)
 
         raise EvaluationError(f"Unknown function: {fname}")
 
