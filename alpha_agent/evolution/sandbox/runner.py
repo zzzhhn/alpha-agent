@@ -35,7 +35,12 @@ _IPC_POLL_TIMEOUT_S = 35  # slightly above the worker's 30s alarm
 # entirely and run operator eval in-process via eval_op_inprocess. AutoDL or
 # any non-Vercel deployment leaves SERVERLESS unset and gets the full
 # subprocess sandbox.
-_SERVERLESS = os.environ.get("SERVERLESS", "").lower() == "true"
+#
+# IMPORTANT: read the env var at __init__ time, NOT at module import time.
+# Vercel's Python runtime caches module imports during build (.pyc); a
+# module-level read here captured `False` during build (before api/index.py
+# set the env var at request time) and froze it in sys.modules cache,
+# so every per-request SandboxRunner() inherited the wrong mode.
 
 
 @dataclass
@@ -56,7 +61,22 @@ class SandboxRunner:
         self._workers: list[_WorkerHandle | None] = [None] * pool_size
         self._next_idx = 0
         self._total_calls = 0
-        self._serverless = _SERVERLESS
+        # Fresh env read per-instance (NOT module-level), so request-time
+        # env values are honored even when this module was pre-imported
+        # during Vercel build with SERVERLESS unset. Accept several truthy
+        # spellings since the Vercel project env was set 42d ago by hand
+        # and the exact value is opaque (encrypted in dashboard).
+        _sl_env = os.environ.get("SERVERLESS", "").strip().lower()
+        self._serverless = _sl_env in ("true", "1", "yes", "on")
+        # Surface mode choice on stderr (Vercel-captured) so a wrong-branch
+        # incident like the 2026-05-25 one (module-level cache freezing
+        # _serverless=False) is immediately visible without code archaeology.
+        import sys as _sys
+        print(
+            f"[SandboxRunner] init pool_size={pool_size} "
+            f"serverless={self._serverless} SERVERLESS_env={_sl_env!r}",
+            file=_sys.stderr, flush=True,
+        )
         # In serverless mode the spawn context is never used; skipping the
         # initialization avoids importing multiprocessing.popen_spawn_posix
         # which itself touches platform features the Vercel sandbox blocks.
