@@ -108,8 +108,32 @@ def _validate_new_ops(raw: list) -> list[dict]:
     return ok
 
 
+def _strip_md_fence(text: str) -> str:
+    """LLMs commonly wrap JSON output in markdown fenced code blocks. Strip
+    the opening ```json (or bare ```) and closing ``` so json.loads succeeds.
+
+    Handles:
+      ```json\n{...}\n```
+      ```\n{...}\n```
+      {...}                  (passthrough)
+      ```json\n{...}         (open-only, in case content was truncated)
+    """
+    s = text.strip()
+    if s.startswith("```"):
+        # Drop the opening fence line, including optional language hint.
+        nl = s.find("\n")
+        if nl != -1:
+            s = s[nl + 1 :]
+        else:
+            # Single-line fence with no newline; just strip the leading marker.
+            s = s.lstrip("`").lstrip()
+    if s.endswith("```"):
+        s = s[: -3].rstrip()
+    return s
+
+
 def _parse_response(text: str, n: int) -> list[RawProposal]:
-    data = json.loads(text)
+    data = json.loads(_strip_md_fence(text))
     raws = data.get("proposals", [])
     out: list[RawProposal] = []
     if not isinstance(raws, list):
