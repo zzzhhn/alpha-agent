@@ -18,11 +18,30 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
+import sys
 from dataclasses import dataclass, field
 
 from alpha_agent.evolution.diagnostics import Diagnostic
 from alpha_agent.llm.base import LLMClient, Message
+
+# Vercel surfaces logger output to runtime logs only when written to stderr.
+# Use both a logger and direct stderr print for the failure path so the raw
+# upstream content is visible in `vercel logs` regardless of log config.
+_log = logging.getLogger(__name__)
+
+
+def _emit_diag(msg: str) -> None:
+    """Best-effort diagnostic emit (logger + stderr) for Vercel visibility."""
+    try:
+        _log.error(msg)
+    except Exception:  # noqa: BLE001 - logger should never block recovery path
+        pass
+    try:
+        print(msg, file=sys.stderr, flush=True)
+    except Exception:  # noqa: BLE001
+        pass
 
 _LF_NAME = re.compile(r"^lf_[a-z_][a-z0-9_]{1,30}$")
 _HARD_N_CAP = 8
@@ -119,14 +138,39 @@ async def propose_factors(
     prompt = _build_prompt(diagnostic, n)
     msgs = [Message(role="user", content=prompt)]
     last_err: Exception | None = None
+    last_preview: str = ""
     for attempt in range(2):
+        resp = None
         try:
             resp = await asyncio.wait_for(
                 llm_client.chat(messages=msgs, max_tokens=_OUTPUT_TOKEN_CAP),
                 timeout=_WALL_CLOCK_S,
             )
-            return _parse_response(resp.content, n)
+            # Capture upstream signature even on success-path failure: empty
+            # content is a known silent-failure mode from Kimi-for-Coding
+            # (UA gate, quota exhaustion) — surface it before json.loads
+            # erases the evidence.
+            raw = (resp.content or "")
+            last_preview = raw[:500]
+            if not raw.strip():
+                _emit_diag(
+                    f"[propose_factors] attempt={attempt} EMPTY LLM content; "
+                    f"resp_type={type(resp).__name__} raw_len={len(raw)} "
+                    f"resp_repr={repr(resp)[:300]}"
+                )
+                last_err = ValueError("LLM returned empty content")
+                continue
+            return _parse_response(raw, n)
         except (json.JSONDecodeError, ValueError) as e:
             last_err = e
+            _emit_diag(
+                f"[propose_factors] attempt={attempt} parse_failed err={type(e).__name__}: {e}; "
+                f"raw_preview={last_preview!r}"
+            )
             continue
-    raise ValueError(f"could not parse LLM response after retry: {last_err}")
+    # Final detail carries the upstream evidence so the 502 detail field tells
+    # the user what actually happened, not just the parser symptom.
+    raise ValueError(
+        f"could not parse LLM response after retry: {last_err}; "
+        f"raw_preview={last_preview[:200]!r}"
+    )
