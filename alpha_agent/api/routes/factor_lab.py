@@ -213,7 +213,7 @@ async def _runner_wrapper(pool, user_id: int, n: int, diagnostic, job_id: str) -
         logger.exception("propose background task crashed (job=%s)", job_id)
 
 
-@router.post("/propose", status_code=202)
+@router.post("/propose")
 async def post_propose(
     background_tasks: BackgroundTasks,
     body: dict = Body(default_factory=dict),
