@@ -11,7 +11,7 @@ from datetime import date, timedelta
 import numpy as np
 import pytest
 
-from tests.storage.conftest import postgresql_proc, postgresql, test_db_url, applied_db  # noqa: F401
+# Fixtures come from tests/evolution/conftest.py (re-exports tests/storage/conftest.py)
 from alpha_agent.storage.postgres import close_pool, get_pool
 
 

@@ -1,4 +1,3 @@
-import json
 from datetime import date, timedelta
 
 import numpy as np
@@ -12,8 +11,8 @@ from alpha_agent.evolution.validation import (
     purged_fold_indices,
 )
 
-# Re-export fixtures from the shared storage conftest so pytest picks them up.
-from tests.storage.conftest import postgresql_proc, postgresql, test_db_url, applied_db  # noqa: F401
+# Fixtures (postgresql_proc, postgresql, test_db_url, applied_db) come from
+# tests/evolution/conftest.py which re-exports them from tests/storage/conftest.py.
 
 
 def test_purged_folds_embargo_excludes_overlap():

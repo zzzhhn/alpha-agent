@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 
 from alpha_agent.evolution.sandbox.canned_tests import CannedTestResult, run_canned_tests

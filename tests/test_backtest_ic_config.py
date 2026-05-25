@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 import pandas as pd
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from alpha_agent import config_store
 from alpha_agent.agents.backtest import BacktestAgent

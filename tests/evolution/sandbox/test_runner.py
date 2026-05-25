@@ -4,7 +4,6 @@ import pytest
 from alpha_agent.evolution.sandbox.errors import SandboxError, SandboxErrorKind
 from alpha_agent.evolution.sandbox.runner import (
     POOL_SIZE_DEFAULT,
-    RECYCLE_AFTER_CALLS,
     SandboxRunner,
 )
 

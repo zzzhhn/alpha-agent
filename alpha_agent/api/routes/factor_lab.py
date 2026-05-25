@@ -104,7 +104,7 @@ async def post_propose(
         # typically clears it.
         raise HTTPException(
             status_code=504,
-            detail=f"LLM proposer timed out after wall clock; retry or reduce n",
+            detail="LLM proposer timed out after wall clock; retry or reduce n",
         ) from exc
     except ValueError as exc:
         raise HTTPException(
@@ -115,23 +115,41 @@ async def post_propose(
         return {"evaluated": 0, "proposed": 0, "dormant": False}
 
     runner = SandboxRunner()
+    # Collect every rejection reason from evaluate_factor_candidate so the
+    # response body can surface why each candidate failed. Without this, all
+    # three early-return branches below emit only `{evaluated, proposed,
+    # dormant}` (44 bytes) and the user sees "0/5 proposed" with no signal.
+    rejects: list = []
     try:
         # 1. Evaluate each candidate (canned tests + purged WF)
         results = []
         for proposal in raw_proposals:
-            r = await evaluate_factor_candidate(pool, runner, proposal)
+            r = await evaluate_factor_candidate(
+                pool, runner, proposal, out_rejects=rejects
+            )
             if r is not None:
                 results.append(r)
         if not results:
-            return {"evaluated": len(raw_proposals), "proposed": 0, "dormant": False}
+            return {
+                "evaluated": len(raw_proposals),
+                "proposed": 0,
+                "dormant": False,
+                "_diag": {"rejects": rejects},
+            }
 
         # 2. Baseline: re-evaluate current expression for comparison.
         baseline = await evaluate_factor_candidate(
             pool, runner,
             RawProposal(expression=diagnostic.current_expression, new_operators=[]),
+            out_rejects=rejects,
         )
         if baseline is None:
-            return {"evaluated": len(raw_proposals), "proposed": 0, "dormant": True}
+            return {
+                "evaluated": len(raw_proposals),
+                "proposed": 0,
+                "dormant": True,
+                "_diag": {"rejects": rejects, "baseline_rejected": True},
+            }
 
         # 3. DSR-lite deflation: keep only survivors that beat baseline AND
         #    have post-deflation positive Sharpe.
@@ -189,6 +207,7 @@ async def post_propose(
                 "base_threshold": base_mean * _BASE_RATIO,
                 "defl_threshold": _DSR_THRESHOLD,
                 "candidates": diag_candidates,
+                "rejects": rejects,
             },
         }
     finally:

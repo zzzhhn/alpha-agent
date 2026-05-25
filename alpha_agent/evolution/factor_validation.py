@@ -31,11 +31,18 @@ from alpha_agent.evolution.validation import (
 )
 
 
-def _emit_reject(expr: str, reason: str, **detail) -> None:
-    """Surface candidate-rejection reason to Vercel logs so 0/N propose
-    outcomes are diagnosable. Each return None in evaluate_factor_candidate
-    is paired with one of these emits so the calling handler can be black-box
-    while the validator's rejection chain stays observable."""
+def _emit_reject(
+    expr: str,
+    reason: str,
+    *,
+    out_rejects: list | None = None,
+    **detail,
+) -> None:
+    """Surface candidate-rejection reason both to stderr (Vercel CLI logs)
+    AND to an optional in-memory collector so the API handler can return the
+    reason in the response body. stderr-only emit was insufficient because
+    Vercel CLI captured only the first stderr line per lambda invocation,
+    leaving 0/N propose outcomes opaque from the frontend."""
     detail_str = " ".join(f"{k}={v!r}" for k, v in detail.items())
     try:
         print(
@@ -46,6 +53,15 @@ def _emit_reject(expr: str, reason: str, **detail) -> None:
         )
     except Exception:  # noqa: BLE001 - logger must never block recovery path
         pass
+    if out_rejects is not None:
+        try:
+            out_rejects.append({
+                "expression": expr[:120],
+                "reason": reason,
+                "detail": {k: repr(v)[:200] for k, v in detail.items()},
+            })
+        except Exception:  # noqa: BLE001 - collector must not block recovery
+            pass
 
 _EMBARGO = 5       # must be >= forward horizon (_FWD_RET_DAYS in ic_engine)
 _N_FOLDS = 3       # matches MIN_FOLDS
@@ -112,6 +128,7 @@ async def evaluate_factor_candidate(
     pool,
     runner: SandboxRunner,
     proposal: RawProposal,
+    out_rejects: list | None = None,
 ) -> FactorCandidateResult | None:
     """Run canned tests on every new operator (reject candidate on any fail),
     then purged WF OOS folds with sandbox-dispatched new ops.
@@ -146,6 +163,7 @@ async def evaluate_factor_candidate(
             _emit_reject(
                 proposal.expression,
                 "canned_test_failed",
+                out_rejects=out_rejects,
                 op_name=op["name"],
                 tests=result.tests,
             )
@@ -160,7 +178,7 @@ async def evaluate_factor_candidate(
         "SELECT ticker, date, close FROM daily_prices ORDER BY date, ticker"
     )
     if not rows:
-        _emit_reject(proposal.expression, "daily_prices_empty")
+        _emit_reject(proposal.expression, "daily_prices_empty", out_rejects=out_rejects)
         return None
 
     tickers_set: list[str] = sorted({r["ticker"] for r in rows})
@@ -184,7 +202,13 @@ async def evaluate_factor_candidate(
     N = close_arr.shape[1]
 
     if N < 10:
-        _emit_reject(proposal.expression, "too_few_tickers", n=N, min=10)
+        _emit_reject(
+            proposal.expression,
+            "too_few_tickers",
+            out_rejects=out_rejects,
+            n=N,
+            min=10,
+        )
         return None
 
     # ------------------------------------------------------------------ #
@@ -196,6 +220,7 @@ async def evaluate_factor_candidate(
         _emit_reject(
             proposal.expression,
             "history_too_short",
+            out_rejects=out_rejects,
             T=T,
             need_min=n_folds * _MIN_ROWS_PER_FOLD,
         )
@@ -213,6 +238,7 @@ async def evaluate_factor_candidate(
         _emit_reject(
             proposal.expression,
             "usable_folds_short",
+            out_rejects=out_rejects,
             usable=len(usable_folds),
             need=MIN_FOLDS,
             total=len(folds),
@@ -292,6 +318,7 @@ async def evaluate_factor_candidate(
             _emit_reject(
                 proposal.expression,
                 "fold_kernel_exception",
+                out_rejects=out_rejects,
                 exc_type=type(fold_exc).__name__,
                 exc_msg=str(fold_exc)[:200],
             )
@@ -315,6 +342,7 @@ async def evaluate_factor_candidate(
         _emit_reject(
             proposal.expression,
             "fold_sharpes_short",
+            out_rejects=out_rejects,
             got=len(fold_sharpes),
             need=MIN_FOLDS,
         )

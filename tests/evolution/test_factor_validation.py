@@ -14,8 +14,8 @@ from alpha_agent.evolution.llm_factor_proposer import RawProposal
 from alpha_agent.evolution.sandbox.runner import SandboxRunner
 from alpha_agent.storage.postgres import close_pool, get_pool
 
-# Re-export fixtures from the shared storage conftest so pytest picks them up.
-from tests.storage.conftest import postgresql_proc, postgresql, test_db_url, applied_db  # noqa: F401
+# Fixtures (postgresql_proc, postgresql, test_db_url, applied_db) come from
+# tests/evolution/conftest.py which re-exports them from tests/storage/conftest.py.
 
 
 @pytest.fixture

@@ -1,5 +1,4 @@
 # tests/fusion/test_rating_configurable.py
-import pytest
 
 from alpha_agent import config_store
 from alpha_agent.fusion.rating import map_to_tier
