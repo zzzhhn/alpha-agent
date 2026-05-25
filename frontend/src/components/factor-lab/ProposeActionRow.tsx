@@ -96,7 +96,11 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
             <p className="pl-5 font-tm-mono text-[11px] text-tm-fg-2">
               {t(locale, outcomeKey(state.result)).replace(
                 "{n}",
-                String(state.result.evaluated || state.result.proposed),
+                String(
+                  state.result.proposed > 0
+                    ? state.result.proposed
+                    : state.result.evaluated,
+                ),
               )}
             </p>
           ) : null}

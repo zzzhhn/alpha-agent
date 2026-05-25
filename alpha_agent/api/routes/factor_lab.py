@@ -41,9 +41,10 @@ _MIN_HISTORY_ROWS = 1000
 # defl > 0 were hard gates; that filtered 100% of Kimi's proposals every
 # run. User decision: keep a filter but loosen so marginal candidates
 # reach human review. Human is the final gate; surfacing more candidates
-# surfaces more learning even if approval rate drops.
-_BASE_RATIO = 0.3           # very permissive: 30% of baseline Sharpe (was 0.9)
-_DSR_THRESHOLD = -3.0       # very permissive: deflated Sharpe down to -3.0 (was -0.5)
+# surfaces more learning even if approval rate drops. Dialed back from
+# the emergency-debug 0.3/-3.0 once end-to-end pipeline confirmed working.
+_BASE_RATIO = 0.6           # accept r_mean within 60% of baseline Sharpe
+_DSR_THRESHOLD = -1.0       # deflated Sharpe down to -1.0 keeps marginal candidates visible
 
 
 @router.get("/diagnostic")
