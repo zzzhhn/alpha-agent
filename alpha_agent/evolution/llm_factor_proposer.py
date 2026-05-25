@@ -67,6 +67,7 @@ def _build_prompt(d: Diagnostic, n: int) -> str:
         "You are an alpha-research factor inventor. Given the diagnostic below,"
         f" propose {n} candidate factor expressions, each optionally introducing"
         " 0 to 2 new operators (sandboxed at runtime; must be pure NumPy).\n\n"
+        f"CURRENT LIVE EXPRESSION (the factor you must beat): {d.current_expression}\n\n"
         "DIAGNOSTIC:\n"
         f"  current_expression: {d.current_expression}\n"
         f"  weak_signal: {d.weak_signal} (IC={d.weak_signal_ic})\n"
@@ -80,7 +81,10 @@ def _build_prompt(d: Diagnostic, n: int) -> str:
         "- New operator python_impl must be a function definition whose name "
         "matches the declared name, with numpy as its only import.\n"
         "- No I/O, no network, no subprocess.\n"
-        "- Return JSON only, no prose."
+        "- Return JSON only, no prose.\n"
+        "OUTPUT FORMAT (STRICT): respond with raw JSON only. No markdown code "
+        "fences (```json or ```). No prose before or after. The first character "
+        "of your response MUST be `{` and the last MUST be `}`."
     )
 
 
