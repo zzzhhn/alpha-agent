@@ -1,18 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Loader2, Play } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t, type TranslationKey } from "@/lib/i18n";
-import { proposeFactors, type ProposeResult } from "@/lib/api/factor-lab";
+import {
+  proposeFactors,
+  pollProposeJob,
+  ProposeJobTimeout,
+  type ProposeResult,
+} from "@/lib/api/factor-lab";
 import { parseFactorError } from "@/lib/factor-errors";
 
+// Phase D state machine:
+//   idle ──click──► running (jobId set, polling) ──► ok | error
+//   ok/error ──click──► running (next run)
+//
+// 'running' covers both 'queued' (POST returned 202) and 'polling' the
+// backend job row. We collapse those to a single visual state per the
+// minimal-state model decision: a spinner + elapsed seconds is enough
+// signal for the user; per-phase progress would add UI complexity for
+// little operational value.
 type ProposeState =
   | { kind: "idle" }
-  | { kind: "running" }
+  | { kind: "running"; jobId: string; startedAt: number }
   | { kind: "ok"; result: ProposeResult; ts: number }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; timedOut: boolean };
 
 interface ProposeActionRowProps {
   readonly n?: number;
@@ -35,22 +49,87 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
   const router = useRouter();
   const [state, setState] = useState<ProposeState>({ kind: "idle" });
   const [resultExpanded, setResultExpanded] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  // Single source of cancellation for the in-flight poll loop. Survives
+  // re-renders via ref so handleClick's closure can abort the previous
+  // run if the user double-clicks.
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Tick elapsed seconds while running. Cleanup on state change or unmount.
+  useEffect(() => {
+    if (state.kind !== "running") {
+      setElapsedSec(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - state.startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [state]);
+
+  // Cancel polling on unmount.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   async function handleClick() {
-    setState({ kind: "running" });
+    // Cancel any in-flight poll from a prior click.
+    abortRef.current?.abort();
+    const ctl = new AbortController();
+    abortRef.current = ctl;
+
+    const startedAt = Date.now();
     try {
-      const result = await proposeFactors(n);
-      setState({ kind: "ok", result, ts: Date.now() });
-      router.refresh();
+      const accepted = await proposeFactors(n);
+
+      // Cost-guard short-circuit: backend already wrote a 'done' job and
+      // returned the result inline. Skip the poll loop.
+      if (accepted.status === "done" && accepted.inline_result) {
+        setState({ kind: "ok", result: accepted.inline_result, ts: Date.now() });
+        router.refresh();
+        return;
+      }
+
+      setState({ kind: "running", jobId: accepted.job_id, startedAt });
+
+      const final = await pollProposeJob(accepted.job_id, {
+        intervalMs: 3000,
+        maxAttempts: 100,
+        signal: ctl.signal,
+      });
+
+      if (ctl.signal.aborted) return;
+
+      if (final.status === "done" && final.result) {
+        setState({ kind: "ok", result: final.result, ts: Date.now() });
+        router.refresh();
+      } else {
+        setState({
+          kind: "error",
+          message: final.error ?? "job finished without result",
+          timedOut: false,
+        });
+      }
     } catch (e) {
+      if (ctl.signal.aborted) return;
+      if (e instanceof ProposeJobTimeout) {
+        setState({
+          kind: "error",
+          message: t(locale, "factorLab.propose.timedOut"),
+          timedOut: true,
+        });
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
-      setState({ kind: "error", message: msg });
+      setState({ kind: "error", message: msg, timedOut: false });
     }
   }
 
   const buttonLabel =
     state.kind === "running"
-      ? t(locale, "factorLab.propose.running")
+      ? `${t(locale, "factorLab.propose.running")} · ${elapsedSec}s`
       : t(locale, "factorLab.propose.button").replace("{n}", String(n));
 
   return (

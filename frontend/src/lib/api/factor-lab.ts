@@ -55,6 +55,30 @@ export interface ProposeResult {
   dormant: boolean;
 }
 
+// Phase D async refactor: POST returns 202 with a job_id; client polls
+// GET /jobs/{id} until status reaches a terminal value (done | failed).
+export type ProposeJobStatus = "queued" | "running" | "done" | "failed";
+
+export interface ProposeJobAcceptedResponse {
+  job_id: string;
+  status: "queued" | "done";
+  // Cost-guard short-circuit returns 'done' inline so the client skips
+  // the poll loop entirely when the result is already known.
+  inline_result?: ProposeResult;
+}
+
+export interface ProposeJobRow {
+  id: string;
+  user_id: number;
+  status: ProposeJobStatus;
+  n: number;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  result: ProposeResult | null;
+  error: string | null;
+}
+
 export interface ApproveResult {
   ok: boolean;
   applied: Record<string, string>;
@@ -81,8 +105,68 @@ export const fetchFactorProposals = (
     opts,
   );
 
+// Phase D: POST now returns 202 with a job_id (or 'done' + inline_result
+// for the cost-guard short-circuit). Callers should chain into
+// pollProposeJob() to drive UI to terminal state.
 export const proposeFactors = (n = 5) =>
-  apiPost<ProposeResult, { n: number }>("/api/factor-lab/propose", { n });
+  apiPost<ProposeJobAcceptedResponse, { n: number }>(
+    "/api/factor-lab/propose",
+    { n },
+  );
+
+export const getProposeJob = (jobId: string) =>
+  apiGet<ProposeJobRow>(`/api/factor-lab/jobs/${jobId}`);
+
+export interface PollProposeJobOptions {
+  intervalMs?: number;       // 3000 default — every 3 seconds
+  maxAttempts?: number;      // 100 default — 5min wall-clock budget
+  onUpdate?: (row: ProposeJobRow) => void;
+  signal?: AbortSignal;
+}
+
+export class ProposeJobTimeout extends Error {
+  constructor(public lastRow: ProposeJobRow | null) {
+    super("propose job did not reach terminal state within budget");
+  }
+}
+
+/**
+ * Poll a propose job until terminal state. Returns the final row; throws
+ * ProposeJobTimeout if the budget is exhausted (UI offers retry).
+ * Cancellable via AbortSignal so component unmount stops polling.
+ */
+export async function pollProposeJob(
+  jobId: string,
+  opts: PollProposeJobOptions = {},
+): Promise<ProposeJobRow> {
+  const intervalMs = opts.intervalMs ?? 3000;
+  const maxAttempts = opts.maxAttempts ?? 100;
+  let lastRow: ProposeJobRow | null = null;
+  for (let i = 0; i < maxAttempts; i++) {
+    if (opts.signal?.aborted) {
+      throw new DOMException("polling aborted", "AbortError");
+    }
+    const row = await getProposeJob(jobId);
+    lastRow = row;
+    opts.onUpdate?.(row);
+    if (row.status === "done" || row.status === "failed") {
+      return row;
+    }
+    // Backoff sleeper that's interruptable by abort signal.
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(resolve, intervalMs);
+      opts.signal?.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(t);
+          reject(new DOMException("polling aborted", "AbortError"));
+        },
+        { once: true },
+      );
+    });
+  }
+  throw new ProposeJobTimeout(lastRow);
+}
 
 export const approveFactorProposal = (id: number) =>
   apiPost<ApproveResult, Record<string, never>>(

@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
 
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
@@ -29,6 +31,9 @@ from alpha_agent.evolution.factor_validation import evaluate_factor_candidate
 from alpha_agent.evolution.llm_factor_proposer import RawProposal, propose_factors
 from alpha_agent.evolution.sandbox import SandboxRunner
 from alpha_agent.evolution.validation import deflated_sharpe_lite
+from alpha_agent.storage import propose_jobs
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/factor-lab", tags=["factor_lab"])
 
@@ -59,59 +64,25 @@ async def get_diagnostic(pool=Depends(get_db_pool)) -> dict:
     return d.to_jsonable()
 
 
-@router.post("/propose")
-async def post_propose(
-    request: Request,
-    body: dict = Body(default_factory=dict),
-    user_id: int = Depends(require_user),
-    pool=Depends(get_db_pool),
+async def _run_propose_work(
+    pool, user_id: int, n: int, diagnostic
 ) -> dict:
-    """Run the propose loop. Returns {evaluated, proposed, dormant}.
-    Dormant=True means cost-guard or validator-dormant; LLM is NOT called
-    when cost-guard fires.
+    """The actual propose loop: LLM call + per-candidate validation + DSR
+    scoring + pending-row writes. Returns the result dict the old sync
+    endpoint used to return inline.
 
-    get_llm_client is resolved lazily AFTER the cost-guard check so that
-    thin-history deploys never waste a BYOK round-trip."""
+    Pre-conditions checked by the caller:
+      - refresh_config(pool) already ran
+      - cost-guard passed (history rows >= _MIN_HISTORY_ROWS)
+      - diagnostic is the snapshot captured BEFORE LLM call so the LLM
+        rationale references the same baseline that drives the threshold
+
+    Raises asyncio.TimeoutError / ValueError on LLM-layer failure; caller
+    is responsible for mapping those onto the job row's failed state."""
     import numpy as np
 
-    n = int(body.get("n", 5)) if isinstance(body, dict) else 5
-
-    # Same cache-refresh rationale as get_diagnostic: propose builds its
-    # baseline from compute_diagnostic().current_expression, which routes
-    # through the process-cache. Without this refresh, a manual edit from
-    # another lambda instance is invisible here and the LLM is asked to
-    # beat the stale preset instead of the user's intended baseline.
-    await refresh_config(pool)
-
-    # Cost-guard: skip LLM if history is too thin to validate anything.
-    # This fires BEFORE the BYOK dependency so no LLM call is wasted.
-    history_n = await pool.fetchval("SELECT count(*) FROM daily_prices") or 0
-    if history_n < _MIN_HISTORY_ROWS:
-        return {"evaluated": 0, "proposed": 0, "dormant": True}
-
-    # Lazy BYOK: only resolve after cost-guard passes.
     llm_client = await get_llm_client(user_id=user_id)
-
-    diagnostic = await compute_diagnostic(pool)
-
-    try:
-        raw_proposals = await propose_factors(llm_client, diagnostic, n=n)
-    except asyncio.TimeoutError as exc:
-        # propose_factors uses asyncio.wait_for(timeout=_WALL_CLOCK_S=240s).
-        # Surface as a clean 504 so the client gets an actionable error message
-        # instead of an opaque 500 with empty body (CLAUDE.md silent-exception
-        # anti-pattern). Wall-clock exceeded usually means Kimi-for-Coding
-        # response stream slow or model overloaded; smaller n or a retry
-        # typically clears it.
-        raise HTTPException(
-            status_code=504,
-            detail="LLM proposer timed out after wall clock; retry or reduce n",
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"LLM proposer: {exc}",
-        ) from exc
+    raw_proposals = await propose_factors(llm_client, diagnostic, n=n)
     if not raw_proposals:
         return {"evaluated": 0, "proposed": 0, "dormant": False}
 
@@ -213,6 +184,126 @@ async def post_propose(
         }
     finally:
         runner.close()
+
+
+async def _runner_wrapper(pool, user_id: int, n: int, diagnostic, job_id: str) -> None:
+    """Background-task entry point. Catches every failure mode that
+    _run_propose_work can raise and persists it onto the job row so the
+    polling client sees a clean status='failed' + actionable error
+    instead of an opaque hang. Never re-raises — a background task's
+    exception escaping into the FastAPI event loop is invisible to the
+    client and corrupts the lambda's runtime."""
+    await propose_jobs.mark_running(pool, job_id)
+    try:
+        result = await _run_propose_work(pool, user_id, n, diagnostic)
+        await propose_jobs.mark_done(pool, job_id, result)
+    except asyncio.TimeoutError:
+        await propose_jobs.mark_failed(
+            pool, job_id,
+            "LLM proposer timed out after wall clock; retry or reduce n",
+        )
+    except ValueError as exc:
+        await propose_jobs.mark_failed(pool, job_id, f"LLM proposer: {exc}")
+    except Exception as exc:  # noqa: BLE001 — terminal failure must be observable
+        # Preserve type name so silent fallback paths surface in the UI
+        # (see feedback_silent_trycatch_antipattern.md).
+        await propose_jobs.mark_failed(
+            pool, job_id, f"{type(exc).__name__}: {exc}"
+        )
+        logger.exception("propose background task crashed (job=%s)", job_id)
+
+
+@router.post("/propose", status_code=202)
+async def post_propose(
+    background_tasks: BackgroundTasks,
+    body: dict = Body(default_factory=dict),
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Queue a propose job and return 202 immediately with a job_id.
+
+    The actual LLM call + per-candidate validation + DSR scoring run as
+    a FastAPI BackgroundTask after the response is sent. The frontend
+    polls GET /jobs/{id} every 3s for the terminal state.
+
+    This async refactor (Phase D, 2026-05-26) replaces the synchronous
+    POST that previously held the connection open for 30-180s. Under
+    China egress + local TUN proxy the long fetch was being dropped
+    mid-response (Safari surfaced as 'Load failed' even though Vercel
+    logged 200), forcing the user to disable VPN to get propose to
+    return. Polling short-lived GETs sidesteps the idle-connection
+    drop entirely.
+
+    Dormant short-circuit (history below cost-guard) still returns 200
+    + a synthetic 'done' job inline so the client doesn't waste a poll
+    cycle on a result that's already known."""
+    n = int(body.get("n", 5)) if isinstance(body, dict) else 5
+    n = max(1, min(n, 20))  # input sanitization at the boundary
+
+    # Same cache-refresh rationale as get_diagnostic: propose builds its
+    # baseline from compute_diagnostic().current_expression which routes
+    # through the process-cache. Without this refresh a manual edit from
+    # another lambda instance is invisible here and the LLM gets the
+    # stale preset as its "beat this" target.
+    await refresh_config(pool)
+
+    # Cost-guard: skip LLM if history is too thin to validate anything.
+    # Synthesize a synthetic 'done' job so the frontend's polling state
+    # machine completes in one round-trip rather than spinning for 5min.
+    history_n = await pool.fetchval("SELECT count(*) FROM daily_prices") or 0
+    if history_n < _MIN_HISTORY_ROWS:
+        dormant_result = {"evaluated": 0, "proposed": 0, "dormant": True}
+        job_id = await propose_jobs.create_job(pool, user_id, n)
+        await propose_jobs.mark_done(pool, job_id, dormant_result)
+        return {"job_id": job_id, "status": "done", "inline_result": dormant_result}
+
+    # Capture diagnostic NOW (before the LLM call) so the rationale the
+    # LLM sees matches the baseline the threshold is computed against.
+    diagnostic = await compute_diagnostic(pool)
+
+    job_id = await propose_jobs.create_job(pool, user_id, n)
+    background_tasks.add_task(_runner_wrapper, pool, user_id, n, diagnostic, job_id)
+    return {"job_id": job_id, "status": "queued"}
+
+
+@router.get("/jobs/{job_id}")
+async def get_propose_job(
+    job_id: str,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Poll endpoint for the propose job state. Returns the row keyed
+    by job_id. 404 if not found; 403 if owned by a different user.
+
+    Polled by the frontend every 3s for up to 5min. Each call is short
+    (<100ms typical) so even an unstable connection has 100 chances to
+    succeed before the client gives up."""
+    job = await propose_jobs.get_job(pool, job_id)
+    if job is None:
+        raise HTTPException(404, "job not found")
+    if job["user_id"] != user_id:
+        raise HTTPException(403, "not your job")
+    return job
+
+
+@router.post("/_apply_migrations")
+async def post_apply_migrations(
+    user_id: int = Depends(require_user),
+) -> dict:
+    """One-time admin trigger to apply pending DB migrations (V017+).
+
+    Vercel deploys don't auto-run migrations and the user can't direct-
+    connect to Neon from China egress, so the migration step has to
+    happen via the backend itself. apply_migrations() is idempotent
+    (schema_migrations table tracks applied versions) — safe to call
+    repeatedly. Returns the list of versions applied in this call."""
+    from alpha_agent.storage.migrations.runner import apply_migrations
+
+    dsn = os.environ.get("DATABASE_URL")
+    if not dsn:
+        raise HTTPException(500, "DATABASE_URL not set")
+    applied = await apply_migrations(dsn)
+    return {"applied": applied}
 
 
 @router.post("/live-expression")
