@@ -101,3 +101,14 @@ export const rollbackFactorProposal = (id: number) =>
     `/api/factor-lab/proposals/${id}/rollback`,
     {},
   );
+
+export interface SetLiveExpressionResult {
+  expression: string;
+  updated_at: string;
+}
+
+export const setLiveExpression = (expression: string) =>
+  apiPost<SetLiveExpressionResult, { expression: string }>(
+    "/api/factor-lab/live-expression",
+    { expression },
+  );
