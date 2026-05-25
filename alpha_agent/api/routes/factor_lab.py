@@ -240,6 +240,136 @@ async def post_live_expression(
     }
 
 
+@router.post("/_demo_seed")
+async def post_demo_seed(
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Insert 3 demo pending proposals so PendingProposalsSection has visible
+    rows for UX verification. Refuses to seed if any pending rows already
+    exist — re-trigger only after the existing ones are approved/rejected.
+
+    This is a temporary admin tool. Safe to call repeatedly: idempotent
+    against existing pending state.
+    """
+    existing = await pool.fetchval(
+        "SELECT count(*) FROM factor_proposals WHERE status='pending'"
+    )
+    if existing and existing > 0:
+        raise HTTPException(
+            400,
+            f"refusing to seed: {existing} pending row(s) already exist; "
+            "approve or reject them first",
+        )
+
+    # Read current diagnostic so each seeded row carries a realistic snapshot
+    await refresh_config(pool)
+    diag = await compute_diagnostic(pool)
+    diag_jsonb = diag.to_jsonable()
+
+    demos = [
+        {
+            "expression": "rank(ts_decay_linear(returns, 10))",
+            "new_operators": [],
+            "evidence": {
+                "sharpes": [1.42, 1.31, 1.18],
+                "ic_oos": 0.038,
+                "deflated_sharpe": 0.62,
+                "baseline_sharpe": 1.05,
+                "n_folds": 3,
+                "n_trials": 5,
+                "llm_rationale": (
+                    "Time-decay weighted recent returns capture short-horizon "
+                    "momentum better than equal-weighted ts_mean. Linear decay "
+                    "preserves recent signal without overfitting the tail."
+                ),
+                "operator_test_results": [],
+            },
+        },
+        {
+            "expression": "rank(divide(ts_mean(returns, 20), ts_std(volume, 20)))",
+            "new_operators": [],
+            "evidence": {
+                "sharpes": [1.28, 1.55, 1.04],
+                "ic_oos": 0.041,
+                "deflated_sharpe": 0.18,
+                "baseline_sharpe": 1.05,
+                "n_folds": 3,
+                "n_trials": 5,
+                "llm_rationale": (
+                    "Volatility-of-volume as a regime filter: high volume "
+                    "dispersion suggests information arrival; dividing return "
+                    "by volume std emphasizes returns earned under noisy tape."
+                ),
+                "operator_test_results": [],
+            },
+        },
+        {
+            "expression": "subtract(rank(ts_mean(returns, 12)), rank(lf_ts_skew(returns, 30)))",
+            "new_operators": [
+                {
+                    "name": "lf_ts_skew",
+                    "signature": "(x: np.ndarray, window: int) -> np.ndarray",
+                    "python_impl": (
+                        "def lf_ts_skew(x, window):\n"
+                        "    import numpy as np\n"
+                        "    out = np.full_like(x, np.nan, dtype=float)\n"
+                        "    for i in range(window - 1, len(x)):\n"
+                        "        sub = x[i - window + 1 : i + 1]\n"
+                        "        m = np.nanmean(sub)\n"
+                        "        s = np.nanstd(sub, ddof=1)\n"
+                        "        if s > 1e-12:\n"
+                        "            out[i] = np.nanmean(((sub - m) / s) ** 3)\n"
+                        "    return out\n"
+                    ),
+                    "doc": "Rolling skewness of returns over `window` days.",
+                }
+            ],
+            "evidence": {
+                "sharpes": [0.98, 1.12, 1.21],
+                "ic_oos": 0.029,
+                "deflated_sharpe": -0.05,
+                "baseline_sharpe": 1.05,
+                "n_folds": 3,
+                "n_trials": 5,
+                "llm_rationale": (
+                    "Negative skew penalty: stocks with rolling-skew-rich "
+                    "return distributions tend to mean-revert. Pair with "
+                    "ts_mean momentum to capture asymmetric reversal."
+                ),
+                "operator_test_results": [
+                    {
+                        "name": "lf_ts_skew",
+                        "passed": True,
+                        "n_tests": 4,
+                        "n_passed": 4,
+                    }
+                ],
+            },
+        },
+    ]
+
+    inserted_ids = []
+    for d in demos:
+        row = await pool.fetchrow(
+            "INSERT INTO factor_proposals "
+            "(status, expression, new_operators, evidence, diagnostic) "
+            "VALUES ('pending', $1, $2::jsonb, $3::jsonb, $4::jsonb) "
+            "RETURNING id",
+            d["expression"],
+            json.dumps(d["new_operators"]),
+            json.dumps(d["evidence"]),
+            json.dumps(diag_jsonb),
+        )
+        inserted_ids.append(row["id"])
+
+    return {
+        "seeded": len(inserted_ids),
+        "ids": inserted_ids,
+        "note": "Refresh /factor-lab page to see them in PENDING PROPOSALS.",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Phase 3d: human-gated approval layer for factor proposals
 # ---------------------------------------------------------------------------
