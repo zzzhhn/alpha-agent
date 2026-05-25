@@ -42,8 +42,8 @@ _MIN_HISTORY_ROWS = 1000
 # run. User decision: keep a filter but loosen so marginal candidates
 # reach human review. Human is the final gate; surfacing more candidates
 # surfaces more learning even if approval rate drops.
-_BASE_RATIO = 0.9           # accept r_mean as low as 90% of baseline Sharpe
-_DSR_THRESHOLD = -0.5       # accept deflated Sharpe down to -0.5
+_BASE_RATIO = 0.3           # very permissive: 30% of baseline Sharpe (was 0.9)
+_DSR_THRESHOLD = -3.0       # very permissive: deflated Sharpe down to -3.0 (was -0.5)
 
 
 @router.get("/diagnostic")
@@ -135,31 +135,26 @@ async def post_propose(
 
         # 3. DSR-lite deflation: keep only survivors that beat baseline AND
         #    have post-deflation positive Sharpe.
-        import sys as _sys
         all_means = [float(np.mean(r.sharpes)) for r in results]
         base_mean = float(np.mean(baseline.sharpes))
-        # Emit the baseline + thresholds once per propose call so the
-        # per-candidate decisions below are interpretable against the same
-        # frame of reference.
-        print(
-            f"[propose:DSR] base_mean={base_mean:.4f} "
-            f"base_threshold={base_mean * _BASE_RATIO:.4f} "
-            f"defl_threshold={_DSR_THRESHOLD:.4f} "
-            f"n_candidates={len(results)}",
-            file=_sys.stderr, flush=True,
-        )
         proposed_count = 0
+        # Per-candidate decision trail returned in the response body so the
+        # client can see why each candidate did/didn't make it. More reliable
+        # than stderr emit because Vercel CLI logs sometimes only surface the
+        # first stderr line per lambda invocation.
+        diag_candidates: list[dict] = []
         for r in sorted(results, key=lambda r: -float(np.mean(r.sharpes))):
             r_mean = float(np.mean(r.sharpes))
             defl = deflated_sharpe_lite(r_mean, all_means, len(raw_proposals))
             passes_mean = r_mean > base_mean * _BASE_RATIO
             passes_defl = defl > _DSR_THRESHOLD
-            print(
-                f"[propose:DSR] expr={r.expression[:80]!r} "
-                f"r_mean={r_mean:.4f} defl={defl:.4f} "
-                f"passes_mean={passes_mean} passes_defl={passes_defl}",
-                file=_sys.stderr, flush=True,
-            )
+            diag_candidates.append({
+                "expression": r.expression[:120],
+                "r_mean": r_mean,
+                "defl": defl,
+                "passes_mean": passes_mean,
+                "passes_defl": passes_defl,
+            })
             if passes_mean and passes_defl:
                 rationale = next(
                     (p.rationale for p in raw_proposals if p.expression == r.expression),
@@ -189,6 +184,12 @@ async def post_propose(
             "evaluated": len(raw_proposals),
             "proposed": proposed_count,
             "dormant": False,
+            "_diag": {
+                "base_mean": base_mean,
+                "base_threshold": base_mean * _BASE_RATIO,
+                "defl_threshold": _DSR_THRESHOLD,
+                "candidates": diag_candidates,
+            },
         }
     finally:
         runner.close()
