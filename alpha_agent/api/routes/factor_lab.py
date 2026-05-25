@@ -135,13 +135,32 @@ async def post_propose(
 
         # 3. DSR-lite deflation: keep only survivors that beat baseline AND
         #    have post-deflation positive Sharpe.
+        import sys as _sys
         all_means = [float(np.mean(r.sharpes)) for r in results]
         base_mean = float(np.mean(baseline.sharpes))
+        # Emit the baseline + thresholds once per propose call so the
+        # per-candidate decisions below are interpretable against the same
+        # frame of reference.
+        print(
+            f"[propose:DSR] base_mean={base_mean:.4f} "
+            f"base_threshold={base_mean * _BASE_RATIO:.4f} "
+            f"defl_threshold={_DSR_THRESHOLD:.4f} "
+            f"n_candidates={len(results)}",
+            file=_sys.stderr, flush=True,
+        )
         proposed_count = 0
         for r in sorted(results, key=lambda r: -float(np.mean(r.sharpes))):
             r_mean = float(np.mean(r.sharpes))
             defl = deflated_sharpe_lite(r_mean, all_means, len(raw_proposals))
-            if r_mean > base_mean * _BASE_RATIO and defl > _DSR_THRESHOLD:
+            passes_mean = r_mean > base_mean * _BASE_RATIO
+            passes_defl = defl > _DSR_THRESHOLD
+            print(
+                f"[propose:DSR] expr={r.expression[:80]!r} "
+                f"r_mean={r_mean:.4f} defl={defl:.4f} "
+                f"passes_mean={passes_mean} passes_defl={passes_defl}",
+                file=_sys.stderr, flush=True,
+            )
+            if passes_mean and passes_defl:
                 rationale = next(
                     (p.rationale for p in raw_proposals if p.expression == r.expression),
                     "",
