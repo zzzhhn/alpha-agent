@@ -13,6 +13,7 @@ evaluate_candidate (lines 83-273, Phase 2a implementation).
 from __future__ import annotations
 
 import ast
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -28,6 +29,23 @@ from alpha_agent.evolution.validation import (
     MIN_FOLDS,
     purged_fold_indices,
 )
+
+
+def _emit_reject(expr: str, reason: str, **detail) -> None:
+    """Surface candidate-rejection reason to Vercel logs so 0/N propose
+    outcomes are diagnosable. Each return None in evaluate_factor_candidate
+    is paired with one of these emits so the calling handler can be black-box
+    while the validator's rejection chain stays observable."""
+    detail_str = " ".join(f"{k}={v!r}" for k, v in detail.items())
+    try:
+        print(
+            f"[evaluate_factor_candidate] REJECT expr={expr[:120]!r} "
+            f"reason={reason} {detail_str}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception:  # noqa: BLE001 - logger must never block recovery path
+        pass
 
 _EMBARGO = 5       # must be >= forward horizon (_FWD_RET_DAYS in ic_engine)
 _N_FOLDS = 3       # matches MIN_FOLDS
@@ -125,6 +143,12 @@ async def evaluate_factor_candidate(
             "tests": result.tests,
         })
         if not result.passed:
+            _emit_reject(
+                proposal.expression,
+                "canned_test_failed",
+                op_name=op["name"],
+                tests=result.tests,
+            )
             return None  # reject candidate immediately; any canned-test failure disqualifies
 
     extra_ops = _build_sandbox_dispatch(runner, proposal.new_operators)
@@ -136,6 +160,7 @@ async def evaluate_factor_candidate(
         "SELECT ticker, date, close FROM daily_prices ORDER BY date, ticker"
     )
     if not rows:
+        _emit_reject(proposal.expression, "daily_prices_empty")
         return None
 
     tickers_set: list[str] = sorted({r["ticker"] for r in rows})
@@ -159,6 +184,7 @@ async def evaluate_factor_candidate(
     N = close_arr.shape[1]
 
     if N < 10:
+        _emit_reject(proposal.expression, "too_few_tickers", n=N, min=10)
         return None
 
     # ------------------------------------------------------------------ #
@@ -167,6 +193,12 @@ async def evaluate_factor_candidate(
     # ------------------------------------------------------------------ #
     n_folds = MIN_FOLDS
     if T // n_folds < _MIN_ROWS_PER_FOLD:
+        _emit_reject(
+            proposal.expression,
+            "history_too_short",
+            T=T,
+            need_min=n_folds * _MIN_ROWS_PER_FOLD,
+        )
         return None
 
     folds = purged_fold_indices(n=T, n_folds=n_folds, embargo=_EMBARGO)
@@ -178,6 +210,13 @@ async def evaluate_factor_candidate(
     ]
 
     if len(usable_folds) < MIN_FOLDS:
+        _emit_reject(
+            proposal.expression,
+            "usable_folds_short",
+            usable=len(usable_folds),
+            need=MIN_FOLDS,
+            total=len(folds),
+        )
         return None
 
     # ------------------------------------------------------------------ #
@@ -244,11 +283,18 @@ async def evaluate_factor_candidate(
 
         try:
             kr = run_kernel(panel, spec, fold_params, extra_ops=extra_ops)
-        except Exception:
+        except Exception as fold_exc:  # noqa: BLE001 - structured emit below
             # A single fold failure (degenerate matrix, sandbox error, etc.)
             # must not abort the whole evaluation. Surface as zero metrics so
-            # the deflated Sharpe reflects the degraded evidence.
-            # (mirrors validation.py:239-245)
+            # the deflated Sharpe reflects the degraded evidence. Emit reason
+            # to stderr so 0-Sharpe folds become diagnosable rather than
+            # silently degrading the candidate's deflated Sharpe to zero.
+            _emit_reject(
+                proposal.expression,
+                "fold_kernel_exception",
+                exc_type=type(fold_exc).__name__,
+                exc_msg=str(fold_exc)[:200],
+            )
             fold_sharpes.append(0.0)
             fold_ics.append(0.0)
             continue
@@ -266,6 +312,12 @@ async def evaluate_factor_candidate(
         fold_ics.append(float(np.mean(ic_vals)) if ic_vals else 0.0)
 
     if len(fold_sharpes) < MIN_FOLDS:
+        _emit_reject(
+            proposal.expression,
+            "fold_sharpes_short",
+            got=len(fold_sharpes),
+            need=MIN_FOLDS,
+        )
         return None
 
     return FactorCandidateResult(
