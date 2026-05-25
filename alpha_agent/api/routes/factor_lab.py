@@ -22,7 +22,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_user
-from alpha_agent.config_store import set_config
+from alpha_agent.config_store import refresh_config, set_config
 from alpha_agent.core.factor_ast import refresh_allowed_ops
 from alpha_agent.evolution.diagnostics import compute_diagnostic
 from alpha_agent.evolution.factor_validation import evaluate_factor_candidate
@@ -48,6 +48,12 @@ _DSR_THRESHOLD = -0.5       # accept deflated Sharpe down to -0.5
 
 @router.get("/diagnostic")
 async def get_diagnostic(pool=Depends(get_db_pool)) -> dict:
+    # config_store keeps a process-level cache; on a fresh lambda instance the
+    # cache is empty and _resolve_default_expr() falls back to DEFAULTS even
+    # when factor.custom_expression has been written to the DB by another
+    # instance (manual edit or approve). Refresh at request entry so the
+    # diagnostic reads what every other lambda has already persisted.
+    await refresh_config(pool)
     d = await compute_diagnostic(pool)
     return d.to_jsonable()
 
@@ -68,6 +74,13 @@ async def post_propose(
     import numpy as np
 
     n = int(body.get("n", 5)) if isinstance(body, dict) else 5
+
+    # Same cache-refresh rationale as get_diagnostic: propose builds its
+    # baseline from compute_diagnostic().current_expression, which routes
+    # through the process-cache. Without this refresh, a manual edit from
+    # another lambda instance is invisible here and the LLM is asked to
+    # beat the stale preset instead of the user's intended baseline.
+    await refresh_config(pool)
 
     # Cost-guard: skip LLM if history is too thin to validate anything.
     # This fires BEFORE the BYOK dependency so no LLM call is wasted.
