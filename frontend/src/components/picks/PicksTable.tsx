@@ -4,6 +4,7 @@ import type { RatingCard } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import PickRow from "./PickRow";
+import { GradeStripHeader } from "./GradeStrip";
 
 const TH = "px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted select-none";
 
@@ -33,7 +34,13 @@ export default function PicksTable({
           <th className={`${TH} text-left`}>{t(locale, "picks_table.col_rating")}</th>
           <th className={`${TH} text-right`}>{t(locale, "picks_table.col_composite")}</th>
           <th className={`${TH} text-right`}>{t(locale, "picks_table.col_confidence")}</th>
-          <th className={`${TH} text-left`}>{t(locale, "picks_table.col_top_drivers")}</th>
+          <th className={`${TH} text-left`}>
+            <span className="flex flex-col gap-0.5">
+              <span>{t(locale, "picks_table.col_grades")}</span>
+              <GradeStripHeader locale={locale} />
+            </span>
+          </th>
+          <th className={`${TH} text-left`}>{t(locale, "picks_table.col_drivers_drags")}</th>
         </tr>
       </thead>
       <tbody>
