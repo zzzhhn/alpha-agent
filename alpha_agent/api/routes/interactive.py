@@ -13,6 +13,7 @@ import math
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from alpha_agent.api.byok import get_llm_client as _get_llm_client
 from alpha_agent.llm.base import LLMClient as _LLMClient
 from pydantic import BaseModel, Field
@@ -724,7 +725,7 @@ async def factors_library(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/api/v1/factor/backtest/export", response_class=None)
+@router.post("/api/v1/factor/backtest/export", response_class=HTMLResponse)
 async def factor_backtest_export(
     body: FactorBacktestRequest,
     factor_name: str = "factor",
