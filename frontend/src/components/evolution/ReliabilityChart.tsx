@@ -10,9 +10,11 @@ import {
   Tooltip,
 } from "recharts";
 import type { EvolutionCalibration } from "@/lib/api/evolution";
+import { t, type Locale } from "@/lib/i18n";
 
 interface ReliabilityChartProps {
   readonly calibration: EvolutionCalibration;
+  readonly locale: Locale;
 }
 
 interface BucketPoint {
@@ -52,11 +54,14 @@ function meanBrier(calibration: EvolutionCalibration): number | null {
   return totalN > 0 ? weightedSum / totalN : null;
 }
 
-export function ReliabilityChart({ calibration }: ReliabilityChartProps) {
+export function ReliabilityChart({ calibration, locale }: ReliabilityChartProps) {
   if (!calibration.applied) {
     return (
       <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-warn text-center">
-        Calibration not yet applied ({calibration.n_pairs}/50 pairs — accumulating).
+        {t(locale, "evolution.cal.not_applied").replace(
+          "{n}",
+          String(calibration.n_pairs),
+        )}
       </p>
     );
   }
@@ -66,7 +71,7 @@ export function ReliabilityChart({ calibration }: ReliabilityChartProps) {
   if (points.length === 0) {
     return (
       <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
-        No calibration bucket data available yet.
+        {t(locale, "evolution.cal.no_buckets")}
       </p>
     );
   }
@@ -86,7 +91,7 @@ export function ReliabilityChart({ calibration }: ReliabilityChartProps) {
               tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => v.toFixed(1)}
               label={{
-                value: "Predicted confidence",
+                value: t(locale, "evolution.cal.axis_predicted"),
                 position: "insideBottom",
                 offset: -4,
                 fill: "var(--tm-muted)",
@@ -101,7 +106,7 @@ export function ReliabilityChart({ calibration }: ReliabilityChartProps) {
               tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => v.toFixed(1)}
               label={{
-                value: "Actual hit rate",
+                value: t(locale, "evolution.cal.axis_actual"),
                 angle: -90,
                 position: "insideLeft",
                 fill: "var(--tm-muted)",
@@ -120,8 +125,10 @@ export function ReliabilityChart({ calibration }: ReliabilityChartProps) {
               }}
               formatter={(v, name) => {
                 const num = typeof v === "number" ? v : Number(v);
-                if (name === "hit_rate") return [num.toFixed(3), "Hit rate"];
-                if (name === "perfect") return [num.toFixed(2), "Perfect cal."];
+                if (name === "hit_rate")
+                  return [num.toFixed(3), t(locale, "evolution.cal.tip_hitrate")];
+                if (name === "perfect")
+                  return [num.toFixed(2), t(locale, "evolution.cal.tip_perfect")];
                 return [String(v ?? ""), String(name)];
               }}
               labelFormatter={(l) => `mid=${Number(l).toFixed(2)}`}
@@ -154,8 +161,8 @@ export function ReliabilityChart({ calibration }: ReliabilityChartProps) {
       </div>
       {brier !== null && (
         <p className="px-1 pb-1 font-tm-mono text-[10px] text-tm-muted text-right">
-          Mean Brier score: {brier.toFixed(4)}
-          {calibration.as_of ? ` · as of ${calibration.as_of}` : ""}
+          {t(locale, "evolution.cal.brier").replace("{v}", brier.toFixed(4))}
+          {calibration.as_of ? ` · ${calibration.as_of}` : ""}
         </p>
       )}
     </div>

@@ -3,8 +3,16 @@
 import { useMemo } from "react";
 import clsx from "clsx";
 import type { EvolutionWeight } from "@/lib/api/evolution";
+import { t, type Locale } from "@/lib/i18n";
+import { getSignalDisplayLabel } from "@/lib/signal-labels";
 
-export function WeightDeltaTable({ weights }: { weights: EvolutionWeight[] }) {
+export function WeightDeltaTable({
+  weights,
+  locale,
+}: {
+  weights: EvolutionWeight[];
+  locale: Locale;
+}) {
   const rows = useMemo(() => {
     // Pivot flat list into one row per signal_name, joining live + shadow.
     const map = new Map<
@@ -51,7 +59,7 @@ export function WeightDeltaTable({ weights }: { weights: EvolutionWeight[] }) {
   if (rows.length === 0) {
     return (
       <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
-        No weight data available.
+        {t(locale, "evolution.weights.empty")}
       </p>
     );
   }
@@ -61,13 +69,13 @@ export function WeightDeltaTable({ weights }: { weights: EvolutionWeight[] }) {
       <table className="w-full min-w-[640px] text-xs border-collapse">
         <thead>
           <tr className="text-tm-fg-2 border-b border-tm-rule">
-            <th className="px-2 py-1.5 text-left">Signal</th>
-            <th className="px-2 py-1.5 text-right">Live W</th>
-            <th className="px-2 py-1.5 text-right">Shadow W</th>
-            <th className="px-2 py-1.5 text-right">Delta</th>
-            <th className="px-2 py-1.5 text-center">Streak</th>
-            <th className="px-2 py-1.5 text-left">Reason</th>
-            <th className="px-2 py-1.5 text-left">Updated</th>
+            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_signal")}</th>
+            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_live")}</th>
+            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_shadow")}</th>
+            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_delta")}</th>
+            <th className="px-2 py-1.5 text-center">{t(locale, "evolution.weights.col_streak")}</th>
+            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_reason")}</th>
+            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_updated")}</th>
           </tr>
         </thead>
         <tbody>
@@ -86,10 +94,13 @@ export function WeightDeltaTable({ weights }: { weights: EvolutionWeight[] }) {
                 {/* Signal */}
                 <td className="px-2 py-1 text-tm-fg font-tm-mono">
                   <span className="inline-flex items-center gap-1.5">
-                    {signal_name}
+                    {getSignalDisplayLabel(signal_name, locale)}
                     {consecutiveBad > 0 && (
                       <span className="inline-flex items-center rounded border border-tm-neg/40 bg-tm-neg/10 px-1 py-0 font-tm-mono text-[9px] text-tm-neg leading-4">
-                        bad&times;{consecutiveBad}
+                        {t(locale, "evolution.weights.bad").replace(
+                          "{n}",
+                          String(consecutiveBad),
+                        )}
                       </span>
                     )}
                   </span>

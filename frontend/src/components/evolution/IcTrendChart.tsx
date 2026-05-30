@@ -13,9 +13,12 @@ import {
   Legend,
 } from "recharts";
 import type { IcTrendSeries } from "@/lib/api/evolution";
+import { t, type Locale } from "@/lib/i18n";
+import { getSignalDisplayLabel } from "@/lib/signal-labels";
 
 interface IcTrendChartProps {
   readonly series: IcTrendSeries[];
+  readonly locale: Locale;
 }
 
 // One color per signal, cycling through tm vars then fallback hex values.
@@ -71,7 +74,7 @@ function mergeIcSeries(series: IcTrendSeries[]): MergedRow[] {
   });
 }
 
-export function IcTrendChart({ series }: IcTrendChartProps) {
+export function IcTrendChart({ series, locale }: IcTrendChartProps) {
   const hasData = series.length > 0 && series.some((s) => s.points.length > 0);
 
   const merged = useMemo(() => mergeIcSeries(series), [series]);
@@ -79,7 +82,7 @@ export function IcTrendChart({ series }: IcTrendChartProps) {
   if (!hasData || merged.length === 0) {
     return (
       <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
-        IC history accumulating — check back after the daily cron runs.
+        {t(locale, "evolution.ic.empty")}
       </p>
     );
   }
@@ -130,7 +133,7 @@ export function IcTrendChart({ series }: IcTrendChartProps) {
               key={s.signal_name}
               type="monotone"
               dataKey={s.signal_name}
-              name={s.signal_name}
+              name={getSignalDisplayLabel(s.signal_name, locale)}
               stroke={SIGNAL_COLORS[i % SIGNAL_COLORS.length]}
               strokeWidth={2}
               dot={false}

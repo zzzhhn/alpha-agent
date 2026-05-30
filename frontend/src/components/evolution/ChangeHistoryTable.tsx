@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import type { EvolutionChange } from "@/lib/api/evolution";
+import { t, type Locale } from "@/lib/i18n";
 
 // Source badge color mapping
 const SOURCE_BADGE: Record<
@@ -81,11 +82,17 @@ function formatChangedAt(raw: string): string {
   );
 }
 
-export function ChangeHistoryTable({ changes }: { changes: EvolutionChange[] }) {
+export function ChangeHistoryTable({
+  changes,
+  locale,
+}: {
+  changes: EvolutionChange[];
+  locale: Locale;
+}) {
   if (changes.length === 0) {
     return (
       <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
-        No weight changes recorded yet.
+        {t(locale, "evolution.changes.empty")}
       </p>
     );
   }
@@ -96,10 +103,10 @@ export function ChangeHistoryTable({ changes }: { changes: EvolutionChange[] }) 
         <thead>
           <tr className="text-tm-fg-2 border-b border-tm-rule">
             <th className="px-2 py-1.5 text-right w-8">#</th>
-            <th className="px-2 py-1.5 text-left">Timestamp</th>
-            <th className="px-2 py-1.5 text-left">Source</th>
-            <th className="px-2 py-1.5 text-right">Baseline IC</th>
-            <th className="px-2 py-1.5 text-left">Note</th>
+            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.changes.col_time")}</th>
+            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.changes.col_source")}</th>
+            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.changes.col_baseline_ic")}</th>
+            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.changes.col_note")}</th>
           </tr>
         </thead>
         <tbody>

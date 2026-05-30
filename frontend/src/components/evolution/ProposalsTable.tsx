@@ -9,6 +9,14 @@ import {
   type Proposal,
 } from "@/lib/api/evolution";
 import { useRouter } from "next/navigation";
+import { t, type Locale } from "@/lib/i18n";
+
+// Localized status label. Falls back to the raw enum for any unmapped status.
+function statusLabel(status: string, locale: Locale): string {
+  const key = `evolution.proposals.status_${status}`;
+  const translated = t(locale, key as Parameters<typeof t>[1]);
+  return translated === key ? status : translated;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -62,7 +70,7 @@ const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }>
   },
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, locale }: { status: string; locale: Locale }) {
   const style = STATUS_STYLE[status] ?? {
     border: "border-tm-rule",
     bg: "bg-tm-bg-3/40",
@@ -77,7 +85,7 @@ function StatusBadge({ status }: { status: string }) {
         style.text,
       )}
     >
-      {status}
+      {statusLabel(status, locale)}
     </span>
   );
 }
@@ -124,7 +132,13 @@ function EvidenceCell({ evidence }: { evidence: Record<string, unknown> }) {
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function ProposalsTable({ proposals }: { proposals: Proposal[] }) {
+export function ProposalsTable({
+  proposals,
+  locale,
+}: {
+  proposals: Proposal[];
+  locale: Locale;
+}) {
   const router = useRouter();
   // Track which proposal id is currently awaiting a mutation (null = none)
   const [pendingId, setPendingId] = useState<number | null>(null);
@@ -134,8 +148,7 @@ export function ProposalsTable({ proposals }: { proposals: Proposal[] }) {
   if (proposals.length === 0) {
     return (
       <p className="px-3 py-4 font-tm-mono text-[11px] text-tm-muted text-center">
-        No pending proposals. The proposer stays dormant until enough trading
-        history accrues to validate a change.
+        {t(locale, "evolution.proposals.empty")}
       </p>
     );
   }
@@ -159,7 +172,9 @@ export function ProposalsTable({ proposals }: { proposals: Proposal[] }) {
       router.refresh();
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "Request failed. Please retry.";
+        err instanceof Error
+          ? err.message
+          : t(locale, "evolution.proposals.request_failed");
       setRowErrors((prev) => ({ ...prev, [id]: msg }));
     } finally {
       setPendingId(null);
@@ -172,12 +187,12 @@ export function ProposalsTable({ proposals }: { proposals: Proposal[] }) {
         <thead>
           <tr className="text-tm-fg-2 border-b border-tm-rule">
             <th className="px-2 py-1.5 text-right w-8 font-tm-mono text-[10px]">#</th>
-            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">Field</th>
-            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">Change</th>
-            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">Evidence</th>
-            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">Status</th>
-            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">When</th>
-            <th className="px-2 py-1.5 text-center font-tm-mono text-[10px]">Actions</th>
+            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">{t(locale, "evolution.proposals.col_field")}</th>
+            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">{t(locale, "evolution.proposals.col_change")}</th>
+            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">{t(locale, "evolution.proposals.col_evidence")}</th>
+            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">{t(locale, "evolution.proposals.col_status")}</th>
+            <th className="px-2 py-1.5 text-left font-tm-mono text-[10px]">{t(locale, "evolution.proposals.col_when")}</th>
+            <th className="px-2 py-1.5 text-center font-tm-mono text-[10px]">{t(locale, "evolution.proposals.col_actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -214,7 +229,7 @@ export function ProposalsTable({ proposals }: { proposals: Proposal[] }) {
 
                 {/* Status */}
                 <td className="px-2 py-1.5">
-                  <StatusBadge status={p.status} />
+                  <StatusBadge status={p.status} locale={locale} />
                 </td>
 
                 {/* Timestamp */}
@@ -237,7 +252,7 @@ export function ProposalsTable({ proposals }: { proposals: Proposal[] }) {
                             : "hover:bg-tm-pos/20",
                         )}
                       >
-                        {isRowPending ? "..." : "approve"}
+                        {isRowPending ? "..." : t(locale, "evolution.proposals.approve")}
                       </button>
                       <button
                         disabled={isRowPending}
@@ -250,12 +265,12 @@ export function ProposalsTable({ proposals }: { proposals: Proposal[] }) {
                             : "hover:bg-tm-neg/20",
                         )}
                       >
-                        {isRowPending ? "..." : "reject"}
+                        {isRowPending ? "..." : t(locale, "evolution.proposals.reject")}
                       </button>
                     </div>
                   ) : (
                     <span className="font-tm-mono text-[9px] text-tm-muted">
-                      {p.status}
+                      {statusLabel(p.status, locale)}
                     </span>
                   )}
                   {rowError && (

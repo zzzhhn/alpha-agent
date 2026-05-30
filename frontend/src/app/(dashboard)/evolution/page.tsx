@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import {
   fetchIcTrend,
   fetchEvolutionWeights,
@@ -10,6 +11,7 @@ import {
   type EvolutionChangesResponse,
   type ProposalsResponse,
 } from "@/lib/api/evolution";
+import { t, type Locale } from "@/lib/i18n";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { IcTrendChart } from "@/components/evolution/IcTrendChart";
 import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
@@ -20,7 +22,14 @@ import EvolutionHealthStrip from "@/components/evolution/EvolutionHealthStrip";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
 
 // Server component — fetches all evolution endpoints in parallel and renders
-// section containers. ProposalsTable (Phase 2b) replaces the old placeholder.
+// section containers. SSR-correct locale comes from the cookie (the client
+// LocaleProvider hydrates from localStorage but defaults to zh before mount,
+// so reading the cookie here avoids a flash and keeps titles in sync).
+async function getLocaleFromCookie(): Promise<Locale> {
+  const cookieStore = await cookies();
+  const v = cookieStore.get("locale")?.value;
+  return v === "zh" || v === "en" ? v : "en";
+}
 
 async function fetchAllEvolution(): Promise<{
   icTrend: IcTrendResponse | null;
@@ -52,139 +61,151 @@ async function fetchAllEvolution(): Promise<{
 }
 
 export default async function EvolutionPage() {
+  const locale = await getLocaleFromCookie();
   const { icTrend, weights, calibration, changes, proposals } =
     await fetchAllEvolution();
 
   // Decision-first header (P0): synthesize the always-present evidence into a
-  // one-glance "is the self-evolution effective & trustworthy?" read, since
-  // the discrete approve/reject surface (proposals) is often dormant. Pure,
-  // server-computed; the strip only formats it with i18n.
+  // one-glance "is the self-evolution effective & trustworthy?" read.
   const health = assessEvolutionHealth({ icTrend, calibration, weights, proposals });
+
+  const tr = (key: string) => t(locale, key as Parameters<typeof t>[1]);
+  const fill = (key: string, vars: Record<string, string | number>) => {
+    let s = tr(key);
+    for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
+    return s;
+  };
+  const unavailable = tr("evolution.unavailable");
+  const loadFailed = tr("evolution.load_failed");
 
   return (
     <TmScreen>
-      <EvolutionHealthStrip health={health} />
+      <EvolutionHealthStrip health={health} locale={locale} />
 
       {/* ── Section 1: Signal IC Trend ──────────────────────────────── */}
       <TmPane
-        title="SIGNAL IC TREND"
+        title={tr("evolution.pane.ic_trend")}
         meta={
           icTrend
-            ? `${icTrend.series.length} signals · ${icTrend.window_days}d window`
-            : "unavailable"
+            ? fill("evolution.ic.meta", {
+                n: icTrend.series.length,
+                d: icTrend.window_days,
+              })
+            : unavailable
         }
       >
         {icTrend ? (
           <div className="px-3 py-2.5">
             <p className="font-tm-mono text-[11px] text-tm-fg-2">
-              {icTrend.series.length} signal
-              {icTrend.series.length !== 1 ? "s" : ""} · {icTrend.window_days}
-              d rolling window
+              {fill("evolution.ic.sub", {
+                n: icTrend.series.length,
+                d: icTrend.window_days,
+              })}
             </p>
-            <IcTrendChart series={icTrend.series} />
+            <IcTrendChart series={icTrend.series} locale={locale} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            Failed to load IC trend data.
+            {loadFailed}
           </p>
         )}
       </TmPane>
 
       {/* ── Section 2: Confidence Calibration ──────────────────────── */}
       <TmPane
-        title="CONFIDENCE CALIBRATION"
+        title={tr("evolution.pane.calibration")}
         meta={
           calibration
-            ? `${calibration.n_pairs} pairs · applied=${String(calibration.applied)}`
-            : "unavailable"
+            ? calibration.applied
+              ? fill("evolution.cal.meta_applied", { n: calibration.n_pairs })
+              : fill("evolution.cal.meta_accumulating", { n: calibration.n_pairs })
+            : unavailable
         }
       >
         {calibration ? (
           <div className="px-3 py-2.5">
             {calibration.applied ? (
               <p className="font-tm-mono text-[11px] text-tm-fg-2">
-                {calibration.n_pairs} calibration pairs ·{" "}
-                {calibration.buckets.length} buckets · applied
-                {calibration.as_of ? ` as of ${calibration.as_of}` : ""}
+                {fill("evolution.cal.sub_applied", {
+                  n: calibration.n_pairs,
+                  b: calibration.buckets.length,
+                })}
+                {calibration.as_of ? ` · ${calibration.as_of}` : ""}
               </p>
             ) : (
               <p className="font-tm-mono text-[11px] text-tm-warn">
-                Calibration accumulating ({calibration.n_pairs}/50 pairs)
+                {fill("evolution.cal.sub_accumulating", { n: calibration.n_pairs })}
               </p>
             )}
-            <ReliabilityChart calibration={calibration} />
+            <ReliabilityChart calibration={calibration} locale={locale} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            Failed to load calibration data.
+            {loadFailed}
           </p>
         )}
       </TmPane>
 
       {/* ── Section 3: Adaptive Weights ────────────────────────────── */}
       <TmPane
-        title="ADAPTIVE WEIGHTS"
+        title={tr("evolution.pane.weights")}
         meta={
           weights
-            ? `${weights.weights.length} weight rows`
-            : "unavailable"
+            ? fill("evolution.weights.meta", { n: weights.weights.length })
+            : unavailable
         }
       >
         {weights ? (
           <div className="px-3 py-2.5">
             <p className="font-tm-mono text-[11px] text-tm-fg-2">
-              {weights.weights.length} signal weight
-              {weights.weights.length !== 1 ? "s" : ""}
+              {fill("evolution.weights.sub", { n: weights.weights.length })}
             </p>
-            <WeightDeltaTable weights={weights.weights} />
+            <WeightDeltaTable weights={weights.weights} locale={locale} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            Failed to load weights data.
+            {loadFailed}
           </p>
         )}
       </TmPane>
 
       {/* ── Section 4: Change History ───────────────────────────────── */}
       <TmPane
-        title="CHANGE HISTORY"
+        title={tr("evolution.pane.changes")}
         meta={
           changes
-            ? `${changes.changes.length} changes`
-            : "unavailable"
+            ? fill("evolution.changes.meta", { n: changes.changes.length })
+            : unavailable
         }
       >
         {changes ? (
           <div className="px-3 py-2.5">
             <p className="font-tm-mono text-[11px] text-tm-fg-2">
-              {changes.changes.length} change record
-              {changes.changes.length !== 1 ? "s" : ""}
+              {fill("evolution.changes.sub", { n: changes.changes.length })}
             </p>
-            <ChangeHistoryTable changes={changes.changes} />
+            <ChangeHistoryTable changes={changes.changes} locale={locale} />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            Failed to load change history.
+            {loadFailed}
           </p>
         )}
       </TmPane>
 
       {/* ── Section 5: Methodology Proposals ──────────────────────── */}
       <TmPane
-        title="METHODOLOGY PROPOSALS"
+        title={tr("evolution.pane.proposals")}
         meta={
           proposals
-            ? `${proposals.proposals.length} proposal${proposals.proposals.length !== 1 ? "s" : ""}`
-            : "unavailable"
+            ? fill("evolution.proposals.meta", { n: proposals.proposals.length })
+            : unavailable
         }
       >
         <div className="px-3 py-2.5">
           {proposals ? (
-            <ProposalsTable proposals={proposals.proposals} />
+            <ProposalsTable proposals={proposals.proposals} locale={locale} />
           ) : (
-            <p className="font-tm-mono text-[11px] text-tm-neg">
-              Failed to load proposals.
-            </p>
+            <p className="font-tm-mono text-[11px] text-tm-neg">{loadFailed}</p>
           )}
         </div>
       </TmPane>

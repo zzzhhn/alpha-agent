@@ -1,8 +1,8 @@
 "use client";
 
 import clsx from "clsx";
-import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import type { Locale } from "@/lib/i18n";
 import type { EvolutionHealth, HealthTone, SubVerdict } from "@/lib/evolution-health";
 
 // Tone → color + glyph + verdict word. 'action' (pending decisions) and
@@ -26,10 +26,11 @@ function num(f: SubVerdict["facts"], key: string): number | null {
 
 export default function EvolutionHealthStrip({
   health,
+  locale,
 }: {
   health: EvolutionHealth;
+  locale: Locale;
 }) {
-  const { locale } = useLocale();
   const zh = locale === "zh";
 
   // Overall headline: a real concern (warn) outranks a pending decision
