@@ -60,6 +60,33 @@ export interface EvolutionChangesResponse {
 export const fetchIcTrend = (windowDays = 30, opts?: ApiGetOptions) =>
   apiGet<IcTrendResponse>(`/api/evolution/ic_trend?window_days=${windowDays}`, opts);
 
+// Traceability overlay (principle 11): structured facts for each material
+// day-over-day IC move. co_occurring is a list of real same-day system
+// events; an empty list means the move had no recorded system cause.
+export interface IcCoOccurringEvent {
+  type: string; // "weight_change" (P0)
+  source?: string; // e.g. "auto_rollback"
+  change_id?: number;
+}
+export interface IcAnnotation {
+  signal_name: string;
+  as_of: string;
+  prev: number | null;
+  curr: number | null;
+  delta: number | null;
+  sign_flip: boolean;
+  co_occurring: IcCoOccurringEvent[];
+}
+export interface IcAnnotationsResponse {
+  annotations: IcAnnotation[];
+}
+
+export const fetchIcAnnotations = (windowDays = 30, opts?: ApiGetOptions) =>
+  apiGet<IcAnnotationsResponse>(
+    `/api/evolution/ic_annotations?window_days=${windowDays}`,
+    opts,
+  );
+
 export const fetchEvolutionWeights = (opts?: ApiGetOptions) =>
   apiGet<EvolutionWeightsResponse>("/api/evolution/weights", opts);
 

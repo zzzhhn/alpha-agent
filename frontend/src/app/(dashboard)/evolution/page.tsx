@@ -1,11 +1,13 @@
 import { getServerLocale } from "@/lib/server-locale";
 import {
   fetchIcTrend,
+  fetchIcAnnotations,
   fetchEvolutionWeights,
   fetchEvolutionCalibration,
   fetchEvolutionChanges,
   fetchProposals,
   type IcTrendResponse,
+  type IcAnnotation,
   type EvolutionWeightsResponse,
   type EvolutionCalibration,
   type EvolutionChangesResponse,
@@ -25,14 +27,16 @@ import { assessEvolutionHealth } from "@/lib/evolution-health";
 // section containers. SSR-correct locale comes from the shared cookie reader.
 async function fetchAllEvolution(): Promise<{
   icTrend: IcTrendResponse | null;
+  icAnnotations: IcAnnotation[];
   weights: EvolutionWeightsResponse | null;
   calibration: EvolutionCalibration | null;
   changes: EvolutionChangesResponse | null;
   proposals: ProposalsResponse | null;
 }> {
-  const [icTrend, weights, calibration, changes, proposals] =
+  const [icTrend, icAnnotations, weights, calibration, changes, proposals] =
     await Promise.allSettled([
       fetchIcTrend(30, { revalidate: 60, tags: ["evolution-ic-trend"] }),
+      fetchIcAnnotations(30, { revalidate: 60, tags: ["evolution-ic-annotations"] }),
       fetchEvolutionWeights({ revalidate: 60, tags: ["evolution-weights"] }),
       fetchEvolutionCalibration({
         revalidate: 60,
@@ -44,6 +48,10 @@ async function fetchAllEvolution(): Promise<{
 
   return {
     icTrend: icTrend.status === "fulfilled" ? icTrend.value : null,
+    icAnnotations:
+      icAnnotations.status === "fulfilled"
+        ? icAnnotations.value.annotations
+        : [],
     weights: weights.status === "fulfilled" ? weights.value : null,
     calibration:
       calibration.status === "fulfilled" ? calibration.value : null,
@@ -54,7 +62,7 @@ async function fetchAllEvolution(): Promise<{
 
 export default async function EvolutionPage() {
   const locale = await getServerLocale();
-  const { icTrend, weights, calibration, changes, proposals } =
+  const { icTrend, icAnnotations, weights, calibration, changes, proposals } =
     await fetchAllEvolution();
 
   // Decision-first header (P0): synthesize the always-present evidence into a
@@ -94,7 +102,11 @@ export default async function EvolutionPage() {
                 d: icTrend.window_days,
               })}
             </p>
-            <IcTrendChart series={icTrend.series} locale={locale} />
+            <IcTrendChart
+              series={icTrend.series}
+              locale={locale}
+              annotations={icAnnotations}
+            />
           </div>
         ) : (
           <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">

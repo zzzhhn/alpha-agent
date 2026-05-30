@@ -1005,6 +1005,14 @@ const translations = {
     "evolution.proposals.status_pending": "待审",
     "evolution.proposals.status_approved": "已批准",
     "evolution.proposals.status_rejected": "已否决",
+    /* ── Traceability (IC change annotations) ───────────────────────── */
+    "evolution.trace.no_change_here": "本日无显著变化",
+    "evolution.trace.no_cause": "无配置变更同期发生（市场驱动）",
+    "evolution.trace.flip_negative": "↓ 跌破零轴（信号转为负向）",
+    "evolution.trace.flip_positive": "↑ 升破零轴（信号转为正向）",
+    "evolution.trace.ev_weight_rollback": "同期：权重自动回滚",
+    "evolution.trace.ev_weight_promote": "同期：权重自动晋升",
+    "evolution.trace.ev_weight_change": "同期：权重配置变更",
     /* ── Version update prompt ──────────────────────────────────────── */
     "version.new_available": "新版本已发布",
     "version.auto_refresh": "将在 {n}s 后自动刷新",
@@ -2018,6 +2026,14 @@ const translations = {
     "evolution.proposals.status_pending": "pending",
     "evolution.proposals.status_approved": "approved",
     "evolution.proposals.status_rejected": "rejected",
+    /* ── Traceability (IC change annotations) ───────────────────────── */
+    "evolution.trace.no_change_here": "no material change this day",
+    "evolution.trace.no_cause": "no system change that day (market-driven)",
+    "evolution.trace.flip_negative": "↓ crossed below zero (signal turned negative)",
+    "evolution.trace.flip_positive": "↑ crossed above zero (signal turned positive)",
+    "evolution.trace.ev_weight_rollback": "same day: weight auto-rollback",
+    "evolution.trace.ev_weight_promote": "same day: weight auto-promote",
+    "evolution.trace.ev_weight_change": "same day: weight config change",
     /* ── Version update prompt ──────────────────────────────────────── */
     "version.new_available": "New version available",
     "version.auto_refresh": "Auto-refreshing in {n}s",
