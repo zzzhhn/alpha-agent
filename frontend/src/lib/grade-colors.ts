@@ -8,15 +8,22 @@
 // Grade thresholds (alpha_agent/fusion/grades.py grade_z):
 //   A+ z>=1.5 · A z>=1.0 · B z>=0.5 · C+ z>=0.0 · C z>=-0.5 · D z>=-1.0 · F else
 
+// Ramp tuned so the blocks are actually VISIBLE on the dark terminal bg —
+// the first pass used /10–/25 opacities that washed out to near-invisible,
+// degrading the "color block" choice into plain colored letters. Now the
+// extremes (A+/F) are solid fills with inverted (tm-bg) text for max pop,
+// and the mid grades are perceptible same-hue tint blocks with full-
+// strength same-hue text (contrast guaranteed in both themes). Neutral C
+// stays faintest so the heatmap's standouts catch the eye first.
 const GRADE_CHIP: Record<string, string> = {
-  "A+": "bg-tm-pos/25 text-tm-pos font-semibold",
-  A: "bg-tm-pos/18 text-tm-pos",
-  "A-": "bg-tm-pos/14 text-tm-pos",
-  B: "bg-tm-pos/10 text-tm-pos",
-  "C+": "bg-tm-fg-2/15 text-tm-fg-2",
-  C: "bg-tm-fg-2/10 text-tm-muted",
-  D: "bg-tm-neg/12 text-tm-neg",
-  F: "bg-tm-neg/25 text-tm-neg font-semibold",
+  "A+": "bg-tm-pos text-tm-bg font-semibold",
+  A: "bg-tm-pos/40 text-tm-pos font-semibold",
+  "A-": "bg-tm-pos/30 text-tm-pos",
+  B: "bg-tm-pos/22 text-tm-pos",
+  "C+": "bg-tm-fg-2/22 text-tm-fg-2",
+  C: "bg-tm-fg-2/12 text-tm-muted",
+  D: "bg-tm-neg/28 text-tm-neg",
+  F: "bg-tm-neg text-tm-bg font-semibold",
 };
 
 const EMPTY_CHIP = "text-tm-muted/40";
