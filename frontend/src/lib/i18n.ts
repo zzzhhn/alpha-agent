@@ -1005,6 +1005,11 @@ const translations = {
     "evolution.proposals.status_pending": "待审",
     "evolution.proposals.status_approved": "已批准",
     "evolution.proposals.status_rejected": "已否决",
+    /* ── Version update prompt ──────────────────────────────────────── */
+    "version.new_available": "新版本已发布",
+    "version.auto_refresh": "将在 {n}s 后自动刷新",
+    "version.refresh_now": "立即刷新",
+    "version.later": "稍后",
     /* AttributionTable additional headers */
     "attribution.col_w": "权重",
     "attribution.col_source": "来源",
@@ -2013,6 +2018,11 @@ const translations = {
     "evolution.proposals.status_pending": "pending",
     "evolution.proposals.status_approved": "approved",
     "evolution.proposals.status_rejected": "rejected",
+    /* ── Version update prompt ──────────────────────────────────────── */
+    "version.new_available": "New version available",
+    "version.auto_refresh": "Auto-refreshing in {n}s",
+    "version.refresh_now": "Refresh now",
+    "version.later": "Later",
     /* AttributionTable additional headers */
     "attribution.col_w": "w",
     "attribution.col_source": "source",

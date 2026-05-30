@@ -1,15 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Bake the deploy's commit SHA into the client bundle so VersionWatcher can
+  // compare the loaded version against the live one (/api/version) and prompt
+  // a refresh after a new deploy. VERCEL_GIT_COMMIT_SHA is a build-time system
+  // env on Vercel; "dev" locally (both sides "dev" → never prompts).
+  env: {
+    NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA || "dev",
+  },
+
   // Rewrite API calls to the AutoDL FastAPI backend
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6008";
     return [
       {
-        // Exclude /api/auth/* from this rewrite: NextAuth's own routes
-        // (/api/auth/session, /api/auth/signin/*, /api/auth/csrf, etc.)
-        // are handled frontend-native by src/app/api/auth/[...nextauth]/route.ts.
-        // All other /api/* paths proxy to the FastAPI backend as before.
-        source: "/api/:path((?!auth/).*)",
+        // Exclude /api/auth/* and /api/fe/* from this rewrite. /api/auth/* is
+        // NextAuth's own routes; /api/fe/* is frontend-native API (e.g.
+        // /api/fe/version for the deploy-version check). Both are handled by
+        // Next route handlers under src/app/api/. All other /api/* paths proxy
+        // to the FastAPI backend as before.
+        source: "/api/:path((?!auth/|fe/).*)",
         destination: `${apiUrl}/api/:path`,
       },
       {

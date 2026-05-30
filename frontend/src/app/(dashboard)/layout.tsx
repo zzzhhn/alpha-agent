@@ -24,6 +24,7 @@ import { type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { LocaleProvider } from "@/components/layout/LocaleProvider";
+import VersionWatcher from "@/components/layout/VersionWatcher";
 import { ToastProvider, ToastViewport } from "@/components/ui/toast";
 
 interface DashboardLayoutProps {
@@ -47,6 +48,7 @@ export default function DashboardLayout({
             <main className="min-w-0 overflow-y-auto">{children}</main>
           </div>
         </div>
+        <VersionWatcher />
       </LocaleProvider>
       <ToastViewport />
     </ToastProvider>
