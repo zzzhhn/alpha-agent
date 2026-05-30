@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import type { Locale } from "@/lib/i18n";
+import { getServerLocale } from "@/lib/server-locale";
 import { TmScreen } from "@/components/tm/TmPane";
 import {
   fetchFactorDiagnostic,
@@ -13,14 +12,8 @@ import { HistoryCollapsedSection } from "@/components/factor-lab/HistoryCollapse
 // This matches how /evolution handles proposals (revalidate: 0).
 export const dynamic = "force-dynamic";
 
-async function getLocaleFromCookie(): Promise<Locale> {
-  const cookieStore = await cookies();
-  const v = cookieStore.get("locale")?.value;
-  return v === "zh" || v === "en" ? v : "en";
-}
-
 export default async function FactorLabPage() {
-  const locale = await getLocaleFromCookie();
+  const locale = await getServerLocale();
 
   const [diagSettled, pendingSettled, allSettled] = await Promise.allSettled([
     fetchFactorDiagnostic({ revalidate: 0, tags: ["factor-lab-diagnostic"] }),

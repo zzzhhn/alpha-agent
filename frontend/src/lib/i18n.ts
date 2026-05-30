@@ -2040,7 +2040,21 @@ export function getLocaleFromStorage(): Locale {
   return stored === "en" ? "en" : "zh";
 }
 
+// Persist to BOTH localStorage (client reads) AND a "locale" cookie. The
+// cookie is what server components read for SSR i18n (getServerLocale) —
+// without it, SSR-rendered titles/strips fall back to the default and the
+// page renders English while the client shows Chinese. 1-year cookie,
+// path=/ so every route sees it.
 export function setLocaleToStorage(locale: Locale): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("alphacore-locale", locale);
+  document.cookie = `locale=${locale}; path=/; max-age=31536000; samesite=lax`;
+}
+
+// Client-side read of the "locale" cookie (the same one the server reads),
+// used by LocaleProvider to detect a stale cookie and re-sync it.
+export function getLocaleFromDocumentCookie(): Locale | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(/(?:^|;\s*)locale=(zh|en)\b/);
+  return m ? (m[1] as Locale) : null;
 }

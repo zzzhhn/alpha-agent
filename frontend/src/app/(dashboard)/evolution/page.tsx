@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { getServerLocale } from "@/lib/server-locale";
 import {
   fetchIcTrend,
   fetchEvolutionWeights,
@@ -11,7 +11,7 @@ import {
   type EvolutionChangesResponse,
   type ProposalsResponse,
 } from "@/lib/api/evolution";
-import { t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { IcTrendChart } from "@/components/evolution/IcTrendChart";
 import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
@@ -22,15 +22,7 @@ import EvolutionHealthStrip from "@/components/evolution/EvolutionHealthStrip";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
 
 // Server component — fetches all evolution endpoints in parallel and renders
-// section containers. SSR-correct locale comes from the cookie (the client
-// LocaleProvider hydrates from localStorage but defaults to zh before mount,
-// so reading the cookie here avoids a flash and keeps titles in sync).
-async function getLocaleFromCookie(): Promise<Locale> {
-  const cookieStore = await cookies();
-  const v = cookieStore.get("locale")?.value;
-  return v === "zh" || v === "en" ? v : "en";
-}
-
+// section containers. SSR-correct locale comes from the shared cookie reader.
 async function fetchAllEvolution(): Promise<{
   icTrend: IcTrendResponse | null;
   weights: EvolutionWeightsResponse | null;
@@ -61,7 +53,7 @@ async function fetchAllEvolution(): Promise<{
 }
 
 export default async function EvolutionPage() {
-  const locale = await getLocaleFromCookie();
+  const locale = await getServerLocale();
   const { icTrend, weights, calibration, changes, proposals } =
     await fetchAllEvolution();
 

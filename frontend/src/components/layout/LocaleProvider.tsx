@@ -10,10 +10,12 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   type Locale,
   getLocaleFromStorage,
   setLocaleToStorage,
+  getLocaleFromDocumentCookie,
 } from "@/lib/i18n";
 
 interface LocaleContextValue {
@@ -32,10 +34,21 @@ interface LocaleProviderProps {
 
 export function LocaleProvider({ children }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState<Locale>("zh");
+  const router = useRouter();
 
   useEffect(() => {
-    setLocaleState(getLocaleFromStorage());
-  }, []);
+    const stored = getLocaleFromStorage();
+    setLocaleState(stored);
+    // Self-heal the SSR locale cookie. Legacy clients persisted locale only
+    // to localStorage, so server components rendered with the default (now
+    // zh) regardless of the user's real choice. If the cookie disagrees with
+    // localStorage, sync it and re-render the server tree once so SSR text
+    // matches the toggle. Steady state: cookie already matches → no refresh.
+    if (getLocaleFromDocumentCookie() !== stored) {
+      setLocaleToStorage(stored);
+      router.refresh();
+    }
+  }, [router]);
 
   const setLocale: Dispatch<SetStateAction<Locale>> = useCallback(
     (action) => {
