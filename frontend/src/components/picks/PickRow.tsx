@@ -4,6 +4,10 @@ import clsx from "clsx";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import GradeStrip from "./GradeStrip";
 import { t, type Locale } from "@/lib/i18n";
+// Reuse the app-wide signal→label map (also used by the stock-detail Radar
+// and AttributionTable) so the drivers/drags column reads in plain language
+// AND stays consistent with how the same signals are labeled elsewhere.
+import { getSignalDisplayLabel } from "@/lib/signal-labels";
 
 const TIER_COLOR: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -48,8 +52,12 @@ export default function PickRow({
   const confBar = lowConf ? "bg-tm-warn" : "bg-tm-fg-2/50";
   const confText = lowConf ? "text-tm-warn" : "text-tm-fg-2";
 
-  const drivers = (card.top_drivers ?? []).slice(0, 3);
-  const drags = (card.top_drags ?? []).slice(0, 3);
+  const drivers = (card.top_drivers ?? [])
+    .slice(0, 3)
+    .map((s) => getSignalDisplayLabel(s, locale));
+  const drags = (card.top_drags ?? [])
+    .slice(0, 3)
+    .map((s) => getSignalDisplayLabel(s, locale));
 
   return (
     <tr className="border-b border-tm-rule hover:bg-tm-bg-2 transition-colors">
@@ -95,7 +103,8 @@ export default function PickRow({
       </td>
       <td className="px-3 py-1.5 font-tm-mono text-[10.5px] tabular-nums text-right">
         {sign}
-        {composite.toFixed(2)}σ
+        {composite.toFixed(2)}
+        <span className="text-tm-muted">σ</span>
       </td>
       <td className="px-3 py-1.5 font-tm-mono text-[10.5px] tabular-nums">
         <span
