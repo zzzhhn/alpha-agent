@@ -58,6 +58,34 @@ async def ic_trend(window_days: int = Query(30, ge=1, le=365)) -> dict[str, Any]
     }
 
 
+@router.get("/ic_annotations")
+async def ic_annotations(
+    window_days: int = Query(30, ge=1, le=365),
+) -> dict[str, Any]:
+    """Traceability overlay for the IC chart: the material day-over-day IC
+    moves with their structured, correlation-grounded facts. Unauthed read,
+    matching the other /api/evolution GETs."""
+    from alpha_agent.evolution.metric_annotations import fetch_ic_annotations
+
+    pool = await get_db_pool()
+    return {"annotations": await fetch_ic_annotations(pool, window_days)}
+
+
+@router.post("/_compute_ic_annotations")
+async def compute_ic_annotations_endpoint(
+    window_days: int = Query(30, ge=1, le=365),
+    user_id: int = Depends(require_user),
+) -> dict[str, Any]:
+    """One-time/admin trigger to (re)compute IC change annotations from
+    signal_ic_history. Idempotent. Cron wiring is a follow-up; for now this
+    is invoked manually like the other admin maintenance endpoints."""
+    from alpha_agent.evolution.metric_annotations import compute_ic_annotations
+
+    pool = await get_db_pool()
+    written = await compute_ic_annotations(pool, window_days)
+    return {"window_days": window_days, "written": written}
+
+
 @router.get("/weights")
 async def weights() -> dict[str, Any]:
     """Current live + shadow weights for every signal."""
