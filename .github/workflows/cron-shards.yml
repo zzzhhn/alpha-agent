@@ -100,7 +100,7 @@ jobs:
           for offset in 0 40 80 120 160 200; do
             echo "::group::fast shot offset=$offset limit=40"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/fast_intraday?limit=40&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -141,7 +141,7 @@ jobs:
           for offset in 0 75 150 225 300 375 450 525; do
             echo "::group::tech shot offset=$offset limit=75"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=tech&limit=75&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -180,7 +180,7 @@ jobs:
           for offset in 0 40 80 120 160 200 240 280 320 360 400 440 480 520 560; do
             echo "::group::mid shot offset=$offset limit=40"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=mid&limit=40&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -219,7 +219,7 @@ jobs:
           for offset in 0 60 120 180 240 300 360 420 480 540; do
             echo "::group::slow-tier shot offset=$offset limit=60"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=slow&limit=60&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -264,7 +264,7 @@ jobs:
           for offset in 0 80 160 240 320 400 480; do
             echo "::group::slow shot offset=$offset limit=80"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/slow_daily?limit=80&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -285,6 +285,19 @@ jobs:
           echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
           echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
 
+      - name: Recompute IC change annotations (traceability)
+        # Keep the /evolution chart's change markers current after the daily
+        # signal refresh. Non-fatal: the annotation overlay is a nice-to-have,
+        # so a hiccup here must not fail the whole slow_daily job (no email).
+        run: |
+          HTTP=$(curl -s --max-time 120 --retry 2 --retry-delay 5 --retry-all-errors \
+            -o /tmp/ann.json -w "%{http_code}" \
+            "$BACKEND_BASE/api/cron/compute_ic_annotations?window_days=30" || echo "000")
+          echo "HTTP=$HTTP"; head -c 400 /tmp/ann.json; echo
+          if [ "$HTTP" != "200" ]; then
+            echo "::warning::ic annotations recompute returned HTTP $HTTP (non-fatal)"
+          fi
+
   news_per_ticker:
     if: |
       github.event.schedule == '0 14-20 * * 1-5' ||
@@ -296,7 +309,7 @@ jobs:
         run: |
           set -e
           for offset in 0 75 150 225 300 375 450 525; do
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/news_per_ticker?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 400; echo
@@ -330,7 +343,7 @@ jobs:
         run: |
           set -e
           for offset in 0 75 150 225 300 375 450 525; do
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/minute_bars?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 200; echo
@@ -372,7 +385,7 @@ jobs:
           TOTAL_ERRORS=0
           for offset in 0 75 150 225 300 375 450 525; do
             echo "::group::daily_prices shot offset=$offset limit=75"
-            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/daily_prices?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 600; echo
@@ -403,7 +416,7 @@ jobs:
     steps:
       - name: run Phase 2a methodology proposer (single shot)
         run: |
-          HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+          HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
             -X POST "$BACKEND_BASE/api/cron/methodology_proposer")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1

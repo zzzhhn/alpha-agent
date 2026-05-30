@@ -227,6 +227,40 @@ async def cron_methodology_proposer() -> dict[str, Any]:
     return {"ok": True, **result}
 
 
+@router.post("/compute_ic_annotations")
+@router.get("/compute_ic_annotations")
+async def cron_compute_ic_annotations(
+    window_days: int = Query(30, ge=1, le=365),
+) -> dict[str, Any]:
+    """Traceability (principle 11): recompute IC change annotations after the
+    daily IC refresh so the /evolution chart markers stay current without a
+    manual trigger. Idempotent upsert; deterministic, no LLM."""
+    from alpha_agent.evolution.metric_annotations import compute_ic_annotations
+
+    pool = await get_pool(os.environ["DATABASE_URL"])
+    started_at = datetime.now(UTC)
+    try:
+        written = await compute_ic_annotations(pool, window_days)
+    except Exception as exc:  # noqa: BLE001 — surface in cron_runs, don't swallow
+        err = f"{type(exc).__name__}: {exc}"
+        await pool.execute(
+            "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, error_count, details) "
+            "VALUES ($1, $2, now(), false, 1, $3::jsonb)",
+            "compute_ic_annotations",
+            started_at,
+            json.dumps({"error": err}),
+        )
+        raise
+    await pool.execute(
+        "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, error_count, details) "
+        "VALUES ($1, $2, now(), true, 0, $3::jsonb)",
+        "compute_ic_annotations",
+        started_at,
+        json.dumps({"written": written, "window_days": window_days}),
+    )
+    return {"ok": True, "written": written, "window_days": window_days}
+
+
 # news_llm_enrich cron route removed 2026-05-17.
 # The previous cron-side handler called get_settings() -> create_llm_client()
 # which requires a global LLM key in the server env. That violates BYOK
