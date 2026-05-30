@@ -71,6 +71,42 @@ describe("assessCalibration", () => {
 });
 
 describe("assessIc", () => {
+  it("reads a mixed regime (7/11 positive) as neutral, not healthy", () => {
+    // 7 positive, 4 negative = 36% decayed → below the 0.7 'good' bar.
+    const mk = (name: string, ic: number) => ({
+      signal_name: name,
+      points: [{ computed_at: "2026-05-29", ic, n: 50 }],
+    });
+    const ic: IcTrendResponse = {
+      window_days: 30,
+      series: [
+        mk("a", 0.2), mk("b", 0.15), mk("c", 0.1), mk("d", 0.08),
+        mk("e", 0.05), mk("f", 0.03), mk("g", 0.01),
+        mk("factor", -0.2), mk("news", -0.1), mk("options", -0.05), mk("technicals", -0.02),
+      ],
+    };
+    const v = assessIc(ic);
+    expect(v.facts.pos).toBe(7);
+    expect(v.facts.total).toBe(11);
+    expect(v.tone).toBe("neutral");
+  });
+
+  it("reads a clear majority (>=70% positive) as good", () => {
+    const mk = (name: string, ic: number) => ({
+      signal_name: name,
+      points: [{ computed_at: "2026-05-29", ic, n: 50 }],
+    });
+    const ic: IcTrendResponse = {
+      window_days: 30,
+      series: [
+        mk("a", 0.2), mk("b", 0.15), mk("c", 0.1), mk("d", 0.08),
+        mk("e", 0.05), mk("f", 0.03), mk("g", 0.01), mk("h", 0.04),
+        mk("x", -0.2), mk("y", -0.1),
+      ], // 8/10 = 80% positive
+    };
+    expect(assessIc(ic).tone).toBe("good");
+  });
+
   it("uses the chronologically latest point per signal", () => {
     const ic: IcTrendResponse = {
       window_days: 30,

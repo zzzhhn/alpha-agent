@@ -114,8 +114,13 @@ export function assessIc(icTrend: IcTrendResponse | null): SubVerdict {
   }
   if (total === 0) return { tone: "na", facts: {} };
   const ratio = pos / total;
+  // "good" requires a clear majority still effective: at most ~30% of signals
+  // decayed to negative IC. 7/11 (36% negative) is a mixed regime, not
+  // healthy, so it reads neutral rather than over-rosy ✓ — especially when
+  // those same negative signals are the ones the weights cell flags as
+  // degrading. "warn" only when most signals (>60%) have gone negative.
   const tone: HealthTone =
-    ratio >= 0.6 ? "good" : ratio < 0.4 ? "warn" : "neutral";
+    ratio >= 0.7 ? "good" : ratio < 0.4 ? "warn" : "neutral";
   return {
     tone,
     facts: {
