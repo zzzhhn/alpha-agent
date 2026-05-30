@@ -767,7 +767,7 @@ function UniverseFilterPane({
             </div>
           )}
           <p className="mt-1 font-tm-mono text-[10px] text-tm-muted">
-            empty = include all sectors
+            {t(locale, "screener.universe.sectorsHint")}
           </p>
         </div>
 
@@ -777,7 +777,7 @@ function UniverseFilterPane({
           value={excludeInput}
           onChange={onExclude}
           placeholder="TSLA, NVDA"
-          hint="upper-cased on submit"
+          hint={t(locale, "screener.universe.excludeHint")}
         />
 
         {/* Cap inputs with preset chips */}
@@ -936,7 +936,7 @@ function CombineParamsPane({
             </span>
           </div>
         </div>
-        <AsOfWithPresets value={asOfDate} onChange={onAsOfDate} label={t(locale, "screener.params.asOf")} />
+        <AsOfWithPresets value={asOfDate} onChange={onAsOfDate} label={t(locale, "screener.params.asOf")} hint={t(locale, "screener.params.asofHint")} />
       </div>
     </TmPane>
   );
@@ -1002,10 +1002,12 @@ function AsOfWithPresets({
   value,
   onChange,
   label,
+  hint,
 }: {
   readonly value: string;
   readonly onChange: (v: string) => void;
   readonly label: string;
+  readonly hint: string;
 }) {
   // Compute preset dates relative to today. "today" sends empty (panel
   // last day) so we don't ship a date the panel might not cover.
@@ -1027,7 +1029,7 @@ function AsOfWithPresets({
         value={value}
         onChange={onChange}
         placeholder="YYYY-MM-DD"
-        hint="leave blank for panel last day"
+        hint={hint}
       />
       <div className="flex flex-wrap items-center gap-1">
         <span className="font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted">
