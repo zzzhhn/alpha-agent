@@ -8,25 +8,28 @@
 // Grade thresholds (alpha_agent/fusion/grades.py grade_z):
 //   A+ z>=1.5 · A z>=1.0 · B z>=0.5 · C+ z>=0.0 · C z>=-0.5 · D z>=-1.0 · F else
 
-// Ramp tuned so the blocks are actually VISIBLE on the dark terminal bg —
-// the first pass used /10–/25 opacities that washed out to near-invisible,
-// degrading the "color block" choice into plain colored letters. Now the
-// extremes (A+/F) are solid fills with inverted (tm-bg) text for max pop,
-// and the mid grades are perceptible same-hue tint blocks with full-
-// strength same-hue text (contrast guaranteed in both themes). Neutral C
-// stays faintest so the heatmap's standouts catch the eye first.
+// Deviation-emphasis ramp (P0, after the §10 re-audit). The earlier
+// "every cell is a visible block" version painted the neutral C+ majority
+// as a sea of gray blocks that added cognitive load without information
+// (violating rules 2 + 6). Now NEUTRAL recedes to faint text with no
+// block, and only the standouts carry ink: strengthening grades (A/B) get
+// green blocks, weakening grades (D/F) get red blocks. Scanning a column
+// the eye lands only on what deviates from the neutral field — the
+// heatmap "disappears" except where there's signal.
 const GRADE_CHIP: Record<string, string> = {
   "A+": "bg-tm-pos text-tm-bg font-semibold",
-  A: "bg-tm-pos/40 text-tm-pos font-semibold",
+  A: "bg-tm-pos/45 text-tm-pos font-semibold",
   "A-": "bg-tm-pos/30 text-tm-pos",
-  B: "bg-tm-pos/22 text-tm-pos",
-  "C+": "bg-tm-fg-2/22 text-tm-fg-2",
-  C: "bg-tm-fg-2/12 text-tm-muted",
-  D: "bg-tm-neg/28 text-tm-neg",
+  B: "bg-tm-pos/20 text-tm-pos",
+  // Neutral majority recedes: no background, faint text. Quiet field.
+  "C+": "text-tm-muted/45",
+  C: "text-tm-muted/35",
+  // Weakness draws attention back — red blocks against the quiet field.
+  D: "bg-tm-neg/30 text-tm-neg",
   F: "bg-tm-neg text-tm-bg font-semibold",
 };
 
-const EMPTY_CHIP = "text-tm-muted/40";
+const EMPTY_CHIP = "text-tm-muted/25";
 
 /** className for a single grade chip. Unknown / "—" grades render faint. */
 export function gradeChipClass(grade: string): string {

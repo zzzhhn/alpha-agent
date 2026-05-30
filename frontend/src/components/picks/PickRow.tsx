@@ -36,6 +36,18 @@ export default function PickRow({
       : 0;
   const sign = composite >= 0 ? "+" : "";
 
+  // confidence = 1/(1+variance) of the signal z's (fusion/rating.py). Below
+  // 0.5 the signal variance exceeds 1.0 — the contributing signals span more
+  // than a full sigma, i.e. they disagree more than they agree. That is the
+  // "scrutinize before acting" case, so flag it in tm-warn rather than
+  // letting it blend into the ~57% board norm. The cutoff is the var=1
+  // inflection of 1/(1+var), not an arbitrary line (rule 9 justification).
+  const CONF_CAUTION = 0.5;
+  const lowConf = conf < CONF_CAUTION;
+  const confPct = Math.round(conf * 100);
+  const confBar = lowConf ? "bg-tm-warn" : "bg-tm-fg-2/50";
+  const confText = lowConf ? "text-tm-warn" : "text-tm-fg-2";
+
   const drivers = (card.top_drivers ?? []).slice(0, 3);
   const drags = (card.top_drags ?? []).slice(0, 3);
 
@@ -85,8 +97,19 @@ export default function PickRow({
         {sign}
         {composite.toFixed(2)}σ
       </td>
-      <td className="px-3 py-1.5 font-tm-mono text-[10.5px] tabular-nums text-right">
-        {(conf * 100).toFixed(0)}%
+      <td className="px-3 py-1.5 font-tm-mono text-[10.5px] tabular-nums">
+        <span
+          className="flex items-center justify-end gap-1.5"
+          title={t(locale, "picks_table.confidence_tooltip")}
+        >
+          <span className="relative inline-block h-1 w-10 overflow-hidden rounded-sm bg-tm-rule">
+            <span
+              className={clsx("absolute inset-y-0 left-0 rounded-sm", confBar)}
+              style={{ width: `${confPct}%` }}
+            />
+          </span>
+          <span className={clsx("w-8 text-right", confText)}>{confPct}%</span>
+        </span>
       </td>
       <td className="px-3 py-1.5">
         <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} />
