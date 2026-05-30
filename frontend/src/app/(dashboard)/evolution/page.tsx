@@ -16,6 +16,8 @@ import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
 import { WeightDeltaTable } from "@/components/evolution/WeightDeltaTable";
 import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
 import { ProposalsTable } from "@/components/evolution/ProposalsTable";
+import EvolutionHealthStrip from "@/components/evolution/EvolutionHealthStrip";
+import { assessEvolutionHealth } from "@/lib/evolution-health";
 
 // Server component — fetches all evolution endpoints in parallel and renders
 // section containers. ProposalsTable (Phase 2b) replaces the old placeholder.
@@ -53,8 +55,16 @@ export default async function EvolutionPage() {
   const { icTrend, weights, calibration, changes, proposals } =
     await fetchAllEvolution();
 
+  // Decision-first header (P0): synthesize the always-present evidence into a
+  // one-glance "is the self-evolution effective & trustworthy?" read, since
+  // the discrete approve/reject surface (proposals) is often dormant. Pure,
+  // server-computed; the strip only formats it with i18n.
+  const health = assessEvolutionHealth({ icTrend, calibration, weights, proposals });
+
   return (
     <TmScreen>
+      <EvolutionHealthStrip health={health} />
+
       {/* ── Section 1: Signal IC Trend ──────────────────────────────── */}
       <TmPane
         title="SIGNAL IC TREND"
