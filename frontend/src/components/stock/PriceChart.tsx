@@ -39,6 +39,9 @@ export default function PriceChart({
   const { locale } = useLocale();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Floating crosshair tooltip that surfaces the hovered day's news headlines
+  // (replaces the old per-marker text labels that piled up unreadably).
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "empty" | "error">("loading");
   const [errMsg, setErrMsg] = useState<string>("");
   // YYYY-MM-DD of the daily candle the user clicked; null = drawer closed.
@@ -107,22 +110,25 @@ export default function PriceChart({
 
     chart.timeScale().fitContent();
 
-    // B4 (2026-05-19): event markers per type. lightweight-charts v4
-    // setMarkers attaches to a series; we attach to the candle series so
-    // markers anchor to the day's price. Shape + colour per type makes
-    // category readable at a glance:
-    //   news               = aboveBar circle (neutral fg)
-    //   macro_political    = belowBar square (accent)
-    //   macro_geopolitical = belowBar triangle (warn)
-    // Tooltip-on-hover surfaces the headline (lightweight-charts ships
-    // marker text in the built-in tooltip when chart.subscribeCrosshairMove
-    // is used; v1 keeps the simple title-as-text path that already shows).
+    // B4 (2026-05-19, decluttered 2026-05-31): event markers per type, anchored
+    // to the candle series so they sit on the day's price. CLEAN SHAPES ONLY —
+    // the old per-marker `text: headline` piled long labels on top of each
+    // other (unreadable when several events cluster near the latest bars). The
+    // headline now lives in a crosshair-hover tooltip instead.
+    //   news               = aboveBar circle
+    //   macro_political    = belowBar square
+    //   macro_geopolitical = belowBar arrowDown
+    // colour by sentiment (green/red/neutral).
+    const eventsByDay = new Map<string, ChartEvent[]>();
     if (events.length) {
       const dayBars = new Set(validBars.map((b) => b.date));
       const markers = events
         .map((e) => {
           const day = e.ts.slice(0, 10);
           if (!dayBars.has(day)) return null;
+          const list = eventsByDay.get(day) ?? [];
+          list.push(e);
+          eventsByDay.set(day, list);
           const sentiment = e.sentiment_score ?? 0;
           const color = sentiment > 0.1 ? "#16a34a" : sentiment < -0.1 ? "#dc2626" : "#9ca3af";
           const shape =
@@ -135,12 +141,48 @@ export default function PriceChart({
             position: position as "aboveBar" | "belowBar",
             color,
             shape: shape as "circle" | "square" | "arrowDown",
-            text: e.headline.length > 60 ? e.headline.slice(0, 57) + "..." : e.headline,
+            // no text — keeps the chart clean; headline surfaces on hover
           };
         })
         .filter((m): m is NonNullable<typeof m> => m !== null);
       candle.setMarkers(markers);
     }
+
+    // Crosshair-hover tooltip: show the hovered day's headlines (if any) in a
+    // floating box near the cursor. De-dupes by day so a cluster reads as one
+    // compact list instead of overlapping labels.
+    const tip = tooltipRef.current;
+    chart.subscribeCrosshairMove((param) => {
+      if (!tip) return;
+      const day = typeof param.time === "string" ? param.time : null;
+      const dayEvents = day ? eventsByDay.get(day) : undefined;
+      if (!day || !dayEvents || !param.point) {
+        tip.style.display = "none";
+        return;
+      }
+      const shown = dayEvents.slice(0, 4);
+      const more = dayEvents.length - shown.length;
+      const rows = shown
+        .map((e) => {
+          const s = e.sentiment_score ?? 0;
+          const dot = s > 0.1 ? "#16a34a" : s < -0.1 ? "#dc2626" : "#9ca3af";
+          const safe = e.headline
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          return `<div style="display:flex;gap:6px;align-items:flex-start;margin-top:2px">
+            <span style="flex:none;width:6px;height:6px;border-radius:50%;background:${dot};margin-top:4px"></span>
+            <span>${safe}</span></div>`;
+        })
+        .join("");
+      tip.innerHTML =
+        `<div style="color:${text};opacity:0.6;margin-bottom:2px">${day}</div>${rows}` +
+        (more > 0 ? `<div style="opacity:0.5;margin-top:2px">+${more}</div>` : "");
+      tip.style.display = "block";
+      // Clamp x so the box stays inside the chart; flip above if near bottom.
+      const w = el.clientWidth;
+      const left = Math.min(Math.max(param.point.x + 12, 4), w - 248);
+      tip.style.left = `${left}px`;
+      tip.style.top = `${Math.max(param.point.y - 8, 4)}px`;
+    });
 
     // Daily-candle click handler: open the IntradayDrawer for that date.
     // lightweight-charts v4 reports param.time as either a string
@@ -162,9 +204,15 @@ export default function PriceChart({
       setDrawerDate(dateStr);
     });
 
-    // Resize handler. TradingView doesn't auto-resize.
+    // Resize handler. TradingView doesn't auto-resize. Re-fit content on every
+    // width change — critical because the very first measurement can be 0 (the
+    // container starts hidden); without re-fitting, bar spacing stays computed
+    // for width≈0 and the candles cram into the right edge.
     const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth });
+      const w = el.clientWidth;
+      if (w === 0) return;
+      chart.applyOptions({ width: w });
+      chart.timeScale().fitContent();
     });
     ro.observe(el);
 
@@ -221,24 +269,31 @@ export default function PriceChart({
           </div>
         ) : null}
       </div>
-      {/* Fixed-height parent: lightweight-charts reads offsetWidth/Height at
-          init; collapsing to 0 in a flex/grid parent kills the canvas
-          (CLAUDE.md memory feedback_recharts_responsive_container_zero_width.md). */}
-      <div style={{ width: "100%", height: 320 }}>
-        {status === "loading" ? (
-          <div className="h-full flex items-center justify-center text-sm text-tm-muted">
-            {t(locale, "chart.loading")}
-          </div>
-        ) : status === "empty" ? (
-          <div className="h-full flex items-center justify-center text-sm text-tm-muted">
-            {t(locale, "chart.no_data")}
-          </div>
-        ) : status === "error" ? (
-          <div className="h-full flex items-center justify-center text-sm text-tm-neg">
-            {t(locale, "chart.error").replace("{reason}", errMsg)}
+      {/* Fixed-height parent. The chart container stays mounted at full width
+          ALWAYS (never display:none) so lightweight-charts measures a real
+          clientWidth at init — hiding it made the first measurement 0 and the
+          candles crammed right. Status overlays sit absolutely on top.
+          (CLAUDE.md memory feedback_recharts_responsive_container_zero_width.md) */}
+      <div className="relative" style={{ width: "100%", height: 320 }}>
+        <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+        {/* crosshair news tooltip */}
+        <div
+          ref={tooltipRef}
+          className="pointer-events-none absolute z-10 hidden max-w-[240px] rounded border border-tm-rule bg-tm-bg-2/95 px-2 py-1.5 font-tm-mono text-[10.5px] leading-snug text-tm-fg shadow-lg shadow-black/30"
+        />
+        {status !== "ok" ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-tm-bg-2">
+            {status === "loading" ? (
+              <span className="text-sm text-tm-muted">{t(locale, "chart.loading")}</span>
+            ) : status === "empty" ? (
+              <span className="text-sm text-tm-muted">{t(locale, "chart.no_data")}</span>
+            ) : (
+              <span className="text-sm text-tm-neg">
+                {t(locale, "chart.error").replace("{reason}", errMsg)}
+              </span>
+            )}
           </div>
         ) : null}
-        <div ref={containerRef} style={{ width: "100%", height: "100%", display: status === "ok" ? "block" : "none" }} />
       </div>
       <IntradayDrawer
         ticker={ticker}
