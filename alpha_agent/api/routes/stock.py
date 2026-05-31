@@ -552,6 +552,11 @@ async def stock_ohlcv(
 class CompanyProfile(BaseModel):
     ticker: str
     name: str | None = None
+    # Chinese company name (V019), backfilled offline. NULL until the name
+    # backfill has considered the ticker; equals `name` when the company has no
+    # established Chinese name. The frontend shows it in zh locale and treats
+    # name_zh != name as "a real Chinese name exists".
+    name_zh: str | None = None
     sector: str | None = None
     industry: str | None = None
     summary: str | None = None
@@ -603,6 +608,7 @@ async def stock_profile(
         return CompanyProfile(
             ticker=ticker,
             name=row["name"],
+            name_zh=row["name_zh"],
             sector=row["sector"],
             industry=row["industry"],
             summary=summary,

@@ -227,6 +227,34 @@ async def list_profiles_missing_zh(
     )
 
 
+async def set_company_name_zh(
+    pool: asyncpg.Pool, ticker: str, name_zh: str | None
+) -> None:
+    """Backfill the Chinese company name (offline translate script). An empty
+    or None value clears it (company has no established Chinese name)."""
+    await pool.execute(
+        "UPDATE company_profiles SET name_zh = $2 WHERE ticker = $1",
+        ticker.upper(), (name_zh or None),
+    )
+
+
+async def list_profiles_missing_name_zh(
+    pool: asyncpg.Pool, limit: int = 1000
+) -> list[asyncpg.Record]:
+    """Rows with an English name but no name_zh decision yet — work queue for
+    the name backfill. name_zh stays NULL until the backfill has CONSIDERED the
+    ticker, so re-running doesn't re-translate already-decided rows."""
+    return await pool.fetch(
+        """
+        SELECT ticker, name FROM company_profiles
+        WHERE name IS NOT NULL AND name <> '' AND name_zh IS NULL
+        ORDER BY ticker
+        LIMIT $1
+        """,
+        limit,
+    )
+
+
 # ── daily_prices (V011): one close per ticker per calendar day ───────────────
 
 

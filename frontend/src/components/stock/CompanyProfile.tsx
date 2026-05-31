@@ -91,9 +91,31 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
       <div className="text-[10px] font-tm-mono uppercase tracking-wide text-tm-muted">
         {copy.title}
       </div>
-      {profile.name ? (
-        <div className="text-sm font-semibold text-tm-fg">{profile.name}</div>
-      ) : null}
+      {(() => {
+        // In zh locale prefer the Chinese name when a REAL one exists
+        // (name_zh present AND different from the English name), with the
+        // English name kept as a muted subline for reference. Otherwise just
+        // the English name.
+        const hasZhName =
+          locale === "zh" &&
+          !!profile.name_zh &&
+          profile.name_zh !== profile.name;
+        if (hasZhName) {
+          return (
+            <div>
+              <div className="text-sm font-semibold text-tm-fg">
+                {profile.name_zh}
+              </div>
+              {profile.name ? (
+                <div className="text-[11px] text-tm-muted">{profile.name}</div>
+              ) : null}
+            </div>
+          );
+        }
+        return profile.name ? (
+          <div className="text-sm font-semibold text-tm-fg">{profile.name}</div>
+        ) : null;
+      })()}
       {subtitle ? (
         <div className="text-xs text-tm-fg-2">{subtitle}</div>
       ) : null}

@@ -266,6 +266,10 @@ export interface ExplainRangeResponse {
 export interface CompanyProfile {
   ticker: string;
   name: string | null;
+  // Chinese company name (V019). Null until backfilled; equals `name` when no
+  // established Chinese name exists. Show in zh locale; name_zh !== name means
+  // a real Chinese name is available.
+  name_zh: string | null;
   sector: string | null;
   industry: string | null;
   summary: string | null;
