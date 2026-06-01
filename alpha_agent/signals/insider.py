@@ -45,10 +45,16 @@ def prime_cache(values: dict[str, tuple[float, int]]) -> None:
 def _fetch(ticker: str, as_of: datetime) -> SignalScore:
     entry = _NET_CACHE.get(ticker.upper())
     if entry is None or entry[1] == 0:
+        # No open-market Form 4 in 30d = genuinely NO insider signal, not a
+        # measured-neutral 0. Emit z=None so it is dropped from the composite
+        # (combine treats non-finite z as a drop, like earnings) AND excluded
+        # from the cross-sectional grade (shown "—" rather than a misleading
+        # C+ relative to the selling-skewed active universe). Rule 9: no fake
+        # signal. Most tickers in most months legitimately fall here.
         return SignalScore(
-            ticker=ticker, z=0.0,
+            ticker=ticker, z=None,  # type: ignore[typeddict-item]
             raw={"net_value": 0, "n_fillings": 0},
-            confidence=0.4, as_of=as_of, source="edgar",
+            confidence=0.0, as_of=as_of, source="edgar",
             error="no filings in 30d",
         )
     net, n = entry

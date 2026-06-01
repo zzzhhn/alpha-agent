@@ -20,19 +20,21 @@ def test_primed_net_selling_yields_negative_z():
     assert fetch_signal("AAPL", _AS_OF)["z"] < 0
 
 
-def test_ticker_absent_from_cache_is_neutral():
+def test_ticker_absent_from_cache_has_no_signal():
     prime_cache({"AAPL": (2_000_000.0, 3)})
     out = fetch_signal("XYZ", _AS_OF)  # not primed
-    assert out["z"] == 0.0
-    assert out["confidence"] < 0.5
+    # z=None -> dropped from composite + excluded from the dimension grade
+    # (shown "—"), not a misleading neutral 0.
+    assert out["z"] is None
+    assert out["confidence"] == 0.0
     assert out["error"] == "no filings in 30d"
 
 
-def test_zero_filings_is_neutral_even_if_present():
+def test_zero_filings_has_no_signal():
     prime_cache({"XYZ": (0.0, 0)})
     out = fetch_signal("XYZ", _AS_OF)
-    assert out["z"] == 0.0
-    assert out["confidence"] < 0.5
+    assert out["z"] is None
+    assert out["confidence"] == 0.0
 
 
 def test_prime_cache_replaces_not_merges():
