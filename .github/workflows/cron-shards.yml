@@ -18,6 +18,11 @@ on:
   schedule:
     # Daily SP500 slow refresh — 13:30 UTC = 09:30 ET pre-open (weekdays).
     - cron: '30 13 * * 1-5'
+    # Redundant slow-sweep backstop: GitHub Actions skips/delays scheduled
+    # triggers under load (the 13:30 sweep was skipped 2026-06-01, freezing the
+    # long-tail universe). A second daily trigger guarantees the full 557-ticker
+    # sweep runs even when one is dropped. Idempotent, so a double-run is safe.
+    - cron: '0 14 * * 1-5'
     # Periodic full-10-signal bootstrap for top-240 — every 2h during market.
     # Tier jobs (tech/mid/slow) cover the full 557 universe at higher
     # cadence for their respective signal subsets; this run rebuilds
@@ -248,6 +253,7 @@ jobs:
     if: |
       always() && (
         github.event.schedule == '30 13 * * 1-5' ||
+        github.event.schedule == '0 14 * * 1-5' ||
         (github.event_name == 'workflow_dispatch' &&
          (inputs.job == 'slow_daily' || inputs.job == 'both'))
       )

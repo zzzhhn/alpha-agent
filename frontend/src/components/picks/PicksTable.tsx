@@ -19,6 +19,15 @@ export default function PicksTable({
   const { locale } = useLocale();
   // Drop dimension columns that are dead across every visible pick.
   const hiddenDims = useMemo(() => computeHiddenDims(picks), [picks]);
+  // Freshest as_of in the list, so each row can flag if its own data lags it.
+  const freshestAsOf = useMemo(
+    () =>
+      picks.reduce<string | null>(
+        (mx, p) => (p.as_of && (!mx || p.as_of > mx) ? p.as_of : mx),
+        null,
+      ),
+    [picks],
+  );
 
   if (picks.length === 0) {
     return (
@@ -55,6 +64,7 @@ export default function PicksTable({
             watched={isWatched?.(card.ticker) ?? false}
             locale={locale}
             hiddenDims={hiddenDims}
+            freshestAsOf={freshestAsOf}
           />
         ))}
       </tbody>

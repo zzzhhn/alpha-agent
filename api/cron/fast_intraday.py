@@ -139,14 +139,13 @@ async def handler(
         return {"ok": False, "tier": tier, "error": f"unknown tier: {tier}"}
     tier_modules = _TIERS[tier]
 
-    from alpha_agent.universe import get_watchlist
-
     pool = await get_pool(os.environ["DATABASE_URL"])
     await refresh_config(pool)
     # Prime insider from the precomputed Form 4 table (SEC fetch lives in a
     # separate job). Harmless when this tier reuses insider from the prior
     # breakdown; needed when the "slow" tier refreshes news + insider.
     from alpha_agent.storage.queries import (
+        get_priority_universe,
         load_all_earnings_finnhub,
         load_all_insider_form4,
     )
@@ -158,9 +157,16 @@ async def handler(
     errors: list[dict] = []
     bucket = int(now.timestamp()) // 1800
 
-    base_universe = get_watchlist(top_n=limit if limit else 100, offset=offset or 0)
+    # Rank-based coverage: refresh the highest-conviction names (|composite|
+    # DESC) the picks page actually surfaces, NOT the alphabetical SP500 head.
+    # The old get_watchlist stub returned SP500[offset:], leaving top picks like
+    # WDC (idx 532) perpetually stale. Full-universe daily coverage still comes
+    # from slow_daily; this just decides who gets the frequent intraday refresh.
+    base_universe = await get_priority_universe(
+        pool, top_n=limit if limit else 100, offset=offset or 0
+    )
     # offset=0 shard unions in every user's watchlist tickers so a starred
-    # ticker gets intraday coverage even when not in the SP500 head.
+    # ticker gets intraday coverage even when not in the head of the ranking.
     if (offset or 0) == 0:
         wl_rows = await pool.fetch("SELECT DISTINCT ticker FROM user_watchlist")
         extras = {r["ticker"] for r in wl_rows} - set(base_universe)

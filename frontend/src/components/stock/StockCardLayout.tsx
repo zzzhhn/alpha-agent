@@ -93,6 +93,7 @@ export default function StockCardLayout({
           {stale ? (
             <div className="rounded bg-tm-warn-soft px-2 py-1 text-tm-warn">
               ⚠ {t(locale, "stock_layout.stale_warning")}
+              {staleLagSuffix(card.as_of, locale)}
             </div>
           ) : null}
           {card.partial ? (
@@ -153,6 +154,23 @@ function formatAsOf(raw: string | null | undefined): string {
   if (!raw) return "—";
   const d = new Date(raw);
   return isNaN(d.getTime()) ? "—" : d.toLocaleString();
+}
+
+/**
+ * Human-readable lag from `as_of` to now, e.g. " · 滞后 3 天" / " · 3d behind".
+ * Honest specifics beat a generic ">24h" pill (the user could not tell a
+ * 1-day lag from a 3-day one). Returns "" when as_of is unparseable.
+ */
+function staleLagSuffix(raw: string | null | undefined, locale: Locale): string {
+  if (!raw) return "";
+  const ms = Date.now() - new Date(raw).getTime();
+  if (isNaN(ms) || ms <= 0) return "";
+  const hours = Math.floor(ms / 3_600_000);
+  const days = Math.floor(hours / 24);
+  if (locale === "zh") {
+    return days >= 1 ? ` · 滞后 ${days} 天` : ` · 滞后 ${hours} 小时`;
+  }
+  return days >= 1 ? ` · ${days}d behind` : ` · ${hours}h behind`;
 }
 
 

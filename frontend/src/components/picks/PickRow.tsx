@@ -23,13 +23,25 @@ export default function PickRow({
   watched = false,
   locale = "zh",
   hiddenDims,
+  freshestAsOf,
 }: {
   rank: number;
   card: RatingCard;
   watched?: boolean;
   locale?: Locale;
   hiddenDims?: ReadonlySet<string>;
+  // Freshest as_of across the visible list, so a row that lags it (its own
+  // data is from an earlier day) is flagged — the list header alone shows the
+  // max, which would otherwise hide a stale row behind a fresh-looking time.
+  freshestAsOf?: string | null;
 }) {
+  // Days this row's data lags the freshest row in the list (0 if within ~20h).
+  const staleDays = (() => {
+    if (!freshestAsOf || !card.as_of) return 0;
+    const gap = new Date(freshestAsOf).getTime() - new Date(card.as_of).getTime();
+    if (isNaN(gap) || gap <= 0) return 0;
+    return gap > 20 * 3_600_000 ? Math.round(gap / 86_400_000) : 0;
+  })();
   // Defensive: backend may return null for composite/confidence when legacy
   // DB rows held NaN before storage sanitization landed.
   const composite =
@@ -90,6 +102,18 @@ export default function PickRow({
             title={t(locale, "picks_table.partial_tooltip")}
           >
             {t(locale, "picks_table.partial_badge")}
+          </span>
+        ) : null}
+        {staleDays > 0 ? (
+          <span
+            className="ml-1.5 rounded bg-tm-warn-soft px-1 py-0.5 align-middle text-[8px] font-semibold tabular-nums text-tm-warn"
+            title={
+              locale === "zh"
+                ? `该行数据比榜单最新时间旧 ${staleDays} 天`
+                : `this row's data is ${staleDays}d older than the freshest`
+            }
+          >
+            {staleDays}d
           </span>
         ) : null}
       </td>

@@ -285,6 +285,51 @@ async def load_all_insider_form4(
     return {r["ticker"]: (r["net_value"], r["n_filings"]) for r in rows}
 
 
+# ── priority universe: rank-based intraday refresh order ─────────────────────
+
+
+async def get_priority_universe(
+    pool: asyncpg.Pool, top_n: int, offset: int = 0
+) -> list[str]:
+    """Tickers ordered by conviction (|latest composite| DESC) for the intraday
+    fast refresh, so the high-signal names the picks page actually surfaces stay
+    fresh regardless of alphabetical position (the old SP500[offset:] stub left
+    e.g. WDC, a top pick, perpetually stale). Both tails (most bullish AND most
+    bearish) score high under abs(). Tickers without a composite yet are
+    appended in universe order so coverage still walks the whole universe over
+    successive offsets. Sliced [offset:offset+top_n]."""
+    from alpha_agent.universe import SP500_UNIVERSE
+
+    rows = await pool.fetch(
+        """
+        WITH fast_latest AS (
+            SELECT DISTINCT ON (ticker) ticker, composite AS score
+            FROM daily_signals_fast
+            WHERE composite IS NOT NULL AND composite = composite
+            ORDER BY ticker, date DESC, fetched_at DESC
+        ),
+        slow_latest AS (
+            SELECT DISTINCT ON (ticker) ticker, composite_partial AS score
+            FROM daily_signals_slow
+            WHERE composite_partial IS NOT NULL
+              AND composite_partial = composite_partial
+            ORDER BY ticker, date DESC, fetched_at DESC
+        ),
+        combined AS (
+            SELECT ticker, score FROM fast_latest
+            UNION ALL
+            SELECT s.ticker, s.score FROM slow_latest s
+            WHERE NOT EXISTS (SELECT 1 FROM fast_latest f WHERE f.ticker = s.ticker)
+        )
+        SELECT ticker FROM combined ORDER BY abs(score) DESC
+        """
+    )
+    ranked = [r["ticker"] for r in rows]
+    seen = set(ranked)
+    ranked += [t for t in SP500_UNIVERSE if t not in seen]
+    return ranked[offset : offset + top_n]
+
+
 # ── earnings_finnhub (V021): precomputed earnings-surprise inputs per ticker ──
 
 
