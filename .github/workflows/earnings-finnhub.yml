@@ -1,0 +1,31 @@
+name: earnings-finnhub
+
+# Ingest Finnhub earnings-surprise inputs for the universe into Neon. Runs
+# OUTSIDE Vercel (no 300s limit, clean egress). The signal crons read the
+# earnings_finnhub table this writes. Scheduled before the slow_daily signal
+# cron (13:30 UTC) so the table is fresh when it primes.
+on:
+  schedule:
+    - cron: "30 11 * * 1-5"
+  workflow_dispatch: {}
+
+concurrency:
+  group: earnings-finnhub
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[storage]" httpx python-dotenv
+      - name: Ingest Finnhub earnings
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: python scripts/ingest_earnings_finnhub.py

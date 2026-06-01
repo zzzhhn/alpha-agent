@@ -285,6 +285,50 @@ async def load_all_insider_form4(
     return {r["ticker"]: (r["net_value"], r["n_filings"]) for r in rows}
 
 
+# ── earnings_finnhub (V021): precomputed earnings-surprise inputs per ticker ──
+
+
+async def upsert_earnings_finnhub(
+    pool: asyncpg.Pool,
+    ticker: str,
+    recent_surprise: float | None,
+    sigma: float | None,
+    report_date,
+    next_date,
+    eps_estimate: float | None,
+    revenue_estimate: float | None,
+) -> None:
+    """Store one ticker's earnings-surprise inputs (run by the Finnhub job)."""
+    await pool.execute(
+        """
+        INSERT INTO earnings_finnhub (ticker, recent_surprise, sigma, report_date,
+            next_date, eps_estimate, revenue_estimate, computed_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        ON CONFLICT (ticker) DO UPDATE
+        SET recent_surprise = EXCLUDED.recent_surprise,
+            sigma = EXCLUDED.sigma,
+            report_date = EXCLUDED.report_date,
+            next_date = EXCLUDED.next_date,
+            eps_estimate = EXCLUDED.eps_estimate,
+            revenue_estimate = EXCLUDED.revenue_estimate,
+            computed_at = now()
+        """,
+        ticker.upper(), recent_surprise, sigma, report_date,
+        next_date, eps_estimate, revenue_estimate,
+    )
+
+
+async def load_all_earnings_finnhub(pool: asyncpg.Pool) -> dict[str, dict]:
+    """All precomputed earnings inputs as {ticker: {...}}. Loaded once per
+    signal cron run to prime the earnings signal (no Finnhub call on the
+    signal path)."""
+    rows = await pool.fetch(
+        """SELECT ticker, recent_surprise, sigma, report_date, next_date,
+                  eps_estimate, revenue_estimate FROM earnings_finnhub"""
+    )
+    return {r["ticker"]: dict(r) for r in rows}
+
+
 # ── daily_prices (V011): one close per ticker per calendar day ───────────────
 
 
