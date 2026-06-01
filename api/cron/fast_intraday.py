@@ -143,6 +143,11 @@ async def handler(
 
     pool = await get_pool(os.environ["DATABASE_URL"])
     await refresh_config(pool)
+    # Prime insider from the precomputed Form 4 table (SEC fetch lives in a
+    # separate job). Harmless when this tier reuses insider from the prior
+    # breakdown; needed when the "slow" tier refreshes news + insider.
+    from alpha_agent.storage.queries import load_all_insider_form4
+    insider.prime_cache(await load_all_insider_form4(pool))
     now = datetime.now(UTC)
     today = now.date().isoformat()
     started_at = now

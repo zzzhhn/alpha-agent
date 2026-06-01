@@ -3,8 +3,9 @@
 import type { RatingCard } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { useMemo } from "react";
 import PickRow from "./PickRow";
-import { GradeStripHeader } from "./GradeStrip";
+import { GradeStripHeader, computeHiddenDims } from "./GradeStrip";
 
 const TH = "px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted select-none";
 
@@ -16,6 +17,8 @@ export default function PicksTable({
   isWatched?: (ticker: string) => boolean;
 }) {
   const { locale } = useLocale();
+  // Drop dimension columns that are dead across every visible pick.
+  const hiddenDims = useMemo(() => computeHiddenDims(picks), [picks]);
 
   if (picks.length === 0) {
     return (
@@ -37,7 +40,7 @@ export default function PicksTable({
           <th className={`${TH} text-left`}>
             <span className="flex flex-col gap-0.5">
               <span>{t(locale, "picks_table.col_grades")}</span>
-              <GradeStripHeader locale={locale} />
+              <GradeStripHeader locale={locale} hidden={hiddenDims} />
             </span>
           </th>
           <th className={`${TH} text-left`}>{t(locale, "picks_table.col_drivers_drags")}</th>
@@ -51,6 +54,7 @@ export default function PicksTable({
             card={card}
             watched={isWatched?.(card.ticker) ?? false}
             locale={locale}
+            hiddenDims={hiddenDims}
           />
         ))}
       </tbody>

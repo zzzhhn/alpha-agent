@@ -53,6 +53,11 @@ async def handler(
 
     pool = await get_pool(os.environ["DATABASE_URL"])
     await refresh_config(pool)
+    # Prime the insider signal from the precomputed Form 4 table. The SEC fetch
+    # runs in a separate job (scripts/ingest_insider_form4.py), never here, so
+    # the signal path stays network-free.
+    from alpha_agent.storage.queries import load_all_insider_form4
+    insider.prime_cache(await load_all_insider_form4(pool))
     today = datetime.now(UTC).date().isoformat()
     now = datetime.now(UTC)
     started_at = now

@@ -22,11 +22,13 @@ export default function PickRow({
   card,
   watched = false,
   locale = "zh",
+  hiddenDims,
 }: {
   rank: number;
   card: RatingCard;
   watched?: boolean;
   locale?: Locale;
+  hiddenDims?: ReadonlySet<string>;
 }) {
   // Defensive: backend may return null for composite/confidence when legacy
   // DB rows held NaN before storage sanitization landed.
@@ -121,7 +123,7 @@ export default function PickRow({
         </span>
       </td>
       <td className="px-3 py-1.5">
-        <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} />
+        <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} hidden={hiddenDims} />
       </td>
       <td className="px-3 py-1.5 font-tm-mono text-[10px]">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">

@@ -255,6 +255,36 @@ async def list_profiles_missing_name_zh(
     )
 
 
+# ── insider_form4 (V020): precomputed SEC Form 4 net value per ticker ────────
+
+
+async def upsert_insider_form4(
+    pool: asyncpg.Pool, ticker: str, net_value: float, n_filings: int
+) -> None:
+    """Store one ticker's net insider value (run by the Form 4 ingestion job)."""
+    await pool.execute(
+        """
+        INSERT INTO insider_form4 (ticker, net_value, n_filings, computed_at)
+        VALUES ($1, $2, $3, now())
+        ON CONFLICT (ticker) DO UPDATE
+        SET net_value = EXCLUDED.net_value,
+            n_filings = EXCLUDED.n_filings,
+            computed_at = now()
+        """,
+        ticker.upper(), float(net_value), int(n_filings),
+    )
+
+
+async def load_all_insider_form4(
+    pool: asyncpg.Pool,
+) -> dict[str, tuple[float, int]]:
+    """All precomputed insider net values as {ticker: (net_value, n_filings)}.
+    Loaded once per signal cron run to prime the insider signal cache, so the
+    signal path makes no SEC calls."""
+    rows = await pool.fetch("SELECT ticker, net_value, n_filings FROM insider_form4")
+    return {r["ticker"]: (r["net_value"], r["n_filings"]) for r in rows}
+
+
 # ── daily_prices (V011): one close per ticker per calendar day ───────────────
 
 
