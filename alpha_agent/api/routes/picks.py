@@ -150,12 +150,21 @@ async def picks_lean(
                 ORDER BY ticker, date DESC, fetched_at DESC
             ),
             combined AS (
-                SELECT * FROM fast_latest
-                UNION ALL
-                SELECT * FROM slow_latest s
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM fast_latest f WHERE f.ticker = s.ticker
-                )
+                -- Recency wins, not table-preference: a ticker that dropped out
+                -- of the intraday fast set keeps a stale fast row; the old
+                -- "fast unless absent" rule let that stale fast shadow a fresher
+                -- daily slow row (the 2026-06-01 misaligned-timestamp bug). Take
+                -- whichever row is genuinely newest per ticker; the partial flag
+                -- stays correct so the ORDER BY below still ranks full fast
+                -- cards above partial ones.
+                SELECT DISTINCT ON (ticker)
+                    ticker, score, rating, confidence, breakdown, fetched_at, partial
+                FROM (
+                    SELECT * FROM fast_latest
+                    UNION ALL
+                    SELECT * FROM slow_latest
+                ) u
+                ORDER BY ticker, fetched_at DESC
             )
             SELECT ticker, score, rating, confidence, breakdown,
                    fetched_at, partial

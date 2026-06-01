@@ -108,9 +108,16 @@ async def fetch_latest_signal(
             ORDER BY date DESC, fetched_at DESC
             LIMIT 1
         )
-        SELECT * FROM fast_row
-        UNION ALL
-        SELECT * FROM slow_row WHERE NOT EXISTS (SELECT 1 FROM fast_row)
+        -- Recency wins, not table-preference: a ticker that fell out of the
+        -- intraday fast set keeps a stale fast row; preferring it would shadow
+        -- a fresher daily slow row (the 2026-06-01 misaligned-timestamp bug).
+        -- Take whichever row is genuinely newest; partial flag stays correct.
+        SELECT * FROM (
+            SELECT * FROM fast_row
+            UNION ALL
+            SELECT * FROM slow_row
+        ) u
+        ORDER BY fetched_at DESC
         LIMIT 1
         """,
         ticker,

@@ -303,23 +303,26 @@ async def get_priority_universe(
     rows = await pool.fetch(
         """
         WITH fast_latest AS (
-            SELECT DISTINCT ON (ticker) ticker, composite AS score
+            SELECT DISTINCT ON (ticker) ticker, composite AS score, fetched_at
             FROM daily_signals_fast
             WHERE composite IS NOT NULL AND composite = composite
             ORDER BY ticker, date DESC, fetched_at DESC
         ),
         slow_latest AS (
-            SELECT DISTINCT ON (ticker) ticker, composite_partial AS score
+            SELECT DISTINCT ON (ticker) ticker, composite_partial AS score, fetched_at
             FROM daily_signals_slow
             WHERE composite_partial IS NOT NULL
               AND composite_partial = composite_partial
             ORDER BY ticker, date DESC, fetched_at DESC
         ),
         combined AS (
-            SELECT ticker, score FROM fast_latest
-            UNION ALL
-            SELECT s.ticker, s.score FROM slow_latest s
-            WHERE NOT EXISTS (SELECT 1 FROM fast_latest f WHERE f.ticker = s.ticker)
+            -- Recency wins (see picks route): rank by the freshest composite per
+            -- ticker, not the fast one if it is stale.
+            SELECT DISTINCT ON (ticker) ticker, score FROM (
+                SELECT ticker, score, fetched_at FROM fast_latest
+                UNION ALL
+                SELECT ticker, score, fetched_at FROM slow_latest
+            ) u ORDER BY ticker, fetched_at DESC
         )
         SELECT ticker FROM combined ORDER BY abs(score) DESC
         """
