@@ -25,7 +25,8 @@ from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.backtest.confidence_calibration import load_active_calibration
 from alpha_agent.fusion.attribution import top_drivers, top_drags
-from alpha_agent.fusion.grades import compute_dimension_grades
+from alpha_agent.fusion.grades import grade_dimensions
+from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.llm.base import LLMClient, Message
 from alpha_agent.signals.yf_helpers import (
     extract_ohlcv,
@@ -146,7 +147,9 @@ async def get_stock(
         news_items=news_items,
         tier_flip_today=sig.get("tier_flip_today", False),
         gex_info=sig.get("gex_info"),
-        dimension_grades=compute_dimension_grades(sig["breakdown"]),
+        dimension_grades=grade_dimensions(
+            sig["breakdown"], await get_dimension_thresholds(pool)
+        ),
     )
     return StockResponse(card=card, stale=stale)
 

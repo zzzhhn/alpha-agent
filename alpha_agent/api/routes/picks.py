@@ -13,7 +13,8 @@ from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
-from alpha_agent.fusion.grades import compute_dimension_grades
+from alpha_agent.fusion.grades import grade_dimensions
+from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
 
 router = APIRouter(prefix="/api/picks", tags=["picks"])
@@ -172,6 +173,10 @@ async def picks_lean(
         most_recent: datetime = max(r["fetched_at"] for r in rows)
         stale = (datetime.now(UTC) - most_recent) > timedelta(hours=_STALE_THRESHOLD_HOURS)
 
+        # Universe-wide band breakpoints so each dimension is graded against its
+        # own cross-sectional distribution (not the returned top-N subset).
+        dim_thresholds = await get_dimension_thresholds(pool)
+
         cards: list[LeanCard] = []
         for r in rows:
             try:
@@ -239,7 +244,7 @@ async def picks_lean(
                     top_drags=top_drags(breakdown_data),
                     partial=is_partial,
                     tier_flip_today=tier_flip_today,
-                    dimension_grades=compute_dimension_grades(breakdown_data),
+                    dimension_grades=grade_dimensions(breakdown_data, dim_thresholds),
                 )
             )
 
