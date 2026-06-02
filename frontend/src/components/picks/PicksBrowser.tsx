@@ -22,10 +22,19 @@ import {
   TmStatusPill,
 } from "@/components/tm/TmSubbar";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 import { useWatchlist } from "@/hooks/useWatchlist";
 // Shared hook so a flip on Stock detail's AttributionTable / Radar
 // propagates back here via the storage event broadcast inside the hook.
 import { useFactorMode } from "@/hooks/useFactorMode";
+import {
+  DISPATCH_EVENT,
+  clearDispatch,
+  isInFlight,
+  loadDispatch,
+  loadSnapshot,
+  saveSnapshot,
+} from "@/lib/dispatch-state";
 
 type PicksData = { picks: RatingCard[]; as_of: string | null; stale: boolean };
 
@@ -107,6 +116,74 @@ export default function PicksBrowser({
   const onSideToggle = useCallback(() => {
     setSide((s) => (s === "long" ? "short" : "long"));
   }, []);
+
+  // ── Refresh-window snapshot freeze (#4) ──────────────────────────────────
+  // The board updates progressively over the ~18min dispatch window, so a
+  // mid-window reload would otherwise show a different half-updated list each
+  // time. PicksBrowser doesn't poll, so same-tab the list is frozen naturally;
+  // the only thing that changes it mid-window is a page reload (SSR re-fetch).
+  // So: on dispatch, snapshot the default board; on mount during the window,
+  // serve that snapshot instead of the half-updated SSR data; when the window
+  // ends, refetch once and flash an "updated" banner.
+  const [now, setNow] = useState(() => Date.now());
+  const [justRefreshed, setJustRefreshed] = useState(false);
+  // Gate localStorage-derived UI on mount so SSR and first client render agree
+  // (loadDispatch returns null server-side but a value client-side -> mismatch).
+  const [hydrated, setHydrated] = useState(false);
+  const liveRef = useRef({ data, search, factorMode, side });
+  liveRef.current = { data, search, factorMode, side };
+  const wasInFlightRef = useRef(false);
+
+  useEffect(() => {
+    setHydrated(true);
+    // Mount: during an in-flight window, prefer the frozen snapshot over the
+    // progressively-updating SSR data.
+    if (isInFlight(loadDispatch())) {
+      const snap = loadSnapshot();
+      if (snap) {
+        setData({ picks: snap.picks, as_of: snap.as_of, stale: snap.stale });
+      }
+      wasInFlightRef.current = true;
+    }
+    const onDispatch = () => {
+      // Snapshot the default board (no active search) for reload-freeze.
+      const l = liveRef.current;
+      if (!l.search.trim()) {
+        saveSnapshot({
+          picks: l.data.picks,
+          as_of: l.data.as_of,
+          stale: l.data.stale,
+        });
+      }
+      wasInFlightRef.current = true;
+      setNow(Date.now());
+    };
+    window.addEventListener(DISPATCH_EVENT, onDispatch);
+    const id = setInterval(() => {
+      setNow(Date.now());
+      if (wasInFlightRef.current && !isInFlight(loadDispatch())) {
+        // Window ended: drop the freeze, pull fresh once, flash a banner.
+        wasInFlightRef.current = false;
+        clearDispatch();
+        const l = liveRef.current;
+        runSearch(l.search, l.factorMode, l.side);
+        setJustRefreshed(true);
+        setTimeout(() => setJustRefreshed(false), 8000);
+      }
+    }, 5000);
+    return () => {
+      window.removeEventListener(DISPATCH_EVENT, onDispatch);
+      clearInterval(id);
+    };
+    // Mount-only: refs carry the latest values into the listener/interval.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runSearch]);
+
+  const dispatch = hydrated ? loadDispatch() : null;
+  const refreshing = isInFlight(dispatch, now);
+  const refreshRemainingMin = dispatch
+    ? Math.max(Math.ceil((dispatch.at + dispatch.etaMin * 60_000 - now) / 60_000), 0)
+    : 0;
 
   const searching = search.trim().length > 0;
   const count = data.picks.length;
@@ -231,6 +308,18 @@ export default function PicksBrowser({
               : copy.metaLong
         }
       >
+        {refreshing ? (
+          <div className="mx-3 mt-2 rounded border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-accent">
+            {t(locale, "picks.freeze_banner").replace(
+              "{min}",
+              String(refreshRemainingMin),
+            )}
+          </div>
+        ) : justRefreshed ? (
+          <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-pos">
+            {t(locale, "picks.refreshed_banner")}
+          </div>
+        ) : null}
         <div className="flex items-center gap-2 px-3 py-2">
           <input
             type="text"

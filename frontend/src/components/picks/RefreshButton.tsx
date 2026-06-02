@@ -11,41 +11,11 @@ import { useCallback, useEffect, useState } from "react";
 import { triggerRefresh, fetchLastRefresh } from "@/lib/api/admin";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
-
-// localStorage key for surviving a page refresh: the ETA progress bar
-// was driven purely by React state, so reloading the page dropped it.
-// We persist {at, etaMin} on successful dispatch and rehydrate on mount.
-const DISPATCH_KEY = "alpha-agent:dispatch";
-
-function loadDispatch(): { at: number; etaMin: number } | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(DISPATCH_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { at?: number; etaMin?: number };
-    if (typeof parsed.at !== "number" || typeof parsed.etaMin !== "number") {
-      return null;
-    }
-    // Grace window beyond ETA: a user returning days later should not
-    // still see a "done" hint from an ancient dispatch. Drop it.
-    if (Date.now() - parsed.at > (parsed.etaMin + 30) * 60_000) {
-      localStorage.removeItem(DISPATCH_KEY);
-      return null;
-    }
-    return { at: parsed.at, etaMin: parsed.etaMin };
-  } catch {
-    return null;
-  }
-}
-
-function saveDispatch(at: number, etaMin: number): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(DISPATCH_KEY, JSON.stringify({ at, etaMin }));
-  } catch {
-    // Silent: localStorage can be unavailable in private mode.
-  }
-}
+import {
+  DISPATCH_EVENT,
+  loadDispatch,
+  saveDispatch,
+} from "@/lib/dispatch-state";
 
 function formatAge(iso: string | null, locale: "zh" | "en"): string {
   if (!iso) return locale === "zh" ? "暂无" : "never";
@@ -83,8 +53,8 @@ function DispatchProgress({
 }) {
   const label = done
     ? locale === "zh"
-      ? "预计已完成，刷新页面查看最新数据"
-      : "ETA reached, reload to see fresh data"
+      ? "数据已更新"
+      : "data updated"
     : locale === "zh"
       ? `预计还需 ${remainingMin} 分钟`
       : `about ${remainingMin} min remaining`;
@@ -179,6 +149,8 @@ export default function RefreshButton() {
         setEtaMin(eta);
         setDispatchedAt(at);
         saveDispatch(at, eta);
+        // Tell PicksBrowser (same tab) to snapshot + freeze the board now.
+        window.dispatchEvent(new CustomEvent(DISPATCH_EVENT));
         dispatched = true;
       } else if (r.reason?.toLowerCase().includes("cooldown")) {
         setToast({ kind: "cooldown" });
@@ -212,6 +184,11 @@ export default function RefreshButton() {
     const remainingMin = Math.max(Math.ceil((totalMs - elapsedMs) / 60_000), 0);
     return { pct, remainingMin, done: pct >= 1 };
   })();
+  // Lock the button for the WHOLE estimated window, not just the brief
+  // dispatch HTTP call — re-clicking mid-window used to fire a second cron
+  // dispatch (the user's complaint), not a page refresh.
+  const inFlight = progress != null && !progress.done;
+  const btnPct = inFlight && progress ? Math.round(progress.pct * 100) : 0;
 
   // The "ok" state is represented by the progress bar, so only non-ok
   // toasts render as a text span.
@@ -246,10 +223,13 @@ export default function RefreshButton() {
         <button
           type="button"
           onClick={onClick}
-          disabled={pending}
+          disabled={pending || inFlight}
+          title={inFlight ? t(locale, "picks.refresh.inflight_tip") : undefined}
           className="rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 text-tm-fg hover:border-tm-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {t(locale, pending ? "picks.refresh.pending" : "picks.refresh")}
+          {inFlight
+            ? `${t(locale, "picks.refresh.inflight")} ${btnPct}%`
+            : t(locale, pending ? "picks.refresh.pending" : "picks.refresh")}
         </button>
         {toastText ? (
           <span className={`text-xs ${toastTone}`}>{toastText}</span>
