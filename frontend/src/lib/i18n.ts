@@ -1040,6 +1040,8 @@ const translations = {
     /* Intraday drawer (Phase 5: click daily candle for minute bars) */
     "intraday.title": "分钟级数据",
     "intraday.close": "关闭",
+    "intraday.news_title": "当日新闻 / 事件",
+    "intraday.news_empty": "该日无新闻或事件",
     "intraday.empty": "该日无交易数据 (可能是周末/节假日)",
     "intraday.out_of_range": "分钟级历史仅保留最近 30 天",
     "intraday.loading": "加载中...",
@@ -2076,6 +2078,8 @@ const translations = {
     /* Intraday drawer (Phase 5: click daily candle for minute bars) */
     "intraday.title": "Intraday minute bars",
     "intraday.close": "Close",
+    "intraday.news_title": "News / events this day",
+    "intraday.news_empty": "No news or events for this day",
     "intraday.empty": "No trading data for this day (weekend / holiday?)",
     "intraday.out_of_range": "Minute-level history limited to last 30 days",
     "intraday.loading": "Loading...",

@@ -4,13 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import {
   fetchMinuteBars,
+  type ChartEvent,
   type MinuteBar,
   type MinuteBarsResponse,
 } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 
-// Modal that pops over the daily PriceChart when a user clicks a candle.
+// Inline panel (was a modal) that opens BELOW the daily PriceChart when a user
+// clicks a candle: the day's intraday minute chart + a scrollable list of that
+// day's news/events. Inline (not a popup) per the 2026-06-02 redesign.
 // Renders an intraday minute candlestick chart for the selected date.
 // Mirrors the PriceChart.tsx lightweight-charts dynamic-import pattern but
 // with a smaller surface (no SMA, no volume, no markers).
@@ -18,10 +21,14 @@ export default function IntradayDrawer({
   ticker,
   date,
   onClose,
+  news = [],
 }: {
   ticker: string;
   date: string | null;
   onClose: () => void;
+  // That day's events (news + macro), already filtered by the parent, shown as
+  // a scrollable list below the intraday chart.
+  news?: ChartEvent[];
 }) {
   const { locale } = useLocale();
 
@@ -148,58 +155,107 @@ export default function IntradayDrawer({
   if (!date) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t(locale, "intraday.title")}
-    >
-      <div
-        className="bg-tm-bg-2 border border-tm-rule rounded-lg p-4 w-[90vw] max-w-3xl h-[70vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-tm-fg">
-            {ticker} {t(locale, "intraday.title")} · {date}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-tm-muted hover:text-tm-fg transition-colors"
-            aria-label={t(locale, "intraday.close")}
-          >
-            <X size={20} />
-          </button>
+    <div className="mt-3 rounded border border-tm-rule bg-tm-bg-2 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-base font-semibold text-tm-fg">
+          {ticker} {t(locale, "intraday.title")} · {date}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-tm-muted transition-colors hover:text-tm-fg"
+          aria-label={t(locale, "intraday.close")}
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* intraday minute chart */}
+      <div className="relative" style={{ width: "100%", height: 280 }}>
+        {status === "loading" ? (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-tm-muted">
+            {t(locale, "intraday.loading")}
+          </div>
+        ) : status === "empty" ? (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-tm-muted">
+            {t(locale, "intraday.empty")}
+          </div>
+        ) : status === "out_of_range" ? (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-tm-muted">
+            {t(locale, "intraday.out_of_range")}
+          </div>
+        ) : status === "error" ? (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-tm-neg">
+            {t(locale, "intraday.error")}: {errMsg}
+          </div>
+        ) : null}
+        <div
+          ref={containerRef}
+          style={{
+            width: "100%",
+            height: "100%",
+            display: status === "ok" ? "block" : "none",
+          }}
+        />
+      </div>
+
+      {/* that day's news / events */}
+      <div className="mt-3 border-t border-tm-rule pt-3">
+        <div className="mb-1.5 font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted">
+          {t(locale, "intraday.news_title")} · {news.length}
         </div>
-        <div className="flex-1 min-h-0 relative">
-          {status === "loading" ? (
-            <div className="h-full flex items-center justify-center text-sm text-tm-muted">
-              {t(locale, "intraday.loading")}
-            </div>
-          ) : status === "empty" ? (
-            <div className="h-full flex items-center justify-center text-sm text-tm-muted">
-              {t(locale, "intraday.empty")}
-            </div>
-          ) : status === "out_of_range" ? (
-            <div className="h-full flex items-center justify-center text-sm text-tm-muted">
-              {t(locale, "intraday.out_of_range")}
-            </div>
-          ) : status === "error" ? (
-            <div className="h-full flex items-center justify-center text-sm text-tm-neg">
-              {t(locale, "intraday.error")}: {errMsg}
-            </div>
-          ) : null}
-          <div
-            ref={containerRef}
-            style={{
-              width: "100%",
-              height: "100%",
-              display: status === "ok" ? "block" : "none",
-            }}
-          />
-        </div>
+        {news.length === 0 ? (
+          <div className="py-2 text-xs text-tm-muted">
+            {t(locale, "intraday.news_empty")}
+          </div>
+        ) : (
+          <ul className="max-h-[220px] space-y-1 overflow-y-auto pr-1">
+            {news.map((e, i) => {
+              const s = e.sentiment_score ?? 0;
+              const dot =
+                s > 0.1 ? "bg-tm-pos" : s < -0.1 ? "bg-tm-neg" : "bg-tm-muted";
+              const src = hostname(e.url);
+              return (
+                <li
+                  key={`${e.ts}-${i}`}
+                  className="flex items-start gap-2 border-b border-tm-rule/50 pb-1 text-xs"
+                >
+                  <span
+                    className={`mt-1 h-1.5 w-1.5 flex-none rounded-full ${dot}`}
+                  />
+                  <div className="min-w-0">
+                    {e.url ? (
+                      <a
+                        href={e.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-tm-fg hover:text-tm-accent hover:underline"
+                      >
+                        {e.headline}
+                      </a>
+                    ) : (
+                      <span className="text-tm-fg">{e.headline}</span>
+                    )}
+                    {src ? (
+                      <span className="ml-2 text-[10px] text-tm-muted">{src}</span>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </div>
   );
+}
+
+// Bare domain from a URL for the source label, e.g. "reuters.com".
+function hostname(u: string | null): string | null {
+  if (!u) return null;
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
 }

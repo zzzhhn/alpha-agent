@@ -119,32 +119,57 @@ export default function PriceChart({
     //   macro_political    = belowBar square
     //   macro_geopolitical = belowBar arrowDown
     // colour by sentiment (green/red/neutral).
+    // One marker PER DAY, not per event: clustered news used to stack into an
+    // unreadable column of dots. News now collapses to ONE aboveBar circle
+    // badged with the day's count ("+21"); macro events collapse to one
+    // belowBar marker. Headlines surface in the crosshair tooltip + the
+    // click-through inline panel.
     const eventsByDay = new Map<string, ChartEvent[]>();
     if (events.length) {
       const dayBars = new Set(validBars.map((b) => b.date));
-      const markers = events
-        .map((e) => {
-          const day = e.ts.slice(0, 10);
-          if (!dayBars.has(day)) return null;
-          const list = eventsByDay.get(day) ?? [];
-          list.push(e);
-          eventsByDay.set(day, list);
-          const sentiment = e.sentiment_score ?? 0;
-          const color = sentiment > 0.1 ? "#16a34a" : sentiment < -0.1 ? "#dc2626" : "#9ca3af";
-          const shape =
-            e.type === "news" ? "circle"
-            : e.type === "macro_political" ? "square"
-            : "arrowDown";
-          const position = e.type === "news" ? "aboveBar" : "belowBar";
-          return {
+      for (const e of events) {
+        const day = e.ts.slice(0, 10);
+        if (!dayBars.has(day)) continue;
+        const list = eventsByDay.get(day) ?? [];
+        list.push(e);
+        eventsByDay.set(day, list);
+      }
+      const markers: {
+        time: string;
+        position: "aboveBar" | "belowBar";
+        color: string;
+        shape: "circle" | "square" | "arrowDown";
+        text?: string;
+      }[] = [];
+      eventsByDay.forEach((list, day) => {
+        const newsItems = list.filter((e) => e.type === "news");
+        const macroItems = list.filter((e) => e.type !== "news");
+        if (newsItems.length) {
+          const mean =
+            newsItems.reduce((a, e) => a + (e.sentiment_score ?? 0), 0) /
+            newsItems.length;
+          markers.push({
             time: day,
-            position: position as "aboveBar" | "belowBar",
-            color,
-            shape: shape as "circle" | "square" | "arrowDown",
-            // no text — keeps the chart clean; headline surfaces on hover
-          };
-        })
-        .filter((m): m is NonNullable<typeof m> => m !== null);
+            position: "aboveBar",
+            color: mean > 0.1 ? "#16a34a" : mean < -0.1 ? "#dc2626" : "#9ca3af",
+            shape: "circle",
+            text: `+${newsItems.length}`,
+          });
+        }
+        if (macroItems.length) {
+          markers.push({
+            time: day,
+            position: "belowBar",
+            color: "#9ca3af",
+            shape: macroItems.some((e) => e.type === "macro_geopolitical")
+              ? "arrowDown"
+              : "square",
+            text: macroItems.length > 1 ? `+${macroItems.length}` : undefined,
+          });
+        }
+      });
+      // lightweight-charts requires markers sorted by time ascending.
+      markers.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
       candle.setMarkers(markers);
     }
 
@@ -299,6 +324,11 @@ export default function PriceChart({
         ticker={ticker}
         date={drawerDate}
         onClose={handleDrawerClose}
+        news={
+          drawerDate
+            ? events.filter((e) => e.ts.slice(0, 10) === drawerDate)
+            : []
+        }
       />
       {status === "ok" ? <ExplainRangePanel ticker={ticker} /> : null}
     </section>
