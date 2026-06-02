@@ -3,6 +3,7 @@
 import type { RatingCard, FactorRaw, FundamentalsData } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 function decodeFactorRaw(raw: unknown): FundamentalsData | null {
   // Pre-M4a rows had factor.raw = float (the z score). Tolerate that by
@@ -107,8 +108,15 @@ export default function FundamentalsBlock({ card }: { card: RatingCard }) {
           const ok = withinBounds(c.field, raw);
           return (
             <div key={c.labelKey} className="space-y-0.5">
-              <div className="text-xs text-tm-muted uppercase tracking-wide">
+              <div className="flex items-center gap-1 text-xs text-tm-muted uppercase tracking-wide">
                 {t(locale, c.labelKey)}
+                <InfoTooltip
+                  iconSize={11}
+                  content={t(
+                    locale,
+                    `fundamentals.tip_${c.field}` as Parameters<typeof t>[1],
+                  )}
+                />
               </div>
               {ok ? (
                 <div className="text-base font-mono text-tm-fg">{c.fmt(raw)}</div>

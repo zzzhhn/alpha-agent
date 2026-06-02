@@ -229,6 +229,7 @@ export default function AttributionTable({
                 <span className="inline-flex items-center gap-1">
                   {getSignalDisplayLabel(b.signal, locale)}
                   <InfoTooltip
+                    placement="right"
                     content={t(
                       locale,
                       `signal_tooltip.${b.signal}` as TranslationKey,
