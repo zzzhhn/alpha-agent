@@ -335,3 +335,42 @@ async def health_news_freshness() -> dict[str, Any]:
         "(SELECT count(*) FROM macro_events WHERE llm_processed_at IS NULL)"
     )
     return {"sources": sources, "llm_backlog": int(llm_backlog or 0)}
+
+
+@router.get("/data_sources")
+async def health_data_sources() -> dict[str, Any]:
+    """Row count + last-write per ingest source, so the data page can show how
+    much each source has actually pulled (not just that it's configured). FRED
+    macro is fetched live per request (no stored table), hence null counts."""
+    pool = await get_db_pool()
+
+    async def _count(sql: str) -> dict[str, Any]:
+        # Surface a per-source query failure in the payload rather than 500-ing
+        # the whole endpoint or silently reporting 0 (anti-pattern guard).
+        try:
+            row = await pool.fetchrow(sql)
+        except Exception as e:  # noqa: BLE001 — reported, not swallowed
+            return {"rows": None, "last_fetched_at": None, "error": f"{type(e).__name__}: {e}"}
+        return {
+            "rows": int(row["n"]) if row and row["n"] is not None else 0,
+            "last_fetched_at": row["ts"].isoformat() if row and row["ts"] else None,
+        }
+
+    return {
+        "sources": {
+            "finnhub": await _count(
+                "SELECT count(*) AS n, max(computed_at) AS ts FROM earnings_finnhub"
+            ),
+            "edgar": await _count(
+                "SELECT count(*) AS n, max(computed_at) AS ts FROM insider_form4"
+            ),
+            "news": await _count(
+                "SELECT count(*) AS n, max(fetched_at) AS ts FROM news_items"
+            ),
+            "yfinance": await _count(
+                "SELECT count(DISTINCT ticker) AS n, max(fetched_at) AS ts "
+                "FROM daily_signals_fast"
+            ),
+            "fred": None,
+        }
+    }
