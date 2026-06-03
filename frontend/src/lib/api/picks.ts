@@ -38,7 +38,12 @@ export interface RatingCard {
   // Same nullable contract as BreakdownEntry — composite/confidence
   // may arrive as null when DB column held NaN before storage-side fix
   // landed (legacy rows). Components must coalesce.
+  // Calibrated directional hit-rate (isotonic over realized 5d outcomes): the
+  // honest "edge", structurally ~50%. Also feeds Kelly position sizing.
   confidence: number | null;
+  // Raw signal-agreement = 1/(1+variance(z)): the conviction headline (how
+  // aligned the signals are), NOT a hit-rate. May be absent on legacy rows.
+  agreement?: number | null;
   composite_score: number | null;
   as_of: string;
   breakdown: BreakdownEntry[];

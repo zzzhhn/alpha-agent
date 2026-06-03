@@ -76,7 +76,9 @@ export default function StockCardLayout({
         <RatingBadge
           rating={card.rating}
           confidence={card.confidence}
+          agreement={card.agreement}
           composite={card.composite_score}
+          locale={locale}
         />
         {card.gex_info ? (
           <GexBadge info={card.gex_info} locale={locale} />

@@ -19,7 +19,7 @@ import math
 import asyncpg
 
 from alpha_agent.backtest.confidence_calibration import apply_calibration
-from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
+from alpha_agent.fusion.rating import compute_confidence, map_to_tier
 
 
 def _safe_float(v: object, default: float = 0.0) -> float:
@@ -135,17 +135,21 @@ async def fetch_latest_signal(
         z_values = [
             z for e in breakdown if isinstance((z := e.get("z")), (int, float))
         ]
-        confidence = calibrated_confidence(z_values, cal_map)
+        # agreement = raw signal-agreement (conviction); confidence = same value
+        # through the calibration map (honest hit-rate). Surfaced separately.
+        agreement = compute_confidence(z_values)
+        confidence = apply_calibration(agreement, cal_map)
         # No band logic on slow-only rows (the cron that writes them never
         # sees a prev_rating to compare against). Always false.
         tier_flip_today = False
         gex_info = None
     else:
-        # Fast row: stored confidence is a raw compute_confidence value from
-        # write time; re-apply the calibration map at read time (single
-        # application, not double-calibration) so fast rows are calibrated too.
+        # Fast row: the stored "confidence" column is a raw compute_confidence
+        # value from write time -> that IS the agreement. Pass it through the
+        # calibration map once for the displayed hit-rate (not double-calibration).
         rating = row["rating"] or "HOLD"
-        confidence = apply_calibration(_safe_float(row["confidence"]), cal_map)
+        agreement = _safe_float(row["confidence"])
+        confidence = apply_calibration(agreement, cal_map)
         tier_flip_today = _parse_tier_flip(row["breakdown"])
         gex_info = _parse_gex_info(row["breakdown"])
 
@@ -154,6 +158,7 @@ async def fetch_latest_signal(
         "score": score,
         "rating": rating,
         "confidence": confidence,
+        "agreement": agreement,
         "breakdown": breakdown,
         "fetched_at": row["fetched_at"],
         "partial": is_partial,

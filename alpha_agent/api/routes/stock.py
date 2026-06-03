@@ -56,7 +56,11 @@ class NewsItemLite(BaseModel):
 class FullCard(BaseModel):
     ticker: str
     rating: str
+    # Calibrated directional hit-rate (honest edge, ~50%); also sizes positions.
     confidence: float
+    # Raw signal-agreement = 1/(1+variance(z)): the conviction headline, NOT a
+    # hit-rate. Defaulted so legacy callers without the field still validate.
+    agreement: float = 0.0
     composite_score: float
     as_of: str
     top_drivers: list[str]
@@ -138,6 +142,7 @@ async def get_stock(
         ticker=sig["ticker"],
         rating=sig["rating"],
         confidence=sig["confidence"],
+        agreement=sig["agreement"],
         composite_score=sig["score"],
         as_of=fetched_at.isoformat(),
         top_drivers=top_drivers(sig["breakdown"]),

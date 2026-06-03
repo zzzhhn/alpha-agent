@@ -15,7 +15,7 @@ from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import grade_dimensions
 from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
-from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
+from alpha_agent.fusion.rating import compute_confidence, map_to_tier
 
 router = APIRouter(prefix="/api/picks", tags=["picks"])
 
@@ -33,7 +33,12 @@ class LeanCard(BaseModel):
 
     ticker: str
     rating: str
+    # Calibrated directional hit-rate (isotonic map over realized 5d outcomes).
+    # Honest "edge", structurally modest (~50%); also feeds Kelly position sizing.
     confidence: float
+    # Raw signal-agreement = 1/(1+variance(z)). The conviction headline: how
+    # aligned the underlying signals are on this name. NOT a hit-rate.
+    agreement: float = 0.0
     composite_score: float
     as_of: str
     top_drivers: list[str]
@@ -205,15 +210,19 @@ async def picks_lean(
                     z for e in breakdown_data
                     if isinstance((z := e.get("z")), (int, float))
                 ]
-                confidence = calibrated_confidence(z_values, cal_map)
+                # agreement = raw signal-agreement (conviction headline);
+                # confidence = the same value passed through the calibration
+                # map (honest hit-rate). Both are surfaced separately.
+                agreement = compute_confidence(z_values)
+                confidence = apply_calibration(agreement, cal_map)
             else:
-                # Fast row: confidence was computed (raw) at write time by the
-                # fast cron and stored. Re-apply the calibration map at read
-                # time so the dominant fast path is calibrated too (the stored
-                # value is a raw compute_confidence output, so this is the
-                # intended single application, not double-calibration).
+                # Fast row: the stored "confidence" column is a raw
+                # compute_confidence value from write time -> that IS the
+                # agreement. Pass it through the calibration map once to get
+                # the displayed hit-rate (single application, not double).
                 rating = r["rating"] or "HOLD"
-                confidence = apply_calibration(_safe_float(r["confidence"], 0.0), cal_map)
+                agreement = _safe_float(r["confidence"], 0.0)
+                confidence = apply_calibration(agreement, cal_map)
             # Phase 2 long-mode re-rank: when mode=="long", look up
             # factor.raw.z_long and re-compute the composite contribution.
             # Old factor contribution gets subtracted, new long-z contribution
@@ -247,6 +256,7 @@ async def picks_lean(
                     ticker=r["ticker"],
                     rating=rating,
                     confidence=confidence,
+                    agreement=agreement,
                     composite_score=score,
                     as_of=r["fetched_at"].isoformat(),
                     top_drivers=top_drivers(breakdown_data),

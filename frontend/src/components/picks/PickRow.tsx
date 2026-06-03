@@ -48,23 +48,32 @@ export default function PickRow({
     typeof card.composite_score === "number" && isFinite(card.composite_score)
       ? card.composite_score
       : 0;
-  const conf =
+  const hit =
     typeof card.confidence === "number" && isFinite(card.confidence)
       ? card.confidence
       : 0;
+  // agreement is the conviction headline; fall back to the calibrated value
+  // only on legacy rows that predate the field so the bar is never blank.
+  const agr =
+    typeof card.agreement === "number" &&
+    isFinite(card.agreement) &&
+    card.agreement > 0
+      ? card.agreement
+      : hit;
   const sign = composite >= 0 ? "+" : "";
 
-  // confidence = 1/(1+variance) of the signal z's (fusion/rating.py). Below
-  // 0.5 the signal variance exceeds 1.0 — the contributing signals span more
-  // than a full sigma, i.e. they disagree more than they agree. That is the
-  // "scrutinize before acting" case, so flag it in tm-warn rather than
-  // letting it blend into the ~57% board norm. The cutoff is the var=1
-  // inflection of 1/(1+var), not an arbitrary line (rule 9 justification).
-  const CONF_CAUTION = 0.5;
-  const lowConf = conf < CONF_CAUTION;
-  const confPct = Math.round(conf * 100);
-  const confBar = lowConf ? "bg-tm-warn" : "bg-tm-fg-2/50";
-  const confText = lowConf ? "text-tm-warn" : "text-tm-fg-2";
+  // agreement = 1/(1+variance) of the signal z's (fusion/rating.py): how
+  // aligned the signals are on this name. Below 0.5 the variance exceeds 1.0 —
+  // the signals span more than a full sigma, i.e. they disagree more than they
+  // agree. That is the "scrutinize before acting" case, flagged in tm-warn.
+  // The cutoff is the var=1 inflection of 1/(1+var), not an arbitrary line
+  // (rule 9 justification). hit = calibrated historical hit-rate, shown small.
+  const AGR_CAUTION = 0.5;
+  const lowAgr = agr < AGR_CAUTION;
+  const agrPct = Math.round(agr * 100);
+  const hitPct = Math.round(hit * 100);
+  const agrBar = lowAgr ? "bg-tm-warn" : "bg-tm-fg-2/50";
+  const agrText = lowAgr ? "text-tm-warn" : "text-tm-fg-2";
 
   const drivers = (card.top_drivers ?? [])
     .slice(0, 3)
@@ -134,16 +143,21 @@ export default function PickRow({
       </td>
       <td className="px-3 py-1.5 font-tm-mono text-[10.5px] tabular-nums">
         <span
-          className="flex items-center justify-end gap-1.5"
+          className="flex flex-col items-end gap-0.5"
           title={t(locale, "picks_table.confidence_tooltip")}
         >
-          <span className="relative inline-block h-1 w-10 overflow-hidden rounded-sm bg-tm-rule">
-            <span
-              className={clsx("absolute inset-y-0 left-0 rounded-sm", confBar)}
-              style={{ width: `${confPct}%` }}
-            />
+          <span className="flex items-center justify-end gap-1.5">
+            <span className="relative inline-block h-1 w-10 overflow-hidden rounded-sm bg-tm-rule">
+              <span
+                className={clsx("absolute inset-y-0 left-0 rounded-sm", agrBar)}
+                style={{ width: `${agrPct}%` }}
+              />
+            </span>
+            <span className={clsx("w-8 text-right", agrText)}>{agrPct}%</span>
           </span>
-          <span className={clsx("w-8 text-right", confText)}>{confPct}%</span>
+          <span className="text-[8px] text-tm-muted">
+            {t(locale, "picks_table.hitrate_label")} {hitPct}%
+          </span>
         </span>
       </td>
       <td className="px-3 py-1.5">
