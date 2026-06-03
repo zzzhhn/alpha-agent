@@ -44,6 +44,7 @@ export default function PicksTable({
           <th className={`${TH} text-left w-8`}>{t(locale, "picks_table.col_rank")}</th>
           <th className={`${TH} text-left`}>{t(locale, "picks_table.col_ticker")}</th>
           <th className={`${TH} text-left`}>{t(locale, "picks_table.col_rating")}</th>
+          <th className={`${TH} text-left`}>{t(locale, "picks_table.col_suggestion")}</th>
           <th className={`${TH} text-right`}>{t(locale, "picks_table.col_composite")}</th>
           <th className={`${TH} text-right`}>{t(locale, "picks_table.col_confidence")}</th>
           <th className={`${TH} text-left`}>

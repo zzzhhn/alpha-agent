@@ -9,6 +9,7 @@ import { t, type Locale } from "@/lib/i18n";
 // and AttributionTable) so the drivers/drags column reads in plain language
 // AND stays consistent with how the same signals are labeled elsewhere.
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import { getSuggestion } from "@/lib/suggestion";
 
 const TIER_COLOR: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -139,6 +140,28 @@ export default function PickRow({
         >
           {card.rating}
         </span>
+      </td>
+      <td className="px-3 py-2.5 text-[13px]">
+        {(() => {
+          const sug = getSuggestion(card.rating, hit, locale);
+          const tone =
+            sug.tone === "pos"
+              ? "text-tm-pos"
+              : sug.tone === "neg"
+                ? "text-tm-neg"
+                : "text-tm-fg-2";
+          // Caution: the action stands (the model's tier), but the modest
+          // realized edge is disclosed rather than hidden — dimmed + a warn
+          // marker that explains the ~coin-flip hit-rate on hover.
+          return sug.caution ? (
+            <HoverTip content={t(locale, "picks_table.sug_caution_tip")} placement="bottom">
+              <span className={clsx("font-semibold opacity-60", tone)}>{sug.label}</span>
+              <span className="ml-0.5 cursor-help text-tm-warn">⚠</span>
+            </HoverTip>
+          ) : (
+            <span className={clsx("font-semibold", tone)}>{sug.label}</span>
+          );
+        })()}
       </td>
       <td className="px-3 py-2.5 font-tm-mono text-xs tabular-nums text-right">
         {sign}
