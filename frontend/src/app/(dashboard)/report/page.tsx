@@ -907,6 +907,7 @@ function ReportCoverPane({
 /* ── v3 #1 — RISK.METRICS pane ────────────────────────────────────── */
 
 function RiskMetricsPane({ report }: { readonly report: FactorReport }) {
+  const { locale } = useLocale();
   const eq = report.backtest.equity_curve;
   const bench = report.backtest.benchmark_curve;
   const m = useMemo(() => {
@@ -924,7 +925,7 @@ function RiskMetricsPane({ report }: { readonly report: FactorReport }) {
   return (
     <TmPane title="RISK.METRICS" meta="institutional risk-adjusted ratios">
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-        Sortino / Calmar / IR / TE / Skew / Excess-Kurt — CFA Performance Standards conventions, complement Sharpe with downside, drawdown, and distribution shape.
+        {t(locale, "report.risk.desc")}
       </p>
       <TmKpiGrid>
         <TmKpi
@@ -970,6 +971,7 @@ function RiskMetricsPane({ report }: { readonly report: FactorReport }) {
 /* ── v3 #2 — TAIL.RISK pane ───────────────────────────────────────── */
 
 function TailRiskPane({ report }: { readonly report: FactorReport }) {
+  const { locale } = useLocale();
   const eq = report.backtest.equity_curve;
   const m = useMemo(() => {
     const rets = dailyReturns(eq);
@@ -989,7 +991,7 @@ function TailRiskPane({ report }: { readonly report: FactorReport }) {
   return (
     <TmPane title="TAIL.RISK" meta="historical VaR / streak / profit factor">
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-        Bottom-of-distribution diagnostics. VaR α = α-th percentile worst day. CVaR (Expected Shortfall) = mean of worst α% days, captures tail severity beyond VaR.
+        {t(locale, "report.tail.desc")}
       </p>
       <TmKpiGrid>
         <TmKpi
@@ -1040,6 +1042,7 @@ function YearlyBreakdownPane({
 }: {
   readonly equityCurve: readonly import("@/lib/types").EquityCurvePoint[];
 }) {
+  const { locale } = useLocale();
   const rows: readonly YearStats[] = useMemo(
     () => yearlyStats(equityCurve),
     [equityCurve],
@@ -1048,7 +1051,7 @@ function YearlyBreakdownPane({
   return (
     <TmPane title="YEARLY.BREAKDOWN" meta={`${rows.length} year${rows.length === 1 ? "" : "s"}`}>
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-        Per-year stats. Sharpe annualized within each year only — short-year fragments at panel edges may amplify variance.
+        {t(locale, "report.yearly.desc")}
       </p>
       <div className="overflow-x-auto">
         <div
@@ -1263,6 +1266,7 @@ function CompareCorrelationPane({
   readonly primary: FactorReport;
   readonly compare: FactorReport;
 }) {
+  const { locale } = useLocale();
   const stats = useMemo(() => {
     const aRets = dailyReturns(primary.backtest.equity_curve);
     const bRets = dailyReturns(compare.backtest.equity_curve);
@@ -1287,7 +1291,7 @@ function CompareCorrelationPane({
       meta={`full-period ρ = ${stats.fullCorr.toFixed(3)}${concentrationWarn ? " · ⚠ HIGH" : ""}`}
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-        Pearson correlation of daily returns. ρ ≥ 0.8 = stacking the two factors gives near-zero diversification benefit; ρ near 0 = genuinely independent signals.
+        {t(locale, "report.correlation.desc")}
       </p>
       <TmKpiGrid>
         <TmKpi
@@ -1369,6 +1373,7 @@ function CompareCorrelationPane({
 /* ── v3 #6 — RECENT.MOMENTUM pane ─────────────────────────────────── */
 
 function RecentMomentumPane({ report }: { readonly report: FactorReport }) {
+  const { locale } = useLocale();
   const eq = report.backtest.equity_curve;
   const bench = report.backtest.benchmark_curve;
   const m = useMemo(() => {
@@ -1393,7 +1398,7 @@ function RecentMomentumPane({ report }: { readonly report: FactorReport }) {
       meta={`vs ${report.backtest.benchmark_ticker} · spread = factor − benchmark`}
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-        Trailing-window returns to surface late-period direction shifts. Persistent positive spread across all four windows = factor still working; spread reversal = decay signal.
+        {t(locale, "report.momentum.desc")}
       </p>
       <TmKpiGrid>
         {(
@@ -1426,6 +1431,7 @@ function TickerOverlapPane({
   readonly primary: FactorReport;
   readonly compare: FactorReport;
 }) {
+  const { locale } = useLocale();
   const data = useMemo(() => {
     const aLong = primary.today.top.map((t) => t.ticker);
     const bLong = compare.today.top.map((t) => t.ticker);
@@ -1452,7 +1458,7 @@ function TickerOverlapPane({
       meta={`Jaccard long ${(data.longJaccard * 100).toFixed(0)}% · short ${(data.shortJaccard * 100).toFixed(0)}%`}
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-        Overlap of today&apos;s top-N baskets between the two factors. High Jaccard (≥0.5) = baskets stack the same names → portfolio diversification benefit minimal even at low correlation.
+        {t(locale, "report.overlap.desc")}
       </p>
       <TmKpiGrid>
         <TmKpi
@@ -1527,6 +1533,7 @@ function RecoveryStatsPane({
 }: {
   readonly equityCurve: readonly import("@/lib/types").EquityCurvePoint[];
 }) {
+  const { locale } = useLocale();
   const s = useMemo(() => recoveryStats(equityCurve), [equityCurve]);
   return (
     <TmPane
@@ -1534,7 +1541,7 @@ function RecoveryStatsPane({
       meta={`${s.nDrawdownEpisodes} episodes · ${equityCurve.length} sessions`}
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-        Drawdown episode time analysis. avg recovery = mean sessions from local trough back to prior peak. Longest underwater = max stretch below running peak across all episodes. Days since last high = time since a new equity all-time-high (0 = at high now).
+        {t(locale, "report.recovery.desc")}
       </p>
       <TmKpiGrid>
         <TmKpi

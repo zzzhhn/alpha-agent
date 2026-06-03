@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/watchlist";
 import { syncWatchlistRemote } from "@/lib/api/watchlist";
 import { TmButton } from "@/components/tm/TmButton";
+import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 
 const FORM_INPUT =
   "h-7 flex-1 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none transition-colors placeholder:text-tm-muted focus:border-tm-accent";
 
 export default function WatchlistEditor() {
+  const { locale } = useLocale();
   const [list, setList] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +30,7 @@ export default function WatchlistEditor() {
     const ticker = draft.trim().toUpperCase();
     if (!ticker) return;
     if (!/^[A-Z]{1,5}$/.test(ticker)) {
-      setError(`"${ticker}" doesn't look like a valid ticker (1-5 uppercase letters)`);
+      setError(t(locale, "watchlist.invalid_ticker").replace("{ticker}", ticker));
       return;
     }
     setList(addToWatchlist(ticker));
@@ -48,7 +51,7 @@ export default function WatchlistEditor() {
       <div className="flex gap-2">
         <input
           className={FORM_INPUT}
-          placeholder="Ticker (e.g. AAPL) · Enter to add"
+          placeholder={t(locale, "watchlist.input_placeholder")}
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
@@ -63,7 +66,7 @@ export default function WatchlistEditor() {
       ) : null}
       {list.length === 0 ? (
         <div className="font-tm-mono text-[10.5px] text-tm-muted py-2">
-          Empty — add tickers above
+          {t(locale, "watchlist.empty")}
         </div>
       ) : (
         <ul className="flex flex-col divide-y divide-tm-rule border border-tm-rule">

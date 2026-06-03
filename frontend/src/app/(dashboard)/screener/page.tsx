@@ -1318,6 +1318,7 @@ function RecsSectorsPane({
   readonly totalRecs: number;
   readonly warn: boolean;
 }) {
+  const { locale } = useLocale();
   return (
     <TmPane
       title="RECS.SECTORS"
@@ -1325,7 +1326,7 @@ function RecsSectorsPane({
     >
       {breakdown.length === 0 ? (
         <p className="px-3 py-3 font-tm-mono text-[11px] text-tm-muted">
-          no sector data.
+          {t(locale, "screener.sectors.empty")}
         </p>
       ) : (
         <ul className="flex flex-col">
@@ -1382,6 +1383,7 @@ function RecsCapMixPane({
   readonly totalRecs: number;
   readonly unknownCount: number;
 }) {
+  const { locale } = useLocale();
   // When every recommendation lacks a cap value (panel.cap all-NaN), 5
   // empty bars look broken. Show a single empty-state instead so the
   // user knows it's a data gap, not a UI hang.
@@ -1392,16 +1394,16 @@ function RecsCapMixPane({
       <TmPane title="RECS.CAPMIX" meta="NO CAP DATA">
         <div className="flex flex-col gap-1.5 px-3 py-3 font-tm-mono text-[11px]">
           <p className="text-tm-warn">
-            ▸ all {totalRecs} recommendations missing cap data.
+            {t(locale, "screener.capmix.warn").replace("{n}", String(totalRecs))}
           </p>
           <p className="leading-relaxed text-tm-muted">
-            panel field <code className="text-tm-fg-2">cap</code> has 0%
-            coverage on this universe — column exists but values are all-NaN.
-            cap-based filters (MIN_CAP / MAX_CAP) will also silently filter
-            to empty until backfilled. cap is computed as{" "}
-            <code className="text-tm-fg-2">close × shares_outstanding</code>;
-            either WRDS Compustat fundq <code>cshoq</code> or yfinance pull
-            needs to repopulate.
+            {t(locale, "screener.capmix.descP1")}{" "}
+            <code className="text-tm-fg-2">cap</code>{" "}
+            {t(locale, "screener.capmix.descP2")}{" "}
+            <code className="text-tm-fg-2">close × shares_outstanding</code>
+            {t(locale, "screener.capmix.descP3")}{" "}
+            <code>cshoq</code>{" "}
+            {t(locale, "screener.capmix.descP4")}
           </p>
         </div>
       </TmPane>
@@ -1478,6 +1480,7 @@ function AggregateContributionPane({
   readonly rows: readonly FactorContributionRow[];
   readonly diagnostics: ScreenerResponse["factor_diagnostics"];
 }) {
+  const { locale } = useLocale();
   const maxAbs = rows[0]?.absSum ?? 1;
   return (
     <TmPane
@@ -1524,8 +1527,8 @@ function AggregateContributionPane({
         })}
       </ul>
       <p className="border-t border-tm-rule px-3 py-1.5 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
-        bar = sum |contribution|; share % of total | sign = net signed sum.
-        a single factor with ≥60% share dominates the basket.
+        {t(locale, "screener.contribution.footer1")}{" "}
+        {t(locale, "screener.contribution.footer2")}
       </p>
     </TmPane>
   );

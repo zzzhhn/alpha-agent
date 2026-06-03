@@ -423,26 +423,25 @@ function DataTab({
           <TmPane title="BIAS.GUARDS" meta="2 INVARIANTS">
             <ul className="flex flex-col">
               <li className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg">
-                <span className="text-tm-accent">▸ Survivorship</span>
+                <span className="text-tm-accent">
+                  ▸ {t(locale, "methodology.bias.survivorship.label")}
+                </span>
                 <span className="ml-2 text-tm-muted">
-                  is_member mask (T,N) → non-member cells NaN
+                  {t(locale, "methodology.bias.survivorship.tag")}
                 </span>
                 <div className="mt-1 text-tm-fg-2">
-                  evaluate_factor_full enforces is_member at evaluation time;
-                  factors never see a ticker on days it was not in the index,
-                  even if its OHLCV row exists in the parquet.
+                  {t(locale, "methodology.bias.survivorship.desc")}
                 </div>
               </li>
               <li className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg">
-                <span className="text-tm-accent">▸ Lookahead</span>
+                <span className="text-tm-accent">
+                  ▸ {t(locale, "methodology.bias.lookahead.label")}
+                </span>
                 <span className="ml-2 text-tm-muted">
-                  RDQ ≤ t PIT join on fundq
+                  {t(locale, "methodology.bias.lookahead.tag")}
                 </span>
                 <div className="mt-1 text-tm-fg-2">
-                  fundamentals_pit_sp500_v3 keys on RDQ (filing date), not
-                  fiscal-period-end. Each (t, ticker) sees only quarters whose
-                  filing landed by t. Forward-fill is disabled; algos see NaN
-                  before the first filing.
+                  {t(locale, "methodology.bias.lookahead.desc")}
                 </div>
               </li>
             </ul>
@@ -666,7 +665,7 @@ function OperatorsTab({
           ))}
           {filtered.length === 0 && (
             <li className="px-3 py-3 font-tm-mono text-[11px] text-tm-muted">
-              no operators match the filter.
+              {t(locale, "methodology.operators.empty")}
             </li>
           )}
         </ul>

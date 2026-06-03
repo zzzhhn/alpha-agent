@@ -2,18 +2,21 @@
 
 import type { CronRun } from "@/lib/api/alerts";
 import clsx from "clsx";
+import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 
 interface AlertListProps {
   readonly cronRuns: Record<string, CronRun[]>;
 }
 
 export default function AlertList({ cronRuns }: AlertListProps) {
+  const { locale } = useLocale();
   const entries = Object.entries(cronRuns);
 
   if (entries.length === 0) {
     return (
       <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
-        No cron jobs registered yet.
+        {t(locale, "alerts.no_cron")}
       </div>
     );
   }
@@ -30,7 +33,7 @@ export default function AlertList({ cronRuns }: AlertListProps) {
           </header>
           {runs.length === 0 ? (
             <div className="px-3 py-2 font-tm-mono text-[10.5px] text-tm-muted">
-              No runs yet
+              {t(locale, "alerts.no_runs")}
             </div>
           ) : (
             <ul className="divide-y divide-tm-rule">
