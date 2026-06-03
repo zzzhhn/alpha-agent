@@ -32,6 +32,7 @@ import {
   UniverseTickers,
 } from "@/components/data/UniverseCard";
 import { OperandCatalog } from "@/components/data/OperandCatalog";
+import { DataSourcesCard } from "@/components/data/DataSourcesCard";
 import {
   fetchUniverses,
   fetchOperandCatalog,
@@ -184,6 +185,8 @@ export default function DataPage() {
           <UniverseTickers universe={activeUniverse} fillHeight />
         </TmCols2>
       )}
+
+      <DataSourcesCard />
 
       {catalog && <OperandCatalog catalog={catalog} />}
     </TmScreen>
