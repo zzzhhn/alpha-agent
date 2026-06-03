@@ -233,6 +233,14 @@ function mean(rates: readonly number[]): number {
   return rates.reduce((s, r) => s + r, 0) / rates.length;
 }
 
+// Honest fill rate derived from the actual cell counts, not the backend's
+// fill_rate field: an empty column (n_present === 0, or n_total === 0) reports
+// a vacuous fill_rate of 1.0 and was being counted as "healthy". Recomputing
+// from n_present/n_total makes zero-data columns read as 0% (red, not healthy).
+function effFill(f: FieldCoverage): number {
+  return f.n_total > 0 ? f.n_present / f.n_total : 0;
+}
+
 function CategoryRow({
   label,
   fields,
@@ -241,8 +249,10 @@ function CategoryRow({
   fields: readonly FieldCoverage[];
 }) {
   const [open, setOpen] = useState(false);
-  const avg = mean(fields.map((f) => f.fill_rate));
-  const healthy = fields.filter((f) => f.fill_rate >= 0.99).length;
+  const avg = mean(fields.map(effFill));
+  // A field is healthy only if it actually has data AND is ≥99% filled. The
+  // n_present > 0 guard is what stops a zero-row column from reading healthy.
+  const healthy = fields.filter((f) => f.n_present > 0 && effFill(f) >= 0.99).length;
   const tone = colorFor(avg);
 
   return (
@@ -285,6 +295,7 @@ function CategoryRow({
 }
 
 function FieldBar({ field }: { field: FieldCoverage }) {
+  const fill = effFill(field);
   return (
     <div className="flex items-center gap-3 font-tm-mono text-[11px]">
       <code className="w-32 truncate text-tm-fg" title={field.name}>
@@ -294,15 +305,15 @@ function FieldBar({ field }: { field: FieldCoverage }) {
         <div
           className="h-full transition-[width] duration-200"
           style={{
-            width: `${field.fill_rate * 100}%`,
-            background: colorFor(field.fill_rate),
+            width: `${fill * 100}%`,
+            background: colorFor(fill),
           }}
         />
       </div>
       <span className="w-14 text-right tabular-nums text-tm-fg">
-        {(field.fill_rate * 100).toFixed(1)}%
+        {(fill * 100).toFixed(1)}%
       </span>
-      <span className="w-20 text-right text-[10px] text-tm-muted">
+      <span className="w-20 text-right text-[11px] text-tm-muted">
         {field.n_present.toLocaleString()} / {field.n_total.toLocaleString()}
       </span>
     </div>
