@@ -1,15 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { X, Sparkles, Square, Lock, AlertTriangle } from "lucide-react";
 import {
   fetchMinuteBars,
   type ChartEvent,
   type MinuteBar,
   type MinuteBarsResponse,
 } from "@/lib/api/picks";
+import { streamNewsDaySummary } from "@/lib/api/streamNewsDaySummary";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { useHasByok } from "@/hooks/useHasByok";
+
+type AnalysisStatus =
+  | "idle"
+  | "streaming"
+  | "done"
+  | "error"
+  | "aborted"
+  | "no_news";
 
 // Inline panel (was a modal) that opens BELOW the daily PriceChart when a user
 // clicks a candle: the day's intraday minute chart + a scrollable list of that
@@ -31,12 +42,83 @@ export default function IntradayDrawer({
   news?: ChartEvent[];
 }) {
   const { locale } = useLocale();
+  // BYOK gate: analysis burns an LLM call, so show a lock + "configure key"
+  // CTA before the user clicks and hits an error. Mirrors PersonaPanel.
+  const { hasKey, loading: keyLoading } = useHasByok();
+  const locked = !keyLoading && !hasKey;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<
     "loading" | "ok" | "empty" | "out_of_range" | "error"
   >("loading");
   const [errMsg, setErrMsg] = useState<string>("");
+
+  // Per-day news analysis (LLM summary + sentiment). Streams via SSE; the
+  // AbortController in a ref backs the Stop button and aborts any in-flight
+  // stream on unmount / date change. Mirrors PersonaPanel's status machine.
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>("idle");
+  const [analysis, setAnalysis] = useState("");
+  const [analysisErr, setAnalysisErr] = useState("");
+  const [analysisCacheHit, setAnalysisCacheHit] = useState(false);
+  const analysisAbortRef = useRef<AbortController | null>(null);
+
+  // Reset analysis + abort any in-flight stream whenever the clicked date
+  // changes or the panel closes, so a stale summary never bleeds across days.
+  useEffect(() => {
+    analysisAbortRef.current?.abort();
+    setAnalysisStatus("idle");
+    setAnalysis("");
+    setAnalysisErr("");
+    setAnalysisCacheHit(false);
+    return () => {
+      analysisAbortRef.current?.abort();
+    };
+  }, [date]);
+
+  const onAnalyze = useCallback(async () => {
+    if (!date) return;
+    setAnalysisStatus("streaming");
+    setAnalysis("");
+    setAnalysisErr("");
+    setAnalysisCacheHit(false);
+    analysisAbortRef.current?.abort();
+    const ac = new AbortController();
+    analysisAbortRef.current = ac;
+
+    try {
+      let painted = false;
+      for await (const ev of streamNewsDaySummary(ticker, date, locale, ac.signal)) {
+        if (ev.type === "done") {
+          // The backend emits cache:"empty" for a window with no news.
+          if (ev.cache === "empty" && !painted) {
+            setAnalysisStatus("no_news");
+          } else {
+            setAnalysisCacheHit(ev.cache === "hit");
+            setAnalysisStatus("done");
+          }
+          break;
+        }
+        if (ev.type === "error") {
+          setAnalysisErr(ev.message);
+          setAnalysisStatus("error");
+          break;
+        }
+        painted = true;
+        setAnalysis((prev) => prev + ev.delta);
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") {
+        setAnalysisStatus("aborted");
+      } else {
+        setAnalysisErr(e instanceof Error ? e.message : String(e));
+        setAnalysisStatus("error");
+      }
+    }
+  }, [ticker, date, locale]);
+
+  const onAnalyzeAbort = useCallback(() => {
+    analysisAbortRef.current?.abort();
+  }, []);
 
   // ESC key closes the modal. Bound only while the modal is open
   // (date != null) to avoid leaking the listener on unmount.
@@ -208,9 +290,83 @@ export default function IntradayDrawer({
 
       {/* that day's news / events */}
       <div className="mt-3 border-t border-tm-rule pt-3">
-        <div className="mb-1.5 font-tm-sans text-[11px] uppercase tracking-wide text-tm-muted">
-          {t(locale, "intraday.news_title")} · {news.length}
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <span className="font-tm-sans text-[11px] uppercase tracking-wide text-tm-muted">
+            {t(locale, "intraday.news_title")} · {news.length}
+          </span>
+          {/* LLM summary + sentiment of this day's news. Hidden when locked
+              shows a Stop button while streaming, an analyze button otherwise.
+              No button when there is no news to analyze. */}
+          {news.length > 0 && !locked ? (
+            analysisStatus === "streaming" ? (
+              <button
+                type="button"
+                onClick={onAnalyzeAbort}
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-tm-rule px-2 py-1 text-[11px] text-tm-fg hover:border-tm-neg"
+              >
+                <Square aria-hidden className="h-3 w-3" strokeWidth={1.75} />
+                {t(locale, "rich.stop_button")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void onAnalyze()}
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-tm-rule bg-tm-bg px-2 py-1 text-[11px] text-tm-fg hover:border-tm-accent"
+              >
+                <Sparkles aria-hidden className="h-3 w-3 text-tm-accent" strokeWidth={1.75} />
+                {t(locale, "intraday.analyze_button")}
+              </button>
+            )
+          ) : null}
         </div>
+        {/* No-key gate: a lock + Settings link instead of a button that errors. */}
+        {news.length > 0 && locked ? (
+          <div className="mb-2 flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-[11px] text-tm-muted">
+            <Lock aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            <span>{t(locale, "intraday.analyze_locked")}</span>
+            <Link href="/settings" className="text-tm-accent hover:underline">
+              {t(locale, "intraday.analyze_configure")}
+            </Link>
+          </div>
+        ) : null}
+        {/* Streamed analysis output: paints tokens live, then settles into the
+            done / aborted / no-news / error terminal state. */}
+        {analysis && (analysisStatus === "streaming" || analysisStatus === "done") ? (
+          <div className="mb-2 rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
+            <div className="mb-1 font-tm-sans text-[11px] uppercase tracking-wide text-tm-muted">
+              {t(locale, "intraday.analysis_title")}
+            </div>
+            <p className="whitespace-pre-wrap">{analysis}</p>
+            {analysisStatus === "done" && analysisCacheHit ? (
+              <p className="mt-1 text-[11px] text-tm-muted">
+                {t(locale, "intraday.analyze_cache_hit")}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {analysisStatus === "no_news" ? (
+          <div className="mb-2 text-xs text-tm-muted">
+            {t(locale, "intraday.no_news_day")}
+          </div>
+        ) : null}
+        {analysisStatus === "aborted" ? (
+          <div className="mb-2 text-xs text-tm-warn">
+            {t(locale, "intraday.analyze_aborted")}
+          </div>
+        ) : null}
+        {analysisStatus === "error" ? (
+          <div className="mb-2 flex items-center gap-2 text-xs text-tm-neg">
+            <AlertTriangle aria-hidden className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+            <span>{analysisErr}</span>
+            <button
+              type="button"
+              onClick={() => void onAnalyze()}
+              className="rounded border border-tm-neg/40 px-1.5 py-0.5"
+            >
+              {t(locale, "intraday.analyze_retry")}
+            </button>
+          </div>
+        ) : null}
         {news.length === 0 ? (
           <div className="py-2 text-xs text-tm-muted">
             {t(locale, "intraday.news_empty")}

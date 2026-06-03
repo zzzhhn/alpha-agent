@@ -652,6 +652,224 @@ async def persona_explain_stream(
     )
 
 
+# ---------------------------------------------------------------------------
+# Per-day news summary (2026-06-04) — LLM summary + sentiment read of the
+# news the user sees after clicking a candle in the IntradayDrawer. Replaces
+# the standalone NewsBlock analysis surface. Mirrors the persona streaming
+# pattern exactly (SSE explanation deltas + done, BYOK key server-side,
+# no-key/decrypt → SSE error event never a 500).
+# ---------------------------------------------------------------------------
+
+
+class NewsDaySummaryRequest(BaseModel):
+    # The clicked candle's calendar date (UTC), YYYY-MM-DD.
+    date: str
+    # LLM output language follows the page locale (no manual picker).
+    language: Literal["zh", "en"] = "en"
+
+
+def _build_news_day_system_prompt(language: str) -> str:
+    """System prompt for the per-day news summary. The model is asked for a
+    short, plain-prose summary plus an overall sentiment read of the day's
+    headlines. Single block (no section markers) so the consumer paints it
+    exactly like persona commentary."""
+    if language == "zh":
+        return (
+            "你是一名股票新闻分析师。给你某只股票在某一交易日窗口内的新闻标题列表,"
+            "请用中文写一段简洁的总结(2 至 3 段):先概述当日新闻的主要内容,"
+            "再给出整体情绪判断(偏多 / 偏空 / 中性)并说明理由。"
+            "只依据所给标题,不要编造未提及的事实,不要给出投资建议。"
+        )
+    return (
+        "You are an equity news analyst. Given a list of news headlines for "
+        "one stock within a single trading-day window, write a concise "
+        "summary (2-3 short paragraphs): first recap the main developments, "
+        "then give an overall sentiment read (bullish / bearish / neutral) "
+        "with a one-line rationale. Use only the supplied headlines, do not "
+        "fabricate facts not present, and do not give investment advice."
+    )
+
+
+@router.post("/{ticker}/news-day-summary/stream")
+async def news_day_summary_stream(
+    payload: NewsDaySummaryRequest,
+    ticker: str = Path(min_length=1, max_length=10),
+    user_id: int = Depends(require_user),
+):
+    """SSE-streaming LLM summary + sentiment read of one day's news.
+
+    Window / holiday backfill: the news window for a trading day D is
+    (previous_trading_day, D] — every news_item with published_at strictly
+    after the previous trading day and through the end of D (UTC). The
+    previous trading day is the max daily_prices.date strictly < D (the
+    trading calendar), so Friday-evening through Monday news folds into
+    Monday and any holiday gap folds into the first trading day after it.
+
+    Mirrors the persona streaming route exactly: BYOK key fetched +
+    decrypted server-side, output streamed as `{type:"explanation",delta}`
+    terminated by `{type:"done"}`, no-key/decrypt failures degrade into an
+    SSE `error` event (never a 500 to a blank UI), and the per-(user,
+    ticker, date, language) B3 cache makes a re-click within 24h instant.
+    An empty window streams a graceful "no news this day" done event.
+    """
+    import os
+    import sys
+
+    from fastapi.responses import StreamingResponse
+
+    from alpha_agent.api.sse import SSE_HEADERS, sse_format
+    from alpha_agent.auth.crypto_box import CryptoError, decrypt
+    from alpha_agent.llm.cache import cache_key
+    from alpha_agent.llm.persona_streamer import stream_persona
+
+    ticker = ticker.upper()
+    try:
+        date_obj = datetime.strptime(payload.date, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid date '{payload.date}', expected YYYY-MM-DD",
+        ) from exc
+    language = payload.language
+
+    pool = await get_db_pool()
+
+    # previous_trading_day = max trading-calendar date strictly before D.
+    # daily_prices.date is the calendar; None when D is the earliest covered
+    # day (or no history) → window opens from the start of D itself.
+    prev_trading_day = await pool.fetchval(
+        "SELECT max(date) FROM daily_prices WHERE date < $1::date",
+        date_obj,
+    )
+
+    # Window = (previous_trading_day, D] in UTC. Open bound is the start of
+    # the day AFTER prev_trading_day (i.e. published_at > prev_trading_day,
+    # which for a DATE means "from 00:00 of the next day"); close bound is
+    # the end of D (start of D+1, exclusive). When there is no previous
+    # trading day, open from the start of D.
+    if prev_trading_day is not None:
+        window_start = datetime.combine(
+            prev_trading_day + timedelta(days=1), datetime.min.time(), tzinfo=UTC
+        )
+    else:
+        window_start = datetime.combine(date_obj, datetime.min.time(), tzinfo=UTC)
+    window_end = datetime.combine(
+        date_obj + timedelta(days=1), datetime.min.time(), tzinfo=UTC
+    )
+
+    news_rows = await pool.fetch(
+        """
+        SELECT headline, source, url, published_at,
+               sentiment_score, sentiment_label
+        FROM news_items
+        WHERE ticker = $1 AND published_at >= $2 AND published_at < $3
+        ORDER BY published_at DESC
+        LIMIT 50
+        """,
+        ticker, window_start, window_end,
+    )
+
+    headlines = [
+        {
+            "headline": r["headline"],
+            "source": r["source"],
+            "published_at": r["published_at"].isoformat(),
+            "sentiment_score": r["sentiment_score"],
+            "sentiment_label": r["sentiment_label"],
+        }
+        for r in news_rows
+    ]
+
+    async def empty_generator():
+        # Graceful "no news this day" — single done event, no LLM round trip,
+        # no error. The consumer shows the no-news copy.
+        yield sse_format({"type": "done", "cache": "empty"})
+
+    if not headlines:
+        return StreamingResponse(
+            empty_generator(),
+            media_type="text/event-stream",
+            headers=SSE_HEADERS,
+        )
+
+    byok = await pool.fetchrow(
+        "SELECT provider, ciphertext, nonce, model, base_url "
+        "FROM user_byok WHERE user_id = $1 LIMIT 1",
+        user_id,
+    )
+    if byok is None:
+        raise HTTPException(
+            status_code=400, detail="No BYOK key set; visit /settings to add one"
+        )
+
+    master = os.environ.get("BYOK_MASTER_KEY")
+    if not master:
+        raise HTTPException(status_code=500, detail="BYOK_MASTER_KEY not configured")
+
+    system = _build_news_day_system_prompt(language)
+    user_payload = json.dumps(
+        {
+            "ticker": ticker,
+            "date": payload.date,
+            "headlines": headlines,
+        },
+        default=str,
+    )
+    # Cache slot per (user, ticker, date, language). The window is fully
+    # determined by (ticker, date) via the trading calendar, so the date is
+    # a sound cache key without folding the resolved window bounds in.
+    key = cache_key(
+        model=byok["model"] or byok["provider"],
+        messages=[Message(role="system", content=system),
+                  Message(role="user", content=user_payload)],
+        variant=f"{ticker}|news-day|{payload.date}|{language}",
+    )
+
+    async def generator():
+        try:
+            plaintext_key = decrypt(byok["ciphertext"], byok["nonce"], master.encode("utf-8"))
+        except CryptoError:
+            yield sse_format({
+                "type": "error",
+                "message": "Stored key cannot be decrypted. Please re-save it in /settings.",
+            })
+            return
+        try:
+            async for event in stream_persona(
+                provider=byok["provider"],
+                api_key=plaintext_key,
+                system_prompt=system,
+                user_payload=user_payload,
+                model=byok["model"],
+                base_url=byok["base_url"],
+                pool=pool,
+                user_id=user_id,
+                cache_key_str=key,
+            ):
+                yield sse_format(event)
+                await asyncio.sleep(0)
+            await pool.execute(
+                "UPDATE user_byok SET last_used_at = now() "
+                "WHERE user_id = $1 AND provider = $2",
+                user_id, byok["provider"],
+            )
+        except Exception as e:
+            print(
+                f"news-day summary stream error: {type(e).__name__}: {e}",
+                file=sys.stderr, flush=True,
+            )
+            yield sse_format({
+                "type": "error",
+                "message": f"LLM request failed ({type(e).__name__}). Check your key in /settings.",
+            })
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
 @router.get("/personas")
 async def list_personas(language: Literal["zh", "en"] = Query("en")) -> dict:
     """Public discovery endpoint — UI uses this to render the persona

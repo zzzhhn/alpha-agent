@@ -25,7 +25,6 @@ import AttributionTable from "./AttributionTable";
 import PriceChart from "./PriceChart";
 import FundamentalsBlock from "./FundamentalsBlock";
 import CatalystsBlock from "./CatalystsBlock";
-import NewsBlock from "./NewsBlock";
 import MarketContextWidget from "./MarketContextWidget";
 import SourcesBlock from "./SourcesBlock";
 
@@ -149,7 +148,10 @@ export default function StockCardLayout({
           <span className="h-px flex-1 bg-tm-rule" />
         </div>
         <CatalystsBlock card={card} />
-        <NewsBlock card={card} />
+        {/* The standalone news analysis section was removed 2026-06-04: it
+            duplicated the per-day news the user sees after clicking a candle,
+            where the LLM summary + sentiment analysis now lives
+            (IntradayDrawer). Catalysts / MarketContext / Sources stay. */}
         <MarketContextWidget ticker={card.ticker} />
         <SourcesBlock card={card} />
       </main>
