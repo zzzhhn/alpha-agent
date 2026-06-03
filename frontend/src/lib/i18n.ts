@@ -901,6 +901,7 @@ const translations = {
     "stock_layout.stale_warning": "数据已超过 24 小时",
     "stock_layout.partial_data": "部分数据：仅日线 pipeline，无 intraday 因子",
     "stock_layout.signal_attribution": "信号归因",
+    "stock_layout.reference": "参考资料",
     /* ActionBox */
     "actionbox.title": "操作建议",
     "actionbox.partial_hint": "Entry / stop / target 需要 intraday 数据 (ATR、实时价)。该 ticker 当前只走日线 pipeline，暂无 intraday 因子。",
@@ -1950,6 +1951,7 @@ const translations = {
     "stock_layout.stale_warning": "data > 24h old",
     "stock_layout.partial_data": "partial data: daily pipeline only, no intraday factors",
     "stock_layout.signal_attribution": "Signal Attribution",
+    "stock_layout.reference": "Reference",
     /* ActionBox */
     "actionbox.title": "Action",
     "actionbox.partial_hint": "Entry / stop / target need intraday data (ATR, live price). This ticker is on the daily pipeline only, no intraday factors yet.",

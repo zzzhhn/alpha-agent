@@ -88,7 +88,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
 
   return (
     <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 space-y-1.5">
-      <div className="text-[10px] font-tm-mono uppercase tracking-wide text-tm-muted">
+      <div className="text-[11px] font-tm-sans uppercase tracking-wide text-tm-muted">
         {copy.title}
       </div>
       {(() => {
@@ -120,7 +120,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
         <div className="text-xs text-tm-fg-2">{subtitle}</div>
       ) : null}
       {summary && locale === "zh" && profile.summary_lang === "en" ? (
-        <div className="text-[10px] italic text-tm-muted">{copy.pendingZh}</div>
+        <div className="text-[11px] italic text-tm-muted">{copy.pendingZh}</div>
       ) : null}
       {summary ? (
         <p
@@ -144,7 +144,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
           {expanded ? copy.showLess : copy.showMore}
         </button>
       ) : null}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[10px] text-tm-muted">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-tm-muted">
         {profile.employees ? (
           <span>
             {copy.employees}: {profile.employees.toLocaleString()}

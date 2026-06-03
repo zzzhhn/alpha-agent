@@ -105,7 +105,7 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
                 {it.headline}
               </a>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-tm-muted">
-                <span className="rounded bg-tm-bg-3 px-1.5 py-0.5 font-tm-mono text-[10px]">
+                <span className="rounded bg-tm-bg-3 px-1.5 py-0.5 font-tm-sans text-[11px]">
                   {it.source}
                 </span>
                 <span>{relativeTime(it.published_at, locale)}</span>

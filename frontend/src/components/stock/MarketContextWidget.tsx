@@ -87,7 +87,7 @@ export default function MarketContextWidget({ ticker }: { ticker: string }) {
               {it.body_excerpt ? (
                 <p className="mt-0.5 text-xs text-tm-muted">{it.body_excerpt}</p>
               ) : null}
-              <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-tm-muted">
+              <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-tm-muted">
                 <span>{relativeTime(it.published_at, locale)}</span>
                 {it.tickers_extracted.length > 0 ? (
                   <span>

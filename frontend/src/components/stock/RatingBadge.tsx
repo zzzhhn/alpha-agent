@@ -76,7 +76,7 @@ export default function RatingBadge({
         </div>
         {/* Secondary: calibrated historical directional hit-rate. */}
         <div
-          className="flex justify-between pt-0.5 text-[10px] text-tm-muted"
+          className="flex justify-between pt-0.5 text-[11px] text-tm-muted"
           title={t(locale, "rating.hitrate_tooltip")}
         >
           <span>{t(locale, "rating.hitrate")}</span>

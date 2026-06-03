@@ -133,7 +133,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
           <p className="text-sm leading-relaxed text-tm-fg">
             {result.explanation}
           </p>
-          <p className="text-[10px] text-tm-muted">
+          <p className="text-[11px] text-tm-muted">
             {copy.eventCount(result.event_count)}
             {result.cache === "hit" ? ` ${copy.cacheHit}` : null}
           </p>

@@ -72,7 +72,7 @@ export default function CatalystsBlock({ card }: { card: RatingCard }) {
         ) : (
           <ul className="text-xs text-tm-fg-2 space-y-1">
             {calendar.slice(0, 5).map((evt, i) => (
-              <li key={i} className="font-mono">
+              <li key={i} className="font-tm-sans">
                 {typeof evt === "string" ? evt : JSON.stringify(evt)}
               </li>
             ))}

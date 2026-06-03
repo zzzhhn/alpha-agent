@@ -156,7 +156,7 @@ export default function RichThesis({ ticker }: { ticker: string }) {
             {/* Phase 312 zh/en tab. Disabled during streaming to avoid a
                 mid-stream abort + race; user can still abort via the Stop
                 button and then switch language. */}
-            <div className="inline-flex items-center rounded border border-tm-rule overflow-hidden text-xs font-tm-mono">
+            <div className="inline-flex items-center rounded border border-tm-rule overflow-hidden text-xs font-tm-sans">
               <button
                 type="button"
                 onClick={() => onLangSwitch("zh")}

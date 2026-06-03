@@ -132,7 +132,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
         <div className="rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
           <p className="whitespace-pre-wrap">{result.explanation}</p>
           {result.cache === "hit" ? (
-            <p className="mt-1 text-[10px] text-tm-muted">{copy.cacheHit}</p>
+            <p className="mt-1 text-[11px] text-tm-muted">{copy.cacheHit}</p>
           ) : null}
         </div>
       ) : null}

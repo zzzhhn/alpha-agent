@@ -304,7 +304,7 @@ export default function PriceChart({
         {/* crosshair news tooltip */}
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute z-10 hidden max-w-[240px] rounded border border-tm-rule bg-tm-bg-2/95 px-2 py-1.5 font-tm-mono text-[10.5px] leading-snug text-tm-fg shadow-lg shadow-black/30"
+          className="pointer-events-none absolute z-10 hidden max-w-[240px] rounded border border-tm-rule bg-tm-bg-2/95 px-2 py-1.5 font-tm-sans text-[11px] leading-snug text-tm-fg shadow-lg shadow-black/30"
         />
         {status !== "ok" ? (
           <div className="absolute inset-0 flex items-center justify-center bg-tm-bg-2">

@@ -61,7 +61,7 @@ export default function LetterGradeRibbon({
 
   return (
     <div title={tip} className="rounded border border-tm-rule bg-tm-bg-2 p-2">
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-tm-muted font-tm-mono">
+      <div className="mb-1 text-[11px] uppercase tracking-wide text-tm-muted font-tm-sans">
         {locale === "zh" ? "维度评级" : "GRADES"}
       </div>
       <div className="grid grid-cols-6 gap-1">
@@ -75,8 +75,8 @@ export default function LetterGradeRibbon({
               className={`flex flex-col items-center rounded border ${tone} px-1 py-0.5`}
               title={`${dim}: ${grade}`}
             >
-              <span className="text-[8px] font-tm-mono opacity-70">{label}</span>
-              <span className="text-sm font-semibold font-tm-mono">{grade}</span>
+              <span className="text-[11px] font-tm-sans opacity-70">{label}</span>
+              <span className="text-sm font-semibold font-tm-sans">{grade}</span>
             </div>
           );
         })}

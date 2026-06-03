@@ -63,6 +63,14 @@ const MODE_OPTIONS: ReadonlyArray<BacktestMode> = ["static", "walk_forward"];
 
 const BENCHMARK_OPTIONS: ReadonlyArray<"SPY" | "RSP"> = ["SPY", "RSP"];
 
+// Shared control geometry so every field box (select / number / checkbox /
+// button) lands on the SAME height and fills its grid track. `h-9` (36px) is
+// the single source of truth for control height across both rows — change it
+// here and the entire form stays aligned. Inputs keep mono for numerics; the
+// box border / bg match the terminal palette.
+const CONTROL_BOX =
+  "flex h-9 w-full items-center rounded border border-tm-rule bg-tm-bg-3 px-2 font-tm-mono text-xs text-tm-fg transition-colors focus-within:border-tm-accent focus:border-tm-accent focus:outline-none";
+
 export function BacktestFormSticky({
   params,
   setParams,
@@ -187,15 +195,22 @@ export function BacktestFormSticky({
           </div>
         )}
 
-        {/* Row 2 — quick params + RUN button (always visible) */}
-        <div className="flex flex-wrap items-end gap-3">
-          <FieldShell label={t(locale, "backtest.form.direction")}>
+        {/* Row 2 — quick params + RUN button (always visible). Shares the
+            same 12-track grid as the advanced row (Row 3) so the field columns
+            line up vertically. Each control fills its track at a uniform h-9
+            via CONTROL_BOX. The toggle + RUN group occupies the last 3 tracks,
+            its buttons bottom-aligned to sit on the control baseline. */}
+        <div className="grid grid-cols-2 items-start gap-x-3 gap-y-3 sm:grid-cols-12">
+          <FieldShell
+            label={t(locale, "backtest.form.direction")}
+            className="sm:col-span-3"
+          >
             <select
               value={params.direction}
               onChange={(e) =>
                 updateField("direction", e.target.value as DirectionMode)
               }
-              className="rounded border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-fg focus:border-tm-accent focus:outline-none"
+              className={CONTROL_BOX}
             >
               {DIRECTION_OPTIONS.map((d) => (
                 <option key={d} value={d}>
@@ -205,7 +220,10 @@ export function BacktestFormSticky({
             </select>
           </FieldShell>
 
-          <FieldShell label={t(locale, "backtest.form.topPct")}>
+          <FieldShell
+            label={t(locale, "backtest.form.topPct")}
+            className="sm:col-span-3"
+          >
             <NumberWithSuffix
               value={params.topPct}
               min={1}
@@ -216,13 +234,16 @@ export function BacktestFormSticky({
             />
           </FieldShell>
 
-          <FieldShell label={t(locale, "backtest.form.universe")}>
+          <FieldShell
+            label={t(locale, "backtest.form.universe")}
+            className="sm:col-span-3"
+          >
             <select
               value={params.universe === "custom" ? "SP500" : params.universe}
               onChange={(e) =>
                 updateField("universe", e.target.value as FactorUniverse)
               }
-              className="rounded border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-fg focus:border-tm-accent focus:outline-none"
+              className={CONTROL_BOX}
             >
               {UNIVERSE_OPTIONS.map((u) => (
                 <option key={u} value={u}>
@@ -232,30 +253,34 @@ export function BacktestFormSticky({
             </select>
           </FieldShell>
 
-          <button
-            type="button"
-            onClick={() => setAdvancedOpen((o) => !o)}
-            aria-expanded={advancedOpen}
-            className="inline-flex items-center gap-1 rounded border border-tm-rule px-2.5 py-1 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
-          >
-            {advancedOpen ? (
-              <ChevronUp className="h-3 w-3" strokeWidth={1.75} />
-            ) : (
-              <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
-            )}
-            <span>
-              {advancedOpen
-                ? t(locale, "backtest.action.advancedHide")
-                : t(locale, "backtest.action.advancedShow")}
-            </span>
-          </button>
+          {/* Toggle + RUN — bottom-aligned to the control row so they sit on
+              the same baseline as the inputs to their left (labels above push
+              the inputs down by one label-row, mt-[22px] matches that offset
+              on small screens where this group wraps to its own line). */}
+          <div className="col-span-2 flex items-end justify-end gap-2 sm:col-span-3 sm:mt-[22px]">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((o) => !o)}
+              aria-expanded={advancedOpen}
+              className="inline-flex h-9 shrink-0 items-center gap-1 rounded border border-tm-rule px-2.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+            >
+              {advancedOpen ? (
+                <ChevronUp className="h-3 w-3" strokeWidth={1.75} />
+              ) : (
+                <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
+              )}
+              <span>
+                {advancedOpen
+                  ? t(locale, "backtest.action.advancedHide")
+                  : t(locale, "backtest.action.advancedShow")}
+              </span>
+            </button>
 
-          <div className="ml-auto">
             <button
               type="button"
               onClick={onRun}
               disabled={runDisabled}
-              className="inline-flex items-center gap-2 rounded bg-tm-accent px-4 py-2 font-tm-mono text-[12px] font-semibold uppercase tracking-wider text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded bg-tm-accent px-4 font-tm-mono text-xs font-semibold uppercase tracking-wider text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRunning ? (
                 <>
@@ -279,8 +304,11 @@ export function BacktestFormSticky({
           }`}
           aria-hidden={!advancedOpen}
         >
-          <div className="grid grid-cols-2 gap-3 border-t border-tm-rule pt-3 md:grid-cols-3 lg:grid-cols-6">
-            <FieldShell label={t(locale, "backtest.form.bottomPct")}>
+          <div className="grid grid-cols-2 items-start gap-x-3 gap-y-3 border-t border-tm-rule pt-3 sm:grid-cols-12">
+            <FieldShell
+              label={t(locale, "backtest.form.bottomPct")}
+              className="sm:col-span-2"
+            >
               <NumberWithSuffix
                 value={params.bottomPct}
                 min={1}
@@ -291,7 +319,10 @@ export function BacktestFormSticky({
               />
             </FieldShell>
 
-            <FieldShell label={t(locale, "backtest.form.lookback")}>
+            <FieldShell
+              label={t(locale, "backtest.form.lookback")}
+              className="sm:col-span-2"
+            >
               <NumberWithSuffix
                 value={params.lookback}
                 min={10}
@@ -302,13 +333,16 @@ export function BacktestFormSticky({
               />
             </FieldShell>
 
-            <FieldShell label={t(locale, "backtest.form.benchmark")}>
+            <FieldShell
+              label={t(locale, "backtest.form.benchmark")}
+              className="sm:col-span-2"
+            >
               <select
                 value={params.benchmark}
                 onChange={(e) =>
                   updateField("benchmark", e.target.value as "SPY" | "RSP")
                 }
-                className="rounded border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-fg focus:border-tm-accent focus:outline-none"
+                className={CONTROL_BOX}
               >
                 {BENCHMARK_OPTIONS.map((b) => (
                   <option key={b} value={b}>
@@ -318,23 +352,32 @@ export function BacktestFormSticky({
               </select>
             </FieldShell>
 
-            <FieldShell label={t(locale, "backtest.form.neutralize")}>
-              <label className="inline-flex items-center gap-2 font-tm-mono text-[11px] text-tm-fg">
+            {/* Neutralize — boxed checkbox cell with the same h-9 control
+                height + border/bg as its row-mates, so the toggle reads as a
+                field control instead of floating between the inputs. */}
+            <FieldShell
+              label={t(locale, "backtest.form.neutralize")}
+              className="sm:col-span-2"
+            >
+              <div className={`${CONTROL_BOX} cursor-pointer gap-2`}>
                 <input
                   type="checkbox"
                   checked={params.neutralize}
                   onChange={(e) => updateField("neutralize", e.target.checked)}
-                  className="cursor-pointer accent-[var(--tm-accent)]"
+                  className="shrink-0 cursor-pointer accent-[var(--tm-accent)]"
                 />
-                <span>
+                <span className="truncate">
                   {params.neutralize
                     ? t(locale, "backtest.form.neutralize.sector")
                     : t(locale, "backtest.form.neutralize.none")}
                 </span>
-              </label>
+              </div>
             </FieldShell>
 
-            <FieldShell label={t(locale, "backtest.form.costBps")}>
+            <FieldShell
+              label={t(locale, "backtest.form.costBps")}
+              className="sm:col-span-2"
+            >
               <NumberWithSuffix
                 value={params.transactionCostBps}
                 min={0}
@@ -345,13 +388,16 @@ export function BacktestFormSticky({
               />
             </FieldShell>
 
-            <FieldShell label={t(locale, "backtest.form.modeLabel")}>
+            <FieldShell
+              label={t(locale, "backtest.form.modeLabel")}
+              className="sm:col-span-2"
+            >
               <select
                 value={params.mode}
                 onChange={(e) =>
                   updateField("mode", e.target.value as BacktestMode)
                 }
-                className="rounded border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-fg focus:border-tm-accent focus:outline-none"
+                className={CONTROL_BOX}
               >
                 {MODE_OPTIONS.map((m) => (
                   <option key={m} value={m}>
@@ -377,13 +423,15 @@ export function BacktestFormSticky({
 function FieldShell({
   label,
   children,
+  className,
 }: {
   readonly label: string;
   readonly children: React.ReactNode;
+  readonly className?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+    <label className={`flex min-w-0 flex-col gap-1.5 ${className ?? ""}`}>
+      <span className="font-tm-sans text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-tm-muted">
         {label}
       </span>
       {children}
@@ -407,7 +455,7 @@ function NumberWithSuffix({
   readonly onChange: (n: number) => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded border border-tm-rule bg-tm-bg-3 px-2 py-1 focus-within:border-tm-accent">
+    <div className={`${CONTROL_BOX} gap-1`}>
       <input
         type="number"
         value={value}
@@ -418,9 +466,9 @@ function NumberWithSuffix({
           const next = Number(e.target.value);
           if (Number.isFinite(next)) onChange(next);
         }}
-        className="w-14 bg-transparent font-mono text-[11px] tabular-nums text-tm-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="min-w-0 flex-1 bg-transparent font-tm-mono text-xs tabular-nums text-tm-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
-      <span className="font-tm-mono text-[10px] text-tm-muted">{suffix}</span>
+      <span className="shrink-0 font-tm-mono text-[11px] text-tm-muted">{suffix}</span>
     </div>
   );
 }

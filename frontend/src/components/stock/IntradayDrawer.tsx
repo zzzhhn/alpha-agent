@@ -208,7 +208,7 @@ export default function IntradayDrawer({
 
       {/* that day's news / events */}
       <div className="mt-3 border-t border-tm-rule pt-3">
-        <div className="mb-1.5 font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted">
+        <div className="mb-1.5 font-tm-sans text-[11px] uppercase tracking-wide text-tm-muted">
           {t(locale, "intraday.news_title")} · {news.length}
         </div>
         {news.length === 0 ? (
@@ -235,17 +235,17 @@ export default function IntradayDrawer({
                 <>
                   <div className="mb-1 flex items-center gap-2">
                     <span
-                      className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${tone.pill}`}
+                      className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tone.pill}`}
                     >
                       {tone.label}
                     </span>
                     {tod ? (
-                      <span className="font-tm-mono text-[10px] text-tm-muted">
+                      <span className="font-tm-mono text-[11px] text-tm-muted">
                         {tod}
                       </span>
                     ) : null}
                     {src ? (
-                      <span className="truncate text-[10px] text-tm-muted">
+                      <span className="truncate text-[11px] text-tm-muted">
                         · {src}
                       </span>
                     ) : null}

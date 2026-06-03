@@ -106,7 +106,11 @@ export default function StockCardLayout({
         </div>
       </aside>
 
-      {/* Right scroll */}
+      {/* Right scroll. Three visual tiers replace the old flat stack of ~10
+          equal-weight blocks: Tier 1 (decision: thesis) leads, Tier 2
+          (analysis: attribution / chart / fundamentals) follows, and Tier 3
+          (reference: catalysts / news / market context / sources) sits under a
+          demoting "Reference" divider so the eye reads top-down by importance. */}
       <main className="lg:col-span-9 space-y-8 min-w-0">
         <LeanThesis card={card} />
         {/* key={ticker} forces remount on SPA ticker change so RichThesis's */}
@@ -136,6 +140,14 @@ export default function StockCardLayout({
           events={chartEvents}
         />
         <FundamentalsBlock card={card} />
+        {/* Tier 3 — reference: demoted below a labeled divider so the long
+            supporting tail no longer competes with the decision/analysis tiers. */}
+        <div className="flex items-center gap-3 pt-2" aria-hidden>
+          <span className="font-tm-sans text-[11px] uppercase tracking-[0.08em] text-tm-muted">
+            {t(locale, "stock_layout.reference")}
+          </span>
+          <span className="h-px flex-1 bg-tm-rule" />
+        </div>
         <CatalystsBlock card={card} />
         <NewsBlock card={card} />
         <MarketContextWidget ticker={card.ticker} />

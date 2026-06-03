@@ -114,7 +114,7 @@ export default function AttributionTable({
                 ? "今日复合分轻微越过 tier 阈值,no-trade band 抑制了翻转。set ALPHA_TIER_BAND_Z 调整带宽。"
                 : "Composite crossed a tier threshold marginally today; no-trade band suppressed the flip. Set ALPHA_TIER_BAND_Z to tune."
             }
-            className="inline-flex items-center gap-1 rounded-md border border-tm-warn/40 bg-tm-warn/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-warn"
+            className="inline-flex items-center gap-1 rounded-md border border-tm-warn/40 bg-tm-warn/10 px-2 py-0.5 font-tm-sans text-[11px] text-tm-warn"
           >
             <span className="opacity-70">{locale === "zh" ? "无交易带" : "BAND"}</span>
             <span className="font-semibold">{locale === "zh" ? "生效" : "ACTIVE"}</span>
@@ -124,7 +124,7 @@ export default function AttributionTable({
           type="button"
           onClick={() => setFactorMode(factorMode === "short" ? "long" : "short")}
           title={modeTip}
-          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-accent transition hover:bg-tm-accent/20"
+          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-sans text-[11px] text-tm-accent transition hover:bg-tm-accent/20"
         >
           <span className="opacity-70">{modeLabel}</span>
           <span className="font-semibold">
@@ -133,7 +133,7 @@ export default function AttributionTable({
         </button>
       </div>
       {!icAvailable ? (
-        <div className="rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
+        <div className="rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 font-tm-sans text-[11px] leading-relaxed text-tm-muted">
           {t(locale, "attribution.ic_accumulating")}
         </div>
       ) : null}
