@@ -322,14 +322,17 @@ h2 {
 }
 
 [data-theme="light"] {
-  --tm-bg: #f5f5f2;
-  --tm-bg-2: #ffffff;
-  --tm-bg-3: #ebebe6;
-  --tm-fg: #161a20;
-  --tm-fg-2: #41464f;
-  --tm-muted: #6b7079;        /* P1-5: darkened from #828891 (3.2:1) → ~4.3:1 on cream */
-  --tm-rule: #d8d8d2;
-  --tm-rule-2: #c0c0b8;
+  /* Warmer light palette (2026-06-03): pure-white #ffffff cards were glary;
+     shifted the whole neutral ramp toward warm cream/taupe so light mode reads
+     like warm paper, not a cold screen. Semantic colors below kept (AA-tuned). */
+  --tm-bg: #f3efe7;
+  --tm-bg-2: #fbf8f2;          /* warm off-white card, replaces glary pure white */
+  --tm-bg-3: #ebe5d9;
+  --tm-fg: #211f1a;            /* warm near-black, was cool blue-black #161a20 */
+  --tm-fg-2: #4b463d;
+  --tm-muted: #6e675b;        /* warm gray, ~4.4:1 on the cream bg (kept AA) */
+  --tm-rule: #ddd5c8;
+  --tm-rule-2: #c7bdac;
   /* P1-5: #0c8a4f green was ~3.5:1 on the cream bg — below WCAG AA (4.5:1)
      for normal text. #0a7344 is ~5.3:1 on cream / ~5.9:1 on white while
      staying unmistakably green, preserving the research-paper palette. */

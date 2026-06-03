@@ -346,8 +346,8 @@ export default function SettingsPage() {
       <TmPane title="SETTINGS / BYOK" meta={preset.help}>
         <p className="px-3 py-2.5 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg-2">
           {zh
-            ? "你的 API key 经 AES-256-GCM 加密后保存在服务端。每次 LLM 请求时服务器解密并以 X-LLM-* header 形式传递给 LiteLLM，明文 key 不会被记录。"
-            : "Your API key is encrypted with AES-256-GCM and stored server-side. On each LLM call the server decrypts it and passes it as X-LLM-* headers to LiteLLM. The plaintext key is never logged."}
+            ? "你的 API Key 在服务端加密存储，仅在发起 LLM 请求的瞬间使用，不会被记录或回显。"
+            : "Your API key is encrypted and stored server-side, used only at the moment an LLM request is made, and is never logged or displayed."}
         </p>
       </TmPane>
 
