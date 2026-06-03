@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { RatingCard } from "@/lib/api/picks";
 import clsx from "clsx";
 import WatchlistStar from "@/components/ui/WatchlistStar";
+import { HoverTip } from "@/components/ui/HoverTip";
 import GradeStrip from "./GradeStrip";
 import { t, type Locale } from "@/lib/i18n";
 // Reuse the app-wide signal→label map (also used by the stock-detail Radar
@@ -98,12 +99,15 @@ export default function PickRow({
           {card.ticker}
         </Link>
         {card.tier_flip_today ? (
-          <span
-            className="ml-1 align-middle text-[10px] font-normal text-tm-warn"
-            title={t(locale, "picks_table.tier_flip_tooltip")}
+          <HoverTip
+            content={t(locale, "picks_table.tier_flip_tooltip")}
+            placement="bottom"
+            className="ml-1 align-middle"
           >
-            ⇄
-          </span>
+            <span className="cursor-help text-[10px] font-normal text-tm-warn">
+              ⇄
+            </span>
+          </HoverTip>
         ) : null}
         {card.partial ? (
           <span
