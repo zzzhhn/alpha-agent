@@ -5,6 +5,7 @@ recent row is older than 24 hours.  Spec §7.2.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -104,25 +105,30 @@ async def get_stock(
     ticker = ticker.upper()
     pool = await get_db_pool()
     cal_map = await load_active_calibration(pool)
-    sig = await fetch_latest_signal(pool, ticker, cal_map=cal_map)
+    # Signal and news are independent reads (news only needs the ticker), so
+    # run them concurrently: with the function in hkg1 and the DB in us-east-1
+    # every query is a transpacific round trip, and gathering collapses two
+    # sequential waves into one. The news read is only wasted on a 404 ticker.
+    sig, news_rows = await asyncio.gather(
+        fetch_latest_signal(pool, ticker, cal_map=cal_map),
+        pool.fetch(
+            """
+            SELECT id, source, headline, url, published_at,
+                   sentiment_score, sentiment_label,
+                   reasoning_text, reasoning_lang
+            FROM news_items
+            WHERE ticker = $1
+            ORDER BY published_at DESC
+            LIMIT 20
+            """,
+            ticker,
+        ),
+    )
     if sig is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
 
     fetched_at: datetime = sig["fetched_at"]
     stale = (datetime.now(UTC) - fetched_at) > timedelta(hours=24)
-
-    news_rows = await pool.fetch(
-        """
-        SELECT id, source, headline, url, published_at,
-               sentiment_score, sentiment_label,
-               reasoning_text, reasoning_lang
-        FROM news_items
-        WHERE ticker = $1
-        ORDER BY published_at DESC
-        LIMIT 20
-        """,
-        ticker,
-    )
     news_items = [
         NewsItemLite(
             id=r["id"],

@@ -9,6 +9,7 @@ cron appends a fresh calibration row; the read path loads the latest.
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
@@ -160,14 +161,32 @@ async def run_calibration(pool) -> dict:
     return {"n_pairs": len(pairs), "applied": applied}
 
 
+# Process-local memo for the active calibration map. The map only changes when
+# the daily cron appends a new row, so reading it on every request was a wasted
+# DB round trip — costly when the function (hkg1) and DB (us-east-1) sit in
+# different regions. A few-minute staleness is harmless (calibration is daily).
+# Freshness is keyed on `ts` alone so a legitimate None value (identity, no
+# usable map) is still cached rather than re-queried every request.
+_CAL_TTL_SECONDS = 600.0
+_cal_cache: dict = {"ts": None, "val": None}
+
+
 async def load_active_calibration(pool) -> dict | None:
     """Most recent APPLIED calibration map, or None (identity) if none exists.
-    Read once per request on the live path and passed to apply_calibration."""
+    Read on the live path and passed to apply_calibration. Memoized in-process
+    for a few minutes (see _cal_cache above)."""
+    now = time.monotonic()
+    if _cal_cache["ts"] is not None and (now - _cal_cache["ts"]) < _CAL_TTL_SECONDS:
+        return _cal_cache["val"]
     row = await pool.fetchrow(
         "SELECT isotonic_map FROM confidence_calibration "
         "WHERE applied = true ORDER BY as_of DESC LIMIT 1"
     )
     if row is None:
-        return None
-    m = json.loads(row["isotonic_map"])
-    return m if m.get("x") else None
+        val = None
+    else:
+        m = json.loads(row["isotonic_map"])
+        val = m if m.get("x") else None
+    _cal_cache["val"] = val
+    _cal_cache["ts"] = now
+    return val
