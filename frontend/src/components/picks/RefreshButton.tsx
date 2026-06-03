@@ -66,7 +66,7 @@ function DispatchProgress({
           style={{ width: `${Math.round(pct * 100)}%` }}
         />
       </div>
-      <span className={`text-[10px] ${done ? "text-tm-pos" : "text-tm-muted"}`}>
+      <span className={`text-[11px] ${done ? "text-tm-pos" : "text-tm-muted"}`}>
         {label}
       </span>
     </div>

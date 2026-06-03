@@ -16,7 +16,7 @@ const DIM_I18N: Record<string, string> = {
 
 // Shared chip geometry so header legend + row chips line up to the pixel.
 const CHIP_BASE =
-  "inline-flex w-[20px] items-center justify-center rounded-sm py-0.5 font-tm-mono text-[9.5px] tabular-nums";
+  "inline-flex w-[22px] items-center justify-center rounded-sm py-0.5 font-tm-mono text-[11px] tabular-nums";
 
 // A dimension is hidden when EVERY visible pick reports "—" for it (the
 // backend returns "—" for a signal that has no cross-sectional data, e.g.

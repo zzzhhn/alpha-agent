@@ -308,7 +308,7 @@ h2 {
   --tm-bg-3: #161a22;
   --tm-fg: #e7eaf0;
   --tm-fg-2: #aab1bd;
-  --tm-muted: #6c7280;
+  --tm-muted: #868d99;  /* readability: was #6c7280 (~4.2:1), now ~5.6:1 on #0a0c0f for small labels */
   --tm-rule: #1f242c;
   --tm-rule-2: #2a3038;
   --tm-accent: #39d98a;       /* terminal green */

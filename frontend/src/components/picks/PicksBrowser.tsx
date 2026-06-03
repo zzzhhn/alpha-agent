@@ -261,7 +261,7 @@ export default function PicksBrowser({
           type="button"
           onClick={onModeToggle}
           title={copy.modeTip}
-          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-accent transition hover:bg-tm-accent/20 focus:outline-none focus:ring-1 focus:ring-tm-accent"
+          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-accent transition hover:bg-tm-accent/20 focus:outline-none focus:ring-1 focus:ring-tm-accent"
           aria-label={copy.modeLabel}
         >
           <span className="opacity-70">{copy.modeLabel}</span>
@@ -276,8 +276,8 @@ export default function PicksBrowser({
           title={copy.sideTip}
           className={
             side === "short"
-              ? "inline-flex items-center gap-1.5 rounded-md border border-tm-neg/40 bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-neg transition hover:bg-tm-neg/20 focus:outline-none focus:ring-1 focus:ring-tm-neg"
-              : "inline-flex items-center gap-1.5 rounded-md border border-tm-pos/40 bg-tm-pos/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-pos transition hover:bg-tm-pos/20 focus:outline-none focus:ring-1 focus:ring-tm-pos"
+              ? "inline-flex items-center gap-1.5 rounded-md border border-tm-neg/40 bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-neg transition hover:bg-tm-neg/20 focus:outline-none focus:ring-1 focus:ring-tm-neg"
+              : "inline-flex items-center gap-1.5 rounded-md border border-tm-pos/40 bg-tm-pos/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-pos transition hover:bg-tm-pos/20 focus:outline-none focus:ring-1 focus:ring-tm-pos"
           }
           aria-label={copy.sideLabel}
         >
@@ -309,14 +309,14 @@ export default function PicksBrowser({
         }
       >
         {refreshing ? (
-          <div className="mx-3 mt-2 rounded border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-accent">
+          <div className="mx-3 mt-2 rounded border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
             {t(locale, "picks.freeze_banner").replace(
               "{min}",
               String(refreshRemainingMin),
             )}
           </div>
         ) : justRefreshed ? (
-          <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-pos">
+          <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
             {t(locale, "picks.refreshed_banner")}
           </div>
         ) : null}
@@ -330,7 +330,7 @@ export default function PicksBrowser({
             className="w-56 rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 font-tm-mono text-[11px] text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none"
           />
           {loading ? (
-            <span className="font-tm-mono text-[10px] text-tm-muted">
+            <span className="font-tm-mono text-[11px] text-tm-muted">
               {copy.loading}
             </span>
           ) : null}

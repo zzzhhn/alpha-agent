@@ -85,10 +85,10 @@ export default function PickRow({
 
   return (
     <tr className="border-b border-tm-rule hover:bg-tm-bg-2 transition-colors">
-      <td className="px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-muted tabular-nums">
+      <td className="px-3 py-2.5 font-tm-mono text-xs text-tm-muted tabular-nums">
         {rank}
       </td>
-      <td className="px-3 py-1.5 font-tm-mono text-[11px] font-semibold">
+      <td className="px-3 py-2.5 font-tm-mono text-[13px] font-semibold">
         {watched ? (
           <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" />
         ) : null}
@@ -104,14 +104,14 @@ export default function PickRow({
             placement="bottom"
             className="ml-1 align-middle"
           >
-            <span className="cursor-help text-[10px] font-normal text-tm-warn">
+            <span className="cursor-help text-[11px] font-normal text-tm-warn">
               ⇄
             </span>
           </HoverTip>
         ) : null}
         {card.partial ? (
           <span
-            className="ml-1.5 rounded bg-tm-bg-2 px-1 py-0.5 align-middle text-[8px] font-semibold uppercase tracking-wide text-tm-muted"
+            className="ml-1.5 rounded bg-tm-bg-2 px-1 py-0.5 align-middle text-[11px] font-semibold uppercase tracking-wide text-tm-muted"
             title={t(locale, "picks_table.partial_tooltip")}
           >
             {t(locale, "picks_table.partial_badge")}
@@ -119,7 +119,7 @@ export default function PickRow({
         ) : null}
         {staleDays > 0 ? (
           <span
-            className="ml-1.5 rounded bg-tm-warn-soft px-1 py-0.5 align-middle text-[8px] font-semibold tabular-nums text-tm-warn"
+            className="ml-1.5 rounded bg-tm-warn-soft px-1 py-0.5 align-middle text-[11px] font-semibold tabular-nums text-tm-warn"
             title={
               locale === "zh"
                 ? `该行数据比榜单最新时间旧 ${staleDays} 天`
@@ -130,7 +130,7 @@ export default function PickRow({
           </span>
         ) : null}
       </td>
-      <td className="px-3 py-1.5 font-tm-mono text-[10.5px]">
+      <td className="px-3 py-2.5 font-tm-mono text-xs">
         <span
           className={clsx(
             "font-semibold",
@@ -140,12 +140,12 @@ export default function PickRow({
           {card.rating}
         </span>
       </td>
-      <td className="px-3 py-1.5 font-tm-mono text-[10.5px] tabular-nums text-right">
+      <td className="px-3 py-2.5 font-tm-mono text-xs tabular-nums text-right">
         {sign}
         {composite.toFixed(2)}
         <span className="text-tm-muted">σ</span>
       </td>
-      <td className="px-3 py-1.5 font-tm-mono text-[10.5px] tabular-nums">
+      <td className="px-3 py-2.5 font-tm-mono text-xs tabular-nums">
         <span
           className="flex flex-col items-end gap-0.5"
           title={t(locale, "picks_table.confidence_tooltip")}
@@ -159,15 +159,15 @@ export default function PickRow({
             </span>
             <span className={clsx("w-8 text-right", agrText)}>{agrPct}%</span>
           </span>
-          <span className="text-[8px] text-tm-muted">
+          <span className="text-[11px] text-tm-muted">
             {t(locale, "picks_table.hitrate_label")} {hitPct}%
           </span>
         </span>
       </td>
-      <td className="px-3 py-1.5">
+      <td className="px-3 py-2.5">
         <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} hidden={hiddenDims} />
       </td>
-      <td className="px-3 py-1.5 font-tm-mono text-[10px]">
+      <td className="px-3 py-2.5 font-tm-sans text-[12px]">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           {drivers.length > 0 ? (
             <span className="text-tm-pos">
