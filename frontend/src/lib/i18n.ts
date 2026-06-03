@@ -866,6 +866,9 @@ const translations = {
     "attribution.icir": "ICIR",
     "attribution.ir": "IR",
     "attribution.tier": "tier",
+    "radar.bullish": "看多强度",
+    "radar.bearish": "看空强度",
+    "radar.no_data": "暂无足够有数据的信号绘制雷达图",
     "attribution.ic_accumulating":
       "Rank IC / ICIR / IR 暂未就绪：滚动 IC 历史正在累积。这三列由 IC 回测引擎按交易日写入，约需 30 个交易日的信号观测才会显示。在此之前显示 “—” 属正常，并非缺失或错误。",
     "attribution.tooltip_rank_ic":
@@ -1904,6 +1907,9 @@ const translations = {
     "attribution.icir": "ICIR",
     "attribution.ir": "IR",
     "attribution.tier": "Tier",
+    "radar.bullish": "Bullish strength",
+    "radar.bearish": "Bearish strength",
+    "radar.no_data": "Not enough data-backed signals to plot the radar",
     "attribution.ic_accumulating":
       "Rank IC / ICIR / IR not yet available: the rolling IC history is still accumulating. These three columns are written per trading day by the IC backtest engine and need ~30 trading days of signal observations before they populate. Until then, “—” is expected, not missing or broken.",
     "attribution.tooltip_rank_ic":
