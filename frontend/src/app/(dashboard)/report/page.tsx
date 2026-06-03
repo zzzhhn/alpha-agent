@@ -55,6 +55,7 @@ import {
   FACTOR_EXAMPLES,
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
+import { FactorExampleCardGrid } from "@/components/alpha/FactorExampleCards";
 import { TmBacktestKpiStrip } from "@/components/backtest/TmBacktestKpiStrip";
 import { TmDrawdownChart } from "@/components/backtest/TmDrawdownChart";
 import { TmMonthlyReturnsHeatmap } from "@/components/backtest/TmMonthlyReturnsHeatmap";
@@ -653,22 +654,21 @@ function ReportPickerPane({
           </div>
         </div>
 
-        {/* From examples */}
+        {/* From examples — scannable card grid (verdict tier + key stats) */}
         <div className="border-t border-tm-rule pt-2.5">
-          <p className="mb-1.5 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
-            {t(locale, "report.picker.fromExamples")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {FACTOR_EXAMPLES.map((example) => (
-              <TmChip
-                key={example.name}
-                onClick={() => loadExample(example)}
-                disabled={running}
-              >
-                {example.name}
-              </TmChip>
-            ))}
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <p className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+              {t(locale, "report.picker.fromExamples")}
+            </p>
+            <p className="font-tm-sans text-[11px] text-tm-muted">
+              {t(locale, "report.picker.exampleCardHint")}
+            </p>
           </div>
+          <FactorExampleCardGrid
+            examples={FACTOR_EXAMPLES}
+            disabled={running}
+            onSelect={loadExample}
+          />
         </div>
 
         {/* From zoo */}
