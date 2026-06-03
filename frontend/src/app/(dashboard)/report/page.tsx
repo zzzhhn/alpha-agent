@@ -55,7 +55,7 @@ import {
   FACTOR_EXAMPLES,
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
-import { FactorExampleCardGrid } from "@/components/alpha/FactorExampleCards";
+import { FactorExampleList } from "@/components/alpha/FactorExampleList";
 import { TmBacktestKpiStrip } from "@/components/backtest/TmBacktestKpiStrip";
 import { TmDrawdownChart } from "@/components/backtest/TmDrawdownChart";
 import { TmMonthlyReturnsHeatmap } from "@/components/backtest/TmMonthlyReturnsHeatmap";
@@ -108,6 +108,34 @@ interface FactorReport {
 }
 
 const REPORT_PREFILL_KEY = "alphacore.report.prefill.v1";
+
+// #4c: persist the user's DIRECTION choice across runs. Only the direction
+// is persisted (neutralize / benchmark / cost stay per-session, and an
+// example load overrides direction with its proven config for that run).
+const REPORT_DIRECTION_KEY = "alphacore.report.direction.v1";
+type ReportDirection = "long_short" | "long_only" | "short_only";
+
+function readPersistedDirection(): ReportDirection | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(REPORT_DIRECTION_KEY);
+    if (raw === "long_short" || raw === "long_only" || raw === "short_only") {
+      return raw;
+    }
+  } catch {
+    /* storage blocked — fall back to default */
+  }
+  return null;
+}
+
+function persistDirection(dir: ReportDirection): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(REPORT_DIRECTION_KEY, dir);
+  } catch {
+    /* storage blocked — non-fatal */
+  }
+}
 
 export interface ReportConfig {
   readonly direction: "long_short" | "long_only" | "short_only";
@@ -175,12 +203,31 @@ export default function ReportPage() {
   const [primary, setPrimary] = useState<FactorReport | null>(null);
   const [compare, setCompare] = useState<FactorReport | null>(null);
   const [zoo, setZoo] = useState<readonly ZooEntry[]>([]);
-  const [config, setConfig] = useState<ReportConfig>(DEFAULT_REPORT_CONFIG);
+  // #4c: seed direction from localStorage (lazy init) so the user's last
+  // choice is reused on the next run. SSR-safe: readPersistedDirection
+  // returns null on the server, falling back to the default.
+  const [config, setConfig] = useState<ReportConfig>(() => ({
+    ...DEFAULT_REPORT_CONFIG,
+    direction: readPersistedDirection() ?? DEFAULT_REPORT_CONFIG.direction,
+  }));
+  // #4d: name of the example staged (loaded but not yet run). Highlights
+  // its row in the list and the Run button; cleared once a report runs or
+  // the user edits the expression by hand.
+  const [stagedName, setStagedName] = useState<string | null>(null);
 
   useEffect(() => {
     seedZooIfFirstRun();
     setZoo(listZoo());
+    // Client-only: re-sync direction from storage in case lazy init ran
+    // before hydration with a server default.
+    const stored = readPersistedDirection();
+    if (stored) setConfig((c) => ({ ...c, direction: stored }));
   }, []);
+
+  // #4c: persist DIRECTION whenever it changes.
+  useEffect(() => {
+    persistDirection(config.direction);
+  }, [config.direction]);
 
   // generate accepts hypothesis (short, ≤200 chars, sent to backend)
   // and an optional intuitionForCover (display-only, can be longer).
@@ -249,7 +296,13 @@ export default function ReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function loadExample(example: FactorExample) {
+  // #4d: clicking an example STAGES it (loads its config into the form) but
+  // does NOT run a backtest. The user must click Run to execute. This loads
+  // the exact validated config the example was discovered under, identical
+  // to the previous wiring — only the auto-run is removed.
+  const [stagedExample, setStagedExample] = useState<FactorExample | null>(null);
+
+  function stageExample(example: FactorExample) {
     setFactorName(example.name);
     setExpr(example.expression);
     const intu =
@@ -263,12 +316,21 @@ export default function ReportPage() {
       benchmarkTicker: example.benchmarkTicker ?? c.benchmarkTicker,
       transactionCostBps: example.transactionCostBps ?? c.transactionCostBps,
     }));
+    setStagedExample(example);
+    setStagedName(example.name);
+  }
+
+  // #4d: explicit Run for the staged example. Uses the same generate() call
+  // the old auto-run used, so the applied config + cover text are identical.
+  function runStaged() {
+    const example = stagedExample;
+    if (!example) return;
     void generate(
       example.name,
       example.expression,
       locale === "zh" ? example.hypothesisZh : example.hypothesisEn,
       "primary",
-      intu, // long display text on the cover; backend hypothesis stays short
+      locale === "zh" ? example.intuitionZh : example.intuitionEn,
     );
   }
 
@@ -413,16 +475,28 @@ export default function ReportPage() {
 
       <ReportPickerPane
         factorName={factorName}
-        onFactorName={setFactorName}
+        onFactorName={(v) => {
+          setFactorName(v);
+          // Hand-editing the name detaches from the staged example.
+          setStagedExample(null);
+          setStagedName(null);
+        }}
         expr={expr}
-        onExpr={setExpr}
+        onExpr={(v) => {
+          setExpr(v);
+          // Hand-editing the expression detaches from the staged example.
+          setStagedExample(null);
+          setStagedName(null);
+        }}
         config={config}
         onConfig={setConfig}
         zoo={zoo}
         primary={primary}
         compare={compare}
         running={running}
-        loadExample={loadExample}
+        stagedName={stagedName}
+        stageExample={stageExample}
+        runStaged={runStaged}
         loadZooEntry={loadZooEntry}
         runCustom={runCustom}
         generate={generate}
@@ -575,7 +649,9 @@ function ReportPickerPane({
   primary,
   compare,
   running,
-  loadExample,
+  stagedName,
+  stageExample,
+  runStaged,
   loadZooEntry,
   runCustom,
   generate,
@@ -593,7 +669,9 @@ function ReportPickerPane({
   readonly primary: FactorReport | null;
   readonly compare: FactorReport | null;
   readonly running: boolean;
-  readonly loadExample: (e: FactorExample) => void;
+  readonly stagedName: string | null;
+  readonly stageExample: (e: FactorExample) => void;
+  readonly runStaged: () => void;
   readonly loadZooEntry: (e: ZooEntry, slot: "primary" | "compare") => void;
   readonly runCustom: () => void;
   readonly generate: (
@@ -654,21 +732,47 @@ function ReportPickerPane({
           </div>
         </div>
 
-        {/* From examples — scannable card grid (verdict tier + key stats) */}
+        {/* From examples — grouped scannable list (tier sections + filter).
+            #4d: a row click STAGES the example into the form; an explicit
+            Run executes the backtest. */}
         <div className="border-t border-tm-rule pt-2.5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <p className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
               {t(locale, "report.picker.fromExamples")}
             </p>
             <p className="font-tm-sans text-[11px] text-tm-muted">
-              {t(locale, "report.picker.exampleCardHint")}
+              {t(locale, "report.example.listHint")}
             </p>
           </div>
-          <FactorExampleCardGrid
+          <FactorExampleList
             examples={FACTOR_EXAMPLES}
             disabled={running}
-            onSelect={loadExample}
+            selectedName={stagedName}
+            onSelect={stageExample}
           />
+          {/* Run gate: visible only once an example is staged. */}
+          {stagedName && (
+            <div className="mt-2 flex items-center justify-between gap-2 border-t border-tm-rule pt-2">
+              <span className="inline-flex items-center gap-1.5 font-tm-mono text-[10.5px] text-tm-muted">
+                <span className="rounded-sm border border-tm-accent/40 bg-tm-accent-soft px-1.5 py-px text-[10px] uppercase tracking-[0.06em] text-tm-accent">
+                  {t(locale, "report.picker.staged")}
+                </span>
+                <span className="font-tm-sans text-[11px] text-tm-fg-2">
+                  {stagedName}
+                </span>
+              </span>
+              <TmButton
+                variant="primary"
+                onClick={runStaged}
+                disabled={running}
+                title={t(locale, "report.picker.runStaged")}
+              >
+                {running
+                  ? t(locale, "report.picker.running")
+                  : t(locale, "report.picker.run")}
+              </TmButton>
+            </div>
+          )}
         </div>
 
         {/* From zoo */}

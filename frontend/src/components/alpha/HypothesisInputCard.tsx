@@ -1,17 +1,14 @@
 "use client";
 
-import { ChevronDown, History, Sparkles } from "lucide-react";
+import { ChevronDown, History } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { FactorExampleList } from "@/components/alpha/FactorExampleList";
+import type { FactorExample } from "@/components/alpha/FactorExamples";
 import type { FactorUniverse } from "@/lib/types";
 
 // ---- Prop types ----
-
-export interface InputCardExample {
-  readonly label: string;
-  readonly text: string;
-}
 
 /**
  * Mirrors the real `HypothesisHistoryEntry` from lib/types.ts.
@@ -40,7 +37,10 @@ interface Props {
   readonly onUniverseChange: (u: FactorUniverse) => void;
   readonly onSubmit: () => void;
   readonly disabled: boolean;
-  readonly examples: ReadonlyArray<InputCardExample>;
+  readonly examples: ReadonlyArray<FactorExample>;
+  // Selecting a row from the grouped example list (alpha flow loads the
+  // example's hypothesis prose into the textarea).
+  readonly onExampleSelect: (ex: FactorExample) => void;
   readonly history: ReadonlyArray<InputCardHistoryEntry>;
   readonly onHistorySelect: (entry: InputCardHistoryEntry) => void;
 }
@@ -147,23 +147,17 @@ export function HypothesisInputCard(p: Props) {
         disabled={p.disabled}
       />
 
-      {/* Example chips -- only when textarea is empty */}
+      {/* Example list -- grouped scannable list, only when textarea is empty */}
       {empty && p.examples.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-tm-mono text-[10px] text-tm-muted">
+        <div className="flex flex-col gap-2">
+          <span className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
             {t(locale, "alpha.input.examplesLabel" as Parameters<typeof t>[1])}
           </span>
-          {p.examples.map((ex) => (
-            <button
-              key={ex.label}
-              type="button"
-              onClick={() => p.onTextChange(ex.text)}
-              className="inline-flex items-center gap-1 rounded-full border border-tm-rule px-2.5 py-0.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-accent"
-            >
-              <Sparkles className="h-3 w-3" strokeWidth={1.75} />
-              {ex.label}
-            </button>
-          ))}
+          <FactorExampleList
+            examples={p.examples}
+            disabled={p.disabled}
+            onSelect={p.onExampleSelect}
+          />
         </div>
       )}
 

@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { FACTOR_EXAMPLES } from "@/components/alpha/FactorExamples";
+import type { FactorExample } from "@/components/alpha/FactorExamples";
 import { AnalyticsAccordion } from "@/components/alpha/AnalyticsAccordion";
 import { EvidencePaneGrid } from "@/components/alpha/EvidencePaneGrid";
 import { HypothesisInputCard } from "@/components/alpha/HypothesisInputCard";
-import type { InputCardExample, InputCardHistoryEntry } from "@/components/alpha/HypothesisInputCard";
+import type { InputCardHistoryEntry } from "@/components/alpha/HypothesisInputCard";
 import { useAlphaChain } from "@/components/alpha/useAlphaChain";
 import { VerdictBar } from "@/components/alpha/VerdictBar";
 import { useToast } from "@/components/ui/toast";
@@ -34,14 +35,12 @@ export default function AlphaPage() {
     setHistory(merged);
   }, []);
 
-  // Map FactorExample (has hypothesisEn/hypothesisZh, name) to InputCardExample (label + text).
-  // Locale-aware: zh uses hypothesisZh, en uses hypothesisEn. Mirrors old page line 176.
-  const examples = useMemo<ReadonlyArray<InputCardExample>>(
-    () =>
-      FACTOR_EXAMPLES.map((ex) => ({
-        label: ex.name,
-        text: locale === "zh" ? ex.hypothesisZh : ex.hypothesisEn,
-      })),
+  // Selecting an example here loads its hypothesis prose into the textarea
+  // (the alpha flow translates prose -> expression -> backtest). Locale-aware.
+  const handleExampleSelect = useCallback(
+    (ex: FactorExample) => {
+      setText(locale === "zh" ? ex.hypothesisZh : ex.hypothesisEn);
+    },
     [locale],
   );
 
@@ -134,7 +133,8 @@ export default function AlphaPage() {
         onUniverseChange={setUniverse}
         onSubmit={handleSubmit}
         disabled={chain.isLoading}
-        examples={examples}
+        examples={FACTOR_EXAMPLES}
+        onExampleSelect={handleExampleSelect}
         history={history as readonly InputCardHistoryEntry[]}
         onHistorySelect={handleHistorySelect}
       />
