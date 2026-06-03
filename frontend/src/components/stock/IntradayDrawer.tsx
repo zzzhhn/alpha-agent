@@ -216,37 +216,59 @@ export default function IntradayDrawer({
             {t(locale, "intraday.news_empty")}
           </div>
         ) : (
-          <ul className="max-h-[220px] space-y-1 overflow-y-auto pr-1">
+          <ul className="max-h-[300px] space-y-1.5 overflow-y-auto pr-1">
             {news.map((e, i) => {
               const s = e.sentiment_score ?? 0;
-              const dot =
-                s > 0.1 ? "bg-tm-pos" : s < -0.1 ? "bg-tm-neg" : "bg-tm-muted";
+              const tone =
+                s > 0.1
+                  ? { pill: "bg-tm-pos/15 text-tm-pos", label: t(locale, "intraday.sent_pos") }
+                  : s < -0.1
+                    ? { pill: "bg-tm-neg/15 text-tm-neg", label: t(locale, "intraday.sent_neg") }
+                    : { pill: "bg-tm-muted/15 text-tm-muted", label: t(locale, "intraday.sent_neu") };
               const src = hostname(e.url);
-              return (
-                <li
-                  key={`${e.ts}-${i}`}
-                  className="flex items-start gap-2 border-b border-tm-rule/50 pb-1 text-xs"
-                >
-                  <span
-                    className={`mt-1 h-1.5 w-1.5 flex-none rounded-full ${dot}`}
-                  />
-                  <div className="min-w-0">
-                    {e.url ? (
-                      <a
-                        href={e.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-tm-fg hover:text-tm-accent hover:underline"
-                      >
-                        {e.headline}
-                      </a>
-                    ) : (
-                      <span className="text-tm-fg">{e.headline}</span>
-                    )}
+              const tod = timeOfDay(e.ts);
+              // The whole card is the click target (feed-like), not just the
+              // headline text, so the hover affordance covers the full row.
+              const cardClass =
+                "group block rounded-md border border-tm-rule/60 bg-tm-bg-3/30 px-3 py-2 transition-colors hover:border-tm-accent/50 hover:bg-tm-bg-3";
+              const body = (
+                <>
+                  <div className="mb-1 flex items-center gap-2">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${tone.pill}`}
+                    >
+                      {tone.label}
+                    </span>
+                    {tod ? (
+                      <span className="font-tm-mono text-[10px] text-tm-muted">
+                        {tod}
+                      </span>
+                    ) : null}
                     {src ? (
-                      <span className="ml-2 text-[10px] text-tm-muted">{src}</span>
+                      <span className="truncate text-[10px] text-tm-muted">
+                        · {src}
+                      </span>
                     ) : null}
                   </div>
+                  <div className="text-[13px] leading-snug text-tm-fg transition-colors group-hover:text-tm-accent">
+                    {e.headline}
+                  </div>
+                </>
+              );
+              return (
+                <li key={`${e.ts}-${i}`}>
+                  {e.url ? (
+                    <a
+                      href={e.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cardClass}
+                    >
+                      {body}
+                    </a>
+                  ) : (
+                    <div className={cardClass}>{body}</div>
+                  )}
                 </li>
               );
             })}
@@ -265,4 +287,17 @@ function hostname(u: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+// Local time-of-day ("HH:mm") for a news event timestamp. Null when the
+// timestamp is missing or unparseable so the caller can omit it.
+function timeOfDay(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
