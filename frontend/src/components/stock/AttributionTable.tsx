@@ -313,7 +313,10 @@ function formatTimestamp(raw: string | null | undefined): string {
   if (!raw) return "—";
   const d = new Date(raw);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // Date + time: "06-02 06:31". A time-only "06:31" was ambiguous across the
+  // multi-day staleness the data can have (some signals are reused for days).
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 function SortTh({

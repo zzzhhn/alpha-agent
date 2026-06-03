@@ -7,7 +7,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 
 export default function LeanThesis({ card }: { card: RatingCard }) {
   const { locale } = useLocale();
-  const thesis = renderLeanThesis(card);
+  const thesis = renderLeanThesis(card, locale);
   return (
     <section className="grid grid-cols-2 gap-4">
       <ThesisBlock title={t(locale, "stock.thesis.bull")} tone="bull" items={thesis.bull} />

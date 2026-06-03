@@ -104,7 +104,14 @@ export default function IntradayDrawer({
     chart.timeScale().fitContent();
 
     const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+      const w = el.clientWidth;
+      if (w === 0) return;
+      chart.applyOptions({ width: w, height: el.clientHeight });
+      // Re-fit on every width change. The panel mounts inline and its first
+      // measured width can be too small (layout not settled), which left the
+      // bars crammed against the right edge; without re-fitting they never
+      // spread. Mirrors PriceChart's resize handler.
+      chart.timeScale().fitContent();
     });
     ro.observe(el);
 
