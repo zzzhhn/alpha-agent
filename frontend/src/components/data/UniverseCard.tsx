@@ -241,6 +241,13 @@ function effFill(f: FieldCoverage): number {
   return f.n_total > 0 ? f.n_present / f.n_total : 0;
 }
 
+// "Healthy" = substantially complete coverage. 99% was unrealistically strict
+// for real market data (a few missing bars / late filings are normal), so every
+// category read 0/N healthy even at 97% coverage. 95% is the green+yellow band:
+// data is essentially there. The n_present > 0 guard still excludes empty
+// columns (the original zero-data-is-healthy bug).
+const HEALTHY_FILL = 0.95;
+
 function CategoryRow({
   label,
   fields,
@@ -252,7 +259,7 @@ function CategoryRow({
   const avg = mean(fields.map(effFill));
   // A field is healthy only if it actually has data AND is ≥99% filled. The
   // n_present > 0 guard is what stops a zero-row column from reading healthy.
-  const healthy = fields.filter((f) => f.n_present > 0 && effFill(f) >= 0.99).length;
+  const healthy = fields.filter((f) => f.n_present > 0 && effFill(f) >= HEALTHY_FILL).length;
   const tone = colorFor(avg);
 
   return (
