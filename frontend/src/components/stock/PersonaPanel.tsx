@@ -9,28 +9,26 @@
  * ONLY surface for persona LLM calls — the cron must never fan persona
  * requests per ticker per day (would 7x the BYOK token spend).
  *
- * Each persona response is cached server-side via B3 per
+ * Streaming (mirrors RichThesis): the commentary token-streams via SSE
+ * (streamPersona). An AbortController in a ref backs the Stop button and
+ * aborts any in-flight stream on unmount / ticker change. Each persona
+ * response is still cached server-side via B3 per
  * (user, ticker, persona, language, as_of_date); a second click on the
- * same persona within 24h is sub-100ms and zero LLM spend.
+ * same persona within 24h replays the cached text as one delta + done
+ * (sub-100ms, zero LLM spend).
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { Lock, Square } from "lucide-react";
 
-import { apiPost } from "@/lib/api/client";
+import { streamPersona } from "@/lib/api/streamPersona";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { t } from "@/lib/i18n";
 import { getPersonas } from "@/lib/personas";
 import { useHasByok } from "@/hooks/useHasByok";
 
-interface ExplainResponse {
-  ticker: string;
-  persona: string;
-  explanation: string;
-  cache: "hit" | "miss";
-}
-
-type Status = "idle" | "loading" | "done" | "error";
+type Status = "idle" | "streaming" | "done" | "error" | "aborted";
 
 export default function PersonaPanel({ ticker }: { ticker: string }) {
   const { locale } = useLocale();
@@ -45,29 +43,63 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
   const locked = !keyLoading && !hasKey;
   const [active, setActive] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
-  const [result, setResult] = useState<ExplainResponse | null>(null);
+  const [explanation, setExplanation] = useState("");
+  const [cacheHit, setCacheHit] = useState(false);
   const [errMsg, setErrMsg] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Defense-in-depth: even with key={ticker} on the parent (which already
+  // unmounts this component on ticker change), guarantee any in-flight SSE
+  // stream is aborted when ticker changes inside the same component
+  // instance. Mirrors RichThesis. Prevents orphan stream writes after a
+  // quick back-and-forth navigation.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [ticker]);
 
   const onExplain = useCallback(
     async (name: string) => {
       setActive(name);
-      setStatus("loading");
+      setStatus("streaming");
+      setExplanation("");
+      setCacheHit(false);
       setErrMsg("");
-      setResult(null);
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+
       try {
-        const r = await apiPost<ExplainResponse, Record<string, never>>(
-          `/api/stock/${ticker.toUpperCase()}/persona/${name}/explain?language=${locale}`,
-          {},
-        );
-        setResult(r);
-        setStatus("done");
+        for await (const ev of streamPersona(ticker, name, locale, ac.signal)) {
+          if (ev.type === "done") {
+            setCacheHit(ev.cache === "hit");
+            setStatus("done");
+            break;
+          }
+          if (ev.type === "error") {
+            setErrMsg(ev.message);
+            setStatus("error");
+            break;
+          }
+          // Accumulate the explanation delta.
+          setExplanation((prev) => prev + ev.delta);
+        }
       } catch (e) {
-        setErrMsg(e instanceof Error ? e.message : String(e));
-        setStatus("error");
+        if ((e as Error).name === "AbortError") {
+          setStatus("aborted");
+        } else {
+          setErrMsg(e instanceof Error ? e.message : String(e));
+          setStatus("error");
+        }
       }
     },
     [ticker, locale],
   );
+
+  const onAbort = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   if (personas.length === 0) return null;
 
@@ -81,6 +113,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
           tryAgain: "重试",
           lockedHint: "需要在 Settings 配置 LLM API Key 才能使用",
           configure: "去配置 →",
+          aborted: "已取消",
         }
       : {
           title: "Analyst Personas",
@@ -90,16 +123,29 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
           tryAgain: "Try again",
           lockedHint: "Requires an LLM API key configured in Settings",
           configure: "Configure →",
+          aborted: "Aborted",
         };
 
   return (
     <section className="rounded border border-tm-rule bg-tm-bg-2 p-4 space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold text-tm-fg flex items-center gap-1.5">
-          {copy.title}
-          {locked ? <Lock aria-hidden className="h-3.5 w-3.5 text-tm-muted" strokeWidth={1.75} /> : null}
-        </h2>
-        <p className="mt-0.5 text-xs text-tm-muted">{copy.subtitle}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-tm-fg flex items-center gap-1.5">
+            {copy.title}
+            {locked ? <Lock aria-hidden className="h-3.5 w-3.5 text-tm-muted" strokeWidth={1.75} /> : null}
+          </h2>
+          <p className="mt-0.5 text-xs text-tm-muted">{copy.subtitle}</p>
+        </div>
+        {status === "streaming" ? (
+          <button
+            type="button"
+            onClick={onAbort}
+            className="inline-flex shrink-0 items-center gap-1 rounded border border-tm-rule px-2 py-1 text-xs text-tm-fg hover:border-tm-neg"
+          >
+            <Square aria-hidden className="w-3 h-3" strokeWidth={1.75} />
+            {t(locale, "rich.stop_button")}
+          </button>
+        ) : null}
       </div>
       {locked ? (
         <div className="flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-[11px] text-tm-muted">
@@ -116,7 +162,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
             key={p.name}
             type="button"
             onClick={() => void onExplain(p.name)}
-            disabled={locked || (status === "loading" && active === p.name)}
+            disabled={locked || status === "streaming"}
             className={`rounded border px-2.5 py-1 text-xs transition disabled:opacity-50 disabled:cursor-not-allowed ${
               active === p.name
                 ? "border-tm-accent bg-tm-accent/15 text-tm-accent"
@@ -124,17 +170,22 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
             }`}
             title={locked ? copy.lockedHint : p.signals.join(" + ")}
           >
-            {status === "loading" && active === p.name ? copy.loading : p.label}
+            {status === "streaming" && active === p.name ? copy.loading : p.label}
           </button>
         ))}
       </div>
-      {status === "done" && result ? (
+      {/* Live + completed output: render whatever has streamed so far so
+          tokens paint as they arrive, not only on done. */}
+      {explanation && (status === "streaming" || status === "done") ? (
         <div className="rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
-          <p className="whitespace-pre-wrap">{result.explanation}</p>
-          {result.cache === "hit" ? (
+          <p className="whitespace-pre-wrap">{explanation}</p>
+          {status === "done" && cacheHit ? (
             <p className="mt-1 text-[11px] text-tm-muted">{copy.cacheHit}</p>
           ) : null}
         </div>
+      ) : null}
+      {status === "aborted" ? (
+        <div className="text-xs text-tm-warn">{copy.aborted}</div>
       ) : null}
       {status === "error" ? (
         <div className="flex items-center gap-2 text-xs text-tm-neg">

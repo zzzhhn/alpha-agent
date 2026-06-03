@@ -505,6 +505,153 @@ async def persona_explain(
     )
 
 
+@router.post("/{ticker}/persona/{persona_name}/explain/stream")
+async def persona_explain_stream(
+    ticker: str = Path(min_length=1, max_length=10),
+    persona_name: str = Path(min_length=2, max_length=24),
+    language: Literal["zh", "en"] = Query("en"),
+    user_id: int = Depends(require_user),
+):
+    """SSE-streaming sibling of `persona_explain` (mirrors the Rich Brief
+    streaming pattern).
+
+    Token-streams the persona commentary as `{type: "explanation", delta}`
+    events terminated by `{type: "done"}`. Auth is required; the BYOK key is
+    fetched + decrypted server-side from the authenticated user's stored
+    credentials, exactly like `post_brief_stream` — the key never leaves the
+    server and decrypt / no-key failures degrade into an SSE `error` event
+    rather than a 500 to a blank UI.
+
+    The per-(user, ticker, persona, language, as_of_date) B3 cache is
+    preserved: a re-click within 24h replays the cached text as one delta +
+    done (sub-100ms, zero LLM spend), matching the non-streaming route's
+    cache slot exactly.
+    """
+    import os
+    import sys
+
+    from fastapi.responses import StreamingResponse
+
+    from alpha_agent.api.sse import SSE_HEADERS, sse_format
+    from alpha_agent.auth.crypto_box import CryptoError, decrypt
+    from alpha_agent.llm.cache import cache_key
+    from alpha_agent.llm.persona_streamer import stream_persona
+    from alpha_agent.personas import get_persona
+    from alpha_agent.personas.registry import render_system_prompt
+
+    ticker = ticker.upper()
+    persona = get_persona(persona_name)
+    if persona is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"persona {persona_name!r} not registered",
+        )
+
+    pool = await get_db_pool()
+    cal_map = await load_active_calibration(pool)
+    sig = await fetch_latest_signal(pool, ticker, cal_map=cal_map)
+    if sig is None:
+        raise HTTPException(status_code=404, detail=f"no rating for {ticker}")
+
+    # Subset the breakdown to the persona's scope (same as the non-stream route).
+    scoped = [
+        b for b in sig["breakdown"]
+        if b.get("signal") in persona.signals
+    ]
+
+    byok = await pool.fetchrow(
+        "SELECT provider, ciphertext, nonce, model, base_url "
+        "FROM user_byok WHERE user_id = $1 LIMIT 1",
+        user_id,
+    )
+    if byok is None:
+        raise HTTPException(
+            status_code=400, detail="No BYOK key set; visit /settings to add one"
+        )
+
+    master = os.environ.get("BYOK_MASTER_KEY")
+    if not master:
+        raise HTTPException(status_code=500, detail="BYOK_MASTER_KEY not configured")
+
+    system = render_system_prompt(persona, language)
+    user_payload = json.dumps(
+        {
+            "ticker": ticker,
+            "rating": sig["rating"],
+            "composite": sig["score"],
+            "signals_in_scope": [
+                {"signal": b["signal"], "z": b.get("z"), "raw": b.get("raw")}
+                for b in scoped
+            ],
+        },
+        default=str,
+    )
+    fetched_date = sig["fetched_at"].date().isoformat()
+    key = cache_key(
+        model=byok["model"] or byok["provider"],
+        messages=[Message(role="system", content=system),
+                  Message(role="user", content=user_payload)],
+        variant=f"{ticker}|{persona.name}|{language}|{fetched_date}",
+    )
+
+    async def generator():
+        # No-data short-circuit: emit the graceful "no signals" line as a
+        # single delta + done, never an error. Mirrors the non-stream route.
+        if not scoped:
+            yield sse_format({
+                "type": "explanation",
+                "delta": (
+                    "该 persona 关注的信号当前为空。"
+                    if language == "zh" else
+                    "No data for this persona's signals right now."
+                ),
+            })
+            yield sse_format({"type": "done", "cache": "miss"})
+            return
+        try:
+            plaintext_key = decrypt(byok["ciphertext"], byok["nonce"], master.encode("utf-8"))
+        except CryptoError:
+            yield sse_format({
+                "type": "error",
+                "message": "Stored key cannot be decrypted. Please re-save it in /settings.",
+            })
+            return
+        try:
+            async for event in stream_persona(
+                provider=byok["provider"],
+                api_key=plaintext_key,
+                system_prompt=system,
+                user_payload=user_payload,
+                model=byok["model"],
+                base_url=byok["base_url"],
+                pool=pool,
+                user_id=user_id,
+                cache_key_str=key,
+            ):
+                yield sse_format(event)
+                await asyncio.sleep(0)
+            await pool.execute(
+                "UPDATE user_byok SET last_used_at = now() "
+                "WHERE user_id = $1 AND provider = $2",
+                user_id, byok["provider"],
+            )
+        except Exception as e:
+            print(
+                f"persona stream error: {type(e).__name__}: {e}",
+                file=sys.stderr, flush=True,
+            )
+            yield sse_format({
+                "type": "error",
+                "message": f"LLM request failed ({type(e).__name__}). Check your key in /settings.",
+            })
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
 @router.get("/personas")
 async def list_personas(language: Literal["zh", "en"] = Query("en")) -> dict:
     """Public discovery endpoint — UI uses this to render the persona

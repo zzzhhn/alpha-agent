@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Square } from "lucide-react";
 import type { RatingCard, NewsItemLite } from "@/lib/api/picks";
-import { enrichNewsForTicker } from "@/lib/api/news";
-import { ApiException } from "@/lib/api/client";
+import { streamNewsEnrich } from "@/lib/api/streamNewsEnrich";
 import { t, type Locale } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 
@@ -27,39 +27,99 @@ const SENTIMENT_TONE: Record<NonNullable<NewsItemLite["sentiment_label"]>, strin
 
 type EnrichState =
   | { kind: "idle" }
-  | { kind: "loading" }
+  | { kind: "streaming" }
   | { kind: "done"; count: number }
+  | { kind: "aborted" }
   | { kind: "no_key" }
   | { kind: "error"; msg: string };
 
 export default function NewsBlock({ card }: { card: RatingCard }) {
   const { locale } = useLocale();
   const [enrich, setEnrich] = useState<EnrichState>({ kind: "idle" });
+  // Local items state so enriched rows splice in place as each batch
+  // streams back — no full-page reload. Seeded from the SSR card; reset
+  // when the parent passes a new ticker's card.
+  const [items, setItems] = useState<NewsItemLite[]>(card.news_items ?? []);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const items: NewsItemLite[] = card.news_items ?? [];
+  useEffect(() => {
+    setItems(card.news_items ?? []);
+    setEnrich({ kind: "idle" });
+  }, [card.ticker, card.news_items]);
+
+  // Defense-in-depth: abort any in-flight enrichment stream on unmount /
+  // ticker change so orphan stream writes don't land on the next card.
+  // Mirrors RichThesis.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [card.ticker]);
+
   const unenrichedCount = items.filter((it) => it.sentiment_label === null).length;
 
-  const onEnrich = async () => {
-    setEnrich({ kind: "loading" });
+  const onEnrich = useCallback(async () => {
+    setEnrich({ kind: "streaming" });
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    let enrichedCount = 0;
     try {
       // Pass the user's active locale so the LLM writes the reasoning
       // text in zh or en matching the UI; otherwise a 中文 user gets
       // English commentary by default.
-      const res = await enrichNewsForTicker(card.ticker, locale);
-      setEnrich({ kind: "done", count: res.enriched });
-      // Page reload is the robust path: parent layout refetches the stock
-      // card and any newly-enriched sentiment colours + reasoning_text
-      // render. In-place splice is a follow-up polish, not required.
-      setTimeout(() => window.location.reload(), 1500);
+      for await (const ev of streamNewsEnrich(card.ticker, locale, ac.signal)) {
+        if (ev.type === "items") {
+          enrichedCount += ev.items.length;
+          // Splice each freshly-enriched row into the list in place by id.
+          setItems((prev) => {
+            const byId = new Map(ev.items.map((it) => [it.id, it]));
+            return prev.map((it) => {
+              const upd = byId.get(it.id);
+              return upd
+                ? {
+                    ...it,
+                    sentiment_score: upd.sentiment_score,
+                    sentiment_label: upd.sentiment_label,
+                    reasoning_text: upd.reasoning_text,
+                    reasoning_lang: upd.reasoning_lang,
+                  }
+                : it;
+            });
+          });
+        } else if (ev.type === "done") {
+          setEnrich({ kind: "done", count: ev.enriched });
+          break;
+        } else if (ev.type === "error") {
+          // A 400 means no BYOK key stored -> show the configure CTA,
+          // matching the prior non-stream behaviour. Anything else is a
+          // graceful inline error.
+          if (ev.message.startsWith("HTTP 400")) {
+            setEnrich({ kind: "no_key" });
+          } else {
+            setEnrich({ kind: "error", msg: ev.message });
+          }
+          break;
+        }
+        // "start" / "batch_failed" carry no UI state beyond progress.
+      }
     } catch (e) {
-      if (e instanceof ApiException && e.status === 400) {
-        setEnrich({ kind: "no_key" });
+      if ((e as Error).name === "AbortError") {
+        setEnrich({ kind: "aborted" });
       } else {
-        const msg = e instanceof Error ? e.message : "unknown";
-        setEnrich({ kind: "error", msg });
+        setEnrich({
+          kind: "error",
+          msg: e instanceof Error ? e.message : "unknown",
+        });
       }
     }
-  };
+    void enrichedCount;
+  }, [card.ticker, locale]);
+
+  const onAbort = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   if (items.length === 0) {
     return (
@@ -78,7 +138,23 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
         <h2 className="text-lg font-semibold text-tm-fg">
           {t(locale, "news.title")}
         </h2>
-        {unenrichedCount > 0 ? (
+        {enrich.kind === "streaming" ? (
+          <button
+            type="button"
+            onClick={onAbort}
+            className="inline-flex items-center gap-1 rounded border border-tm-rule px-2 py-1 text-xs text-tm-fg hover:border-tm-neg"
+          >
+            <Square aria-hidden className="w-3 h-3" strokeWidth={1.75} />
+            {t(locale, "rich.stop_button")}
+          </button>
+        ) : unenrichedCount > 0 ? (
+          <EnrichControl
+            state={enrich}
+            count={unenrichedCount}
+            onClick={onEnrich}
+            locale={locale}
+          />
+        ) : enrich.kind !== "idle" ? (
           <EnrichControl
             state={enrich}
             count={unenrichedCount}
@@ -87,6 +163,16 @@ export default function NewsBlock({ card }: { card: RatingCard }) {
           />
         ) : null}
       </div>
+      {enrich.kind === "streaming" ? (
+        <p className="mb-2 text-xs text-tm-muted">
+          {t(locale, "news.enrich_streaming")}
+        </p>
+      ) : null}
+      {enrich.kind === "aborted" ? (
+        <p className="mb-2 text-xs text-tm-warn">
+          {t(locale, "news.enrich_aborted")}
+        </p>
+      ) : null}
       <ul className="space-y-3">
         {items.map((it) => (
           <li key={it.id} className="flex gap-2 text-sm">
@@ -147,13 +233,6 @@ function EnrichControl({
       </Link>
     );
   }
-  if (state.kind === "loading") {
-    return (
-      <span className="text-xs text-tm-muted">
-        {t(locale, "news.enrich_loading")}
-      </span>
-    );
-  }
   if (state.kind === "done") {
     return (
       <span className="text-xs text-tm-pos">
@@ -173,6 +252,8 @@ function EnrichControl({
       </button>
     );
   }
+  // idle / aborted with remaining unenriched rows -> offer (re)trigger.
+  if (count === 0) return null;
   return (
     <button
       type="button"

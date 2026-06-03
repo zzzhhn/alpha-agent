@@ -149,12 +149,68 @@ async def enrich_news_for_ticker(
     return n_proc, n_failed
 
 
+async def enrich_news_for_ticker_stream(
+    pool, llm, ticker: str, row_limit: int = 100, lang: str = "en",
+):
+    """Streaming variant of `enrich_news_for_ticker`.
+
+    Yields progress events as each batch completes so the frontend can fill
+    the news list in progressively (no full-page reload):
+
+      {"type": "start", "pending": <int>}            once, up front
+      {"type": "items", "items": [<written item>...]} per completed batch
+      {"type": "batch_failed"}                        per failed batch
+      {"type": "done", "enriched": <int>, "failed_batches": <int>}
+
+    Granularity note: the underlying LLM call is a *batch* (15 headlines →
+    one JSON array, parsed in one shot — a truncated array fails the whole
+    batch). True per-item streaming is therefore not structurally possible
+    without N× the token spend, so the honest unit is per-batch: each
+    `items` event carries every row that batch enriched, and the consumer
+    splices them into the list in place. With ≤15 unenriched headlines (the
+    common case) this is a single `items` event; longer backlogs paint
+    batch by batch.
+
+    Each item dict has the same shape the frontend NewsItemLite expects:
+    {id, sentiment_score, sentiment_label, reasoning_text, reasoning_lang}.
+    """
+    news = await pool.fetch(
+        "SELECT id, ticker, headline FROM news_items "
+        "WHERE ticker = $1 AND llm_processed_at IS NULL "
+        "ORDER BY id LIMIT $2",
+        ticker.upper(), int(row_limit),
+    )
+    yield {"type": "start", "pending": len(news)}
+    n_proc = 0
+    n_failed = 0
+    for batch in _chunks(news, _BATCH_SIZE):
+        items = await _enrich_news_batch_items(pool, llm, batch, lang=lang)
+        if items is None:
+            n_failed += 1
+            yield {"type": "batch_failed"}
+            continue
+        n_proc += len(batch)
+        yield {"type": "items", "items": items}
+    yield {"type": "done", "enriched": n_proc, "failed_batches": n_failed}
+
+
 def _chunks(seq, n):
     for i in range(0, len(seq), n):
         yield seq[i : i + n]
 
 
-async def _enrich_news_batch(pool, llm, batch, lang: str = "en") -> bool:
+async def _enrich_news_batch_items(
+    pool, llm, batch, lang: str = "en",
+) -> list[dict] | None:
+    """Enrich one batch and return the list of items written to the DB.
+
+    Returns a list of `{id, sentiment_score, sentiment_label,
+    reasoning_text, reasoning_lang}` dicts for each row the LLM successfully
+    classified, or `None` if the whole batch failed (bad/truncated JSON) so
+    the rows stay pending for the next click. This is the per-batch unit the
+    streaming enrich endpoint surfaces so the news list fills in
+    progressively without a full-page reload.
+    """
     user_payload = "\n".join(
         f'{{"id": {r["id"]}, "ticker": "{r["ticker"]}", '
         f'"headline": {json.dumps(r["headline"])}}}'
@@ -173,8 +229,9 @@ async def _enrich_news_batch(pool, llm, batch, lang: str = "en") -> bool:
     except Exception as exc:
         logger.warning("news llm enrich batch failed: %s: %s",
                        type(exc).__name__, exc)
-        return False
+        return None
     by_id = {int(p["id"]): p for p in parsed if isinstance(p, dict) and "id" in p}
+    written: list[dict] = []
     for row in batch:
         p = by_id.get(int(row["id"]))
         if p is None:
@@ -186,17 +243,36 @@ async def _enrich_news_batch(pool, llm, batch, lang: str = "en") -> bool:
                 if reasoning_raw not in (None, "")
                 else None
             )
+            score = (
+                float(p.get("sentiment_score"))
+                if p.get("sentiment_score") is not None
+                else None
+            )
+            label = p.get("sentiment_label")
             await update_news_item_llm(
                 pool, int(row["id"]),
-                float(p.get("sentiment_score")) if p.get("sentiment_score") is not None else None,
-                p.get("sentiment_label"),
+                score,
+                label,
                 reasoning_text=reasoning_text,
                 reasoning_lang=lang if reasoning_text else None,
             )
+            written.append({
+                "id": int(row["id"]),
+                "sentiment_score": score,
+                "sentiment_label": label,
+                "reasoning_text": reasoning_text,
+                "reasoning_lang": lang if reasoning_text else None,
+            })
         except Exception as exc:
             logger.warning("news llm update failed row=%s: %s: %s",
                            row["id"], type(exc).__name__, exc)
-    return True
+    return written
+
+
+async def _enrich_news_batch(pool, llm, batch, lang: str = "en") -> bool:
+    """Back-compat boolean wrapper used by the cron / non-stream paths."""
+    items = await _enrich_news_batch_items(pool, llm, batch, lang=lang)
+    return items is not None
 
 
 async def _enrich_macro_batch(pool, llm, batch) -> bool:

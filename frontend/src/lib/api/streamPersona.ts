@@ -1,0 +1,88 @@
+// frontend/src/lib/api/streamPersona.ts
+//
+// SSE-via-fetch reader for persona commentary. Mirrors streamBrief.ts:
+// EventSource is GET-only + no headers, so we POST + read the
+// ReadableStream + parse 'data: ' lines manually. Returns an async
+// generator yielding typed events; caller `for await`s over it.
+
+// Browser: same-origin "" so /api/* goes through the Next.js middleware
+// (which injects the auth Bearer header) and the next.config.mjs rewrite.
+// Server (SSR): the absolute backend URL, since middleware does not run on
+// server-component fetches. Auth-gated endpoints are only called client-side.
+const API_BASE =
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app"
+    : "";
+
+export type PersonaEvent =
+  | { type: "explanation"; delta: string }
+  | { type: "done"; cache?: "hit" | "miss" }
+  | { type: "error"; message: string };
+
+export async function* streamPersona(
+  ticker: string,
+  personaName: string,
+  lang: "zh" | "en",
+  signal?: AbortSignal,
+): AsyncGenerator<PersonaEvent, void, void> {
+  const r = await fetch(
+    `${API_BASE}/api/stock/${ticker.toUpperCase()}/persona/${personaName}/explain/stream?language=${lang}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "include", // same-origin JWT cookie -> Bearer at the rewrite
+      body: "{}",
+      signal,
+    },
+  );
+
+  if (!r.ok || !r.body) {
+    let msg = `HTTP ${r.status}`;
+    try {
+      const j = await r.json();
+      msg = `${msg}: ${j.detail ?? JSON.stringify(j)}`;
+    } catch {
+      // body might not be JSON (e.g. 502 from edge)
+    }
+    yield { type: "error", message: msg };
+    return;
+  }
+
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE events are separated by blank lines. A complete event ends
+      // with "\n\n". Process all complete events in the buffer.
+      let sepIdx;
+      while ((sepIdx = buffer.indexOf("\n\n")) >= 0) {
+        const event = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
+        for (const line of event.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice("data: ".length);
+          try {
+            yield JSON.parse(data) as PersonaEvent;
+          } catch {
+            // Skip malformed event; continue with the next.
+          }
+        }
+      }
+    }
+    // Flush any trailing event without separator (rare with FastAPI).
+    if (buffer.trim().startsWith("data: ")) {
+      try {
+        yield JSON.parse(buffer.slice("data: ".length).trim()) as PersonaEvent;
+      } catch {
+        /* ignore */
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
