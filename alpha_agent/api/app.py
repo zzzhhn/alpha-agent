@@ -241,6 +241,10 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.picks import router
         return router
 
+    def _import_basket_edge():
+        from alpha_agent.api.routes.basket_edge import router
+        return router
+
     def _import_stock():
         from alpha_agent.api.routes.stock import router
         return router
@@ -286,6 +290,7 @@ def create_app() -> FastAPI:
         return router
 
     _load("picks", _import_picks)
+    _load("basket_edge", _import_basket_edge)
     _load("stock", _import_stock)
     _load("brief", _import_brief)
     _load("watchlist", _import_watchlist)

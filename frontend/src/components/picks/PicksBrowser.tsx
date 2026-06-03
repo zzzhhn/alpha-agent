@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
 import RefreshButton from "./RefreshButton";
+import BasketEdgeStrip from "./BasketEdgeStrip";
 import { TmPane } from "@/components/tm/TmPane";
 import {
   TmSubbar,
@@ -293,6 +294,10 @@ export default function PicksBrowser({
           </>
         ) : null}
       </TmSubbar>
+
+      {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
+          basket, not single-name direction. Pinned above the picks table. */}
+      <BasketEdgeStrip />
 
       <div className="flex justify-end px-4 pt-3">
         <RefreshButton />
