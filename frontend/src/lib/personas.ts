@@ -2,7 +2,7 @@
 //
 // Persona metadata that previously came from GET /api/stock/personas. The
 // endpoint just rendered a static dictionary (alpha_agent/personas/registry.py
-// → PERSONAS), so embedding the same 7-entry table here removes one network
+// → PERSONAS), so embedding the same 8-entry table here removes one network
 // round-trip per stock-page load (100-200ms saved on cold visits).
 //
 // Drift discipline: when adding a persona to the backend registry, mirror
@@ -30,6 +30,11 @@ const PERSONAS_BY_LOCALE: Record<PersonaLocale, PersonaMeta[]> = {
     { name: "insider", label: "内部人派", signals: ["insider"] },
     { name: "macro", label: "宏观派", signals: ["macro", "factor"] },
     {
+      name: "supply_chain",
+      label: "供应链卡点猎手",
+      signals: ["news", "earnings", "analyst", "factor"],
+    },
+    {
       name: "risk",
       label: "风控派",
       signals: ["technicals", "options", "macro", "earnings"],
@@ -53,6 +58,11 @@ const PERSONAS_BY_LOCALE: Record<PersonaLocale, PersonaMeta[]> = {
       name: "macro",
       label: "Macro Analyst",
       signals: ["macro", "factor"],
+    },
+    {
+      name: "supply_chain",
+      label: "Supply-Chain Hunter",
+      signals: ["news", "earnings", "analyst", "factor"],
     },
     {
       name: "risk",
