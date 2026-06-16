@@ -285,6 +285,68 @@ async def load_all_insider_form4(
     return {r["ticker"]: (r["net_value"], r["n_filings"]) for r in rows}
 
 
+# ── supply_chain_scorecard (V022): serenity bottleneck score per ticker ──────
+
+
+async def upsert_supply_chain_scorecard(
+    pool: asyncpg.Pool,
+    ticker: str,
+    final_score: float,
+    verdict: str,
+    factors: dict,
+    penalties: dict | None = None,
+    evidence: list | None = None,
+) -> None:
+    """Store one ticker's serenity supply-chain scorecard (run by a research
+    session, not a cron). `factors` holds the 8 ratings 0-5 (incl.
+    evidence_quality, which the signal turns into confidence)."""
+    await pool.execute(
+        """
+        INSERT INTO supply_chain_scorecard
+            (ticker, final_score, verdict, factors, penalties, evidence, computed_at)
+        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, now())
+        ON CONFLICT (ticker) DO UPDATE
+        SET final_score = EXCLUDED.final_score,
+            verdict = EXCLUDED.verdict,
+            factors = EXCLUDED.factors,
+            penalties = EXCLUDED.penalties,
+            evidence = EXCLUDED.evidence,
+            computed_at = now()
+        """,
+        ticker.upper(), float(final_score), str(verdict),
+        json.dumps(factors or {}),
+        json.dumps(penalties or {}),
+        json.dumps(evidence or []),
+    )
+
+
+async def load_all_supply_chain_scorecard(
+    pool: asyncpg.Pool,
+) -> dict[str, dict]:
+    """All scorecards as {ticker: {final_score, verdict, evidence_quality}},
+    loaded once per signal cron run to prime the supply_chain signal cache."""
+    rows = await pool.fetch(
+        "SELECT ticker, final_score, verdict, factors FROM supply_chain_scorecard"
+    )
+    out: dict[str, dict] = {}
+    for r in rows:
+        factors = r["factors"]
+        if isinstance(factors, str):
+            factors = json.loads(factors)
+        eq = 0.0
+        if isinstance(factors, dict):
+            try:
+                eq = float(factors.get("evidence_quality", 0.0))
+            except (TypeError, ValueError):
+                eq = 0.0
+        out[r["ticker"]] = {
+            "final_score": r["final_score"],
+            "verdict": r["verdict"],
+            "evidence_quality": eq,
+        }
+    return out
+
+
 # ── priority universe: rank-based intraday refresh order ─────────────────────
 
 
