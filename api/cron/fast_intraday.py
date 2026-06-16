@@ -51,6 +51,7 @@ from alpha_agent.signals import (
     options,
     political_impact,
     premarket,
+    supply_chain,
     technicals,
 )
 from alpha_agent.signals.base import SignalScore
@@ -71,14 +72,17 @@ _ALL_MODULES = {
     "calendar": cal,
     "political_impact": political_impact,
     "geopolitical_impact": geopolitical_impact,
+    "supply_chain": supply_chain,
 }
 
-# Tier -> the signal modules that tier refreshes this run.
+# Tier -> the signal modules that tier refreshes this run. supply_chain rides
+# the "slow" tier: a serenity study changes rarely, so refreshing it at the 4h
+# cadence (alongside insider/news) is plenty.
 _TIERS: dict[str, list[str]] = {
     "full": list(_ALL_MODULES.keys()),
     "tech": ["technicals"],
     "mid":  ["options", "analyst", "premarket"],
-    "slow": ["news", "insider"],
+    "slow": ["news", "insider", "supply_chain"],
 }
 
 
@@ -148,9 +152,13 @@ async def handler(
         get_priority_universe,
         load_all_earnings_finnhub,
         load_all_insider_form4,
+        load_all_supply_chain_scorecard,
     )
     insider.prime_cache(await load_all_insider_form4(pool))
     earnings.prime_cache(await load_all_earnings_finnhub(pool))
+    # serenity supply-chain scorecards (written ad-hoc by research). Empty table
+    # => every ticker z=None => dropped, so this is inert until a study exists.
+    supply_chain.prime_cache(await load_all_supply_chain_scorecard(pool))
     now = datetime.now(UTC)
     today = now.date().isoformat()
     started_at = now

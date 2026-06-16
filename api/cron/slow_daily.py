@@ -19,7 +19,9 @@ from alpha_agent.config_store import refresh_config
 from alpha_agent.fusion.combine import combine
 from alpha_agent.fusion.weights import DEFAULT_WEIGHTS, normalize_weights
 from alpha_agent.orchestrator.batch_runner import run_batched
-from alpha_agent.signals import analyst, earnings, factor, insider, macro
+from alpha_agent.signals import (
+    analyst, earnings, factor, insider, macro, supply_chain,
+)
 from alpha_agent.storage.postgres import get_pool
 from alpha_agent.storage.queries import insert_signal_slow, log_error
 
@@ -29,6 +31,7 @@ _SLOW_MODULES = {
     "earnings": earnings,
     "insider": insider,
     "macro": macro,
+    "supply_chain": supply_chain,
 }
 _SLOW_WEIGHTS = {k: v for k, v in DEFAULT_WEIGHTS.items() if k in _SLOW_MODULES}
 
@@ -59,9 +62,11 @@ async def handler(
     from alpha_agent.storage.queries import (
         load_all_earnings_finnhub,
         load_all_insider_form4,
+        load_all_supply_chain_scorecard,
     )
     insider.prime_cache(await load_all_insider_form4(pool))
     earnings.prime_cache(await load_all_earnings_finnhub(pool))
+    supply_chain.prime_cache(await load_all_supply_chain_scorecard(pool))
     today = datetime.now(UTC).date().isoformat()
     now = datetime.now(UTC)
     started_at = now

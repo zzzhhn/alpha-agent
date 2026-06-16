@@ -30,6 +30,7 @@ _SIGNAL_NAMES: list[str] = [
     "macro",
     "calendar",
     "political_impact",
+    "supply_chain",
 ]
 
 
@@ -61,9 +62,10 @@ def _fixture_signal(name: str, ticker: str, as_of: datetime):
         "macro": 0.2,
         "calendar": 0.0,
         "political_impact": 0.0,
+        "supply_chain": 0.0,
     }
     z = _z_map.get(name, 0.5)
-    confidence = 0.0 if name in ("calendar", "political_impact") else 0.80
+    confidence = 0.0 if name in ("calendar", "political_impact", "supply_chain") else 0.80
     return SignalScore(
         ticker=ticker,
         z=z,
