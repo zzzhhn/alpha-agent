@@ -13,6 +13,8 @@ import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useFactorMode } from "@/hooks/useFactorMode";
 import { applyFactorMode } from "@/lib/picks-mode";
+import { useWeightsOverride } from "@/hooks/useWeightsOverride";
+import { applyWeightsToBreakdown } from "@/lib/weights-override";
 
 type SortKey = "signal" | "z" | "weight" | "contribution";
 
@@ -38,15 +40,18 @@ export default function AttributionTable({
   const [desc, setDesc] = useState(true);
   const { locale } = useLocale();
   const [factorMode, setFactorMode] = useFactorMode();
+  const weights = useWeightsOverride();
 
   // Apply factor-mode swap before sort so contribution-sort respects the
   // active mode. Picks endpoint already does composite re-rank server-side
   // when invoked with ?mode=long, but the single-card /api/stock response
   // does not — this swap is the per-component equivalent for stock detail.
-  const breakdownForMode = useMemo(
-    () => applyFactorMode(card.breakdown, factorMode),
-    [card.breakdown, factorMode],
-  );
+  // Then apply the personal weight override so the weight + contribution
+  // columns (and the contribution sort) reflect the saved weights.
+  const breakdownForMode = useMemo(() => {
+    const moded = applyFactorMode(card.breakdown, factorMode);
+    return weights ? applyWeightsToBreakdown(moded, weights).breakdown : moded;
+  }, [card.breakdown, factorMode, weights]);
 
   const sorted = useMemo(() => {
     const out = [...breakdownForMode];

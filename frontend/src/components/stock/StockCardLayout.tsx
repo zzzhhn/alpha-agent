@@ -27,6 +27,8 @@ import FundamentalsBlock from "./FundamentalsBlock";
 import CatalystsBlock from "./CatalystsBlock";
 import MarketContextWidget from "./MarketContextWidget";
 import SourcesBlock from "./SourcesBlock";
+import { useWeightsOverride } from "@/hooks/useWeightsOverride";
+import { applyWeightsToCard } from "@/lib/weights-override";
 
 export default function StockCardLayout({
   card,
@@ -50,6 +52,12 @@ export default function StockCardLayout({
   const { isWatched } = useWatchlist();
   const watched = isWatched(card.ticker);
   const { locale } = useLocale();
+  // Personal weight override (settings → WeightsEditor): recompute the header
+  // rating + composite from the saved weights. null = no override = backend
+  // canonical card untouched. confidence/agreement are weight-independent so
+  // they stay from the original card.
+  const weights = useWeightsOverride();
+  const shownCard = weights ? applyWeightsToCard(card, weights) : card;
   return (
     // P3-5: single column on mobile, 3+9 split from lg up. The sidebar is
     // only sticky on lg — when stacked above the main column on mobile,
@@ -73,10 +81,10 @@ export default function StockCardLayout({
           <span>{card.ticker}</span>
         </div>
         <RatingBadge
-          rating={card.rating}
+          rating={shownCard.rating}
           confidence={card.confidence}
           agreement={card.agreement}
-          composite={card.composite_score}
+          composite={shownCard.composite_score}
           locale={locale}
         />
         {card.gex_info ? (

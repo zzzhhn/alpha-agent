@@ -10,6 +10,11 @@ export interface BreakdownEntry {
   weight: number | null;
   weight_effective: number | null;
   contribution: number | null;
+  // Per-signal confidence the backend emits on every breakdown row (combine()
+  // uses it for its drop logic). Optional here because legacy rows predating
+  // the field may omit it; the client weight-override engine falls back to
+  // z-finiteness when it is absent.
+  confidence?: number | null;
   raw: unknown;
   source: string;
   timestamp: string;

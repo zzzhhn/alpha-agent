@@ -7,6 +7,8 @@ import { t } from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { useFactorMode } from "@/hooks/useFactorMode";
 import { applyFactorModeToCard } from "@/lib/picks-mode";
+import { useWeightsOverride } from "@/hooks/useWeightsOverride";
+import { applyWeightsToCard } from "@/lib/weights-override";
 
 // Dynamic imports keep Recharts (~150KB gzip) out of the initial server chunk.
 // Per CLAUDE.md memory: wrap ResponsiveContainer in a fixed-height div.
@@ -61,10 +63,17 @@ function isRealDataAxis(b: BreakdownEntry): boolean {
 export default function AttributionRadar({ card }: { card: RatingCard }) {
   const { locale } = useLocale();
   const [factorMode] = useFactorMode();
+  const weights = useWeightsOverride();
   // Apply mode swap so the factor petal + composite footer reflect the
   // active toggle. Same useFactorMode hook subscribes to localStorage so a
   // flip on /picks (or via AttributionTable's pill) re-renders this radar.
-  const modedCard = applyFactorModeToCard(card, factorMode);
+  // Then apply the personal weight override (factor-mode first so the
+  // recompute uses the moded z's); zeroing a signal's weight also drops its
+  // spoke via isRealDataAxis (weight_effective -> 0).
+  const modedCard = (() => {
+    const c = applyFactorModeToCard(card, factorMode);
+    return weights ? applyWeightsToCard(c, weights) : c;
+  })();
 
   // Split each real signal's z into a positive and a negative magnitude on
   // the same axis. Two coloured Radar series (blue = bullish, red = bearish)
