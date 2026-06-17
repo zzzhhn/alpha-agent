@@ -956,6 +956,7 @@ const translations = {
     "attribution.signal_label_macro": "宏观 (波动率)",
     "attribution.signal_label_political_impact": "政治",
     "attribution.signal_label_geopolitical_impact": "地缘 (关税/Fed)",
+    "attribution.signal_label_supply_chain": "供应链卡点",
     /* Stock detail layout (StockCardLayout) */
     "stock_layout.back_to_picks": "返回选股",
     "stock_layout.as_of": "数据时间",
@@ -1008,6 +1009,8 @@ const translations = {
       "近 7 天政治事件(言论/竞选/选举)的情绪加权。\n数据: macro_events",
     "signal_tooltip.geopolitical_impact":
       "近 7 天政策动作(关税/制裁/Fed/监管)的情绪加权。\n数据: macro_events",
+    "signal_tooltip.supply_chain":
+      "供应链卡点研究评分: 需求拐点/架构耦合/卡点强度/供给集中度等 8 因子加权(0-100)归一为 z。研究驱动,仅覆盖经研究的标的。\n数据: serenity 研究",
     /* RichThesis additional */
     "rich.stop_button": "停止",
     /* SourcesBlock */
@@ -2083,6 +2086,7 @@ const translations = {
     "attribution.signal_label_macro": "Macro (Vol)",
     "attribution.signal_label_political_impact": "Political",
     "attribution.signal_label_geopolitical_impact": "Geopolitical",
+    "attribution.signal_label_supply_chain": "Supply-Chain",
     /* Stock detail layout (StockCardLayout) */
     "stock_layout.back_to_picks": "Back to Picks",
     "stock_layout.as_of": "as of",
@@ -2135,6 +2139,8 @@ const translations = {
       "Sentiment-weighted political events (speeches, campaigns, elections) over 7 days.\nData: macro_events",
     "signal_tooltip.geopolitical_impact":
       "Sentiment-weighted policy actions (tariffs, sanctions, Fed, regulation) over 7 days.\nData: macro_events",
+    "signal_tooltip.supply_chain":
+      "Supply-chain bottleneck research score: 8 factors (demand inflection, architecture coupling, chokepoint severity, supplier concentration, etc.) weighted 0-100, mapped to z. Research-driven, only covers researched names.\nData: serenity research",
     /* RichThesis additional */
     "rich.stop_button": "Stop",
     /* SourcesBlock */

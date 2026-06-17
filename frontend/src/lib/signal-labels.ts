@@ -27,6 +27,8 @@ const SIGNAL_DISPLAY_LABEL_FALLBACK: Record<string, Record<Locale, string>> = {
   // A3 (2026-05-19) split: geopolitical_impact carries tariff / Fed /
   // sanctions / regulatory rows that used to be bundled into political.
   geopolitical_impact: { zh: "地缘 (关税/Fed)", en: "Geopolitical" },
+  // serenity seam #2 (2026-06-16): supply-chain bottleneck research score.
+  supply_chain: { zh: "供应链卡点", en: "Supply-Chain" },
 };
 
 export function getSignalDisplayLabel(
