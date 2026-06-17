@@ -41,6 +41,10 @@ class WeightPolicy:
                     distinction, v1).
     missing_policy: "coverage_sqrt" (damp composite by sqrt(core coverage)) or
                     "renormalize" (legacy: silently redistribute to survivors).
+    caps:           per-signal guardrail caps (council item #5). A capped
+                    signal's effective weight is scaled DOWN to the cap and the
+                    freed weight is NOT redistributed to survivors (it goes to
+                    neutral, reducing conviction). Empty = no caps.
     source:         provenance note.
     """
 
@@ -51,9 +55,13 @@ class WeightPolicy:
     core_signals: tuple[str, ...]
     missing_policy: str
     source: str
+    caps: Mapping[str, float] = field(default_factory=dict)
 
     def core_set(self) -> set[str]:
         return set(self.core_signals)
+
+    def caps_dict(self) -> dict[str, float]:
+        return dict(self.caps)
 
 
 # The always-expected market/fundamental signals. Excludes the sparse ones
@@ -69,6 +77,9 @@ _CORE_SIGNALS: tuple[str, ...] = (
     "macro",
 )
 
+# Uncapped baseline. Kept as the explicit prior for the guarded-shrinkage
+# shadow (council #6) and as the policy to revert to once the technicals
+# guardrail clears its diagnostics.
 STATIC_V1 = WeightPolicy(
     policy_id="static_v1",
     mode="static",
@@ -79,6 +90,27 @@ STATIC_V1 = WeightPolicy(
     source="hand-set DEFAULT_WEIGHTS + serenity supply_chain (0.05 exploratory)",
 )
 
+# Council item #5: technicals carries 0.20 live weight but shows materially
+# negative observed 5d rank IC. Its native horizon IS 5d (so this is not a
+# horizon-mismatch artifact), but the IC sample is still short (~16 non-
+# overlapping windows), so this is a CONSERVATIVE, REVERSIBLE guardrail: halve
+# the weight (0.20 -> 0.10) rather than zero it. The freed 0.10 is NOT
+# reallocated (it goes to neutral, reducing conviction on technicals-driven
+# cards). Revert to static_v1 once the sign-flip / component-IC diagnostics and
+# more native-horizon IC history clear technicals.
+_TECHNICALS_GUARDRAIL_CAP = 0.10
+
+STATIC_V2 = WeightPolicy(
+    policy_id="static_v2_technicals_guardrail",
+    mode="static",
+    horizon="5d",
+    weights=dict(DEFAULT_WEIGHTS),
+    core_signals=_CORE_SIGNALS,
+    missing_policy="coverage_sqrt",
+    caps={"technicals": _TECHNICALS_GUARDRAIL_CAP},
+    source="static_v1 + council #5 technicals guardrail (cap 0.20->0.10, reversible)",
+)
+
 
 def get_active_policy() -> WeightPolicy:
     """Return the policy that governs live production ratings.
@@ -87,4 +119,4 @@ def get_active_policy() -> WeightPolicy:
     of referencing DEFAULT_WEIGHTS directly, so the live weighting is explicit,
     versioned, and swappable without touching cron code.
     """
-    return STATIC_V1
+    return STATIC_V2

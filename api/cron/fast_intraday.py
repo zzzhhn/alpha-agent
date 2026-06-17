@@ -259,9 +259,11 @@ async def handler(
             }
             sigs.update(fresh)
 
-        # Combine + rate via the active weight policy (coverage-aware fusion).
+        # Combine + rate via the active weight policy (coverage-aware fusion +
+        # council #5 guardrail caps, e.g. technicals capped to neutral).
         result = combine(
-            sigs, _POLICY.weights, coverage_core=_POLICY.core_set()
+            sigs, _POLICY.weights,
+            coverage_core=_POLICY.core_set(), caps=_POLICY.caps_dict(),
         )
         contributing_zs = [
             b["z"] for b in result.breakdown if b["weight_effective"] > 0

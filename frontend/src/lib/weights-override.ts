@@ -39,6 +39,15 @@ export const DEFAULT_WEIGHTS: Record<string, number> = {
   supply_chain: 0.05,
 };
 
+// Active-policy guardrail caps (council #5). MUST mirror the active WeightPolicy
+// caps in alpha_agent/fusion/policy.py (currently static_v2: technicals 0.10).
+// A capped signal's effective weight is scaled down to the cap and the freed
+// weight is NOT reallocated (goes to neutral), so the personal reweight matches
+// the production composite. Empty entry = uncapped.
+export const ACTIVE_CAPS: Record<string, number> = {
+  technicals: 0.1,
+};
+
 type Tier = RatingCard["rating"];
 
 function isFiniteNumber(x: unknown): x is number {
@@ -123,8 +132,12 @@ export function applyWeightsToBreakdown(
   let composite = 0;
   const out = breakdown.map((e) => {
     const wOrig = weights[e.signal] ?? 0;
-    const wEff =
+    let wEff =
       total > 0 && !dropped.has(e.signal) && wOrig > 0 ? wOrig / total : 0;
+    // Apply guardrail cap (council #5): scale the effective weight down to the
+    // cap without reallocating the freed weight (mirrors backend _apply_caps).
+    const cap = ACTIVE_CAPS[e.signal];
+    if (cap !== undefined && wOrig > 0 && cap < wOrig) wEff *= cap / wOrig;
     const contribution = wEff === 0 ? 0 : (e.z ?? 0) * wEff;
     composite += contribution;
     return { ...e, weight: wOrig, weight_effective: wEff, contribution };

@@ -89,10 +89,30 @@ def _is_finite_number(x: Any) -> bool:
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
+def _apply_caps(
+    eff: dict[str, float],
+    weights: Mapping[str, float],
+    caps: Mapping[str, float] | None,
+) -> dict[str, float]:
+    """Scale a capped signal's effective weight down to its cap, WITHOUT
+    redistributing the freed weight to other signals (council #5: a guardrailed
+    signal's excess weight goes to neutral, reducing conviction, rather than
+    inflating the survivors). No-op when caps is empty. Returns a new dict."""
+    if not caps:
+        return eff
+    out = dict(eff)
+    for name, cap in caps.items():
+        w = weights.get(name, 0.0)
+        if name in out and w > 0 and cap < w:
+            out[name] = out[name] * (cap / w)
+    return out
+
+
 def _combine_breakdown_list(
     breakdown_in: list[dict[str, Any]],
     weights: Mapping[str, float],
     coverage_core: set[str] | None = None,
+    caps: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """New-style: list of breakdown dicts in, dict envelope out."""
     drop: set[str] = set()
@@ -109,6 +129,7 @@ def _combine_breakdown_list(
             drop.add(name)
 
     eff = normalize_weights(weights, drop=drop)
+    eff = _apply_caps(eff, weights, caps)
     composite = 0.0
     breakdown_out: list[dict[str, Any]] = []
     for entry in breakdown_in:
@@ -141,6 +162,7 @@ def _combine_signal_mapping(
     signals: Mapping[str, SignalScore],
     weights: Mapping[str, float],
     coverage_core: set[str] | None = None,
+    caps: Mapping[str, float] | None = None,
 ) -> CombineResult:
     """Legacy-style: {name: SignalScore} in, CombineResult out."""
     drop = {n for n, sc in signals.items() if sc["confidence"] == 0.0}
@@ -150,6 +172,7 @@ def _combine_signal_mapping(
         if not _is_finite_number(sc["z"])
     }
     eff = normalize_weights(weights, drop=drop)
+    eff = _apply_caps(eff, weights, caps)
     composite = 0.0
     breakdown: list[dict[str, Any]] = []
     for name, sc in signals.items():
@@ -189,6 +212,7 @@ def combine(
     *,
     weights_override: Mapping[str, float] | None = None,
     coverage_core: set[str] | None = None,
+    caps: Mapping[str, float] | None = None,
 ):
     """Compute weighted composite + per-signal breakdown.
 
@@ -212,8 +236,10 @@ def combine(
 
     if isinstance(signals_or_breakdown, list):
         return _combine_breakdown_list(
-            signals_or_breakdown, resolved_weights, coverage_core=coverage_core
+            signals_or_breakdown, resolved_weights,
+            coverage_core=coverage_core, caps=caps,
         )
     return _combine_signal_mapping(
-        signals_or_breakdown, resolved_weights, coverage_core=coverage_core
+        signals_or_breakdown, resolved_weights,
+        coverage_core=coverage_core, caps=caps,
     )

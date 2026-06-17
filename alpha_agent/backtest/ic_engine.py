@@ -229,6 +229,15 @@ async def run_monthly_ic_backtest(pool) -> int:
                 )
         updated += 1
 
-    from alpha_agent.backtest.adaptive_weights import apply_adaptive_weights
+    from alpha_agent.backtest.adaptive_weights import (
+        apply_adaptive_weights,
+        compute_guarded_shadow,
+    )
     await apply_adaptive_weights(pool, _ACTIVE_SIGNALS)
+    # council #6: compute the guarded-shrinkage shadow (prior = the uncapped
+    # static baseline, evidence = the aggressive adaptive candidate) for
+    # side-by-side comparison. NOT promoted live; nothing reads guarded_shadow
+    # for fusion. Live weighting stays the explicit static policy.
+    from alpha_agent.fusion.policy import STATIC_V1
+    await compute_guarded_shadow(pool, dict(STATIC_V1.weights), _ACTIVE_SIGNALS)
     return updated

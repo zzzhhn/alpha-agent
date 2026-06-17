@@ -14,38 +14,50 @@ export function WeightDeltaTable({
   locale: Locale;
 }) {
   const rows = useMemo(() => {
-    // Pivot flat list into one row per signal_name, joining live + shadow.
+    // Pivot flat list into one row per signal_name, joining live + shadow +
+    // guarded_shadow (council #6 guarded-shrinkage candidate, not promoted).
     const map = new Map<
       string,
-      { live: EvolutionWeight | null; shadow: EvolutionWeight | null }
+      {
+        live: EvolutionWeight | null;
+        shadow: EvolutionWeight | null;
+        guarded: EvolutionWeight | null;
+      }
     >();
 
     for (const w of weights) {
-      const existing = map.get(w.signal_name) ?? { live: null, shadow: null };
+      const existing =
+        map.get(w.signal_name) ?? { live: null, shadow: null, guarded: null };
       if (w.status === "live") {
         map.set(w.signal_name, { ...existing, live: w });
+      } else if (w.status === "guarded_shadow") {
+        map.set(w.signal_name, { ...existing, guarded: w });
       } else {
         map.set(w.signal_name, { ...existing, shadow: w });
       }
     }
 
     // Compute delta per signal, then sort by |delta| descending.
-    const entries = Array.from(map.entries()).map(([signal_name, { live, shadow }]) => {
-      const liveWeight = live?.weight ?? null;
-      const shadowWeight = shadow?.weight ?? null;
-      const delta =
-        liveWeight !== null && shadowWeight !== null
-          ? shadowWeight - liveWeight
-          : null;
-      return {
-        signal_name,
-        live,
-        shadow,
-        liveWeight,
-        shadowWeight,
-        delta,
-      };
-    });
+    const entries = Array.from(map.entries()).map(
+      ([signal_name, { live, shadow, guarded }]) => {
+        const liveWeight = live?.weight ?? null;
+        const shadowWeight = shadow?.weight ?? null;
+        const guardedWeight = guarded?.weight ?? null;
+        const delta =
+          liveWeight !== null && shadowWeight !== null
+            ? shadowWeight - liveWeight
+            : null;
+        return {
+          signal_name,
+          live,
+          shadow,
+          liveWeight,
+          shadowWeight,
+          guardedWeight,
+          delta,
+        };
+      },
+    );
 
     entries.sort((a, b) => {
       const absDeltaA = a.delta !== null ? Math.abs(a.delta) : -1;
@@ -72,6 +84,7 @@ export function WeightDeltaTable({
             <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_signal")}</th>
             <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_live")}</th>
             <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_shadow")}</th>
+            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_guarded")}</th>
             <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_delta")}</th>
             <th className="px-2 py-1.5 text-center">{t(locale, "evolution.weights.col_streak")}</th>
             <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_reason")}</th>
@@ -79,7 +92,7 @@ export function WeightDeltaTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ signal_name, live, shadow, liveWeight, shadowWeight, delta }) => {
+          {rows.map(({ signal_name, live, shadow, liveWeight, shadowWeight, guardedWeight, delta }) => {
             const consecutiveBad = live?.consecutive_bad_windows ?? shadow?.consecutive_bad_windows ?? 0;
             const shadowStreak = shadow?.shadow_streak ?? 0;
             const reason = shadow?.reason ?? live?.reason ?? null;
@@ -111,9 +124,14 @@ export function WeightDeltaTable({
                   {liveWeight !== null ? liveWeight.toFixed(4) : "—"}
                 </td>
 
-                {/* Shadow weight */}
+                {/* Shadow weight (aggressive adaptive candidate) */}
                 <td className="px-2 py-1 text-right font-mono text-tm-fg-2">
                   {shadowWeight !== null ? shadowWeight.toFixed(4) : "—"}
+                </td>
+
+                {/* Guarded-shrinkage shadow (council #6, not promoted live) */}
+                <td className="px-2 py-1 text-right font-mono text-tm-fg-2">
+                  {guardedWeight !== null ? guardedWeight.toFixed(4) : "—"}
                 </td>
 
                 {/* Delta */}

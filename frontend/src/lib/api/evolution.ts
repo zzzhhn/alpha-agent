@@ -23,7 +23,9 @@ export interface IcTrendResponse {
 
 export interface EvolutionWeight {
   signal_name: string;
-  status: "live" | "shadow";
+  // "guarded_shadow" (council #6): the guarded-shrinkage candidate computed for
+  // comparison but NOT promoted live.
+  status: "live" | "shadow" | "guarded_shadow";
   weight: number;
   reason: string | null;
   consecutive_bad_windows: number;

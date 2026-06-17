@@ -24,6 +24,34 @@ MAX_BAD_WINDOWS: int = 3        # hard-drop to 0 only after this many consecutiv
 ICIR_NORMALIZE: float = 0.10    # scales positive ICIR into the familiar weight range
 SHADOW_PROMOTE_STREAK: int = 5  # trading days a candidate must hold before promotion
 
+# Guarded-shrinkage constants (council 2026-06-17 item #6). The safe path from
+# the static prior toward adaptive evidence: shrink toward evidence by effective
+# sample size, cap the per-cycle move, never hard-drop or resurrect from 0.
+SHRINK_N_REF: float = 30.0       # evidence sample at which it gets ~half the pull
+SHRINK_MAX_DELTA: float = 0.05   # max move from the prior per cycle (no hard drops)
+
+
+def shrink_weight(
+    prior: float,
+    evidence: float,
+    n_eff: float | None,
+    *,
+    floor: float = 0.0,
+    cap: float = 1.0,
+    max_delta: float = SHRINK_MAX_DELTA,
+    n_ref: float = SHRINK_N_REF,
+) -> float:
+    """Guarded shrinkage: move `prior` toward `evidence` by a sample-size-weighted
+    factor lam = n_eff/(n_eff+n_ref), cap the move at +/- max_delta, clamp to
+    [floor, cap]. No / non-positive evidence sample -> stay at the prior (council
+    #6: never hard-drop a signal from short, overlapping-window evidence)."""
+    if n_eff is None or n_eff <= 0:
+        return float(prior)
+    lam = n_eff / (n_eff + n_ref)
+    target = prior + lam * (evidence - prior)
+    delta = max(-max_delta, min(max_delta, target - prior))
+    return float(max(floor, min(cap, prior + delta)))
+
 
 def compute_ewma_icir(
     points: list[tuple[date | datetime, float]],
@@ -321,3 +349,44 @@ async def apply_adaptive_weights(pool, active_signals) -> dict:
     else:
         await pool.execute("UPDATE signal_weight_current SET shadow_streak=0 WHERE status='shadow'")
     return {"promoted": promoted, "ic_live": ic_live, "ic_shadow": ic_shadow, "rolled_back": rolled_back}
+
+
+async def compute_guarded_shadow(
+    pool, prior_weights: dict[str, float], signals, *, window: int = 30
+) -> dict[str, float]:
+    """Council #6: compute the GUARDED-SHRINKAGE weight set and store it as
+    status='guarded_shadow' for side-by-side comparison. It blends the explicit
+    static prior toward the aggressive adaptive evidence (the existing 'shadow'
+    candidate) via shrink_weight, so a signal can move at most SHRINK_MAX_DELTA
+    per cycle and never hard-drops to 0 on sparse evidence.
+
+    This is the SAFE alternative to wiring the raw adaptive weights live. It is
+    NOT promoted: nothing reads 'guarded_shadow' for live fusion. It exists so
+    the guarded path can be compared against live (static) for weeks before any
+    promotion decision is made.
+    """
+    evidence = await _weights_by_status(pool, "shadow")
+    now = datetime.now(UTC)
+    out: dict[str, float] = {}
+    for sig in signals:
+        prior = float(prior_weights.get(sig, 0.0))
+        ev = float(evidence.get(sig, prior))  # no evidence -> stay at prior
+        n_eff = await pool.fetchval(
+            "SELECT count(*) FROM signal_ic_history "
+            "WHERE signal_name=$1 AND window_days=$2 AND horizon_days=5",
+            sig, window,
+        )
+        # Floor a real (prior>0) signal at the diversification floor so guarded
+        # shrinkage never zeroes it; leave display-only (prior 0) signals at 0.
+        floor = WEIGHT_FLOOR if prior > 0 else 0.0
+        cap = max(prior, ev, 0.30)  # do not let a signal run far above its prior
+        w = shrink_weight(prior, ev, n_eff or 0, floor=floor, cap=cap)
+        out[sig] = w
+        await pool.execute(
+            "INSERT INTO signal_weight_current (signal_name, status, weight, last_updated, reason) "
+            "VALUES ($1,'guarded_shadow',$2,$3,$4) "
+            "ON CONFLICT (signal_name, status) DO UPDATE SET "
+            "weight=EXCLUDED.weight, last_updated=EXCLUDED.last_updated, reason=EXCLUDED.reason",
+            sig, w, now, "council#6 guarded shrinkage (shadow, not live)",
+        )
+    return out

@@ -24,9 +24,9 @@ def _full_sigs() -> dict:
     return {n: _sc(1.0) for n in names}
 
 
-def test_policy_is_static_v1_with_expected_core():
+def test_active_policy_is_static_v2_with_expected_core():
     p = get_active_policy()
-    assert p.policy_id == "static_v1"
+    assert p.policy_id == "static_v2_technicals_guardrail"
     assert p.mode == "static"
     assert p.horizon == "5d"
     assert p.missing_policy == "coverage_sqrt"
@@ -70,3 +70,36 @@ def test_missing_sparse_signal_does_not_penalize_coverage():
     sigs["insider"] = _sc(1.0, conf=0.0)  # sparse, not in core
     r = combine(sigs, p.weights, coverage_core=p.core_set())
     assert abs(r.coverage - 1.0) < 1e-12
+
+
+def _contrib(res, sig):
+    return next(b["contribution"] for b in res.breakdown if b["signal"] == sig)
+
+
+def test_active_policy_caps_technicals():
+    # council #5: the live policy guardrails technicals.
+    p = get_active_policy()
+    assert p.caps_dict().get("technicals") == 0.10
+
+
+def test_cap_reduces_signal_without_reallocating():
+    p = get_active_policy()
+    sigs = _full_sigs()
+    uncapped = combine(sigs, p.weights, coverage_core=p.core_set())
+    capped = combine(
+        sigs, p.weights, coverage_core=p.core_set(), caps={"technicals": 0.10},
+    )
+    # technicals contribution shrinks (weight scaled 0.10/0.20 = 0.5)...
+    assert abs(_contrib(capped, "technicals")) < abs(_contrib(uncapped, "technicals"))
+    # ...a non-capped signal's contribution is UNCHANGED (no reallocation)...
+    assert abs(_contrib(capped, "factor") - _contrib(uncapped, "factor")) < 1e-12
+    # ...so the composite is smaller (freed weight went to neutral, not others).
+    assert capped.composite < uncapped.composite
+
+
+def test_no_caps_is_identical():
+    p = get_active_policy()
+    sigs = _full_sigs()
+    a = combine(sigs, p.weights, coverage_core=p.core_set(), caps=None)
+    b = combine(sigs, p.weights, coverage_core=p.core_set(), caps={})
+    assert a.composite == b.composite
