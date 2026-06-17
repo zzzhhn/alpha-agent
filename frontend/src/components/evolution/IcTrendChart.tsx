@@ -15,6 +15,7 @@ import {
 import type { IcTrendSeries, IcAnnotation } from "@/lib/api/evolution";
 import { t, type Locale } from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import { nativeHorizon } from "@/lib/signal-horizons";
 import { formatIcAnnotation } from "@/lib/ic-annotation-format";
 
 interface IcTrendChartProps {
@@ -242,7 +243,7 @@ export function IcTrendChart({ series, locale, annotations }: IcTrendChartProps)
               key={s.signal_name}
               type="monotone"
               dataKey={s.signal_name}
-              name={getSignalDisplayLabel(s.signal_name, locale)}
+              name={`${getSignalDisplayLabel(s.signal_name, locale)} (${nativeHorizon(s.signal_name)}d)`}
               stroke={SIGNAL_COLORS[i % SIGNAL_COLORS.length]}
               strokeWidth={2}
               dot={(props) => annotationDot(s.signal_name, annByKey, props)}

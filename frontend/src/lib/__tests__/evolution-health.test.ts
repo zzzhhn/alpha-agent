@@ -79,6 +79,7 @@ describe("assessIc", () => {
     });
     const ic: IcTrendResponse = {
       window_days: 30,
+      horizon_days: 5,
       series: [
         mk("a", 0.2), mk("b", 0.15), mk("c", 0.1), mk("d", 0.08),
         mk("e", 0.05), mk("f", 0.03), mk("g", 0.01),
@@ -98,6 +99,7 @@ describe("assessIc", () => {
     });
     const ic: IcTrendResponse = {
       window_days: 30,
+      horizon_days: 5,
       series: [
         mk("a", 0.2), mk("b", 0.15), mk("c", 0.1), mk("d", 0.08),
         mk("e", 0.05), mk("f", 0.03), mk("g", 0.01), mk("h", 0.04),
@@ -110,6 +112,7 @@ describe("assessIc", () => {
   it("uses the chronologically latest point per signal", () => {
     const ic: IcTrendResponse = {
       window_days: 30,
+      horizon_days: 5,
       series: [
         {
           signal_name: "analyst",

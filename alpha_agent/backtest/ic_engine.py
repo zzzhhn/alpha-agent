@@ -33,6 +33,8 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
+from alpha_agent.signals.horizons import DEFAULT_HORIZON_DAYS, native_horizon
+
 
 def _spearman_rho(xs, ys):
     """Spearman rank correlation via numpy only (no scipy).
@@ -88,28 +90,45 @@ async def compute_walk_forward_ic(
     pool,
     signal_name: str,
     window_days: int,
+    horizon_days: int = _FWD_RET_DAYS,
 ) -> tuple[float, int] | None:
-    """Return (Spearman rank IC, n_observations) for the signal over
-    `window_days`. None if fewer than `_MIN_OBS` observations
-    (insufficient statistical power) or if Spearman returns NaN.
+    """Return (Spearman rank IC, n_observations) for `signal_name` over
+    `window_days` of as_of dates, against a `horizon_days`-trading-day forward
+    return. None if fewer than `_MIN_OBS` observations or if Spearman is NaN.
 
-    Walk-forward guarantee:
-      - signal as_of (date) is restricted to [now - window_days, now - 5d]
-        so every forward return window is observable in the past.
-      - forward return uses daily_prices: entry close at as_of, exit close
-        via LEAD(close, 5) (5 trading days ahead, assuming no missing rows
-        for the ticker; a gap shifts the real interval but never crashes).
-        Rows with no observable exit (close_exit IS NULL) are excluded by
-        the WHERE clause.
+    Decision-time contract (council #3 — IC pipeline correctness):
+      - The z is read from the daily_signals_fast row stored ON its as_of
+        date; entry is that date's close, exit is the close `horizon_days`
+        trading rows later. The IC assumes a decision made at the as_of close
+        from only that day's (and earlier) data. Signals must NOT be backfilled
+        with later-arriving data, or a past as_of would leak the future.
+      - Walk-forward: as_of is restricted to [now - window_days,
+        now - horizon_days] so every forward window is fully in the past.
+      - daily_prices.close is split/dividend adjusted, so entry/exit is a
+        clean total return.
+      - Missing-row guard (council #3): LEAD counts ROWS, not calendar days, so
+        a halted/holiday-gapped ticker could stretch the real interval. Rows
+        whose exit date is more than ~2x the horizon in calendar days ahead are
+        excluded so a stale exit price cannot pollute the IC.
     """
+    if not isinstance(horizon_days, int) or horizon_days < 1:
+        raise ValueError(
+            f"horizon_days must be a positive int, got {horizon_days!r}"
+        )
     now = datetime.now(UTC)
     window_start = (now - timedelta(days=window_days)).date()
-    # Signal as_of must be early enough that the 5d-forward exit price
-    # is itself in the past; otherwise we would be peeking ahead.
-    fwd_cutoff = (now - timedelta(days=_FWD_RET_DAYS)).date()
+    # as_of must be early enough that the horizon-forward exit is itself in the
+    # past; otherwise we would be peeking ahead.
+    fwd_cutoff = (now - timedelta(days=horizon_days)).date()
+    # Reject exits where missing rows stretched the real window too far: at most
+    # horizon_days trading days (~horizon_days*7/5 calendar days); allow a
+    # weekend + holiday buffer.
+    max_span_days = horizon_days * 2 + 4
 
+    # horizon_days is a validated positive int (not user input) so interpolating
+    # it into LEAD()'s offset is injection-safe; LEAD offsets cannot be bound.
     rows = await pool.fetch(
-        """
+        f"""
         WITH sig AS (
             SELECT
                 f.ticker,
@@ -127,27 +146,31 @@ async def compute_walk_forward_ic(
                 ticker,
                 date,
                 close AS close_entry,
-                LEAD(close, 5) OVER (PARTITION BY ticker ORDER BY date) AS close_exit
+                LEAD(close, {horizon_days}) OVER (PARTITION BY ticker ORDER BY date) AS close_exit,
+                LEAD(date, {horizon_days}) OVER (PARTITION BY ticker ORDER BY date) AS date_exit
             FROM daily_prices
         )
         SELECT
             s.signal_z,
-            (fwd.close_exit / fwd.close_entry - 1)::double precision AS fwd_5d
+            (fwd.close_exit / fwd.close_entry - 1)::double precision AS fwd_ret
         FROM sig s
         JOIN fwd
           ON fwd.ticker = s.ticker
          AND fwd.date = s.as_of
         WHERE fwd.close_entry > 0
           AND fwd.close_exit IS NOT NULL
+          AND fwd.date_exit IS NOT NULL
+          AND (fwd.date_exit - fwd.date) <= $4
         """,
         signal_name,
         window_start,
         fwd_cutoff,
+        max_span_days,
     )
     if len(rows) < _MIN_OBS:
         return None
     xs = np.array([float(r["signal_z"]) for r in rows])
-    ys = np.array([float(r["fwd_5d"]) for r in rows])
+    ys = np.array([float(r["fwd_ret"]) for r in rows])
     rho = _spearman_rho(xs, ys)
     if rho is None or np.isnan(rho):
         return None
@@ -155,9 +178,11 @@ async def compute_walk_forward_ic(
 
 
 async def run_monthly_ic_backtest(pool) -> int:
-    """For each active signal: compute IC over 3 windows, write each
-    successful (signal, window) to signal_ic_history. Returns the count
-    of signals whose IC history was processed.
+    """For each active signal: compute IC over 3 windows at BOTH the 5d
+    reference horizon (cross-signal comparison) and the signal's native horizon
+    (council #4 — horizon-coherent validation), writing each successful
+    (signal, window, horizon) to signal_ic_history. Returns the count of
+    signals processed.
 
     Weight production is delegated entirely to the Phase 1b adaptive layer
     (EWMA-ICIR + change-cap + floor/hard-drop + shadow/promote/rollback)
@@ -179,20 +204,29 @@ async def run_monthly_ic_backtest(pool) -> int:
         )
         if existing is not None and existing > skip_threshold:
             continue
+        # Evaluate at the 5d reference horizon + the signal's native horizon
+        # (deduped). Judging a 60d signal like factor only on 5d IC is
+        # horizon-incoherent (council #4).
+        horizons = sorted({DEFAULT_HORIZON_DAYS, native_horizon(sig_name)})
         for w in _WINDOWS:
-            result = await compute_walk_forward_ic(pool, sig_name, w)
-            if result is None:
-                continue
-            ic, n_obs = result
-            await pool.execute(
-                """
-                INSERT INTO signal_ic_history
-                    (signal_name, window_days, ic, n_observations, computed_at)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (signal_name, window_days, computed_at) DO NOTHING
-                """,
-                sig_name, w, ic, n_obs, now,
-            )
+            for h in horizons:
+                result = await compute_walk_forward_ic(
+                    pool, sig_name, w, horizon_days=h
+                )
+                if result is None:
+                    continue
+                ic, n_obs = result
+                await pool.execute(
+                    """
+                    INSERT INTO signal_ic_history
+                        (signal_name, window_days, horizon_days, ic,
+                         n_observations, computed_at)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (signal_name, window_days, horizon_days, computed_at)
+                    DO NOTHING
+                    """,
+                    sig_name, w, h, ic, n_obs, now,
+                )
         updated += 1
 
     from alpha_agent.backtest.adaptive_weights import apply_adaptive_weights

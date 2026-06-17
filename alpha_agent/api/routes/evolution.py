@@ -32,15 +32,23 @@ def _decode_jsonb(value: Any) -> Any:
 
 
 @router.get("/ic_trend")
-async def ic_trend(window_days: int = Query(30, ge=1, le=365)) -> dict[str, Any]:
-    """IC time-series for every signal over the requested rolling window."""
+async def ic_trend(
+    window_days: int = Query(30, ge=1, le=365),
+    horizon_days: int = Query(5, ge=1, le=120),
+) -> dict[str, Any]:
+    """IC time-series for every signal over the requested rolling window, at a
+    given forward horizon (council #4). Defaults to the 5d reference horizon so
+    existing callers are unchanged; pass horizon_days to see a signal validated
+    at its native horizon (factor 60d, news 3d, ...)."""
     pool = await get_db_pool()
     since = datetime.now(UTC) - timedelta(days=window_days)
     rows = await pool.fetch(
         "SELECT signal_name, computed_at, ic, n_observations "
-        "FROM signal_ic_history WHERE window_days = $1 AND computed_at >= $2 "
+        "FROM signal_ic_history "
+        "WHERE window_days = $1 AND horizon_days = $2 AND computed_at >= $3 "
         "ORDER BY signal_name, computed_at",
         window_days,
+        horizon_days,
         since,
     )
     series: dict[str, list[dict[str, Any]]] = {}
@@ -54,6 +62,7 @@ async def ic_trend(window_days: int = Query(30, ge=1, le=365)) -> dict[str, Any]
         )
     return {
         "window_days": window_days,
+        "horizon_days": horizon_days,
         "series": [{"signal_name": k, "points": v} for k, v in series.items()],
     }
 

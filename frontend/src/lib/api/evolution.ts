@@ -15,6 +15,9 @@ export interface IcTrendSeries {
 }
 export interface IcTrendResponse {
   window_days: number;
+  // Forward horizon (trading days) the IC was computed against (council #4).
+  // Defaults to the 5d reference; can be a signal's native horizon.
+  horizon_days: number;
   series: IcTrendSeries[];
 }
 
@@ -57,8 +60,15 @@ export interface EvolutionChangesResponse {
   changes: EvolutionChange[];
 }
 
-export const fetchIcTrend = (windowDays = 30, opts?: ApiGetOptions) =>
-  apiGet<IcTrendResponse>(`/api/evolution/ic_trend?window_days=${windowDays}`, opts);
+export const fetchIcTrend = (
+  windowDays = 30,
+  horizonDays = 5,
+  opts?: ApiGetOptions,
+) =>
+  apiGet<IcTrendResponse>(
+    `/api/evolution/ic_trend?window_days=${windowDays}&horizon_days=${horizonDays}`,
+    opts,
+  );
 
 // Traceability overlay (principle 11): structured facts for each material
 // day-over-day IC move. co_occurring is a list of real same-day system

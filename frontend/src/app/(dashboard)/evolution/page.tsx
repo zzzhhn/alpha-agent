@@ -35,7 +35,7 @@ async function fetchAllEvolution(): Promise<{
 }> {
   const [icTrend, icAnnotations, weights, calibration, changes, proposals] =
     await Promise.allSettled([
-      fetchIcTrend(30, { revalidate: 60, tags: ["evolution-ic-trend"] }),
+      fetchIcTrend(30, 5, { revalidate: 60, tags: ["evolution-ic-trend"] }),
       fetchIcAnnotations(30, { revalidate: 60, tags: ["evolution-ic-annotations"] }),
       fetchEvolutionWeights({ revalidate: 60, tags: ["evolution-weights"] }),
       fetchEvolutionCalibration({

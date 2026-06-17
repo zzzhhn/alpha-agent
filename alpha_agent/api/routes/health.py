@@ -93,7 +93,7 @@ async def _compute_signal_metrics(
 
     rows = await pool.fetch(
         "SELECT ic FROM signal_ic_history "
-        "WHERE signal_name = $1 AND window_days = $2 "
+        "WHERE signal_name = $1 AND window_days = $2 AND horizon_days = 5 "
         "ORDER BY computed_at DESC LIMIT 90",
         name, window_days,
     )
@@ -180,13 +180,13 @@ async def health_signals() -> HealthSignalsResponse:
         ic_30d = metrics_30d["ic_latest"]
         ic_60d_raw = await pool.fetchval(
             "SELECT ic FROM signal_ic_history "
-            "WHERE signal_name = $1 AND window_days = 60 "
+            "WHERE signal_name = $1 AND window_days = 60 AND horizon_days = 5 "
             "ORDER BY computed_at DESC LIMIT 1",
             name,
         )
         ic_90d_raw = await pool.fetchval(
             "SELECT ic FROM signal_ic_history "
-            "WHERE signal_name = $1 AND window_days = 90 "
+            "WHERE signal_name = $1 AND window_days = 90 AND horizon_days = 5 "
             "ORDER BY computed_at DESC LIMIT 1",
             name,
         )

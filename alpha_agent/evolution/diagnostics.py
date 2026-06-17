@@ -44,7 +44,7 @@ async def compute_diagnostic(pool) -> Diagnostic:
     # IC computation cycle.
     row = await pool.fetchrow(
         "SELECT signal_name, ic FROM signal_ic_history "
-        "WHERE window_days = 30 "
+        "WHERE window_days = 30 AND horizon_days = 5 "  # 5d reference horizon
         "ORDER BY computed_at DESC, ic ASC LIMIT 1"
     )
     if row is not None:

@@ -52,7 +52,8 @@ async def compute_ic_annotations(
     Returns the number of annotations written."""
     rows = await pool.fetch(
         "SELECT signal_name, computed_at, ic FROM signal_ic_history "
-        "WHERE window_days = $1 ORDER BY signal_name, computed_at",
+        "WHERE window_days = $1 AND horizon_days = 5 "  # 5d reference horizon
+        "ORDER BY signal_name, computed_at",
         window_days,
     )
     by_signal: dict[str, list[tuple]] = defaultdict(list)

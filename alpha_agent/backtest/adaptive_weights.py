@@ -166,8 +166,11 @@ async def _gather_icir(pool, signal_name: str, windows=(30, 60, 90)) -> float | 
     icirs = []
     for w in windows:
         rows = await pool.fetch(
+            # 5d reference horizon only (council #4 added per-horizon rows; the
+            # adaptive layer stays on the consistent reference horizon).
             "SELECT computed_at, ic FROM signal_ic_history "
-            "WHERE signal_name=$1 AND window_days=$2 ORDER BY computed_at",
+            "WHERE signal_name=$1 AND window_days=$2 AND horizon_days=5 "
+            "ORDER BY computed_at",
             signal_name, w,
         )
         v = compute_ewma_icir([(r["computed_at"], float(r["ic"])) for r in rows])
