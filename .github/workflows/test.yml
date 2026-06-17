@@ -28,6 +28,10 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: |
+          # libseccomp is required by pyseccomp (linux-only base dep) for the
+          # SandboxRunner's seccomp hardening; without it the sandbox canned /
+          # worker / runner tests fail with "Unable to find libseccomp".
+          sudo apt-get update && sudo apt-get install -y libseccomp-dev
           pip install -e ".[dev,storage,test]"
       - name: Lint
         run: ruff check alpha_agent tests

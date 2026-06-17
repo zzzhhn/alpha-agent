@@ -22,9 +22,15 @@ from alpha_agent.signals.base import SignalScore
 # Helpers
 # ---------------------------------------------------------------------------
 
+# MUST cover every signal build_card._SIGNAL_NAMES fetches, or an unpatched
+# signal hits real APIs/DB. political_impact + supply_chain were added to
+# build_card later; leaving them unpatched made build_card query the (CI:
+# unmigrated) macro_events table -> UndefinedTableError, breaking the "no
+# external APIs are hit" guarantee this suite documents.
 _SIGNAL_MODULES = [
     "factor", "technicals", "analyst", "earnings", "news",
     "insider", "options", "premarket", "macro", "calendar",
+    "political_impact", "supply_chain",
 ]
 
 _AS_OF = datetime(2026, 5, 10)
