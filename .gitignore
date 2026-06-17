@@ -40,3 +40,4 @@ alpha_agent/data/insider_form4_sp500_v3.parquet
 
 # Superpowers brainstorming sessions (visual companion mockups, ephemeral)
 .superpowers/
+.env*.local

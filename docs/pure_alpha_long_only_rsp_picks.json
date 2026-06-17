@@ -1,84 +1,142 @@
 [
   {
     "name": "ep",
-    "neutralize": "sector",
-    "top_pct": 0.2,
-    "test_sr": 1.8033474128282754,
-    "ic": 0.007090064858734351,
-    "ic_p": 0.22522011887231086,
-    "psr": 0.9578116831400564,
-    "alpha_ann": 0.049019690319936006,
-    "alpha_t": 1.893776565057757,
-    "alpha_p": 0.05825467352370645,
-    "beta": 1.1064397933943764,
+    "neutralize": "none",
+    "top_pct": 0.1,
+    "test_sr": 2.2817818124368623,
+    "ic": 0.011029240840916868,
+    "ic_p": 0.12642987295601596,
+    "psr": 0.9843573943239257,
+    "alpha_ann": 0.10883719660625608,
+    "alpha_t": 2.5935489229940383,
+    "alpha_p": 0.009499102342076906,
+    "beta": 1.1721983885377245,
     "regimes": [
       {
         "regime": "bull",
         "n_days": 79,
-        "alpha_t": 0.2999147519798785
+        "alpha_t": 0.9894839421208192
       },
       {
         "regime": "sideways",
         "n_days": 147,
-        "alpha_t": 1.5438670317802892
+        "alpha_t": 1.8035775141611528
       }
     ],
     "family": "value",
     "thesis": "Earnings yield E/P",
     "expression": "rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))",
-    "verdict": "MARGINAL"
+    "verdict": "SIG_ALPHA"
   },
   {
-    "name": "high_dvol",
-    "neutralize": "sector",
+    "name": "cash_buffer",
+    "neutralize": "none",
     "top_pct": 0.1,
-    "test_sr": 1.8690826354222356,
-    "ic": 0.01315751917498136,
-    "ic_p": 0.10161418953624866,
-    "psr": 0.9611413250260352,
-    "alpha_ann": 0.0672287470600905,
-    "alpha_t": 1.6324698034227487,
-    "alpha_p": 0.10258055469545002,
-    "beta": 0.9378863439069266,
+    "test_sr": 1.1139262903410112,
+    "ic": 0.012758368567506975,
+    "ic_p": 0.19934366144988558,
+    "psr": 0.8514801056584667,
+    "alpha_ann": 0.07176649828533715,
+    "alpha_t": 1.771060740223017,
+    "alpha_p": 0.07655060167215415,
+    "beta": 1.1669864954609064,
     "regimes": [
       {
         "regime": "bull",
         "n_days": 79,
-        "alpha_t": 0.5119262111998174
+        "alpha_t": -1.4898797451003654
       },
       {
         "regime": "sideways",
         "n_days": 147,
-        "alpha_t": 1.3070032847012785
+        "alpha_t": 1.4015164819140171
       }
     ],
-    "family": "liquidity",
-    "thesis": "High dollar volume rank",
-    "expression": "rank(adv60)",
+    "family": "health",
+    "thesis": "Cash buffer (cash / equity)",
+    "expression": "rank(divide(cash_and_equivalents, equity))",
+    "verdict": "MARGINAL"
+  },
+  {
+    "name": "bp",
+    "neutralize": "none",
+    "top_pct": 0.2,
+    "test_sr": 2.136735712128583,
+    "ic": 0.013165361756447896,
+    "ic_p": 0.1247332893040118,
+    "psr": 0.9815499765275432,
+    "alpha_ann": 0.04822333132403412,
+    "alpha_t": 1.2345215310914954,
+    "alpha_p": 0.21700862865137713,
+    "beta": 1.1396847001262462,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 79,
+        "alpha_t": 1.2595947377728993
+      },
+      {
+        "regime": "sideways",
+        "n_days": 147,
+        "alpha_t": 1.2268707264516046
+      }
+    ],
+    "family": "value",
+    "thesis": "Book yield B/P",
+    "expression": "rank(divide(equity, multiply(close, shares_outstanding)))",
+    "verdict": "NOISE"
+  },
+  {
+    "name": "roe",
+    "neutralize": "none",
+    "top_pct": 0.2,
+    "test_sr": 1.0503936565751089,
+    "ic": -0.0002857508444457182,
+    "ic_p": 0.9550116361551684,
+    "psr": 0.8400573192904348,
+    "alpha_ann": 0.03027977887296631,
+    "alpha_t": 1.201433514528796,
+    "alpha_p": 0.2295830821515743,
+    "beta": 1.0109861434305474,
+    "regimes": [
+      {
+        "regime": "bull",
+        "n_days": 79,
+        "alpha_t": 0.4057183710972299
+      },
+      {
+        "regime": "sideways",
+        "n_days": 147,
+        "alpha_t": -1.160361873087585
+      }
+    ],
+    "family": "quality",
+    "thesis": "Return on equity (ni / equity)",
+    "expression": "rank(divide(net_income_adjusted, equity))",
     "verdict": "NOISE"
   },
   {
     "name": "trend_sharpe_120",
-    "neutralize": "sector",
-    "top_pct": 0.1,
-    "test_sr": 2.047905709943735,
-    "ic": 0.018636572281901978,
-    "ic_p": 0.13883045451847398,
-    "psr": 0.9736677023883047,
-    "alpha_ann": 0.0793283499114964,
-    "alpha_t": 1.4338607454657573,
-    "alpha_p": 0.15161200585842294,
-    "beta": 0.7705380529910183,
+    "neutralize": "none",
+    "top_pct": 0.3,
+    "test_sr": 1.8093301829585426,
+    "ic": 0.015477150667000075,
+    "ic_p": 0.28298669316640174,
+    "psr": 0.9538834333069897,
+    "alpha_ann": 0.048073623788895625,
+    "alpha_t": 1.1655624823177755,
+    "alpha_p": 0.24379138408398748,
+    "beta": 0.7720512248333541,
     "regimes": [
       {
         "regime": "bull",
         "n_days": 79,
-        "alpha_t": 0.1704548914945747
+        "alpha_t": 0.802589488321504
       },
       {
         "regime": "sideways",
         "n_days": 147,
-        "alpha_t": 1.8336919907881948
+        "alpha_t": 0.921739284556471
       }
     ],
     "family": "trend",
@@ -87,90 +145,32 @@
     "verdict": "NOISE"
   },
   {
-    "name": "momo_6_1",
-    "neutralize": "sector",
-    "top_pct": 0.2,
-    "test_sr": 1.218904901316544,
-    "ic": 0.01348866860415722,
-    "ic_p": 0.15635739628000683,
-    "psr": 0.8746822865324583,
-    "alpha_ann": 0.0445110851584692,
-    "alpha_t": 0.8609205567589042,
-    "alpha_p": 0.38928179890818065,
-    "beta": 1.0364434998302237,
-    "regimes": [
-      {
-        "regime": "bull",
-        "n_days": 79,
-        "alpha_t": -1.1367685592768257
-      },
-      {
-        "regime": "sideways",
-        "n_days": 147,
-        "alpha_t": 1.1881023915273048
-      }
-    ],
-    "family": "momentum",
-    "thesis": "6-1 month momentum",
-    "expression": "rank(subtract(ts_mean(returns, 126), ts_mean(returns, 21)))",
-    "verdict": "NOISE"
-  },
-  {
     "name": "vol_zscore_20",
-    "neutralize": "sector",
-    "top_pct": 0.2,
-    "test_sr": 1.8479155188087149,
-    "ic": 0.010681605795538649,
-    "ic_p": 0.005649655934731503,
-    "psr": 0.9609371715504686,
-    "alpha_ann": 0.021220232098224705,
-    "alpha_t": 0.8469436352808841,
-    "alpha_p": 0.39702653914878067,
-    "beta": 1.0004786916457953,
+    "neutralize": "none",
+    "top_pct": 0.1,
+    "test_sr": 1.8539149550619083,
+    "ic": 0.01101420706638743,
+    "ic_p": 0.02361596042740155,
+    "psr": 0.9617227643328652,
+    "alpha_ann": 0.03999135416567042,
+    "alpha_t": 1.0500706424199684,
+    "alpha_p": 0.2936856350948905,
+    "beta": 0.9903820927282098,
     "regimes": [
       {
         "regime": "bull",
         "n_days": 79,
-        "alpha_t": -0.9776625288234745
+        "alpha_t": -0.05489026110382167
       },
       {
         "regime": "sideways",
         "n_days": 147,
-        "alpha_t": 2.7314918319235626
+        "alpha_t": 1.6834459784211615
       }
     ],
     "family": "volume",
     "thesis": "Volume 20d z-score",
     "expression": "ts_zscore(volume, 20)",
-    "verdict": "NOISE"
-  },
-  {
-    "name": "cash_buffer",
-    "neutralize": "sector",
-    "top_pct": 0.3,
-    "test_sr": 1.2081281127294576,
-    "ic": 0.014011178427389642,
-    "ic_p": 0.03201887933189738,
-    "psr": 0.8723105137466302,
-    "alpha_ann": 0.019194849067379522,
-    "alpha_t": 0.8106651856811641,
-    "alpha_p": 0.4175579713955825,
-    "beta": 1.0908187242552665,
-    "regimes": [
-      {
-        "regime": "bull",
-        "n_days": 79,
-        "alpha_t": -0.9014154758243199
-      },
-      {
-        "regime": "sideways",
-        "n_days": 147,
-        "alpha_t": 0.6417015981614861
-      }
-    ],
-    "family": "health",
-    "thesis": "Cash buffer (cash / equity)",
-    "expression": "rank(divide(cash_and_equivalents, equity))",
     "verdict": "NOISE"
   }
 ]

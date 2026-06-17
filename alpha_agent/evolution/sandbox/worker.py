@@ -93,6 +93,17 @@ def _harden_once() -> None:
     global _HARDENED
     if _HARDENED:
         return
+    # Resolve libseccomp BEFORE _install_rlimits() drops RLIMIT_NPROC to 0.
+    # pyseccomp binds the C library at import time via
+    # ctypes.util.find_library("seccomp"), which resolves the soname by
+    # spawning a helper subprocess (gcc / `ldconfig -p`). Once NPROC is 0 that
+    # fork fails, find_library returns None, and pyseccomp raises
+    # RuntimeError("Unable to find libseccomp"). Importing here populates the
+    # module cache so the later lazy import inside _install_seccomp_linux() is
+    # a no-op: the filter still loads at the same point, identical security
+    # posture, but the library is resolved while forking is still allowed.
+    if sys.platform == "linux":
+        import pyseccomp  # noqa: F401, PLC0415 - pre-resolve before rlimits drop NPROC
     _install_rlimits()
     if sys.platform == "linux":
         _install_seccomp_linux()

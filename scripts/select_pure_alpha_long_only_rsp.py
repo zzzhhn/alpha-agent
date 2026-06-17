@@ -177,17 +177,22 @@ def verdict(alpha_p: float, beta: float, alpha: float) -> str:
 
 
 def main() -> int:
-    # User's spec: (long_only, sector-neutral, RSP). FORCE sector — earlier
-    # version of this script picked best of (none, sector) which silently
-    # broke the contract for factors where neutralize=none gave higher α-t.
-    # Sweep across top_pct only.
-    print("[stage 1] running 22 candidates × 3 top_pct variants under "
-          "(long_only, sector-neutral, RSP) — STRICT SPEC", file=sys.stderr)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--neutralize", choices=("none", "sector"),
+                    default="sector",
+                    help="Neutralize mode to FORCE (default: sector)")
+    args, _ = ap.parse_known_args()
+    fixed_neut = args.neutralize
+
+    print(f"[stage 1] running 22 candidates × 3 top_pct variants under "
+          f"(long_only, neutralize={fixed_neut}, RSP) — STRICT SPEC",
+          file=sys.stderr)
     chosen: list[dict] = []
     for fam, name, thesis, expr, ops in CANDIDATES:
         variants = []
         for tp in (0.10, 0.20, 0.30):
-            v = run_one(name, expr, ops, "sector", tp)
+            v = run_one(name, expr, ops, fixed_neut, tp)
             if v and "error" not in v:
                 variants.append(v)
         if not variants:
@@ -199,7 +204,8 @@ def main() -> int:
         best["expression"] = expr
         best["verdict"] = verdict(best["alpha_p"], best["beta"], best["alpha_ann"])
         chosen.append(best)
-        print(f"  {name:18s} S/top{int(best['top_pct']*100):2d}%  "
+        nlabel = fixed_neut[:1].upper()
+        print(f"  {name:18s} {nlabel}/top{int(best['top_pct']*100):2d}%  "
               f"SR={best['test_sr']:+.2f}  α-t={best['alpha_t']:+.2f}  "
               f"α-p={best['alpha_p']:.3f}  β={best['beta']:+.3f}  "
               f"verdict={best['verdict']}",
