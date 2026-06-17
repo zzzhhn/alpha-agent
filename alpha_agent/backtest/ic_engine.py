@@ -63,6 +63,18 @@ _ACTIVE_SIGNALS: tuple[str, ...] = (
     "macro",
     "calendar",
     "political_impact",
+    # serenity seam #2 (2026-06-17): start forward IC tracking for the
+    # supply_chain bottleneck signal. compute_walk_forward_ic returns None
+    # (insufficient) until the daily fast cron has accumulated enough
+    # supply_chain z history for a 5d-forward-observable window, so nothing is
+    # written to signal_ic_history yet. apply_adaptive_weights treats a no-IC
+    # signal as "bad" and would shrink it toward the floor, but it writes only
+    # to signal_weight_current, which NO live cron reads (fast_intraday +
+    # slow_daily both fuse on DEFAULT_WEIGHTS), so the live 0.05 weight is
+    # untouched. This is pure measurement: it lets ic_backtest_monthly emit a
+    # real IC for supply_chain once ~3-4 weeks of history exist, so the weight
+    # can later be tuned on evidence instead of a guess.
+    "supply_chain",
 )
 
 _WINDOWS: tuple[int, ...] = (30, 60, 90)
