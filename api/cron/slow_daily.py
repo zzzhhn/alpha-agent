@@ -17,7 +17,8 @@ from typing import Any
 
 from alpha_agent.config_store import refresh_config
 from alpha_agent.fusion.combine import combine
-from alpha_agent.fusion.weights import DEFAULT_WEIGHTS, normalize_weights
+from alpha_agent.fusion.weights import normalize_weights
+from alpha_agent.fusion.policy import get_active_policy
 from alpha_agent.orchestrator.batch_runner import run_batched
 from alpha_agent.signals import (
     analyst, earnings, factor, insider, macro, supply_chain,
@@ -33,7 +34,12 @@ _SLOW_MODULES = {
     "macro": macro,
     "supply_chain": supply_chain,
 }
-_SLOW_WEIGHTS = {k: v for k, v in DEFAULT_WEIGHTS.items() if k in _SLOW_MODULES}
+# Consume the active weight policy (single source of truth, council #1) rather
+# than referencing DEFAULT_WEIGHTS directly. slow_daily produces a PARTIAL
+# composite (subset of signals) used only as a fallback, so it does NOT apply
+# the coverage damping (that is for the full-signal fast composite).
+_POLICY = get_active_policy()
+_SLOW_WEIGHTS = {k: v for k, v in _POLICY.weights.items() if k in _SLOW_MODULES}
 
 
 async def _fetch_one(ticker: str, as_of: datetime) -> dict:

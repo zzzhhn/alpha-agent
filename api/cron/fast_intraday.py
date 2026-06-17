@@ -37,6 +37,12 @@ from alpha_agent.fusion.rating import (
     compute_confidence, map_to_tier, map_to_tier_with_band,
 )
 from alpha_agent.fusion.weights import DEFAULT_WEIGHTS
+from alpha_agent.fusion.policy import get_active_policy
+
+# Council items #1 + #2: the live policy is an explicit, versioned object
+# (not a bare DEFAULT_WEIGHTS reference), and fusion is coverage-aware (missing
+# core signals damp conviction instead of silently redistributing weight).
+_POLICY = get_active_policy()
 from alpha_agent.orchestrator.alert_detector import detect_alerts
 from alpha_agent.orchestrator.batch_runner import run_batched
 from alpha_agent.signals import (
@@ -253,8 +259,10 @@ async def handler(
             }
             sigs.update(fresh)
 
-        # Combine + rate
-        result = combine(sigs, DEFAULT_WEIGHTS)
+        # Combine + rate via the active weight policy (coverage-aware fusion).
+        result = combine(
+            sigs, _POLICY.weights, coverage_core=_POLICY.core_set()
+        )
         contributing_zs = [
             b["z"] for b in result.breakdown if b["weight_effective"] > 0
         ]
@@ -323,6 +331,10 @@ async def handler(
                 "tier_flip_today": tier_flip_today,
                 "raw_tier": raw_tier,
                 "gex_info": gex_info,
+                # Council #1: stamp the policy that produced this rating + the
+                # core coverage (council #2) so every card is auditable.
+                "weight_policy_id": _POLICY.policy_id,
+                "coverage": result.coverage,
             },
             partial=False,
         )

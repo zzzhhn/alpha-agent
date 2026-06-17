@@ -87,13 +87,28 @@ export function readWeightsOverride(): Record<string, number> | null {
   }
 }
 
+// The always-expected core signals used for coverage-aware fusion. MUST mirror
+// alpha_agent/fusion/policy.py _CORE_SIGNALS. Sparse signals (insider, options,
+// premarket, supply_chain) and weight-0 display-only signals are excluded so
+// their structural absence does not penalize conviction.
+const CORE_SIGNALS = new Set([
+  "factor",
+  "technicals",
+  "analyst",
+  "earnings",
+  "news",
+  "macro",
+]);
+
 // Recompute breakdown weight / weight_effective / contribution under custom
-// weights, mirroring combine()'s drop + renormalize logic exactly. Returns
-// the rewritten rows plus the resulting composite.
+// weights, mirroring combine()'s drop + renormalize logic exactly, then apply
+// the coverage-aware damping (council #2): composite is scaled by
+// sqrt(core coverage) so cards missing core signals carry less conviction.
+// Returns the rewritten rows, the resulting composite, and the coverage.
 export function applyWeightsToBreakdown(
   breakdown: BreakdownEntry[],
   weights: Record<string, number>,
-): { breakdown: BreakdownEntry[]; composite: number } {
+): { breakdown: BreakdownEntry[]; composite: number; coverage: number } {
   const dropped = new Set<string>();
   for (const e of breakdown) {
     const w = weights[e.signal] ?? 0;
@@ -114,7 +129,20 @@ export function applyWeightsToBreakdown(
     composite += contribution;
     return { ...e, weight: wOrig, weight_effective: wEff, contribution };
   });
-  return { breakdown: out, composite };
+  // Coverage-aware damping over the core signal set (mirrors backend
+  // _core_coverage). present core weight / total core weight, weight>0.
+  let coreTotal = 0;
+  let corePresent = 0;
+  for (const e of breakdown) {
+    if (!CORE_SIGNALS.has(e.signal)) continue;
+    const w = weights[e.signal] ?? 0;
+    if (w <= 0) continue;
+    coreTotal += w;
+    if (!dropped.has(e.signal)) corePresent += w;
+  }
+  const coverage = coreTotal > 0 ? corePresent / coreTotal : 1.0;
+  composite *= Math.sqrt(coverage);
+  return { breakdown: out, composite, coverage };
 }
 
 // Recompute a card's composite_score + rating + breakdown under custom

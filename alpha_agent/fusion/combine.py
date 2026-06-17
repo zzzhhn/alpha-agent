@@ -41,6 +41,30 @@ from alpha_agent.fusion.weights import DEFAULT_WEIGHTS, normalize_weights
 class CombineResult:
     composite: float
     breakdown: list[dict[str, Any]] = field(default_factory=list)
+    # Council item #2 (coverage-aware fusion): fraction of CORE signal weight
+    # actually present (1.0 = full core coverage). None when coverage-aware
+    # fusion was not requested (legacy survivor-renormalize behavior).
+    coverage: float | None = None
+
+
+def _core_coverage(
+    weights: Mapping[str, float],
+    drop: set[str],
+    core: set[str],
+) -> float:
+    """Fraction of CORE signal weight present (not dropped).
+
+    Coverage measures whether the always-expected market/fundamental signals
+    are available; sparse/optional signals are excluded from `core` so their
+    structural absence does not penalize conviction. Returns 1.0 when no core
+    signal carries weight (nothing to be missing)."""
+    total = sum(w for n, w in weights.items() if n in core and w > 0)
+    if total <= 0:
+        return 1.0
+    present = sum(
+        w for n, w in weights.items() if n in core and w > 0 and n not in drop
+    )
+    return present / total
 
 
 async def load_weights(pool) -> dict[str, float]:
@@ -68,6 +92,7 @@ def _is_finite_number(x: Any) -> bool:
 def _combine_breakdown_list(
     breakdown_in: list[dict[str, Any]],
     weights: Mapping[str, float],
+    coverage_core: set[str] | None = None,
 ) -> dict[str, Any]:
     """New-style: list of breakdown dicts in, dict envelope out."""
     drop: set[str] = set()
@@ -101,12 +126,21 @@ def _combine_breakdown_list(
         out["weight_effective"] = w_eff
         out["contribution"] = contribution
         breakdown_out.append(out)
-    return {"composite_score": composite, "breakdown": breakdown_out}
+    coverage = None
+    if coverage_core is not None:
+        coverage = _core_coverage(weights, drop, coverage_core)
+        composite *= math.sqrt(coverage)
+    return {
+        "composite_score": composite,
+        "breakdown": breakdown_out,
+        "coverage": coverage,
+    }
 
 
 def _combine_signal_mapping(
     signals: Mapping[str, SignalScore],
     weights: Mapping[str, float],
+    coverage_core: set[str] | None = None,
 ) -> CombineResult:
     """Legacy-style: {name: SignalScore} in, CombineResult out."""
     drop = {n for n, sc in signals.items() if sc["confidence"] == 0.0}
@@ -140,7 +174,13 @@ def _combine_signal_mapping(
             "timestamp": sc["as_of"].isoformat(),
             "error": sc["error"],
         })
-    return CombineResult(composite=composite, breakdown=breakdown)
+    coverage = None
+    if coverage_core is not None:
+        coverage = _core_coverage(weights, drop, coverage_core)
+        composite *= math.sqrt(coverage)
+    return CombineResult(
+        composite=composite, breakdown=breakdown, coverage=coverage
+    )
 
 
 def combine(
@@ -148,6 +188,7 @@ def combine(
     weights: Mapping[str, float] | None = None,
     *,
     weights_override: Mapping[str, float] | None = None,
+    coverage_core: set[str] | None = None,
 ):
     """Compute weighted composite + per-signal breakdown.
 
@@ -170,5 +211,9 @@ def combine(
         resolved_weights = DEFAULT_WEIGHTS
 
     if isinstance(signals_or_breakdown, list):
-        return _combine_breakdown_list(signals_or_breakdown, resolved_weights)
-    return _combine_signal_mapping(signals_or_breakdown, resolved_weights)
+        return _combine_breakdown_list(
+            signals_or_breakdown, resolved_weights, coverage_core=coverage_core
+        )
+    return _combine_signal_mapping(
+        signals_or_breakdown, resolved_weights, coverage_core=coverage_core
+    )
