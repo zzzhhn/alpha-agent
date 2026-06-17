@@ -1,6 +1,6 @@
 """Fast intraday cron tests. Mocks all signal fetches; uses real ephemeral Postgres."""
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import asyncpg
 import pytest
@@ -24,24 +24,40 @@ def _patch_all_signals():
         "calendar",
     ]
 
+    def _score(t, a, name):
+        return SignalScore(
+            ticker=t, z=0.8, raw=0.8, confidence=0.85,
+            as_of=a, source=name, error=None,
+        )
+
     def make(name):
         def _f(t, a):
-            return SignalScore(
-                ticker=t,
-                z=0.8,
-                raw=0.8,
-                confidence=0.85,
-                as_of=a,
-                source=name,
-                error=None,
-            )
+            return _score(t, a, name)
 
         return _f
 
-    return [
-        patch(f"alpha_agent.signals.{n}.fetch_signal", side_effect=make(n))
-        for n in targets
-    ]
+    def amake(name):
+        async def _af(t, a):
+            return _score(t, a, name)
+
+        return _af
+
+    import importlib
+
+    patches = []
+    for n in targets:
+        patches.append(
+            patch(f"alpha_agent.signals.{n}.fetch_signal", side_effect=make(n))
+        )
+        # Async-native signals (e.g. news, political_impact) are invoked by the
+        # cron via `await mod.afetch_signal`, not the sync fetch_signal; patch
+        # both or the real (empty-DB) async fetch leaks a z=0 into the composite.
+        mod = importlib.import_module(f"alpha_agent.signals.{n}")
+        if hasattr(mod, "afetch_signal"):
+            patches.append(
+                patch(f"alpha_agent.signals.{n}.afetch_signal", side_effect=amake(n))
+            )
+    return patches
 
 
 async def test_fast_intraday_writes_full_card(applied_db, monkeypatch):
@@ -51,9 +67,11 @@ async def test_fast_intraday_writes_full_card(applied_db, monkeypatch):
     pg_module._pool_dsn = None
 
     monkeypatch.setenv("DATABASE_URL", applied_db)
+    # The handler selects its universe via get_priority_universe (async), not
+    # the old get_watchlist stub; patch that so the cron builds exactly these.
     monkeypatch.setattr(
-        "alpha_agent.universe.get_watchlist",
-        lambda top_n=100, offset=0: ["AAPL", "MSFT"],
+        "alpha_agent.storage.queries.get_priority_universe",
+        AsyncMock(return_value=["AAPL", "MSFT"]),
     )
     patches = _patch_all_signals()
     for p in patches:
@@ -92,8 +110,8 @@ async def test_fast_intraday_emits_alert_on_rating_change(applied_db, monkeypatc
 
     monkeypatch.setenv("DATABASE_URL", applied_db)
     monkeypatch.setattr(
-        "alpha_agent.universe.get_watchlist",
-        lambda top_n=100, offset=0: ["AAPL"],
+        "alpha_agent.storage.queries.get_priority_universe",
+        AsyncMock(return_value=["AAPL"]),
     )
     today = datetime.now(UTC).date().isoformat()
 

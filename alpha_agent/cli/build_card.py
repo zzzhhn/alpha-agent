@@ -114,7 +114,15 @@ def build_card(
     breakdown = [
         BreakdownEntry(
             signal=row["signal"],
-            z=max(min(row["z"], 3.0), -3.0),
+            # A dropped / no-data signal carries z=None (e.g. supply_chain on an
+            # unscored ticker, or any signal whose fetch failed in graceful
+            # degradation). Pass None through rather than crashing on
+            # min(None, 3.0); only clip a real numeric z.
+            z=(
+                max(min(row["z"], 3.0), -3.0)
+                if isinstance(row["z"], (int, float))
+                else None
+            ),
             weight=row["weight"],
             weight_effective=row["weight_effective"],
             contribution=row["contribution"],

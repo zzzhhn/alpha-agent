@@ -52,6 +52,9 @@ def test_get_me_with_auth(client, monkeypatch):
 def test_post_byok_encrypts_and_stores(client, monkeypatch):
     pool = MagicMock()
     pool.execute = AsyncMock()
+    # The route awaits pool.fetchrow to snapshot prior BYOK coords (B9) before
+    # the upsert; without an AsyncMock 'await MagicMock()' raises TypeError.
+    pool.fetchrow = AsyncMock(return_value=None)
     monkeypatch.setattr("alpha_agent.api.routes.user.get_db_pool",
                         AsyncMock(return_value=pool))
     r = client.post(

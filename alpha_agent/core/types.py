@@ -83,7 +83,11 @@ class BreakdownEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     signal: str
-    z: float = Field(ge=-3.0, le=3.0)
+    # None for a dropped / no-data signal (e.g. supply_chain on an unscored
+    # ticker, or a signal whose fetch failed under graceful degradation),
+    # matching the frontend BreakdownEntry.z (number | null) and the JSONB
+    # breakdown the cron stores. The [-3, 3] clip applies only to a real z.
+    z: float | None = Field(default=None, ge=-3.0, le=3.0)
     weight: float = Field(ge=0.0, le=1.0)
     weight_effective: float = Field(ge=0.0, le=1.0)
     contribution: float

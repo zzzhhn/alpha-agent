@@ -45,6 +45,11 @@ def test_post_propose_returns_dormant_on_starved_history(authed_client):
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["dormant"] is True
-    assert body["proposed"] == 0
-    assert body["evaluated"] == 0
+    # The endpoint is now job-shaped: a dormant short-circuit completes inline
+    # and nests the result under inline_result (the LLM path returns
+    # {job_id, status: "queued"} instead).
+    assert body["status"] == "done"
+    result = body["inline_result"]
+    assert result["dormant"] is True
+    assert result["proposed"] == 0
+    assert result["evaluated"] == 0
