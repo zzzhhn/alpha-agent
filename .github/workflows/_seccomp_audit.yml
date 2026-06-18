@@ -1,0 +1,27 @@
+# TEMPORARY tuning workflow (manual dispatch). Discovers the syscalls the
+# sandbox worker needs on the ubuntu-noble runner kernel so _ALLOWED_SYSCALLS
+# can be completed empirically instead of guessed. Delete once the allow-list
+# is finalized and the sandbox tests are re-enabled in test.yml.
+name: _seccomp_audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev,storage,test]"
+      - name: Audit syscalls (LOG mode)
+        run: |
+          # Make SCMP_ACT_LOG messages land in the ring buffer and start clean.
+          echo "log" | sudo tee /proc/sys/kernel/seccomp/actions_logged || true
+          sudo dmesg -C || true
+          ALPHA_SANDBOX_SECCOMP_ACTION=log python scripts/seccomp_audit.py
+          echo "=== raw seccomp dmesg lines (for cross-check) ==="
+          sudo dmesg | grep -iE "seccomp|syscall=" | tail -60 || true

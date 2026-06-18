@@ -19,6 +19,7 @@ The kind strings match SandboxErrorKind.value (lowercase) so the runner
 can map directly via SandboxErrorKind(reply["kind"])."""
 from __future__ import annotations
 
+import os
 import resource
 import signal
 import sys
@@ -67,25 +68,86 @@ def _install_rlimits() -> None:
         pass  # defensive; RLIMIT_NOFILE is widely supported but wrap for safety
 
 
+# Action applied to syscalls NOT on the allow-list. "kill" (prod default) maps
+# to SCMP_ACT_KILL_PROCESS: a disallowed syscall kills the WHOLE worker, the
+# runner sees a broken pipe and respawns it. (The older SCMP_ACT_KILL_THREAD
+# killed only the offending thread, which could leave the worker's main thread
+# blocked on the dead thread's futex -> the runner saw an IPC timeout instead of
+# a clean death.) Override via the ALPHA_SANDBOX_SECCOMP_ACTION env var:
+#   "log" -> SCMP_ACT_LOG: allow every syscall but log the un-allow-listed ones
+#            to the audit ring buffer. Audit/tuning mode used to discover the
+#            syscalls a new kernel/glibc/numpy build needs (read them back from
+#            `dmesg`, add the legitimate ones below), without killing the worker.
+#   "off" -> skip seccomp entirely (RLIMIT hardening still applies).
+_SECCOMP_ACTION = os.environ.get("ALPHA_SANDBOX_SECCOMP_ACTION", "kill").strip().lower()
+
+# Syscalls a CPython 3.12 + numpy 2.x worker legitimately makes AFTER hardening,
+# on x86-64 Linux (glibc 2.39 / ubuntu-noble): memory management, futex/thread
+# sync, signal handling (the per-call SIGALRM timeout), pipe + POSIX
+# shared-memory IO, randomness, time, and process/resource lookups. The
+# genuinely dangerous escape vectors are deliberately ABSENT, so they hit the
+# default-deny action: execve/execveat (no new programs), the socket family (no
+# network), ptrace / process_vm_* (no cross-process memory), and module / mount
+# / namespace / reboot ops. The operator is additionally boxed at the Python
+# layer (restricted builtins + numpy-only imports), so it cannot even reach
+# allow-listed syscalls like openat/clone directly; seccomp is the backstop.
+#
+# NOTE: shm_open() is glibc-implemented as openat("/dev/shm/<name>"), so openat
+# MUST be allowed for shared-memory IPC to work at all -- its absence is why the
+# original minimal list KILLed the worker on the very first request on Linux.
+_ALLOWED_SYSCALLS = (
+    # --- memory ---
+    "read", "write", "readv", "writev", "pread64", "pwrite64",
+    "mmap", "mremap", "munmap", "mprotect", "brk", "madvise",
+    # --- futex / threads / scheduling ---
+    "futex", "rseq", "set_robust_list", "get_robust_list", "set_tid_address",
+    "clone", "clone3", "sched_yield", "sched_getaffinity", "sched_setaffinity",
+    "membarrier", "getcpu",
+    # --- signals (per-call SIGALRM timeout) ---
+    "rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "sigreturn",
+    "rt_sigtimedwait", "sigaltstack", "setitimer", "getitimer", "alarm",
+    "tgkill", "restart_syscall",
+    # --- fds: pipe IPC + shared-memory create/attach ---
+    "close", "dup", "dup2", "dup3", "fcntl", "lseek", "ftruncate",
+    "fstat", "newfstatat", "statx", "lstat", "stat",
+    "openat", "open", "unlink", "unlinkat", "readlink", "readlinkat",
+    "pipe2", "poll", "ppoll", "select", "pselect6",
+    "epoll_create1", "epoll_ctl", "epoll_wait", "epoll_pwait", "eventfd2",
+    "memfd_create", "getdents64",
+    # --- randomness (glibc / PYTHONHASHSEED) ---
+    "getrandom",
+    # --- time ---
+    "clock_gettime", "clock_getres", "clock_nanosleep", "nanosleep",
+    "gettimeofday", "time",
+    # --- process / resource info ---
+    "getpid", "gettid", "getuid", "geteuid", "getgid", "getegid",
+    "getrlimit", "prlimit64", "getrusage", "sysinfo", "uname", "arch_prctl",
+    # --- exit ---
+    "exit", "exit_group",
+)
+
+
+def _seccomp_default_action(seccomp):
+    """Resolve the configured default (non-allow-listed) action."""
+    if _SECCOMP_ACTION == "log":
+        return seccomp.LOG
+    if _SECCOMP_ACTION == "allow":
+        return seccomp.ALLOW
+    # prod default: kill the whole process on a disallowed syscall.
+    return getattr(seccomp, "KILL_PROCESS", seccomp.KILL)
+
+
 def _install_seccomp_linux() -> None:
-    """Allow only the minimal syscall set needed for numpy compute + shm IO.
-    Any other syscall hits the default-KILL path and the worker dies; the
-    runner sees a broken pipe + respawns."""
+    """Default-deny syscall filter: allow only _ALLOWED_SYSCALLS; everything
+    else hits the default action (KILL_PROCESS in prod). See _ALLOWED_SYSCALLS
+    and _SECCOMP_ACTION for the threat model and the audit/tuning escape hatch."""
     import pyseccomp as seccomp  # noqa: PLC0415 - lazy import; macOS skips this branch
-    f = seccomp.SyscallFilter(defaction=seccomp.KILL)
-    for name in (
-        "read", "write", "mmap", "mremap", "munmap", "brk", "futex",
-        "sigreturn", "rt_sigreturn", "rt_sigaction", "rt_sigprocmask",
-        "exit_group", "exit", "shm_open", "shm_unlink",
-        "fstat", "newfstatat", "lseek", "close",
-        "getpid", "gettid",
-        "clock_gettime", "clock_nanosleep",
-    ):
+    f = seccomp.SyscallFilter(defaction=_seccomp_default_action(seccomp))
+    for name in _ALLOWED_SYSCALLS:
         try:
             f.add_rule(seccomp.ALLOW, name)
         except Exception:
-            pass  # syscall not available on this kernel/arch; skip silently is OK
-                  # because the default is KILL, so missing rules just stay blocked
+            pass  # syscall absent on this kernel/arch; default-deny keeps it blocked
     f.load()
 
 
@@ -93,9 +155,22 @@ def _harden_once() -> None:
     global _HARDENED
     if _HARDENED:
         return
+    if _SECCOMP_ACTION == "off" or sys.platform != "linux":
+        _install_rlimits()
+        _HARDENED = True
+        return
+    # Resolve libseccomp BEFORE _install_rlimits() drops RLIMIT_NPROC to 0.
+    # pyseccomp binds the C library at import time via
+    # ctypes.util.find_library("seccomp"), which resolves the soname by forking
+    # a helper subprocess (gcc / `ldconfig -p`). Once NPROC is 0 that fork fails,
+    # find_library returns None, and pyseccomp raises RuntimeError("Unable to
+    # find libseccomp"). Importing here (module cache) makes the later lazy
+    # import inside _install_seccomp_linux() a no-op: the filter still loads at
+    # the same point with identical security posture, but the library is
+    # resolved while forking is still allowed.
+    import pyseccomp  # noqa: F401, PLC0415 - pre-resolve before rlimits drop NPROC
     _install_rlimits()
-    if sys.platform == "linux":
-        _install_seccomp_linux()
+    _install_seccomp_linux()
     _HARDENED = True
 
 
