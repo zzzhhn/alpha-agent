@@ -99,6 +99,7 @@ _ALLOWED_SYSCALLS = (
     # --- memory ---
     "read", "write", "readv", "writev", "pread64", "pwrite64",
     "mmap", "mremap", "munmap", "mprotect", "brk", "madvise",
+    "mbind",  # glibc malloc sets a NUMA policy when a new arena grows (error path)
     # --- futex / threads / scheduling ---
     "futex", "rseq", "set_robust_list", "get_robust_list", "set_tid_address",
     "clone", "clone3", "sched_yield", "sched_getaffinity", "sched_setaffinity",
@@ -108,6 +109,11 @@ _ALLOWED_SYSCALLS = (
     "rt_sigtimedwait", "sigaltstack", "setitimer", "getitimer", "alarm",
     "tgkill", "restart_syscall",
     # --- fds: pipe IPC + shared-memory create/attach ---
+    # ioctl: CPython's io layer calls isatty() (ioctl TCGETS) when the exception
+    # machinery touches stderr on the error path. Safe here: the operator cannot
+    # reach ioctl from Python (no os/fcntl/termios import), and the worker has no
+    # controlling TTY (stdio are pipes), so TIOCSTI-style injection is impossible.
+    "ioctl",
     "close", "dup", "dup2", "dup3", "fcntl", "lseek", "ftruncate",
     "fstat", "newfstatat", "statx", "lstat", "stat",
     "openat", "open", "unlink", "unlinkat", "readlink", "readlinkat",
