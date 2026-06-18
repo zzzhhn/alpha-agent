@@ -37,24 +37,17 @@ jobs:
         # singleton-pool / env / config-cache / calibration-cache cross-test
         # pollution (autouse reset fixtures in tests/conftest.py), openapi
         # snapshot drift (regenerated), build_card z=None handling, async-fetch +
-        # dead-monkeypatch mismatches, and a date-aged-out fixture. A real test
-        # regression now fails CI.
-        #
-        # The three worker-spawning seccomp sandbox files are TEMPORARILY excluded
-        # again: the Linux hardening fix (resolve libseccomp before the
-        # RLIMIT_NPROC drop + completed allow-list) makes the success path pass,
-        # but the error path (an op that raises -> traceback.format_exc in the
-        # worker) still uses one or more syscalls the allow-list misses, so the
-        # worker is KILLed there. Keep main green while that error-path gap is
-        # closed via scripts/seccomp_audit.py (the _seccomp_audit workflow), then
-        # re-enable. They still run locally (macOS no-ops seccomp).
+        # dead-monkeypatch mismatches, and a date-aged-out fixture. The seccomp
+        # sandbox tests (worker-spawning) run here too: the SandboxRunner's Linux
+        # hardening was fixed (resolve libseccomp before the RLIMIT_NPROC drop +
+        # a syscall allow-list completed for BOTH the success and the error/
+        # traceback paths), verified against the runner kernel via
+        # scripts/seccomp_audit.py / the _seccomp_audit workflow (MISSING_SYSCALLS
+        # = none). A real test regression now fails CI.
         env:
           DATABASE_URL: postgres://postgres:testpwd@localhost:5432/alpha_test
         run: |
           pytest tests/ \
             --ignore=tests/test_factor_db_autoinit.py \
             --ignore=tests/test_report.py \
-            --ignore=tests/evolution/sandbox/test_canned_tests.py \
-            --ignore=tests/evolution/sandbox/test_runner.py \
-            --ignore=tests/evolution/sandbox/test_worker_smoke.py \
             --cov=alpha_agent -m "not slow" -v
