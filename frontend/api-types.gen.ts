@@ -1823,40 +1823,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/factors": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Factors */
-        get: operations["list_factors_api_v1_factors_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/factors/decay_alerts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Decay Alerts */
-        get: operations["decay_alerts_api_v1_factors_decay_alerts_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/factors/library": {
         parameters: {
             query?: never;
@@ -1876,24 +1842,6 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/factors/{factor_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Factor */
-        get: operations["get_factor_api_v1_factors__factor_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Factor */
-        delete: operations["delete_factor_api_v1_factors__factor_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2509,25 +2457,6 @@ export interface components {
             /** Universe Id */
             universe_id: string;
         };
-        /** DecayAlert */
-        DecayAlert: {
-            /** Baseline Ic */
-            baseline_ic: number;
-            /** Decay Pct */
-            decay_pct: number;
-            /** Expression */
-            expression: string;
-            /** Factor Id */
-            factor_id: string;
-            /** Latest Ic */
-            latest_ic: number;
-            /** Latest Run At */
-            latest_run_at: string;
-            /** N Runs */
-            n_runs: number;
-            /** Name */
-            name: string;
-        };
         /** EnrichResponse */
         EnrichResponse: {
             /** Enriched */
@@ -2811,12 +2740,6 @@ export interface components {
             /** Walk Forward */
             walk_forward?: components["schemas"]["_WalkForwardWindow"][] | null;
         };
-        /** FactorDetailResponse */
-        FactorDetailResponse: {
-            factor: components["schemas"]["FactorSummary"];
-            /** Runs */
-            runs: components["schemas"]["FactorRunSummary"][];
-        };
         /** FactorDiagnostic */
         FactorDiagnostic: {
             /** Expression */
@@ -2829,52 +2752,6 @@ export interface components {
             n_eligible: number;
             /** Used Weight */
             used_weight: number;
-        };
-        /** FactorRunSummary */
-        FactorRunSummary: {
-            /** Alpha Annualized */
-            alpha_annualized?: number | null;
-            /** Alpha P */
-            alpha_p?: number | null;
-            /** Alpha T */
-            alpha_t?: number | null;
-            /** Benchmark Ticker */
-            benchmark_ticker: string;
-            /** Beta */
-            beta?: number | null;
-            /** Bottom Pct */
-            bottom_pct: number;
-            /** Daily Ic */
-            daily_ic?: number[] | null;
-            /** Direction */
-            direction: string;
-            /** Factor Id */
-            factor_id: string;
-            /** Id */
-            id: string;
-            /** Neutralize */
-            neutralize: string;
-            /**
-             * Overfit Flag
-             * @default false
-             */
-            overfit_flag: boolean;
-            /** Panel Version */
-            panel_version: string;
-            /** R Squared */
-            r_squared?: number | null;
-            /** Ran At */
-            ran_at?: string | null;
-            /** Test Ic */
-            test_ic: number;
-            /** Test Psr */
-            test_psr?: number | null;
-            /** Test Sharpe */
-            test_sharpe: number;
-            /** Top Pct */
-            top_pct: number;
-            /** Transaction Cost Bps */
-            transaction_cost_bps: number;
         };
         /**
          * FactorSpec
@@ -2910,48 +2787,6 @@ export interface components {
              * @enum {string}
              */
             universe: "CSI300" | "CSI500" | "SP500" | "custom";
-        };
-        /** FactorSummary */
-        FactorSummary: {
-            /** Ast Hash */
-            ast_hash: string;
-            /** Created At */
-            created_at?: string | null;
-            /** Expression */
-            expression: string;
-            /** Hypothesis */
-            hypothesis?: string | null;
-            /** Id */
-            id: string;
-            /** Intuition */
-            intuition?: string | null;
-            /** Last Alpha P */
-            last_alpha_p?: number | null;
-            /** Last Alpha T */
-            last_alpha_t?: number | null;
-            /** Last Benchmark */
-            last_benchmark?: string | null;
-            /** Last Direction */
-            last_direction?: string | null;
-            /** Last Neutralize */
-            last_neutralize?: string | null;
-            /** Last Overfit Flag */
-            last_overfit_flag?: boolean | null;
-            /** Last Psr */
-            last_psr?: number | null;
-            /** Last Test Ic */
-            last_test_ic?: number | null;
-            /** Last Test Sharpe */
-            last_test_sharpe?: number | null;
-            /**
-             * N Runs
-             * @default 0
-             */
-            n_runs: number;
-            /** Name */
-            name: string;
-            /** Updated At */
-            updated_at?: string | null;
         };
         /** FieldCoverage */
         FieldCoverage: {
@@ -6470,70 +6305,6 @@ export interface operations {
             };
         };
     };
-    list_factors_api_v1_factors_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FactorSummary"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    decay_alerts_api_v1_factors_decay_alerts_get: {
-        parameters: {
-            query?: {
-                rolling_window_days?: number;
-                min_runs?: number;
-                decay_threshold?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DecayAlert"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     factors_library_api_v1_factors_library_get: {
         parameters: {
             query?: {
@@ -6542,70 +6313,6 @@ export interface operations {
             };
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_factor_api_v1_factors__factor_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                factor_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FactorDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_factor_api_v1_factors__factor_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                factor_id: string;
-            };
             cookie?: never;
         };
         requestBody?: never;
