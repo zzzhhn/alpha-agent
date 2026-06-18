@@ -34,18 +34,34 @@ def _run_representative_ops() -> list[str]:
     runner = SandboxRunner()
     outcomes: list[str] = []
     x = np.arange(256, dtype=np.float64)
+    # Success paths.
     ops = [
         ("scale", "def scale(x):\n    return x * 2.0 + 1.0\n"),
         ("reduce", "def reduce(x):\n    import numpy as np\n    return np.cumsum(x)\n"),
         ("matmul", "def matmul(x):\n    import numpy as np\n"
                    "    m = x[:64].reshape(8, 8)\n    return (m @ m).ravel()\n"),
     ]
+    # Error paths: an op that RAISES exercises traceback.format_exc() inside the
+    # worker, which the success paths never touch -- it can need syscalls (e.g.
+    # source-line lookup) the success-only allow-list misses, which is exactly
+    # how the first audit pass left the worker getting KILLed on the error path.
+    raise_ops = [
+        ("raise_name", "def raise_name(x):\n    return undefined_name\n"),
+        ("raise_value", "def raise_value(x):\n    raise ValueError('boom')\n"),
+        ("crash_nan", "def crash_nan(x):\n    import numpy as np\n"
+                      "    if np.isnan(x).any():\n        raise ValueError('no NaN')\n"
+                      "    raise ValueError('forced')\n"),
+    ]
     for name, code in ops:
         res = runner.evaluate(code, name, args={"x": x})
-        if isinstance(res, np.ndarray):
-            outcomes.append(f"{name}: ok shape={res.shape}")
-        else:
-            outcomes.append(f"{name}: ERROR {res!r}")
+        outcomes.append(f"{name}: ok shape={res.shape}" if isinstance(res, np.ndarray)
+                        else f"{name}: ERROR {res!r}")
+    for name, code in raise_ops:
+        res = runner.evaluate(code, name, args={"x": x})
+        # For raise ops, a structured SandboxError (NOT 'worker died') is the
+        # healthy outcome: it means the worker survived hardening AND formatted
+        # the traceback without hitting a blocked syscall.
+        outcomes.append(f"{name}: {'SURVIVED->' if not isinstance(res, np.ndarray) else 'ndarray?? '}{res!r}")
     runner.close()
     return outcomes
 
