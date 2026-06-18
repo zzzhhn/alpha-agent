@@ -72,7 +72,20 @@ export interface RatingCard {
   // Sentiment / Catalyst / Insider / Flow), each A+ to F derived from
   // breakdown z-scores. Empty dimensions render as "—".
   dimension_grades?: Record<string, string>;
+  // Per-ticker directional consistency: how often the predicted tier matched
+  // the next trading day's move, over trailing windows. Each value is a
+  // fraction in [0,1] or null = insufficient realized history (UI shows "—").
+  consistency?: ConsistencyWindows | null;
   news_items?: NewsItemLite[];
+}
+
+// d5 = past 5 trading days, m1 = ~1 month (21d), y1 = ~1 year (252d),
+// hist = all-time. null when the window lacks enough realized predictions.
+export interface ConsistencyWindows {
+  d5: number | null;
+  m1: number | null;
+  y1: number | null;
+  hist: number | null;
 }
 
 export interface GexInfo {

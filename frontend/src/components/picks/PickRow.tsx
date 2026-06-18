@@ -64,18 +64,28 @@ export default function PickRow({
       : hit;
   const sign = composite >= 0 ? "+" : "";
 
-  // agreement = 1/(1+variance) of the signal z's (fusion/rating.py): how
-  // aligned the signals are on this name. Below 0.5 the variance exceeds 1.0 —
-  // the signals span more than a full sigma, i.e. they disagree more than they
-  // agree. That is the "scrutinize before acting" case, flagged in tm-warn.
-  // The cutoff is the var=1 inflection of 1/(1+var), not an arbitrary line
-  // (rule 9 justification). hit = calibrated historical hit-rate, shown small.
-  const AGR_CAUTION = 0.5;
-  const lowAgr = agr < AGR_CAUTION;
+  // agreement = 1/(1+variance) of the signal z's (fusion/rating.py): the
+  // conviction headline (how aligned the signals are). hit = calibrated
+  // historical 5d hit-rate. Both moved into the consistency cell's tooltip now
+  // that the column itself shows the multi-window directional hit-rate.
   const agrPct = Math.round(agr * 100);
   const hitPct = Math.round(hit * 100);
-  const agrBar = lowAgr ? "bg-tm-warn" : "bg-tm-fg-2/50";
-  const agrText = lowAgr ? "text-tm-warn" : "text-tm-fg-2";
+
+  // Directional consistency: predicted tier vs next-day actual move, hit-rate
+  // over trailing windows. null -> "—" (insufficient realized history). Colour
+  // only clearly-off-coinflip values (>=55 / <=45 around the structural ~50%);
+  // the rest stay neutral so noisy near-50% reads do not over-claim an edge.
+  const CONS_WINDOWS = [
+    { key: "d5", labelKey: "picks_table.cons_5d" },
+    { key: "m1", labelKey: "picks_table.cons_1m" },
+    { key: "y1", labelKey: "picks_table.cons_1y" },
+    { key: "hist", labelKey: "picks_table.cons_hist" },
+  ] as const;
+  const consVals = CONS_WINDOWS.map((w) => {
+    const v = card.consistency?.[w.key];
+    const ok = typeof v === "number" && isFinite(v);
+    return { label: t(locale, w.labelKey), pct: ok ? Math.round(v * 100) : null };
+  });
 
   const drivers = (card.top_drivers ?? [])
     .slice(0, 3)
@@ -168,24 +178,47 @@ export default function PickRow({
         {composite.toFixed(2)}
         <span className="text-tm-muted">σ</span>
       </td>
-      <td className="px-3 py-2.5 font-tm-mono text-xs tabular-nums">
-        <span
-          className="flex flex-col items-end gap-0.5"
-          title={t(locale, "picks_table.confidence_tooltip")}
+      <td className="px-3 py-2.5 font-tm-mono text-[11px] tabular-nums">
+        <HoverTip
+          content={
+            t(locale, "picks_table.consistency_tooltip") +
+            " · " +
+            t(locale, "picks_table.agreement_label") +
+            " " +
+            agrPct +
+            "% · " +
+            t(locale, "picks_table.hitrate_label") +
+            " " +
+            hitPct +
+            "%"
+          }
+          placement="bottom"
         >
-          <span className="flex items-center justify-end gap-1.5">
-            <span className="relative inline-block h-1 w-10 overflow-hidden rounded-sm bg-tm-rule">
+          <span className="grid grid-cols-4 gap-x-1.5 text-right cursor-help">
+            {consVals.map((c) => (
+              <span key={c.label} className="text-[10px] text-tm-muted">
+                {c.label}
+              </span>
+            ))}
+            {consVals.map((c) => (
               <span
-                className={clsx("absolute inset-y-0 left-0 rounded-sm", agrBar)}
-                style={{ width: `${agrPct}%` }}
-              />
-            </span>
-            <span className={clsx("w-8 text-right", agrText)}>{agrPct}%</span>
+                key={c.label + "_v"}
+                className={clsx(
+                  "tabular-nums",
+                  c.pct === null
+                    ? "text-tm-muted"
+                    : c.pct >= 55
+                      ? "text-tm-pos"
+                      : c.pct <= 45
+                        ? "text-tm-neg"
+                        : "text-tm-fg-2",
+                )}
+              >
+                {c.pct === null ? "—" : `${c.pct}%`}
+              </span>
+            ))}
           </span>
-          <span className="text-[11px] text-tm-muted">
-            {t(locale, "picks_table.hitrate_label")} {hitPct}%
-          </span>
-        </span>
+        </HoverTip>
       </td>
       <td className="px-3 py-2.5">
         <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} hidden={hiddenDims} />

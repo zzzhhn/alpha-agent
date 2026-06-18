@@ -61,6 +61,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/_health/data_sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Data Sources
+         * @description Row count + last-write per ingest source, so the data page can show how
+         *     much each source has actually pulled (not just that it's configured). FRED
+         *     macro is fetched live per request (no stored table), hence null counts.
+         */
+        get: operations["health_data_sources_api__health_data_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/_health/news_freshness": {
         parameters: {
             query?: never;
@@ -121,14 +143,107 @@ export interface paths {
          * @description Per-signal error summary + live IC, current weight, and tier color.
          *
          *     Tier rule:
-         *       red     = reason == 'auto_dropped_low_ic' OR weight_current == 0.0
-         *       green   = min(ic_30d, ic_60d, ic_90d) > 0.02
-         *       yellow  = 0.01 < min(ics) <= 0.02
-         *       unknown = no IC data and not dropped
+         *       red                = reason == 'auto_dropped_low_ic' OR weight_current == 0.0
+         *       green              = min(ic_30d, ic_60d, ic_90d) > 0.02
+         *       yellow             = 0.01 < min(ics) <= 0.02
+         *       insufficient_data  = no IC history yet AND no weight row yet
+         *                            (framework alive, IC backtest needs > 10 obs
+         *                            per window which require ~30 trading days)
+         *       unknown            = mixed state not matching above (catch-all)
          */
         get: operations["health_signals_api__health_signals_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/cache_stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cache Stats Endpoint
+         * @description B3 (2026-05-19) LLM cache observability — per-user rows + bytes +
+         *     last-write timestamp. Auth-gated so a public deploy never leaks
+         *     other users' cache pressure to a probing endpoint. A purge knob is
+         *     intentionally absent — purge runs lazily on read filter; a future
+         *     cron can call llm.cache.purge_expired() if storage grows.
+         */
+        get: operations["cache_stats_endpoint_api_admin_cache_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Config Knobs
+         * @description List all engine_config rows with decoded values.
+         *
+         *     Unauthenticated (read-only, same policy as /last_refresh).
+         */
+        get: operations["get_config_knobs_api_admin_config_get"];
+        put?: never;
+        /**
+         * Set Config Knob
+         * @description Upsert a single engine_config knob + journal the change.
+         *
+         *     Only keys present in config_store.DEFAULTS are accepted (400 otherwise).
+         */
+        post: operations["set_config_knob_api_admin_config_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/last_refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Last Refresh
+         * @description Lightweight GET so the frontend can show 'last refreshed N min ago'
+         *     without needing auth or write permission.
+         */
+        get: operations["last_refresh_api_admin_last_refresh_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger Refresh */
+        post: operations["trigger_refresh_api_admin_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -194,6 +309,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/compute_ic_annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Compute Ic Annotations
+         * @description Traceability (principle 11): recompute IC change annotations after the
+         *     daily IC refresh so the /evolution chart markers stay current without a
+         *     manual trigger. Idempotent upsert; deterministic, no LLM.
+         */
+        get: operations["cron_compute_ic_annotations_api_cron_compute_ic_annotations_get"];
+        put?: never;
+        /**
+         * Cron Compute Ic Annotations
+         * @description Traceability (principle 11): recompute IC change annotations after the
+         *     daily IC refresh so the /evolution chart markers stay current without a
+         *     manual trigger. Idempotent upsert; deterministic, no LLM.
+         */
+        post: operations["cron_compute_ic_annotations_api_cron_compute_ic_annotations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/daily_prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Daily Prices
+         * @description Append daily closes for the universe into daily_prices (the
+         *     forward-return source for the walk-forward IC engine). `period` defaults
+         *     to the daily "5d" append; pass a longer period (e.g. 3y) over offset
+         *     slices to backfill history from the production backend.
+         */
+        get: operations["cron_daily_prices_api_cron_daily_prices_get"];
+        put?: never;
+        /**
+         * Cron Daily Prices
+         * @description Append daily closes for the universe into daily_prices (the
+         *     forward-return source for the walk-forward IC engine). `period` defaults
+         *     to the daily "5d" append; pass a longer period (e.g. 3y) over offset
+         *     slices to backfill history from the production backend.
+         */
+        post: operations["cron_daily_prices_api_cron_daily_prices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/fast_intraday": {
         parameters: {
             query?: never;
@@ -243,6 +416,40 @@ export interface paths {
         put?: never;
         /** Ic Backtest Monthly */
         post: operations["ic_backtest_monthly_api_cron_ic_backtest_monthly_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/methodology_proposer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Methodology Proposer
+         * @description Phase 2a: daily statistics-driven methodology proposer. Enumerates
+         *     single-knob config candidates, validates each on purged walk-forward OOS
+         *     folds with trial-count deflation, and queues survivors as pending
+         *     config_change_log rows for human approval (Phase 2b). Stays dormant
+         *     (proposes nothing) until enough daily_prices history accrues to validate.
+         *     Nothing auto-applies.
+         */
+        get: operations["cron_methodology_proposer_api_cron_methodology_proposer_get"];
+        put?: never;
+        /**
+         * Cron Methodology Proposer
+         * @description Phase 2a: daily statistics-driven methodology proposer. Enumerates
+         *     single-knob config candidates, validates each on purged walk-forward OOS
+         *     folds with trial-count deflation, and queues survivors as pending
+         *     config_change_log rows for human approval (Phase 2b). Stays dormant
+         *     (proposes nothing) until enough daily_prices history accrues to validate.
+         *     Nothing auto-applies.
+         */
+        post: operations["cron_methodology_proposer_api_cron_methodology_proposer_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -376,6 +583,463 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/evolution/_compute_ic_annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compute Ic Annotations Endpoint
+         * @description One-time/admin trigger to (re)compute IC change annotations from
+         *     signal_ic_history. Idempotent. Cron wiring is a follow-up; for now this
+         *     is invoked manually like the other admin maintenance endpoints.
+         */
+        post: operations["compute_ic_annotations_endpoint_api_evolution__compute_ic_annotations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calibration
+         * @description Most-recent confidence-calibration snapshot (isotonic map + buckets).
+         */
+        get: operations["calibration_api_evolution_calibration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Changes
+         * @description Recent signal-weight config changes (auto_promote / auto_rollback / etc.).
+         */
+        get: operations["changes_api_evolution_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/ic_annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ic Annotations
+         * @description Traceability overlay for the IC chart: the material day-over-day IC
+         *     moves with their structured, correlation-grounded facts. Unauthed read,
+         *     matching the other /api/evolution GETs.
+         */
+        get: operations["ic_annotations_api_evolution_ic_annotations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/ic_trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ic Trend
+         * @description IC time-series for every signal over the requested rolling window, at a
+         *     given forward horizon (council #4). Defaults to the 5d reference horizon so
+         *     existing callers are unchanged; pass horizon_days to see a signal validated
+         *     at its native horizon (factor 60d, news 3d, ...).
+         */
+        get: operations["ic_trend_api_evolution_ic_trend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proposals
+         * @description List all pending methodology proposals from the proposer.
+         */
+        get: operations["proposals_api_evolution_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/proposals/{proposal_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve
+         * @description Apply the proposed knob change and mark the proposal approved.
+         */
+        post: operations["approve_api_evolution_proposals__proposal_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject
+         * @description Mark the proposal rejected without applying any config change.
+         */
+        post: operations["reject_api_evolution_proposals__proposal_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/proposals/{proposal_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rollback
+         * @description Re-apply the old_value of an approved proposal, journaling a rollback row.
+         */
+        post: operations["rollback_api_evolution_proposals__proposal_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/weights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Weights
+         * @description Current live + shadow weights for every signal.
+         */
+        get: operations["weights_api_evolution_weights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/_apply_migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Apply Migrations
+         * @description One-time admin trigger to apply pending DB migrations (V017+).
+         *
+         *     Vercel deploys don't auto-run migrations and the user can't direct-
+         *     connect to Neon from China egress, so the migration step has to
+         *     happen via the backend itself. apply_migrations() is idempotent
+         *     (schema_migrations table tracks applied versions) — safe to call
+         *     repeatedly. Returns the list of versions applied in this call.
+         */
+        post: operations["post_apply_migrations_api_factor_lab__apply_migrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/_demo_seed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Demo Seed
+         * @description Insert 3 demo pending proposals so PendingProposalsSection has visible
+         *     rows for UX verification. Refuses to seed if any pending rows already
+         *     exist — re-trigger only after the existing ones are approved/rejected.
+         *
+         *     This is a temporary admin tool. Safe to call repeatedly: idempotent
+         *     against existing pending state.
+         */
+        post: operations["post_demo_seed_api_factor_lab__demo_seed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/diagnostic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Diagnostic */
+        get: operations["get_diagnostic_api_factor_lab_diagnostic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Propose Job
+         * @description Poll endpoint for the propose job state. Returns the row keyed
+         *     by job_id. 404 if not found; 403 if owned by a different user.
+         *
+         *     Polled by the frontend every 3s for up to 5min. Each call is short
+         *     (<100ms typical) so even an unstable connection has 100 chances to
+         *     succeed before the client gives up.
+         */
+        get: operations["get_propose_job_api_factor_lab_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/live-expression": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Live Expression
+         * @description Manually set the live factor expression (admin gate).
+         *
+         *     Validates the expression via factor_ast (same allow-lists as the
+         *     proposer / backtester) and writes it via set_config. Returns the
+         *     persisted expression + a timestamp.
+         *
+         *     On invalid expression (unknown operator, unknown operand, syntax error)
+         *     returns 400 with FastAPI's standard {detail: ...} envelope so the front
+         *     end errorParse helper can surface the upstream message.
+         */
+        post: operations["post_live_expression_api_factor_lab_live_expression_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Proposals
+         * @description List factor proposals. Optional ?status filter. Unauthed read (matches
+         *     the existing /diagnostic and the Phase 2c evolution router precedent).
+         */
+        get: operations["list_proposals_api_factor_lab_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/proposals/{proposal_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Proposal
+         * @description Approve a pending proposal:
+         *     1. Register each new operator in extended_operators (ON CONFLICT DO NOTHING).
+         *     2. set_config('factor.custom_expression', proposal.expression) via the
+         *        shared journal (config_change_log gets a source='approved' row that
+         *        the rollback handler later reads).
+         *     3. UPDATE proposal status=approved + decided_at + decided_by.
+         *     4. refresh_allowed_ops so the AST validator accepts the new operator
+         *        names from the next request; failure surfaces in response.refresh_error
+         *        (anti-silent: do not log + pretend success).
+         */
+        post: operations["approve_proposal_api_factor_lab_proposals__proposal_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Proposal
+         * @description Mark the proposal rejected. 404 on missing/decided rows (mirror the
+         *     Phase 2b reject 404 symmetry fix; silent ok=true would be misleading).
+         */
+        post: operations["reject_proposal_api_factor_lab_proposals__proposal_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/proposals/{proposal_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rollback Proposal
+         * @description Revert factor.custom_expression to its pre-approval value, sourced from
+         *     the config_change_log row that the approve handler wrote (source='approved',
+         *     changed_at <= proposal.decided_at, most recent). Operators stay registered
+         *     in extended_operators (audit + reproducibility, per the Phase 3 spec).
+         */
+        post: operations["rollback_proposal_api_factor_lab_proposals__proposal_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Propose
+         * @description Queue a propose job and return 202 immediately with a job_id.
+         *
+         *     The actual LLM call + per-candidate validation + DSR scoring run as
+         *     a FastAPI BackgroundTask after the response is sent. The frontend
+         *     polls GET /jobs/{id} every 3s for the terminal state.
+         *
+         *     This async refactor (Phase D, 2026-05-26) replaces the synchronous
+         *     POST that previously held the connection open for 30-180s. Under
+         *     China egress + local TUN proxy the long fetch was being dropped
+         *     mid-response (Safari surfaced as 'Load failed' even though Vercel
+         *     logged 200), forcing the user to disable VPN to get propose to
+         *     return. Polling short-lived GETs sidesteps the idle-connection
+         *     drop entirely.
+         *
+         *     Dormant short-circuit (history below cost-guard) still returns 200
+         *     + a synthetic 'done' job inline so the client doesn't waste a poll
+         *     cycle on a result that's already known.
+         */
+        post: operations["post_propose_api_factor_lab_propose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -385,6 +1049,55 @@ export interface paths {
         };
         /** Health */
         get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/healthz/ast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Healthz Ast
+         * @description Phase 3a: surface the AST whitelist size + any startup-refresh
+         *     error. If allowed_ops_refresh_error is non-null the union with
+         *     extended_operators did not load (built-ins still serve, but newly
+         *     approved operators will be rejected until the next refresh).
+         *     Lives under /api/ so the Vercel rewrite forwards it to FastAPI;
+         *     a sibling /healthz/routers exists but is currently only reachable
+         *     in local dev (the rewrite is /api/(.*) only).
+         */
+        get: operations["healthz_ast_api_healthz_ast_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/healthz/sandbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Healthz Sandbox
+         * @description Phase 3b: report SandboxRunner pool health. The pool is created
+         *     lazily on first call; idle pool is normal. If pool instantiation
+         *     fails (e.g. multiprocessing blocked in this runtime), the response
+         *     still returns 200 with init_error populated so callers can see why.
+         */
+        get: operations["healthz_sandbox_api_healthz_sandbox_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -419,8 +1132,76 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Enrich */
+        /**
+         * Enrich
+         * @description Run the BYOK LLM enrichment over un-processed news_items for `ticker`.
+         *
+         *     `lang` controls the language of the per-headline reasoning text the LLM
+         *     writes into news_items.reasoning_text (V007 column). The frontend
+         *     NewsBlock passes the user's active locale so the analyst commentary
+         *     matches the UI; older clients that don't send it default to English.
+         */
         post: operations["enrich_api_news_enrich__ticker__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/news/enrich/{ticker}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enrich Stream
+         * @description SSE-streaming sibling of `enrich` (mirrors the Rich Brief streaming
+         *     pattern).
+         *
+         *     Streams one event per enrichment batch as it completes so the news list
+         *     fills in progressively *in place* (no full-page reload). Auth is
+         *     required; the BYOK key is fetched + decrypted server-side from the
+         *     authenticated user's stored credentials, exactly like
+         *     `brief.post_brief_stream` — the key never leaves the server and decrypt
+         *     failures degrade into an SSE `error` event rather than a 500 to a blank
+         *     UI. No-key still returns a pre-stream 400 (the frontend maps it to the
+         *     existing "configure key" CTA).
+         *
+         *     Granularity note: news enrichment is structurally a *batch* LLM call
+         *     (15 headlines → one JSON array, parsed in one shot), so true per-item
+         *     streaming is not possible without N× the token spend. The honest
+         *     equivalent implemented here is per-batch progress: each `items` event
+         *     carries every row that batch enriched and the consumer splices them in
+         *     place. With ≤15 unenriched headlines (the common case) this is a single
+         *     `items` event followed by `done`.
+         */
+        post: operations["enrich_stream_api_news_enrich__ticker__stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/picks/edge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Picks Edge
+         * @description Long-short basket edge (rank-IC + quintile spread) per horizon.
+         *
+         *     Pure read, no auth (same as /api/picks/lean). Memoized ~600s process-local.
+         */
+        get: operations["picks_edge_api_picks_edge_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -436,7 +1217,14 @@ export interface paths {
         };
         /**
          * Picks Lean
-         * @description Return tickers sorted by composite score DESC.
+         * @description Return tickers ranked by composite score.
+         *
+         *     `side` (P1-2 two-sided view): "long" (default) returns the top-N by
+         *     composite DESC — the highest-conviction longs. "short" returns the
+         *     bottom-N by composite ASC — the most bearish names (UW/SELL tier),
+         *     which the default long view never surfaces because they rank at the
+         *     bottom of the universe. Same data + same pipeline; only the sort
+         *     direction + LIMIT slice differ.
          *
          *     Unions two sources so the full ~557-ticker universe is reachable:
          *       - daily_signals_fast: the 15-min intraday pipeline (~100 tickers),
@@ -448,8 +1236,38 @@ export interface paths {
          *
          *     A ticker present in fast is taken from fast (fresher and complete).
          *     `search` does a case-insensitive substring match on the ticker.
+         *
+         *     `mode` (Phase 2 dual-factor): "short" (default, 12d/60d momentum-vol,
+         *     aligned with the rest of the short-window composite) or "long"
+         *     (252d/126d academic Jegadeesh-Titman/Daniel-Moskowitz framework). When
+         *     "long", the picks list is re-ranked in Python using factor.raw.z_long
+         *     (populated by fast_intraday's universe-wide eval) instead of the stored
+         *     short-mode composite. SQL ordering is unchanged; we re-sort in Python
+         *     after the score swap. Rows without z_long (legacy / partial) keep their
+         *     original composite under either mode.
          */
         get: operations["picks_lean_api_picks_lean_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/personas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Personas
+         * @description Public discovery endpoint — UI uses this to render the persona
+         *     chip row on the stock detail page.
+         */
+        get: operations["list_personas_api_stock_personas_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -482,6 +1300,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stock/{ticker}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Events
+         * @description Return timestamped events for a ticker within [from_ts, to_ts].
+         *
+         *     Pulls from news_items (per-ticker direct) UNION macro_events
+         *     (per-ticker via tickers_extracted array containment from the LLM
+         *     enrich step). Capped at 200 events per request so a single chart
+         *     overlay never explodes — older time ranges that exceed the cap
+         *     are truncated newest-first.
+         */
+        get: operations["get_events_api_stock__ticker__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/{ticker}/explain_range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explain Range
+         * @description B4 lasso replacement (v1): LLM-generated 3-sentence explanation
+         *     of which events most likely drove a price move within the user's
+         *     selected window. Cached via B3 (per-user, key folds in from_ts,
+         *     to_ts, language, top headlines hash) so a re-click on the same
+         *     range is sub-100ms and zero BYOK spend.
+         */
+        post: operations["explain_range_api_stock__ticker__explain_range_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/{ticker}/minute_bars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock Minute Bars
+         * @description Return all minute_bars for one ticker on one calendar date (UTC).
+         *
+         *     Returns empty bars list if date is older than the 30d rolling window
+         *     or no bars exist (e.g. weekend / holiday / out-of-coverage ticker).
+         *     Caller (frontend IntradayDrawer) renders an empty-state message.
+         */
+        get: operations["stock_minute_bars_api_stock__ticker__minute_bars_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/{ticker}/news-day-summary/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * News Day Summary Stream
+         * @description SSE-streaming LLM summary + sentiment read of one day's news.
+         *
+         *     Window / holiday backfill: the news window for a trading day D is
+         *     (previous_trading_day, D] — every news_item with published_at strictly
+         *     after the previous trading day and through the end of D (UTC). The
+         *     previous trading day is the max daily_prices.date strictly < D (the
+         *     trading calendar), so Friday-evening through Monday news folds into
+         *     Monday and any holiday gap folds into the first trading day after it.
+         *
+         *     Mirrors the persona streaming route exactly: BYOK key fetched +
+         *     decrypted server-side, output streamed as `{type:"explanation",delta}`
+         *     terminated by `{type:"done"}`, no-key/decrypt failures degrade into an
+         *     SSE `error` event (never a 500 to a blank UI), and the per-(user,
+         *     ticker, date, language) B3 cache makes a re-click within 24h instant.
+         *     An empty window streams a graceful "no news this day" done event.
+         */
+        post: operations["news_day_summary_stream_api_stock__ticker__news_day_summary_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stock/{ticker}/ohlcv": {
         parameters: {
             query?: never;
@@ -495,6 +1421,94 @@ export interface paths {
          *     (or here, future) - for now relies on FE-side staleness.
          */
         get: operations["stock_ohlcv_api_stock__ticker__ohlcv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/{ticker}/persona/{persona_name}/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Persona Explain
+         * @description Render a named persona's commentary for one ticker.
+         *
+         *     Critical (per backlog A1): this MUST stay on the detail-drawer-open
+         *     path only. The cron must never fan persona calls per ticker per day
+         *     — 7 personas × N tickers × M days would 7x the BYOK token spend
+         *     with zero marginal UX gain. Cron path is the AttributionTable z
+         *     payload; LLM persona text is read-time-on-demand only.
+         *
+         *     Cached via B3 per (user, ticker, persona, language, as_of_date) so
+         *     re-clicks on the same persona within 24h are sub-100ms.
+         */
+        post: operations["persona_explain_api_stock__ticker__persona__persona_name__explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/{ticker}/persona/{persona_name}/explain/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Persona Explain Stream
+         * @description SSE-streaming sibling of `persona_explain` (mirrors the Rich Brief
+         *     streaming pattern).
+         *
+         *     Token-streams the persona commentary as `{type: "explanation", delta}`
+         *     events terminated by `{type: "done"}`. Auth is required; the BYOK key is
+         *     fetched + decrypted server-side from the authenticated user's stored
+         *     credentials, exactly like `post_brief_stream` — the key never leaves the
+         *     server and decrypt / no-key failures degrade into an SSE `error` event
+         *     rather than a 500 to a blank UI.
+         *
+         *     The per-(user, ticker, persona, language, as_of_date) B3 cache is
+         *     preserved: a re-click within 24h replays the cached text as one delta +
+         *     done (sub-100ms, zero LLM spend), matching the non-streaming route's
+         *     cache slot exactly.
+         */
+        post: operations["persona_explain_stream_api_stock__ticker__persona__persona_name__explain_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock/{ticker}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock Profile
+         * @description Company "About" card. DB-cached (company_profiles, V010): the first
+         *     request per ticker pulls yfinance once and stores the EN fields;
+         *     subsequent reads serve from the DB so we never re-scrape. `summary` is
+         *     locale-appropriate — summary_zh when lang=zh and a translation exists
+         *     (backfilled offline by scripts/backfill_company_profiles_zh.py), else
+         *     summary_en. Never 500s: DB failures fall back to a direct yfinance pull,
+         *     and a total failure returns all-null fields (the card hides).
+         */
+        get: operations["stock_profile_api_stock__ticker__profile_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -757,6 +1771,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/factor/backtest/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Factor Backtest Export
+         * @description Run the same backtest as /api/v1/factor/backtest, then render a
+         *     self-contained HTML tearsheet (no matplotlib / no plotly) for download.
+         *
+         *     Frontend Export button calls this with the active config + the user's
+         *     factor_name + locale. Response is text/html with Content-Disposition
+         *     attachment so the browser triggers a save dialog. The .html file
+         *     works offline as long as the user has internet on first open
+         *     (Chart.js loads from cdn.jsdelivr.net).
+         */
+        post: operations["factor_backtest_export_api_v1_factor_backtest_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/factor/explain_ast": {
         parameters: {
             query?: never;
@@ -808,6 +1849,30 @@ export interface paths {
         };
         /** Decay Alerts */
         get: operations["decay_alerts_api_v1_factors_decay_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/factors/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Factors Library
+         * @description Return the curated Alpha158 short-horizon factor seed library.
+         *
+         *     Surgical default: horizon_max=20 (trading days) keeps the response
+         *     aligned with the SHORT factor-mode user. Bump to 252 for the full
+         *     set if/when LONG mode users land. Category filter is optional.
+         */
+        get: operations["factors_library_api_v1_factors_library_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1275,6 +2340,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BasketEdgeResponse */
+        BasketEdgeResponse: {
+            /** As Of */
+            as_of: string;
+            /** Horizons */
+            horizons: components["schemas"]["HorizonEdge"][];
+            /** Universe N */
+            universe_n: number;
+        };
         /** BriefRequest */
         BriefRequest: {
             /** Api Key */
@@ -1308,6 +2382,71 @@ export interface components {
             net_pct: number;
             /** Short Pct */
             short_pct: number;
+        };
+        /**
+         * ChartEvent
+         * @description One event marker for the PriceChart overlay. `type` drives the
+         *     glyph + colour the lightweight-charts setMarkers call renders.
+         *     sentiment_score and sentiment_label come from the LLM-enrich step
+         *     (Phase 5b read-time path) and are nullable for un-enriched rows.
+         */
+        ChartEvent: {
+            /** Headline */
+            headline: string;
+            /** Sentiment Label */
+            sentiment_label?: string | null;
+            /** Sentiment Score */
+            sentiment_score?: number | null;
+            /** Ts */
+            ts: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "news" | "macro_political" | "macro_geopolitical";
+            /** Url */
+            url?: string | null;
+        };
+        /** ChartEventsResponse */
+        ChartEventsResponse: {
+            /** Events */
+            events: components["schemas"]["ChartEvent"][];
+            /** From Ts */
+            from_ts: string;
+            /** Ticker */
+            ticker: string;
+            /** To Ts */
+            to_ts: string;
+        };
+        /** CompanyProfile */
+        CompanyProfile: {
+            /** Country */
+            country?: string | null;
+            /** Employees */
+            employees?: number | null;
+            /** Industry */
+            industry?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Name Zh */
+            name_zh?: string | null;
+            /** Sector */
+            sector?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Summary Lang */
+            summary_lang?: ("zh" | "en") | null;
+            /** Ticker */
+            ticker: string;
+            /** Website */
+            website?: string | null;
+        };
+        /** ConfigSetRequest */
+        ConfigSetRequest: {
+            /** Key */
+            key: string;
+            /** Value */
+            value: unknown;
         };
         /** CorrelationRequest */
         CorrelationRequest: {
@@ -1415,6 +2554,25 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** ExplainRangeResponse */
+        ExplainRangeResponse: {
+            /**
+             * Cache
+             * @default miss
+             * @enum {string}
+             */
+            cache: "hit" | "miss";
+            /** Event Count */
+            event_count: number;
+            /** Explanation */
+            explanation: string;
+            /** From Ts */
+            from_ts: string;
+            /** Ticker */
+            ticker: string;
+            /** To Ts */
+            to_ts: string;
+        };
         /** ExposureRequest */
         ExposureRequest: {
             /**
@@ -1456,6 +2614,12 @@ export interface components {
         };
         /** FactorBacktestRequest */
         FactorBacktestRequest: {
+            /**
+             * Apply Survivorship Mask
+             * @description When True (default) applies point-in-time SP500 membership mask so delisted tickers do not appear in the universe on dates they were not constituents. Toggle off to reproduce legacy lookahead-biased results for delta comparison; survivorship_corrected in the response echoes the active mode.
+             * @default true
+             */
+            apply_survivorship_mask: boolean;
             /**
              * Benchmark Ticker
              * @description Benchmark for alpha/beta regression. SPY = cap-weighted (Mag-7 dominated), RSP = equal-weight SP500. Long-only equal-weight baskets are far closer to RSP's regime than SPY's.
@@ -1806,6 +2970,11 @@ export interface components {
         };
         /** FullCard */
         FullCard: {
+            /**
+             * Agreement
+             * @default 0
+             */
+            agreement: number;
             /** As Of */
             as_of: string;
             /** Breakdown */
@@ -1816,6 +2985,17 @@ export interface components {
             composite_score: number;
             /** Confidence */
             confidence: number;
+            /**
+             * Dimension Grades
+             * @default {}
+             */
+            dimension_grades: {
+                [key: string]: string;
+            };
+            /** Gex Info */
+            gex_info?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * News Items
              * @default []
@@ -1830,6 +3010,11 @@ export interface components {
             rating: string;
             /** Ticker */
             ticker: string;
+            /**
+             * Tier Flip Today
+             * @default false
+             */
+            tier_flip_today: boolean;
             /** Top Drags */
             top_drags: string[];
             /** Top Drivers */
@@ -1857,6 +3042,21 @@ export interface components {
         HealthSignalsResponse: {
             /** Signals */
             signals: components["schemas"]["SignalStatus"][];
+        };
+        /** HorizonEdge */
+        HorizonEdge: {
+            /** Horizon */
+            horizon: number;
+            /** Ic Ir */
+            ic_ir: number | null;
+            /** Insufficient */
+            insufficient: boolean;
+            /** Long Short Spread */
+            long_short_spread: number | null;
+            /** Mean Ic */
+            mean_ic: number | null;
+            /** N Days */
+            n_days: number;
         };
         /** HypothesisTranslateRequest */
         HypothesisTranslateRequest: {
@@ -1944,12 +3144,31 @@ export interface components {
          *     and can be up to ~1 day old.
          */
         LeanCard: {
+            /**
+             * Agreement
+             * @default 0
+             */
+            agreement: number;
             /** As Of */
             as_of: string;
             /** Composite Score */
             composite_score: number;
             /** Confidence */
             confidence: number;
+            /**
+             * Consistency
+             * @default {}
+             */
+            consistency: {
+                [key: string]: number | null;
+            };
+            /**
+             * Dimension Grades
+             * @default {}
+             */
+            dimension_grades: {
+                [key: string]: string;
+            };
             /**
              * Partial
              * @default false
@@ -1959,6 +3178,11 @@ export interface components {
             rating: string;
             /** Ticker */
             ticker: string;
+            /**
+             * Tier Flip Today
+             * @default false
+             */
+            tier_flip_today: boolean;
             /** Top Drags */
             top_drags: string[];
             /** Top Drivers */
@@ -1990,6 +3214,43 @@ export interface components {
             /** Items */
             items: components["schemas"]["MacroContextItem"][];
         };
+        /** MinuteBar */
+        MinuteBar: {
+            /** Close */
+            close: number | null;
+            /** High */
+            high: number | null;
+            /** Low */
+            low: number | null;
+            /** Open */
+            open: number | null;
+            /** Ts */
+            ts: string;
+            /** Volume */
+            volume: number;
+        };
+        /** MinuteBarsResponse */
+        MinuteBarsResponse: {
+            /** Bars */
+            bars: components["schemas"]["MinuteBar"][];
+            /** Date */
+            date: string;
+            /** Out Of Range */
+            out_of_range: boolean;
+            /** Ticker */
+            ticker: string;
+        };
+        /** NewsDaySummaryRequest */
+        NewsDaySummaryRequest: {
+            /** Date */
+            date: string;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "zh" | "en";
+        };
         /** NewsItemLite */
         NewsItemLite: {
             /** Headline */
@@ -1998,6 +3259,10 @@ export interface components {
             id: number;
             /** Published At */
             published_at: string;
+            /** Reasoning Lang */
+            reasoning_lang?: string | null;
+            /** Reasoning Text */
+            reasoning_text?: string | null;
             /** Sentiment Label */
             sentiment_label: string | null;
             /** Sentiment Score */
@@ -2068,6 +3333,21 @@ export interface components {
             /** Z */
             z: number;
         };
+        /** PersonaExplainResponse */
+        PersonaExplainResponse: {
+            /**
+             * Cache
+             * @default miss
+             * @enum {string}
+             */
+            cache: "hit" | "miss";
+            /** Explanation */
+            explanation: string;
+            /** Persona */
+            persona: string;
+            /** Ticker */
+            ticker: string;
+        };
         /** PicksResponse */
         PicksResponse: {
             /** As Of */
@@ -2091,6 +3371,28 @@ export interface components {
             sector?: string | null;
             /** Ticker */
             ticker: string;
+        };
+        /** RefreshRequest */
+        RefreshRequest: {
+            /**
+             * Job
+             * @default fast_intraday
+             * @enum {string}
+             */
+            job: "fast_intraday" | "slow_daily" | "both";
+        };
+        /** RefreshResponse */
+        RefreshResponse: {
+            /** Dispatched At */
+            dispatched_at?: string | null;
+            /** Eta Minutes */
+            eta_minutes?: number | null;
+            /** Last Run Started At */
+            last_run_started_at?: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Reason */
+            reason?: string | null;
         };
         /**
          * RouterHealth
@@ -2189,6 +3491,10 @@ export interface components {
         SignalStatus: {
             /** Error Count 24H */
             error_count_24h: number;
+            /** Icir 30D */
+            icir_30d?: number | null;
+            /** Ir 30D */
+            ir_30d?: number | null;
             /** Last Error */
             last_error: string | null;
             /** Last Success */
@@ -2199,6 +3505,11 @@ export interface components {
             live_ic_60d?: number | null;
             /** Live Ic 90D */
             live_ic_90d?: number | null;
+            /**
+             * N Obs 30D
+             * @default 0
+             */
+            n_obs_30d: number;
             /** Name */
             name: string;
             /**
@@ -2211,6 +3522,16 @@ export interface components {
         };
         /** SmokeReport */
         SmokeReport: {
+            /**
+             * Degenerate
+             * @default false
+             */
+            degenerate: boolean;
+            /**
+             * Factor Std
+             * @default 0
+             */
+            factor_std: number;
             /** Ic Spearman */
             ic_spearman: number;
             /** Rows Valid */
@@ -2226,6 +3547,12 @@ export interface components {
         };
         /** StreamBriefRequest */
         StreamBriefRequest: {
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "zh" | "en";
             /** Model Override */
             model_override?: string | null;
         };
@@ -2659,6 +3986,28 @@ export interface operations {
             };
         };
     };
+    health_data_sources_api__health_data_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     health_news_freshness_api__health_news_freshness_get: {
         parameters: {
             query?: never;
@@ -2719,6 +4068,155 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthSignalsResponse"];
+                };
+            };
+        };
+    };
+    cache_stats_endpoint_api_admin_cache_stats_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_config_knobs_api_admin_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    set_config_knob_api_admin_config_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    last_refresh_api_admin_last_refresh_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    trigger_refresh_api_admin_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2839,6 +4337,142 @@ export interface operations {
             };
         };
     };
+    cron_compute_ic_annotations_api_cron_compute_ic_annotations_get: {
+        parameters: {
+            query?: {
+                window_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_compute_ic_annotations_api_cron_compute_ic_annotations_post: {
+        parameters: {
+            query?: {
+                window_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_daily_prices_api_cron_daily_prices_get: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+                period?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_daily_prices_api_cron_daily_prices_post: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number | null;
+                period?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     fast_intraday_api_cron_fast_intraday_get: {
         parameters: {
             query?: {
@@ -2910,6 +4544,50 @@ export interface operations {
         };
     };
     ic_backtest_monthly_api_cron_ic_backtest_monthly_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_methodology_proposer_api_cron_methodology_proposer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_methodology_proposer_api_cron_methodology_proposer_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3201,7 +4879,696 @@ export interface operations {
             };
         };
     };
+    compute_ic_annotations_endpoint_api_evolution__compute_ic_annotations_post: {
+        parameters: {
+            query?: {
+                window_days?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calibration_api_evolution_calibration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    changes_api_evolution_changes_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ic_annotations_api_evolution_ic_annotations_get: {
+        parameters: {
+            query?: {
+                window_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ic_trend_api_evolution_ic_trend_get: {
+        parameters: {
+            query?: {
+                window_days?: number;
+                horizon_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proposals_api_evolution_proposals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    approve_api_evolution_proposals__proposal_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_api_evolution_proposals__proposal_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_api_evolution_proposals__proposal_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    weights_api_evolution_weights_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    post_apply_migrations_api_factor_lab__apply_migrations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_demo_seed_api_factor_lab__demo_seed_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_diagnostic_api_factor_lab_diagnostic_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_propose_job_api_factor_lab_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_live_expression_api_factor_lab_live_expression_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_proposals_api_factor_lab_proposals_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_proposal_api_factor_lab_proposals__proposal_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_proposal_api_factor_lab_proposals__proposal_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_proposal_api_factor_lab_proposals__proposal_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_propose_api_factor_lab_propose_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    healthz_ast_api_healthz_ast_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    healthz_sandbox_api_healthz_sandbox_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3257,7 +5624,9 @@ export interface operations {
     };
     enrich_api_news_enrich__ticker__post: {
         parameters: {
-            query?: never;
+            query?: {
+                lang?: string;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -3288,11 +5657,68 @@ export interface operations {
             };
         };
     };
+    enrich_stream_api_news_enrich__ticker__stream_post: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    picks_edge_api_picks_edge_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BasketEdgeResponse"];
+                };
+            };
+        };
+    };
     picks_lean_api_picks_lean_get: {
         parameters: {
             query?: {
                 limit?: number;
                 search?: string | null;
+                mode?: string;
+                side?: string;
             };
             header?: never;
             path?: never;
@@ -3307,6 +5733,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PicksResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_personas_api_stock_personas_get: {
+        parameters: {
+            query?: {
+                language?: "zh" | "en";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -3351,6 +5810,147 @@ export interface operations {
             };
         };
     };
+    get_events_api_stock__ticker__events_get: {
+        parameters: {
+            query: {
+                from_ts: string;
+                to_ts: string;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartEventsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_range_api_stock__ticker__explain_range_post: {
+        parameters: {
+            query: {
+                from_ts: string;
+                to_ts: string;
+                language?: "zh" | "en";
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExplainRangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stock_minute_bars_api_stock__ticker__minute_bars_get: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MinuteBarsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    news_day_summary_stream_api_stock__ticker__news_day_summary_stream_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsDaySummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stock_ohlcv_api_stock__ticker__ohlcv_get: {
         parameters: {
             query?: {
@@ -3371,6 +5971,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OhlcvResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    persona_explain_api_stock__ticker__persona__persona_name__explain_post: {
+        parameters: {
+            query?: {
+                language?: "zh" | "en";
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ticker: string;
+                persona_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonaExplainResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    persona_explain_stream_api_stock__ticker__persona__persona_name__explain_stream_post: {
+        parameters: {
+            query?: {
+                language?: "zh" | "en";
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ticker: string;
+                persona_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stock_profile_api_stock__ticker__profile_get: {
+        parameters: {
+            query?: {
+                lang?: "zh" | "en";
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyProfile"];
                 };
             };
             /** @description Validation Error */
@@ -3696,6 +6401,42 @@ export interface operations {
             };
         };
     };
+    factor_backtest_export_api_v1_factor_backtest_export_post: {
+        parameters: {
+            query?: {
+                factor_name?: string;
+                lang?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactorBacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     explain_ast_api_v1_factor_explain_ast_post: {
         parameters: {
             query?: never;
@@ -3780,6 +6521,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DecayAlert"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    factors_library_api_v1_factors_library_get: {
+        parameters: {
+            query?: {
+                horizon_max?: number;
+                category?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

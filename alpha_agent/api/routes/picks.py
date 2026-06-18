@@ -51,6 +51,11 @@ class LeanCard(BaseModel):
     # B8 (2026-05-19): per-dimension letter grades from breakdown z's so
     # the picks table can show A+/A/B/.../F at-a-glance per row.
     dimension_grades: dict[str, str] = {}
+    # Per-ticker directional consistency = next-day hit-rate of the predicted
+    # tier over trailing windows {d5, m1, y1, hist}. Each value is a fraction in
+    # [0,1], or None when the window has too little realized history (UI shows a
+    # dash). See alpha_agent/backtest/consistency.py for the exact definition.
+    consistency: dict[str, float | None] = {}
 
 
 class PicksResponse(BaseModel):
@@ -191,6 +196,15 @@ async def picks_lean(
         # own cross-sectional distribution (not the returned top-N subset).
         dim_thresholds = await get_dimension_thresholds(pool)
 
+        # Per-ticker directional consistency (5d/1m/1y/all-time next-day
+        # hit-rate) for the returned tickers, in one batched query. Mode/side
+        # independent: it reads the stored historical predictions, not the
+        # current card's (possibly long-mode re-ranked) rating.
+        from alpha_agent.backtest.consistency import compute_window_consistency
+        consistency_by_ticker = await compute_window_consistency(
+            pool, [r["ticker"] for r in rows]
+        )
+
         cards: list[LeanCard] = []
         for r in rows:
             try:
@@ -264,6 +278,7 @@ async def picks_lean(
                     partial=is_partial,
                     tier_flip_today=tier_flip_today,
                     dimension_grades=grade_dimensions(breakdown_data, dim_thresholds),
+                    consistency=consistency_by_ticker.get(r["ticker"], {}),
                 )
             )
 
