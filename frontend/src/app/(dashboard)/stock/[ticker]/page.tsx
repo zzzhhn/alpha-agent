@@ -13,8 +13,12 @@ import { notFound } from "next/navigation";
 
 // Page is dynamic by data dependency (the await below); the force-dynamic
 // directive was an over-precaution that defeated Next.js Data Cache. With
-// it gone, the per-ticker fetch is cached for 60s + tagged so the cron can
-// revalidate explicitly when ratings change.
+// it gone, the per-ticker fetches were cached for 60s + tagged. BUT the
+// revalidateTag path those tags relied on was never built (no revalidate
+// route, no cron call), so card + chart served stale-while-revalidate: a
+// ticker not revisited for days showed last-cached (2-week-old) data on first
+// open. Card + OHLCV now fetch no-store (fresh per open); events keep a short
+// cache since their cache key already rotates daily (from/today in the URL).
 
 export default async function StockPage({
   params,
@@ -42,17 +46,18 @@ export default async function StockPage({
       ohlcvResult,
       eventsResult,
     ] = await Promise.all([
-      fetchStock(ticker, {
-        revalidate: 60,
-        tags: [`stock-${ticker}`],
-      }),
+      // no-store: detail card must reflect the current rating/price, not a
+      // stale-while-revalidate snapshot from a prior visit (the revalidateTag
+      // path the old revalidate:60 relied on was never built).
+      fetchStock(ticker),
       fetchSignalHealth({ revalidate: 3600, tags: ["signal-health"] }).catch(
         () => ({ signals: [] as SignalHealthEntry[] }),
       ),
-      fetchOhlcv(ticker, "6mo", {
-        revalidate: 60,
-        tags: [`ohlcv-${ticker}`],
-      }).catch(() => ({
+      // no-store: the price chart must show current daily bars. The backend
+      // OHLCV endpoint is a live, fresh yfinance read; the prior revalidate:60
+      // cache (with a tag nothing ever revalidated) served 2-week-old candles
+      // on the first visit to a ticker not opened recently.
+      fetchOhlcv(ticker, "6mo").catch(() => ({
         ticker,
         period: "6mo",
         bars: [] as OhlcvBar[],
