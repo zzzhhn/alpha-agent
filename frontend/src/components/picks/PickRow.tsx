@@ -178,8 +178,9 @@ export default function PickRow({
         {composite.toFixed(2)}
         <span className="text-tm-muted">σ</span>
       </td>
-      <td className="px-3 py-2.5 font-tm-mono text-[11px] tabular-nums">
+      <td className="px-3 py-2.5 font-tm-mono text-[11px] tabular-nums text-right">
         <HoverTip
+          className="justify-end"
           content={
             t(locale, "picks_table.consistency_tooltip") +
             " · " +
