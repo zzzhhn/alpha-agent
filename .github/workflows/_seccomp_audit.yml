@@ -1,7 +1,8 @@
-# TEMPORARY tuning workflow (manual dispatch). Discovers the syscalls the
-# sandbox worker needs on the ubuntu-noble runner kernel so _ALLOWED_SYSCALLS
-# can be completed empirically instead of guessed. Delete once the allow-list
-# is finalized and the sandbox tests are re-enabled in test.yml.
+# Manual tuning workflow (workflow_dispatch only; never runs automatically).
+# Discovers the syscalls the sandbox worker needs on the current runner kernel
+# so worker._ALLOWED_SYSCALLS can be completed empirically instead of guessed.
+# Re-run after a runner-image / glibc / numpy bump if the seccomp sandbox tests
+# start failing: read MISSING_SYSCALLS from the log and add the legitimate ones.
 name: _seccomp_audit
 
 on:
