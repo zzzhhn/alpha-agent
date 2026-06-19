@@ -134,14 +134,17 @@ Verification (the safety of this phase):
 - Verification: regenerate openapi + the gen file; `tsc` + frontend tests green; the
   generated values match the backend registry exactly (drift becomes a build error).
 
-### Phase 3 — delete dead `llm/_legacy/` (independent cleanup)
+### Phase 3 — delete dead `llm/_legacy/` (independent cleanup)  ⚠️ HALTED
 
-- `llm/_legacy/{openai,kimi,ollama}.py` are superseded by the LiteLLM client and only
-  reachable behind `LLM_USE_LEGACY`. Confirm the flag is unset in prod, then delete
-  the three modules + the fallback branch in `llm/factory.py` + the reference in
-  `api/byok.py`.
-- Verification: factory tests pass with the flag removed; grep shows no remaining
-  `_legacy` import; one release of monitoring before deletion if you want a margin.
+This phase's premise was FALSIFIED on 2026-06-19 (roadmap step 4). `LLM_USE_LEGACY`
+is confirmed unset in prod, BUT `llm/_legacy/kimi.py` is NOT only reachable behind
+the flag: `api/byok.py` routes every Kimi-For-Coding BYOK request through the
+hand-rolled `KimiClient` (LiteLLM's anthropic provider drops the UA that Kimi's
+`/messages` gate requires — "the only path that actually works"), and prod has
+Kimi + BYOK configured. So `_legacy/` is load-bearing and is KEPT. Only
+`_legacy/{ollama,openai}.py` are dead-in-prod, but they are a deliberate kill
+switch sharing the factory legacy path with kimi; their removal is deferred to an
+explicit decision. See docs/ROADMAP.md step 4.
 
 ## 4. Sequencing + success criteria
 

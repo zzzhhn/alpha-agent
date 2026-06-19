@@ -77,10 +77,26 @@ gate (chosen over TS codegen because this CI runs pytest, not a frontend build) 
 golden-equality / invariant / lazy-import tests. The plan's Phase 3 (delete
 `llm/_legacy`) is roadmap step 4 below, not part of this step.
 
-### 4. Delete dead legacy + freeze discovery expansion
+### 4. Delete dead legacy + freeze discovery expansion  ⚠️ PARTIAL 2026-06-19
 Prove `llm/_legacy/` unused via import graph, then delete it. Freeze new
 LLM-factor / evolution / sandbox expansion until the ledger + L2 prove the current
 product has forward value. Do not spend effort discovering exotic weak signals now.
+
+**Freeze: DONE** — banner in `alpha_agent/evolution/__init__.py`; no net-new
+discovery machinery until the freeze lifts.
+
+**Deletion: HALTED — the plan's premise was falsified by the import graph.**
+`LLM_USE_LEGACY` is confirmed unset in prod (the factory kill-switch path is
+dead-in-prod), BUT `llm/_legacy/kimi.py` is **load-bearing in production**:
+`api/byok.py` routes every Kimi-For-Coding BYOK request through the hand-rolled
+`KimiClient` because LiteLLM's anthropic provider drops the User-Agent that
+Kimi's `/messages` endpoint gates on ("the only path that actually works"), and
+prod has `KIMI_MODEL`/`KIMI_BASE_URL` + BYOK configured. The council's own gate
+was "delete IF the import graph proves it unused" — it does not. So `_legacy/`
+is KEPT. `_legacy/{ollama,openai}.py` are dead-in-prod (only the unset
+kill-switch reaches them) but are a deliberate "LiteLLM regression" kill switch
+sharing the factory legacy path with kimi; deleting them buys ~5KB at the cost
+of that safety net — deferred pending an explicit decision.
 
 ### 5. Resolve the inert adaptive-weights subsystem
 `backtest/adaptive_weights` computes EWMA-ICIR weights that nothing live consumes.
