@@ -39,6 +39,19 @@ const nextConfig = {
         destination: "/data",
         permanent: true,
       },
+      // Module consolidation (2026-06-20): /factor-lab merged into /evolution
+      // (both surfaced methodology proposals); /signal merged into /report
+      // (report already renders signal's components). Preserve deep links.
+      {
+        source: "/factor-lab",
+        destination: "/evolution",
+        permanent: true,
+      },
+      {
+        source: "/signal",
+        destination: "/report",
+        permanent: true,
+      },
     ];
   },
 

@@ -13,15 +13,23 @@ import {
   type EvolutionChangesResponse,
   type ProposalsResponse,
 } from "@/lib/api/evolution";
+import {
+  fetchFactorDiagnostic,
+  fetchFactorProposals,
+} from "@/lib/api/factor-lab";
 import { t } from "@/lib/i18n";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { IcTrendChart } from "@/components/evolution/IcTrendChart";
 import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
 import { WeightDeltaTable } from "@/components/evolution/WeightDeltaTable";
 import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
-import { ProposalsTable } from "@/components/evolution/ProposalsTable";
 import EvolutionHealthStrip from "@/components/evolution/EvolutionHealthStrip";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
+// Methodology-proposals UI, merged in from the former /factor-lab page (the two
+// nav slots both surfaced proposals; consolidated into this one monitor).
+import { FactorLabDecisionCard } from "@/components/factor-lab/FactorLabDecisionCard";
+import { PendingProposalsSection } from "@/components/factor-lab/PendingProposalsSection";
+import { HistoryCollapsedSection } from "@/components/factor-lab/HistoryCollapsedSection";
 
 // Server component — fetches all evolution endpoints in parallel and renders
 // section containers. SSR-correct locale comes from the shared cookie reader.
@@ -60,10 +68,29 @@ async function fetchAllEvolution(): Promise<{
   };
 }
 
+// Proposals trio data, merged from the former /factor-lab page (kept as its own
+// fetch so this page's existing fetchProposals — which feeds the health strip —
+// is untouched). Mirrors the old factor-lab page's fetch exactly (revalidate:0).
+async function fetchFactorLab() {
+  const [diagSettled, pendingSettled, allSettled] = await Promise.allSettled([
+    fetchFactorDiagnostic({ revalidate: 0, tags: ["factor-lab-diagnostic"] }),
+    fetchFactorProposals("pending", { revalidate: 0, tags: ["factor-lab-pending"] }),
+    fetchFactorProposals(undefined, { revalidate: 0, tags: ["factor-lab-history"] }),
+  ]);
+  const diagnostic = diagSettled.status === "fulfilled" ? diagSettled.value : null;
+  const pending =
+    pendingSettled.status === "fulfilled" ? pendingSettled.value.proposals : [];
+  const all = allSettled.status === "fulfilled" ? allSettled.value.proposals : [];
+  return { diagnostic, pending, history: all.filter((p) => p.status !== "pending") };
+}
+
 export default async function EvolutionPage() {
   const locale = await getServerLocale();
-  const { icTrend, icAnnotations, weights, calibration, changes, proposals } =
-    await fetchAllEvolution();
+  const [
+    { icTrend, icAnnotations, weights, calibration, changes, proposals },
+    { diagnostic, pending, history },
+  ] = await Promise.all([fetchAllEvolution(), fetchFactorLab()]);
+  const liveExpression = diagnostic?.current_expression ?? "";
 
   // Decision-first header (P0): synthesize the always-present evidence into a
   // one-glance "is the self-evolution effective & trustworthy?" read.
@@ -196,23 +223,13 @@ export default async function EvolutionPage() {
         )}
       </TmPane>
 
-      {/* ── Section 5: Methodology Proposals ──────────────────────── */}
-      <TmPane
-        title={tr("evolution.pane.proposals")}
-        meta={
-          proposals
-            ? fill("evolution.proposals.meta", { n: proposals.proposals.length })
-            : unavailable
-        }
-      >
-        <div className="px-3 py-2.5">
-          {proposals ? (
-            <ProposalsTable proposals={proposals.proposals} locale={locale} />
-          ) : (
-            <p className="font-tm-mono text-[11px] text-tm-neg">{loadFailed}</p>
-          )}
-        </div>
-      </TmPane>
+      {/* ── Section 5: Methodology Proposals (merged from /factor-lab) ──
+          The decision card + actionable pending list + collapsed history,
+          richer than the prior read-only table. `proposals` (fetchProposals)
+          still feeds the health strip above. */}
+      <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
+      <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
+      <HistoryCollapsedSection history={history} />
     </TmScreen>
   );
 }

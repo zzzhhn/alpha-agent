@@ -63,6 +63,8 @@ import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
 import { TmCompareEquityChart } from "@/components/charts/TmCompareEquityChart";
 import { TmTopBottomTable } from "@/components/signal/TmTopBottomTable";
 import { TmExposureChart } from "@/components/signal/TmExposureChart";
+// IC timeseries, folded in from the merged /signal page (/signal redirects here).
+import { TmICTimeseriesChart } from "@/components/signal/TmICTimeseriesChart";
 import { listZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
 import {
   dailyReturns,
@@ -90,12 +92,14 @@ import {
   runFactorBacktest,
   signalToday,
   signalExposure,
+  signalIcTimeseries,
 } from "@/lib/api";
 import type {
   FactorBacktestResponse,
   SignalSpec,
   SignalTodayResponse,
   ExposureResponse,
+  ICTimeseriesResponse,
 } from "@/lib/types";
 
 interface FactorReport {
@@ -105,6 +109,7 @@ interface FactorReport {
   readonly backtest: FactorBacktestResponse;
   readonly today: SignalTodayResponse;
   readonly exposure: ExposureResponse;
+  readonly icTs: ICTimeseriesResponse;
 }
 
 const REPORT_PREFILL_KEY = "alphacore.report.prefill.v1";
@@ -190,6 +195,8 @@ async function fetchAll(
     }),
     signalToday(spec, 10, cfg.neutralize),
     signalExposure(spec, 10, cfg.neutralize),
+    // IC timeseries folded in from the merged /signal page (252d window).
+    signalIcTimeseries(spec, 252, cfg.neutralize),
   ]);
 }
 
@@ -243,12 +250,12 @@ export default function ReportPage() {
     ) => {
       setRunning(true);
       setError(null);
-      const [bt, td, ex] = await fetchAll(name, expression, hypothesis, config);
+      const [bt, td, ex, ic] = await fetchAll(name, expression, hypothesis, config);
       if (
-        bt.error || td.error || ex.error ||
-        !bt.data || !td.data || !ex.data
+        bt.error || td.error || ex.error || ic.error ||
+        !bt.data || !td.data || !ex.data || !ic.data
       ) {
-        setError(bt.error ?? td.error ?? ex.error ?? "unknown error");
+        setError(bt.error ?? td.error ?? ex.error ?? ic.error ?? "unknown error");
         setRunning(false);
         return;
       }
@@ -259,6 +266,7 @@ export default function ReportPage() {
         backtest: bt.data,
         today: td.data,
         exposure: ex.data,
+        icTs: ic.data,
       };
       if (slot === "primary") {
         setPrimary(built);
@@ -586,6 +594,7 @@ export default function ReportPage() {
               />
             )}
           <TmTopBottomTable today={primary.today} loading={false} />
+          <TmICTimeseriesChart data={primary.icTs} loading={false} />
           <TmExposureChart
             data={primary.exposure}
             topN={10}
@@ -617,6 +626,7 @@ export default function ReportPage() {
               />
             )}
           <TmTopBottomTable today={compare.today} loading={false} />
+          <TmICTimeseriesChart data={compare.icTs} loading={false} />
           <TmExposureChart
             data={compare.exposure}
             topN={10}

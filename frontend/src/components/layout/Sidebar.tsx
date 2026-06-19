@@ -53,7 +53,8 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
       { id: "alpha", href: "/alpha", labelKey: "lifecycle.alpha" },
       { id: "backtest", href: "/backtest", labelKey: "lifecycle.backtest" },
       { id: "zoo", href: "/factors", labelKey: "lifecycle.zoo" },
-      { id: "signal", href: "/signal", labelKey: "lifecycle.signal" },
+      // /signal merged into /report (report runs the same signal-today +
+      // exposure and now also the IC timeseries; /signal redirects here).
       { id: "report", href: "/report", labelKey: "lifecycle.report" },
     ],
   },
@@ -63,8 +64,9 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
       { id: "picks", href: "/picks", labelKey: "nav.picks" },
       { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
       { id: "alerts", href: "/alerts", labelKey: "nav.alerts" },
+      // Evolution now also hosts the methodology-proposals UI (the former
+      // /factor-lab page was merged in; /factor-lab redirects here).
       { id: "evolution", href: "/evolution", labelKey: "nav.evolution" },
-      { id: "factor-lab", href: "/factor-lab", labelKey: "nav.factor-lab" },
     ],
   },
   {
