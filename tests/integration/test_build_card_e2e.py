@@ -22,16 +22,12 @@ from alpha_agent.signals.base import SignalScore
 # Helpers
 # ---------------------------------------------------------------------------
 
-# MUST cover every signal build_card._SIGNAL_NAMES fetches, or an unpatched
-# signal hits real APIs/DB. political_impact + supply_chain were added to
-# build_card later; leaving them unpatched made build_card query the (CI:
-# unmigrated) macro_events table -> UndefinedTableError, breaking the "no
-# external APIs are hit" guarantee this suite documents.
-_SIGNAL_MODULES = [
-    "factor", "technicals", "rsrs", "analyst", "earnings", "news",
-    "insider", "options", "premarket", "macro", "calendar",
-    "political_impact", "supply_chain",
-]
+# MUST cover every signal build_card fetches, or an unpatched signal hits real
+# APIs/DB (e.g. an unmocked geopolitical_impact queried the CI-unmigrated
+# macro_events table -> UndefinedTableError, breaking the "no external APIs are
+# hit" guarantee). Derived from build_card._SIGNAL_NAMES (registry-backed) so
+# this list can never drift behind a newly-added signal again.
+from alpha_agent.cli.build_card import _SIGNAL_NAMES as _SIGNAL_MODULES
 
 _AS_OF = datetime(2026, 5, 10)
 _TICKER = "AAPL"
