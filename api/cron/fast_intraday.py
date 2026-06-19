@@ -204,6 +204,17 @@ async def handler(
                 "err": f"long_factor_eval_failed: {type(exc).__name__}: {exc}"[:200],
             })
 
+    # Guarded adaptive activation (step 5): the live weights are the static
+    # prior guardedly blended with the promoted adaptive weights (10% pull,
+    # min-sample gated, static fallback). With no adaptive 'live' rows this
+    # equals _POLICY.weights EXACTLY, so it is a no-op until the monthly IC
+    # backtest has promoted evidence. Computed ONCE per run (universe-wide);
+    # the effective set is persisted (status='effective') only on the full tier.
+    from alpha_agent.fusion.guarded_weights import get_effective_weights
+    effective_weights = await get_effective_weights(
+        pool, static=dict(_POLICY.weights), persist=(tier == "full"),
+    )
+
     async def _per_ticker(t: str) -> str:
         # Fetch fresh signals for this tier first (slow IO, no DB held).
         # Modules expose either sync fetch_signal or async afetch_signal;
@@ -253,10 +264,11 @@ async def handler(
             }
             sigs.update(fresh)
 
-        # Combine + rate via the active weight policy (coverage-aware fusion +
-        # council #5 guardrail caps, e.g. technicals capped to neutral).
+        # Combine + rate via the guarded effective weights (static prior +
+        # guarded adaptive pull) with coverage-aware fusion + council #5
+        # guardrail caps (e.g. technicals capped to neutral).
         result = combine(
-            sigs, _POLICY.weights,
+            sigs, effective_weights,
             coverage_core=_POLICY.core_set(), caps=_POLICY.caps_dict(),
         )
         contributing_zs = [

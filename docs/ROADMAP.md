@@ -98,12 +98,18 @@ kill-switch reaches them) but are a deliberate "LiteLLM regression" kill switch
 sharing the factory legacy path with kimi; deleting them buys ~5KB at the cost
 of that safety net — deferred pending an explicit decision.
 
-### 5. Resolve the inert adaptive-weights subsystem
+### 5. Resolve the inert adaptive-weights subsystem  ✅ SHIPPED 2026-06-19 (guarded activation)
 `backtest/adaptive_weights` computes EWMA-ICIR weights that nothing live consumes.
 Inert is forbidden (false capability). Pick one: (a) research-only, explicitly
 labelled not-live; (b) guarded activation `0.9*static_prior + 0.1*adaptive` with
 min-sample, caps, nonneg, fallback, persisted effective weights; or (c) delete.
 Do NOT flip EWMA-ICIR fully live on noisy free-data IC.
+Chosen (b): `fusion/guarded_weights.py::get_effective_weights` blends the static
+prior with the promoted adaptive `live` weights (alpha=0.10), gated by a >=10-obs
+min-sample check, static-fallback per signal, non-negative, caps applied
+downstream by combine, effective set persisted as `signal_weight_current`
+status='effective'. Wired into both crons (fast_intraday + slow_daily). No
+adaptive rows -> effective == static exactly (safe no-op until evidence accrues).
 
 ### 6. Minimal causal L2 forward paper-trading
 On top of the ledger: long-only top-50, equal-weight, weekly rebalance, signal

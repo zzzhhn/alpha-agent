@@ -146,6 +146,64 @@ async def test_fast_intraday_full_run_records_product_ledger(applied_db, monkeyp
         await conn.close()
 
 
+async def test_fast_intraday_full_run_activates_guarded_weights(applied_db, monkeypatch):
+    """A full run consumes the adaptive evidence via the guarded blend (step 5),
+    resolving the inert subsystem: effective = 0.9*static + 0.1*adaptive for a
+    signal with enough IC history, persisted as status='effective'."""
+    from datetime import UTC, datetime, timedelta
+
+    from alpha_agent.storage import postgres as pg_module
+
+    pg_module._pool = None
+    pg_module._pool_dsn = None
+    monkeypatch.setenv("DATABASE_URL", applied_db)
+    monkeypatch.setattr(
+        "alpha_agent.storage.queries.get_priority_universe",
+        AsyncMock(return_value=["AAPL", "MSFT"]),
+    )
+
+    conn = await asyncpg.connect(applied_db)
+    try:
+        # adaptive 'live' evidence for factor (static prior 0.30) ...
+        await conn.execute(
+            "INSERT INTO signal_weight_current (signal_name, status, weight, last_updated) "
+            "VALUES ('factor', 'live', 0.50, now())"
+        )
+        # ... and enough IC history to clear the min-sample gate.
+        base = datetime(2026, 6, 1, tzinfo=UTC)
+        for i in range(12):
+            await conn.execute(
+                "INSERT INTO signal_ic_history "
+                "(signal_name, window_days, horizon_days, computed_at, ic, n_observations) "
+                "VALUES ('factor', 30, 5, $1, 0.05, 50)",
+                base + timedelta(days=i),
+            )
+    finally:
+        await conn.close()
+
+    patches = _patch_all_signals()
+    for p in patches:
+        p.start()
+    try:
+        from api.cron.fast_intraday import handler
+
+        await handler()  # full tier -> persist effective
+    finally:
+        for p in patches:
+            p.stop()
+
+    conn = await asyncpg.connect(applied_db)
+    try:
+        eff = await conn.fetchval(
+            "SELECT weight FROM signal_weight_current "
+            "WHERE signal_name='factor' AND status='effective'"
+        )
+        assert eff is not None
+        assert float(eff) == pytest.approx(0.9 * 0.30 + 0.1 * 0.50)  # 0.32
+    finally:
+        await conn.close()
+
+
 async def test_fast_intraday_emits_alert_on_rating_change(applied_db, monkeypatch):
     """Pre-seed daily_signals_fast with HOLD; new run with z=0.8 → OW should
     enqueue a rating_change alert."""

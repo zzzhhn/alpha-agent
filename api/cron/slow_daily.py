@@ -78,9 +78,17 @@ async def handler(
     started_at = now
     errors: list[dict] = []
 
+    # Guarded adaptive activation (step 5): blend the slow subset's static
+    # weights with the promoted adaptive weights before normalizing. No persist
+    # here — the full-tier fast cron owns the canonical effective set; this
+    # subset would otherwise overwrite it. With no adaptive rows this equals the
+    # static slow weights exactly.
+    from alpha_agent.fusion.guarded_weights import get_effective_weights
+    eff_slow = await get_effective_weights(pool, static=dict(_SLOW_WEIGHTS), persist=False)
+    norm_w = normalize_weights(eff_slow)
+
     async def _per_ticker(t: str) -> str:
         sigs = await _fetch_one(t, now)
-        norm_w = normalize_weights(_SLOW_WEIGHTS)
         result = combine(sigs, norm_w)
         await insert_signal_slow(
             pool, t, today, result.composite, {"breakdown": result.breakdown}

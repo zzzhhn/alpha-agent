@@ -8,11 +8,14 @@ NOTHING live consumed. That severed live ratings from any governed, auditable
 policy. This module makes the live policy a first-class, versioned object that
 both crons consume, and that every RatingCard can stamp for auditability.
 
-It deliberately does NOT wire the raw adaptive weights into production (council
-item #6 — adaptive stays shadow-only until the IC pipeline + horizon metadata
-are fixed and promotion goes through guarded shrinkage). The active policy is
-`static_v1`: the hand-set DEFAULT_WEIGHTS, 5d horizon, coverage-aware missing
-policy.
+This module defines the STATIC PRIOR (the hand-set DEFAULT_WEIGHTS, 5d horizon,
+coverage-aware missing policy, council #5 caps). As of 2026-06-19 (roadmap step
+5) the live crons no longer fuse on this prior directly: they apply GUARDED
+ACTIVATION on top of it via `fusion/guarded_weights.get_effective_weights`
+(effective = 0.9*prior + 0.1*adaptive, min-sample gated, static fallback,
+non-negative, capped downstream). With no promoted adaptive rows the effective
+weights equal this prior exactly, so the prior is still the anchor; the raw
+EWMA-ICIR weights are NEVER flipped fully live (council #6).
 """
 from __future__ import annotations
 
