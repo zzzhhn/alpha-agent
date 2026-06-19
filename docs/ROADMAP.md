@@ -132,11 +132,19 @@ accumulating ledger, 5/20 bps sensitivity, beta-to-SPY + sector concentration +
 confidence bands, multi-period rolling equity, and the research decile-spread
 diagnostic (backlog).
 
-### 7. Prune signals by incremental forward contribution + tier validation
+### 7. Prune signals by incremental forward contribution + tier validation  ✅ SHIPPED 2026-06-20
 Only after the above: prune a signal only if low IC AND redundant-correlation AND
 poor coverage/staleness AND high maintenance AND no forward/L2 contribution (never
 a hard IC cutoff). Add monthly tier-monotonicity validation (BUY > OW > HOLD > UW >
 SELL forward return; hit-rate + turnover by tier).
+Shipped (`backtest/tier_validation.py`, both NON-destructive diagnostics):
+`prune_candidates` flags a signal only when ALL five weak-signal criteria hold
+at once (a single strong axis spares it; never prunes on low IC alone);
+`tier_monotonicity` computes per-tier forward return + hit-rate + count from the
+ledger's complete-run snapshots vs daily_prices and reports whether
+BUY >= OW >= HOLD >= UW >= SELL holds, with explicit inversion violations.
+Deferred: wiring the prune metrics from live sources (IC/corr/coverage/L2
+contribution) + a monthly scheduled run + turnover-by-tier (an L2 concept).
 
 ## Backlog / later (explicitly NOT now)
 
