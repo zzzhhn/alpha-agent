@@ -111,7 +111,7 @@ downstream by combine, effective set persisted as `signal_weight_current`
 status='effective'. Wired into both crons (fast_intraday + slow_daily). No
 adaptive rows -> effective == static exactly (safe no-op until evidence accrues).
 
-### 6. Minimal causal L2 forward paper-trading
+### 6. Minimal causal L2 forward paper-trading  ✅ SHIPPED 2026-06-20 (causal core)
 On top of the ledger: long-only top-50, equal-weight, weekly rebalance, signal
 after close D filled at D+1 close, 10 bps/side (report 5/20 sensitivity), benchmark
 SPY (secondary RSP). Orders generated from a PRIOR immutable snapshot and persisted
@@ -119,6 +119,18 @@ before execution prices are consumed. Report gross+net+turnover+stale-count+
 sector+beta+confidence bands. Held positions never silently dropped. This is the
 honest "should the user trust the ratings" test. L3 real-money execution stays
 deferred until L2 shows a forward edge. Detail: `docs/l2-paper-trading-plan.md`.
+Shipped (causal core): migration V026 (`l2_strategy` / `l2_order` /
+`l2_equity_daily`) + `backtest/l2.py` — `select_holdings` (top-N, BUY/OW
+preferred, equal weight), `generate_orders` (from a COMPLETE gated run only,
+source_run_id + generated_at, no price read, idempotent per signal_date),
+`fill_orders` (D+1 close; dead feed -> explicit 'unfilled', never dropped),
+`mark_equity` (gross/net/turnover/missing vs SPY, deterministic + reproducible;
+feed death between fill and mark -> explicit 'exited'). Tests pin the three
+council bullets (causal ordering, deterministic equity, dead-feed exit).
+Deferred (clearly not done): a scheduler/cron driving the weekly cycle over the
+accumulating ledger, 5/20 bps sensitivity, beta-to-SPY + sector concentration +
+confidence bands, multi-period rolling equity, and the research decile-spread
+diagnostic (backlog).
 
 ### 7. Prune signals by incremental forward contribution + tier validation
 Only after the above: prune a signal only if low IC AND redundant-correlation AND
