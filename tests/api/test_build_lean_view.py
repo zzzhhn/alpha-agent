@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import asyncpg
 import pytest
 
 from alpha_agent.api.routes.picks import LeanCard, build_lean_view
