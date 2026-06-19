@@ -15,28 +15,17 @@ from alpha_agent.fusion.combine import combine
 from alpha_agent.fusion.rating import calibrated_confidence, map_to_tier
 from alpha_agent.fusion.weights import DEFAULT_WEIGHTS
 from alpha_agent.signals.base import safe_fetch
+from alpha_agent.signals.registry import all_signal_names as _all_signal_names
+from alpha_agent.signals.registry import fixture_z_map as _fixture_z_map
 
 
-# Ordered list of all signal module names (matches DEFAULT_WEIGHTS keys).
-_SIGNAL_NAMES: list[str] = [
-    "factor",
-    "technicals",
-    "rsrs",
-    "analyst",
-    "earnings",
-    "news",
-    "insider",
-    "options",
-    "premarket",
-    "macro",
-    "calendar",
-    "political_impact",
-    "supply_chain",
-]
+# Ordered list of all signal module names. Derived from the single signal
+# registry (source of truth), so it can no longer drift from the fusion weights.
+_SIGNAL_NAMES: list[str] = _all_signal_names()
 
 
 def _module_names_for_fixtures() -> list[str]:
-    """Return the canonical 10 signal names. Used by --use-fixtures path."""
+    """Return the canonical signal names. Used by --use-fixtures path."""
     return list(_SIGNAL_NAMES)
 
 
@@ -51,23 +40,11 @@ def _fixture_signal(name: str, ticker: str, as_of: datetime):
     from alpha_agent.signals.base import SignalScore
 
     # Deterministic but varied per signal so fusion tests are meaningful.
-    _z_map = {
-        "factor": 1.5,
-        "technicals": 0.8,
-        "rsrs": 0.7,
-        "analyst": 1.2,
-        "earnings": 0.6,
-        "news": 0.3,
-        "insider": 0.9,
-        "options": 0.4,
-        "premarket": 0.7,
-        "macro": 0.2,
-        "calendar": 0.0,
-        "political_impact": 0.0,
-        "supply_chain": 0.0,
-    }
+    # Derived from the registry; z==0.0 marks the signals the fixture treats as
+    # absent (display-only + sparse), so they drop out of combine via conf 0.
+    _z_map = _fixture_z_map()
     z = _z_map.get(name, 0.5)
-    confidence = 0.0 if name in ("calendar", "political_impact", "supply_chain") else 0.80
+    confidence = 0.0 if z == 0.0 else 0.80
     return SignalScore(
         ticker=ticker,
         z=z,

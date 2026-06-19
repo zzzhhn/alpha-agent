@@ -34,6 +34,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from alpha_agent.signals.horizons import DEFAULT_HORIZON_DAYS, native_horizon
+from alpha_agent.signals.registry import active_ic_signals as _active_ic_signals
 
 
 def _spearman_rho(xs, ys):
@@ -50,35 +51,13 @@ def _spearman_rho(xs, ys):
     return float(np.corrcoef(rxs, rys)[0, 1])
 
 
-# Active signals to backtest. Sourced from the production signal map
-# (alpha_agent.signals.*) plus the Phase 6a T6 political_impact signal.
-# Must be kept in lockstep with the registry used in fusion.combine.
-_ACTIVE_SIGNALS: tuple[str, ...] = (
-    "factor",
-    "technicals",
-    "rsrs",  # forward IC tracking for the RSRS timing tilt (native horizon 20d)
-    "analyst",
-    "earnings",
-    "news",
-    "insider",
-    "options",
-    "premarket",
-    "macro",
-    "calendar",
-    "political_impact",
-    # serenity seam #2 (2026-06-17): start forward IC tracking for the
-    # supply_chain bottleneck signal. compute_walk_forward_ic returns None
-    # (insufficient) until the daily fast cron has accumulated enough
-    # supply_chain z history for a 5d-forward-observable window, so nothing is
-    # written to signal_ic_history yet. apply_adaptive_weights treats a no-IC
-    # signal as "bad" and would shrink it toward the floor, but it writes only
-    # to signal_weight_current, which NO live cron reads (fast_intraday +
-    # slow_daily both fuse on DEFAULT_WEIGHTS), so the live 0.05 weight is
-    # untouched. This is pure measurement: it lets ic_backtest_monthly emit a
-    # real IC for supply_chain once ~3-4 weeks of history exist, so the weight
-    # can later be tuned on evidence instead of a guess.
-    "supply_chain",
-)
+# Active signals to backtest. Derived from the single signal registry
+# (active_in_ic), so it stays in lockstep with fusion by construction. Every
+# live signal is IC-tracked except geopolitical_impact (display-only, no history
+# yet). A no-IC signal (e.g. supply_chain until ~3-4 weeks of z history accrue)
+# yields None from compute_walk_forward_ic and is untouched in production
+# (adaptive weights write only signal_weight_current, which no live cron reads).
+_ACTIVE_SIGNALS: tuple[str, ...] = _active_ic_signals()
 
 _WINDOWS: tuple[int, ...] = (30, 60, 90)
 _FWD_RET_DAYS: int = 5

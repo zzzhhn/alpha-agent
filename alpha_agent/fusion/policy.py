@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from typing import Mapping
 
 from alpha_agent.fusion.weights import DEFAULT_WEIGHTS
+from alpha_agent.signals.registry import core_signals as _core_signals
+from alpha_agent.signals.registry import fusion_caps as _fusion_caps
 
 
 @dataclass(frozen=True)
@@ -64,18 +66,11 @@ class WeightPolicy:
         return dict(self.caps)
 
 
-# The always-expected market/fundamental signals. Excludes the sparse ones
-# (insider: most names have no recent Form 4; options: not all have liquid
-# chains; premarket: only meaningful in the premarket window; supply_chain:
-# only the ~10 researched names) and the weight-0 display-only signals.
-_CORE_SIGNALS: tuple[str, ...] = (
-    "factor",
-    "technicals",
-    "analyst",
-    "earnings",
-    "news",
-    "macro",
-)
+# The always-expected market/fundamental signals (core_for_coverage in the
+# registry). Excludes the sparse ones (insider / options / premarket /
+# supply_chain) and the weight-0 display-only signals. Derived from the single
+# signal registry (source of truth).
+_CORE_SIGNALS: tuple[str, ...] = _core_signals()
 
 # Uncapped baseline. Kept as the explicit prior for the guarded-shrinkage
 # shadow (council #6) and as the policy to revert to once the technicals
@@ -90,16 +85,14 @@ STATIC_V1 = WeightPolicy(
     source="hand-set DEFAULT_WEIGHTS + serenity supply_chain (0.05 exploratory)",
 )
 
-# Council item #5: technicals carries 0.20 live weight but shows materially
-# negative observed 5d rank IC. Its native horizon IS 5d (so this is not a
-# horizon-mismatch artifact), but the IC sample is still short (~16 non-
-# overlapping windows), so this is a CONSERVATIVE, REVERSIBLE guardrail: halve
-# the weight (0.20 -> 0.10) rather than zero it. The freed 0.10 is NOT
-# reallocated (it goes to neutral, reducing conviction on technicals-driven
-# cards). Revert to static_v1 once the sign-flip / component-IC diagnostics and
-# more native-horizon IC history clear technicals.
-_TECHNICALS_GUARDRAIL_CAP = 0.10
-
+# Council item #5: technicals carries live weight but shows materially negative
+# observed 5d rank IC. Its native horizon IS 5d (so this is not a horizon-
+# mismatch artifact), but the IC sample is still short (~16 non-overlapping
+# windows), so the guardrail is a CONSERVATIVE, REVERSIBLE cap (0.10) rather
+# than a zero. The freed weight is NOT reallocated (it goes to neutral, reducing
+# conviction on technicals-driven cards). The cap value lives in the signal
+# registry (fusion_cap); revert by clearing it there once diagnostics clear
+# technicals.
 STATIC_V2 = WeightPolicy(
     policy_id="static_v2_technicals_guardrail",
     mode="static",
@@ -107,7 +100,7 @@ STATIC_V2 = WeightPolicy(
     weights=dict(DEFAULT_WEIGHTS),
     core_signals=_CORE_SIGNALS,
     missing_policy="coverage_sqrt",
-    caps={"technicals": _TECHNICALS_GUARDRAIL_CAP},
+    caps=_fusion_caps(),
     source="static_v1 + council #5 technicals guardrail (cap 0.20->0.10, reversible)",
 )
 

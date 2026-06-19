@@ -18,23 +18,14 @@ from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.core.types import RouterHealth
+from alpha_agent.signals.registry import all_signal_names as _all_signal_names
 
 router = APIRouter(prefix="/api/_health", tags=["health"])
 
-_SIGNAL_NAMES = [
-    "factor",
-    "technicals",
-    "rsrs",
-    "analyst",
-    "earnings",
-    "news",
-    "insider",
-    "options",
-    "premarket",
-    "macro",
-    "calendar",
-    "political_impact",
-]
+# Derived from the single signal registry (source of truth). Previously a
+# hand-kept list that had drifted (missing geopolitical_impact + supply_chain);
+# deriving it means monitoring now covers every live signal automatically.
+_SIGNAL_NAMES = _all_signal_names()
 
 
 class HealthResponse(BaseModel):

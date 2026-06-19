@@ -1,47 +1,21 @@
 # alpha_agent/fusion/weights.py
 """Default fusion weights + redistribution helper.
 
-Spec §3.1: 9 fusion signals sum to 1.0; calendar=0 (display only)."""
+Weights are now derived from the single signal registry (the source of truth
+for signal identity); see alpha_agent/signals/registry.py for the per-signal
+rationale (technicals trimmed to fund rsrs; supply_chain/geopolitical
+exploratory). NB: the total is 1.05, not 1.0 (supply_chain added without a
+compensating trim); combine() renormalizes over contributing signals so this is
+harmless, flagged for the re-tune step."""
 from __future__ import annotations
 
 from typing import Mapping
 
-DEFAULT_WEIGHTS: dict[str, float] = {
-    "factor":           0.30,
-    # technicals trimmed 0.20 -> 0.15 to fund rsrs without inflating the total
-    # price-action allocation (technicals + rsrs = 0.20, unchanged). technicals
-    # is already cap-limited to 0.10 under STATIC_V2, so its EFFECTIVE weight is
-    # unchanged by this trim; the freed 0.05 of default budget goes to rsrs.
-    "technicals":       0.15,
-    # RSRS (signals/rsrs.py): price-based timing tilt, validated weak-but-positive
-    # and decorrelated (scripts/rsrs_validation.py: ~0.043 IC @20d). Small,
-    # exploratory weight; re-tune once ic_backtest_monthly accrues rsrs history.
-    "rsrs":             0.05,
-    "analyst":          0.10,
-    "earnings":         0.10,
-    "news":             0.10,
-    "insider":          0.05,
-    "options":          0.05,
-    "premarket":        0.05,
-    "macro":            0.05,
-    "calendar":         0.00,
-    "political_impact": 0.00,
-    # A3 (2026-05-19): split from political_impact. Geopolitical actions
-    # (tariff / Fed / sanctions / regulatory) move markets via different
-    # channel than political rhetoric. Weight stays 0 in v1 (display-only)
-    # so the split is purely informational until backtest shows whether
-    # to upweight; flip 0.05+ once ic_backtest_monthly has 90d of history.
-    "geopolitical_impact": 0.00,
-    # serenity-skill seam #2 — EXPLORATORY activation (2026-06-16): supply-chain
-    # bottleneck score from a qualitative research study (signals/supply_chain.py).
-    # Weight 0.05 is a small, UNVALIDATED tilt (no forward-return / ic_backtest
-    # history yet) and only moves the composite for names a serenity study has
-    # scored (the supply_chain_scorecard table); every unscored ticker emits
-    # z=None and is dropped, so the rest of the universe is unaffected. Re-tune
-    # or zero this once ic_backtest_monthly shows whether the bottleneck z
-    # predicts returns.
-    "supply_chain": 0.05,
-}
+from alpha_agent.signals.registry import default_weights as _default_weights
+
+# Derived from SIGNAL_REGISTRY (one source of truth). A signal-identity drift
+# test (tests/signals/test_signal_registry.py) pins these exact values.
+DEFAULT_WEIGHTS: dict[str, float] = _default_weights()
 
 
 def normalize_weights(

@@ -17,23 +17,11 @@ meant to be refined once the per-horizon IC matrix accumulates enough history.
 """
 from __future__ import annotations
 
-# signal_name -> native forward horizon in TRADING days.
-SIGNAL_HORIZON_DAYS: dict[str, int] = {
-    "factor": 60,           # cross-sectional factor exposure, long-horizon
-    "technicals": 5,        # multi-day momentum / moving-average structure
-    "rsrs": 20,             # RSRS slope z-score; US sweet spot is the ~20d horizon
-    "analyst": 20,          # rating/target revisions play out over weeks
-    "earnings": 20,         # post-earnings drift
-    "news": 3,              # sentiment decays fast
-    "insider": 20,          # Form 4 cluster signal is multi-week
-    "options": 5,           # put/call + IV skew, multi-day
-    "premarket": 1,         # overnight gap, intraday horizon
-    "macro": 20,            # rate/vol regime shifts over weeks
-    "calendar": 5,          # display-only
-    "political_impact": 5,  # display-only / event proximity
-    "geopolitical_impact": 5,  # display-only / policy-action proximity
-    "supply_chain": 60,     # bottleneck thesis is a multi-month view
-}
+from alpha_agent.signals.registry import signal_horizon_days as _signal_horizon_days
+
+# signal_name -> native forward horizon in TRADING days. Derived from the single
+# signal registry (source of truth); per-signal horizon rationale lives there.
+SIGNAL_HORIZON_DAYS: dict[str, int] = _signal_horizon_days()
 
 # Reference horizon used as a common cross-signal comparison + the default for
 # legacy callers that do not pass a horizon. Matches the prior hardcoded 5d.

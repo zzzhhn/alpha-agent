@@ -19,28 +19,20 @@ async def test_health_includes_db_status(client_with_db):
 
 
 async def test_health_signals_returns_all_rows(client_with_db, applied_db):
-    """All 11 signals listed even with no error_log entries (last_error=null).
+    """Every signal listed even with no error_log entries (last_error=null).
 
-    Phase 6a T10 added political_impact to _SIGNAL_NAMES.
+    The monitored set is now derived from the single signal registry, so it
+    covers ALL live signals. Previously a hand-kept list that had drifted
+    (missing geopolitical_impact + supply_chain); deriving it closes that gap.
     """
+    from alpha_agent.signals.registry import all_signal_names
+
     r = client_with_db.get("/api/_health/signals")
     assert r.status_code == 200
     sigs = r.json()["signals"]
     names = {s["name"] for s in sigs}
-    assert names == {
-        "factor",
-        "technicals",
-        "rsrs",
-        "analyst",
-        "earnings",
-        "news",
-        "insider",
-        "options",
-        "premarket",
-        "macro",
-        "calendar",
-        "political_impact",
-    }
+    assert names == set(all_signal_names())
+    assert {"geopolitical_impact", "supply_chain"} <= names  # the closed drift gap
 
 
 async def test_health_cron_returns_recent_runs_per_cron(client_with_db, applied_db):

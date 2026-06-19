@@ -65,35 +65,25 @@ from alpha_agent.config_store import refresh_config
 from alpha_agent.storage.postgres import get_pool
 from alpha_agent.storage.queries import enqueue_alert, log_error, upsert_signal_fast
 
-_ALL_MODULES = {
-    "factor": factor,
-    "technicals": technicals,
-    "rsrs": rsrs,
-    "analyst": analyst,
-    "earnings": earnings,
-    "news": news,
-    "insider": insider,
-    "options": options,
-    "premarket": premarket,
-    "macro": macro,
-    "calendar": cal,
-    "political_impact": political_impact,
-    "geopolitical_impact": geopolitical_impact,
-    "supply_chain": supply_chain,
-}
+# Name -> signal module + the tier cadence map, both DERIVED from the single
+# signal registry (source of truth). Adding a signal is one registry row; this
+# map and the tiers update automatically, so they can no longer drift from the
+# fusion weights / horizons / IC set. import_module returns the same cached
+# module objects the eager imports above bound, so test patching is unaffected.
+# (cron_group rationale, e.g. rsrs/supply_chain riding "slow", lives in the
+# registry.)
+from importlib import import_module as _import_module  # noqa: E402
 
-# Tier -> the signal modules that tier refreshes this run. supply_chain rides
-# the "slow" tier: a serenity study changes rarely, so refreshing it at the 4h
-# cadence (alongside insider/news) is plenty.
-_TIERS: dict[str, list[str]] = {
-    "full": list(_ALL_MODULES.keys()),
-    "tech": ["technicals"],
-    "mid":  ["options", "analyst", "premarket"],
-    # rsrs rides "slow": it is computed from DAILY high/low bars (its z-score
-    # barely moves intraday) and each fetch pulls ~420 days of OHLC, so the 4h
-    # cadence is plenty; the 15min "tech" tier would just re-download for nothing.
-    "slow": ["news", "insider", "supply_chain", "rsrs"],
+from alpha_agent.signals.registry import (  # noqa: E402
+    all_signal_names as _all_signal_names,
+    cron_tiers as _cron_tiers,
+    module_path as _module_path,
+)
+
+_ALL_MODULES = {
+    name: _import_module(_module_path(name)) for name in _all_signal_names()
 }
+_TIERS: dict[str, list[str]] = _cron_tiers()
 
 
 def _sig_from_breakdown(entry: dict, ticker: str) -> SignalScore:
