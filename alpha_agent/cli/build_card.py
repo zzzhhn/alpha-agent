@@ -21,6 +21,7 @@ from alpha_agent.signals.base import safe_fetch
 _SIGNAL_NAMES: list[str] = [
     "factor",
     "technicals",
+    "rsrs",
     "analyst",
     "earnings",
     "news",
@@ -53,6 +54,7 @@ def _fixture_signal(name: str, ticker: str, as_of: datetime):
     _z_map = {
         "factor": 1.5,
         "technicals": 0.8,
+        "rsrs": 0.7,
         "analyst": 1.2,
         "earnings": 0.6,
         "news": 0.3,

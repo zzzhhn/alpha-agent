@@ -58,8 +58,10 @@ def test_missing_core_signal_damps_composite_by_sqrt_coverage():
     sigs["factor"] = _sc(1.0, conf=0.0)  # factor dropped (no data)
     legacy = combine(sigs, p.weights).composite  # renormalized, no damping
     r = combine(sigs, p.weights, coverage_core=p.core_set())
-    # core total weight = factor.30+tech.20+analyst.10+earnings.10+news.10+macro.05 = 0.85
-    expected_cov = (0.85 - 0.30) / 0.85
+    # core total weight = factor.30+tech.15+analyst.10+earnings.10+news.10+macro.05 = 0.80
+    # (technicals trimmed 0.20->0.15 when rsrs was added; rsrs is NON-core so it
+    # is not in the core-coverage denominator.)
+    expected_cov = (0.80 - 0.30) / 0.80
     assert abs(r.coverage - expected_cov) < 1e-9
     assert abs(r.composite - legacy * math.sqrt(expected_cov)) < 1e-9
 

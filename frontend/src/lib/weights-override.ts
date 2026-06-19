@@ -25,7 +25,10 @@ export const WEIGHTS_KEY = "alpha-agent:weights";
 // this so the editor and the reweight engine never drift.
 export const DEFAULT_WEIGHTS: Record<string, number> = {
   factor: 0.3,
-  technicals: 0.2,
+  // mirror backend: technicals trimmed 0.20 -> 0.15 to fund rsrs (price-action
+  // bucket total unchanged at 0.20); see alpha_agent/fusion/weights.py.
+  technicals: 0.15,
+  rsrs: 0.05,
   analyst: 0.1,
   earnings: 0.1,
   news: 0.1,

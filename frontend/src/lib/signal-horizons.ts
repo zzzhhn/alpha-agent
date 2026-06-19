@@ -7,6 +7,7 @@
 export const SIGNAL_HORIZON_DAYS: Record<string, number> = {
   factor: 60,
   technicals: 5,
+  rsrs: 20,
   analyst: 20,
   earnings: 20,
   news: 3,

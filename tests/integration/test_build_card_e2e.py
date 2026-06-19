@@ -28,7 +28,7 @@ from alpha_agent.signals.base import SignalScore
 # unmigrated) macro_events table -> UndefinedTableError, breaking the "no
 # external APIs are hit" guarantee this suite documents.
 _SIGNAL_MODULES = [
-    "factor", "technicals", "analyst", "earnings", "news",
+    "factor", "technicals", "rsrs", "analyst", "earnings", "news",
     "insider", "options", "premarket", "macro", "calendar",
     "political_impact", "supply_chain",
 ]

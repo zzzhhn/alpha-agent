@@ -8,7 +8,15 @@ from typing import Mapping
 
 DEFAULT_WEIGHTS: dict[str, float] = {
     "factor":           0.30,
-    "technicals":       0.20,
+    # technicals trimmed 0.20 -> 0.15 to fund rsrs without inflating the total
+    # price-action allocation (technicals + rsrs = 0.20, unchanged). technicals
+    # is already cap-limited to 0.10 under STATIC_V2, so its EFFECTIVE weight is
+    # unchanged by this trim; the freed 0.05 of default budget goes to rsrs.
+    "technicals":       0.15,
+    # RSRS (signals/rsrs.py): price-based timing tilt, validated weak-but-positive
+    # and decorrelated (scripts/rsrs_validation.py: ~0.043 IC @20d). Small,
+    # exploratory weight; re-tune once ic_backtest_monthly accrues rsrs history.
+    "rsrs":             0.05,
     "analyst":          0.10,
     "earnings":         0.10,
     "news":             0.10,

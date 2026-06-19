@@ -56,6 +56,7 @@ def _spearman_rho(xs, ys):
 _ACTIVE_SIGNALS: tuple[str, ...] = (
     "factor",
     "technicals",
+    "rsrs",  # forward IC tracking for the RSRS timing tilt (native horizon 20d)
     "analyst",
     "earnings",
     "news",

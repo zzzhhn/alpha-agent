@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/_health", tags=["health"])
 _SIGNAL_NAMES = [
     "factor",
     "technicals",
+    "rsrs",
     "analyst",
     "earnings",
     "news",

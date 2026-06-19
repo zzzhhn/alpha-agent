@@ -71,13 +71,14 @@ class TestBuildCardOrchestrator:
         assert card.tier in ("BUY", "OW", "HOLD", "UW", "SELL")
         assert 0.0 <= card.confidence <= 1.0
 
-    def test_module_names_for_fixtures_returns_12_names(self):
+    def test_module_names_for_fixtures_returns_13_names(self):
         from alpha_agent.cli.build_card import _module_names_for_fixtures
 
         names = _module_names_for_fixtures()
         # Phase 6a-t6 added political_impact (weight 0); serenity seam #2 added
-        # supply_chain (exploratory 0.05).
-        assert len(names) == 12
+        # supply_chain (exploratory 0.05); 2026-06-19 added rsrs (price-timing).
+        assert len(names) == 13
         assert "factor" in names
+        assert "rsrs" in names
         assert "calendar" in names
         assert "political_impact" in names

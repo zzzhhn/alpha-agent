@@ -30,6 +30,7 @@ async def test_health_signals_returns_all_rows(client_with_db, applied_db):
     assert names == {
         "factor",
         "technicals",
+        "rsrs",
         "analyst",
         "earnings",
         "news",

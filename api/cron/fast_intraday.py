@@ -36,7 +36,6 @@ from alpha_agent.fusion.combine import combine
 from alpha_agent.fusion.rating import (
     compute_confidence, map_to_tier, map_to_tier_with_band,
 )
-from alpha_agent.fusion.weights import DEFAULT_WEIGHTS
 from alpha_agent.fusion.policy import get_active_policy
 
 # Council items #1 + #2: the live policy is an explicit, versioned object
@@ -57,6 +56,7 @@ from alpha_agent.signals import (
     options,
     political_impact,
     premarket,
+    rsrs,
     supply_chain,
     technicals,
 )
@@ -68,6 +68,7 @@ from alpha_agent.storage.queries import enqueue_alert, log_error, upsert_signal_
 _ALL_MODULES = {
     "factor": factor,
     "technicals": technicals,
+    "rsrs": rsrs,
     "analyst": analyst,
     "earnings": earnings,
     "news": news,
@@ -88,7 +89,10 @@ _TIERS: dict[str, list[str]] = {
     "full": list(_ALL_MODULES.keys()),
     "tech": ["technicals"],
     "mid":  ["options", "analyst", "premarket"],
-    "slow": ["news", "insider", "supply_chain"],
+    # rsrs rides "slow": it is computed from DAILY high/low bars (its z-score
+    # barely moves intraday) and each fetch pulls ~420 days of OHLC, so the 4h
+    # cadence is plenty; the 15min "tech" tier would just re-download for nothing.
+    "slow": ["news", "insider", "supply_chain", "rsrs"],
 }
 
 

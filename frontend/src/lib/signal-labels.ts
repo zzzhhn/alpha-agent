@@ -15,6 +15,7 @@ import { t, type Locale } from "./i18n";
 const SIGNAL_DISPLAY_LABEL_FALLBACK: Record<string, Record<Locale, string>> = {
   factor: { zh: "因子", en: "Factor" },
   technicals: { zh: "技术面", en: "Technicals" },
+  rsrs: { zh: "支阻强度", en: "RSRS" },
   analyst: { zh: "分析师", en: "Analyst" },
   earnings: { zh: "财报", en: "Earnings" },
   news: { zh: "新闻", en: "News" },

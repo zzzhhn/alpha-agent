@@ -21,6 +21,7 @@ from __future__ import annotations
 SIGNAL_HORIZON_DAYS: dict[str, int] = {
     "factor": 60,           # cross-sectional factor exposure, long-horizon
     "technicals": 5,        # multi-day momentum / moving-average structure
+    "rsrs": 20,             # RSRS slope z-score; US sweet spot is the ~20d horizon
     "analyst": 20,          # rating/target revisions play out over weeks
     "earnings": 20,         # post-earnings drift
     "news": 3,              # sentiment decays fast
