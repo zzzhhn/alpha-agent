@@ -365,6 +365,33 @@ async def handler(
                 err_message=str(v) or repr(v),
             )
 
+    # Product ledger (council #1): after a FULL run, snapshot the canonical
+    # picks view into the append-only ledger so the engine keeps an immutable
+    # causal record of what the user saw. Idempotent per market date — the first
+    # full run of the day records it; later full runs see the existing complete
+    # run and skip (record_daily_close returns None). Only the "full" tier has
+    # all signals fresh, so partial tiers never write the ledger. Best-effort:
+    # a failure is surfaced (cron result + cron_runs details + log_error, never
+    # swallowed) but must not break the signal cron.
+    ledger_run_id: int | None = None
+    ledger_error: str | None = None
+    if tier == "full":
+        try:
+            from alpha_agent.ledger import record_daily_close
+            ledger_run_id = await record_daily_close(
+                pool, scheduled_for_date=now.date(), started_at=started_at,
+            )
+        except Exception as exc:  # noqa: BLE001 — never let the ledger break the cron
+            ledger_error = f"{type(exc).__name__}: {str(exc) or repr(exc)}"[:200]
+            await log_error(
+                pool,
+                layer="cron",
+                component=f"cron.fast_intraday[{tier}].ledger",
+                ticker="_LEDGER_",
+                err_type=type(exc).__name__,
+                err_message=str(exc) or repr(exc),
+            )
+
     # Distinct cron_name per tier so each tier has its own history in
     # cron_runs. tier="full" keeps the legacy "fast_intraday" name for
     # backward compat with /api/admin/last_refresh + the picks
@@ -376,9 +403,13 @@ async def handler(
         "VALUES ($1, $2, $3, $4, $5, $6::jsonb)",
         cron_name, started_at, datetime.now(UTC),
         len(errors) == 0, len(errors),
-        json.dumps({"rows_written": rows_written, "tier": tier}),
+        json.dumps({
+            "rows_written": rows_written, "tier": tier,
+            "ledger_run_id": ledger_run_id, "ledger_error": ledger_error,
+        }),
     )
     return {
         "ok": True, "tier": tier,
         "rows_written": rows_written, "errors": errors[:5],
+        "ledger_run_id": ledger_run_id, "ledger_error": ledger_error,
     }

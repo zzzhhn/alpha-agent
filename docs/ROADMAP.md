@@ -12,6 +12,13 @@ order below front-loads "prove the current product is honest and works" over
 
 ## Shipped recently
 
+- **Append-only product ledger** (step 1, 2026-06-19) — migration V024
+  (`research_run` + `rating_snapshot`); writer/reader `storage/product_ledger.py`
+  (append-only, duplicate-complete guard, canonical = latest complete by
+  finished_at); `ledger.record_daily_close` snapshots the canonical picks view
+  via the shared `build_lean_view` (golden round-trip = byte-identical to what
+  the user saw); wired best-effort + idempotent into `fast_intraday` full runs.
+  No change to the live read path or signal numerics.
 - **RSRS timing factor** (`signals/rsrs.py`) — weak-but-positive decorrelated tilt,
   small capped weight. Keep; re-judge by incremental forward contribution (step 7),
   not by IC cutoff.
@@ -21,7 +28,7 @@ order below front-loads "prove the current product is honest and works" over
 
 ## Ordered plan (council ICE ranking)
 
-### 1. Append-only product ledger  ← single highest-leverage move
+### 1. Append-only product ledger  ✅ SHIPPED 2026-06-19
 The engine has no causal memory of what it believed when. Build immutable
 `research_run` + `rating_snapshot` tables recording, per market date, what was
 emitted and what the user saw (composite, rank, tier, eligibility, coverage,

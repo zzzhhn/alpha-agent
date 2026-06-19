@@ -100,6 +100,50 @@ async def test_fast_intraday_writes_full_card(applied_db, monkeypatch):
         await conn.close()
 
 
+async def test_fast_intraday_full_run_records_product_ledger(applied_db, monkeypatch):
+    """A full-signal run snapshots the canonical picks view into the append-only
+    ledger (council #1). Best-effort + once per market date."""
+    from alpha_agent.storage import postgres as pg_module
+
+    pg_module._pool = None
+    pg_module._pool_dsn = None
+
+    monkeypatch.setenv("DATABASE_URL", applied_db)
+    monkeypatch.setattr(
+        "alpha_agent.storage.queries.get_priority_universe",
+        AsyncMock(return_value=["AAPL", "MSFT"]),
+    )
+    patches = _patch_all_signals()
+    for p in patches:
+        p.start()
+    try:
+        from api.cron.fast_intraday import handler
+
+        result = await handler()  # tier="full" by default
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert result["ok"] is True
+    assert result.get("ledger_run_id") is not None
+
+    conn = await asyncpg.connect(applied_db)
+    try:
+        run = await conn.fetchrow(
+            "SELECT * FROM research_run WHERE status='complete' "
+            "ORDER BY finished_at DESC LIMIT 1"
+        )
+        assert run is not None
+        assert run["run_type"] == "daily_close"
+        snaps = await conn.fetch(
+            "SELECT ticker FROM rating_snapshot WHERE run_id=$1 ORDER BY ticker",
+            run["id"],
+        )
+        assert {s["ticker"] for s in snaps} == {"AAPL", "MSFT"}
+    finally:
+        await conn.close()
+
+
 async def test_fast_intraday_emits_alert_on_rating_change(applied_db, monkeypatch):
     """Pre-seed daily_signals_fast with HOLD; new run with z=0.8 → OW should
     enqueue a rating_change alert."""

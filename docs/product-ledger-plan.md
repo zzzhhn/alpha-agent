@@ -1,9 +1,23 @@
 # Plan: append-only product ledger + run-health gates
 
-Status: proposed (2026-06-19), elevated to the #1 move by the llm-council review
+Status: LEDGER SHIPPED 2026-06-19 (the run-health/abstention gates below remain
+roadmap step 2). Elevated to the #1 move by the llm-council review
 (`docs/_council-consolidation-review/FINAL_verdict.md`). This is the prerequisite
 for honest L2, forward IC, drift detection, adaptive-weight validation, and tier
 monotonicity. Everything else can silently recompute the past without it.
+
+Shipped (step 1): migration `V024__product_ledger.sql`; pure-persistence
+`alpha_agent/storage/product_ledger.py` (RunMeta / RatingSnapshot dataclasses,
+`record_research_run` append-only + duplicate-complete guard, `get_canonical_run`,
+`get_run_snapshots`); orchestration `alpha_agent/ledger.py::record_daily_close`
+which snapshots the canonical picks view through the shared
+`alpha_agent/api/routes/picks.py::build_lean_view` (so the record is byte-identical
+to what /api/picks/lean serves); wired best-effort + idempotent-per-date into
+`api/cron/fast_intraday.py` full runs. Tests: `tests/storage/test_migration_v024.py`,
+`test_product_ledger.py`, `test_ledger.py` (golden round-trip + append-only
+invariant), `tests/api/test_build_lean_view.py`, plus the fast_intraday wiring test.
+Deferred to step 2 (still on the schema, populated later): full eligibility recording
+of dropped tickers, coverage + price-download provenance columns, run-health gates.
 
 ## Problem
 
