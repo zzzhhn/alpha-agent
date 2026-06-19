@@ -1,7 +1,7 @@
 """Tests for GET /api/picks/lean."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import asyncpg
 
@@ -51,3 +51,47 @@ async def test_picks_lean_empty_db_returns_empty_list(client_with_db):
     body = r.json()
     assert body["picks"] == []
     assert body["stale"] is False
+
+
+async def _seed_fresh_and_dead(applied_db) -> None:
+    """TFRESH: fresh signal + closes through today. TDEAD: fresh signal but a
+    dead price feed (last close ~30 days ago)."""
+    today = date.today()
+    conn = await asyncpg.connect(applied_db)
+    try:
+        for tk, comp in [("TFRESH", 2.0), ("TDEAD", 1.9)]:
+            await conn.execute(
+                "INSERT INTO daily_signals_fast "
+                "(ticker, date, composite, rating, confidence, breakdown, partial) "
+                "VALUES ($1, $2, $3, 'BUY', 0.8, '{\"breakdown\": []}', false)",
+                tk, today, comp,
+            )
+        for i in range(5):
+            await conn.execute(
+                "INSERT INTO daily_prices (ticker, date, close) VALUES ($1, $2, $3)",
+                "TFRESH", today - timedelta(days=4 - i), 100.0 + i,
+            )
+        for i in range(5):
+            await conn.execute(
+                "INSERT INTO daily_prices (ticker, date, close) VALUES ($1, $2, $3)",
+                "TDEAD", today - timedelta(days=34 - i), 50.0 + i,
+            )
+    finally:
+        await conn.close()
+
+
+async def test_picks_lean_excludes_dead_price_feed_from_default(client_with_db, applied_db):
+    """A dead-price-feed ticker is dropped from the default ranking."""
+    await _seed_fresh_and_dead(applied_db)
+    default = [p["ticker"] for p in client_with_db.get("/api/picks/lean?limit=20").json()["picks"]]
+    assert "TFRESH" in default
+    assert "TDEAD" not in default
+
+
+async def test_picks_lean_search_still_surfaces_dead_feed(client_with_db, applied_db):
+    """An explicit search bypasses the freshness guard so a dead ticker is still
+    findable (one app request per test: TestClient runs each on its own loop and
+    asyncpg pool connections are loop-bound)."""
+    await _seed_fresh_and_dead(applied_db)
+    searched = [p["ticker"] for p in client_with_db.get("/api/picks/lean?search=TDEAD").json()["picks"]]
+    assert searched == ["TDEAD"]

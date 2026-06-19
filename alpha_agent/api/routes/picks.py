@@ -21,6 +21,14 @@ router = APIRouter(prefix="/api/picks", tags=["picks"])
 
 _STALE_THRESHOLD_HOURS = 24
 
+# A ticker with no close in the last N trading sessions has a dead price feed
+# (delisting / ticker change / halt — e.g. HOLX/SEE return nothing on Yahoo,
+# BK/CTRA stopped on a date). It is untradeable AND its signal is computed on
+# stale prices, so it must not be recommended. The guard excludes such tickers
+# from the default ranking only — an explicit ticker search still surfaces it
+# (so you can look one up). Reversible: raise to re-admit slower-updating names.
+_PRICE_FRESH_TRADING_DAYS = 3
+
 
 class LeanCard(BaseModel):
     """Lean projection of a signal row, no heavy breakdown list.
@@ -128,6 +136,21 @@ async def picks_lean(
         # direction is a controlled literal derived from the pattern-validated
         # `side`, never raw user input, so the f-string interpolation is safe.
         score_dir = "ASC" if side == "short" else "DESC"
+        # Price-feed freshness cutoff: the oldest of the last N distinct trading
+        # dates in daily_prices. A recommended ticker must have a close on/after
+        # this (i.e. have traded in the last N sessions); a dead feed (delisted /
+        # ticker change / halt) is dropped from the default ranking below. NULL
+        # when there is no price history yet -> guard disabled. Computed relative
+        # to the market's own latest dates, so it tolerates the normal ~1-day
+        # price-vs-signal lag without dropping healthy names.
+        fresh_cutoff = await pool.fetchval(
+            """
+            SELECT min(date) FROM (
+                SELECT DISTINCT date FROM daily_prices ORDER BY date DESC LIMIT $1
+            ) t
+            """,
+            _PRICE_FRESH_TRADING_DAYS,
+        )
         # DISTINCT ON reduces each table to its latest row per ticker, then
         # UNION ALL stitches them with fast taking precedence (NOT EXISTS
         # drops slow rows whose ticker already came from fast). Dedup, the
@@ -180,11 +203,24 @@ async def picks_lean(
                    fetched_at, partial
             FROM combined
             WHERE ($2::text IS NULL OR ticker ILIKE '%' || $2 || '%')
+              -- Drop dead-price-feed tickers from the DEFAULT ranking only (an
+              -- explicit search, $2 not null, still surfaces them). Keep a
+              -- ticker only if it has a close in the last N sessions. $3 NULL
+              -- (no price history) disables the guard.
+              AND (
+                $2::text IS NOT NULL
+                OR $3::date IS NULL
+                OR EXISTS (
+                    SELECT 1 FROM daily_prices dp
+                    WHERE dp.ticker = combined.ticker AND dp.date >= $3::date
+                )
+              )
             ORDER BY partial ASC, score {score_dir}
             LIMIT $1
             """,
             limit,
             search_norm,
+            fresh_cutoff,
         )
         if not rows:
             return PicksResponse(picks=[], as_of=None, stale=False)
