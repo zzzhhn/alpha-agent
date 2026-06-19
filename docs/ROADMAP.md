@@ -1,49 +1,80 @@
 # alpha-agent roadmap
 
-Single-user quantitative equity rating engine. Research-only (no live execution).
-This file tracks direction; detailed plans live in their own docs (linked).
+Single-user, free-data, research-only quantitative equity rating engine. This file
+is the ordered master plan; detail docs are linked per step.
+
+Guiding principle (from the 2026-06-19 llm-council review,
+`docs/_council-consolidation-review/FINAL_verdict.md`): **do not build more alpha
+machinery right now.** The engine does not need more sophistication; it needs
+causal memory, fewer silent drift paths, and fewer ways to lie to itself. So the
+order below front-loads "prove the current product is honest and works" over
+"add more signals/factors."
 
 ## Shipped recently
 
-- **RSRS timing factor** — price-based (high~low slope, z-scored) cross-sectional
-  diversifier, validated weak-but-positive (~0.043 IC @20d, M=126) and fused at a
-  small capped weight. `signals/rsrs.py`, `scripts/rsrs_validation.py`.
-- **Directional consistency** on picks (5d/1m/1y/all next-day hit-rate, dash when thin).
-- **Dead-price-feed guard** — untradeable/delisted tickers (no close in last N
-  sessions) dropped from the default ranking; cron now surfaces skipped tickers.
+- **RSRS timing factor** (`signals/rsrs.py`) — weak-but-positive decorrelated tilt,
+  small capped weight. Keep; re-judge by incremental forward contribution (step 7),
+  not by IC cutoff.
+- **Directional consistency** on picks (5d/1m/1y/all next-day hit-rate).
+- **Dead-price-feed guard** — untradeable tickers dropped from default ranking;
+  cron surfaces skipped tickers.
 
-## Planned (ordered)
+## Ordered plan (council ICE ranking)
 
-### 1. Signal-registry consolidation
-See `docs/signal-registry-consolidation-plan.md`. Replace the ~10 hand-maintained
-signal-registration sites (7 backend + 3 frontend mirrors) with a single
-`SIGNAL_REGISTRY` everything derives from; codegen the frontend mirrors; delete
-dead `llm/_legacy/`. Structural, zero behavior change, phased.
+### 1. Append-only product ledger  ← single highest-leverage move
+The engine has no causal memory of what it believed when. Build immutable
+`research_run` + `rating_snapshot` tables recording, per market date, what was
+emitted and what the user saw (composite, rank, tier, eligibility, coverage,
+effective weights, price source + as-of), plus provenance (registry_hash,
+weight_policy_id, tier_threshold_version, data_asof). No overwrites; corrections
+are new run IDs. This is the prerequisite that makes honest L2, forward IC, drift
+detection, adaptive-weight validation, and tier checks possible. Without it every
+validation layer can silently recompute the past and fool us.
+Detail: `docs/product-ledger-plan.md`.
 
-### 2. L2 forward paper-trading (verification layer)
-The honest, end-to-end answer to "do the engine's calls actually work?" without
-risking real money. Three levels of verification, only L1+L2 in scope:
+### 2. Run health + abstention gates
+Bad runs must not be treated as tradable truth. Gate each run on eligible-count,
+stale-feed count, missing-price count, failed-signal count, benchmark availability,
+BUY/SELL counts, sector concentration; mark failing runs non-tradable. L2 consumes
+only `complete`, gated runs. Detail: in `docs/product-ledger-plan.md`.
 
-- **L1 (have):** historical / IC backtest (`ic_engine`, `consistency`). Statistical,
-  has look-ahead/overfit risk.
-- **L2 (build this):** forward paper-trading. Take the engine's REAL daily picks,
-  construct a virtual portfolio (e.g. long the top-N OW/BUY names, optional short
-  the bottom-N), mark it to market daily off `daily_prices`, and track the
-  cumulative equity curve vs a benchmark (SPY). It is forward and look-ahead-free
-  (only uses data as it arrives), needs no broker / no paid data / no real money,
-  and is largely a deterministic accounting layer over data we already have
-  (picks + daily_prices). This is the natural extension of the earlier
-  forward-IC-tracking / hindsight-basket work. Deliverables: a portfolio-construction
-  rule, a daily mark-to-market cron, a positions/pnl table, an equity-curve UI.
-- **L3 (NOT now):** real-money live execution via a broker API. Gated on L2 showing
-  a forward edge over a meaningful window. Risk + broker/OMS/reconciliation surface;
-  free data is NOT the blocker (Alpaca free tier covers paper+live data), the
-  execution surface is. Revisit only after L2.
+### 3. Signal-registry consolidation
+Replace the ~10 hand-maintained registration sites with ONE data-only manifest
+(string import paths, explicit fields, no eager imports), derive all backend lists,
+codegen the frontend mirrors (CI fails if stale), add lazy-import + invariant tests.
+Detail (revised per council): `docs/signal-registry-consolidation-plan.md`.
 
-## Backlog / later
+### 4. Delete dead legacy + freeze discovery expansion
+Prove `llm/_legacy/` unused via import graph, then delete it. Freeze new
+LLM-factor / evolution / sandbox expansion until the ledger + L2 prove the current
+product has forward value. Do not spend effort discovering exotic weak signals now.
 
-- GA-based factor mining as a second discovery engine feeding the existing
-  sandbox/validation (complements the LLM proposer). (RedNote note 5)
-- Explicit money-management / position-sizing stage (formalize the Kelly sizing
-  now buried in confidence). (RedNote note 3 step 5 + note 1 "risk assessment")
-- Re-tune / promote-or-drop RSRS once `ic_backtest_monthly` accrues its live IC.
+### 5. Resolve the inert adaptive-weights subsystem
+`backtest/adaptive_weights` computes EWMA-ICIR weights that nothing live consumes.
+Inert is forbidden (false capability). Pick one: (a) research-only, explicitly
+labelled not-live; (b) guarded activation `0.9*static_prior + 0.1*adaptive` with
+min-sample, caps, nonneg, fallback, persisted effective weights; or (c) delete.
+Do NOT flip EWMA-ICIR fully live on noisy free-data IC.
+
+### 6. Minimal causal L2 forward paper-trading
+On top of the ledger: long-only top-50, equal-weight, weekly rebalance, signal
+after close D filled at D+1 close, 10 bps/side (report 5/20 sensitivity), benchmark
+SPY (secondary RSP). Orders generated from a PRIOR immutable snapshot and persisted
+before execution prices are consumed. Report gross+net+turnover+stale-count+
+sector+beta+confidence bands. Held positions never silently dropped. This is the
+honest "should the user trust the ratings" test. L3 real-money execution stays
+deferred until L2 shows a forward edge. Detail: `docs/l2-paper-trading-plan.md`.
+
+### 7. Prune signals by incremental forward contribution + tier validation
+Only after the above: prune a signal only if low IC AND redundant-correlation AND
+poor coverage/staleness AND high maintenance AND no forward/L2 contribution (never
+a hard IC cutoff). Add monthly tier-monotonicity validation (BUY > OW > HOLD > UW >
+SELL forward return; hit-rate + turnover by tier).
+
+## Backlog / later (explicitly NOT now)
+
+- L3 real-money live execution (broker API) — gated on L2 forward edge.
+- GA-based factor mining as a second discovery engine. (RedNote note 5)
+- Explicit money-management / position-sizing stage. (RedNote note 3 step 5)
+- Research diagnostic: decile-spread / broad rank-weighted book to measure
+  cross-sectional ranking alpha (separate from the user-facing top-50 product test).

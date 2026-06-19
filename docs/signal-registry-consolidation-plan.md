@@ -1,8 +1,13 @@
 # Consolidation Plan: a single Signal Registry
 
-Status: proposed (2026-06-19). Author note: this plan was scoped after integrating
-the RSRS factor, which required edits to ~10 separate registration sites. That
-exercise is the evidence base below.
+Status: proposed (2026-06-19), revised same day per the llm-council review
+(`docs/_council-consolidation-review/FINAL_verdict.md`). Council call: GO WITH
+CHANGES (data-only manifest with string import paths, not decorator/eager imports;
+split the vague `tier`; CI-fail-on-stale codegen; lazy-import test). It is now
+**step 3** of the master plan (`docs/ROADMAP.md`): the product ledger + run-health
+gates (steps 1-2) come first, because the registry is internal hygiene while the
+ledger is what makes the product honest. Author note: scoped after integrating the
+RSRS factor, which required edits to ~10 separate registration sites (evidence below).
 
 ## 1. Diagnosis (what is actually wrong)
 
@@ -55,23 +60,39 @@ There is no single source of truth. Each list drifts independently (today's
 
 ### Phase 1 — backend `SIGNAL_REGISTRY` (highest ROI, low risk)
 
-New module `alpha_agent/signals/registry.py`:
+New module `alpha_agent/signals/registry.py`. It must be a **data-only manifest**:
+pure dataclasses, NO imports of pandas / yfinance / signal modules / fusion / cron /
+api. Signal implementation modules must NOT import the registry (no circular dep).
+Reference signal code by **string import path**, resolved lazily by the consumer
+that actually needs the module (the cron), never at registry import time. Do not use
+decorator self-registration (rejected by council: it forces importing every signal
+module to populate the registry, which breaks serverless cold-start hygiene and makes
+discovery depend on import side effects).
+
+Split the one vague `tier` into explicit, separately-meaningful fields:
 
 ```python
 @dataclass(frozen=True)
 class SignalMeta:
     name: str
-    module: str          # importable as alpha_agent.signals.<module>
-    weight: float        # default fusion weight
-    horizon_days: int    # native forward horizon
-    core: bool           # in the coverage-damping core set?
-    tier: str            # fast-cron cadence: "tech" | "mid" | "slow"
+    module_path: str       # "alpha_agent.signals.rsrs" (string; lazy-resolved)
+    compute_fn: str        # "fetch_signal"
+    cron_group: str        # refresh cadence: "tech" | "mid" | "slow" | "full"
+    core_for_coverage: bool  # in the sqrt-coverage core set?
+    active_in_ic: bool     # tracked by ic_engine?
+    enabled_in_live: bool
+    default_weight: float
+    horizon_days: int
+    fusion_cap: float | None  # STATIC_V2 guardrail cap
     label_zh: str
     label_en: str
-    cap: float | None = None   # optional STATIC_V2 guardrail cap
+    data_deps: tuple[str, ...] = ()  # e.g. ("daily_prices.high", "daily_prices.low")
 
 SIGNAL_REGISTRY: tuple[SignalMeta, ...] = ( ... one entry per signal ... )
 ```
+
+(`rating_tier` BUY/OW/HOLD/UW/SELL is a separate concept and stays out of the
+registry; it is rating OUTPUT, not signal metadata.)
 
 Then the 7 backend sites become one-line derivations, e.g.:
 
@@ -92,9 +113,13 @@ per-signal caps fold in via the same registry.
 Verification (the safety of this phase):
 - A migration test that asserts each derived dict EQUALS a golden snapshot of the
   current hardcoded values (so the refactor provably changes nothing).
-- A registry-integrity test: every registered signal has an importable module with
-  a `fetch_signal`; weights sum to 1.0; no name appears in a derived list but not
-  the registry. This test is what makes future drift impossible.
+- A registry-integrity test: every registered signal's `module_path` resolves to a
+  module exposing `compute_fn`; weights sum to 1.0; no name appears in a derived
+  list but not the registry. This is what makes future drift impossible.
+- A lazy-import regression test (council must-have): `import
+  alpha_agent.signals.registry` must NOT pull in `yfinance`, `pandas`, or any signal
+  module (assert they are absent from `sys.modules` after a clean import). This is
+  what keeps the manifest data-only and serverless-cold-start-safe.
 - Full suite green; build a card before/after and assert identical composite.
 
 ### Phase 2 — frontend codegen (kill the hand-written mirrors)
