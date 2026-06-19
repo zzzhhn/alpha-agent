@@ -45,6 +45,10 @@ class RunMeta:
     registry_hash: str | None = None
     weight_policy_id: str | None = None
     tier_threshold_version: str | None = None
+    # Run-health gate verdict + metrics (step 2): {passed, reasons[], metrics{}}.
+    # Tradability is encoded in `status` (a failed gate -> 'partial'); this is
+    # the auditable detail behind that decision.
+    health: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -130,15 +134,16 @@ async def record_research_run(
                 INSERT INTO research_run
                     (scheduled_for_date, run_type, status, started_at,
                      finished_at, data_asof, input_data_cutoff, code_version,
-                     registry_hash, weight_policy_id, tier_threshold_version)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                     registry_hash, weight_policy_id, tier_threshold_version,
+                     health_json)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
                 RETURNING id
                 """,
                 run_meta.scheduled_for_date, run_meta.run_type, run_meta.status,
                 run_meta.started_at, run_meta.finished_at, run_meta.data_asof,
                 run_meta.input_data_cutoff, run_meta.code_version,
                 run_meta.registry_hash, run_meta.weight_policy_id,
-                run_meta.tier_threshold_version,
+                run_meta.tier_threshold_version, json.dumps(run_meta.health or {}),
             )
 
             if snapshots:

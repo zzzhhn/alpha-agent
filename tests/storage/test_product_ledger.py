@@ -138,6 +138,22 @@ async def test_partial_and_failed_runs_are_never_canonical(pool):
 
 
 @pytest.mark.asyncio
+async def test_health_json_roundtrips(pool):
+    import json
+    health = {"passed": True, "reasons": [], "metrics": {"eligible_count": 42}}
+    meta = RunMeta(
+        scheduled_for_date=date(2026, 6, 18),
+        status="complete",
+        started_at=datetime(2026, 6, 18, 21, 0, tzinfo=UTC),
+        finished_at=datetime(2026, 6, 18, 21, 5, tzinfo=UTC),
+        health=health,
+    )
+    run_id = await record_research_run(pool, meta, [_snap("AAPL", 1)])
+    row = await pool.fetchrow("SELECT health_json FROM research_run WHERE id=$1", run_id)
+    assert json.loads(row["health_json"]) == health
+
+
+@pytest.mark.asyncio
 async def test_partial_does_not_block_a_later_complete(pool):
     # A partial run earlier in the day must not trip the duplicate guard.
     await record_research_run(pool, _meta(status="partial"), [_snap("AAPL", 1)])

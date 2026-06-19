@@ -130,11 +130,13 @@ async def test_fast_intraday_full_run_records_product_ledger(applied_db, monkeyp
     conn = await asyncpg.connect(applied_db)
     try:
         run = await conn.fetchrow(
-            "SELECT * FROM research_run WHERE status='complete' "
-            "ORDER BY finished_at DESC LIMIT 1"
+            "SELECT * FROM research_run ORDER BY finished_at DESC LIMIT 1"
         )
         assert run is not None
         assert run["run_type"] == "daily_close"
+        # Only 2 mocked names + no benchmark seeded -> gated non-tradable
+        # (proves the run-health gate runs end-to-end inside the cron).
+        assert run["status"] == "partial"
         snaps = await conn.fetch(
             "SELECT ticker FROM rating_snapshot WHERE run_id=$1 ORDER BY ticker",
             run["id"],

@@ -12,6 +12,14 @@ order below front-loads "prove the current product is honest and works" over
 
 ## Shipped recently
 
+- **Run-health + abstention gates** (step 2, 2026-06-19) — `run_health.py`
+  (`evaluate_gates`, pure; `benchmark_is_fresh`); migration V025 (`health_json`
+  on `research_run`). A daily-close run failing a hard gate (eligible-count <
+  MIN_ELIGIBLE, or no fresh SPY benchmark) is recorded `partial` (with reasons +
+  metrics in `health_json`), so `get_canonical_run` excludes it and L2 /
+  forward-IC never consume a non-tradable run. Live gates: eligible-count +
+  benchmark; tier-distribution recorded as a metric. Deferred (need richer
+  recording): stale/missing-price, failed-signal, sector-concentration gates.
 - **Append-only product ledger** (step 1, 2026-06-19) — migration V024
   (`research_run` + `rating_snapshot`); writer/reader `storage/product_ledger.py`
   (append-only, duplicate-complete guard, canonical = latest complete by
@@ -39,11 +47,16 @@ detection, adaptive-weight validation, and tier checks possible. Without it ever
 validation layer can silently recompute the past and fool us.
 Detail: `docs/product-ledger-plan.md`.
 
-### 2. Run health + abstention gates
+### 2. Run health + abstention gates  ✅ SHIPPED 2026-06-19 (core gates)
 Bad runs must not be treated as tradable truth. Gate each run on eligible-count,
 stale-feed count, missing-price count, failed-signal count, benchmark availability,
 BUY/SELL counts, sector concentration; mark failing runs non-tradable. L2 consumes
 only `complete`, gated runs. Detail: in `docs/product-ledger-plan.md`.
+Shipped: eligible-count + benchmark-availability hard gates wired into
+`record_daily_close` (verdict in `research_run.health_json`); a failed gate
+records `partial` (excluded by `get_canonical_run`). Remaining (need
+ineligible-ticker + per-signal-failure recording, partly step-3 registry work):
+stale/missing-price, failed-signal, and sector-concentration gates.
 
 ### 3. Signal-registry consolidation
 Replace the ~10 hand-maintained registration sites with ONE data-only manifest

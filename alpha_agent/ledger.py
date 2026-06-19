@@ -77,19 +77,32 @@ async def record_daily_close(
     registry_hash: str | None = None,
     tier_threshold_version: str | None = None,
     status: str = "complete",
+    min_eligible: int | None = None,
     allow_correction: bool = False,
     on_conflict: str = "skip",
 ) -> int | None:
-    """Snapshot the canonical default picks view into the ledger.
+    """Snapshot the canonical default picks view into the ledger, GATED.
+
+    The run is scored by run_health.evaluate_gates: a healthy run is recorded
+    'complete' (canonical, tradable); a run failing a hard gate (too few
+    eligible / no benchmark) is recorded 'partial' with reasons (still appended
+    for forensics, but excluded from get_canonical_run so L2 / forward-IC never
+    consume it). The gate verdict + metrics are persisted in health_json.
+
+    `status` defaults to 'complete' = "let the gates decide"; pass an explicit
+    non-'complete' status (e.g. 'failed' from a crashed pipeline) to override
+    the gate and force that terminal state.
 
     Returns the new run id, or None when on_conflict='skip' and a complete run
-    already exists for the date (the first run of the day wins; re-fires are a
-    no-op). Set allow_correction=True to deliberately record a superseding
-    correction (a new run id; the earlier run is never mutated).
+    already exists for the date (the first complete run of the day wins;
+    re-fires are a no-op). Set allow_correction=True to deliberately record a
+    superseding correction (a new run id; the earlier run is never mutated).
 
     The view captured is the user-facing default: full universe, long side,
     short mode — the same one /api/picks/lean serves with no params.
     """
+    from alpha_agent.run_health import MIN_ELIGIBLE, benchmark_is_fresh, evaluate_gates
+
     now = datetime.now(UTC)
     for_date = scheduled_for_date or now.date()
     started = started_at or now
@@ -98,6 +111,21 @@ async def record_daily_close(
         pool, limit=600, search=None, mode="short", side="long"
     )
     snapshots = [_snapshot_from_card(c, i) for i, c in enumerate(cards, start=1)]
+
+    # Gate the run. The benchmark check is the only DB-dependent gate input.
+    bench_fresh = await benchmark_is_fresh(pool)
+    gate = evaluate_gates(
+        snapshots,
+        benchmark_fresh=bench_fresh,
+        min_eligible=min_eligible if min_eligible is not None else MIN_ELIGIBLE,
+    )
+    # 'complete' default => the gates decide; an explicit terminal status wins.
+    effective_status = gate.status if status == "complete" else status
+    health = {
+        "passed": gate.passed,
+        "reasons": gate.reasons,
+        "metrics": gate.metrics,
+    }
 
     if weight_policy_id is None:
         try:
@@ -108,7 +136,7 @@ async def record_daily_close(
 
     meta = RunMeta(
         scheduled_for_date=for_date,
-        status=status,
+        status=effective_status,
         started_at=started,
         finished_at=finished_at or datetime.now(UTC),
         run_type="daily_close",
@@ -118,6 +146,7 @@ async def record_daily_close(
         registry_hash=registry_hash,
         weight_policy_id=weight_policy_id,
         tier_threshold_version=tier_threshold_version,
+        health=health,
     )
 
     try:
