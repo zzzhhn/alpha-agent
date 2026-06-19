@@ -12,6 +12,15 @@ order below front-loads "prove the current product is honest and works" over
 
 ## Shipped recently
 
+- **Single signal registry** (step 3, 2026-06-19) — `signals/registry.py`, one
+  data-only manifest (string import paths, lazy-resolved). All 7 backend lists
+  (weights / horizons / core-set / caps / IC-set / cron modules+tiers / CLI +
+  health names) now derive from it; the 3 frontend mirrors are gated by a Python
+  drift test (CI fails if they disagree). Fixed the drift the manifest exposed
+  (build_card + health had silently dropped geopolitical_impact / supply_chain).
+  No fusion numerics change (golden-equality + invariant + lazy-import tests).
+  Surfaced: DEFAULT_WEIGHTS totals 1.05 not 1.0 (harmless under renormalization,
+  flagged for #456). Optional `GET /api/_signal_registry` debug endpoint not built.
 - **Run-health + abstention gates** (step 2, 2026-06-19) — `run_health.py`
   (`evaluate_gates`, pure; `benchmark_is_fresh`); migration V025 (`health_json`
   on `research_run`). A daily-close run failing a hard gate (eligible-count <
@@ -58,11 +67,15 @@ records `partial` (excluded by `get_canonical_run`). Remaining (need
 ineligible-ticker + per-signal-failure recording, partly step-3 registry work):
 stale/missing-price, failed-signal, and sector-concentration gates.
 
-### 3. Signal-registry consolidation
+### 3. Signal-registry consolidation  ✅ SHIPPED 2026-06-19
 Replace the ~10 hand-maintained registration sites with ONE data-only manifest
 (string import paths, explicit fields, no eager imports), derive all backend lists,
 codegen the frontend mirrors (CI fails if stale), add lazy-import + invariant tests.
 Detail (revised per council): `docs/signal-registry-consolidation-plan.md`.
+Shipped: `signals/registry.py` + 7 backend derivations + a Python frontend drift
+gate (chosen over TS codegen because this CI runs pytest, not a frontend build) +
+golden-equality / invariant / lazy-import tests. The plan's Phase 3 (delete
+`llm/_legacy`) is roadmap step 4 below, not part of this step.
 
 ### 4. Delete dead legacy + freeze discovery expansion
 Prove `llm/_legacy/` unused via import graph, then delete it. Freeze new
