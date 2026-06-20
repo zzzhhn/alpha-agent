@@ -4,14 +4,21 @@ Catches the class of bug where a new operand is added to one schema layer
 (e.g. _V2_FUNDAMENTAL_FIELDS) but missing from another (e.g. AST whitelist
 _ALLOWED_OPERANDS), producing user-visible HTTP 400 in production.
 
-The 4 layers that MUST stay in sync:
+The 5 layers that MUST stay in sync:
     1. _ALLOWED_OPERANDS — AST validator (rejects unknown operands)
     2. _V2_FUNDAMENTAL_FIELDS — backend fundamental field registry
     3. fields_augmented.json — operand catalog served to /methodology + LLM
     4. build_data_dict — kernel data dict population
+    5. _synthetic_panel — smoke-test data dict (must hold EVERY allowed operand)
 
 User-reported precedent: shares_outstanding + total_liabilities added to
 layers 2 & 4 in T1.5a but not layers 1 & 3 → HTTP 400 on /signal.
+
+Second precedent (this guard's reason to exist): shares_outstanding +
+total_liabilities + the 3 insider_* fields reached layer 1 but never layer 5,
+so any expression referencing them (e.g. the now-correct value-factor
+multiply(close, shares_outstanding)) crashed the smoke test with
+"HTTP 500: Smoke test crashed: KeyError" instead of being backtested.
 """
 from __future__ import annotations
 
@@ -20,6 +27,7 @@ from pathlib import Path
 
 from alpha_agent.core.factor_ast import _ALLOWED_OPERANDS
 from alpha_agent.factor_engine.factor_backtest import _V2_FUNDAMENTAL_FIELDS
+from alpha_agent.scan.smoke import _synthetic_panel
 
 _ROOT = Path(__file__).resolve().parent.parent
 _CATALOG_PATH = _ROOT / "alpha_agent" / "data" / "wq_catalog" / "fields_augmented.json"
@@ -62,6 +70,24 @@ def test_metadata_operands_in_ast():
     assert not in_ast_only, (
         f"Test's _METADATA_OPERANDS contains entries missing from "
         f"_ALLOWED_OPERANDS: {sorted(in_ast_only)}."
+    )
+
+
+def test_smoke_panel_covers_all_operands():
+    """Smoke's synthetic panel MUST populate every AST-allowed operand.
+
+    The smoke test evaluates an LLM-translated expression against this panel
+    via `data[operand]`. A missing key raises KeyError, surfaced to the user
+    as "HTTP 500: Smoke test crashed" — a hard failure on an otherwise-valid
+    factor. Adding an operand to _ALLOWED_OPERANDS without adding it here is
+    the drift this asserts against.
+    """
+    panel = _synthetic_panel(lookback=20, n_tickers=20, seed=42)
+    missing_from_panel = _ALLOWED_OPERANDS - set(panel.keys())
+    assert not missing_from_panel, (
+        f"_synthetic_panel is missing operands the AST validator accepts: "
+        f"{sorted(missing_from_panel)}. Any factor referencing one crashes the "
+        f"smoke test with KeyError (HTTP 500). Add them in scan/smoke.py."
     )
 
 

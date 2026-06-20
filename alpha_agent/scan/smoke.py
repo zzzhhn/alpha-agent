@@ -121,6 +121,21 @@ def _synthetic_panel(lookback: int, n_tickers: int, seed: int) -> dict[str, np.n
     data["operating_cash_flow"] = _fund(4e9)
     data["investing_cash_flow"] = _fund(-2e9)
 
+    # ── T1.5a (v4) Compustat additions ──────────────────────────────
+    # shares_outstanding lets value factors express market cap dynamically as
+    # multiply(close, shares_outstanding); with close ~100 this yields ~$200B
+    # caps that vary per ticker, so E/P = ni / (close * shares) is non-constant.
+    # total_liabilities feeds debt ratios without summing long/short-term debt.
+    data["shares_outstanding"] = _fund(2e9, 1e7)
+    data["total_liabilities"] = _fund(3e10, 1e8)
+
+    # ── Bundle C.3 (v4) insider Form-4 alt-alpha ────────────────────
+    # insider_net_dollars is a SIGNED per-day net (buys minus sells), so it may
+    # be negative — no floor. The two counts are non-negative.
+    data["insider_net_dollars"] = _fund(1e6)
+    data["insider_n_buys"] = _fund(5.0, 0.0)
+    data["insider_n_sells"] = _fund(5.0, 0.0)
+
     return data
 
 
