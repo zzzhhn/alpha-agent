@@ -165,14 +165,29 @@ Op signatures:
 lookback must be >= the largest ts_* window in the expression.
 operators_used must exactly equal the set of ops actually called.
 
-Degenerate-expression rule (STRICT): the two arms of a sub()/div() spread MUST
-differ in at least one of {{field, lookback window, operator, coefficient}}. Never
-emit sub(x, x) or div(x, x) where the two arguments are structurally identical —
-it collapses to a constant (0 or 1), carries zero cross-sectional signal, and is
-rejected by the validator. For a "high X long, low X short" hypothesis the spread
-is already captured by a single rank(X): high X → high rank, low X → low rank.
-Do NOT write sub(rank(X), rank(X)). Either emit rank(X) alone, or if a genuine
-two-leg spread is intended, the legs must reference different fields/windows.
+Direction is a SETTING, not part of the expression. The backtester applies the
+long/short split separately via a `direction` control (long_short / long_only /
+short_only): it ranks your factor cross-sectionally and goes long the top
+quantile, short the bottom. So output ONLY the cross-sectional alpha SCORE — a
+level that is high for stocks you want to be long and low for stocks you want to
+be short. Do NOT bake the long/short spread into the expression yourself.
+
+For a "high X long, low X short" hypothesis the answer is simply rank(X): high X
+→ high rank (long leg), low X → low rank (short leg). The direction setting does
+the rest. The expression is a LEVEL, never a "spread" you assemble by hand.
+
+Anti-patterns that destroy the factor (NEVER emit these):
+  - sub(rank(X), rank(X)) — collapses to the constant 0; rejected by the validator.
+  - sub(rank(X), ts_delay(rank(X), k)) — this equals ts_delta(rank(X), k), the
+    DAY-OVER-DAY CHANGE in the rank, NOT a level factor. It converts a stable
+    low-turnover value/quality signal into a ~270%-turnover reversal signal that
+    is annihilated by transaction costs (observed live: turnover 274%, Sharpe
+    -6.8). NEVER subtract a time-lagged copy of your own signal to manufacture a
+    "spread" — the level IS the factor.
+A genuine two-leg sub()/div() spread is valid ONLY when the legs are DIFFERENT
+economic quantities (e.g. sub(rank(E/P), rank(B/P)) — value vs another value
+proxy), never the same signal at two different times or two identical arms.
+
 Beyond the structural check, the smoke test also REJECTS any factor whose
 evaluated cross-sectional standard deviation is ~0 (a per-stock-constant
 expression). So never emit an expression that is the same for every stock.
