@@ -4555,6 +4555,52 @@
         ]
       }
     },
+    "/api/cron/l2_cycle": {
+      "get": {
+        "description": "Advance the L2 paper book one step over the product ledger (generate ->\nfill -> mark any due rebalance). Idempotent; schedule daily after the close\nso l2_equity_daily accumulates a forward curve.",
+        "operationId": "l2_cycle_api_cron_l2_cycle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response L2 Cycle Api Cron L2 Cycle Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "L2 Cycle",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Advance the L2 paper book one step over the product ledger (generate ->\nfill -> mark any due rebalance). Idempotent; schedule daily after the close\nso l2_equity_daily accumulates a forward curve.",
+        "operationId": "l2_cycle_api_cron_l2_cycle_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response L2 Cycle Api Cron L2 Cycle Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "L2 Cycle",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/methodology_proposer": {
       "get": {
         "description": "Phase 2a: daily statistics-driven methodology proposer. Enumerates\nsingle-knob config candidates, validates each on purged walk-forward OOS\nfolds with trial-count deflation, and queues survivors as pending\nconfig_change_log rows for human approval (Phase 2b). Stays dormant\n(proposes nothing) until enough daily_prices history accrues to validate.\nNothing auto-applies.",

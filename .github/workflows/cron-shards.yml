@@ -59,6 +59,10 @@ on:
     # so IC history and forward returns are already updated before proposer
     # enumerates candidates. Weekdays only.
     - cron: '30 22 * * 1-5'
+    # L2 paper-book daily step: 45 min after the self-loop (daily_prices + IC
+    # backtest at 22:00) so the day's complete ledger run + settled prices are
+    # available. Generates/fills/marks any due rebalance. Idempotent, weekdays.
+    - cron: '45 22 * * 1-5'
   workflow_dispatch:
     inputs:
       job:
@@ -79,6 +83,7 @@ on:
           - ic_backtest_monthly
           - daily_prices_puller
           - methodology_proposer
+          - l2_cycle
 
 env:
   BACKEND_BASE: https://alpha.bobbyzhong.com
@@ -335,6 +340,21 @@ jobs:
         run: |
           HTTP=$(curl -s --max-time 60 -o /tmp/shot.json -w "%{http_code}" \
             "$BACKEND_BASE/api/cron/news_macro")
+          cat /tmp/shot.json | head -c 400; echo
+          [ "$HTTP" = "200" ] || exit 1
+
+  l2_cycle:
+    if: |
+      github.event.schedule == '45 22 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && inputs.job == 'l2_cycle')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: advance L2 paper book one step
+        run: |
+          HTTP=$(curl -s --max-time 120 --retry 2 --retry-delay 5 --retry-all-errors \
+            -o /tmp/shot.json -w "%{http_code}" \
+            "$BACKEND_BASE/api/cron/l2_cycle")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
 

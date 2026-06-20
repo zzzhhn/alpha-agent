@@ -67,6 +67,16 @@ async def alert_dispatcher() -> dict[str, Any]:
     return await handler()
 
 
+@router.post("/l2_cycle")
+@router.get("/l2_cycle")
+async def l2_cycle() -> dict[str, Any]:
+    """Advance the L2 paper book one step over the product ledger (generate ->
+    fill -> mark any due rebalance). Idempotent; schedule daily after the close
+    so l2_equity_daily accumulates a forward curve."""
+    from api.cron.l2_cycle import handler
+    return await handler()
+
+
 @router.post("/news_per_ticker")
 @router.get("/news_per_ticker")
 async def cron_news_per_ticker(
