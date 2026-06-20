@@ -410,7 +410,6 @@ const translations = {
     "group.lifecycle": "策略生命周期",
     "lifecycle.data": "数据 Data",
     "lifecycle.alpha": "因子 Alpha",
-    "lifecycle.signal": "信号 Signal",
     "lifecycle.backtest": "回测 Backtest",
     "lifecycle.report": "报告 Report",
     "lifecycle.zoo": "因子库 Zoo",
@@ -714,7 +713,6 @@ const translations = {
     /* M3: Picks + Alerts + Stock detail + Settings extensions */
     "nav.picks": "今日推荐",
     "nav.evolution": "演化监控",
-    "nav.factor-lab": "因子实验室",
     "nav.group.research": "研究",
     "nav.group.decisions": "决策",
     "nav.group.reference": "参考",
@@ -1548,7 +1546,6 @@ const translations = {
     "lifecycle.zoo": "Factor Zoo",
     "lifecycle.data": "Data",
     "lifecycle.alpha": "Alpha",
-    "lifecycle.signal": "Signal",
     "lifecycle.backtest": "Backtest",
     "lifecycle.report": "Report",
     "lifecycle.screener": "Screener",
@@ -1851,7 +1848,6 @@ const translations = {
     /* M3: Picks + Alerts + Stock detail + Settings extensions */
     "nav.picks": "Picks",
     "nav.evolution": "Evolution",
-    "nav.factor-lab": "Factor Lab",
     "nav.group.research": "RESEARCH",
     "nav.group.decisions": "DECISIONS",
     "nav.group.reference": "REFERENCE",
