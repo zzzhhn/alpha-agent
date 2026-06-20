@@ -905,7 +905,7 @@ function DistChart({
         {title}
       </div>
       <div className="h-[180px] w-full px-1 pb-1 pt-2">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <BarChart data={data as { label: string; count: number }[]} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" vertical={false} />
             <XAxis
@@ -987,7 +987,7 @@ function TimelineActivityPane({
       </TmKpiGrid>
 
       <div className="h-[160px] w-full px-1 pb-1 pt-2">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <AreaChart
             data={weeks as ActivityWeek[]}
             margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
