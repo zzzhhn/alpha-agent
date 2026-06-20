@@ -54,12 +54,23 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
               {t(locale, "alpha.degenerateBlocked" as Parameters<typeof t>[1])}
             </div>
           ) : null}
+          {/* Advisory (not blocking): a change/reversal expression churns its
+              whole book and is punished by transaction costs. Shown alongside
+              degenerate; a factor can in principle trip neither, one, or both. */}
+          {data.high_turnover && !data.degenerate ? (
+            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
+              {t(locale, "alpha.highTurnoverWarn" as Parameters<typeof t>[1])}
+            </div>
+          ) : null}
           <div className="font-tm-mono text-[11px] text-tm-muted">
             {t(locale, "alpha.pane.rowsValid" as Parameters<typeof t>[1])}=<span className="font-mono">{data.rows_valid}</span>
             {" "}&bull;{" "}
             {t(locale, "alpha.pane.runtime" as Parameters<typeof t>[1])}=<span className="font-mono">{data.runtime_ms}ms</span>
             {data.factor_std !== undefined
               ? <> &bull; {t(locale, "alpha.pane.std" as Parameters<typeof t>[1])}=<span className="font-mono">{data.factor_std.toFixed(4)}</span></>
+              : null}
+            {data.turnover !== undefined
+              ? <> &bull; {t(locale, "alpha.pane.turnover" as Parameters<typeof t>[1])}=<span className={`font-mono ${data.high_turnover ? "text-tm-warn" : ""}`}>{(data.turnover * 100).toFixed(0)}%</span></>
               : null}
           </div>
         </>

@@ -354,6 +354,7 @@ const translations = {
     "alpha.degenerateTitle": "退化因子：零截面信号",
     "alpha.degenerateBody": "该表达式求值后是（近似）常数（factor_std ≈ 0），不携带任何截面信息。无法保存到 Zoo 或回测。请修改假设，使 spread/ratio 的两臂在字段、回看窗口、算子或系数上至少有一处不同。",
     "alpha.degenerateBlocked": "退化因子（零方差），已阻止回测。",
+    "alpha.highTurnoverWarn": "换手偏高：更像「变化/反转」信号而非水平因子，会被交易成本严重侵蚀（合成估计，实盘通常更高）。多空方向由「策略方向」设置，无需写进表达式。",
     "alpha.labelFactorStd": "FACTOR STD",
 
     /* Phase 2: Factor Analytics + Gate Editor */
@@ -609,6 +610,7 @@ const translations = {
     "alpha.pane.rowsValid": "有效样本",
     "alpha.pane.runtime": "耗时",
     "alpha.pane.std": "标准差",
+    "alpha.pane.turnover": "换手",
     "alpha.pane.retry": "重试",
     "alpha.pane.retranslate": "重新翻译",
     "alpha.pane.retryBacktest": "重试回测",
@@ -1494,6 +1496,7 @@ const translations = {
     "alpha.degenerateTitle": "Degenerate factor: zero cross-sectional signal",
     "alpha.degenerateBody": "This expression evaluates to a (near-)constant (factor_std ≈ 0) and carries no cross-sectional information. It cannot be saved to Zoo or backtested. Revise the hypothesis so the two arms of the spread/ratio differ in at least one of: field, lookback window, operator, or coefficient.",
     "alpha.degenerateBlocked": "Degenerate factor (zero variance) — backtest blocked.",
+    "alpha.highTurnoverWarn": "High turnover: this looks like a change/reversal signal, not a level factor, and gets eaten by transaction costs (synthetic estimate — live is usually higher). Long/short is the direction setting, not part of the expression.",
     "alpha.labelFactorStd": "FACTOR STD",
 
     "nav.factors": "Factor Analytics",
@@ -1744,6 +1747,7 @@ const translations = {
     "alpha.pane.rowsValid": "rows_valid",
     "alpha.pane.runtime": "runtime",
     "alpha.pane.std": "std",
+    "alpha.pane.turnover": "turnover",
     "alpha.pane.retry": "Retry",
     "alpha.pane.retranslate": "Re-translate",
     "alpha.pane.retryBacktest": "Retry backtest",

@@ -271,6 +271,13 @@ export interface SmokeReport {
   // against any in-flight response from before the backend field landed.
   readonly factor_std?: number;
   readonly degenerate?: boolean;
+  // Estimated per-period rebalance turnover on the synthetic panel. high_turnover
+  // flags a change/reversal expression (e.g. ts_delta(rank(X),1)) emitted for a
+  // level hypothesis — it churns its whole book and gets eaten by transaction
+  // costs. ADVISORY only (does NOT block backtest/save). Optional for resilience
+  // against in-flight responses from before the backend field landed.
+  readonly turnover?: number;
+  readonly high_turnover?: boolean;
 }
 
 export interface HypothesisTranslateResponse {

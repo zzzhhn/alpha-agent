@@ -33,6 +33,14 @@ class SmokeResult:
     # didn't structurally catch). Surfaced so the API can flag degenerate
     # factors before they reach Zoo / backtest.
     factor_std: float = 0.0
+    # Estimated per-period rebalance turnover (L1 weight change of a top/bottom
+    # quantile long-short book, averaged over days) on the synthetic panel. A
+    # LEVEL factor (value/quality rank) churns slowly (<~0.5); a CHANGE factor
+    # like ts_delta(rank(X), 1) churns its whole book (>~1.0) and is destroyed
+    # by transaction costs. Synthetic fundamentals are per-ticker constants so
+    # this understates real turnover, but it cleanly separates the two classes —
+    # surfaced so the API can warn before the user spends a real backtest.
+    turnover: float = 0.0
 
 
 def _synthetic_panel(lookback: int, n_tickers: int, seed: int) -> dict[str, np.ndarray]:
@@ -139,6 +147,50 @@ def _synthetic_panel(lookback: int, n_tickers: int, seed: int) -> dict[str, np.n
     return data
 
 
+def _estimate_turnover(
+    factor: np.ndarray, top_pct: float = 0.30, bottom_pct: float = 0.30
+) -> float:
+    """Estimate per-period rebalance turnover of a long-short quantile book.
+
+    Mirrors the production engine exactly so the number is comparable to the
+    backtest's reported turnover:
+      - weights: long the top `top_pct`, short the bottom `bottom_pct`,
+        equal-weight within each leg (kernel.py:493-511);
+      - turnover: mean over days of the L1 weight change, Σ_n |w_t - w_{t-1}|
+        (kernel.py:344-348).
+
+    Returns 0.0 for a single-row panel (no day-over-day delta to measure).
+    """
+    factor = np.asarray(factor, dtype=np.float64)
+    if factor.ndim == 1:
+        factor = factor.reshape(-1, 1)
+    n_days, n_names = factor.shape
+    if n_days < 2:
+        return 0.0
+
+    weights = np.zeros((n_days, n_names), dtype=np.float64)
+    for t in range(n_days):
+        row = factor[t]
+        mask = ~np.isnan(row)
+        valid = int(mask.sum())
+        if valid < 10:
+            continue
+        ranks = np.full_like(row, np.nan)
+        ranks[mask] = (row[mask].argsort().argsort() + 1.0) / valid
+        long_mask = ranks >= (1.0 - top_pct)
+        n_long = int(long_mask.sum())
+        if n_long > 0:
+            weights[t, long_mask] = 1.0 / n_long
+        short_mask = ranks <= bottom_pct
+        n_short = int(short_mask.sum())
+        if n_short > 0:
+            weights[t, short_mask] = -1.0 / n_short
+
+    delta = np.abs(weights[1:] - weights[:-1])
+    turnover = float(delta.sum(axis=1).mean())
+    return turnover if np.isfinite(turnover) else 0.0
+
+
 def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
     """Run the 10-day Spearman-IC smoke check for an AST-validated expression."""
     n_tickers = 20
@@ -161,6 +213,11 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
     if not np.isfinite(factor_std):
         factor_std = 0.0
 
+    # Rebalance-turnover gauge: high turnover flags a change/reversal signal
+    # (e.g. an LLM emitting ts_delta(rank(X), 1) for a level hypothesis) that
+    # passes the degeneracy check but gets destroyed by transaction costs.
+    turnover = _estimate_turnover(factor)
+
     fwd_ret = np.vstack(
         [np.diff(np.log(close), axis=0), np.full((1, close.shape[1]), np.nan)]
     )
@@ -172,6 +229,7 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
             ic_spearman=float("nan"),
             runtime_ms=runtime_ms,
             factor_std=factor_std,
+            turnover=turnover,
         )
 
     factor_tail = factor[-(tail + 1) : -1]
@@ -199,4 +257,5 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
         ic_spearman=ic,
         runtime_ms=float(runtime_ms),
         factor_std=factor_std,
+        turnover=turnover,
     )

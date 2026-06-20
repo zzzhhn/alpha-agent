@@ -2688,6 +2688,11 @@
             "title": "Factor Std",
             "type": "number"
           },
+          "high_turnover": {
+            "default": false,
+            "title": "High Turnover",
+            "type": "boolean"
+          },
           "ic_spearman": {
             "title": "Ic Spearman",
             "type": "number"
@@ -2698,6 +2703,11 @@
           },
           "runtime_ms": {
             "title": "Runtime Ms",
+            "type": "number"
+          },
+          "turnover": {
+            "default": 0.0,
+            "title": "Turnover",
             "type": "number"
           }
         },

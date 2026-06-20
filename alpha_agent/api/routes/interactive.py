@@ -61,6 +61,16 @@ class HypothesisTranslateRequest(BaseModel):
     budget_tokens: int = Field(default=4000, ge=500, le=8000)
 
 
+# Turnover above this (estimated on the synthetic smoke panel) means the factor
+# rebalances most of its book every period — the signature of a change/reversal
+# expression (e.g. ts_delta(rank(X), 1)) emitted for a level hypothesis. The
+# synthetic estimate understates real turnover, and level factors calibrate to
+# 0-41% vs change factors 104-275%, so 0.80 sits cleanly in the gap. The warning
+# is ADVISORY (a genuine short-term-reversal factor legitimately churns this much
+# and the user may want it) — it never blocks Save to Zoo / Run backtest.
+_HIGH_TURNOVER_THRESHOLD: float = 0.80
+
+
 class SmokeReport(BaseModel):
     rows_valid: int
     ic_spearman: float
@@ -70,6 +80,12 @@ class SmokeReport(BaseModel):
     # so the frontend must disable "Save to Zoo" / "Run backtest" and warn.
     factor_std: float = 0.0
     degenerate: bool = False
+    # Estimated per-period rebalance turnover (see smoke._estimate_turnover).
+    # high_turnover=True surfaces an advisory "this looks like a change/reversal
+    # signal — high turnover is punished by transaction costs" warning. Unlike
+    # `degenerate`, this does NOT disable backtest/save — it only informs.
+    turnover: float = 0.0
+    high_turnover: bool = False
 
 
 class HypothesisTranslateResponse(BaseModel):
@@ -310,6 +326,8 @@ async def translate_hypothesis(
             # didn't structurally catch (e.g. multiply(0, x)).
             degenerate=(smoke.factor_std < 1e-9)
             or (not math.isfinite(smoke.ic_spearman)),
+            turnover=smoke.turnover,
+            high_turnover=smoke.turnover > _HIGH_TURNOVER_THRESHOLD,
         ),
         llm_tokens={
             "prompt": llm_resp.prompt_tokens,
