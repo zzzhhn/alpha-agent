@@ -44,9 +44,6 @@ import { t } from "@/lib/i18n";
 import { listZoo, removeFromZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
 import {
   runZooCorrelation,
-  listServerFactors,
-  getDecayAlerts,
-  type ServerFactor,
   type DecayAlert,
 } from "@/lib/api";
 import type { ZooCorrelationResponse } from "@/lib/types";
@@ -175,35 +172,6 @@ function bucketByWeek(entries: readonly ZooEntry[]): readonly ActivityWeek[] {
   return out;
 }
 
-function mergeFactors(
-  server: readonly ServerFactor[],
-  local: readonly ZooEntry[],
-): readonly ZooEntry[] {
-  const serverExprs = new Set(server.map((f) => f.expression));
-  const fromServer: ZooEntry[] = server.map((f) => ({
-    id: f.id,
-    name: f.name,
-    expression: f.expression,
-    hypothesis: f.hypothesis ?? "",
-    intuition: f.intuition ?? undefined,
-    direction:
-      (f.last_direction as ZooEntry["direction"]) ?? "long_short",
-    savedAt: f.updated_at ?? f.created_at ?? new Date().toISOString(),
-    headlineMetrics: {
-      testSharpe: f.last_test_sharpe ?? undefined,
-      testIc: f.last_test_ic ?? undefined,
-    },
-    neutralize:
-      (f.last_neutralize as "none" | "sector" | undefined) ?? undefined,
-    benchmarkTicker:
-      (f.last_benchmark as "SPY" | "RSP" | undefined) ?? undefined,
-  }));
-  return [
-    ...fromServer,
-    ...local.filter((e) => !serverExprs.has(e.expression)),
-  ];
-}
-
 interface Aggregates {
   readonly avgSharpe: number | null;
   readonly medianIC: number | null;
@@ -311,33 +279,23 @@ export default function FactorsPage() {
   const [entries, setEntries] = useState<readonly ZooEntry[]>([]);
   const [serverCount, setServerCount] = useState(0);
   const [localCount, setLocalCount] = useState(0);
-  const [decay, setDecay] = useState<readonly DecayAlert[]>([]);
+  // Decay alerts come from the (currently disabled) factors_db backend; with
+  // that endpoint not enabled this is always empty. Kept as a typed constant so
+  // decayIds + the row decay markers still resolve (to "none decaying").
+  const decay: readonly DecayAlert[] = [];
 
   async function refresh() {
     // Cold-start seed before the first Zoo read so a new user sees the
     // curated factors instead of an empty Zoo. Flag-guarded → no-op after.
     seedZooIfFirstRun();
-    try {
-      const [r1, r2] = await Promise.all([
-        listServerFactors(200),
-        getDecayAlerts({ min_runs: 3, decay_threshold: 0.5 }),
-      ]);
-      const local = listZoo();
-      setLocalCount(local.length);
-      if (r1.data) {
-        setServerCount(r1.data.length);
-        setEntries(mergeFactors(r1.data, local));
-      } else {
-        setServerCount(0);
-        setEntries(local);
-      }
-      if (r2.data) setDecay(r2.data);
-    } catch {
-      const local = listZoo();
-      setEntries(local);
-      setLocalCount(local.length);
-      setServerCount(0);
-    }
+    // The Factor Zoo is localStorage-backed. The server-side saved-factors +
+    // decay-alerts endpoints (the factors_db backend router) are not enabled,
+    // so calling them only 404'd on every load with no functional effect (the
+    // page already fell back to the local Zoo). Read the local Zoo directly.
+    const local = listZoo();
+    setEntries(local);
+    setLocalCount(local.length);
+    setServerCount(0);
   }
 
   useEffect(() => {

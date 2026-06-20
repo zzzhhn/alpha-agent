@@ -10,12 +10,10 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { useRouter } from "next/navigation";
 import {
   type Locale,
   getLocaleFromStorage,
   setLocaleToStorage,
-  getLocaleFromDocumentCookie,
 } from "@/lib/i18n";
 
 interface LocaleContextValue {
@@ -30,31 +28,35 @@ const LocaleContext = createContext<LocaleContextValue>({
 
 interface LocaleProviderProps {
   readonly children: ReactNode;
+  // Server-resolved locale (from the `locale` cookie, read in the dashboard
+  // layout via getServerLocale). Seeding useState with this makes the client's
+  // first render match the SSR output, eliminating the hydration text mismatch
+  // (React #425) and the old router.refresh() self-heal that re-rendered the
+  // root (React #422).
+  readonly initialLocale: Locale;
 }
 
-export function LocaleProvider({ children }: LocaleProviderProps) {
-  const [locale, setLocaleState] = useState<Locale>("zh");
-  const router = useRouter();
+export function LocaleProvider({ children, initialLocale }: LocaleProviderProps) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
   useEffect(() => {
+    // setLocaleToStorage keeps localStorage and the cookie in sync, so in steady
+    // state this is a no-op. It only fires for a legacy client whose locale lived
+    // in localStorage but not the cookie: update the UI + re-sync the cookie for
+    // the next SSR. No router.refresh — initialLocale already matched SSR, so
+    // there is nothing to re-render on the server here (this avoids the #422
+    // recover-by-client-render thrash).
     const stored = getLocaleFromStorage();
-    setLocaleState(stored);
-    // Self-heal the SSR locale cookie. Legacy clients persisted locale only
-    // to localStorage, so server components rendered with the default (now
-    // zh) regardless of the user's real choice. If the cookie disagrees with
-    // localStorage, sync it and re-render the server tree once so SSR text
-    // matches the toggle. Steady state: cookie already matches → no refresh.
-    if (getLocaleFromDocumentCookie() !== stored) {
+    if (stored !== initialLocale) {
+      setLocaleState(stored);
       setLocaleToStorage(stored);
-      router.refresh();
     }
-  }, [router]);
+  }, [initialLocale]);
 
   const setLocale: Dispatch<SetStateAction<Locale>> = useCallback(
     (action) => {
       setLocaleState((prev) => {
-        const next =
-          typeof action === "function" ? action(prev) : action;
+        const next = typeof action === "function" ? action(prev) : action;
         setLocaleToStorage(next);
         return next;
       });

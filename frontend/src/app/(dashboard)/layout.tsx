@@ -1,7 +1,11 @@
-"use client";
-
 /**
  * Dashboard layout — workstation chrome (Variation C, Stage 2).
+ *
+ * Server component (no hooks of its own) so it can read the locale cookie
+ * via getServerLocale() and seed LocaleProvider with it — the client's first
+ * render then matches SSR, eliminating the locale hydration mismatch
+ * (React #425 / #422). The chrome (Topbar/Sidebar/etc.) are client components
+ * rendered as children, which a server component renders fine.
  *
  * Composition:
  *   ┌──────────────────────────────────────────┐
@@ -26,17 +30,19 @@ import { Topbar } from "@/components/layout/Topbar";
 import { LocaleProvider } from "@/components/layout/LocaleProvider";
 import VersionWatcher from "@/components/layout/VersionWatcher";
 import { ToastProvider, ToastViewport } from "@/components/ui/toast";
+import { getServerLocale } from "@/lib/server-locale";
 
 interface DashboardLayoutProps {
   readonly children: ReactNode;
 }
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
+  const locale = await getServerLocale();
   return (
     <ToastProvider>
-      <LocaleProvider>
+      <LocaleProvider initialLocale={locale}>
         <div className="flex h-screen flex-col bg-tm-bg text-tm-fg">
           <Topbar />
           <div className="grid min-h-0 flex-1 grid-cols-[200px_1fr]">
