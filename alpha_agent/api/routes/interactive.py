@@ -131,6 +131,18 @@ ALLOWED_OPS — every function call must be one of these names:
 Operands (leaves) — only these names + numeric literals are allowed:
   {", ".join(operands)}
 
+Common derived quantities — there is NO direct operand for these; BUILD them from
+the operands above. In particular there is NO `market_cap` / `market_value` /
+`price` field: use `close` for price, and express market cap as a product.
+  market cap          = multiply(close, shares_outstanding)
+  earnings yield E/P  = divide(net_income_adjusted, multiply(close, shares_outstanding))
+  book-to-price B/P   = divide(equity, multiply(close, shares_outstanding))
+  sales-to-price S/P  = divide(revenue, multiply(close, shares_outstanding))
+  EPS                 = divide(net_income_adjusted, shares_outstanding)
+A value factor like "high E/P long, low E/P short" is simply the cross-sectional
+rank of E/P:
+  rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))
+
 No attributes, no imports, no lambdas, no keyword args. No infix `< > == + - * / **`
 — use the functional forms (less, greater, equal, add, sub, mul, div, pow).
 
@@ -161,10 +173,17 @@ rejected by the validator. For a "high X long, low X short" hypothesis the sprea
 is already captured by a single rank(X): high X → high rank, low X → low rank.
 Do NOT write sub(rank(X), rank(X)). Either emit rank(X) alone, or if a genuine
 two-leg spread is intended, the legs must reference different fields/windows.
+Beyond the structural check, the smoke test also REJECTS any factor whose
+evaluated cross-sectional standard deviation is ~0 (a per-stock-constant
+expression). So never emit an expression that is the same for every stock.
 
 Example input: {{"hypothesis": "low turnover and rising ROE for mid-caps", "universe": "SP500"}}
 Example output:
 {{"name":"low_turn_roe_up","hypothesis":"Mid-caps with low turnover and rising ROE.","expression":"sub(rank(ts_mean(div(volume,close),20)),rank(ts_zscore(returns,20)))","operators_used":["sub","rank","ts_mean","div","ts_zscore"],"lookback":20,"universe":"SP500","justification":"Inverse-turnover proxy via rolling volume/close; ROE proxy via short-term return zscore; cross-sectional rank removes scale."}}
+
+Example input: {{"hypothesis": "high earnings yield (net income / market cap) long, low EY short — classic Basu 1977 value factor", "universe": "SP500"}}
+Example output:
+{{"name":"earnings_yield_ls","hypothesis":"Long high E/P (net income over market cap), short low E/P — Basu 1977 value.","expression":"rank(divide(net_income_adjusted,multiply(close,shares_outstanding)))","operators_used":["rank","divide","multiply"],"lookback":20,"universe":"SP500","justification":"Market cap = close * shares_outstanding; E/P = net_income / market cap; the cross-sectional rank IS the long-short, so no self-subtraction is needed."}}
 """
 
 
