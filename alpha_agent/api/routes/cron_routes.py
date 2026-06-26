@@ -109,23 +109,23 @@ async def cron_minute_bars(
     300s budget. Universe is read from daily_signals_slow (~557 tickers)
     and ordered alphabetically for deterministic slicing across shards.
     """
-    from alpha_agent.data.minute_price import pull_and_store_minute_bars
+    from alpha_agent.data.minute_price import (
+        prune_minute_bars,
+        pull_and_store_minute_bars,
+    )
 
     started_at = datetime.now(UTC)
     pool = await get_pool(os.environ["DATABASE_URL"])
 
-    # Retention prune (first shard only, once per cycle): keep a rolling 7-day
-    # window. yfinance only serves 7d of 1m bars, and the Neon free-tier 512MB
-    # limit cannot hold more (557 tickers x 1m bars is ~35MB/day). Without this
-    # the table grew unbounded and filled the DB. A daily DELETE + autovacuum
-    # stabilizes the table at its ~7-day high-water mark: plain VACUUM does not
-    # shrink the file on Neon, but it marks pages reusable so new inserts reuse
-    # them instead of extending the file.
+    # Retention prune (first shard only, once per cycle): keep a rolling window
+    # of MINUTE_BARS_RETENTION_DAYS. The Neon free-tier 512MB limit cannot hold
+    # a 7-day window (~1.4M rows / ~324MB crowded out every other table and
+    # produced DiskFullError on 2026-06-26), so the window is now 2 days. A
+    # daily DELETE stabilizes the table at its high-water mark: plain VACUUM
+    # does not shrink the file on Neon, but it marks pages reusable so new
+    # inserts reuse them instead of extending the file.
     if offset == 0:
-        async with pool.acquire() as conn:
-            await conn.execute(
-                "DELETE FROM minute_bars WHERE ts < now() - interval '7 days'"
-            )
+        await prune_minute_bars(pool)
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(

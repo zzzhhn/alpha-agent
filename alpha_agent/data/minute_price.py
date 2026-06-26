@@ -16,10 +16,33 @@ import yfinance as yf
 _PERIOD = "7d"      # yfinance 1m bar max retention
 _INTERVAL = "1m"
 
+# DB-side retention for the minute_bars rolling cache. Tightened from 7 to 2
+# days after the 2026-06-26 incident: ~557 tickers x ~390 bars/session is
+# ~200K rows/day; a 7-day window held ~1.4M rows / ~324MB and, on the 512MB
+# Neon free tier, crowded out every other table's writes — producing
+# asyncpg.DiskFullError on news_macro / fast_intraday / slow_daily, which
+# surfaced as unhandled 500s and flooded GH Actions with cron-failure emails.
+# The intraday signals only consume the last 1-2 sessions, so 2 days is ample
+# and keeps the table near ~100MB with headroom for the rest of the schema.
+MINUTE_BARS_RETENTION_DAYS = 2
+
 
 def _yf_history(ticker: str) -> pd.DataFrame:
     """Indirection layer so tests can monkeypatch."""
     return yf.Ticker(ticker).history(period=_PERIOD, interval=_INTERVAL)
+
+
+async def prune_minute_bars(pool) -> str:
+    """Delete minute_bars older than MINUTE_BARS_RETENTION_DAYS.
+
+    Parameterized interval (make_interval) so the window can never drift from
+    the constant. DELETE does not extend the file, so this is safe to run even
+    when the DB is at its size limit (it is the operation that frees space).
+    Returns asyncpg's status string (e.g. "DELETE 12345")."""
+    return await pool.execute(
+        "DELETE FROM minute_bars WHERE ts < now() - make_interval(days => $1)",
+        MINUTE_BARS_RETENTION_DAYS,
+    )
 
 
 async def pull_and_store_minute_bars(pool, ticker: str) -> int:

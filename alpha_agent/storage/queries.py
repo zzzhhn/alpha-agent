@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from typing import Any
 
 import asyncpg
@@ -139,13 +140,37 @@ async def log_error(
     err_message: str | None = None,
     context: dict[str, Any] | None = None,
 ) -> None:
-    await pool.execute(
-        """
-        INSERT INTO error_log (layer, component, ticker, err_type, err_message, context)
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-        """,
-        layer, component, ticker, err_type, err_message, _dumps(context or {}),
-    )
+    """Persist a structured error row. This is a DIAGNOSTIC path — callers
+    invoke it from inside their own except blocks to record an upstream error.
+
+    It MUST therefore never raise: if the INSERT itself fails (most importantly
+    asyncpg.DiskFullError when the Neon free tier is full — the very condition
+    worth logging), propagating would mask the original error AND surface as an
+    unhandled 500, hard-failing the cron and flooding GH Actions with
+    run-failure emails (2026-06-26 incident). On failure we fall back to a
+    structured stderr line rather than swallowing silently (Silent Exception
+    Anti-Pattern)."""
+    try:
+        await pool.execute(
+            """
+            INSERT INTO error_log (layer, component, ticker, err_type, err_message, context)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            """,
+            layer, component, ticker, err_type, err_message, _dumps(context or {}),
+        )
+    except Exception as exc:  # noqa: BLE001 — diagnostic path must not raise
+        print(
+            json.dumps({
+                "event": "log_error_failed",
+                "layer": layer,
+                "component": component,
+                "ticker": ticker,
+                "original_err": f"{err_type}: {err_message}",
+                "logging_err": f"{type(exc).__name__}: {exc}",
+            }),
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 # ── company_profiles (V010): cached stock-detail "About" card ───────────────

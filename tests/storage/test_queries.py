@@ -1,4 +1,5 @@
 import json
+import asyncpg
 import pytest
 
 from alpha_agent.storage.postgres import close_pool, get_pool
@@ -11,6 +12,38 @@ from alpha_agent.storage.queries import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+class _RaisingPool:
+    """Stub pool whose execute() always raises DiskFullError — simulates the
+    Neon free tier being full (the 2026-06-26 incident)."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    async def execute(self, *args, **kwargs):
+        raise self._exc
+
+
+async def test_log_error_never_raises_when_db_write_fails(capsys):
+    """log_error is the diagnostic path handlers call to RECORD an upstream
+    error. If its own INSERT raises (e.g. asyncpg.DiskFullError when the DB is
+    full), it must NOT propagate — otherwise it masks the original error and
+    turns it into an unhandled 500 (the cascade that flooded GH Actions with
+    cron-failure emails). It must instead surface to stderr (never silently
+    swallow — Silent Exception Anti-Pattern)."""
+    pool = _RaisingPool(
+        asyncpg.exceptions.DiskFullError("could not extend file ... 512 MB")
+    )
+    # Must return normally, not raise.
+    await log_error(
+        pool, layer="cron", component="news.macro",
+        err_type="ValueError", err_message="upstream boom",
+    )
+    captured = capsys.readouterr()
+    assert "log_error_failed" in captured.err
+    assert "news.macro" in captured.err
+    assert "DiskFullError" in captured.err
 
 
 @pytest.fixture

@@ -5,6 +5,8 @@ import pandas as pd
 import pytest
 
 from alpha_agent.data.minute_price import (
+    MINUTE_BARS_RETENTION_DAYS,
+    prune_minute_bars,
     pull_and_store_minute_bars,
     get_bars_for_event,
 )
@@ -63,3 +65,34 @@ async def test_event_beyond_30d_returns_empty(pool):
     event_ts = datetime.now(UTC) - timedelta(days=45)
     bars = await get_bars_for_event(pool, "AAPL", event_ts, window_min=60)
     assert bars.empty or len(bars) == 0
+
+
+class _CapturePool:
+    """Stub pool that records the DELETE issued by prune_minute_bars."""
+
+    def __init__(self) -> None:
+        self.query = None
+        self.args = None
+
+    async def execute(self, query, *args):
+        self.query = query
+        self.args = args
+        return "DELETE 42"
+
+
+def test_minute_bars_retention_is_two_days():
+    """7-day retention (~1.4M rows, ~324MB) crowded out every other table on
+    the 512MB Neon free tier and caused DiskFullError cascades (2026-06-26).
+    2 days is all the intraday signals consume."""
+    assert MINUTE_BARS_RETENTION_DAYS == 2
+
+
+@pytest.mark.asyncio
+async def test_prune_minute_bars_deletes_older_than_retention():
+    pool = _CapturePool()
+    status = await prune_minute_bars(pool)
+    assert "minute_bars" in pool.query
+    assert "DELETE" in pool.query.upper()
+    # Parameterized interval so the window can't drift from the constant.
+    assert pool.args == (MINUTE_BARS_RETENTION_DAYS,)
+    assert status == "DELETE 42"
