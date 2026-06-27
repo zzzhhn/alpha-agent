@@ -2702,6 +2702,16 @@
             "title": "Low Robustness",
             "type": "boolean"
           },
+          "low_stability": {
+            "default": false,
+            "title": "Low Stability",
+            "type": "boolean"
+          },
+          "rank_stability": {
+            "default": 0.0,
+            "title": "Rank Stability",
+            "type": "number"
+          },
           "robustness": {
             "default": 0.0,
             "title": "Robustness",

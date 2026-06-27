@@ -82,6 +82,15 @@ _HIGH_TURNOVER_THRESHOLD: float = 0.80
 # real data, where genuine fundamentals carry their own measurement noise.
 _LOW_ROBUSTNESS_THRESHOLD: float = 0.60
 
+# Temporal-stability (AlphaEval dim 2) below this means the factor's ranking
+# reshuffles day to day. Calibration on the synthetic panel: stable factors
+# 0.95-1.0 vs unstable (iid / change / knife-edge) -0.04 to 0.42, so 0.50 sits
+# cleanly in the gap. This is the full-cross-section measure behind turnover;
+# they co-move on synthetic data (the paper reports R^2=0.815 vs turnover) but
+# rank_stability also catches mid-distribution churn the quantile-book turnover
+# misses. ADVISORY only — never blocks.
+_LOW_STABILITY_THRESHOLD: float = 0.50
+
 
 class SmokeReport(BaseModel):
     rows_valid: int
@@ -104,6 +113,12 @@ class SmokeReport(BaseModel):
     # warning. Like high_turnover, ADVISORY only — does NOT disable backtest/save.
     robustness: float = 0.0
     low_robustness: bool = False
+    # Temporal-stability score (AlphaEval dim 2, see smoke._estimate_rank_stability).
+    # low_stability=True surfaces an advisory "this factor's ranking reshuffles day
+    # to day" warning. The full-cross-section measure behind turnover; ADVISORY
+    # only — does NOT disable backtest/save.
+    rank_stability: float = 0.0
+    low_stability: bool = False
 
 
 class HypothesisTranslateResponse(BaseModel):
@@ -354,6 +369,11 @@ async def translate_hypothesis(
             low_robustness=(
                 math.isfinite(smoke.robustness)
                 and smoke.robustness < _LOW_ROBUSTNESS_THRESHOLD
+            ),
+            rank_stability=smoke.rank_stability,
+            low_stability=(
+                math.isfinite(smoke.rank_stability)
+                and smoke.rank_stability < _LOW_STABILITY_THRESHOLD
             ),
         ),
         llm_tokens={

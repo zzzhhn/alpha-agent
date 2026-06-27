@@ -115,7 +115,7 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
             />
             <DimRow
               label={tk("alpha.qc.dim.stability")}
-              value={pct(data.turnover)}
+              value={num(data.rank_stability, 2)}
               status={sc.stability}
             />
             <DimRow
@@ -143,10 +143,25 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
               {tk("alpha.lowRobustnessWarn")}
             </div>
           ) : null}
+          {/* Only when stability is tripped by full-distribution rank churn that
+              the quantile-book turnover did NOT catch — otherwise the turnover
+              warning already covers it (the two co-fire on most factors). */}
+          {data.low_stability && !data.high_turnover && !data.degenerate ? (
+            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
+              {tk("alpha.lowStabilityWarn")}
+            </div>
+          ) : null}
 
-          {/* Diagnostic footer: synthetic IC (indicative only) + run meta. */}
+          {/* Diagnostic footer: synthetic IC (indicative only) + turnover (the
+              cost-relevant churn number) + run meta. */}
           <div className="font-tm-mono text-[11px] text-tm-muted">
             IC <span className="font-mono">{data.ic_spearman.toFixed(4)}</span>
+            {data.turnover !== undefined ? (
+              <>
+                {" "}&bull;{" "}
+                {tk("alpha.pane.turnover")}=<span className={`font-mono ${data.high_turnover ? "text-tm-warn" : ""}`}>{pct(data.turnover)}</span>
+              </>
+            ) : null}
             {" "}&bull;{" "}
             {tk("alpha.pane.rowsValid")}=<span className="font-mono">{data.rows_valid}</span>
             {" "}&bull;{" "}

@@ -48,6 +48,14 @@ class SmokeResult:
     # toward 0 = the factor is dominated by noise / curve-fit to exact numbers and
     # will not hold out-of-sample. Surfaced so the API can flag fragile factors.
     robustness: float = 0.0
+    # Temporal-stability score in [-1, 1] (AlphaEval dimension 2): the mean
+    # adjacent-day Spearman rank autocorrelation of the factor over the IC-tail
+    # window. ~1.0 = the cross-sectional ranking is preserved day to day (stable,
+    # low-churn); ~0 = it reshuffles each day; negative = day-over-day reversal.
+    # The full-cross-section temporal-stability measure (turnover only sees the
+    # top/bottom quantile book); the project's principled stand-in for AlphaEval's
+    # Relative Rank Entropy. Costs nothing extra — ranks the clean factor only.
+    rank_stability: float = 0.0
 
 
 def _synthetic_panel(lookback: int, n_tickers: int, seed: int) -> dict[str, np.ndarray]:
@@ -279,6 +287,25 @@ def _estimate_robustness(
     return float(np.mean(scores)) if scores else float("nan")
 
 
+def _estimate_rank_stability(clean_factor: np.ndarray) -> float:
+    """Temporal-stability score (AlphaEval dim 2): mean Spearman rank correlation
+    between consecutive days' rankings over the IC-tail window.
+
+    1.0 = the cross-sectional ranking is preserved day to day; ~0 = it reshuffles
+    each day; negative = reversal. Operates on the already-evaluated factor, so
+    no re-evaluation. Returns NaN if the factor can't be ranked (all-NaN /
+    constant — already covered by factor_std).
+    """
+    clean = np.asarray(clean_factor, dtype=np.float64)
+    if clean.ndim == 1:
+        clean = clean.reshape(-1, 1)
+    if clean.shape[0] < _ROBUSTNESS_TAIL + 1:
+        return float("nan")
+    ranks = rank(clean[-(_ROBUSTNESS_TAIL + 1) :])  # tail+1 days -> tail pairs
+    consistency = _row_rank_consistency(ranks[:-1], ranks[1:])
+    return consistency if consistency is not None else float("nan")
+
+
 def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
     """Run the 10-day Spearman-IC smoke check for an AST-validated expression."""
     n_tickers = 20
@@ -311,6 +338,11 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
     # out-of-sample. (AlphaEval dimension 3.)
     robustness = _estimate_robustness(expression, data, factor, seed=seed)
 
+    # Temporal-stability gauge: low score flags a factor whose ranking reshuffles
+    # day to day — the full-cross-section measure behind turnover. (AlphaEval
+    # dimension 2.)
+    rank_stability = _estimate_rank_stability(factor)
+
     fwd_ret = np.vstack(
         [np.diff(np.log(close), axis=0), np.full((1, close.shape[1]), np.nan)]
     )
@@ -324,6 +356,7 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
             factor_std=factor_std,
             turnover=turnover,
             robustness=robustness,
+            rank_stability=rank_stability,
         )
 
     factor_tail = factor[-(tail + 1) : -1]
@@ -353,4 +386,5 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
         factor_std=factor_std,
         turnover=turnover,
         robustness=robustness,
+        rank_stability=rank_stability,
     )

@@ -43,6 +43,14 @@ describe("buildSmokeScorecard", () => {
     expect(sc.integrity).toBe("pass");
   });
 
+  it("low stability (rank churn) is an advisory caution, even when turnover is fine", () => {
+    const sc = buildSmokeScorecard(
+      report({ low_stability: true, rank_stability: 0.2, high_turnover: false })
+    );
+    expect(sc.stability).toBe("caution");
+    expect(sc.verdict).toBe("caution");
+  });
+
   it("low robustness is an advisory caution, not a block", () => {
     const sc = buildSmokeScorecard(report({ low_robustness: true, robustness: 0.1 }));
     expect(sc.robustness).toBe("caution");

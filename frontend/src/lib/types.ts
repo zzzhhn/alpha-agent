@@ -285,6 +285,13 @@ export interface SmokeReport {
   // against in-flight responses from before the backend field landed.
   readonly robustness?: number;
   readonly low_robustness?: boolean;
+  // Temporal-stability score in [-1,1] (AlphaEval dim 2): mean adjacent-day rank
+  // autocorrelation. low_stability flags a factor whose ranking reshuffles day to
+  // day — the full-cross-section measure behind turnover. ADVISORY only (does NOT
+  // block backtest/save). Optional for resilience against in-flight responses
+  // from before the backend field landed.
+  readonly rank_stability?: number;
+  readonly low_stability?: boolean;
 }
 
 export interface HypothesisTranslateResponse {

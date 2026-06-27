@@ -9,8 +9,9 @@
 //
 //   - Integrity  (degenerate): the only BLOCKING check — a (near-)constant factor
 //                carries zero cross-sectional signal and disables backtest/save.
-//   - Stability  (high_turnover): advisory — a change/reversal expression churns
-//                its book and is eaten by transaction costs.
+//   - Stability  (high_turnover OR low_stability): advisory — the ranking churns
+//                day to day. Two lenses: turnover (quantile-book L1 = trading cost)
+//                and rank_stability (full-cross-section AlphaEval dim 2).
 //   - Robustness (low_robustness): advisory — ranking collapses under input noise,
 //                a sign of overfitting that won't hold out-of-sample.
 //
@@ -31,7 +32,8 @@ export function buildSmokeScorecard(data: SmokeReport): SmokeScorecard {
   // Optional flags are treated as "not tripped" so an in-flight response from
   // before a gauge shipped degrades to pass rather than throwing.
   const integrity: QcStatus = data.degenerate ? "block" : "pass";
-  const stability: QcStatus = data.high_turnover ? "caution" : "pass";
+  const stability: QcStatus =
+    data.high_turnover || data.low_stability ? "caution" : "pass";
   const robustness: QcStatus = data.low_robustness ? "caution" : "pass";
 
   const verdict: QcStatus =
