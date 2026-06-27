@@ -356,6 +356,13 @@ const translations = {
     "alpha.degenerateBlocked": "退化因子（零方差），已阻止回测。",
     "alpha.highTurnoverWarn": "换手偏高：更像「变化/反转」信号而非水平因子，会被交易成本严重侵蚀（合成估计，实盘通常更高）。多空方向由「策略方向」设置，无需写进表达式。",
     "alpha.lowRobustnessWarn": "鲁棒性偏低：给输入加 3% 噪声后该因子的排序就大幅改变，通常是「差分/相减」或两个近似相等量的差所致，容易过拟合、出样本难持续。优先用水平量（如某个基本面的 rank）而非其差分。",
+    "alpha.qc.verdict.pass": "预检通过",
+    "alpha.qc.verdict.caution": "注意",
+    "alpha.qc.verdict.block": "已阻止",
+    "alpha.qc.subtitle": "结构预检（合成面板）。真实有效性以回测为准。",
+    "alpha.qc.dim.integrity": "完整性",
+    "alpha.qc.dim.stability": "稳定性",
+    "alpha.qc.dim.robustness": "鲁棒性",
     "alpha.labelFactorStd": "FACTOR STD",
 
     /* Phase 2: Factor Analytics + Gate Editor */
@@ -1500,6 +1507,13 @@ const translations = {
     "alpha.degenerateBlocked": "Degenerate factor (zero variance) — backtest blocked.",
     "alpha.highTurnoverWarn": "High turnover: this looks like a change/reversal signal, not a level factor, and gets eaten by transaction costs (synthetic estimate — live is usually higher). Long/short is the direction setting, not part of the expression.",
     "alpha.lowRobustnessWarn": "Low robustness: a 3% input-noise jitter substantially reshuffles this factor's ranking — usually a sign of differencing or a spread of two near-equal quantities. Prone to overfitting and unlikely to hold out-of-sample. Prefer a level quantity (e.g. the rank of a fundamental) over its difference.",
+    "alpha.qc.verdict.pass": "Pre-checks passed",
+    "alpha.qc.verdict.caution": "Caution",
+    "alpha.qc.verdict.block": "Blocked",
+    "alpha.qc.subtitle": "Structural pre-checks (synthetic panel). Real validity comes from the backtest.",
+    "alpha.qc.dim.integrity": "Integrity",
+    "alpha.qc.dim.stability": "Stability",
+    "alpha.qc.dim.robustness": "Robustness",
     "alpha.labelFactorStd": "FACTOR STD",
 
     "nav.factors": "Factor Analytics",

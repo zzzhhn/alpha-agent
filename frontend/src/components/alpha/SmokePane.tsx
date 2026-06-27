@@ -2,6 +2,7 @@
 
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { buildSmokeScorecard, type QcStatus } from "@/lib/factorQc";
 import type { SmokeReport } from "@/lib/types";
 import type { PaneState } from "./types";
 
@@ -10,6 +11,28 @@ interface Props {
   data: SmokeReport | null;
   errorMessage: string | null;
   onRetry?: () => void;
+}
+
+// Status → status-dot color. pass=green, caution=amber, block=red, mirroring the
+// terminal palette used across the workstation.
+const DOT: Record<QcStatus, string> = {
+  pass: "bg-tm-pos",
+  caution: "bg-tm-warn",
+  block: "bg-tm-neg",
+};
+
+// Verdict → badge classes (the one primary visual of the pane).
+const VERDICT_BADGE: Record<QcStatus, string> = {
+  pass: "border-tm-pos/40 bg-tm-pos/10 text-tm-pos",
+  caution: "border-tm-warn/40 bg-tm-warn/10 text-tm-warn",
+  block: "border-tm-neg/40 bg-tm-neg/10 text-tm-neg",
+};
+
+function pct(x: number | undefined): string {
+  return x === undefined ? "—" : `${(x * 100).toFixed(0)}%`;
+}
+function num(x: number | undefined, digits: number): string {
+  return x === undefined ? "—" : x.toFixed(digits);
 }
 
 function Skeleton() {
@@ -22,13 +45,37 @@ function Skeleton() {
   );
 }
 
+function DimRow({
+  label,
+  value,
+  status,
+}: {
+  label: string;
+  value: string;
+  status: QcStatus;
+}) {
+  return (
+    <div className="flex items-center justify-between font-tm-mono text-[11px]">
+      <span className="text-tm-fg-2">{label}</span>
+      <span className="flex items-center gap-1.5">
+        <span className="font-mono text-tm-fg">{value}</span>
+        <span className={`h-1.5 w-1.5 rounded-full ${DOT[status]}`} />
+      </span>
+    </div>
+  );
+}
+
 export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
   const { locale } = useLocale();
+  const tk = (k: string) => t(locale, k as Parameters<typeof t>[1]);
+  // Pure + total, so safe to compute before branching (no IIFE in JSX that could
+  // throw and unmount the subtree — see feedback_render_throw_unmounts_subtree).
+  const sc = data ? buildSmokeScorecard(data) : null;
 
   return (
     <section className="flex flex-col gap-2 rounded border border-tm-rule bg-tm-bg-2 p-3">
       <h3 className="font-tm-mono text-xs font-semibold uppercase text-tm-fg-2">
-        {t(locale, "alpha.pane.smoke" as Parameters<typeof t>[1])}
+        {tk("alpha.pane.smoke")}
       </h3>
       {state === "waiting" || state === "loading" ? (
         <Skeleton />
@@ -40,49 +87,70 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
               onClick={onRetry}
               className="w-fit rounded border border-tm-neg/40 px-2 py-0.5 font-tm-mono text-tm-neg hover:bg-tm-neg/10"
             >
-              {t(locale, "alpha.pane.retry" as Parameters<typeof t>[1])}
+              {tk("alpha.pane.retry")}
             </button>
           ) : null}
         </div>
-      ) : data ? (
+      ) : data && sc ? (
         <>
-          <div className="font-tm-mono text-sm font-semibold text-tm-fg">
-            IC = <span className="font-mono">{data.ic_spearman.toFixed(4)}</span>
+          {/* Verdict badge — the single primary visual. PASS means the cheap
+              structural pre-checks passed (not "good factor"); the subtitle keeps
+              that honest: real validity is the backtest's call. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded border px-2 py-0.5 font-tm-mono text-xs font-semibold uppercase ${VERDICT_BADGE[sc.verdict]}`}
+            >
+              {tk(`alpha.qc.verdict.${sc.verdict}`)}
+            </span>
+            <span className="text-[11px] text-tm-muted">{tk("alpha.qc.subtitle")}</span>
           </div>
+
+          {/* Three structural dimensions — each value IS its own justification
+              (no fabricated composite score). */}
+          <div className="flex flex-col gap-1 border-t border-tm-rule pt-2">
+            <DimRow
+              label={tk("alpha.qc.dim.integrity")}
+              value={`σ ${num(data.factor_std, 3)}`}
+              status={sc.integrity}
+            />
+            <DimRow
+              label={tk("alpha.qc.dim.stability")}
+              value={pct(data.turnover)}
+              status={sc.stability}
+            />
+            <DimRow
+              label={tk("alpha.qc.dim.robustness")}
+              value={num(data.robustness, 2)}
+              status={sc.robustness}
+            />
+          </div>
+
+          {/* Actionable detail for whatever tripped — keeps the "how to fix"
+              guidance (Forgiveness). Degenerate is blocking and shown alone; the
+              two advisories show only when not already blocked. */}
           {data.degenerate ? (
-            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
-              {t(locale, "alpha.degenerateBlocked" as Parameters<typeof t>[1])}
+            <div className="rounded border border-tm-neg/40 bg-tm-neg/10 px-2 py-1 font-tm-mono text-[11px] text-tm-neg">
+              {tk("alpha.degenerateBlocked")}
             </div>
           ) : null}
-          {/* Advisory (not blocking): a change/reversal expression churns its
-              whole book and is punished by transaction costs. Shown alongside
-              degenerate; a factor can in principle trip neither, one, or both. */}
           {data.high_turnover && !data.degenerate ? (
             <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
-              {t(locale, "alpha.highTurnoverWarn" as Parameters<typeof t>[1])}
+              {tk("alpha.highTurnoverWarn")}
             </div>
           ) : null}
-          {/* Advisory (not blocking): factor ranking collapses under small input
-              noise — likely overfit. Independent of turnover (a factor can be
-              fragile without churning), so shown separately. */}
           {data.low_robustness && !data.degenerate ? (
             <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
-              {t(locale, "alpha.lowRobustnessWarn" as Parameters<typeof t>[1])}
+              {tk("alpha.lowRobustnessWarn")}
             </div>
           ) : null}
+
+          {/* Diagnostic footer: synthetic IC (indicative only) + run meta. */}
           <div className="font-tm-mono text-[11px] text-tm-muted">
-            {t(locale, "alpha.pane.rowsValid" as Parameters<typeof t>[1])}=<span className="font-mono">{data.rows_valid}</span>
+            IC <span className="font-mono">{data.ic_spearman.toFixed(4)}</span>
             {" "}&bull;{" "}
-            {t(locale, "alpha.pane.runtime" as Parameters<typeof t>[1])}=<span className="font-mono">{data.runtime_ms}ms</span>
-            {data.factor_std !== undefined
-              ? <> &bull; {t(locale, "alpha.pane.std" as Parameters<typeof t>[1])}=<span className="font-mono">{data.factor_std.toFixed(4)}</span></>
-              : null}
-            {data.turnover !== undefined
-              ? <> &bull; {t(locale, "alpha.pane.turnover" as Parameters<typeof t>[1])}=<span className={`font-mono ${data.high_turnover ? "text-tm-warn" : ""}`}>{(data.turnover * 100).toFixed(0)}%</span></>
-              : null}
-            {data.robustness !== undefined
-              ? <> &bull; {t(locale, "alpha.pane.robustness" as Parameters<typeof t>[1])}=<span className={`font-mono ${data.low_robustness ? "text-tm-warn" : ""}`}>{data.robustness.toFixed(2)}</span></>
-              : null}
+            {tk("alpha.pane.rowsValid")}=<span className="font-mono">{data.rows_valid}</span>
+            {" "}&bull;{" "}
+            {tk("alpha.pane.runtime")}=<span className="font-mono">{data.runtime_ms}ms</span>
           </div>
         </>
       ) : null}
