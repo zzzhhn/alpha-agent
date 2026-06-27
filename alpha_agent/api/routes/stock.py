@@ -8,15 +8,17 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 _log = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from pydantic import BaseModel
 
 from alpha_agent.api.byok import get_llm_client
+from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.storage.queries import (
     get_company_profile,
@@ -94,6 +96,7 @@ class StockResponse(BaseModel):
 
 @router.get("/{ticker}", response_model=StockResponse)
 async def get_stock(
+    response: Response,
     ticker: str = Path(min_length=1, max_length=10),
 ) -> StockResponse:
     """Return the most-recent RatingCard for *ticker*.
@@ -105,11 +108,13 @@ async def get_stock(
     ticker = ticker.upper()
     pool = await get_db_pool()
     cal_map = await load_active_calibration(pool)
-    # Signal and news are independent reads (news only needs the ticker), so
-    # run them concurrently: with the function in hkg1 and the DB in us-east-1
-    # every query is a transpacific round trip, and gathering collapses two
-    # sequential waves into one. The news read is only wasted on a 404 ticker.
-    sig, news_rows = await asyncio.gather(
+    # Signal, news, and dimension thresholds are independent reads, so run them
+    # concurrently: with the function in hkg1 and the DB in us-east-1 every query
+    # is a transpacific round trip, and gathering collapses three sequential
+    # waves into one. (thresholds is cached in-process, so on a warm instance
+    # it's a no-op; the gather matters on a cold instance.) The news read is only
+    # wasted on a 404 ticker.
+    sig, news_rows, dim_thresholds = await asyncio.gather(
         fetch_latest_signal(pool, ticker, cal_map=cal_map),
         pool.fetch(
             """
@@ -123,9 +128,14 @@ async def get_stock(
             """,
             ticker,
         ),
+        get_dimension_thresholds(pool),
     )
     if sig is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
+    # Rating card is global, slow-moving (intraday cron refreshes ~every 15 min):
+    # let the hkg1 edge serve repeat opens so a re-click never pays the
+    # transpacific round trip or queues behind a cron write.
+    set_public_cache(response, s_maxage=45, swr=300)
 
     fetched_at: datetime = sig["fetched_at"]
     stale = (datetime.now(UTC) - fetched_at) > timedelta(hours=24)
@@ -158,9 +168,7 @@ async def get_stock(
         news_items=news_items,
         tier_flip_today=sig.get("tier_flip_today", False),
         gex_info=sig.get("gex_info"),
-        dimension_grades=grade_dimensions(
-            sig["breakdown"], await get_dimension_thresholds(pool)
-        ),
+        dimension_grades=grade_dimensions(sig["breakdown"], dim_thresholds),
     )
     return StockResponse(card=card, stale=stale)
 
@@ -192,6 +200,7 @@ class ChartEventsResponse(BaseModel):
 
 @router.get("/{ticker}/events", response_model=ChartEventsResponse)
 async def get_events(
+    response: Response,
     ticker: str = Path(min_length=1, max_length=10),
     from_ts: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     to_ts: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
@@ -269,6 +278,9 @@ async def get_events(
     events.sort(key=lambda e: e.ts, reverse=True)
     events = events[:200]
 
+    # Chart overlay is a global, slow-moving read. (When called internally by
+    # explain_range the response is a throwaway, so the header is discarded.)
+    set_public_cache(response, s_maxage=120, swr=600)
     return ChartEventsResponse(
         ticker=ticker, from_ts=from_ts, to_ts=to_ts, events=events,
     )
@@ -301,7 +313,11 @@ async def explain_range(
     ticker = ticker.upper()
     pool = await get_db_pool()
 
-    events_resp = await get_events(ticker=ticker, from_ts=from_ts, to_ts=to_ts)
+    # Internal reuse of the events query — pass a throwaway Response (its cache
+    # header is discarded; explain_range is a POST and sets none of its own).
+    events_resp = await get_events(
+        Response(), ticker=ticker, from_ts=from_ts, to_ts=to_ts
+    )
     if not events_resp.events:
         return ExplainRangeResponse(
             ticker=ticker, from_ts=from_ts, to_ts=to_ts,
@@ -910,17 +926,46 @@ class OhlcvResponse(BaseModel):
 # Restrict to the ones the chart UI offers to avoid surprises.
 _AllowedPeriod = Literal["1mo", "3mo", "6mo", "1y", "2y", "5y"]
 
+# In-process OHLCV cache. The old handler did a live, synchronous yfinance pull
+# on EVERY chart open — slow (~200-500ms transpacific to Yahoo) and worst exactly
+# while the cron pulls the same tickers from yfinance (rate-limit contention, the
+# user's "slower when the backend is pulling data" symptom). Daily bars move once
+# per session, so a short in-process TTL plus the edge cache means a re-open
+# almost never re-hits Yahoo. Keyed (ticker, period); value (monotonic_ts, bars).
+_OHLCV_TTL_SECONDS = 300.0
+_ohlcv_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+
+
+def _fetch_ohlcv_bars(ticker: str, period: str) -> list[dict]:
+    """yfinance pull -> OHLCV row dicts. Indirection so the cache + tests can
+    wrap the one slow, blocking call."""
+    df = get_ticker(ticker).history(period=period)
+    return extract_ohlcv(df)
+
+
+def _cached_ohlcv_bars(ticker: str, period: str) -> list[dict]:
+    key = (ticker, period)
+    now = time.monotonic()
+    hit = _ohlcv_cache.get(key)
+    if hit is not None and (now - hit[0]) < _OHLCV_TTL_SECONDS:
+        return hit[1]
+    bars = _fetch_ohlcv_bars(ticker, period)
+    _ohlcv_cache[key] = (now, bars)
+    return bars
+
 
 @router.get("/{ticker}/ohlcv", response_model=OhlcvResponse)
 async def stock_ohlcv(
+    response: Response,
     ticker: str,
     period: _AllowedPeriod = "6mo",
 ) -> OhlcvResponse:
-    """Lazy OHLCV feed for the price chart. Cache headers in middleware
-    (or here, future) - for now relies on FE-side staleness."""
+    """Lazy OHLCV feed for the price chart. In-process TTL cache over the
+    yfinance pull + an edge cache header so repeat opens are instant and never
+    contend with the cron's yfinance pulls."""
     ticker = ticker.upper()
-    df = get_ticker(ticker).history(period=period)
-    bars = extract_ohlcv(df)
+    bars = _cached_ohlcv_bars(ticker, period)
+    set_public_cache(response, s_maxage=600, swr=3600)
     return OhlcvResponse(
         ticker=ticker,
         period=period,
@@ -949,6 +994,7 @@ class CompanyProfile(BaseModel):
 
 @router.get("/{ticker}/profile", response_model=CompanyProfile)
 async def stock_profile(
+    response: Response,
     ticker: str,
     lang: Literal["zh", "en"] = Query("en"),
 ) -> CompanyProfile:
@@ -960,6 +1006,9 @@ async def stock_profile(
     summary_en. Never 500s: DB failures fall back to a direct yfinance pull,
     and a total failure returns all-null fields (the card hides)."""
     ticker = ticker.upper()
+    # Company profile barely changes — cache it hard at the edge (long fresh +
+    # day-long stale-while-revalidate).
+    set_public_cache(response, s_maxage=3600, swr=86400)
     try:
         pool = await get_db_pool()
         row = await get_company_profile(pool, ticker)

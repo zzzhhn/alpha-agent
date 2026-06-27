@@ -6909,7 +6909,7 @@
     },
     "/api/stock/{ticker}/ohlcv": {
       "get": {
-        "description": "Lazy OHLCV feed for the price chart. Cache headers in middleware\n(or here, future) - for now relies on FE-side staleness.",
+        "description": "Lazy OHLCV feed for the price chart. In-process TTL cache over the\nyfinance pull + an edge cache header so repeat opens are instant and never\ncontend with the cron's yfinance pulls.",
         "operationId": "stock_ohlcv_api_stock__ticker__ohlcv_get",
         "parameters": [
           {

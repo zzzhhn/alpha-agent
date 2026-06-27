@@ -13,9 +13,10 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
+from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import grade_dimensions
@@ -339,6 +340,7 @@ async def build_lean_view(
 
 @router.get("/lean", response_model=PicksResponse)
 async def picks_lean(
+    response: Response,
     limit: int = Query(50, ge=1, le=600),
     search: str | None = Query(None, max_length=12),
     mode: str = Query("short", pattern="^(short|long)$"),
@@ -379,6 +381,11 @@ async def picks_lean(
         cards, most_recent, stale = await build_lean_view(
             pool, limit=limit, search=search, mode=mode, side=side
         )
+        # 今日推荐 is a global, slow-moving ranked list (intraday cron refreshes
+        # ~every 15 min). Edge-cache it so the four serial DB waves in
+        # build_lean_view run at most once per window instead of on every open —
+        # this is the surface that queues worst behind cron writes.
+        set_public_cache(response, s_maxage=45, swr=300)
         return PicksResponse(picks=cards, as_of=most_recent, stale=stale)
     except Exception as e:
         # Surface the real exception so we can diagnose instead of seeing
