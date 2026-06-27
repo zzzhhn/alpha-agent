@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "regions": ["hkg1"],
+  "regions": ["iad1"],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/qcore", "destination": "/api/index" }

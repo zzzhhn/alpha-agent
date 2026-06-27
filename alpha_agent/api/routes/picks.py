@@ -10,6 +10,7 @@ SAME function so the immutable record is byte-identical to what the user saw
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -138,27 +139,31 @@ async def build_lean_view(
         apply_calibration,
         load_active_calibration,
     )
-    cal_map = await load_active_calibration(pool)
+    # cal_map and dim_thresholds are cached global config; fresh_cutoff is an
+    # independent aggregate. None depends on another, so collapse what were three
+    # serial transpacific round trips into one gathered wave (matters most on a
+    # cold instance, where all three miss their in-process cache). fresh_cutoff is
+    # the price-feed freshness cutoff: the oldest of the last N distinct trading
+    # dates in daily_prices; a recommended ticker must have a close on/after it
+    # (a dead/delisted feed is dropped from the default ranking below). NULL when
+    # there is no price history yet -> guard disabled.
+    cal_map, fresh_cutoff, dim_thresholds = await asyncio.gather(
+        load_active_calibration(pool),
+        pool.fetchval(
+            """
+            SELECT min(date) FROM (
+                SELECT DISTINCT date FROM daily_prices ORDER BY date DESC LIMIT $1
+            ) t
+            """,
+            _PRICE_FRESH_TRADING_DAYS,
+        ),
+        get_dimension_thresholds(pool),
+    )
     search_norm = search.strip().upper() if search and search.strip() else None
     # side=short surfaces the bottom of the ranking (most bearish). The
     # direction is a controlled literal derived from the pattern-validated
     # `side`, never raw user input, so the f-string interpolation is safe.
     score_dir = "ASC" if side == "short" else "DESC"
-    # Price-feed freshness cutoff: the oldest of the last N distinct trading
-    # dates in daily_prices. A recommended ticker must have a close on/after
-    # this (i.e. have traded in the last N sessions); a dead feed (delisted /
-    # ticker change / halt) is dropped from the default ranking below. NULL
-    # when there is no price history yet -> guard disabled. Computed relative
-    # to the market's own latest dates, so it tolerates the normal ~1-day
-    # price-vs-signal lag without dropping healthy names.
-    fresh_cutoff = await pool.fetchval(
-        """
-        SELECT min(date) FROM (
-            SELECT DISTINCT date FROM daily_prices ORDER BY date DESC LIMIT $1
-        ) t
-        """,
-        _PRICE_FRESH_TRADING_DAYS,
-    )
     # DISTINCT ON reduces each table to its latest row per ticker, then
     # UNION ALL stitches them with fast taking precedence (NOT EXISTS
     # drops slow rows whose ticker already came from fast). Dedup, the
@@ -236,9 +241,8 @@ async def build_lean_view(
     most_recent: datetime = max(r["fetched_at"] for r in rows)
     stale = (datetime.now(UTC) - most_recent) > timedelta(hours=_STALE_THRESHOLD_HOURS)
 
-    # Universe-wide band breakpoints so each dimension is graded against its
-    # own cross-sectional distribution (not the returned top-N subset).
-    dim_thresholds = await get_dimension_thresholds(pool)
+    # dim_thresholds (universe-wide band breakpoints, so each dimension is graded
+    # against its own cross-sectional distribution) was fetched in the gather above.
 
     # Per-ticker directional consistency (5d/1m/1y/all-time next-day
     # hit-rate) for the returned tickers, in one batched query. Mode/side
