@@ -41,6 +41,13 @@ class SmokeResult:
     # this understates real turnover, but it cleanly separates the two classes —
     # surfaced so the API can warn before the user spends a real backtest.
     turnover: float = 0.0
+    # Perturbation-robustness score in [-1, 1] (AlphaEval dimension 3): the mean
+    # Spearman rank correlation between the clean factor ranking and the ranking
+    # after a small multiplicative noise jitter on the input operands (Gaussian +
+    # Student-t). ~1.0 = the ranking is stable under noise (genuine signal);
+    # toward 0 = the factor is dominated by noise / curve-fit to exact numbers and
+    # will not hold out-of-sample. Surfaced so the API can flag fragile factors.
+    robustness: float = 0.0
 
 
 def _synthetic_panel(lookback: int, n_tickers: int, seed: int) -> dict[str, np.ndarray]:
@@ -191,6 +198,87 @@ def _estimate_turnover(
     return turnover if np.isfinite(turnover) else 0.0
 
 
+# Multiplicative noise scale for the robustness probe: data * (1 + eps), eps ~
+# N(0, _NOISE_SIGMA). 3% matches AlphaEval's var=0.001 (sigma ~ 0.0316) "small
+# perturbation" — large enough to reshuffle a noise-dominated factor, small
+# enough to leave a genuine cross-sectional signal's ranking intact.
+_NOISE_SIGMA: float = 0.03
+_ROBUSTNESS_TAIL: int = 10
+
+
+def _row_rank_consistency(rank_a: np.ndarray, rank_b: np.ndarray) -> float | None:
+    """Mean per-row Pearson correlation of two cross-sectional rank arrays
+    (== Spearman of the underlying values). Rows with <3 valid pairs or zero
+    variance are skipped. Returns None if no row qualifies."""
+    corrs: list[float] = []
+    for t in range(rank_a.shape[0]):
+        x, y = rank_a[t], rank_b[t]
+        m = ~(np.isnan(x) | np.isnan(y))
+        if int(m.sum()) < 3:
+            continue
+        xv, yv = x[m], y[m]
+        if xv.std() == 0 or yv.std() == 0:
+            continue
+        c = float(np.corrcoef(xv, yv)[0, 1])
+        if np.isfinite(c):
+            corrs.append(c)
+    return float(np.mean(corrs)) if corrs else None
+
+
+def _estimate_robustness(
+    expression: str,
+    data: dict[str, np.ndarray],
+    clean_factor: np.ndarray,
+    *,
+    seed: int,
+    n_trials: int = 3,
+) -> float:
+    """Perturbation-robustness score (AlphaEval dim 3): re-evaluate the factor on
+    noise-jittered inputs and average the rank consistency vs the clean ranking.
+
+    Two noise families per AlphaEval: Gaussian (normal vol) and Student-t df=3
+    (fat-tail shock). Only numeric operands are perturbed (categorical strings
+    like sector/industry are passed through untouched). Deterministic given
+    `seed`. Returns the mean Spearman rank correlation over all trials, or NaN if
+    the factor can't be ranked (all-NaN / constant — already caught by
+    factor_std, so this stays NaN rather than masquerading as fragile).
+    """
+    clean = np.asarray(clean_factor, dtype=np.float64)
+    if clean.ndim == 1:
+        clean = clean.reshape(-1, 1)
+    if clean.shape[0] < _ROBUSTNESS_TAIL + 1:
+        return float("nan")
+    clean_rank = rank(clean[-(_ROBUSTNESS_TAIL + 1) : -1])
+
+    numeric_keys = [k for k, v in data.items() if v.dtype.kind in "fiu"]
+    rng = np.random.default_rng(seed + 1)  # distinct stream from the panel's
+    scores: list[float] = []
+    for noise_kind in ("gaussian", "student_t"):
+        for _ in range(n_trials):
+            noisy = dict(data)
+            for k in numeric_keys:
+                arr = data[k]
+                if noise_kind == "gaussian":
+                    eps = rng.normal(0.0, _NOISE_SIGMA, size=arr.shape)
+                else:
+                    eps = rng.standard_t(3, size=arr.shape) * _NOISE_SIGMA
+                noisy[k] = arr * (1.0 + eps)
+            try:
+                noisy_factor = np.asarray(evaluate(expression, noisy), dtype=np.float64)
+            except Exception:  # noqa: BLE001 — a noisy eval blow-up = fragile, score it 0
+                scores.append(0.0)
+                continue
+            if noisy_factor.ndim == 1:
+                noisy_factor = noisy_factor.reshape(-1, 1)
+            if noisy_factor.shape[0] < _ROBUSTNESS_TAIL + 1:
+                continue
+            noisy_rank = rank(noisy_factor[-(_ROBUSTNESS_TAIL + 1) : -1])
+            consistency = _row_rank_consistency(clean_rank, noisy_rank)
+            if consistency is not None:
+                scores.append(consistency)
+    return float(np.mean(scores)) if scores else float("nan")
+
+
 def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
     """Run the 10-day Spearman-IC smoke check for an AST-validated expression."""
     n_tickers = 20
@@ -218,6 +306,11 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
     # passes the degeneracy check but gets destroyed by transaction costs.
     turnover = _estimate_turnover(factor)
 
+    # Perturbation-robustness gauge: low score flags a factor whose ranking
+    # collapses under small input noise — overfit to exact numbers, won't hold
+    # out-of-sample. (AlphaEval dimension 3.)
+    robustness = _estimate_robustness(expression, data, factor, seed=seed)
+
     fwd_ret = np.vstack(
         [np.diff(np.log(close), axis=0), np.full((1, close.shape[1]), np.nan)]
     )
@@ -230,6 +323,7 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
             runtime_ms=runtime_ms,
             factor_std=factor_std,
             turnover=turnover,
+            robustness=robustness,
         )
 
     factor_tail = factor[-(tail + 1) : -1]
@@ -258,4 +352,5 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
         runtime_ms=float(runtime_ms),
         factor_std=factor_std,
         turnover=turnover,
+        robustness=robustness,
     )

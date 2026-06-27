@@ -278,6 +278,13 @@ export interface SmokeReport {
   // against in-flight responses from before the backend field landed.
   readonly turnover?: number;
   readonly high_turnover?: boolean;
+  // Perturbation-robustness score in [-1,1] (AlphaEval dim 3). low_robustness
+  // flags a factor whose ranking collapses under a small input-noise jitter
+  // (differencing / knife-edge spread) — likely overfit, won't hold OOS.
+  // ADVISORY only (does NOT block backtest/save). Optional for resilience
+  // against in-flight responses from before the backend field landed.
+  readonly robustness?: number;
+  readonly low_robustness?: boolean;
 }
 
 export interface HypothesisTranslateResponse {

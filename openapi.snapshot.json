@@ -2697,6 +2697,16 @@
             "title": "Ic Spearman",
             "type": "number"
           },
+          "low_robustness": {
+            "default": false,
+            "title": "Low Robustness",
+            "type": "boolean"
+          },
+          "robustness": {
+            "default": 0.0,
+            "title": "Robustness",
+            "type": "number"
+          },
           "rows_valid": {
             "title": "Rows Valid",
             "type": "integer"

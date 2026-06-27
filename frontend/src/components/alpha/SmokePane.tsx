@@ -62,6 +62,14 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
               {t(locale, "alpha.highTurnoverWarn" as Parameters<typeof t>[1])}
             </div>
           ) : null}
+          {/* Advisory (not blocking): factor ranking collapses under small input
+              noise — likely overfit. Independent of turnover (a factor can be
+              fragile without churning), so shown separately. */}
+          {data.low_robustness && !data.degenerate ? (
+            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
+              {t(locale, "alpha.lowRobustnessWarn" as Parameters<typeof t>[1])}
+            </div>
+          ) : null}
           <div className="font-tm-mono text-[11px] text-tm-muted">
             {t(locale, "alpha.pane.rowsValid" as Parameters<typeof t>[1])}=<span className="font-mono">{data.rows_valid}</span>
             {" "}&bull;{" "}
@@ -71,6 +79,9 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
               : null}
             {data.turnover !== undefined
               ? <> &bull; {t(locale, "alpha.pane.turnover" as Parameters<typeof t>[1])}=<span className={`font-mono ${data.high_turnover ? "text-tm-warn" : ""}`}>{(data.turnover * 100).toFixed(0)}%</span></>
+              : null}
+            {data.robustness !== undefined
+              ? <> &bull; {t(locale, "alpha.pane.robustness" as Parameters<typeof t>[1])}=<span className={`font-mono ${data.low_robustness ? "text-tm-warn" : ""}`}>{data.robustness.toFixed(2)}</span></>
               : null}
           </div>
         </>

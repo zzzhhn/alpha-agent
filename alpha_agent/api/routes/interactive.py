@@ -70,6 +70,18 @@ class HypothesisTranslateRequest(BaseModel):
 # and the user may want it) — it never blocks Save to Zoo / Run backtest.
 _HIGH_TURNOVER_THRESHOLD: float = 0.80
 
+# Robustness (AlphaEval dim 3) below this means the factor's cross-sectional
+# ranking decorrelates from itself under a 3% input-noise jitter — the signature
+# of a noise-AMPLIFYING expression (differencing, or a knife-edge spread of two
+# near-equal quantities) that is curve-fit to exact numbers and won't hold OOS.
+# Calibration on the synthetic panel: robust level factors 0.90-0.99 vs
+# noise-amplifying factors 0.00-0.25, so 0.60 sits cleanly in the gap (well below
+# the lowest robust factor, so it won't false-positive legit factors). ADVISORY
+# only — never blocks. On the synthetic panel this correlates with high turnover
+# (both flag differencing), but it is a distinct mechanism that diverges more on
+# real data, where genuine fundamentals carry their own measurement noise.
+_LOW_ROBUSTNESS_THRESHOLD: float = 0.60
+
 
 class SmokeReport(BaseModel):
     rows_valid: int
@@ -86,6 +98,12 @@ class SmokeReport(BaseModel):
     # `degenerate`, this does NOT disable backtest/save — it only informs.
     turnover: float = 0.0
     high_turnover: bool = False
+    # Perturbation-robustness score (AlphaEval dim 3, see smoke._estimate_robustness).
+    # low_robustness=True surfaces an advisory "this factor's ranking collapses
+    # under small input noise — likely overfit / won't hold out-of-sample"
+    # warning. Like high_turnover, ADVISORY only — does NOT disable backtest/save.
+    robustness: float = 0.0
+    low_robustness: bool = False
 
 
 class HypothesisTranslateResponse(BaseModel):
@@ -328,6 +346,15 @@ async def translate_hypothesis(
             or (not math.isfinite(smoke.ic_spearman)),
             turnover=smoke.turnover,
             high_turnover=smoke.turnover > _HIGH_TURNOVER_THRESHOLD,
+            robustness=smoke.robustness,
+            # Only flag a finite, genuinely-low score: a NaN robustness means the
+            # factor couldn't be ranked at all (already covered by `degenerate`),
+            # so don't double-warn — fragility only makes sense for a factor that
+            # HAS a ranking to lose.
+            low_robustness=(
+                math.isfinite(smoke.robustness)
+                and smoke.robustness < _LOW_ROBUSTNESS_THRESHOLD
+            ),
         ),
         llm_tokens={
             "prompt": llm_resp.prompt_tokens,
