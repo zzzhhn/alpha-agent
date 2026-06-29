@@ -15,6 +15,7 @@ import {
 import PicksTable from "./PicksTable";
 import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
+import ConvictionBand from "./ConvictionBand";
 import { TmPane } from "@/components/tm/TmPane";
 import {
   TmSubbar,
@@ -302,6 +303,11 @@ export default function PicksBrowser({
       <div className="flex justify-end px-4 pt-3">
         <RefreshButton />
       </div>
+
+      {/* ★ Highest-Conviction hero band — top-3 of the current board as
+          decision-first cards (ALPHACORE design). Hidden during an active
+          search, where the result set is a lookup, not a conviction ranking. */}
+      {!searching ? <ConvictionBand picks={data.picks} /> : null}
 
       <TmPane
         title={copy.paneTitle}
