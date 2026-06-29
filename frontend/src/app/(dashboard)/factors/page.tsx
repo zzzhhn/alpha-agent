@@ -370,6 +370,11 @@ export default function FactorsPage() {
   }
 
   /* ── correlation panel ────────────────────────────────────────── */
+  // ALPHACORE design (zoo block): split the page into analytics / manage tabs.
+  // Analytics (the dashboard) is the default; manage holds the factor catalog +
+  // correlation. Keeps the high-frequency view (analytics) front and centre and
+  // demotes the long catalog behind a tab, per the design's "次要信息收进标签页".
+  const [zooView, setZooView] = useState<"analytics" | "manage">("analytics");
   const [corrLoading, setCorrLoading] = useState(false);
   const [corrError, setCorrError] = useState<string | null>(null);
   const [corrResult, setCorrResult] =
@@ -377,6 +382,9 @@ export default function FactorsPage() {
 
   async function checkCorrelation() {
     if (entries.length < 2) return;
+    // The correlation result lives in the MANAGE tab; the trigger is in the
+    // always-visible subbar, so switch the user there to see the result.
+    setZooView("manage");
     setCorrLoading(true);
     setCorrError(null);
     setCorrResult(null);
@@ -442,6 +450,37 @@ export default function FactorsPage() {
         </TmButton>
       </TmSubbar>
 
+      {/* manage / analytics tab bar (ALPHACORE design) */}
+      <div className="flex border-b border-tm-rule">
+        {(["analytics", "manage"] as const).map((v) => {
+          const active = zooView === v;
+          const label =
+            v === "analytics"
+              ? locale === "zh"
+                ? "分析"
+                : "ANALYTICS"
+              : locale === "zh"
+                ? "管理"
+                : "MANAGE";
+          return (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setZooView(v)}
+              className={`border-b-2 px-4 py-2 font-tm-mono text-[11px] uppercase tracking-[0.05em] transition ${
+                active
+                  ? "border-tm-accent text-tm-accent"
+                  : "border-transparent text-tm-muted hover:text-tm-fg-2"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {zooView === "analytics" && (
+        <>
       {/* 1. OVERVIEW — 8 KPIs */}
       <TmPane
         title="ZOO.OVERVIEW"
@@ -611,7 +650,11 @@ export default function FactorsPage() {
           </ul>
         </TmPane>
       )}
+        </>
+      )}
 
+      {zooView === "manage" && (
+        <>
       {/* 6. CATALOG (with chip filter + sort) */}
       <ZooCatalogPane
         entries={entries}
@@ -640,6 +683,8 @@ export default function FactorsPage() {
           )}
           {corrResult && <CorrelationPanel data={corrResult} />}
         </TmPane>
+      )}
+        </>
       )}
     </TmScreen>
   );
