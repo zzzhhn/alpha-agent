@@ -56,6 +56,7 @@ import {
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
 import { FactorExampleList } from "@/components/alpha/FactorExampleList";
+import { ReportVerdictBanner } from "@/components/report/ReportVerdictBanner";
 import { TmBacktestKpiStrip } from "@/components/backtest/TmBacktestKpiStrip";
 import { TmDrawdownChart } from "@/components/backtest/TmDrawdownChart";
 import { TmMonthlyReturnsHeatmap } from "@/components/backtest/TmMonthlyReturnsHeatmap";
@@ -557,6 +558,14 @@ export default function ReportPage() {
 
       {primary && (
         <article className="report-tearsheet flex flex-col">
+          {/* Decision-first VERDICT banner (ALPHACORE design): factor + derived
+              quality tier + intuition, above the full tear sheet. */}
+          <ReportVerdictBanner
+            name={primary.name}
+            expression={primary.expression}
+            intuition={primary.intuition}
+            backtest={primary.backtest}
+          />
           <ReportCoverPane
             r={primary}
             expr={primary.expression}
