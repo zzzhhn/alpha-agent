@@ -56,7 +56,9 @@ import {
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
 import { FactorExampleList } from "@/components/alpha/FactorExampleList";
-import { ReportVerdictBanner } from "@/components/report/ReportVerdictBanner";
+import { ReportVerdictHero } from "@/components/report/ReportVerdictHero";
+import { ReportCompareBar } from "@/components/report/ReportCompareBar";
+import { ReportDeepModal } from "@/components/report/ReportDeepModal";
 import { TmBacktestKpiStrip } from "@/components/backtest/TmBacktestKpiStrip";
 import { TmDrawdownChart } from "@/components/backtest/TmDrawdownChart";
 import { TmMonthlyReturnsHeatmap } from "@/components/backtest/TmMonthlyReturnsHeatmap";
@@ -222,6 +224,8 @@ export default function ReportPage() {
   // its row in the list and the Run button; cleared once a report runs or
   // the user edits the expression by hand.
   const [stagedName, setStagedName] = useState<string | null>(null);
+  // R3: the long-tail tear-sheet sections collapse into a floating-button modal.
+  const [deepOpen, setDeepOpen] = useState(false);
 
   useEffect(() => {
     seedZooIfFirstRun();
@@ -482,6 +486,31 @@ export default function ReportPage() {
         )}
       </TmSubbar>
 
+      {/* R1 — decision-first verdict hero with a switch-factor dropdown,
+          above the picker. States the tier + whether a report is worthwhile. */}
+      <div className="px-4 pt-4">
+        <ReportVerdictHero
+          primary={primary}
+          zoo={zoo}
+          onSwitch={(e) => loadZooEntry(e, "primary")}
+          running={running}
+        />
+      </div>
+
+      {/* R2 — compare a second factor by dropdown + Generate (only once a
+          primary report exists to compare against). */}
+      {primary && (
+        <div className="px-4 pt-3">
+          <ReportCompareBar
+            zoo={zoo}
+            compareName={compare?.name ?? null}
+            onCompare={(e) => loadZooEntry(e, "compare")}
+            onClear={() => setCompare(null)}
+            running={running}
+          />
+        </div>
+      )}
+
       <ReportPickerPane
         factorName={factorName}
         onFactorName={(v) => {
@@ -557,59 +586,62 @@ export default function ReportPage() {
       )}
 
       {primary && (
-        <article className="report-tearsheet flex flex-col">
-          {/* Decision-first VERDICT banner (ALPHACORE design): factor + derived
-              quality tier + intuition, above the full tear sheet. */}
-          <ReportVerdictBanner
-            name={primary.name}
-            expression={primary.expression}
-            intuition={primary.intuition}
-            backtest={primary.backtest}
-          />
-          <ReportCoverPane
-            r={primary}
-            expr={primary.expression}
-            factorName={primary.name}
-            intuition={primary.intuition}
-            config={config}
-          />
-          <TmBacktestKpiStrip result={primary.backtest} />
-          {/* v3 #1 — institutional risk metrics */}
-          <RiskMetricsPane report={primary} />
-          {/* v3 #2 — tail risk + streak diagnostics */}
-          <TailRiskPane report={primary} />
-          {/* v3 #6 — recent momentum vs benchmark */}
-          <RecentMomentumPane report={primary} />
-          <TmPane
-            title="EQUITY.CURVE"
-            meta={`${primary.backtest.equity_curve.length} sessions · vs ${primary.backtest.benchmark_ticker}`}
+        <>
+          <article className="report-tearsheet flex flex-col">
+            <ReportCoverPane
+              r={primary}
+              expr={primary.expression}
+              factorName={primary.name}
+              intuition={primary.intuition}
+              config={config}
+            />
+            <TmBacktestKpiStrip result={primary.backtest} />
+            {/* v3 #1 — institutional risk metrics */}
+            <RiskMetricsPane report={primary} />
+            {/* v3 #2 — tail risk + streak diagnostics */}
+            <TailRiskPane report={primary} />
+            {/* v3 #6 — recent momentum vs benchmark */}
+            <RecentMomentumPane report={primary} />
+            <TmPane
+              title="EQUITY.CURVE"
+              meta={`${primary.backtest.equity_curve.length} sessions · vs ${primary.backtest.benchmark_ticker}`}
+            >
+              <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+                {t(locale, "backtest.equity.subtitle")}
+              </p>
+              <div className="px-2 pb-2 pt-2">
+                <FactorPnLChart data={primary.backtest} height={260} />
+              </div>
+            </TmPane>
+            <TmDrawdownChart equityCurve={primary.backtest.equity_curve} />
+          </article>
+
+          {/* R3 — deep / long-tail sections collapsed behind a floating button
+              so the main report stops scrolling forever. */}
+          <ReportDeepModal
+            open={deepOpen}
+            onOpen={() => setDeepOpen(true)}
+            onClose={() => setDeepOpen(false)}
           >
-            <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
-              {t(locale, "backtest.equity.subtitle")}
-            </p>
-            <div className="px-2 pb-2 pt-2">
-              <FactorPnLChart data={primary.backtest} height={260} />
-            </div>
-          </TmPane>
-          <TmDrawdownChart equityCurve={primary.backtest.equity_curve} />
-          {/* v3 #8 — recovery / underwater stats */}
-          <RecoveryStatsPane equityCurve={primary.backtest.equity_curve} />
-          {/* v3 #3 — per-year breakdown table */}
-          <YearlyBreakdownPane equityCurve={primary.backtest.equity_curve} />
-          {primary.backtest.monthly_returns &&
-            primary.backtest.monthly_returns.length > 0 && (
-              <TmMonthlyReturnsHeatmap
-                data={primary.backtest.monthly_returns}
-              />
-            )}
-          <TmTopBottomTable today={primary.today} loading={false} />
-          <TmICTimeseriesChart data={primary.icTs} loading={false} />
-          <TmExposureChart
-            data={primary.exposure}
-            topN={10}
-            loading={false}
-          />
-        </article>
+            {/* v3 #8 — recovery / underwater stats */}
+            <RecoveryStatsPane equityCurve={primary.backtest.equity_curve} />
+            {/* v3 #3 — per-year breakdown table */}
+            <YearlyBreakdownPane equityCurve={primary.backtest.equity_curve} />
+            {primary.backtest.monthly_returns &&
+              primary.backtest.monthly_returns.length > 0 && (
+                <TmMonthlyReturnsHeatmap
+                  data={primary.backtest.monthly_returns}
+                />
+              )}
+            <TmTopBottomTable today={primary.today} loading={false} />
+            <TmICTimeseriesChart data={primary.icTs} loading={false} />
+            <TmExposureChart
+              data={primary.exposure}
+              topN={10}
+              loading={false}
+            />
+          </ReportDeepModal>
+        </>
       )}
 
       {compare && (
