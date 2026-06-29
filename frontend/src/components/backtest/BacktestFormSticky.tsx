@@ -195,15 +195,15 @@ export function BacktestFormSticky({
           </div>
         )}
 
-        {/* Row 2 — quick params + RUN button (always visible). Shares the
-            same 12-track grid as the advanced row (Row 3) so the field columns
-            line up vertically. Each control fills its track at a uniform h-9
-            via CONTROL_BOX. The toggle + RUN group occupies the last 3 tracks,
-            its buttons bottom-aligned to sit on the control baseline. */}
-        <div className="grid grid-cols-2 items-start gap-x-3 gap-y-3 sm:grid-cols-12">
+        {/* Row 2 — quick params + RUN button (always visible). A single flex
+            row: the three labelled fields grow equally (flex-1) so they fill
+            the width with no dead gap, and the toggle + RUN action cluster sits
+            flush at the trailing edge, bottom-aligned to the control baseline.
+            Even, gap-free tiles instead of fixed-track bricks with a void. */}
+        <div className="flex flex-wrap items-end gap-3">
           <FieldShell
             label={t(locale, "backtest.form.direction")}
-            className="sm:col-span-3"
+            className="min-w-[160px] flex-1"
           >
             <select
               value={params.direction}
@@ -222,7 +222,7 @@ export function BacktestFormSticky({
 
           <FieldShell
             label={t(locale, "backtest.form.topPct")}
-            className="sm:col-span-3"
+            className="min-w-[120px] flex-1"
           >
             <NumberWithSuffix
               value={params.topPct}
@@ -236,7 +236,7 @@ export function BacktestFormSticky({
 
           <FieldShell
             label={t(locale, "backtest.form.universe")}
-            className="sm:col-span-3"
+            className="min-w-[150px] flex-1"
           >
             <select
               value={params.universe === "custom" ? "SP500" : params.universe}
@@ -253,11 +253,9 @@ export function BacktestFormSticky({
             </select>
           </FieldShell>
 
-          {/* Toggle + RUN — bottom-aligned to the control row so they sit on
-              the same baseline as the inputs to their left (labels above push
-              the inputs down by one label-row, mt-[22px] matches that offset
-              on small screens where this group wraps to its own line). */}
-          <div className="col-span-2 flex items-end justify-end gap-2 sm:col-span-3 sm:mt-[22px]">
+          {/* Toggle + RUN — trailing action cluster, bottom-aligned to the
+              input baseline of the fields to its left. */}
+          <div className="flex items-end gap-2">
             <button
               type="button"
               onClick={() => setAdvancedOpen((o) => !o)}
@@ -304,10 +302,10 @@ export function BacktestFormSticky({
           }`}
           aria-hidden={!advancedOpen}
         >
-          <div className="grid grid-cols-2 items-start gap-x-3 gap-y-3 border-t border-tm-rule pt-3 sm:grid-cols-12">
+          <div className="flex flex-wrap items-start gap-3 border-t border-tm-rule pt-3">
             <FieldShell
               label={t(locale, "backtest.form.bottomPct")}
-              className="sm:col-span-2"
+              className="min-w-[120px] flex-1"
             >
               <NumberWithSuffix
                 value={params.bottomPct}
@@ -321,7 +319,7 @@ export function BacktestFormSticky({
 
             <FieldShell
               label={t(locale, "backtest.form.lookback")}
-              className="sm:col-span-2"
+              className="min-w-[120px] flex-1"
             >
               <NumberWithSuffix
                 value={params.lookback}
@@ -335,7 +333,7 @@ export function BacktestFormSticky({
 
             <FieldShell
               label={t(locale, "backtest.form.benchmark")}
-              className="sm:col-span-2"
+              className="min-w-[120px] flex-1"
             >
               <select
                 value={params.benchmark}
@@ -357,7 +355,7 @@ export function BacktestFormSticky({
                 field control instead of floating between the inputs. */}
             <FieldShell
               label={t(locale, "backtest.form.neutralize")}
-              className="sm:col-span-2"
+              className="min-w-[140px] flex-1"
             >
               <div className={`${CONTROL_BOX} cursor-pointer gap-2`}>
                 <input
@@ -376,7 +374,7 @@ export function BacktestFormSticky({
 
             <FieldShell
               label={t(locale, "backtest.form.costBps")}
-              className="sm:col-span-2"
+              className="min-w-[120px] flex-1"
             >
               <NumberWithSuffix
                 value={params.transactionCostBps}
@@ -390,7 +388,7 @@ export function BacktestFormSticky({
 
             <FieldShell
               label={t(locale, "backtest.form.modeLabel")}
-              className="sm:col-span-2"
+              className="min-w-[140px] flex-1"
             >
               <select
                 value={params.mode}

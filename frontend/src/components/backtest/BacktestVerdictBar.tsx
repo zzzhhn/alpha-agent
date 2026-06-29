@@ -12,6 +12,7 @@ import {
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { parseFactorError } from "@/lib/factor-errors";
+import { BacktestVerdictHeadline } from "./BacktestVerdictHeadline";
 import type {
   MetricDelta,
   Run,
@@ -304,7 +305,11 @@ export function BacktestVerdictBar({
   const isPinned = currentRun.id === baselineRunId;
 
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm">
+    <div className="flex flex-col gap-3">
+      {/* Decision-first verdict: real factor vs overfit, derived from stats */}
+      <BacktestVerdictHeadline raw={currentRun.raw} />
+
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         <MetricCell
           label={t(locale, "backtest.metric.sharpe")}
@@ -398,6 +403,7 @@ export function BacktestVerdictBar({
             : t(locale, "backtest.action.pinAsBaseline")}
         </button>
       </div>
-    </section>
+      </section>
+    </div>
   );
 }

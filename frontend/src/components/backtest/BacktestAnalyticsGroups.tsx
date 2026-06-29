@@ -20,6 +20,7 @@
 import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { SegmentedTabs, type SegmentedTabItem } from "@/components/ui/SegmentedTabs";
 import { type GroupBadge } from "./GroupAccordion";
 import { RiskAttributionPane } from "./RiskAttributionPane";
 import { WorstDrawdownsPane } from "./WorstDrawdownsPane";
@@ -91,15 +92,23 @@ export function BacktestAnalyticsGroups({ currentRun }: Props) {
     "risk" | "regime" | "holdings" | "ops"
   >("risk");
 
-  const tabs: ReadonlyArray<{
-    readonly key: "risk" | "regime" | "holdings" | "ops";
-    readonly label: string;
-    readonly badge: GroupBadge | null;
-  }> = [
+  const badgeNode = (badge: GroupBadge | null) =>
+    badge ? (
+      <span
+        className={
+          badge.severity === "alert" ? "text-tm-neg" : "text-tm-warn"
+        }
+        title={badge.reason}
+      >
+        ⚠
+      </span>
+    ) : undefined;
+
+  const tabs: ReadonlyArray<SegmentedTabItem<"risk" | "regime" | "holdings" | "ops">> = [
     {
       key: "risk",
       label: t(locale, "backtest.group.riskDetail" as Parameters<typeof t>[1]),
-      badge: riskBadge,
+      badge: badgeNode(riskBadge),
     },
     {
       key: "regime",
@@ -107,53 +116,26 @@ export function BacktestAnalyticsGroups({ currentRun }: Props) {
         locale,
         "backtest.group.regimeBreakdown" as Parameters<typeof t>[1],
       ),
-      badge: null,
     },
     {
       key: "holdings",
       label: t(locale, "backtest.group.holdings" as Parameters<typeof t>[1]),
-      badge: null,
     },
     {
       key: "ops",
       label: t(locale, "backtest.group.operations" as Parameters<typeof t>[1]),
-      badge: opsBadge,
+      badge: badgeNode(opsBadge),
     },
   ];
 
   return (
     <section className="border border-tm-rule bg-tm-bg">
-      <div className="flex overflow-x-auto border-b border-tm-rule bg-tm-bg-2">
-        {tabs.map((tab) => {
-          const active = activeTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 font-tm-mono text-[11px] uppercase tracking-[0.05em] transition ${
-                active
-                  ? "border-tm-accent text-tm-accent"
-                  : "border-transparent text-tm-muted hover:text-tm-fg-2"
-              }`}
-            >
-              {tab.label}
-              {tab.badge ? (
-                <span
-                  className={
-                    tab.badge.severity === "alert"
-                      ? "text-tm-neg"
-                      : "text-tm-warn"
-                  }
-                  title={tab.badge.reason}
-                >
-                  ⚠
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedTabs
+        items={tabs}
+        active={activeTab}
+        onChange={setActiveTab}
+        ariaLabel={t(locale, "backtest.group.riskDetail" as Parameters<typeof t>[1])}
+      />
       <div className="flex flex-col gap-3 p-3">
         {activeTab === "risk" ? (
           <>
