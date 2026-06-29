@@ -63,7 +63,8 @@ import {
 } from "@/components/tm/TmSubbar";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
-import { TmInput, TmSelect } from "@/components/tm/TmField";
+import { TmInput } from "@/components/tm/TmField";
+import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 
 const PREFILL_KEY = "alphacore.screener.prefill.v1";
 const CONCENTRATION_THRESHOLD = 0.5; // ≥50% of top N in one sector → warn
@@ -585,37 +586,92 @@ function FactorPickerPane({
         </span>
       </div>
       <div className="overflow-x-auto">
-        <div
-          className="grid min-w-[860px] gap-px bg-tm-rule"
-          style={{
-            gridTemplateColumns: showWeights
-              ? "32px minmax(140px, 200px) 1fr minmax(140px, 160px) minmax(80px, 100px)"
-              : "32px minmax(140px, 200px) 1fr minmax(140px, 160px)",
-          }}
-        >
-          <PHeader>·</PHeader>
-          <PHeader>{t(locale, "screener.factors.colName")}</PHeader>
-          <PHeader>{t(locale, "zoo.colExpr")}</PHeader>
-          <PHeader>{t(locale, "screener.factors.colDirection")}</PHeader>
-          {showWeights && (
-            <PHeader align="right">
-              {t(locale, "screener.factors.colWeight")}
-            </PHeader>
-          )}
-          {facPageRows.map((e) => {
-            const sel = selectedById.get(e.id);
-            return (
-              <PickerRow
-                key={e.id}
-                entry={e}
-                selection={sel}
-                showWeights={showWeights}
-                onToggle={() => onToggle(e)}
-                onUpdate={(patch) => onUpdate(e.id, patch)}
-              />
-            );
-          })}
-        </div>
+        <table className="w-full min-w-[860px] border-collapse font-tm-mono text-[11.5px]">
+          <thead>
+            <tr className="bg-tm-bg-2 text-[9px] uppercase tracking-[0.06em] text-tm-muted">
+              <th className="w-9 px-3.5 py-2 text-left font-medium">·</th>
+              <th className="px-3 py-2 text-left font-medium">
+                {t(locale, "screener.factors.colName")}
+              </th>
+              <th className="px-3 py-2 text-left font-medium">
+                {t(locale, "zoo.colExpr")}
+              </th>
+              <th className="px-3.5 py-2 text-right font-medium">
+                {t(locale, "screener.factors.colDirection")}
+              </th>
+              {showWeights && (
+                <th className="px-3 py-2 text-right font-medium">
+                  {t(locale, "screener.factors.colWeight")}
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {facPageRows.map((e) => {
+              const sel = selectedById.get(e.id);
+              const isSelected = Boolean(sel);
+              const dir = sel?.direction ?? readDirection(e);
+              return (
+                <tr
+                  key={e.id}
+                  onClick={() => onToggle(e)}
+                  className="cursor-pointer border-t border-tm-rule transition-colors hover:bg-tm-bg-2"
+                >
+                  <td className="px-3.5 py-2.5">
+                    <span
+                      aria-hidden="true"
+                      className={`inline-block h-3.5 w-3.5 border ${
+                        isSelected
+                          ? "border-tm-accent bg-tm-accent"
+                          : "border-tm-rule bg-transparent"
+                      }`}
+                    />
+                  </td>
+                  <td
+                    className={`whitespace-nowrap px-3 py-2.5 ${
+                      isSelected ? "text-tm-accent" : "text-tm-fg"
+                    }`}
+                  >
+                    {e.name}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span
+                      className="block max-w-[520px] truncate text-[11px] text-tm-accent"
+                      title={e.expression}
+                    >
+                      {e.expression}
+                    </span>
+                  </td>
+                  <td className="px-3.5 py-2.5 text-right">
+                    <ScreenerDirBadge direction={dir} />
+                  </td>
+                  {showWeights && (
+                    <td
+                      className="px-3 py-2.5 text-right"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      {sel ? (
+                        <input
+                          type="number"
+                          min={0}
+                          max={10}
+                          step={0.1}
+                          value={sel.weight}
+                          onChange={(ev) =>
+                            onUpdate(e.id, { weight: Number(ev.target.value) })
+                          }
+                          className="h-7 w-20 border border-tm-rule bg-tm-bg-2 px-2 text-right font-tm-mono text-[11px] tabular-nums text-tm-fg outline-none focus:border-tm-accent"
+                        />
+                      ) : (
+                        <span className="text-tm-muted">—</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
       {facPageCount > 1 ? (
         <div className="flex items-center justify-between border-t border-tm-rule px-3 py-2">
@@ -646,119 +702,21 @@ function FactorPickerPane({
   );
 }
 
-function PickerRow({
-  entry,
-  selection,
-  showWeights,
-  onToggle,
-  onUpdate,
-}: {
-  readonly entry: ZooEntry;
-  readonly selection: FactorSelection | undefined;
-  readonly showWeights: boolean;
-  readonly onToggle: () => void;
-  readonly onUpdate: (patch: Partial<FactorSelection>) => void;
-}) {
-  const isSelected = Boolean(selection);
-  const directionOptions = useMemo(
-    () => [
-      { value: "long_short", label: "long_short" },
-      { value: "long_only", label: "long_only" },
-      { value: "short_only", label: "short_only" },
-    ],
-    [],
-  );
+function ScreenerDirBadge({ direction }: { readonly direction: ZooDirection }) {
+  const map = {
+    long_short: { label: "LS", cls: "border-tm-accent text-tm-accent" },
+    long_only: { label: "LO", cls: "border-tm-pos text-tm-pos" },
+    short_only: { label: "SO", cls: "border-tm-neg text-tm-neg" },
+  } as const;
+  const { label, cls } = map[direction];
   return (
-    <>
-      <PCell>
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={onToggle}
-          className="cursor-pointer accent-[var(--tm-accent)]"
-        />
-      </PCell>
-      <PCell>
-        <span
-          className={`truncate ${isSelected ? "text-tm-accent" : "text-tm-fg"}`}
-        >
-          {entry.name}
-        </span>
-      </PCell>
-      <PCell title={entry.expression}>
-        <span className="block truncate text-tm-fg-2">{entry.expression}</span>
-      </PCell>
-      <PCell>
-        {selection ? (
-          <TmSelect
-            value={selection.direction}
-            onChange={(v) => onUpdate({ direction: v as ZooDirection })}
-            options={directionOptions}
-            className="w-full"
-          />
-        ) : (
-          <span className="text-tm-muted">—</span>
-        )}
-      </PCell>
-      {showWeights && (
-        <PCell align="right">
-          {selection ? (
-            <input
-              type="number"
-              min={0}
-              max={10}
-              step={0.1}
-              value={selection.weight}
-              onChange={(ev: ChangeEvent<HTMLInputElement>) =>
-                onUpdate({ weight: Number(ev.target.value) })
-              }
-              className="h-7 w-full border border-tm-rule bg-tm-bg-2 px-2 text-right font-tm-mono text-[11px] tabular-nums text-tm-fg outline-none focus:border-tm-accent"
-            />
-          ) : (
-            <span className="text-tm-muted">—</span>
-          )}
-        </PCell>
-      )}
-    </>
-  );
-}
-
-function PHeader({
-  children,
-  align = "left",
-}: {
-  readonly children: React.ReactNode;
-  readonly align?: "left" | "right";
-}) {
-  return (
-    <div
-      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
-        align === "right" ? "text-right" : ""
-      }`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function PCell({
-  children,
-  align = "left",
-  title,
-}: {
-  readonly children: React.ReactNode;
-  readonly align?: "left" | "right";
-  readonly title?: string;
-}) {
-  return (
-    <div
-      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
-        align === "right" ? "justify-end" : ""
-      }`}
-      title={title}
-    >
-      {children}
-    </div>
+    <GlossaryTip term={label} underline={false}>
+      <span
+        className={`inline-block border px-1.5 py-px font-tm-mono text-[9px] tabular-nums ${cls}`}
+      >
+        {label}
+      </span>
+    </GlossaryTip>
   );
 }
 
@@ -788,10 +746,19 @@ function UniverseFilterPane({
   readonly onMaxCap: (v: string) => void;
 }) {
   const { locale } = useLocale();
+  const zh = locale === "zh";
+  const [tickerAdd, setTickerAdd] = useState("");
+
+  const sectorTags = Array.from(selectedSectors);
+  const sectorAvail = availableSectors.filter((s) => !selectedSectors.has(s));
   const sectorMeta =
     availableSectors.length === 0
       ? "loading…"
-      : `${selectedSectors.size} / ${availableSectors.length} GICS-1`;
+      : sectorTags.length > 0
+        ? `${sectorTags.length} / ${availableSectors.length} GICS-1`
+        : zh
+          ? "全部行业"
+          : "all sectors";
 
   const capPresets: { label: string; value: string }[] = [
     { label: "10B", value: "10000000000" },
@@ -799,55 +766,140 @@ function UniverseFilterPane({
     { label: "1T", value: "1000000000000" },
   ];
 
+  // Excluded tickers are derived from the comma-sep string the parent owns,
+  // rendered as removable red tags (design lines 766-773).
+  const excluded = Array.from(
+    new Set(
+      excludeInput
+        .split(/[,，\s]+/)
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  );
+  function addTicker() {
+    const tk = tickerAdd.trim().toUpperCase();
+    if (tk && !excluded.includes(tk)) onExclude([...excluded, tk].join(", "));
+    setTickerAdd("");
+  }
+  function removeTicker(tk: string) {
+    onExclude(excluded.filter((x) => x !== tk).join(", "));
+  }
+
   return (
     <TmPane title="UNIVERSE.FILTER" meta={sectorMeta}>
-      <div className="flex flex-col gap-3 px-3 py-3">
-        {/* Sectors chip multi-select */}
+      <div className="flex flex-col gap-4 px-3.5 py-3.5">
+        {/* Sectors — add via dropdown, selected shown as accent tags */}
         <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
-              {t(locale, "screener.universe.sectors")}
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-tm-mono text-[10px] text-tm-muted">
+              {zh ? "行业（留空 = 全部）" : "Sectors (blank = all)"}
             </span>
-            {selectedSectors.size > 0 && (
+            {sectorTags.length > 0 && (
               <button
                 type="button"
                 onClick={onClearSectors}
                 className="font-tm-mono text-[10px] text-tm-muted hover:text-tm-accent"
               >
-                clear
+                {zh ? "清空" : "clear"}
               </button>
             )}
           </div>
-          {availableSectors.length === 0 ? (
-            <p className="font-tm-mono text-[10.5px] text-tm-muted">
-              loading sectors…
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {availableSectors.map((s) => (
-                <TmChip
-                  key={s}
-                  on={selectedSectors.has(s)}
-                  onClick={() => onToggleSector(s)}
-                >
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) onToggleSector(e.target.value);
+              }}
+              disabled={availableSectors.length === 0}
+              className="cursor-pointer border border-tm-rule bg-tm-bg-3 px-2.5 py-1.5 font-tm-mono text-[12px] text-tm-accent outline-none focus:border-tm-accent disabled:opacity-50"
+            >
+              <option value="">
+                {availableSectors.length === 0
+                  ? zh
+                    ? "加载行业…"
+                    : "loading…"
+                  : zh
+                    ? "+ 添加行业…"
+                    : "+ Add sector…"}
+              </option>
+              {sectorAvail.map((s) => (
+                <option key={s} value={s}>
                   {s}
-                </TmChip>
+                </option>
               ))}
-            </div>
-          )}
-          <p className="mt-1 font-tm-mono text-[10px] text-tm-muted">
-            {t(locale, "screener.universe.sectorsHint")}
-          </p>
+            </select>
+            {sectorTags.map((s) => (
+              <span
+                key={s}
+                className="inline-flex items-center gap-1.5 border border-tm-accent bg-tm-accent-soft px-2 py-1 font-tm-mono text-[11px] text-tm-accent"
+              >
+                {s}
+                <button
+                  type="button"
+                  onClick={() => onToggleSector(s)}
+                  className="text-tm-muted hover:text-tm-fg"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {sectorTags.length === 0 && (
+              <span className="font-tm-mono text-[11px] text-tm-muted">
+                {zh ? "全部行业" : "all sectors"}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Exclude tickers */}
-        <TmInput
-          label={t(locale, "screener.universe.exclude")}
-          value={excludeInput}
-          onChange={onExclude}
-          placeholder="TSLA, NVDA"
-          hint={t(locale, "screener.universe.excludeHint")}
-        />
+        {/* Exclude tickers — removable red tags + add field */}
+        <div>
+          <div className="mb-2 font-tm-mono text-[10px] text-tm-muted">
+            {zh ? "排除标的（逗号分隔）" : "Exclude tickers (comma-sep)"}
+          </div>
+          <div className="flex min-h-[26px] flex-wrap items-center gap-2">
+            {excluded.map((tk) => (
+              <span
+                key={tk}
+                className="inline-flex items-center gap-1.5 border border-tm-neg bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-neg"
+              >
+                {tk}
+                <button
+                  type="button"
+                  onClick={() => removeTicker(tk)}
+                  className="text-tm-muted hover:text-tm-neg"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {excluded.length === 0 && (
+              <span className="font-tm-mono text-[11px] text-tm-muted">
+                {zh ? "未排除任何标的" : "none excluded"}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={tickerAdd}
+              onChange={(e) => setTickerAdd(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addTicker();
+                }
+              }}
+              placeholder={zh ? "输入代码，如 TSLA" : "Ticker, e.g. TSLA"}
+              className="flex-1 border border-tm-rule bg-tm-bg-3 px-2.5 py-1.5 font-tm-mono text-[11px] uppercase text-tm-fg outline-none focus:border-tm-accent"
+            />
+            <button
+              type="button"
+              onClick={addTicker}
+              className="border border-tm-rule px-3 py-1.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+            >
+              {zh ? "排除" : "Exclude"}
+            </button>
+          </div>
+        </div>
 
         {/* Cap inputs with preset chips */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
