@@ -522,6 +522,34 @@ function FactorPickerPane({
   const { locale } = useLocale();
   const selectedCount = selectedById.size;
 
+  // Search + pagination over the factor list (ALPHACORE design, screener block
+  // lines 734/748-751). The Zoo can grow well past a screenful, so the picker
+  // gets a name/expression filter + a pager. Selection is keyed by id in
+  // selectedById (global), so a factor filtered out of the current view STAYS
+  // selected and the SELECTED count is unaffected.
+  const [facQuery, setFacQuery] = useState("");
+  const [facPage, setFacPage] = useState(0);
+  const FAC_PAGE_SIZE = 8;
+  const filteredZoo = useMemo(() => {
+    const needle = facQuery.trim().toLowerCase();
+    if (!needle) return zoo;
+    return zoo.filter(
+      (e) =>
+        e.name.toLowerCase().includes(needle) ||
+        e.expression.toLowerCase().includes(needle),
+    );
+  }, [zoo, facQuery]);
+  const facPageCount = Math.max(1, Math.ceil(filteredZoo.length / FAC_PAGE_SIZE));
+  const facPageClamped = Math.min(facPage, facPageCount - 1);
+  const facPageRows = filteredZoo.slice(
+    facPageClamped * FAC_PAGE_SIZE,
+    facPageClamped * FAC_PAGE_SIZE + FAC_PAGE_SIZE,
+  );
+  const facCopy =
+    locale === "zh"
+      ? { search: "搜索因子…", page: `第 ${facPageClamped + 1}/${facPageCount} 页` }
+      : { search: "Search factors…", page: `PAGE ${facPageClamped + 1}/${facPageCount}` };
+
   if (zoo.length === 0) {
     return (
       <TmPane title="SCREENER.FACTORS" meta="ZOO EMPTY">
@@ -540,6 +568,22 @@ function FactorPickerPane({
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
         {t(locale, "screener.factors.subtitle")}
       </p>
+      <div className="flex items-center gap-2 border-b border-tm-rule px-3 py-2">
+        <span className="font-tm-mono text-xs text-tm-muted">⌕</span>
+        <input
+          type="text"
+          value={facQuery}
+          onChange={(e) => {
+            setFacQuery(e.target.value);
+            setFacPage(0);
+          }}
+          placeholder={facCopy.search}
+          className="flex-1 bg-transparent font-tm-mono text-[11px] text-tm-fg outline-none placeholder:text-tm-muted"
+        />
+        <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+          {filteredZoo.length} / {zoo.length}
+        </span>
+      </div>
       <div className="overflow-x-auto">
         <div
           className="grid min-w-[860px] gap-px bg-tm-rule"
@@ -558,7 +602,7 @@ function FactorPickerPane({
               {t(locale, "screener.factors.colWeight")}
             </PHeader>
           )}
-          {zoo.map((e) => {
+          {facPageRows.map((e) => {
             const sel = selectedById.get(e.id);
             return (
               <PickerRow
@@ -573,6 +617,31 @@ function FactorPickerPane({
           })}
         </div>
       </div>
+      {facPageCount > 1 ? (
+        <div className="flex items-center justify-between border-t border-tm-rule px-3 py-2">
+          <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+            {facCopy.page} · {filteredZoo.length}
+          </span>
+          <span className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setFacPage((p) => Math.max(0, p - 1))}
+              disabled={facPageClamped === 0}
+              className="border border-tm-rule px-3 py-0.5 font-tm-mono text-[11px] text-tm-fg-2 transition hover:bg-tm-bg-2 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              onClick={() => setFacPage((p) => Math.min(facPageCount - 1, p + 1))}
+              disabled={facPageClamped >= facPageCount - 1}
+              className="border border-tm-rule px-3 py-0.5 font-tm-mono text-[11px] text-tm-fg-2 transition hover:bg-tm-bg-2 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              →
+            </button>
+          </span>
+        </div>
+      ) : null}
     </TmPane>
   );
 }
