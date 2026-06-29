@@ -17,9 +17,10 @@
  * T8 will mount this under the evidence grid on /backtest.
  */
 
+import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { GroupAccordion, type GroupBadge } from "./GroupAccordion";
+import { type GroupBadge } from "./GroupAccordion";
 import { RiskAttributionPane } from "./RiskAttributionPane";
 import { WorstDrawdownsPane } from "./WorstDrawdownsPane";
 import { WinLossDistributionPane } from "./WinLossDistributionPane";
@@ -82,51 +83,104 @@ export function BacktestAnalyticsGroups({ currentRun }: Props) {
     return null;
   })();
 
+  // ALPHACORE design (backtest block lines 284-321): the four analytics groups
+  // are a TAB bar — one row of tabs, only the active tab's panes shown — not a
+  // stack of folding accordions. Same four categories + same panes; the design
+  // leads with risk attribution and demotes the rest behind tabs.
+  const [activeTab, setActiveTab] = useState<
+    "risk" | "regime" | "holdings" | "ops"
+  >("risk");
+
+  const tabs: ReadonlyArray<{
+    readonly key: "risk" | "regime" | "holdings" | "ops";
+    readonly label: string;
+    readonly badge: GroupBadge | null;
+  }> = [
+    {
+      key: "risk",
+      label: t(locale, "backtest.group.riskDetail" as Parameters<typeof t>[1]),
+      badge: riskBadge,
+    },
+    {
+      key: "regime",
+      label: t(
+        locale,
+        "backtest.group.regimeBreakdown" as Parameters<typeof t>[1],
+      ),
+      badge: null,
+    },
+    {
+      key: "holdings",
+      label: t(locale, "backtest.group.holdings" as Parameters<typeof t>[1]),
+      badge: null,
+    },
+    {
+      key: "ops",
+      label: t(locale, "backtest.group.operations" as Parameters<typeof t>[1]),
+      badge: opsBadge,
+    },
+  ];
+
   return (
-    <div className="flex flex-col gap-3">
-      <GroupAccordion
-        title={t(
-          locale,
-          "backtest.group.riskDetail" as Parameters<typeof t>[1],
-        )}
-        count={3}
-        badge={riskBadge}
-      >
-        <RiskAttributionPane currentRun={currentRun} />
-        <WorstDrawdownsPane currentRun={currentRun} />
-        <WinLossDistributionPane currentRun={currentRun} />
-      </GroupAccordion>
-
-      <GroupAccordion
-        title={t(
-          locale,
-          "backtest.group.regimeBreakdown" as Parameters<typeof t>[1],
-        )}
-        count={2}
-      >
-        <TrainTestSplitPane currentRun={currentRun} />
-        <RegimeBreakdownPane currentRun={currentRun} />
-      </GroupAccordion>
-
-      <GroupAccordion
-        title={t(locale, "backtest.group.holdings" as Parameters<typeof t>[1])}
-        count={2}
-      >
-        <PortfolioTodayPane currentRun={currentRun} />
-        <PositionContributionPane currentRun={currentRun} />
-      </GroupAccordion>
-
-      <GroupAccordion
-        title={t(
-          locale,
-          "backtest.group.operations" as Parameters<typeof t>[1],
-        )}
-        count={2}
-        badge={opsBadge}
-      >
-        <TurnoverProfilePane currentRun={currentRun} />
-        <DailyBreakdownPane currentRun={currentRun} />
-      </GroupAccordion>
-    </div>
+    <section className="border border-tm-rule bg-tm-bg">
+      <div className="flex overflow-x-auto border-b border-tm-rule bg-tm-bg-2">
+        {tabs.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 font-tm-mono text-[11px] uppercase tracking-[0.05em] transition ${
+                active
+                  ? "border-tm-accent text-tm-accent"
+                  : "border-transparent text-tm-muted hover:text-tm-fg-2"
+              }`}
+            >
+              {tab.label}
+              {tab.badge ? (
+                <span
+                  className={
+                    tab.badge.severity === "alert"
+                      ? "text-tm-neg"
+                      : "text-tm-warn"
+                  }
+                  title={tab.badge.reason}
+                >
+                  ⚠
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex flex-col gap-3 p-3">
+        {activeTab === "risk" ? (
+          <>
+            <RiskAttributionPane currentRun={currentRun} />
+            <WorstDrawdownsPane currentRun={currentRun} />
+            <WinLossDistributionPane currentRun={currentRun} />
+          </>
+        ) : null}
+        {activeTab === "regime" ? (
+          <>
+            <TrainTestSplitPane currentRun={currentRun} />
+            <RegimeBreakdownPane currentRun={currentRun} />
+          </>
+        ) : null}
+        {activeTab === "holdings" ? (
+          <>
+            <PortfolioTodayPane currentRun={currentRun} />
+            <PositionContributionPane currentRun={currentRun} />
+          </>
+        ) : null}
+        {activeTab === "ops" ? (
+          <>
+            <TurnoverProfilePane currentRun={currentRun} />
+            <DailyBreakdownPane currentRun={currentRun} />
+          </>
+        ) : null}
+      </div>
+    </section>
   );
 }
