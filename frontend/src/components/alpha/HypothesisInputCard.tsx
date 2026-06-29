@@ -1,10 +1,10 @@
 "use client";
 
-import { ChevronDown, History } from "lucide-react";
+import { ChevronDown, History, LayoutGrid } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { FactorExampleList } from "@/components/alpha/FactorExampleList";
+import { FactorExampleModal } from "@/components/alpha/FactorExampleModal";
 import type { FactorExample } from "@/components/alpha/FactorExamples";
 import type { FactorUniverse } from "@/lib/types";
 
@@ -53,6 +53,7 @@ const UNIVERSES: FactorUniverse[] = ["SP500", "CSI300", "CSI500", "custom"];
 export function HypothesisInputCard(p: Props) {
   const { locale } = useLocale();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [examplesOpen, setExamplesOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -147,20 +148,6 @@ export function HypothesisInputCard(p: Props) {
         disabled={p.disabled}
       />
 
-      {/* Example list -- grouped scannable list, only when textarea is empty */}
-      {empty && p.examples.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
-            {t(locale, "alpha.input.examplesLabel" as Parameters<typeof t>[1])}
-          </span>
-          <FactorExampleList
-            examples={p.examples}
-            disabled={p.disabled}
-            onSelect={p.onExampleSelect}
-          />
-        </div>
-      )}
-
       {/* Footer row: char count + universe selector + primary action */}
       <div className="flex items-center justify-between gap-3">
         <div className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
@@ -184,6 +171,20 @@ export function HypothesisInputCard(p: Props) {
             ))}
           </select>
 
+          {/* Browse examples — opens the example library modal (left of submit) */}
+          {p.examples.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setExamplesOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded border border-tm-rule px-3 py-2 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <span>
+                {t(locale, "alpha.examples.browse" as Parameters<typeof t>[1])}
+              </span>
+            </button>
+          )}
+
           {/* Primary action */}
           <button
             type="button"
@@ -195,6 +196,18 @@ export function HypothesisInputCard(p: Props) {
           </button>
         </div>
       </div>
+
+      {/* Example library modal — collapsed behind the Browse examples button */}
+      <FactorExampleModal
+        open={examplesOpen}
+        examples={p.examples}
+        disabled={p.disabled}
+        onSelect={(ex) => {
+          p.onExampleSelect(ex);
+          setExamplesOpen(false);
+        }}
+        onClose={() => setExamplesOpen(false)}
+      />
     </section>
   );
 }

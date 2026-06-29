@@ -126,6 +126,7 @@ function FactorExampleRow({
   onSelect,
 }: RowProps) {
   const retPositive = example.totalReturn >= 0;
+  const hypothesis = locale === "zh" ? example.hypothesisZh : example.hypothesisEn;
   return (
     <button
       type="button"
@@ -134,7 +135,7 @@ function FactorExampleRow({
       title={example.name}
       aria-pressed={selected}
       className={[
-        "group flex w-full items-center gap-2.5 border-l-2 px-2 py-1.5 text-left transition-colors",
+        "group flex w-full flex-col gap-1 border-l-2 px-2.5 py-2 text-left transition-colors",
         selected
           ? "border-l-tm-accent bg-tm-accent-soft"
           : "border-l-transparent hover:border-l-tm-rule-2 hover:bg-tm-bg-3",
@@ -142,38 +143,41 @@ function FactorExampleRow({
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
       ].join(" ")}
     >
-      {/* Tier color dot */}
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`}
-        aria-hidden="true"
-      />
-
-      {/* Name (sans) — fixed-ish lead column */}
-      <span className="w-[150px] shrink-0 truncate font-tm-sans text-[11.5px] font-semibold leading-tight text-tm-fg group-hover:text-tm-fg">
-        {example.name}
+      {/* Top line: tier dot + name + inline metrics */}
+      <span className="flex items-center gap-2.5">
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`}
+          aria-hidden="true"
+        />
+        <span className="min-w-0 flex-1 truncate font-tm-sans text-[12px] font-semibold leading-tight text-tm-fg">
+          {example.name}
+        </span>
+        <span className="flex shrink-0 items-baseline gap-x-3">
+          <Metric
+            label={t(locale, "report.example.stat.sharpe")}
+            value={fmtSharpe(example.testSharpe)}
+          />
+          <Metric
+            label={t(locale, "report.example.stat.ic")}
+            value={fmtIC(example.testIC)}
+          />
+          <Metric
+            label={t(locale, "report.example.stat.return")}
+            value={fmtPct(example.totalReturn)}
+            valueClass={retPositive ? "text-tm-pos" : "text-tm-neg"}
+          />
+        </span>
       </span>
 
-      {/* Inline metrics — mono tabular numbers with tiny sans labels */}
-      <span className="flex shrink-0 items-baseline gap-x-3">
-        <Metric
-          label={t(locale, "report.example.stat.sharpe")}
-          value={fmtSharpe(example.testSharpe)}
-        />
-        <Metric
-          label={t(locale, "report.example.stat.ic")}
-          value={fmtIC(example.testIC)}
-        />
-        <Metric
-          label={t(locale, "report.example.stat.return")}
-          value={fmtPct(example.totalReturn)}
-          valueClass={retPositive ? "text-tm-pos" : "text-tm-neg"}
-        />
-      </span>
-
-      {/* Expression — muted mono snippet, fills remaining width */}
-      <code className="ml-auto min-w-0 truncate font-tm-mono text-[10.5px] text-tm-muted group-hover:text-tm-fg-2">
+      {/* Expression — the factor's defining code */}
+      <code className="block min-w-0 truncate font-tm-mono text-[10.5px] text-tm-accent/90">
         {example.expression}
       </code>
+
+      {/* Hypothesis — the per-row "more info" (locale-aware prose) */}
+      <span className="line-clamp-1 font-tm-sans text-[11px] leading-snug text-tm-muted group-hover:text-tm-fg-2">
+        {hypothesis}
+      </span>
     </button>
   );
 }

@@ -3,6 +3,7 @@
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { FactorBacktestResponse } from "@/lib/types";
+import { PanePlaceholder } from "./PanePlaceholder";
 import type { PaneState } from "./types";
 
 interface Props {
@@ -30,7 +31,11 @@ export function BacktestPane({ state, data, errorMessage, onRetry }: Props) {
       <h3 className="font-tm-mono text-xs font-semibold uppercase text-tm-fg-2">
         {t(locale, "alpha.pane.backtest" as Parameters<typeof t>[1])}
       </h3>
-      {state === "waiting" || state === "loading" ? (
+      {state === "waiting" ? (
+        <PanePlaceholder
+          hint={t(locale, "alpha.pane.waitingBacktest" as Parameters<typeof t>[1])}
+        />
+      ) : state === "loading" ? (
         <Skeleton />
       ) : state === "error" ? (
         <div className="flex flex-col gap-2 text-xs text-tm-neg">

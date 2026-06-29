@@ -4,6 +4,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { buildSmokeScorecard, type QcStatus } from "@/lib/factorQc";
 import type { SmokeReport } from "@/lib/types";
+import { PanePlaceholder } from "./PanePlaceholder";
 import type { PaneState } from "./types";
 
 interface Props {
@@ -77,7 +78,9 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
       <h3 className="font-tm-mono text-xs font-semibold uppercase text-tm-fg-2">
         {tk("alpha.pane.smoke")}
       </h3>
-      {state === "waiting" || state === "loading" ? (
+      {state === "waiting" ? (
+        <PanePlaceholder hint={tk("alpha.pane.waitingSmoke")} />
+      ) : state === "loading" ? (
         <Skeleton />
       ) : state === "error" ? (
         <div className="flex flex-col gap-2 text-xs text-tm-neg">
