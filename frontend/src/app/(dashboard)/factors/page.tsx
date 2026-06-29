@@ -58,6 +58,8 @@ import {
 } from "@/components/tm/TmSubbar";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
+import { SegmentedTabs, type SegmentedTabItem } from "@/components/ui/SegmentedTabs";
+import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 
 /* ── Constants ────────────────────────────────────────────────────── */
 
@@ -427,17 +429,25 @@ export default function FactorsPage() {
         <TmSubbarKV label="LOCAL" value={localCount.toString()} />
         <TmSubbarSpacer />
         {decay.length > 0 && (
-          <TmStatusPill tone="warn">{`${decay.length} DECAYING`}</TmStatusPill>
+          <TmStatusPill tone="warn">
+            <GlossaryTip term="DECAYING" underline={false}>
+              {`${decay.length} DECAYING`}
+            </GlossaryTip>
+          </TmStatusPill>
         )}
         {aggregates.staleEntries.length > 0 && (
-          <TmStatusPill tone="warn">{`${aggregates.staleEntries.length} STALE`}</TmStatusPill>
+          <TmStatusPill tone="warn">
+            <GlossaryTip term="STALE" underline={false}>
+              {`${aggregates.staleEntries.length} STALE`}
+            </GlossaryTip>
+          </TmStatusPill>
         )}
         {corrLoading && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
         <TmButton
-          variant="ghost"
+          variant="primary"
           onClick={checkCorrelation}
           disabled={corrLoading || entries.length < 2}
-          className="-my-1 px-2"
+          className="-my-1"
           title={
             entries.length < 2
               ? t(locale, "zoo.corr.disabledHint")
@@ -450,34 +460,18 @@ export default function FactorsPage() {
         </TmButton>
       </TmSubbar>
 
-      {/* manage / analytics tab bar (ALPHACORE design) */}
-      <div className="flex border-b border-tm-rule">
-        {(["analytics", "manage"] as const).map((v) => {
-          const active = zooView === v;
-          const label =
-            v === "analytics"
-              ? locale === "zh"
-                ? "分析"
-                : "ANALYTICS"
-              : locale === "zh"
-                ? "管理"
-                : "MANAGE";
-          return (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setZooView(v)}
-              className={`border-b-2 px-4 py-2 font-tm-mono text-[11px] uppercase tracking-[0.05em] transition ${
-                active
-                  ? "border-tm-accent text-tm-accent"
-                  : "border-transparent text-tm-muted hover:text-tm-fg-2"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      {/* manage / analytics tab bar — high-affordance segmented control */}
+      <SegmentedTabs
+        items={
+          [
+            { key: "analytics", label: locale === "zh" ? "分析" : "ANALYTICS" },
+            { key: "manage", label: locale === "zh" ? "管理" : "MANAGE" },
+          ] as ReadonlyArray<SegmentedTabItem<"analytics" | "manage">>
+        }
+        active={zooView}
+        onChange={setZooView}
+        ariaLabel={locale === "zh" ? "因子库视图" : "Factor zoo view"}
+      />
 
       {zooView === "analytics" && (
         <>
@@ -717,8 +711,12 @@ function LeaderSide({
         >
           <HCell>#</HCell>
           <HCell>NAME</HCell>
-          <HCell align="right">SHARPE</HCell>
-          <HCell align="right">IC</HCell>
+          <HCell align="right">
+            <GlossaryTip term="SHARPE">SHARPE</GlossaryTip>
+          </HCell>
+          <HCell align="right">
+            <GlossaryTip term="IC">IC</GlossaryTip>
+          </HCell>
           <HCell align="right">ACT</HCell>
           {entries.map((e, i) => {
             const sh = e.headlineMetrics?.testSharpe ?? 0;
@@ -1183,7 +1181,9 @@ function ZooCatalogPane({
             <SortHeader col="name" current={sortCol} dir={sortDir} onClick={toggleSort}>
               {t(locale, "zoo.colName")}
             </SortHeader>
-            <Header>DIR</Header>
+            <Header>
+              <GlossaryTip term="DIR">DIR</GlossaryTip>
+            </Header>
             <Header>{t(locale, "zoo.colExpr")}</Header>
             <SortHeader col="sharpe" current={sortCol} dir={sortDir} onClick={toggleSort} align="right">
               {t(locale, "zoo.colSharpe")}
@@ -1314,9 +1314,11 @@ function DirBadge({ direction }: { readonly direction: "long_short" | "long_only
   } as const;
   const { label, tone } = map[direction];
   return (
-    <span className={`inline-block border border-current px-1 py-px font-tm-mono text-[9.5px] tabular-nums ${tone}`}>
-      {label}
-    </span>
+    <GlossaryTip term={label} underline={false}>
+      <span className={`inline-block border border-current px-1 py-px font-tm-mono text-[9.5px] tabular-nums ${tone}`}>
+        {label}
+      </span>
+    </GlossaryTip>
   );
 }
 
@@ -1347,8 +1349,16 @@ function ZooRow({
     <>
       <div className="flex min-w-0 items-center gap-1.5 bg-tm-bg px-2 py-1 font-tm-mono text-[11px]">
         <span className="truncate text-tm-accent">{entry.name}</span>
-        {isDecaying && <span title="decaying" className="text-tm-warn">⚠</span>}
-        {isStale && <span title="stale" className="text-tm-info">⏱</span>}
+        {isDecaying && (
+          <GlossaryTip term="DECAYING" underline={false}>
+            <span className="text-tm-warn">⚠</span>
+          </GlossaryTip>
+        )}
+        {isStale && (
+          <GlossaryTip term="STALE" underline={false}>
+            <span className="text-tm-info">⏱</span>
+          </GlossaryTip>
+        )}
       </div>
       <div className="flex items-center bg-tm-bg px-2 py-1">
         <DirBadge direction={dir} />
