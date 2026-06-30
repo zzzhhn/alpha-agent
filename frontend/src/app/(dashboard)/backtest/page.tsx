@@ -32,7 +32,7 @@ import { BacktestAnalyticsGroups } from "@/components/backtest/BacktestAnalytics
 import { RecentRunsTable } from "@/components/backtest/RecentRunsTable";
 import { parseFactorError } from "@/lib/factor-errors";
 import { addToZoo, removeFromZoo } from "@/lib/factor-zoo";
-import type { Run } from "@/components/backtest/types";
+import type { BacktestParams, Run } from "@/components/backtest/types";
 
 /**
  * Shape of the sessionStorage handoff blob written by /alpha and /factors.
@@ -56,10 +56,42 @@ interface PrefillPayload {
 
 const PREFILL_KEY = "alphacore.backtest.prefill.v1";
 
+// Persisted form memory (mirrors /report's localStorage Pattern C). Re-entering
+// /backtest restores the last-used config instead of resetting to defaults.
+// Priority is enforced in the mount effect below: explicit sessionStorage
+// prefill (a one-shot /alpha or /factors handoff) > this localStorage memory >
+// DEFAULT_PARAMS. Both helpers are SSR-safe and never throw (storage can be
+// blocked); universe is coerced to SP500 since CSI options were removed.
+const BACKTEST_FORM_KEY = "alphacore.backtest.form.v1";
+
+function readBacktestForm(): Partial<BacktestParams> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(BACKTEST_FORM_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<BacktestParams>;
+    if (!parsed || typeof parsed !== "object") return null;
+    return { ...parsed, universe: "SP500" };
+  } catch {
+    return null;
+  }
+}
+
+function persistBacktestForm(params: BacktestParams): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(BACKTEST_FORM_KEY, JSON.stringify(params));
+  } catch {
+    /* storage blocked — non-fatal */
+  }
+}
+
 export default function BacktestPage() {
   const { locale } = useLocale();
   const { toast } = useToast();
-  const session = useBacktestSession();
+  // Seed the form from persisted localStorage on first render (priority below:
+  // a sessionStorage prefill handoff still overrides this in the mount effect).
+  const session = useBacktestSession(readBacktestForm);
 
   // Hold name/hypothesis from the prefill so Save-to-Zoo can attach them
   // even after the user has fiddled with the form (specMeta in the hook is
@@ -76,18 +108,25 @@ export default function BacktestPage() {
   // re-fire the same toast.
   const lastErrorToastedRef = useRef<string | null>(null);
 
-  // 1) Consume sessionStorage prefill once on mount → drive params + specMeta.
+  // 1) On mount, resolve the form source by priority: explicit one-shot
+  //    sessionStorage prefill (a /alpha or /factors handoff) > localStorage
+  //    form memory > DEFAULT_PARAMS. The prefill must win, so localStorage is
+  //    only restored when there is no prefill.
   useEffect(() => {
     if (typeof window === "undefined") return;
     let parsed: PrefillPayload | null = null;
     try {
       const raw = window.sessionStorage.getItem(PREFILL_KEY);
-      if (!raw) return;
-      window.sessionStorage.removeItem(PREFILL_KEY);
-      parsed = JSON.parse(raw) as PrefillPayload;
+      if (raw) {
+        window.sessionStorage.removeItem(PREFILL_KEY);
+        parsed = JSON.parse(raw) as PrefillPayload;
+      }
     } catch {
-      return;
+      parsed = null;
     }
+
+    // No prefill handoff → the localStorage form was already restored in the
+    // hook's useState initializer (readBacktestForm), so there is nothing to do.
     if (!parsed?.expression) return;
 
     prefillNameRef.current = parsed.name ?? null;
@@ -124,6 +163,25 @@ export default function BacktestPage() {
     pendingAutoRunRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount-only — session setters are stable
+
+  // 1b) Persist the form on every change so the next visit restores it. On
+  //     mount params already equal the restored localStorage value (seeded in
+  //     the hook initializer), so the first write is a harmless no-op; a prefill
+  //     override re-persists itself, becoming the new last-used config.
+  useEffect(() => {
+    persistBacktestForm(session.params);
+  }, [session.params]);
+
+  // 1c) Reconcile controlled <select> elements to the localStorage-restored
+  //     value. React does NOT apply a client-only initial value to a <select>
+  //     on the hydration pass (it keeps the SSR-selected option), so direction
+  //     / benchmark / mode would visually show defaults even though state is
+  //     restored. One forced post-mount re-render (params → identical copy)
+  //     runs a normal commit that sets each select's value correctly.
+  useEffect(() => {
+    session.setParams((p) => ({ ...p }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 2) Once the params reflect the prefill, fire runOnce exactly once.
   useEffect(() => {

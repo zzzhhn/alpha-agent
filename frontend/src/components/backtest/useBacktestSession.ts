@@ -123,8 +123,21 @@ function buildRequest(
   };
 }
 
-export function useBacktestSession() {
-  const [params, setParams] = useState<BacktestParams>(DEFAULT_PARAMS);
+/**
+ * `initParams` — an OPTIONAL lazy initializer the page passes to seed the form
+ * from persisted localStorage on first render (so the initial params are the
+ * stored ones, never DEFAULT_PARAMS-then-restore). Restoring synchronously in
+ * useState avoids the race where a persist-on-change effect would clobber the
+ * stored values with defaults before an effect-based restore could land. The
+ * fn must be SSR-safe (return null on the server) so server + client agree.
+ */
+export function useBacktestSession(
+  initParams?: () => Partial<BacktestParams> | null,
+) {
+  const [params, setParams] = useState<BacktestParams>(() => {
+    const override = initParams?.() ?? null;
+    return override ? { ...DEFAULT_PARAMS, ...override } : DEFAULT_PARAMS;
+  });
   const [specMeta, setSpecMeta] = useState<SpecMetadata>(DEFAULT_SPEC_METADATA);
   const [runState, setRunState] = useState<RunState>({ kind: "idle" });
   const [recentRuns, setRecentRuns] = useState<Run[]>([]);

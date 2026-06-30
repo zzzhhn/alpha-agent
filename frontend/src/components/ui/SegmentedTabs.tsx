@@ -54,18 +54,10 @@ export function SegmentedTabs<K extends string>({
             className={[
               "relative flex items-center gap-1.5 whitespace-nowrap px-4 py-2.5 font-tm-mono text-[11px] uppercase tracking-[0.06em] transition-colors",
               isActive
-                ? "bg-tm-bg font-semibold text-tm-accent"
+                ? "bg-tm-accent font-semibold text-tm-bg"
                 : "font-medium text-tm-muted hover:bg-tm-bg-3 hover:text-tm-fg",
             ].join(" ")}
           >
-            {/* Active marker — sits on the shared bottom rule so the selected
-                segment visually fuses with the content panel below it. */}
-            {isActive ? (
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 bottom-[-1px] h-0.5 bg-tm-accent"
-              />
-            ) : null}
             <span>{item.label}</span>
             {item.badge}
           </button>

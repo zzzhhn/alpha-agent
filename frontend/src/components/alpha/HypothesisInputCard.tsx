@@ -46,7 +46,9 @@ interface Props {
 }
 
 // FactorUniverse = "CSI300" | "CSI500" | "SP500" | "custom"
-const UNIVERSES: FactorUniverse[] = ["SP500", "CSI300", "CSI500", "custom"];
+// CSI300/CSI500 dropped: the backend has no A-share data and the LLM only
+// emits SP500|custom, so they were non-functional. SP500 + custom remain.
+const UNIVERSES: FactorUniverse[] = ["SP500", "custom"];
 
 // ---- Component ----
 

@@ -45,12 +45,12 @@ interface BacktestFormStickyProps {
   readonly onRun: () => void;
 }
 
-// `custom` is API-only — do not expose to the user. Spec §3 explicitly
-// scopes the UI to the three real universes.
+// The web backtest engine is hard-fixed to the pre-cached SP500 panel
+// (factor_backtest.py ignores spec.universe; there is no A-share data), so
+// CSI300/CSI500 were dead options that silently returned SP500 results.
+// SP500 is the only real choice. `custom` is API-only — not exposed here.
 const UNIVERSE_OPTIONS: ReadonlyArray<Exclude<FactorUniverse, "custom">> = [
   "SP500",
-  "CSI300",
-  "CSI500",
 ];
 
 const DIRECTION_OPTIONS: ReadonlyArray<DirectionMode> = [
