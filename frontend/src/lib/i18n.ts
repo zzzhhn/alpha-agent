@@ -128,6 +128,12 @@ const translations = {
     "backtest.monthly.legend": "鼠标悬停可看精确数值。空格 = 该月无数据（回测窗口未覆盖）。",
 
     /* Backtest redesign new keys (T2-T7) */
+    "backtest.loadZoo.label": "从因子库加载",
+    "backtest.loadZoo.placeholder": "选择已保存因子…",
+    "backtest.loadZoo.empty": "因子库为空",
+    "backtest.memory.label": "参数自动记忆",
+    "backtest.memory.hint": "你的回测参数会自动保存在本浏览器，下次打开会恢复上次的设置。点「重置默认」可清除。",
+    "backtest.memory.reset": "重置默认",
     "backtest.action.runBacktest": "运行回测",
     "backtest.action.advancedShow": "+ 高级",
     "backtest.action.advancedHide": "收起高级",
@@ -1325,6 +1331,12 @@ const translations = {
     "backtest.monthly.legend": "Hover for the exact figure. Empty cell = month not covered by the backtest window.",
 
     /* Backtest redesign new keys (T2-T7) */
+    "backtest.loadZoo.label": "Load from Zoo",
+    "backtest.loadZoo.placeholder": "Pick a saved factor…",
+    "backtest.loadZoo.empty": "Zoo is empty",
+    "backtest.memory.label": "Auto-saved",
+    "backtest.memory.hint": "Your backtest settings are saved in this browser and restored automatically next time. Click Reset to clear them.",
+    "backtest.memory.reset": "Reset",
     "backtest.action.runBacktest": "RUN BACKTEST",
     "backtest.action.advancedShow": "+ Advanced",
     "backtest.action.advancedHide": "Hide Advanced",

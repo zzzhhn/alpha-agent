@@ -23,10 +23,18 @@
  * anyway, so a naive regex extraction is sufficient.
  */
 
-import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Play } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Library,
+  Loader2,
+  Play,
+  Save,
+} from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { HoverTip } from "@/components/ui/HoverTip";
 import {
   extractOperands,
   extractOps,
@@ -35,8 +43,15 @@ import {
   suggestOp,
   suggestOperand,
 } from "@/lib/factor-spec";
+import {
+  listZoo,
+  readDirection,
+  seedZooIfFirstRun,
+  type ZooEntry,
+} from "@/lib/factor-zoo";
 import type { FactorUniverse } from "@/lib/types";
 import type { BacktestMode, BacktestParams, DirectionMode } from "./types";
+import { DEFAULT_PARAMS } from "./useBacktestSession";
 
 interface BacktestFormStickyProps {
   readonly params: BacktestParams;
@@ -79,6 +94,39 @@ export function BacktestFormSticky({
 }: BacktestFormStickyProps) {
   const { locale } = useLocale();
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Saved factors for the "Load from Zoo" picker — so the user can pull a
+  // saved factor straight into the expression instead of retyping it.
+  const [zoo, setZoo] = useState<readonly ZooEntry[]>([]);
+  useEffect(() => {
+    seedZooIfFirstRun();
+    setZoo(listZoo());
+  }, []);
+
+  // Apply a saved factor's expression + its proven config to the form (mirrors
+  // the /alpha · /factors prefill mapping; topPct/bottomPct are stored as
+  // fractions, the form carries 0–100 percentages). Does NOT auto-run.
+  function loadFromZoo(entry: ZooEntry) {
+    setParams((p) => ({
+      ...p,
+      expression: entry.expression,
+      operatorsUsed: extractOps(entry.expression),
+      direction: readDirection(entry),
+      neutralize:
+        entry.neutralize != null ? entry.neutralize === "sector" : p.neutralize,
+      benchmark: entry.benchmarkTicker ?? p.benchmark,
+      mode: entry.mode ?? p.mode,
+      topPct: entry.topPct != null ? entry.topPct * 100 : p.topPct,
+      bottomPct: entry.bottomPct != null ? entry.bottomPct * 100 : p.bottomPct,
+      transactionCostBps: entry.transactionCostBps ?? p.transactionCostBps,
+    }));
+  }
+
+  // Reset to defaults; the page's persist effect then overwrites the saved
+  // localStorage form with defaults, so "memory" is cleared too (Forgiveness).
+  function resetForm() {
+    setParams(DEFAULT_PARAMS);
+  }
 
   const exprEmpty = params.expression.trim().length === 0;
   // Catch typos like `ts_means` BEFORE the backend bounces a verbose 422.
@@ -135,6 +183,52 @@ export function BacktestFormSticky({
       aria-label={t(locale, "backtest.form.title")}
     >
       <div className="flex flex-col gap-3 px-4 py-3">
+        {/* Row 0 — load a saved factor + surface that the form auto-saves */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Load from Zoo: pull a saved factor straight into the expression */}
+          <label className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-muted">
+            <Library className="h-3.5 w-3.5" strokeWidth={1.75} />
+            {t(locale, "backtest.loadZoo.label")}
+            <select
+              value=""
+              onChange={(e) => {
+                const entry = zoo.find((z) => z.id === e.target.value);
+                if (entry) loadFromZoo(entry);
+              }}
+              disabled={zoo.length === 0}
+              className="cursor-pointer border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-accent outline-none focus:border-tm-accent disabled:opacity-50"
+            >
+              <option value="">
+                {zoo.length === 0
+                  ? t(locale, "backtest.loadZoo.empty")
+                  : t(locale, "backtest.loadZoo.placeholder")}
+              </option>
+              {zoo.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* Autosave indicator (discoverability) + reset (Forgiveness) */}
+          <div className="flex items-center gap-2 font-tm-mono text-[10.5px] text-tm-muted">
+            <HoverTip content={t(locale, "backtest.memory.hint")} width={260}>
+              <span className="inline-flex cursor-help items-center gap-1 border-b border-dotted border-tm-muted/50 hover:border-tm-fg">
+                <Save className="h-3 w-3" strokeWidth={1.75} />
+                {t(locale, "backtest.memory.label")}
+              </span>
+            </HoverTip>
+            <button
+              type="button"
+              onClick={resetForm}
+              className="border border-tm-rule px-2 py-0.5 text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+            >
+              {t(locale, "backtest.memory.reset")}
+            </button>
+          </div>
+        </div>
+
         {/* Row 1 — expression textarea */}
         <textarea
           value={params.expression}

@@ -45,7 +45,7 @@ const DEFAULT_SPEC_METADATA: SpecMetadata = {
   justification: "interactive backtest",
 };
 
-const DEFAULT_PARAMS: BacktestParams = {
+export const DEFAULT_PARAMS: BacktestParams = {
   expression: "",
   operatorsUsed: [],
   direction: "long_short",
