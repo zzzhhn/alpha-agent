@@ -14,12 +14,12 @@ without paying for the LLM call. Forgiveness UX: do not waste user tokens
 on a deploy that cannot produce a valid result."""
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
+import httpx
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
@@ -169,23 +169,32 @@ async def _run_propose_work(
         proposed_count = 0
         skeptic_used = 0
 
-        # Phase B1: build the SELF_CORRELATION gate once from already-saved,
-        # non-overfit factors. A survivor whose daily long-short PnL is ~the
-        # same as a saved factor is a re-discovery, not a new alpha, so it is
-        # rejected (WorldQuant SELF_CORRELATION analog). Empty saved set / any
+        # Phase B1: the SELF_CORRELATION gate re-evaluates every saved factor on
+        # the full panel — the heaviest work in a propose round. Build it LAZILY,
+        # only once a candidate actually survives the DSR gate, so the common
+        # 0-survivor round never pays for it (and never risks blowing the Vercel
+        # function budget on a check that nothing needs). A survivor whose daily
+        # long-short PnL is ~the same as a saved factor is a re-discovery, not a
+        # new alpha (WorldQuant SELF_CORRELATION analog); empty saved set / any
         # load failure → the gate is a harmless no-op.
-        try:
-            from alpha_agent.storage.factor_db import list_factors
+        _corr_gate: SelfCorrelationGate | None = None
 
-            saved = [
-                (f.get("name") or f.get("id") or "saved", f["expression"])
-                for f in list_factors(limit=40)
-                if f.get("expression") and not f.get("last_overfit_flag")
-            ]
-        except Exception as e:  # noqa: BLE001 - gate is auxiliary to the propose
-            logger.warning("list_factors for self-corr gate failed: %s", e)
-            saved = []
-        corr_gate = SelfCorrelationGate(saved)
+        def _corr_check(expression: str) -> tuple[float, str | None]:
+            nonlocal _corr_gate
+            if _corr_gate is None:
+                try:
+                    from alpha_agent.storage.factor_db import list_factors
+
+                    saved = [
+                        (f.get("name") or f.get("id") or "saved", f["expression"])
+                        for f in list_factors(limit=40)
+                        if f.get("expression") and not f.get("last_overfit_flag")
+                    ]
+                except Exception as e:  # noqa: BLE001 - gate is auxiliary
+                    logger.warning("list_factors for self-corr gate failed: %s", e)
+                    saved = []
+                _corr_gate = SelfCorrelationGate(saved)
+            return _corr_gate.check(expression)
         # Per-candidate decision trail returned in the response body so the
         # client can see why each candidate did/didn't make it. More reliable
         # than stderr emit because Vercel CLI logs sometimes only surface the
@@ -205,7 +214,7 @@ async def _run_propose_work(
             corr_with: str | None = None
             redundant = False
             if accepted:
-                self_corr, corr_with = corr_gate.check(r.expression)
+                self_corr, corr_with = _corr_check(r.expression)
                 if self_corr >= SELF_CORR_THRESHOLD:
                     redundant = True
                     accepted = False
@@ -320,70 +329,86 @@ async def _run_propose_work(
         runner.close()
 
 
-async def _runner_wrapper(pool, user_id: int, n: int, diagnostic, job_id: str) -> None:
-    """Background-task entry point. Catches every failure mode that
-    _run_propose_work can raise and persists it onto the job row so the
-    polling client sees a clean status='failed' + actionable error
-    instead of an opaque hang. Never re-raises — a background task's
-    exception escaping into the FastAPI event loop is invisible to the
-    client and corrupts the lambda's runtime."""
-    await propose_jobs.mark_running(pool, job_id)
+_GH_REPO = os.environ.get("GH_REPO", "zzzhhn/alpha-agent")
+_GH_REF = os.environ.get("GH_REF", "main")
+_PROPOSE_RUNNER_WORKFLOW = "propose-job-runner.yml"
+
+
+async def _dispatch_propose_runner() -> None:
+    """Best-effort: kick the GitHub Actions job-runner so a freshly-queued
+    propose job starts within ~1min instead of waiting for the runner's fallback
+    schedule. Never raises — a dispatch failure only delays the job (the
+    scheduled runner still drains it), it never drops it.
+
+    We do NOT use a FastAPI BackgroundTask: Vercel freezes the function once the
+    response is sent, so post-response work never runs. That is exactly why the
+    button silently produced nothing after the 2026-05-26 async refactor. The
+    reliable path is a GitHub Actions runner calling /api/cron/run_propose_jobs,
+    which executes the work in-request (server-to-server, no browser long-hold)."""
+    gh_token = os.environ.get("GH_PAT")
+    if not gh_token:
+        logger.warning(
+            "GH_PAT missing; queued propose job waits for the scheduled runner"
+        )
+        return
+    url = (
+        f"https://api.github.com/repos/{_GH_REPO}/actions/"
+        f"workflows/{_PROPOSE_RUNNER_WORKFLOW}/dispatches"
+    )
     try:
-        result = await _run_propose_work(pool, user_id, n, diagnostic)
-        await propose_jobs.mark_done(pool, job_id, result)
-    except asyncio.TimeoutError:
-        await propose_jobs.mark_failed(
-            pool, job_id,
-            "LLM proposer timed out after wall clock; retry or reduce n",
-        )
-    except ValueError as exc:
-        await propose_jobs.mark_failed(pool, job_id, f"LLM proposer: {exc}")
-    except Exception as exc:  # noqa: BLE001 — terminal failure must be observable
-        # Preserve type name so silent fallback paths surface in the UI
-        # (see feedback_silent_trycatch_antipattern.md).
-        await propose_jobs.mark_failed(
-            pool, job_id, f"{type(exc).__name__}: {exc}"
-        )
-        logger.exception("propose background task crashed (job=%s)", job_id)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                url,
+                json={"ref": _GH_REF},
+                headers={
+                    "Authorization": f"Bearer {gh_token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+        if resp.status_code != 204:
+            logger.warning(
+                "propose runner dispatch returned %s: %s",
+                resp.status_code, resp.text[:200],
+            )
+    except Exception as e:  # noqa: BLE001 — dispatch is best-effort
+        logger.warning("propose runner dispatch failed: %s", e)
 
 
 @router.post("/propose")
 async def post_propose(
-    background_tasks: BackgroundTasks,
     body: dict = Body(default_factory=dict),
     user_id: int = Depends(require_user),
     pool=Depends(get_db_pool),
 ) -> dict:
-    """Queue a propose job and return 202 immediately with a job_id.
+    """Enqueue a propose job and return 202 immediately with a job_id.
 
-    The actual LLM call + per-candidate validation + DSR scoring run as
-    a FastAPI BackgroundTask after the response is sent. The frontend
-    polls GET /jobs/{id} every 3s for the terminal state.
+    The work does NOT run here. A GitHub Actions runner (kicked instantly via
+    workflow_dispatch below, plus a fallback schedule) calls
+    /api/cron/run_propose_jobs, which runs the LLM call + per-candidate
+    validation + DSR scoring in-request and writes the terminal job state. The
+    frontend polls GET /jobs/{id} every 3s until done|failed.
 
-    This async refactor (Phase D, 2026-05-26) replaces the synchronous
-    POST that previously held the connection open for 30-180s. Under
-    China egress + local TUN proxy the long fetch was being dropped
-    mid-response (Safari surfaced as 'Load failed' even though Vercel
-    logged 200), forcing the user to disable VPN to get propose to
-    return. Polling short-lived GETs sidesteps the idle-connection
-    drop entirely.
+    Why not a FastAPI BackgroundTask (the 2026-05-26 design): Vercel freezes the
+    function after the response is sent, so post-response work never completed
+    and the button silently produced nothing. Why not a synchronous POST (the
+    pre-2026-05-26 design): under China egress + local TUN proxy the 30-180s
+    connection was dropped mid-response. Enqueue + reliable runner + short poll
+    GETs sidesteps both.
 
-    Dormant short-circuit (history below cost-guard) still returns 200
-    + a synthetic 'done' job inline so the client doesn't waste a poll
-    cycle on a result that's already known."""
+    Dormant short-circuit (history below cost-guard) still returns 200 + a
+    synthetic 'done' job inline so the client skips the poll entirely."""
     n = int(body.get("n", 5)) if isinstance(body, dict) else 5
     n = max(1, min(n, 20))  # input sanitization at the boundary
 
-    # Same cache-refresh rationale as get_diagnostic: propose builds its
-    # baseline from compute_diagnostic().current_expression which routes
-    # through the process-cache. Without this refresh a manual edit from
-    # another lambda instance is invisible here and the LLM gets the
-    # stale preset as its "beat this" target.
+    # Same cache-refresh rationale as get_diagnostic: the cost-guard + the
+    # runner's baseline route through the process-cache; refresh so a manual
+    # edit from another lambda instance is visible.
     await refresh_config(pool)
 
-    # Cost-guard: skip LLM if history is too thin to validate anything.
-    # Synthesize a synthetic 'done' job so the frontend's polling state
-    # machine completes in one round-trip rather than spinning for 5min.
+    # Cost-guard: skip the whole pipeline if history is too thin to validate
+    # anything. Synthesize a 'done' job inline so the poll completes in one
+    # round-trip rather than dispatching a runner for a known-empty result.
     history_n = await pool.fetchval("SELECT count(*) FROM daily_prices") or 0
     if history_n < _MIN_HISTORY_ROWS:
         dormant_result = {"evaluated": 0, "proposed": 0, "dormant": True}
@@ -391,12 +416,9 @@ async def post_propose(
         await propose_jobs.mark_done(pool, job_id, dormant_result)
         return {"job_id": job_id, "status": "done", "inline_result": dormant_result}
 
-    # Capture diagnostic NOW (before the LLM call) so the rationale the
-    # LLM sees matches the baseline the threshold is computed against.
-    diagnostic = await compute_diagnostic(pool)
-
     job_id = await propose_jobs.create_job(pool, user_id, n)
-    background_tasks.add_task(_runner_wrapper, pool, user_id, n, diagnostic, job_id)
+    # Kick the runner now (best-effort); the fallback schedule covers a miss.
+    await _dispatch_propose_runner()
     return {"job_id": job_id, "status": "queued"}
 
 

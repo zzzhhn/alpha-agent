@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -235,6 +236,68 @@ async def cron_methodology_proposer() -> dict[str, Any]:
         details,
     )
     return {"ok": True, **result}
+
+
+# Wall-clock budget for one runner invocation. Kept under Vercel's function
+# limit so we mark_failed cleanly (a diagnosable terminal state) rather than
+# getting hard-killed mid-run and leaving a job stuck 'running'. Only checked
+# BETWEEN jobs, so a single in-flight job still runs to its natural length;
+# this just stops the runner from starting a fresh job too late.
+_RUN_PROPOSE_BUDGET_S = 230.0
+
+
+@router.post("/run_propose_jobs")
+@router.get("/run_propose_jobs")
+async def cron_run_propose_jobs() -> dict[str, Any]:
+    """Reliable execution path for the LLM factor proposer (the /evolution
+    'propose factors' button).
+
+    POST /api/factor-lab/propose only ENQUEUES a job. The old design ran the
+    work in a FastAPI BackgroundTask after the 202 response, but Vercel freezes
+    the function once the response is sent, so that task never completed and the
+    button silently produced nothing after the 2026-05-26 async refactor. A
+    GitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,
+    plus a fallback schedule) calls this endpoint instead; here the work runs
+    INSIDE the request (server-to-server, no browser long-hold, completes within
+    the function budget) so it always finishes and writes a terminal job state
+    the frontend poll can read.
+
+    Drains queued jobs oldest-first until the queue empties or the budget is
+    hit. Each job's failure is persisted onto its row, never swallowed."""
+    from alpha_agent.api.routes.factor_lab import _run_propose_work
+    from alpha_agent.config_store import refresh_config
+    from alpha_agent.evolution.diagnostics import compute_diagnostic
+    from alpha_agent.storage import propose_jobs
+
+    pool = await get_pool(os.environ["DATABASE_URL"])
+    deadline = time.monotonic() + _RUN_PROPOSE_BUDGET_S
+    drained: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        job = await propose_jobs.claim_oldest_queued(pool)
+        if job is None:
+            break
+        job_id = job["id"]
+        try:
+            # Mirror post_propose's pre-work so the LLM sees the live baseline.
+            await refresh_config(pool)
+            diagnostic = await compute_diagnostic(pool)
+            result = await _run_propose_work(
+                pool, job["user_id"], job["n"], diagnostic
+            )
+            await propose_jobs.mark_done(pool, job_id, result)
+            drained.append(
+                {
+                    "job_id": job_id,
+                    "status": "done",
+                    "proposed": result.get("proposed", 0),
+                    "evaluated": result.get("evaluated", 0),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 — terminal failure must be observable
+            err = f"{type(exc).__name__}: {exc}"
+            await propose_jobs.mark_failed(pool, job_id, err)
+            drained.append({"job_id": job_id, "status": "failed", "error": err})
+    return {"ok": True, "drained": len(drained), "jobs": drained}
 
 
 @router.post("/compute_ic_annotations")

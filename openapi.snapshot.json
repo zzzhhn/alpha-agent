@@ -4975,6 +4975,52 @@
         ]
       }
     },
+    "/api/cron/run_propose_jobs": {
+      "get": {
+        "description": "Reliable execution path for the LLM factor proposer (the /evolution\n'propose factors' button).\n\nPOST /api/factor-lab/propose only ENQUEUES a job. The old design ran the\nwork in a FastAPI BackgroundTask after the 202 response, but Vercel freezes\nthe function once the response is sent, so that task never completed and the\nbutton silently produced nothing after the 2026-05-26 async refactor. A\nGitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,\nplus a fallback schedule) calls this endpoint instead; here the work runs\nINSIDE the request (server-to-server, no browser long-hold, completes within\nthe function budget) so it always finishes and writes a terminal job state\nthe frontend poll can read.\n\nDrains queued jobs oldest-first until the queue empties or the budget is\nhit. Each job's failure is persisted onto its row, never swallowed.",
+        "operationId": "cron_run_propose_jobs_api_cron_run_propose_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Run Propose Jobs Api Cron Run Propose Jobs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron Run Propose Jobs",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Reliable execution path for the LLM factor proposer (the /evolution\n'propose factors' button).\n\nPOST /api/factor-lab/propose only ENQUEUES a job. The old design ran the\nwork in a FastAPI BackgroundTask after the 202 response, but Vercel freezes\nthe function once the response is sent, so that task never completed and the\nbutton silently produced nothing after the 2026-05-26 async refactor. A\nGitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,\nplus a fallback schedule) calls this endpoint instead; here the work runs\nINSIDE the request (server-to-server, no browser long-hold, completes within\nthe function budget) so it always finishes and writes a terminal job state\nthe frontend poll can read.\n\nDrains queued jobs oldest-first until the queue empties or the budget is\nhit. Each job's failure is persisted onto its row, never swallowed.",
+        "operationId": "cron_run_propose_jobs_api_cron_run_propose_jobs_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Run Propose Jobs Api Cron Run Propose Jobs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron Run Propose Jobs",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/slow_daily": {
       "get": {
         "description": "Run slow_daily cron. `limit=N` caps universe (\u2264300s Hobby budget).\n`offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables\nGH-Actions multi-shot full SP500 coverage (e.g. 4 \u00d7 {limit:140, offset:0/140/280/420}).",
@@ -6149,7 +6195,7 @@
     },
     "/api/factor-lab/propose": {
       "post": {
-        "description": "Queue a propose job and return 202 immediately with a job_id.\n\nThe actual LLM call + per-candidate validation + DSR scoring run as\na FastAPI BackgroundTask after the response is sent. The frontend\npolls GET /jobs/{id} every 3s for the terminal state.\n\nThis async refactor (Phase D, 2026-05-26) replaces the synchronous\nPOST that previously held the connection open for 30-180s. Under\nChina egress + local TUN proxy the long fetch was being dropped\nmid-response (Safari surfaced as 'Load failed' even though Vercel\nlogged 200), forcing the user to disable VPN to get propose to\nreturn. Polling short-lived GETs sidesteps the idle-connection\ndrop entirely.\n\nDormant short-circuit (history below cost-guard) still returns 200\n+ a synthetic 'done' job inline so the client doesn't waste a poll\ncycle on a result that's already known.",
+        "description": "Enqueue a propose job and return 202 immediately with a job_id.\n\nThe work does NOT run here. A GitHub Actions runner (kicked instantly via\nworkflow_dispatch below, plus a fallback schedule) calls\n/api/cron/run_propose_jobs, which runs the LLM call + per-candidate\nvalidation + DSR scoring in-request and writes the terminal job state. The\nfrontend polls GET /jobs/{id} every 3s until done|failed.\n\nWhy not a FastAPI BackgroundTask (the 2026-05-26 design): Vercel freezes the\nfunction after the response is sent, so post-response work never completed\nand the button silently produced nothing. Why not a synchronous POST (the\npre-2026-05-26 design): under China egress + local TUN proxy the 30-180s\nconnection was dropped mid-response. Enqueue + reliable runner + short poll\nGETs sidesteps both.\n\nDormant short-circuit (history below cost-guard) still returns 200 + a\nsynthetic 'done' job inline so the client skips the poll entirely.",
         "operationId": "post_propose_api_factor_lab_propose_post",
         "parameters": [
           {

@@ -566,6 +566,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/run_propose_jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Run Propose Jobs
+         * @description Reliable execution path for the LLM factor proposer (the /evolution
+         *     'propose factors' button).
+         *
+         *     POST /api/factor-lab/propose only ENQUEUES a job. The old design ran the
+         *     work in a FastAPI BackgroundTask after the 202 response, but Vercel freezes
+         *     the function once the response is sent, so that task never completed and the
+         *     button silently produced nothing after the 2026-05-26 async refactor. A
+         *     GitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,
+         *     plus a fallback schedule) calls this endpoint instead; here the work runs
+         *     INSIDE the request (server-to-server, no browser long-hold, completes within
+         *     the function budget) so it always finishes and writes a terminal job state
+         *     the frontend poll can read.
+         *
+         *     Drains queued jobs oldest-first until the queue empties or the budget is
+         *     hit. Each job's failure is persisted onto its row, never swallowed.
+         */
+        get: operations["cron_run_propose_jobs_api_cron_run_propose_jobs_get"];
+        put?: never;
+        /**
+         * Cron Run Propose Jobs
+         * @description Reliable execution path for the LLM factor proposer (the /evolution
+         *     'propose factors' button).
+         *
+         *     POST /api/factor-lab/propose only ENQUEUES a job. The old design ran the
+         *     work in a FastAPI BackgroundTask after the 202 response, but Vercel freezes
+         *     the function once the response is sent, so that task never completed and the
+         *     button silently produced nothing after the 2026-05-26 async refactor. A
+         *     GitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,
+         *     plus a fallback schedule) calls this endpoint instead; here the work runs
+         *     INSIDE the request (server-to-server, no browser long-hold, completes within
+         *     the function budget) so it always finishes and writes a terminal job state
+         *     the frontend poll can read.
+         *
+         *     Drains queued jobs oldest-first until the queue empties or the budget is
+         *     hit. Each job's failure is persisted onto its row, never swallowed.
+         */
+        post: operations["cron_run_propose_jobs_api_cron_run_propose_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/slow_daily": {
         parameters: {
             query?: never;
@@ -1066,23 +1118,23 @@ export interface paths {
         put?: never;
         /**
          * Post Propose
-         * @description Queue a propose job and return 202 immediately with a job_id.
+         * @description Enqueue a propose job and return 202 immediately with a job_id.
          *
-         *     The actual LLM call + per-candidate validation + DSR scoring run as
-         *     a FastAPI BackgroundTask after the response is sent. The frontend
-         *     polls GET /jobs/{id} every 3s for the terminal state.
+         *     The work does NOT run here. A GitHub Actions runner (kicked instantly via
+         *     workflow_dispatch below, plus a fallback schedule) calls
+         *     /api/cron/run_propose_jobs, which runs the LLM call + per-candidate
+         *     validation + DSR scoring in-request and writes the terminal job state. The
+         *     frontend polls GET /jobs/{id} every 3s until done|failed.
          *
-         *     This async refactor (Phase D, 2026-05-26) replaces the synchronous
-         *     POST that previously held the connection open for 30-180s. Under
-         *     China egress + local TUN proxy the long fetch was being dropped
-         *     mid-response (Safari surfaced as 'Load failed' even though Vercel
-         *     logged 200), forcing the user to disable VPN to get propose to
-         *     return. Polling short-lived GETs sidesteps the idle-connection
-         *     drop entirely.
+         *     Why not a FastAPI BackgroundTask (the 2026-05-26 design): Vercel freezes the
+         *     function after the response is sent, so post-response work never completed
+         *     and the button silently produced nothing. Why not a synchronous POST (the
+         *     pre-2026-05-26 design): under China egress + local TUN proxy the 30-180s
+         *     connection was dropped mid-response. Enqueue + reliable runner + short poll
+         *     GETs sidesteps both.
          *
-         *     Dormant short-circuit (history below cost-guard) still returns 200
-         *     + a synthetic 'done' job inline so the client doesn't waste a poll
-         *     cycle on a result that's already known.
+         *     Dormant short-circuit (history below cost-guard) still returns 200 + a
+         *     synthetic 'done' job inline so the client skips the poll entirely.
          */
         post: operations["post_propose_api_factor_lab_propose_post"];
         delete?: never;
@@ -4750,6 +4802,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_run_propose_jobs_api_cron_run_propose_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_run_propose_jobs_api_cron_run_propose_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

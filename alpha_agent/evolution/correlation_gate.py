@@ -91,6 +91,12 @@ def _daily_returns_for(panel, fwd, expression: str, name: str) -> Optional[np.nd
             expression=expression,
             operators_used=[],
             lookback=20,
+            # `universe` is a required FactorSpec field; evaluate_factor_full
+            # ignores it (it reads ONLY spec.expression), but omitting it made
+            # pydantic raise on construction — every saved factor then failed
+            # this try/except and the gate was a silent no-op. Any valid literal
+            # works since the panel is fixed by _load_panel, not by this field.
+            universe="SP500",
             justification="self-correlation gate",
         )
         factor = evaluate_factor_full(panel, spec)
@@ -104,9 +110,17 @@ class SelfCorrelationGate:
     candidate against them. Instantiate per propose round (saved factors don't
     change mid-round), call .check(expression) per surviving candidate."""
 
-    def __init__(self, existing: list[tuple[str, str]]):
+    def __init__(self, existing: list[tuple[str, str]], budget_s: float = 40.0):
         """existing: list of (name, expression) for the already-saved factors
-        to guard against. Empty → the gate is a no-op (never loads the panel)."""
+        to guard against. Empty → the gate is a no-op (never loads the panel).
+
+        budget_s caps the precompute wall-clock: evaluating many saved factors
+        on the full panel is the heaviest part of a propose round, and this runs
+        inside a Vercel function with a hard duration cap. If the budget is hit
+        the gate simply guards against the subset computed so far (best-effort
+        dedup) rather than risking the whole propose being killed mid-run."""
+        import time
+
         self._ok = False
         self._panel = None
         self._fwd = None
@@ -121,7 +135,10 @@ class SelfCorrelationGate:
             return
         self._fwd = np.full_like(self._panel.close, np.nan)
         self._fwd[:-1] = self._panel.close[1:] / self._panel.close[:-1] - 1.0
+        deadline = time.monotonic() + budget_s
         for name, expr in existing:
+            if time.monotonic() > deadline:
+                break
             ret = _daily_returns_for(self._panel, self._fwd, expr, name)
             if ret is not None:
                 self._existing_rets[name] = ret

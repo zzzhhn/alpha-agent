@@ -1,0 +1,47 @@
+# Reliable execution path for the LLM factor proposer (the /evolution
+# "propose factors" button). The button's POST only ENQUEUES a job — the work
+# CANNOT run in a Vercel FastAPI BackgroundTask (Vercel freezes the function
+# after the response is sent, so post-response work never ran; that is why the
+# button silently produced nothing after the 2026-05-26 async refactor).
+#
+# This runner calls a backend endpoint that drains queued jobs synchronously
+# (server-to-server, no browser long-hold, completes within the function
+# budget). It is triggered two ways:
+#   1. workflow_dispatch — the backend fires this the instant a job is enqueued
+#      (POST /propose -> _dispatch_propose_runner), so results land in ~1-2min.
+#   2. schedule — a fallback net that drains any job whose instant dispatch was
+#      missed (e.g. GH_PAT unset or a GitHub API hiccup). Mostly a no-op.
+name: propose-job-runner
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Fallback only. Instant dispatch is the primary path; this catches misses.
+    - cron: "*/15 * * * *"
+
+# Serialize runners: the DB claim is race-safe (FOR UPDATE SKIP LOCKED), but
+# serializing avoids piling up runner invocations when a user clicks repeatedly.
+concurrency:
+  group: propose-job-runner
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drain queued propose jobs
+        env:
+          # /api/cron/* is rewritten to the alpha-agent backend (same host the
+          # existing cron-shards workflow uses).
+          BACKEND_BASE: https://alpha.bobbyzhong.com
+        run: |
+          HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors \
+            -o /tmp/propose.json -w "%{http_code}" \
+            -X POST "$BACKEND_BASE/api/cron/run_propose_jobs")
+          echo "HTTP=$HTTP"
+          head -c 2000 /tmp/propose.json 2>/dev/null || true
+          echo ""
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::propose runner returned HTTP $HTTP"
+            exit 1
+          fi

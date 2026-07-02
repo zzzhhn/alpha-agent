@@ -54,6 +54,27 @@ async def mark_running(pool: asyncpg.Pool, job_id: str) -> None:
     )
 
 
+async def claim_oldest_queued(pool: asyncpg.Pool) -> Optional[dict]:
+    """Atomically claim the oldest queued job: flip it to 'running' and return
+    {id, user_id, n}, or None when nothing is queued.
+
+    The reliable execution path (a GitHub Actions runner draining this queue)
+    can have >1 worker in flight, so the claim must be race-safe: the inner
+    SELECT ... FOR UPDATE SKIP LOCKED locks exactly one queued row and lets a
+    concurrent runner skip past it to the next, so no job is ever run twice."""
+    row = await pool.fetchrow(
+        "UPDATE factor_propose_jobs SET status='running', started_at=now() "
+        "WHERE id = ("
+        "  SELECT id FROM factor_propose_jobs WHERE status='queued' "
+        "  ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+        ") "
+        "RETURNING id, user_id, n"
+    )
+    if row is None:
+        return None
+    return {"id": row["id"], "user_id": row["user_id"], "n": row["n"]}
+
+
 async def mark_done(pool: asyncpg.Pool, job_id: str, result: dict) -> None:
     await pool.execute(
         "UPDATE factor_propose_jobs "
