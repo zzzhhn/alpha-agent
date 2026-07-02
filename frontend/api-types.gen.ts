@@ -422,6 +422,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/l2_cycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * L2 Cycle
+         * @description Advance the L2 paper book one step over the product ledger (generate ->
+         *     fill -> mark any due rebalance). Idempotent; schedule daily after the close
+         *     so l2_equity_daily accumulates a forward curve.
+         */
+        get: operations["l2_cycle_api_cron_l2_cycle_get"];
+        put?: never;
+        /**
+         * L2 Cycle
+         * @description Advance the L2 paper book one step over the product ledger (generate ->
+         *     fill -> mark any due rebalance). Idempotent; schedule daily after the close
+         *     so l2_equity_daily accumulates a forward curve.
+         */
+        post: operations["l2_cycle_api_cron_l2_cycle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/methodology_proposer": {
         parameters: {
             query?: never;
@@ -875,6 +903,29 @@ export interface paths {
          *     succeed before the client gives up.
          */
         get: operations["get_propose_job_api_factor_lab_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/lessons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lessons
+         * @description Recent mining-journal lessons for the /evolution Mining Journal panel.
+         *
+         *     Unauthed read (matches /diagnostic). Degrades to an empty list if the
+         *     factor_lessons table hasn't been migrated yet (V027 not applied).
+         */
+        get: operations["get_lessons_api_factor_lab_lessons_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1417,8 +1468,9 @@ export interface paths {
         };
         /**
          * Stock Ohlcv
-         * @description Lazy OHLCV feed for the price chart. Cache headers in middleware
-         *     (or here, future) - for now relies on FE-side staleness.
+         * @description Lazy OHLCV feed for the price chart. In-process TTL cache over the
+         *     yfinance pull + an edge cache header so repeat opens are instant and never
+         *     contend with the cron's yfinance pulls.
          */
         get: operations["stock_ohlcv_api_stock__ticker__ohlcv_get"];
         put?: never;
@@ -3367,12 +3419,42 @@ export interface components {
              * @default 0
              */
             factor_std: number;
+            /**
+             * High Turnover
+             * @default false
+             */
+            high_turnover: boolean;
             /** Ic Spearman */
             ic_spearman: number;
+            /**
+             * Low Robustness
+             * @default false
+             */
+            low_robustness: boolean;
+            /**
+             * Low Stability
+             * @default false
+             */
+            low_stability: boolean;
+            /**
+             * Rank Stability
+             * @default 0
+             */
+            rank_stability: number;
+            /**
+             * Robustness
+             * @default 0
+             */
+            robustness: number;
             /** Rows Valid */
             rows_valid: number;
             /** Runtime Ms */
             runtime_ms: number;
+            /**
+             * Turnover
+             * @default 0
+             */
+            turnover: number;
         };
         /** StockResponse */
         StockResponse: {
@@ -4404,6 +4486,50 @@ export interface operations {
             };
         };
     };
+    l2_cycle_api_cron_l2_cycle_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    l2_cycle_api_cron_l2_cycle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     cron_methodology_proposer_api_cron_methodology_proposer_get: {
         parameters: {
             query?: never;
@@ -5121,6 +5247,39 @@ export interface operations {
             path: {
                 job_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lessons_api_factor_lab_lessons_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

@@ -5803,6 +5803,52 @@
         ]
       }
     },
+    "/api/factor-lab/lessons": {
+      "get": {
+        "description": "Recent mining-journal lessons for the /evolution Mining Journal panel.\n\nUnauthed read (matches /diagnostic). Degrades to an empty list if the\nfactor_lessons table hasn't been migrated yet (V027 not applied).",
+        "operationId": "get_lessons_api_factor_lab_lessons_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Lessons Api Factor Lab Lessons Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lessons",
+        "tags": [
+          "factor_lab"
+        ]
+      }
+    },
     "/api/factor-lab/live-expression": {
       "post": {
         "description": "Manually set the live factor expression (admin gate).\n\nValidates the expression via factor_ast (same allow-lists as the\nproposer / backtester) and writes it via set_config. Returns the\npersisted expression + a timestamp.\n\nOn invalid expression (unknown operator, unknown operand, syntax error)\nreturns 400 with FastAPI's standard {detail: ...} envelope so the front\nend errorParse helper can surface the upstream message.",
