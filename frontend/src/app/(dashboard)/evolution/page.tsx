@@ -17,6 +17,8 @@ import {
   fetchFactorDiagnostic,
   fetchFactorProposals,
   fetchMiningLessons,
+  fetchBriefing,
+  type MiningBriefing,
 } from "@/lib/api/factor-lab";
 import { t } from "@/lib/i18n";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
@@ -32,6 +34,7 @@ import { FactorLabDecisionCard } from "@/components/factor-lab/FactorLabDecision
 import { PendingProposalsSection } from "@/components/factor-lab/PendingProposalsSection";
 import { HistoryCollapsedSection } from "@/components/factor-lab/HistoryCollapsedSection";
 import { MiningJournalPane } from "@/components/factor-lab/MiningJournalPane";
+import { BriefingPane } from "@/components/factor-lab/BriefingPane";
 
 // Server component — fetches all evolution endpoints in parallel and renders
 // section containers. SSR-correct locale comes from the shared cookie reader.
@@ -74,12 +77,13 @@ async function fetchAllEvolution(): Promise<{
 // fetch so this page's existing fetchProposals — which feeds the health strip —
 // is untouched). Mirrors the old factor-lab page's fetch exactly (revalidate:0).
 async function fetchFactorLab() {
-  const [diagSettled, pendingSettled, allSettled, lessonsSettled] =
+  const [diagSettled, pendingSettled, allSettled, lessonsSettled, briefingSettled] =
     await Promise.allSettled([
       fetchFactorDiagnostic({ revalidate: 0, tags: ["factor-lab-diagnostic"] }),
       fetchFactorProposals("pending", { revalidate: 0, tags: ["factor-lab-pending"] }),
       fetchFactorProposals(undefined, { revalidate: 0, tags: ["factor-lab-history"] }),
       fetchMiningLessons(20, { revalidate: 0, tags: ["factor-lab-lessons"] }),
+      fetchBriefing({ revalidate: 0, tags: ["factor-lab-briefing"] }),
     ]);
   const diagnostic = diagSettled.status === "fulfilled" ? diagSettled.value : null;
   const pending =
@@ -87,11 +91,16 @@ async function fetchFactorLab() {
   const all = allSettled.status === "fulfilled" ? allSettled.value.proposals : [];
   const lessons =
     lessonsSettled.status === "fulfilled" ? lessonsSettled.value.lessons : [];
+  const briefing: MiningBriefing =
+    briefingSettled.status === "fulfilled"
+      ? briefingSettled.value
+      : { validated: [], flagged: [], failure_insights: [] };
   return {
     diagnostic,
     pending,
     history: all.filter((p) => p.status !== "pending"),
     lessons,
+    briefing,
   };
 }
 
@@ -99,7 +108,7 @@ export default async function EvolutionPage() {
   const locale = await getServerLocale();
   const [
     { icTrend, icAnnotations, weights, calibration, changes, proposals },
-    { diagnostic, pending, history, lessons },
+    { diagnostic, pending, history, lessons, briefing },
   ] = await Promise.all([fetchAllEvolution(), fetchFactorLab()]);
   const liveExpression = diagnostic?.current_expression ?? "";
 
@@ -239,6 +248,12 @@ export default async function EvolutionPage() {
           richer than the prior read-only table. `proposals` (fetchProposals)
           still feeds the health strip above. */}
       <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
+
+      {/* Phase D: compressed 3-bucket briefing — the miner's output squeezed to
+          validated / flagged / repeated-failure directions. Sits right under the
+          decision card so the headline read is above the raw pending list. */}
+      <BriefingPane briefing={briefing} locale={locale} />
+
       <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
 
       {/* ── Section 6: Mining Journal (Phase A memory + Phase B rejects) ──

@@ -92,6 +92,95 @@ async def get_lessons(limit: int = 20, pool=Depends(get_db_pool)) -> dict:
     return {"lessons": [dict(r) for r in rows]}
 
 
+# A pending proposal is "flagged" (needs scrutiny) once its daily PnL correlates
+# this much with a saved factor, even below the hard redundancy-reject threshold.
+_FLAG_SELF_CORR = 0.5
+
+
+def _categorize_reject(reason: str | None) -> str:
+    """Collapse a specific reject_reason into a recurring failure CATEGORY, so
+    the briefing can count 'where the search keeps hitting walls' instead of
+    listing every unique message (self-corr reasons embed distinct values/names
+    and would never aggregate raw)."""
+    r = (reason or "").lower()
+    if "redundant" in r or "self-corr" in r:
+        return "redundant: too correlated with a saved factor"
+    if "degenerate" in r:
+        return "degenerate expression (e.g. x-x, x/x)"
+    if "canned" in r or "operator" in r:
+        return "new operator failed a canned test"
+    if "fold" in r:
+        return "too few valid walk-forward folds"
+    if "nan" in r or "constant" in r:
+        return "constant / all-NaN factor"
+    return (reason or "other")[:60]
+
+
+@router.get("/briefing")
+async def get_briefing(pool=Depends(get_db_pool)) -> dict:
+    """Phase D compressed briefing: the miner's output squeezed to the 3 buckets
+    a human actually needs (XHS 'Loop Engineering'):
+      validated        — pending proposals that passed cleanly (low skeptic risk
+                         + low self-correlation): clear extensions.
+      flagged          — pending proposals the skeptic or the correlation gate
+                         marked risky: scrutinize before approving.
+      failure_insights — recurring reject CATEGORIES distilled from the journal:
+                         where the search keeps failing. These are
+                         correlation-grounded counts of real recorded outcomes,
+                         never speculation.
+    Unauthed read; degrades to empty buckets if a table isn't migrated yet."""
+    from collections import Counter
+
+    validated: list[dict] = []
+    flagged: list[dict] = []
+    try:
+        rows = await pool.fetch(
+            "SELECT id, expression, evidence FROM factor_proposals "
+            "WHERE status='pending' ORDER BY id DESC LIMIT 50"
+        )
+        for row in rows:
+            ev = row["evidence"]
+            ev = json.loads(ev) if isinstance(ev, str) else (ev or {})
+            skeptic = ev.get("skeptic") or {}
+            risk = skeptic.get("risk_level")
+            self_corr = ev.get("self_correlation") or 0.0
+            item = {
+                "id": row["id"],
+                "expression": row["expression"],
+                "source": ev.get("source"),
+                "deflated_sharpe": ev.get("deflated_sharpe"),
+                "ic_oos": ev.get("ic_oos"),
+                "self_correlation": self_corr,
+                "risk_level": risk,
+                "concerns": skeptic.get("concerns", []),
+            }
+            if risk in ("medium", "high") or self_corr >= _FLAG_SELF_CORR:
+                flagged.append(item)
+            else:
+                validated.append(item)
+    except Exception as e:  # noqa: BLE001 - degrade to empty
+        logger.warning("briefing: proposals query failed: %s", e)
+
+    failure_insights: list[dict] = []
+    try:
+        rows = await pool.fetch(
+            "SELECT reject_reason FROM factor_lessons WHERE outcome='rejected' "
+            "AND reject_reason IS NOT NULL ORDER BY created_at DESC LIMIT 200"
+        )
+        counts = Counter(_categorize_reject(r["reject_reason"]) for r in rows)
+        failure_insights = [
+            {"pattern": pat, "count": n} for pat, n in counts.most_common(6)
+        ]
+    except Exception as e:  # noqa: BLE001 - table may not exist yet
+        logger.warning("briefing: lessons query failed: %s", e)
+
+    return {
+        "validated": validated,
+        "flagged": flagged,
+        "failure_insights": failure_insights,
+    }
+
+
 async def _run_propose_work(
     pool, user_id: int, n: int, diagnostic
 ) -> dict:

@@ -5811,6 +5811,30 @@
         ]
       }
     },
+    "/api/factor-lab/briefing": {
+      "get": {
+        "description": "Phase D compressed briefing: the miner's output squeezed to the 3 buckets\na human actually needs (XHS 'Loop Engineering'):\n  validated        \u2014 pending proposals that passed cleanly (low skeptic risk\n                     + low self-correlation): clear extensions.\n  flagged          \u2014 pending proposals the skeptic or the correlation gate\n                     marked risky: scrutinize before approving.\n  failure_insights \u2014 recurring reject CATEGORIES distilled from the journal:\n                     where the search keeps failing. These are\n                     correlation-grounded counts of real recorded outcomes,\n                     never speculation.\nUnauthed read; degrades to empty buckets if a table isn't migrated yet.",
+        "operationId": "get_briefing_api_factor_lab_briefing_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Briefing Api Factor Lab Briefing Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Briefing",
+        "tags": [
+          "factor_lab"
+        ]
+      }
+    },
     "/api/factor-lab/diagnostic": {
       "get": {
         "operationId": "get_diagnostic_api_factor_lab_diagnostic_get",

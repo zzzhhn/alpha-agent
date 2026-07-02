@@ -53,6 +53,29 @@ export interface MiningLesson {
   lesson: string;
 }
 
+// Phase D compressed briefing: the miner's output in 3 buckets.
+export interface BriefingItem {
+  id: number;
+  expression: string;
+  source: string | null;
+  deflated_sharpe: number | null;
+  ic_oos: number | null;
+  self_correlation: number;
+  risk_level: "low" | "medium" | "high" | null;
+  concerns: string[];
+}
+
+export interface FailureInsight {
+  pattern: string;
+  count: number;
+}
+
+export interface MiningBriefing {
+  validated: BriefingItem[];
+  flagged: BriefingItem[];
+  failure_insights: FailureInsight[];
+}
+
 export interface FactorDiagnosticSnapshot {
   current_expression: string;
   weak_signal: string | null;
@@ -124,6 +147,9 @@ export const fetchMiningLessons = (limit = 20, opts?: ApiGetOptions) =>
     `/api/factor-lab/lessons?limit=${limit}`,
     opts,
   );
+
+export const fetchBriefing = (opts?: ApiGetOptions) =>
+  apiGet<MiningBriefing>("/api/factor-lab/briefing", opts);
 
 export const fetchFactorProposals = (
   status?: "pending" | "approved" | "rejected",

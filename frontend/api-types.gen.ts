@@ -959,6 +959,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/factor-lab/briefing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Briefing
+         * @description Phase D compressed briefing: the miner's output squeezed to the 3 buckets
+         *     a human actually needs (XHS 'Loop Engineering'):
+         *       validated        — pending proposals that passed cleanly (low skeptic risk
+         *                          + low self-correlation): clear extensions.
+         *       flagged          — pending proposals the skeptic or the correlation gate
+         *                          marked risky: scrutinize before approving.
+         *       failure_insights — recurring reject CATEGORIES distilled from the journal:
+         *                          where the search keeps failing. These are
+         *                          correlation-grounded counts of real recorded outcomes,
+         *                          never speculation.
+         *     Unauthed read; degrades to empty buckets if a table isn't migrated yet.
+         */
+        get: operations["get_briefing_api_factor_lab_briefing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/factor-lab/diagnostic": {
         parameters: {
             query?: never;
@@ -5390,6 +5420,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_briefing_api_factor_lab_briefing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
