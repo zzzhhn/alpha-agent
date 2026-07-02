@@ -26,10 +26,15 @@ from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.config_store import refresh_config, set_config
 from alpha_agent.core.factor_ast import refresh_allowed_ops
+from alpha_agent.evolution.correlation_gate import (
+    SELF_CORR_THRESHOLD,
+    SelfCorrelationGate,
+)
 from alpha_agent.evolution.diagnostics import compute_diagnostic
 from alpha_agent.evolution.factor_validation import evaluate_factor_candidate
 from alpha_agent.evolution.llm_factor_proposer import RawProposal, propose_factors
 from alpha_agent.evolution.sandbox import SandboxRunner
+from alpha_agent.evolution.skeptic import assess_candidate
 from alpha_agent.evolution.validation import deflated_sharpe_lite
 from alpha_agent.storage import factor_lessons, propose_jobs
 
@@ -50,6 +55,9 @@ _MIN_HISTORY_ROWS = 1000
 # the emergency-debug 0.3/-3.0 once end-to-end pipeline confirmed working.
 _BASE_RATIO = 0.6           # accept r_mean within 60% of baseline Sharpe
 _DSR_THRESHOLD = -1.0       # deflated Sharpe down to -1.0 keeps marginal candidates visible
+# Cap the skeptic LLM reviews per round: only the top few survivors get a
+# second opinion, keeping the extra latency inside the propose time budget.
+_SKEPTIC_MAX = 3
 
 
 @router.get("/diagnostic")
@@ -62,6 +70,25 @@ async def get_diagnostic(pool=Depends(get_db_pool)) -> dict:
     await refresh_config(pool)
     d = await compute_diagnostic(pool)
     return d.to_jsonable()
+
+
+@router.get("/lessons")
+async def get_lessons(limit: int = 20, pool=Depends(get_db_pool)) -> dict:
+    """Recent mining-journal lessons for the /evolution Mining Journal panel.
+
+    Unauthed read (matches /diagnostic). Degrades to an empty list if the
+    factor_lessons table hasn't been migrated yet (V027 not applied)."""
+    try:
+        rows = await pool.fetch(
+            "SELECT created_at, expression, outcome, test_sharpe, test_ic, "
+            "deflated_sharpe, reject_reason, lesson FROM factor_lessons "
+            "ORDER BY created_at DESC LIMIT $1",
+            min(max(int(limit), 1), 100),
+        )
+    except Exception as e:  # noqa: BLE001 - table may not exist yet
+        logger.warning("get_lessons query failed (table missing?): %s", e)
+        return {"lessons": []}
+    return {"lessons": [dict(r) for r in rows]}
 
 
 async def _run_propose_work(
@@ -140,6 +167,25 @@ async def _run_propose_work(
         all_means = [float(np.mean(r.sharpes)) for r in results]
         base_mean = float(np.mean(baseline.sharpes))
         proposed_count = 0
+        skeptic_used = 0
+
+        # Phase B1: build the SELF_CORRELATION gate once from already-saved,
+        # non-overfit factors. A survivor whose daily long-short PnL is ~the
+        # same as a saved factor is a re-discovery, not a new alpha, so it is
+        # rejected (WorldQuant SELF_CORRELATION analog). Empty saved set / any
+        # load failure → the gate is a harmless no-op.
+        try:
+            from alpha_agent.storage.factor_db import list_factors
+
+            saved = [
+                (f.get("name") or f.get("id") or "saved", f["expression"])
+                for f in list_factors(limit=40)
+                if f.get("expression") and not f.get("last_overfit_flag")
+            ]
+        except Exception as e:  # noqa: BLE001 - gate is auxiliary to the propose
+            logger.warning("list_factors for self-corr gate failed: %s", e)
+            saved = []
+        corr_gate = SelfCorrelationGate(saved)
         # Per-candidate decision trail returned in the response body so the
         # client can see why each candidate did/didn't make it. More reliable
         # than stderr emit because Vercel CLI logs sometimes only surface the
@@ -150,19 +196,54 @@ async def _run_propose_work(
             defl = deflated_sharpe_lite(r_mean, all_means, len(raw_proposals))
             passes_mean = r_mean > base_mean * _BASE_RATIO
             passes_defl = defl > _DSR_THRESHOLD
+            accepted = passes_mean and passes_defl
+
+            # Phase B1: only survivors are worth the (panel-backed) correlation
+            # check. A too-high match with a saved factor flips accept→reject
+            # (it's a re-discovery, not new alpha).
+            self_corr = 0.0
+            corr_with: str | None = None
+            redundant = False
+            if accepted:
+                self_corr, corr_with = corr_gate.check(r.expression)
+                if self_corr >= SELF_CORR_THRESHOLD:
+                    redundant = True
+                    accepted = False
+
             diag_candidates.append({
                 "expression": r.expression[:120],
                 "r_mean": r_mean,
                 "defl": defl,
                 "passes_mean": passes_mean,
                 "passes_defl": passes_defl,
+                "self_correlation": self_corr,
+                "self_correlation_with": corr_with,
+                "redundant": redundant,
             })
-            accepted = passes_mean and passes_defl
+
             if accepted:
                 rationale = next(
                     (p.rationale for p in raw_proposals if p.expression == r.expression),
                     "",
                 )
+                # Phase B2: a SEPARATE skeptic LLM reviews the top survivors and
+                # flags look-good-but-risky. It never blocks (human is the final
+                # gate); assess_candidate returns None on any failure.
+                skeptic_json = None
+                if skeptic_used < _SKEPTIC_MAX:
+                    verdict = await assess_candidate(
+                        llm_client,
+                        r.expression,
+                        {
+                            "sharpes": r.sharpes,
+                            "ic_oos": r.ic_oos,
+                            "deflated_sharpe": defl,
+                            "self_correlation": self_corr,
+                            "self_correlation_with": corr_with,
+                        },
+                    )
+                    skeptic_used += 1
+                    skeptic_json = verdict.to_jsonable() if verdict else None
                 await pool.execute(
                     "INSERT INTO factor_proposals "
                     "(status, expression, new_operators, evidence, diagnostic) "
@@ -178,27 +259,34 @@ async def _run_propose_work(
                         "n_trials": len(raw_proposals),
                         "llm_rationale": rationale,
                         "operator_test_results": r.operator_test_results,
+                        "self_correlation": self_corr,
+                        "self_correlation_with": corr_with,
+                        "skeptic": skeptic_json,
                     }),
                     json.dumps(diagnostic.to_jsonable()),
                 )
                 proposed_count += 1
 
-            # Phase A: journal this candidate's outcome so future rounds learn
-            # from it. Best-effort — never fail a propose over a memory write.
-            try:
-                _ic = (
-                    float(np.mean(r.ic_oos)) if getattr(r, "ic_oos", None) else None
-                )
-            except Exception:  # noqa: BLE001 - metrics may be malformed
-                _ic = None
+            # Phase A/B: journal this candidate's outcome so future rounds learn.
+            # accepted = kept; redundant = rejected (self-correlation); else
+            # weak. Best-effort — never fail a propose over a memory write.
+            _ic = float(r.ic_oos) if r.ic_oos is not None else None
+            if accepted:
+                _outcome, _reject = "accepted", None
+            elif redundant:
+                _outcome = "rejected"
+                _reject = f"redundant: self-corr {self_corr:.2f} vs {corr_with}"
+            else:
+                _outcome, _reject = "weak", None
             try:
                 await factor_lessons.record_lesson(
                     pool,
                     expression=r.expression,
-                    outcome="accepted" if accepted else "weak",
+                    outcome=_outcome,
                     test_sharpe=r_mean,
                     test_ic=_ic,
                     deflated_sharpe=defl,
+                    reject_reason=_reject,
                 )
             except Exception as e:  # noqa: BLE001 - memory is auxiliary
                 logger.warning("factor_lessons record (candidate) failed: %s", e)
