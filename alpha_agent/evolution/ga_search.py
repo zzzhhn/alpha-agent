@@ -94,6 +94,7 @@ def evolve(
     max_depth: int = 6,
     budget_s: Optional[float] = None,
     clock: Optional[Callable[[], float]] = None,
+    vocab: ga_dsl.Vocab = ga_dsl.DEFAULT_VOCAB,
 ) -> list[tuple[str, float]]:
     """Run the GA. Returns distinct (expression, best-score) pairs, fittest
     first, with -inf (invalid/unfit) filtered out. Deterministic given `rng`.
@@ -109,7 +110,7 @@ def evolve(
 
     pop = list(seeds)
     while len(pop) < pop_size:
-        pop.append(ga_dsl.random_tree(rng, 3))
+        pop.append(ga_dsl.random_tree(rng, 3, vocab))
     pop = pop[:pop_size]
 
     best: dict[str, float] = {}
@@ -135,7 +136,7 @@ def evolve(
             guard += 1
             p1 = _tournament(rng, ranked, tournament_k)
             p2 = _tournament(rng, ranked, tournament_k)
-            child = ga_dsl.mutate(rng, ga_dsl.crossover(rng, p1, p2))
+            child = ga_dsl.mutate(rng, ga_dsl.crossover(rng, p1, p2), vocab)
             if ga_dsl.tree_depth(child) <= max_depth:
                 nxt.append(child)
         ranked = evaluate(nxt)
@@ -157,10 +158,13 @@ def run_ga_search(
     rng_seed: int = 1234,
     direction: str = "long_short",
     n_trials: int = 1,
+    vocab: ga_dsl.Vocab = ga_dsl.DEFAULT_VOCAB,
 ) -> list[str]:
     """End-to-end: load the panel, breed candidates, return the top-K expression
     strings for downstream DSR-gated validation. `seed_exprs` (e.g. the current
-    live factor + known-good templates) join the initial population."""
+    live factor + known-good templates) join the initial population. `vocab`
+    restricts the field/window alphabet — the BRAIN miner passes its FASTEXPR
+    vocabulary here to reuse this exact search."""
     from alpha_agent.core.factor_ast import expression_to_tree
     from alpha_agent.factor_engine.factor_backtest import _load_panel
 
@@ -178,6 +182,7 @@ def run_ga_search(
     best = evolve(
         rng, seeds, fitness,
         pop_size=pop_size, generations=generations, budget_s=budget_s,
+        vocab=vocab,
     )
     return [expr for expr, _score in best[:top_k]]
 

@@ -18,6 +18,7 @@ drops the degenerate subtract(x,x) / divide(x,x) forms the grammar rejects)."""
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 
 # ── argument-kind vocabulary ────────────────────────────────────────────
 # Only 'expr' slots are recursively grown / spliced; 'window' and 'param' are
@@ -76,6 +77,22 @@ for _n, _sig in GA_OPS.items():
     OPS_BY_SIG.setdefault(_sig, []).append(_n)
 
 
+@dataclass(frozen=True)
+class Vocab:
+    """The leaf/constant alphabet a GA run draws from. The operators, group
+    semantics, and the genetics themselves are shared; only these sets differ
+    between the local miner (parquet field names) and the BRAIN miner (FASTEXPR
+    field names). Defaults reproduce the local vocabulary exactly."""
+
+    fields: tuple[str, ...] = NUMERIC_FIELDS
+    groups: tuple[str, ...] = GROUP_FIELDS
+    windows: tuple[int, ...] = WINDOWS
+    params: tuple[int, ...] = PARAMS
+
+
+DEFAULT_VOCAB = Vocab()
+
+
 # ── tree <-> expression ──────────────────────────────────────────────────
 def tree_to_expression(tree: dict) -> str:
     """Serialize a tree back to a DSL string. Integer-valued literals print
@@ -115,35 +132,41 @@ def tree_depth(tree: dict) -> int:
 
 
 # ── random generation ────────────────────────────────────────────────────
-def _leaf(rng: random.Random) -> dict:
-    return {"type": "operand", "name": rng.choice(NUMERIC_FIELDS)}
+def _leaf(rng: random.Random, vocab: Vocab = DEFAULT_VOCAB) -> dict:
+    return {"type": "operand", "name": rng.choice(vocab.fields)}
 
 
-def _arg(rng: random.Random, kind: str, depth: int) -> dict:
+def _arg(
+    rng: random.Random, kind: str, depth: int, vocab: Vocab = DEFAULT_VOCAB
+) -> dict:
     if kind == WINDOW:
-        return {"type": "literal", "value": rng.choice(WINDOWS)}
+        return {"type": "literal", "value": rng.choice(vocab.windows)}
     if kind == PARAM:
-        return {"type": "literal", "value": rng.choice(PARAMS)}
+        return {"type": "literal", "value": rng.choice(vocab.params)}
     if kind == GROUP:
-        return {"type": "operand", "name": rng.choice(GROUP_FIELDS)}
-    return random_tree(rng, depth)  # EXPR
+        return {"type": "operand", "name": rng.choice(vocab.groups)}
+    return random_tree(rng, depth, vocab)  # EXPR
 
 
-def random_tree(rng: random.Random, depth: int) -> dict:
+def random_tree(
+    rng: random.Random, depth: int, vocab: Vocab = DEFAULT_VOCAB
+) -> dict:
     """Grow a random valid tree of at most `depth` operator levels. A leaf field
     is returned once depth is exhausted or on a coin-flip (keeps trees shallow)."""
     if depth <= 0 or rng.random() < 0.35:
-        return _leaf(rng)
+        return _leaf(rng, vocab)
     op = rng.choice(list(GA_OPS))
     return {
         "type": "operator",
         "name": op,
-        "args": [_arg(rng, k, depth - 1) for k in GA_OPS[op]],
+        "args": [_arg(rng, k, depth - 1, vocab) for k in GA_OPS[op]],
     }
 
 
-def random_population(rng: random.Random, size: int, depth: int = 3) -> list[dict]:
-    return [random_tree(rng, depth) for _ in range(size)]
+def random_population(
+    rng: random.Random, size: int, depth: int = 3, vocab: Vocab = DEFAULT_VOCAB
+) -> list[dict]:
+    return [random_tree(rng, depth, vocab) for _ in range(size)]
 
 
 # ── addressing 'expr' slots (the only splice / mutate targets) ────────────
@@ -190,18 +213,23 @@ def crossover(rng: random.Random, a: dict, b: dict) -> dict:
     return replace_at(a, pa, at(b, pb))
 
 
-def _mutate_operand(rng: random.Random, tree: dict) -> dict | None:
+def _mutate_operand(
+    rng: random.Random, tree: dict, vocab: Vocab = DEFAULT_VOCAB
+) -> dict | None:
     paths = [p for p in expr_paths(tree) if at(tree, p)["type"] == "operand"]
     if not paths:
         return None
     p = rng.choice(paths)
     cur = at(tree, p)["name"]
     # An expr-slot operand is always numeric (group operands live off expr slots).
-    choices = [f for f in NUMERIC_FIELDS if f != cur]
+    choices = [f for f in vocab.fields if f != cur] or list(vocab.fields)
     return replace_at(tree, p, {"type": "operand", "name": rng.choice(choices)})
 
 
-def _mutate_operator(rng: random.Random, tree: dict) -> dict | None:
+def _mutate_operator(
+    rng: random.Random, tree: dict, vocab: Vocab = DEFAULT_VOCAB
+) -> dict | None:
+    # vocab unused: operator swaps stay within the same arg-kind signature group.
     paths = [p for p in expr_paths(tree) if at(tree, p)["type"] == "operator"]
     if not paths:
         return None
@@ -213,7 +241,9 @@ def _mutate_operator(rng: random.Random, tree: dict) -> dict | None:
     return replace_at(tree, p, {**node, "name": rng.choice(alts)})
 
 
-def _mutate_literal(rng: random.Random, tree: dict) -> dict | None:
+def _mutate_literal(
+    rng: random.Random, tree: dict, vocab: Vocab = DEFAULT_VOCAB
+) -> dict | None:
     targets: list[tuple[tuple[int, ...], int, str]] = []
     for p in expr_paths(tree):
         node = at(tree, p)
@@ -225,7 +255,7 @@ def _mutate_literal(rng: random.Random, tree: dict) -> dict | None:
         return None
     p, i, k = rng.choice(targets)
     node = at(tree, p)
-    pool = WINDOWS if k == WINDOW else PARAMS
+    pool = vocab.windows if k == WINDOW else vocab.params
     cur = node["args"][i]["value"]
     choices = [v for v in pool if v != cur] or list(pool)
     new_args = list(node["args"])
@@ -233,17 +263,21 @@ def _mutate_literal(rng: random.Random, tree: dict) -> dict | None:
     return replace_at(tree, p, {**node, "args": new_args})
 
 
-def _mutate_wrap(rng: random.Random, tree: dict) -> dict | None:
+def _mutate_wrap(
+    rng: random.Random, tree: dict, vocab: Vocab = DEFAULT_VOCAB
+) -> dict | None:
     p = rng.choice(expr_paths(tree))
     sub = at(tree, p)
     op = rng.choice(UNARY_WRAP_OPS)
-    args = [sub] + [_arg(rng, k, 1) for k in GA_OPS[op][1:]]
+    args = [sub] + [_arg(rng, k, 1, vocab) for k in GA_OPS[op][1:]]
     return replace_at(tree, p, {"type": "operator", "name": op, "args": args})
 
 
-def _mutate_subtree(rng: random.Random, tree: dict) -> dict | None:
+def _mutate_subtree(
+    rng: random.Random, tree: dict, vocab: Vocab = DEFAULT_VOCAB
+) -> dict | None:
     p = rng.choice(expr_paths(tree))
-    return replace_at(tree, p, random_tree(rng, 2))
+    return replace_at(tree, p, random_tree(rng, 2, vocab))
 
 
 _MUTATORS = (
@@ -255,14 +289,14 @@ _MUTATORS = (
 )
 
 
-def mutate(rng: random.Random, tree: dict) -> dict:
+def mutate(rng: random.Random, tree: dict, vocab: Vocab = DEFAULT_VOCAB) -> dict:
     """Apply one randomly-chosen mutation. Tries kinds in a shuffled order and
     takes the first that applies (some don't fit every tree, e.g. a bare leaf
     has no operator to swap), so a mutation always happens where possible."""
     order = list(_MUTATORS)
     rng.shuffle(order)
     for m in order:
-        out = m(rng, tree)
+        out = m(rng, tree, vocab)
         if out is not None:
             return out
     return tree
