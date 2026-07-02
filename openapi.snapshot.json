@@ -3974,6 +3974,68 @@
         ]
       }
     },
+    "/api/brain/alphas": {
+      "get": {
+        "description": "The user's BRAIN mining results (passed / flagged / rejected / sim_error),\nnewest first. Degrades to an empty list if V028 isn't applied yet.",
+        "operationId": "list_alphas_api_brain_alphas_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Alphas Api Brain Alphas Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alphas",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
     "/api/brain/credentials": {
       "get": {
         "description": "Non-secret connection status: connected? username last-4? saved when?",

@@ -4,11 +4,15 @@ Save the user's encrypted BRAIN login, read its non-secret status, and a
 connection test that actually authenticates to BRAIN. The plaintext password is
 accepted once on save and never returned. Every route requires the user's own
 auth — credentials are strictly per-user."""
+import logging
+
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.brain import vault
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/brain", tags=["brain"])
 
@@ -59,3 +63,21 @@ async def test_connection(
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
     finally:
         await client.aclose()
+
+
+@router.get("/alphas")
+async def list_alphas(
+    limit: int = 100,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """The user's BRAIN mining results (passed / flagged / rejected / sim_error),
+    newest first. Degrades to an empty list if V028 isn't applied yet."""
+    from alpha_agent.brain import store
+
+    try:
+        alphas = await store.list_brain_alphas(pool, user_id, limit=limit)
+    except Exception as e:  # noqa: BLE001 - table may not exist yet
+        logger.warning("list_brain_alphas failed (table missing?): %s", e)
+        return {"alphas": []}
+    return {"alphas": alphas}

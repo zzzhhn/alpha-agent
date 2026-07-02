@@ -1,0 +1,42 @@
+# Phase E4: the WorldQuant BRAIN mining loop. Runs on GitHub Actions (BRAIN
+# simulations poll for minutes — far past any serverless budget) and talks to
+# Neon directly. Each round: auth with the user's vaulted BRAIN credentials,
+# generate FASTEXPR candidates, simulate on BRAIN, gate on the real metrics,
+# self-correlation check, and persist passing/flagged alphas for review.
+#
+# Required repo secrets: DATABASE_URL (Neon), BYOK_MASTER_KEY (same base64 key
+# the backend uses to decrypt the vault), BRAIN_MINING_USER_ID (the user id
+# whose vaulted BRAIN credentials + results this runs under).
+name: brain-mining-loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      n_candidates:
+        description: "candidates to generate this round"
+        default: "8"
+  schedule:
+    - cron: "0 8 * * *" # daily 08:00 UTC
+
+concurrency:
+  group: brain-mining-loop
+  cancel-in-progress: false
+
+jobs:
+  mine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[storage]"
+      - name: Run one mining round
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
+          BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
+          BRAIN_N_CANDIDATES: ${{ github.event.inputs.n_candidates || '8' }}
+        run: python scripts/brain_mining_loop.py
