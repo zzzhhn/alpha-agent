@@ -45,6 +45,7 @@ import { t } from "@/lib/i18n";
 import WeightsEditor from "@/components/settings/WeightsEditor";
 import WatchlistEditor from "@/components/settings/WatchlistEditor";
 import ChangeLog from "@/components/settings/ChangeLog";
+import { BrainCredentialsCard } from "@/components/settings/BrainCredentialsCard";
 
 type TestState =
   | { kind: "idle" }
@@ -497,6 +498,9 @@ export default function SettingsPage() {
           )}
         </div>
       </TmPane>
+
+      {/* Phase E2: connect a real WorldQuant BRAIN account (encrypted vault). */}
+      <BrainCredentialsCard />
 
       {/* Notes pane — origin-scoping warnings */}
       <TmPane title="NOTES">
