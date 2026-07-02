@@ -10,6 +10,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   type Locale,
   getLocaleFromStorage,
@@ -38,6 +39,7 @@ interface LocaleProviderProps {
 
 export function LocaleProvider({ children, initialLocale }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
+  const router = useRouter();
 
   useEffect(() => {
     // setLocaleToStorage keeps localStorage and the cookie in sync, so in steady
@@ -57,11 +59,21 @@ export function LocaleProvider({ children, initialLocale }: LocaleProviderProps)
     (action) => {
       setLocaleState((prev) => {
         const next = typeof action === "function" ? action(prev) : action;
-        setLocaleToStorage(next);
+        if (next !== prev) {
+          setLocaleToStorage(next);
+          // Re-render server components too. getServerLocale() reads the cookie
+          // we just wrote, so SSR-localized text (decision card, mining journal,
+          // section headers) follows the toggle live instead of staying frozen
+          // in the page-load language until a manual reload. Safe here: this is a
+          // deliberate, user-initiated refresh long after hydration — not the
+          // #422 hydration self-heal that was removed. initialLocale already
+          // matches SSR, so the refreshed tree stays consistent with this state.
+          router.refresh();
+        }
         return next;
       });
     },
-    []
+    [router]
   );
 
   return (
