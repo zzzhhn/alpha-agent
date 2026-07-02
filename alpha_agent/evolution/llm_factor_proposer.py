@@ -62,7 +62,31 @@ class RawProposal:
     rationale: str = ""
 
 
-def _build_prompt(d: Diagnostic, n: int) -> str:
+def _build_prompt(
+    d: Diagnostic,
+    n: int,
+    lessons: list[str] | None = None,
+    tried_expressions: list[str] | None = None,
+) -> str:
+    # Phase A memory block: injected from the factor_lessons journal by the
+    # caller. Empty when there is no history, so a fresh install is byte-for-byte
+    # the pre-memory prompt (backward compatible).
+    memory = ""
+    if lessons:
+        joined = "\n".join(f"- {ln}" for ln in lessons[:12])
+        memory += (
+            "LESSONS FROM PRIOR ROUNDS (a persistent research journal — extend "
+            "what was KEPT, never re-propose what was AVOIDed, and change "
+            "direction when a family keeps coming up WEAK):\n"
+            f"{joined}\n\n"
+        )
+    if tried_expressions:
+        joined = "; ".join(tried_expressions[:30])
+        memory += (
+            "ALREADY TRIED (do NOT re-propose these or trivial "
+            "re-parameterizations of them — propose genuinely new structures):\n"
+            f"{joined}\n\n"
+        )
     return (
         "You are an alpha-research factor inventor. Given the diagnostic below,"
         f" propose {n} candidate factor expressions, each optionally introducing"
@@ -72,6 +96,7 @@ def _build_prompt(d: Diagnostic, n: int) -> str:
         f"  current_expression: {d.current_expression}\n"
         f"  weak_signal: {d.weak_signal} (IC={d.weak_signal_ic})\n"
         f"  symptom: {d.symptom_summary}\n\n"
+        f"{memory}"
         "CONSTRAINTS:\n"
         "- Output strict JSON: {\"proposals\":[{...}, ...]}.\n"
         "- Each proposal: {expression, new_operators, rationale}.\n"
@@ -157,13 +182,23 @@ def _parse_response(text: str, n: int) -> list[RawProposal]:
 
 
 async def propose_factors(
-    llm_client: LLMClient, diagnostic: Diagnostic, n: int = 5,
+    llm_client: LLMClient,
+    diagnostic: Diagnostic,
+    n: int = 5,
+    lessons: list[str] | None = None,
+    tried_expressions: list[str] | None = None,
 ) -> list[RawProposal]:
     """Run one LLM round-trip with at most one structured retry on JSON parse
     failure. Raises ValueError on the second failure so the caller can return
-    a structured 502."""
+    a structured 502.
+
+    `lessons` + `tried_expressions` are the Phase A memory injected by the
+    caller (loaded from factor_lessons); both default to None → the pre-memory
+    prompt."""
     n = min(max(int(n), 1), _HARD_N_CAP)
-    prompt = _build_prompt(diagnostic, n)
+    prompt = _build_prompt(
+        diagnostic, n, lessons=lessons, tried_expressions=tried_expressions
+    )
     msgs = [Message(role="user", content=prompt)]
     last_err: Exception | None = None
     last_preview: str = ""

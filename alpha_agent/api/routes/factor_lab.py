@@ -31,7 +31,7 @@ from alpha_agent.evolution.factor_validation import evaluate_factor_candidate
 from alpha_agent.evolution.llm_factor_proposer import RawProposal, propose_factors
 from alpha_agent.evolution.sandbox import SandboxRunner
 from alpha_agent.evolution.validation import deflated_sharpe_lite
-from alpha_agent.storage import propose_jobs
+from alpha_agent.storage import factor_lessons, propose_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,20 @@ async def _run_propose_work(
     is responsible for mapping those onto the job row's failed state."""
     import numpy as np
 
+    # Phase A: inject the experiment-journal memory (recent lessons + already-
+    # tried expressions) so the proposer stops repeating rejects and shifts
+    # direction. Best-effort: a memory-read failure must not block a propose.
+    try:
+        lessons = await factor_lessons.load_recent_lessons(pool, limit=12)
+        tried = await factor_lessons.load_tried_expressions(pool, limit=30)
+    except Exception as e:  # noqa: BLE001 - memory is auxiliary to the propose
+        logger.warning("factor_lessons load failed; proposing without memory: %s", e)
+        lessons, tried = [], []
+
     llm_client = await get_llm_client(user_id=user_id)
-    raw_proposals = await propose_factors(llm_client, diagnostic, n=n)
+    raw_proposals = await propose_factors(
+        llm_client, diagnostic, n=n, lessons=lessons, tried_expressions=tried,
+    )
     if not raw_proposals:
         return {"evaluated": 0, "proposed": 0, "dormant": False}
 
@@ -145,7 +157,8 @@ async def _run_propose_work(
                 "passes_mean": passes_mean,
                 "passes_defl": passes_defl,
             })
-            if passes_mean and passes_defl:
+            accepted = passes_mean and passes_defl
+            if accepted:
                 rationale = next(
                     (p.rationale for p in raw_proposals if p.expression == r.expression),
                     "",
@@ -169,6 +182,39 @@ async def _run_propose_work(
                     json.dumps(diagnostic.to_jsonable()),
                 )
                 proposed_count += 1
+
+            # Phase A: journal this candidate's outcome so future rounds learn
+            # from it. Best-effort — never fail a propose over a memory write.
+            try:
+                _ic = (
+                    float(np.mean(r.ic_oos)) if getattr(r, "ic_oos", None) else None
+                )
+            except Exception:  # noqa: BLE001 - metrics may be malformed
+                _ic = None
+            try:
+                await factor_lessons.record_lesson(
+                    pool,
+                    expression=r.expression,
+                    outcome="accepted" if accepted else "weak",
+                    test_sharpe=r_mean,
+                    test_ic=_ic,
+                    deflated_sharpe=defl,
+                )
+            except Exception as e:  # noqa: BLE001 - memory is auxiliary
+                logger.warning("factor_lessons record (candidate) failed: %s", e)
+
+        # Journal rejected candidates (canned-test / degenerate / too-few-folds)
+        # so the proposer learns which structures and errors to avoid.
+        for rj in rejects:
+            try:
+                await factor_lessons.record_lesson(
+                    pool,
+                    expression=rj.get("expression", ""),
+                    outcome="rejected",
+                    reject_reason=rj.get("reason"),
+                )
+            except Exception as e:  # noqa: BLE001 - memory is auxiliary
+                logger.warning("factor_lessons record (rejected) failed: %s", e)
 
         return {
             "evaluated": len(raw_proposals),
