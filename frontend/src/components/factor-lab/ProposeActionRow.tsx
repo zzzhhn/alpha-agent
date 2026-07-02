@@ -96,7 +96,10 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
 
       const final = await pollProposeJob(accepted.job_id, {
         intervalMs: 3000,
-        maxAttempts: 100,
+        // 8min budget: the job is now drained by a GitHub Actions runner, which
+        // adds ~1-2min of dispatch+startup on top of the 30-180s run. 5min was
+        // too tight and surfaced as a false timeout.
+        maxAttempts: 160,
         signal: ctl.signal,
       });
 
