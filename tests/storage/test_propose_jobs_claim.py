@@ -60,3 +60,24 @@ async def test_concurrent_claims_single_winner(applied_db):
         assert claimed[0]["id"] == job
     finally:
         await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_get_job_decodes_jsonb_result_to_dict(applied_db):
+    """mark_done writes the result as jsonb; get_job must return it as a decoded
+    dict, not the raw JSON string asyncpg hands back (no codec on the pool). If
+    it's a string the propose UI reads result.proposed/evaluated as undefined and
+    shows "undefined 个候选已入队"."""
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        job_id = await pj.create_job(pool, user_id=1, n=5)
+        await pj.mark_done(
+            pool, job_id, {"evaluated": 5, "proposed": 2, "dormant": False}
+        )
+        job = await pj.get_job(pool, job_id)
+        assert isinstance(job["result"], dict)  # decoded, not a JSON string
+        assert job["result"]["proposed"] == 2
+        assert job["result"]["evaluated"] == 5
+        assert job["status"] == "done"
+    finally:
+        await pool.close()

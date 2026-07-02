@@ -105,6 +105,14 @@ async def get_job(pool: asyncpg.Pool, job_id: str) -> Optional[dict]:
     )
     if row is None:
         return None
+    # asyncpg returns jsonb as a str (no codec registered on the pool), so decode
+    # it here — otherwise the client gets `result` as a JSON string and reading
+    # result.proposed / result.evaluated yields undefined ("undefined 个候选已入队"
+    # in the propose UI). Matches the json.loads-if-str convention used at every
+    # other jsonb read site (admin.py, factor_lab briefing).
+    result = row["result_json"]
+    if isinstance(result, str):
+        result = json.loads(result)
     return {
         "id": row["id"],
         "user_id": row["user_id"],
@@ -113,6 +121,6 @@ async def get_job(pool: asyncpg.Pool, job_id: str) -> Optional[dict]:
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
         "started_at": row["started_at"].isoformat() if row["started_at"] else None,
         "finished_at": row["finished_at"].isoformat() if row["finished_at"] else None,
-        "result": row["result_json"],
+        "result": result,
         "error": row["error"],
     }
