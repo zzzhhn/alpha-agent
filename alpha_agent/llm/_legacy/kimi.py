@@ -46,7 +46,14 @@ class KimiClient(LLMClient):
                 "User-Agent": _UA,
                 "Content-Type": "application/json",
             },
-            timeout=120.0,
+            # Read timeout must exceed the caller's wall clock (propose_factors
+            # wraps chat() in asyncio.wait_for): Kimi-for-Coding generating a full
+            # multi-factor proposal now takes >120s, and the old flat 120s httpx
+            # cap ReadTimeout'd the non-streaming request before the caller's
+            # wait_for could govern — surfacing as "提议失败: ReadTimeout". A high
+            # read timeout lets the caller's wall clock be the single, clean cap;
+            # a short connect keeps a dead endpoint failing fast.
+            timeout=httpx.Timeout(260.0, connect=15.0),
         )
 
     async def chat(
