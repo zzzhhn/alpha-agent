@@ -46,6 +46,13 @@ function meanOrNull(xs: readonly number[] | undefined): number | null {
   return sum / xs.length;
 }
 
+// Phase B2: skeptic risk badge colouring (low = clean, high = flagged).
+const RISK_CLS: Record<string, string> = {
+  low: "border-tm-pos text-tm-pos",
+  medium: "border-tm-warn text-tm-warn",
+  high: "border-tm-neg text-tm-neg",
+};
+
 export function PendingProposalsSection({
   proposals,
   liveExpression,
@@ -183,6 +190,15 @@ export function PendingProposalsSection({
                 <code className="flex-1 truncate font-mono text-[11px] text-tm-fg">
                   {p.expression}
                 </code>
+                {ev?.skeptic ? (
+                  <span
+                    className={`shrink-0 border px-1.5 py-px font-tm-mono text-[9px] font-bold tracking-[0.04em] ${RISK_CLS[ev.skeptic.risk_level] ?? RISK_CLS.medium}`}
+                    title={ev.skeptic.summary}
+                  >
+                    {(locale === "zh" ? "风险 " : "RISK ") +
+                      ev.skeptic.risk_level.toUpperCase()}
+                  </span>
+                ) : null}
                 <span className="shrink-0 font-mono text-[11px] text-tm-fg-2">
                   {t(locale, "factorLab.pending.colDS")} {fmtNum(ds, 2)}
                 </span>
@@ -258,7 +274,38 @@ export function PendingProposalsSection({
                         <span>
                           Trials {ev.n_trials ?? "—"}
                         </span>
+                        {typeof ev.self_correlation === "number" ? (
+                          <span
+                            title={
+                              ev.self_correlation_with
+                                ? `vs ${ev.self_correlation_with}`
+                                : undefined
+                            }
+                          >
+                            Self-corr {fmtNum(ev.self_correlation, 2)}
+                          </span>
+                        ) : null}
                       </div>
+                    </div>
+                  ) : null}
+                  {ev?.skeptic ? (
+                    <div>
+                      <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+                        {(locale === "zh" ? "怀疑者审查 · " : "SKEPTIC · ") +
+                          ev.skeptic.risk_level.toUpperCase()}
+                      </div>
+                      {ev.skeptic.summary ? (
+                        <p className="font-tm-mono text-[11px] text-tm-fg-2">
+                          {ev.skeptic.summary}
+                        </p>
+                      ) : null}
+                      {ev.skeptic.concerns.length > 0 ? (
+                        <ul className="mt-0.5 list-disc pl-4 font-tm-mono text-[10.5px] text-tm-fg-2">
+                          {ev.skeptic.concerns.map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                   ) : null}
                   <div>
