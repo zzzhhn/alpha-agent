@@ -17,6 +17,13 @@ export interface FactorProposalOperatorTestResult {
   tests: Array<{ name: string; passed: boolean; detail: string }>;
 }
 
+// Phase B2: the skeptic pass's risk annotation on a survivor.
+export interface SkepticVerdict {
+  risk_level: "low" | "medium" | "high";
+  concerns: string[];
+  summary: string;
+}
+
 export interface FactorProposalEvidence {
   sharpes: number[];
   ic_oos: number;
@@ -26,6 +33,24 @@ export interface FactorProposalEvidence {
   n_trials: number;
   llm_rationale: string;
   operator_test_results: FactorProposalOperatorTestResult[];
+  // Phase B: self-correlation gate + skeptic pass. Optional — absent on
+  // proposals created before Phase B shipped.
+  self_correlation?: number;
+  self_correlation_with?: string | null;
+  skeptic?: SkepticVerdict | null;
+}
+
+// Phase A/B: one mining-journal lesson (KEEP / WEAK / AVOID) shown in the
+// Mining Journal panel.
+export interface MiningLesson {
+  created_at: string | null;
+  expression: string;
+  outcome: "accepted" | "weak" | "rejected";
+  test_sharpe: number | null;
+  test_ic: number | null;
+  deflated_sharpe: number | null;
+  reject_reason: string | null;
+  lesson: string;
 }
 
 export interface FactorDiagnosticSnapshot {
@@ -93,6 +118,12 @@ export interface RollbackResult {
 
 export const fetchFactorDiagnostic = (opts?: ApiGetOptions) =>
   apiGet<FactorDiagnosticSnapshot>("/api/factor-lab/diagnostic", opts);
+
+export const fetchMiningLessons = (limit = 20, opts?: ApiGetOptions) =>
+  apiGet<{ lessons: MiningLesson[] }>(
+    `/api/factor-lab/lessons?limit=${limit}`,
+    opts,
+  );
 
 export const fetchFactorProposals = (
   status?: "pending" | "approved" | "rejected",

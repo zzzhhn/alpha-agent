@@ -16,6 +16,7 @@ import {
 import {
   fetchFactorDiagnostic,
   fetchFactorProposals,
+  fetchMiningLessons,
 } from "@/lib/api/factor-lab";
 import { t } from "@/lib/i18n";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
@@ -30,6 +31,7 @@ import { assessEvolutionHealth } from "@/lib/evolution-health";
 import { FactorLabDecisionCard } from "@/components/factor-lab/FactorLabDecisionCard";
 import { PendingProposalsSection } from "@/components/factor-lab/PendingProposalsSection";
 import { HistoryCollapsedSection } from "@/components/factor-lab/HistoryCollapsedSection";
+import { MiningJournalPane } from "@/components/factor-lab/MiningJournalPane";
 
 // Server component — fetches all evolution endpoints in parallel and renders
 // section containers. SSR-correct locale comes from the shared cookie reader.
@@ -72,23 +74,32 @@ async function fetchAllEvolution(): Promise<{
 // fetch so this page's existing fetchProposals — which feeds the health strip —
 // is untouched). Mirrors the old factor-lab page's fetch exactly (revalidate:0).
 async function fetchFactorLab() {
-  const [diagSettled, pendingSettled, allSettled] = await Promise.allSettled([
-    fetchFactorDiagnostic({ revalidate: 0, tags: ["factor-lab-diagnostic"] }),
-    fetchFactorProposals("pending", { revalidate: 0, tags: ["factor-lab-pending"] }),
-    fetchFactorProposals(undefined, { revalidate: 0, tags: ["factor-lab-history"] }),
-  ]);
+  const [diagSettled, pendingSettled, allSettled, lessonsSettled] =
+    await Promise.allSettled([
+      fetchFactorDiagnostic({ revalidate: 0, tags: ["factor-lab-diagnostic"] }),
+      fetchFactorProposals("pending", { revalidate: 0, tags: ["factor-lab-pending"] }),
+      fetchFactorProposals(undefined, { revalidate: 0, tags: ["factor-lab-history"] }),
+      fetchMiningLessons(20, { revalidate: 0, tags: ["factor-lab-lessons"] }),
+    ]);
   const diagnostic = diagSettled.status === "fulfilled" ? diagSettled.value : null;
   const pending =
     pendingSettled.status === "fulfilled" ? pendingSettled.value.proposals : [];
   const all = allSettled.status === "fulfilled" ? allSettled.value.proposals : [];
-  return { diagnostic, pending, history: all.filter((p) => p.status !== "pending") };
+  const lessons =
+    lessonsSettled.status === "fulfilled" ? lessonsSettled.value.lessons : [];
+  return {
+    diagnostic,
+    pending,
+    history: all.filter((p) => p.status !== "pending"),
+    lessons,
+  };
 }
 
 export default async function EvolutionPage() {
   const locale = await getServerLocale();
   const [
     { icTrend, icAnnotations, weights, calibration, changes, proposals },
-    { diagnostic, pending, history },
+    { diagnostic, pending, history, lessons },
   ] = await Promise.all([fetchAllEvolution(), fetchFactorLab()]);
   const liveExpression = diagnostic?.current_expression ?? "";
 
@@ -229,6 +240,12 @@ export default async function EvolutionPage() {
           still feeds the health strip above. */}
       <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
       <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
+
+      {/* ── Section 6: Mining Journal (Phase A memory + Phase B rejects) ──
+          What the self-evolving miner has learned: one KEEP/WEAK/AVOID lesson
+          per evaluated candidate. The proposer reads these back each round. */}
+      <MiningJournalPane lessons={lessons} locale={locale} />
+
       <HistoryCollapsedSection history={history} />
     </TmScreen>
   );
