@@ -5,8 +5,9 @@
 # self-correlation check, and persist passing/flagged alphas for review.
 #
 # Required repo secrets: DATABASE_URL (Neon), BYOK_MASTER_KEY (same base64 key
-# the backend uses to decrypt the vault), BRAIN_MINING_USER_ID (the user id
-# whose vaulted BRAIN credentials + results this runs under).
+# the backend uses to decrypt the vault). Optional: BRAIN_MINING_USER_ID — the
+# user id to mine for; if unset the runner uses the single account that has BRAIN
+# credentials in the vault (set it only to disambiguate a multi-user setup).
 name: brain-mining-loop
 
 on:

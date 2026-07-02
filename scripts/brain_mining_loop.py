@@ -17,13 +17,27 @@ async def _main() -> int:
     from alpha_agent.brain.client import BrainClient
     from alpha_agent.brain.mining_loop import run_mining_round
 
-    user_id = int(os.environ["BRAIN_MINING_USER_ID"])
     n = int(os.environ.get("BRAIN_N_CANDIDATES", "8"))
+    uid_env = os.environ.get("BRAIN_MINING_USER_ID")
 
     pool = await asyncpg.create_pool(
         os.environ["DATABASE_URL"], min_size=1, max_size=2
     )
     try:
+        if uid_env:
+            user_id = int(uid_env)
+        else:
+            # Single-user default: the (only) account with BRAIN creds in the
+            # vault. Set BRAIN_MINING_USER_ID to disambiguate a multi-user setup.
+            row = await pool.fetchrow(
+                "SELECT user_id FROM user_byok WHERE provider='worldquant_brain' "
+                "ORDER BY encrypted_at DESC LIMIT 1"
+            )
+            if row is None:
+                print(json.dumps({"ok": False, "error": "no BRAIN credentials in vault; connect an account in Settings"}))
+                return 1
+            user_id = row["user_id"]
+
         creds = await vault.load_brain_credentials(pool, user_id)
         if creds is None:
             print(json.dumps({"ok": False, "error": f"no BRAIN credentials for user {user_id}"}))
