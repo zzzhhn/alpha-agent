@@ -300,6 +300,60 @@ async def cron_run_propose_jobs() -> dict[str, Any]:
     return {"ok": True, "drained": len(drained), "jobs": drained}
 
 
+# GA search wall-clock inside the daily loop, under the Vercel function budget.
+_GA_BUDGET_S = 90.0
+
+
+@router.post("/daily_factor_loop")
+@router.get("/daily_factor_loop")
+async def cron_daily_factor_loop() -> dict[str, Any]:
+    """Phase D daily autonomous loop: read memory -> generate -> validate ->
+    journal, all through the shared eval/gate/insert/journal core.
+
+    The GA arm ALWAYS runs — it needs no LLM key, so the miner keeps improving
+    unattended (the key advantage of the non-LLM generator). The LLM arm runs
+    only when SYSTEM_USER_ID is configured, since an unattended cron has no
+    per-user BYOK key (see feedback_byok_cron_architectural_tension). Records a
+    cron_runs audit row so a silent failure stays visible."""
+    from alpha_agent.api.routes.factor_lab import _run_ga_work, _run_propose_work
+    from alpha_agent.config_store import refresh_config
+    from alpha_agent.evolution.diagnostics import compute_diagnostic
+
+    pool = await get_pool(os.environ["DATABASE_URL"])
+    started_at = datetime.now(UTC)
+    await refresh_config(pool)
+    diagnostic = await compute_diagnostic(pool)
+    out: dict[str, Any] = {"ok": True}
+
+    # GA arm — the non-LLM generator; always runs.
+    try:
+        out["ga"] = await _run_ga_work(pool, diagnostic, budget_s=_GA_BUDGET_S)
+    except Exception as exc:  # noqa: BLE001 — surface + still try the LLM arm
+        out["ga"] = {"error": f"{type(exc).__name__}: {exc}"}
+
+    # LLM arm — best-effort, only with a configured system key.
+    system_uid = os.environ.get("SYSTEM_USER_ID")
+    if system_uid:
+        try:
+            out["llm"] = await _run_propose_work(pool, int(system_uid), 5, diagnostic)
+        except Exception as exc:  # noqa: BLE001 — surface, don't crash the loop
+            out["llm"] = {"error": f"{type(exc).__name__}: {exc}"}
+    else:
+        out["llm"] = {"skipped": "no SYSTEM_USER_ID"}
+
+    ga_prop = (out.get("ga") or {}).get("proposed", 0)
+    llm_prop = (out.get("llm") or {}).get("proposed", 0)
+    await pool.execute(
+        "INSERT INTO cron_runs "
+        "(cron_name, started_at, finished_at, ok, error_count, details) "
+        "VALUES ($1, $2, now(), true, 0, $3::jsonb)",
+        "daily_factor_loop",
+        started_at,
+        json.dumps({"ga_proposed": ga_prop, "llm_proposed": llm_prop}),
+    )
+    return out
+
+
 @router.post("/compute_ic_annotations")
 @router.get("/compute_ic_annotations")
 async def cron_compute_ic_annotations(

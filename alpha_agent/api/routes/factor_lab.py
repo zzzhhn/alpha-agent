@@ -14,6 +14,7 @@ without paying for the LLM call. Forgiveness UX: do not waste user tokens
 on a deploy that cannot produce a valid result."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -94,23 +95,16 @@ async def get_lessons(limit: int = 20, pool=Depends(get_db_pool)) -> dict:
 async def _run_propose_work(
     pool, user_id: int, n: int, diagnostic
 ) -> dict:
-    """The actual propose loop: LLM call + per-candidate validation + DSR
-    scoring + pending-row writes. Returns the result dict the old sync
-    endpoint used to return inline.
+    """LLM arm of the miner: load the experiment-journal memory, ask the LLM for
+    n candidates, then hand them to the shared evaluate/gate/record core.
 
-    Pre-conditions checked by the caller:
-      - refresh_config(pool) already ran
-      - cost-guard passed (history rows >= _MIN_HISTORY_ROWS)
-      - diagnostic is the snapshot captured BEFORE LLM call so the LLM
-        rationale references the same baseline that drives the threshold
-
-    Raises asyncio.TimeoutError / ValueError on LLM-layer failure; caller
-    is responsible for mapping those onto the job row's failed state."""
-    import numpy as np
-
-    # Phase A: inject the experiment-journal memory (recent lessons + already-
-    # tried expressions) so the proposer stops repeating rejects and shifts
-    # direction. Best-effort: a memory-read failure must not block a propose.
+    Pre-conditions checked by the caller: refresh_config(pool) already ran; the
+    cost-guard passed; `diagnostic` was snapshotted BEFORE the LLM call so its
+    rationale references the same baseline the threshold is computed against.
+    Raises asyncio.TimeoutError / ValueError on LLM-layer failure; the runner
+    endpoint maps those onto the job row's failed state."""
+    # Phase A: inject recent lessons + already-tried expressions so the proposer
+    # stops repeating rejects. Best-effort — a memory read must not block a run.
     try:
         lessons = await factor_lessons.load_recent_lessons(pool, limit=12)
         tried = await factor_lessons.load_tried_expressions(pool, limit=30)
@@ -124,6 +118,22 @@ async def _run_propose_work(
     )
     if not raw_proposals:
         return {"evaluated": 0, "proposed": 0, "dormant": False}
+    return await _evaluate_and_record(
+        pool, raw_proposals, diagnostic, llm_client=llm_client, source="llm"
+    )
+
+
+async def _evaluate_and_record(
+    pool, raw_proposals, diagnostic, *, llm_client=None, source: str = "llm"
+) -> dict:
+    """Shared validation core for BOTH the LLM proposer (source='llm') and the
+    GA search (source='ga'): evaluate each candidate (canned tests + purged
+    walk-forward), DSR-gate them, apply the self-correlation gate + optional
+    skeptic to survivors, insert survivors as pending factor_proposals, and
+    journal every outcome. The generators differ only in how they PRODUCE
+    raw_proposals — validation is identical. `llm_client` is optional so the GA
+    can run autonomously with no key (the skeptic pass simply skips)."""
+    import numpy as np
 
     runner = SandboxRunner()
     # Collect every rejection reason from evaluate_factor_candidate so the
@@ -239,7 +249,7 @@ async def _run_propose_work(
                 # flags look-good-but-risky. It never blocks (human is the final
                 # gate); assess_candidate returns None on any failure.
                 skeptic_json = None
-                if skeptic_used < _SKEPTIC_MAX:
+                if llm_client is not None and skeptic_used < _SKEPTIC_MAX:
                     verdict = await assess_candidate(
                         llm_client,
                         r.expression,
@@ -260,6 +270,7 @@ async def _run_propose_work(
                     r.expression,
                     json.dumps(r.new_operators),
                     json.dumps({
+                        "source": source,
                         "sharpes": r.sharpes,
                         "ic_oos": r.ic_oos,
                         "deflated_sharpe": defl,
@@ -327,6 +338,32 @@ async def _run_propose_work(
         }
     finally:
         runner.close()
+
+
+async def _run_ga_work(
+    pool, diagnostic, *, pop_size: int = 24, generations: int = 6,
+    top_k: int = 5, budget_s: float = 90.0, llm_client=None,
+) -> dict:
+    """GA arm of the miner (Phase C generator + Phase D loop): breed candidates
+    with the non-LLM genetic search — seeded with the current live expression —
+    then run the top-K through the SAME shared validation/gate/insert/journal
+    core the LLM arm uses. Needs no LLM key, so it runs autonomously; the CPU-
+    bound search (kernel evals) is offloaded off the event loop with to_thread."""
+    from alpha_agent.evolution.ga_search import ga_candidates
+
+    seed = [diagnostic.current_expression] if diagnostic.current_expression else []
+    raw = await asyncio.to_thread(
+        ga_candidates,
+        pop_size=pop_size, generations=generations, top_k=top_k,
+        budget_s=budget_s, seed_exprs=seed,
+    )
+    if not raw:
+        return {"evaluated": 0, "proposed": 0, "dormant": False, "source": "ga"}
+    result = await _evaluate_and_record(
+        pool, raw, diagnostic, llm_client=llm_client, source="ga"
+    )
+    result["source"] = "ga"
+    return result
 
 
 _GH_REPO = os.environ.get("GH_REPO", "zzzhhn/alpha-agent")

@@ -1,0 +1,35 @@
+# Phase D: the daily autonomous factor-mining loop. Fires the GA arm (and, if a
+# system key is set, the LLM arm) which read memory -> generate -> validate ->
+# journal, feeding survivors as pending proposals for human review. Runs
+# server-to-server so it completes within the Vercel function budget (same model
+# as propose-job-runner and the existing cron-shards workflow).
+name: daily-factor-loop
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily 07:00 UTC (~15:00 CST), after the daily price/IC data has refreshed.
+    - cron: "0 7 * * *"
+
+concurrency:
+  group: daily-factor-loop
+  cancel-in-progress: false
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run daily factor loop (GA + optional LLM)
+        env:
+          BACKEND_BASE: https://alpha.bobbyzhong.com
+        run: |
+          HTTP=$(curl -s --max-time 290 --retry 1 --retry-delay 5 --retry-all-errors \
+            -o /tmp/loop.json -w "%{http_code}" \
+            -X POST "$BACKEND_BASE/api/cron/daily_factor_loop")
+          echo "HTTP=$HTTP"
+          head -c 3000 /tmp/loop.json 2>/dev/null || true
+          echo ""
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::daily factor loop returned HTTP $HTTP"
+            exit 1
+          fi

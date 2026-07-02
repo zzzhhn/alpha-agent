@@ -4236,6 +4236,52 @@
         ]
       }
     },
+    "/api/cron/daily_factor_loop": {
+      "get": {
+        "description": "Phase D daily autonomous loop: read memory -> generate -> validate ->\njournal, all through the shared eval/gate/insert/journal core.\n\nThe GA arm ALWAYS runs \u2014 it needs no LLM key, so the miner keeps improving\nunattended (the key advantage of the non-LLM generator). The LLM arm runs\nonly when SYSTEM_USER_ID is configured, since an unattended cron has no\nper-user BYOK key (see feedback_byok_cron_architectural_tension). Records a\ncron_runs audit row so a silent failure stays visible.",
+        "operationId": "cron_daily_factor_loop_api_cron_daily_factor_loop_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Daily Factor Loop Api Cron Daily Factor Loop Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron Daily Factor Loop",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Phase D daily autonomous loop: read memory -> generate -> validate ->\njournal, all through the shared eval/gate/insert/journal core.\n\nThe GA arm ALWAYS runs \u2014 it needs no LLM key, so the miner keeps improving\nunattended (the key advantage of the non-LLM generator). The LLM arm runs\nonly when SYSTEM_USER_ID is configured, since an unattended cron has no\nper-user BYOK key (see feedback_byok_cron_architectural_tension). Records a\ncron_runs audit row so a silent failure stays visible.",
+        "operationId": "cron_daily_factor_loop_api_cron_daily_factor_loop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Daily Factor Loop Api Cron Daily Factor Loop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron Daily Factor Loop",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/daily_prices": {
       "get": {
         "description": "Append daily closes for the universe into daily_prices (the\nforward-return source for the walk-forward IC engine). `period` defaults\nto the daily \"5d\" append; pass a longer period (e.g. 3y) over offset\nslices to backfill history from the production backend.",

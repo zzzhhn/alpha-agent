@@ -337,6 +337,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/daily_factor_loop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Daily Factor Loop
+         * @description Phase D daily autonomous loop: read memory -> generate -> validate ->
+         *     journal, all through the shared eval/gate/insert/journal core.
+         *
+         *     The GA arm ALWAYS runs — it needs no LLM key, so the miner keeps improving
+         *     unattended (the key advantage of the non-LLM generator). The LLM arm runs
+         *     only when SYSTEM_USER_ID is configured, since an unattended cron has no
+         *     per-user BYOK key (see feedback_byok_cron_architectural_tension). Records a
+         *     cron_runs audit row so a silent failure stays visible.
+         */
+        get: operations["cron_daily_factor_loop_api_cron_daily_factor_loop_get"];
+        put?: never;
+        /**
+         * Cron Daily Factor Loop
+         * @description Phase D daily autonomous loop: read memory -> generate -> validate ->
+         *     journal, all through the shared eval/gate/insert/journal core.
+         *
+         *     The GA arm ALWAYS runs — it needs no LLM key, so the miner keeps improving
+         *     unattended (the key advantage of the non-LLM generator). The LLM arm runs
+         *     only when SYSTEM_USER_ID is configured, since an unattended cron has no
+         *     per-user BYOK key (see feedback_byok_cron_architectural_tension). Records a
+         *     cron_runs audit row so a silent failure stays visible.
+         */
+        post: operations["cron_daily_factor_loop_api_cron_daily_factor_loop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/daily_prices": {
         parameters: {
             query?: never;
@@ -4372,6 +4410,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_daily_factor_loop_api_cron_daily_factor_loop_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_daily_factor_loop_api_cron_daily_factor_loop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
