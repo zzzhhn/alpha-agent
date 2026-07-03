@@ -9,6 +9,7 @@ import logging
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.auth.crypto_box import CryptoError
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.brain import vault
 
@@ -37,7 +38,14 @@ async def save_credentials(
     password = body.get("password") or ""
     if not username or not password:
         raise HTTPException(400, "username and password are required")
-    last4 = await vault.save_brain_credentials(pool, user_id, username, password)
+    try:
+        last4 = await vault.save_brain_credentials(pool, user_id, username, password)
+    except CryptoError as e:
+        # Same class of failure as BYOK save: a misconfigured master key must
+        # surface its reason as a 400, not an opaque 500.
+        raise HTTPException(
+            status_code=400, detail=f"server master key is misconfigured: {e}"
+        ) from e
     return {"connected": True, "username_last4": last4}
 
 

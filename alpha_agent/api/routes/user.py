@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from alpha_agent.api.dependencies import get_db_pool
-from alpha_agent.auth.crypto_box import encrypt
+from alpha_agent.auth.crypto_box import CryptoError, encrypt
 from alpha_agent.auth.dependencies import require_user
 
 router = APIRouter(prefix="/api/user", tags=["user"])
@@ -76,7 +76,16 @@ async def save_byok(
         raise HTTPException(
             status_code=500, detail="BYOK_MASTER_KEY not configured"
         )
-    ciphertext, nonce = encrypt(body.api_key, master.encode("utf-8"))
+    try:
+        ciphertext, nonce = encrypt(body.api_key, master.encode("utf-8"))
+    except CryptoError as e:
+        # A malformed BYOK_MASTER_KEY (e.g. a rotated key pasted with a stray
+        # newline) must surface its real reason, not an opaque 500 — the user
+        # can't fix what they can't see (project no-opaque-500 rule).
+        raise HTTPException(
+            status_code=400,
+            detail=f"server master key is misconfigured: {e}",
+        ) from e
     last4 = body.api_key[-4:]
     pool = await get_db_pool()
 

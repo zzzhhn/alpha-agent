@@ -23,9 +23,16 @@ class CryptoError(Exception):
 
 
 def _load_key(master_key_b64: bytes) -> bytes:
-    """Decode + validate the base64 master key into 32 raw bytes."""
+    """Decode + validate the base64 master key into 32 raw bytes.
+
+    Leading/trailing whitespace is stripped first: a base64 key never contains
+    meaningful whitespace, and a trailing newline is the single most common way
+    a rotated key gets corrupted (copying `openssl rand -base64 32` output, or
+    pasting into a secrets field). Without this, that newline makes
+    b64decode(validate=True) reject the key as 'Only base64 data is allowed' and
+    every encrypt/decrypt 500s."""
     try:
-        raw = base64.b64decode(master_key_b64, validate=True)
+        raw = base64.b64decode(master_key_b64.strip(), validate=True)
     except (ValueError, TypeError) as e:
         raise CryptoError(f"master key is not valid base64: {type(e).__name__}") from e
     if len(raw) != 32:

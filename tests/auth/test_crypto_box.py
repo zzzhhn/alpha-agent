@@ -41,3 +41,16 @@ def test_nonce_uniqueness_across_encryptions():
 def test_encrypt_rejects_malformed_master_key():
     with pytest.raises(CryptoError):
         encrypt("sk-test", b"not-base64-and-too-short")
+
+
+def test_master_key_tolerates_surrounding_whitespace():
+    """A trailing newline from `openssl rand -base64 32 | pbcopy` (or any paste
+    into a secrets field) must not break decryption — whitespace is never part
+    of a valid base64 key. This was a real HTTP 500 on BYOK save after a key
+    rotation: the pasted value had a trailing '\\n' and b64decode(validate=True)
+    rejected it as 'Only base64 data is allowed'."""
+    for wrapped in (_TEST_KEY + b"\n", b"\n" + _TEST_KEY, _TEST_KEY + b"  ", b" " + _TEST_KEY + b"\r\n"):
+        ciphertext, nonce = encrypt("sk-test-abc123", wrapped)
+        assert decrypt(ciphertext, nonce, wrapped) == "sk-test-abc123"
+        # cross-compatible with the clean key (same 32 raw bytes)
+        assert decrypt(ciphertext, nonce, _TEST_KEY) == "sk-test-abc123"
