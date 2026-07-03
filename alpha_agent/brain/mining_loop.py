@@ -11,9 +11,12 @@ serverless budget), talking to Neon directly. The loop itself is client- and
 pool-injected so it unit-tests against a fake BrainClient with no network."""
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from alpha_agent.brain import store
 from alpha_agent.brain.client import BrainClient, BrainSimulationError
@@ -97,9 +100,16 @@ async def run_mining_round(
                 raise BrainSimulationError("completed sim carried no alpha id")
             metrics = await client.get_alpha_metrics(alpha_id)
         except Exception as exc:  # noqa: BLE001 — persist + continue the round
+            detail = f"{type(exc).__name__}: {exc}"
+            # Also log to stdout so the GitHub Actions run surfaces WHY a sim
+            # failed without a DB round-trip — a whole round of sim_error is a
+            # systematic problem (auth / expr format / endpoint shape), and the
+            # detail is the fastest way to see which.
+            logger.warning("sim_error for %r: %s", expr[:60], detail)
+            print(f"[sim_error] {expr[:60]!r}: {detail}", flush=True)
             await store.record_brain_alpha(
                 pool, user_id=user_id, expression=expr, settings=settings,
-                outcome="sim_error", detail=f"{type(exc).__name__}: {exc}",
+                outcome="sim_error", detail=detail,
             )
             summary["sim_error"] += 1
             continue

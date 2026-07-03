@@ -1,0 +1,22 @@
+# Diagnostic: dump the most recent brain_alphas rows (esp. sim_error details)
+# from the DB, so a failed mining round's cause is visible without another full
+# simulate round. Needs only DATABASE_URL.
+name: brain-show-errors
+
+on:
+  workflow_dispatch:
+
+jobs:
+  show:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[storage]"
+      - name: Show recent brain_alphas details
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/brain_show_errors.py
