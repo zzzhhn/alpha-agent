@@ -776,6 +776,7 @@ const translations = {
     /* M3: Picks + Alerts + Stock detail + Settings extensions */
     "nav.picks": "今日推荐",
     "nav.evolution": "演化监控",
+    "nav.brain": "BRAIN 挖矿",
     "nav.group.research": "研究",
     "nav.group.decisions": "决策",
     "nav.group.reference": "参考",
@@ -1974,6 +1975,7 @@ const translations = {
     /* M3: Picks + Alerts + Stock detail + Settings extensions */
     "nav.picks": "Picks",
     "nav.evolution": "Evolution",
+    "nav.brain": "BRAIN Mining",
     "nav.group.research": "RESEARCH",
     "nav.group.decisions": "DECISIONS",
     "nav.group.reference": "REFERENCE",

@@ -67,6 +67,8 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
       // Evolution now also hosts the methodology-proposals UI (the former
       // /factor-lab page was merged in; /factor-lab redirects here).
       { id: "evolution", href: "/evolution", labelKey: "nav.evolution" },
+      // Phase E: real WorldQuant BRAIN mining results + submit.
+      { id: "brain", href: "/brain", labelKey: "nav.brain" },
     ],
   },
   {
