@@ -242,10 +242,15 @@ export default function SettingsPage() {
         },
         credentials: "include",
         body: JSON.stringify({
-          // budget_tokens enforced >= 500 by FastAPI; smaller would 422.
+          // budget_tokens must leave room for the model to actually emit the
+          // JSON. kimi-for-coding (k2.6) is a reasoning model that spends output
+          // tokens on internal thinking; at the 500 floor it burns the whole
+          // budget reasoning and returns empty content -> 422 "LLM did not
+          // return parseable JSON. Head: ''". 3000 gives comfortable headroom
+          // (the translate endpoint's own default is 4000).
           text: "5-day mean reversion",
           universe: "SP500",
-          budget_tokens: 500,
+          budget_tokens: 3000,
         }),
       });
       const elapsed = Math.round(performance.now() - started);
