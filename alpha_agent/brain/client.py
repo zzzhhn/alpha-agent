@@ -67,6 +67,35 @@ class AlphaMetrics:
     turnover: Optional[float]
     returns: Optional[float]
     drawdown: Optional[float]
+    # BRAIN's own in-sample check verdicts, keyed by check name (e.g.
+    # LOW_SHARPE, LOW_FITNESS, HIGH_TURNOVER, SELF_CORRELATION). Each value is
+    # {"result": "PASS"|"FAIL"|"PENDING", "value": float|None, "limit": ...}.
+    # This is BRAIN's authoritative gate result (what actually blocks submit),
+    # not our local threshold comparison.
+    checks: dict[str, dict] = None  # type: ignore[assignment]
+
+    def brain_self_correlation(self) -> Optional[float]:
+        """BRAIN's computed max self-correlation from the SELF_CORRELATION check,
+        or None if BRAIN hasn't computed it yet (PENDING / absent)."""
+        chk = (self.checks or {}).get("SELF_CORRELATION") or {}
+        v = chk.get("value")
+        return float(v) if isinstance(v, (int, float)) else None
+
+    def brain_checks_verdict(
+        self, *, exclude: tuple[str, ...] = ("SELF_CORRELATION",)
+    ) -> Optional[bool]:
+        """True/False if BRAIN reports a definitive PASS/FAIL across its in-sample
+        checks; None if any is still PENDING (or there are no checks yet).
+        SELF_CORRELATION is excluded by default — the miner treats correlation as
+        a separate axis (flagged bucket), so this reflects the alpha's own merit
+        (Sharpe/Fitness/Turnover/etc.)."""
+        checks = {k: v for k, v in (self.checks or {}).items() if k not in exclude}
+        if not checks:
+            return None
+        results = [c.get("result") for c in checks.values()]
+        if any(r in (None, "PENDING") for r in results):
+            return None
+        return all(r == "PASS" for r in results)
 
     def passes_gates(
         self,
@@ -76,8 +105,13 @@ class AlphaMetrics:
         max_turnover: float = MAX_TURNOVER,
         max_drawdown: float = MAX_DRAWDOWN,
     ) -> bool:
-        """True only if every in-sample gate is present and cleared. A missing
-        metric fails closed (never surface an alpha we couldn't fully vet)."""
+        """True only if every in-sample gate is present and cleared. Prefers
+        BRAIN's own check verdict when available (authoritative); otherwise
+        falls back to comparing the raw metrics against our thresholds. A
+        missing metric fails closed (never surface an alpha we couldn't vet)."""
+        verdict = self.brain_checks_verdict()
+        if verdict is not None:
+            return verdict
         if None in (self.sharpe, self.fitness, self.turnover):
             return False
         if self.sharpe < min_sharpe or self.fitness < min_fitness:
@@ -89,6 +123,32 @@ class AlphaMetrics:
         return True
 
 
+def _max_self_corr(body: dict) -> Optional[float]:
+    """Extract the max self-correlation from a /correlations/self response.
+
+    Uses the unambiguous top-level numeric `max` (what BRAIN reports as the
+    largest correlation against the user's other alphas). We deliberately do NOT
+    scan `records`: those are histogram buckets [low, high, count], and a count
+    of 1 is indistinguishable from a correlation of 1.0 — guessing there could
+    fabricate a false 'redundant' flag. None → caller falls back to the local
+    approximation rather than trust a mis-parse."""
+    if not isinstance(body, dict):
+        return None
+    top = body.get("max")
+    return float(top) if isinstance(top, (int, float)) else None
+
+
+def _parse_checks(is_block: dict) -> dict[str, dict]:
+    """Index the `is.checks` array by check name. Each check is
+    {"name": ..., "result": "PASS"/"FAIL"/"PENDING", "value": ..., "limit": ...}."""
+    out: dict[str, dict] = {}
+    for chk in is_block.get("checks") or []:
+        name = chk.get("name")
+        if name:
+            out[name] = chk
+    return out
+
+
 def _metrics_from_alpha(alpha_id: str, alpha: dict) -> AlphaMetrics:
     is_block = alpha.get("is") or {}
     return AlphaMetrics(
@@ -98,6 +158,7 @@ def _metrics_from_alpha(alpha_id: str, alpha: dict) -> AlphaMetrics:
         turnover=is_block.get("turnover"),
         returns=is_block.get("returns"),
         drawdown=is_block.get("drawdown"),
+        checks=_parse_checks(is_block),
     )
 
 
@@ -188,6 +249,41 @@ class BrainClient:
         resp.raise_for_status()
         return _metrics_from_alpha(alpha_id, resp.json())
 
+    async def get_self_correlation(
+        self, alpha_id: str, *, interval_s: float = 5.0, max_wait_s: float = 120.0
+    ) -> Optional[float]:
+        """GET /alphas/{id}/correlations/self → BRAIN's OWN max self-correlation
+        of this alpha against the user's other alphas (the value that actually
+        gates submission). Computed lazily server-side: BRAIN answers 202 (often
+        with Retry-After) while computing, then 200 with the data. Returns the
+        max correlation, or None if it can't be obtained (best-effort — never
+        raises into the mining loop).
+
+        Response shape varies; we read a top-level numeric `max`, else scan
+        `records` for the largest numeric cell. This is the authoritative signal:
+        when seeding from the user's own alphas, offspring that are near-
+        duplicates score high here exactly as BRAIN would reject them."""
+        waited = 0.0
+        while True:
+            try:
+                resp = await self._client.get(f"/alphas/{alpha_id}/correlations/self")
+            except Exception:  # noqa: BLE001 — best-effort
+                return None
+            if resp.status_code == 202:
+                if waited >= max_wait_s:
+                    return None
+                retry = resp.headers.get("Retry-After")
+                delay = float(retry) if retry and retry.isdigit() else interval_s
+                await asyncio.sleep(delay)
+                waited += delay
+                continue
+            if resp.status_code != 200:
+                return None
+            try:
+                return _max_self_corr(resp.json())
+            except Exception:  # noqa: BLE001 — unparseable body → no signal
+                return None
+
     async def get_pnl(self, alpha_id: str) -> dict:
         """GET /alphas/{id}/recordsets/pnl → cumulative-PnL recordset. The caller
         differences it into DAILY returns for the SELF_CORRELATION check (raw
@@ -203,6 +299,35 @@ class BrainClient:
         resp.raise_for_status()
         results = resp.json().get("results", [])
         return [a for a in results if (a.get("status") or "").upper() == "ACTIVE"]
+
+    async def fetch_alpha_expressions(
+        self, *, limit: int = 200, page_size: int = 50
+    ) -> list[str]:
+        """The FASTEXPR code of the user's REGULAR alphas (across all statuses),
+        for use as GA seeds — the 'golden templates' the miner breeds from. The
+        expression lives at alpha['regular']['code']. Paginated via limit/offset
+        (the user may have dozens); stops at `limit` total or the last page.
+        Best-effort: a page failure just ends collection with what we have."""
+        out: list[str] = []
+        offset = 0
+        while len(out) < limit:
+            try:
+                resp = await self._client.get(
+                    "/users/self/alphas",
+                    params={"limit": page_size, "offset": offset},
+                )
+                resp.raise_for_status()
+                results = resp.json().get("results", [])
+            except Exception:  # noqa: BLE001 — best-effort seed collection
+                break
+            if not results:
+                break
+            for a in results:
+                code = (a.get("regular") or {}).get("code")
+                if isinstance(code, str) and code.strip():
+                    out.append(code.strip())
+            offset += page_size
+        return out[:limit]
 
     async def submit(self, alpha_id: str) -> bool:
         """POST /alphas/{id}/submit. Returns True on 201 (accepted). NOTE: 201 is

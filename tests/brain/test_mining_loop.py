@@ -73,6 +73,14 @@ class _FakeBrain:
     async def get_alpha_metrics(self, alpha_id):
         return self._by_alpha[alpha_id]["metrics"]
 
+    async def get_self_correlation(self, alpha_id, **kw):
+        # Test double: BRAIN's dedicated /correlations/self value, if the outcome
+        # provides one (None → loop falls back to the local PnL approximation).
+        return self._by_alpha.get(alpha_id, {}).get("brain_corr")
+
+    async def fetch_alpha_expressions(self, **kw):
+        return list(getattr(self, "_seed_alphas", []))
+
 
 @pytest.mark.asyncio
 async def test_run_mining_round_buckets_and_persists(applied_db):
@@ -99,6 +107,29 @@ async def test_run_mining_round_buckets_and_persists(applied_db):
         assert by_outcome["flagged"]["self_correlation"] > 0.7
         assert by_outcome["flagged"]["self_correlation_with"] == "E1"
         assert by_outcome["sim_error"]["alpha_id"] is None
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_brain_authoritative_self_corr_flags(applied_db):
+    """When BRAIN reports its OWN self-correlation (via /correlations/self here),
+    that value gates — a near-duplicate of the user's own alphas (the seeding
+    concern) is flagged even though the local ACTIVE set wouldn't catch it."""
+    client = _FakeBrain([
+        {"metrics": _PASS, "pnl": {"records": []}, "brain_corr": 0.88},  # BRAIN says redundant
+        {"metrics": _PASS, "pnl": {"records": []}, "brain_corr": 0.20},  # BRAIN says fresh
+    ])
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        summary = await run_mining_round(
+            client, pool, user_id=1, n_candidates=2, rng_seed=1
+        )
+        assert summary["flagged"] == 1 and summary["passed"] == 1
+        rows = {r["outcome"]: r for r in await store.list_brain_alphas(pool, 1)}
+        assert rows["flagged"]["self_correlation"] == 0.88
+        assert rows["flagged"]["self_correlation_with"] == "BRAIN"  # authoritative source
+        assert rows["passed"]["self_correlation"] == 0.20
     finally:
         await pool.close()
 

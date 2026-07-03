@@ -123,6 +123,69 @@ async def test_get_alpha_metrics_parses_is_block():
 
 
 @pytest.mark.asyncio
+async def test_get_alpha_metrics_parses_brain_checks():
+    """BRAIN's is.checks array is the authoritative gate verdict; SELF_CORRELATION
+    is one of the checks. passes_gates() must honour it (excluding self-corr)."""
+    def h(req):
+        return httpx.Response(200, json={"is": {
+            "sharpe": 1.5, "fitness": 1.2, "turnover": 0.1, "drawdown": 0.05,
+            "checks": [
+                {"name": "LOW_SHARPE", "result": "PASS", "value": 1.5},
+                {"name": "LOW_FITNESS", "result": "PASS", "value": 1.2},
+                {"name": "SELF_CORRELATION", "result": "FAIL", "value": 0.82},
+            ],
+        }})
+
+    c = _client(h)
+    m = await c.get_alpha_metrics("A1")
+    assert m.brain_self_correlation() == 0.82
+    # self-corr excluded from the merit verdict → PASS on its own metrics
+    assert m.brain_checks_verdict() is True
+    assert m.passes_gates() is True
+    await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_brain_checks_verdict_pending_is_none():
+    m = AlphaMetrics("A", 1.5, 1.2, 0.1, 0.2, 0.05,
+                     checks={"LOW_SHARPE": {"result": "PENDING"}})
+    assert m.brain_checks_verdict() is None  # can't judge yet
+
+
+@pytest.mark.asyncio
+async def test_get_self_correlation_top_level_max():
+    c = _client(lambda req: httpx.Response(200, json={"max": 0.66, "min": -0.2}))
+    assert await c.get_self_correlation("A1") == 0.66
+    await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_self_correlation_202_then_ready():
+    calls = {"n": 0}
+
+    def h(req):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(202, headers={"Retry-After": "0"})
+        return httpx.Response(200, json={"max": 0.71, "min": -0.1, "records": [[0.1, 0.2, 3]]})
+
+    c = _client(h)
+    # polls past the 202, then reads the authoritative top-level max
+    assert await c.get_self_correlation("A1", interval_s=0) == 0.71
+    assert calls["n"] == 2
+    await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_self_correlation_none_when_no_top_level_max():
+    # histogram-only body (no top-level max) → None, so the caller falls back to
+    # the local approximation rather than mis-reading a bucket count as a corr.
+    c = _client(lambda req: httpx.Response(200, json={"records": [[0.1, 0.2, 1]]}))
+    assert await c.get_self_correlation("A1", interval_s=0) is None
+    await c.aclose()
+
+
+@pytest.mark.asyncio
 async def test_list_active_alphas_filters_status():
     def h(req):
         return httpx.Response(200, json={"results": [
@@ -134,6 +197,31 @@ async def test_list_active_alphas_filters_status():
     c = _client(h)
     active = await c.list_active_alphas()
     assert sorted(a["id"] for a in active) == ["A1", "A3"]
+    await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_fetch_alpha_expressions_paginates_and_extracts_code():
+    """Seeds = the FASTEXPR at alpha['regular']['code'], across pages."""
+    def h(req):
+        offset = int(dict(req.url.params).get("offset", "0"))
+        if offset == 0:
+            return httpx.Response(200, json={"results": [
+                {"regular": {"code": "rank(returns)"}},
+                {"regular": {"code": "ts_mean(vwap, 20)"}},
+                {"regular": None},  # skipped (no code)
+            ]})
+        if offset == 50:
+            return httpx.Response(200, json={"results": [
+                {"regular": {"code": "group_rank(returns, sector)"}},
+            ]})
+        return httpx.Response(200, json={"results": []})  # end
+
+    c = _client(h)
+    exprs = await c.fetch_alpha_expressions(limit=200, page_size=50)
+    assert exprs == [
+        "rank(returns)", "ts_mean(vwap, 20)", "group_rank(returns, sector)",
+    ]
     await c.aclose()
 
 

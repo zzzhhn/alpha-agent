@@ -72,12 +72,27 @@ async def run_mining_round(
     seed_exprs: Optional[list[str]] = None,
     rng_seed: int = 1234,
     sim_timeout_s: float = 300.0,
+    seed_from_user_alphas: bool = True,
 ) -> dict:
     """Execute one round and return a bucket summary. Every candidate's outcome
     is persisted to brain_alphas regardless of pass/fail so the UI + the next
-    round have the full picture."""
+    round have the full picture.
+
+    Seeding: unless explicit `seed_exprs` are given, the GA breeds from the
+    user's OWN existing alphas (the golden templates) so it explores around
+    proven structures instead of random noise. The BRAIN self-correlation gate
+    (authoritative) then flags any offspring that ends up too close to an
+    existing alpha — so seeding improves hit-rate without producing un-submittable
+    near-duplicates."""
     await client.authenticate()
     existing = await _existing_active_returns(client)
+
+    if seed_exprs is None and seed_from_user_alphas:
+        try:
+            seed_exprs = await client.fetch_alpha_expressions(limit=200)
+            logger.info("seeded GA from %d of the user's own alphas", len(seed_exprs))
+        except Exception:  # noqa: BLE001 — seeding is best-effort
+            seed_exprs = None
 
     candidates = generate_brain_candidates(
         n_candidates, seed_exprs=seed_exprs, rng_seed=rng_seed
@@ -127,13 +142,26 @@ async def run_mining_round(
             summary["rejected"] += 1
             continue
 
+        # Self-correlation, authoritative-first. BRAIN's own SELF_CORRELATION is
+        # the value that actually gates submission, so prefer it:
+        #   1. the SELF_CORRELATION entry in is.checks (free — already fetched);
+        #   2. the dedicated /correlations/self endpoint (BRAIN computes on demand);
+        #   3. our local PnL-vs-ACTIVE approximation (fallback if BRAIN gives none).
+        # This matters most when seeding from the user's own alphas: offspring
+        # that are near-duplicates score high here exactly as BRAIN would reject.
         self_corr, corr_with = 0.0, None
-        try:
-            rets = pnl_to_daily_returns(await client.get_pnl(alpha_id))
-            if rets is not None and existing:
-                self_corr, corr_with = max_corr_against(rets, existing)
-        except Exception:  # noqa: BLE001 — no PnL just means no self-corr signal
-            pass
+        brain_corr = metrics.brain_self_correlation()
+        if brain_corr is None:
+            brain_corr = await client.get_self_correlation(alpha_id)
+        if brain_corr is not None:
+            self_corr, corr_with = brain_corr, "BRAIN"
+        else:
+            try:
+                rets = pnl_to_daily_returns(await client.get_pnl(alpha_id))
+                if rets is not None and existing:
+                    self_corr, corr_with = max_corr_against(rets, existing)
+            except Exception:  # noqa: BLE001 — no PnL just means no self-corr signal
+                pass
 
         if self_corr >= _SELF_CORR_THRESHOLD:
             await store.record_brain_alpha(
