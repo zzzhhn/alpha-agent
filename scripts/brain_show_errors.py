@@ -25,13 +25,22 @@ async def _main() -> None:
             print("no BRAIN user found")
             return
         rows = await pool.fetch(
-            "SELECT created_at, outcome, expression, detail FROM brain_alphas "
+            "SELECT created_at, outcome, expression, detail, sharpe, fitness, "
+            "turnover, self_correlation FROM brain_alphas "
             "WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20",
             user_id,
         )
         print(f"=== last {len(rows)} brain_alphas for user {user_id} ===")
+
+        def _f(v):
+            return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
+
         for r in rows:
-            print(f"[{r['outcome']}] {r['expression'][:70]}")
+            print(f"[{r['outcome']}] {r['expression'][:80]}")
+            print(
+                f"    Sharpe={_f(r['sharpe'])} Fitness={_f(r['fitness'])} "
+                f"TO={_f(r['turnover'])} selfcorr={_f(r['self_correlation'])}"
+            )
             if r["detail"]:
                 print(f"    detail: {r['detail']}")
     finally:
