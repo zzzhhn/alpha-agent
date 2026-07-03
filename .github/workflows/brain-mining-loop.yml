@@ -34,6 +34,10 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: pip install -e ".[storage]"
+      - name: Apply pending migrations (idempotent — ensures brain_alphas exists)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/apply_migrations.py
       - name: Run one mining round
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
