@@ -49,7 +49,18 @@ export async function saveByok(body: {
     credentials: "include",
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`saveByok failed: HTTP ${r.status}`);
+  if (!r.ok) {
+    // Surface the backend's detail (e.g. "server master key is misconfigured:
+    // master key must decode to 32 bytes"), not just the status code — an
+    // opaque "HTTP 400" hides the actual, fixable reason.
+    const detail = await r
+      .json()
+      .then((b) => (b as { detail?: string })?.detail)
+      .catch(() => undefined);
+    throw new Error(
+      detail ? `saveByok failed: ${detail}` : `saveByok failed: HTTP ${r.status}`,
+    );
+  }
   return (await r.json()) as ByokSaveResponse;
 }
 
