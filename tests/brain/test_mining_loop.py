@@ -118,3 +118,21 @@ async def test_mark_submitted(applied_db):
         assert row["settings"] == {"decay": 0}  # jsonb decoded
     finally:
         await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_get_brain_alpha_scoped_to_owner(applied_db):
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        rid = await store.record_brain_alpha(
+            pool, user_id=1, expression="rank(vwap)", settings={"decay": 5},
+            outcome="passed", alpha_id="A9", sharpe=1.7,
+        )
+        got = await store.get_brain_alpha(pool, 1, rid)
+        assert got["alpha_id"] == "A9" and got["settings"] == {"decay": 5}
+        # another user cannot read it
+        assert await store.get_brain_alpha(pool, 2, rid) is None
+        # unknown id
+        assert await store.get_brain_alpha(pool, 1, 999999) is None
+    finally:
+        await pool.close()

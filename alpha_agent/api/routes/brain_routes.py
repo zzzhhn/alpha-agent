@@ -89,3 +89,45 @@ async def list_alphas(
         logger.warning("list_brain_alphas failed (table missing?): %s", e)
         return {"alphas": []}
     return {"alphas": alphas}
+
+
+@router.post("/alphas/{row_id}/submit")
+async def submit_alpha(
+    row_id: int,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Submit a mined alpha to the user's BRAIN account. This is the ONLY
+    outward action in the whole BRAIN flow and is strictly user-initiated (one
+    click per alpha) — nothing auto-submits. Guards: the row must be the user's,
+    carry a BRAIN alpha_id, and be a gate survivor (passed/flagged). Records the
+    submit outcome; a 201 from BRAIN means accepted, not yet ACTIVE."""
+    from alpha_agent.brain import store
+    from alpha_agent.brain.client import BrainClient
+
+    row = await store.get_brain_alpha(pool, user_id, row_id)
+    if row is None:
+        raise HTTPException(404, "alpha not found")
+    if not row.get("alpha_id"):
+        raise HTTPException(400, "this candidate has no BRAIN alpha id (sim failed)")
+    if row.get("outcome") not in ("passed", "flagged"):
+        raise HTTPException(400, "only passed/flagged alphas can be submitted")
+    if row.get("submitted_at"):
+        raise HTTPException(409, "already submitted")
+
+    creds = await vault.load_brain_credentials(pool, user_id)
+    if creds is None:
+        raise HTTPException(400, "no BRAIN credentials saved")
+
+    client = BrainClient(creds[0], creds[1])
+    try:
+        await client.authenticate()
+        accepted = await client.submit(row["alpha_id"])
+    except Exception as e:  # noqa: BLE001 — surface BRAIN failure as a clean 502
+        raise HTTPException(502, f"BRAIN submit failed: {type(e).__name__}: {e}") from e
+    finally:
+        await client.aclose()
+
+    status = "submitted" if accepted else "submit_rejected"
+    await store.mark_submitted(pool, row_id, brain_status=status)
+    return {"ok": accepted, "brain_status": status, "alpha_id": row["alpha_id"]}

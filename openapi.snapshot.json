@@ -4036,6 +4036,67 @@
         ]
       }
     },
+    "/api/brain/alphas/{row_id}/submit": {
+      "post": {
+        "description": "Submit a mined alpha to the user's BRAIN account. This is the ONLY\noutward action in the whole BRAIN flow and is strictly user-initiated (one\nclick per alpha) \u2014 nothing auto-submits. Guards: the row must be the user's,\ncarry a BRAIN alpha_id, and be a gate survivor (passed/flagged). Records the\nsubmit outcome; a 201 from BRAIN means accepted, not yet ACTIVE.",
+        "operationId": "submit_alpha_api_brain_alphas__row_id__submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "title": "Row Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Alpha Api Brain Alphas  Row Id  Submit Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Alpha",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
     "/api/brain/credentials": {
       "get": {
         "description": "Non-secret connection status: connected? username last-4? saved when?",

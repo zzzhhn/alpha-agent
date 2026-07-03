@@ -55,6 +55,27 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
     return out
 
 
+async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
+    """One mining result by id, scoped to the owner (None if not found / not
+    theirs). jsonb settings decoded."""
+    r = await pool.fetchrow(
+        "SELECT id, expression, settings, alpha_id, sharpe, fitness, turnover, "
+        "drawdown, self_correlation, self_correlation_with, outcome, detail, "
+        "created_at, submitted_at, brain_status "
+        "FROM brain_alphas WHERE id=$1 AND user_id=$2",
+        row_id, user_id,
+    )
+    if r is None:
+        return None
+    d = dict(r)
+    if isinstance(d.get("settings"), str):
+        d["settings"] = json.loads(d["settings"])
+    for k in ("created_at", "submitted_at"):
+        if d.get(k) is not None:
+            d[k] = d[k].isoformat()
+    return d
+
+
 async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:
     """Record that the user submitted this alpha to BRAIN + BRAIN's status."""
     await pool.execute(
