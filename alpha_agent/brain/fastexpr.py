@@ -103,6 +103,21 @@ def _golden_template(rng: random.Random, v: ga_dsl.Vocab) -> dict:
         lambda: _op(
             "group_zscore", _op("divide", _op("ts_delta", f(), w()), f()), g()
         ),
+        # BLENDED: add two group-ranked signals over different fields. Blending
+        # decorrelated stable signals is the documented LOW_FITNESS fix — the
+        # single-field fundamentals hit Sharpe>1.25 but missed Fitness (returns
+        # too low); a blend raises returns/stability without wrecking Sharpe.
+        lambda: _op(
+            "add",
+            _op("group_rank", _op("ts_rank", f(), w()), _fld("subindustry")),
+            _op("group_rank", _op("ts_rank", f(), w()), _fld("subindustry")),
+        ),
+        # BLENDED ratio + momentum, subindustry-neutral
+        lambda: _op(
+            "add",
+            _op("group_rank", _op("divide", f(), f()), _fld("subindustry")),
+            _op("group_rank", _op("ts_delta", f(), w()), _fld("subindustry")),
+        ),
     )
     return rng.choice(builders)()
 
