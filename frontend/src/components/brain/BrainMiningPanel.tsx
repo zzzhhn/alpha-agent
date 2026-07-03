@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, AlertTriangle, Send } from "lucide-react";
+import { CheckCircle2, Loader2, AlertTriangle, Send, RefreshCw } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import {
+  fetchBrainAlphas,
   submitBrainAlpha,
   type BrainAlpha,
   type BrainOutcome,
@@ -184,19 +185,54 @@ const OUTCOME_META: Record<
   },
 };
 
-export function BrainMiningPanel({ alphas }: { alphas: BrainAlpha[] }) {
+export function BrainMiningPanel() {
   const { locale } = useLocale();
   const zh = locale === "zh";
-  const router = useRouter();
   const [showTail, setShowTail] = useState(false);
+  // Auth-gated endpoint: fetch client-side (in the browser, where the Next.js
+  // middleware injects the auth token), NOT from a server component — SSR skips
+  // middleware, so /api/brain/alphas would 401 and render "no results" even
+  // when the user has mined alphas. (client.ts: "Auth-gated endpoints are only
+  // called client-side.")
+  const [alphas, setAlphas] = useState<BrainAlpha[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetchBrainAlphas(100);
+      setAlphas(res.alphas);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+      setAlphas([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const groups = useMemo(() => {
     const g: Record<BrainOutcome, BrainAlpha[]> = {
       passed: [], flagged: [], rejected: [], sim_error: [],
     };
-    for (const a of alphas) g[a.outcome]?.push(a);
+    for (const a of alphas ?? []) g[a.outcome]?.push(a);
     return g;
   }, [alphas]);
+
+  // Loading (first fetch not yet resolved).
+  if (alphas === null) {
+    return (
+      <TmScreen>
+        <TmPane title="WORLDQUANT.BRAIN" meta={zh ? "加载中" : "loading"}>
+          <p className="flex items-center gap-2 px-3 py-5 font-tm-mono text-[11.5px] text-tm-muted">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+            {zh ? "读取挖矿结果…" : "loading mining results…"}
+          </p>
+        </TmPane>
+      </TmScreen>
+    );
+  }
 
   const meta = `${groups.passed.length} ${zh ? "通过" : "PASS"} · ${groups.flagged.length} ${zh ? "存疑" : "FLAG"} · ${groups.rejected.length + groups.sim_error.length} ${zh ? "淘汰" : "OUT"}`;
 
@@ -205,7 +241,9 @@ export function BrainMiningPanel({ alphas }: { alphas: BrainAlpha[] }) {
       <TmScreen>
         <TmPane title="WORLDQUANT.BRAIN" meta={zh ? "无结果" : "no results"}>
           <p className="px-3 py-5 font-tm-mono text-[11.5px] leading-relaxed text-tm-muted">
-            {zh
+            {loadError
+              ? (zh ? `读取失败: ${loadError}` : `load failed: ${loadError}`)
+              : zh
               ? "还没有挖矿结果。到 GitHub → Actions → brain-mining-loop 手动跑一轮(或等每日 08:00 UTC 自动运行)。GA 会生成 FASTEXPR、在你的 BRAIN 账号上真实仿真、按 Sharpe/Fitness/换手/自相关过闸,过闸的 alpha 会出现在这里供你审查提交。前提:已在「设置」连接 BRAIN 账号。"
               : "No mining results yet. Run GitHub → Actions → brain-mining-loop (or wait for the daily 08:00 UTC run). The GA generates FASTEXPR, simulates on your BRAIN account, and gates on Sharpe/Fitness/Turnover/self-correlation; survivors appear here for you to review and submit. Requires a connected BRAIN account in Settings."}
           </p>
@@ -229,7 +267,7 @@ export function BrainMiningPanel({ alphas }: { alphas: BrainAlpha[] }) {
               key={a.id}
               alpha={a}
               submittable={submittable}
-              onDone={() => router.refresh()}
+              onDone={() => void load()}
             />
           ))}
         </ul>
@@ -239,7 +277,23 @@ export function BrainMiningPanel({ alphas }: { alphas: BrainAlpha[] }) {
 
   return (
     <TmScreen>
-      <TmPane title="WORLDQUANT.BRAIN" meta={meta}>
+      <TmPane
+        title="WORLDQUANT.BRAIN"
+        meta={
+          <span className="flex items-center gap-2">
+            {meta}
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="text-tm-muted hover:text-tm-fg"
+              aria-label={zh ? "刷新" : "refresh"}
+              title={zh ? "刷新" : "refresh"}
+            >
+              <RefreshCw className="h-3 w-3" strokeWidth={1.75} />
+            </button>
+          </span>
+        }
+      >
         <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-fg-2">
           {zh
             ? "GA 挖出、在你 BRAIN 账号上真实仿真过的 alpha。通过下方闸门的可直接提交(提交是唯一对外动作,需你逐条确认)。"

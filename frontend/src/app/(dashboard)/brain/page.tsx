@@ -1,19 +1,9 @@
-import { fetchBrainAlphas, type BrainAlpha } from "@/lib/api/brain";
 import { BrainMiningPanel } from "@/components/brain/BrainMiningPanel";
 
-// Phase E5: the WorldQuant BRAIN mining review page. Fetches the user's mined
-// alphas server-side (degrades to an empty list if the backend/table isn't
-// ready) and hands them to the client panel that renders buckets + submit.
-export default async function BrainPage() {
-  let alphas: BrainAlpha[] = [];
-  try {
-    const res = await fetchBrainAlphas(100, {
-      revalidate: 0,
-      tags: ["brain-alphas"],
-    });
-    alphas = res.alphas;
-  } catch {
-    alphas = [];
-  }
-  return <BrainMiningPanel alphas={alphas} />;
+// Phase E5: the WorldQuant BRAIN mining review page. The panel fetches the
+// user's mined alphas CLIENT-side — /api/brain/alphas is auth-gated, and SSR
+// server-component fetches skip the Next.js middleware that injects the auth
+// token (so a server-side fetch would 401 → "no results" even with data).
+export default function BrainPage() {
+  return <BrainMiningPanel />;
 }
