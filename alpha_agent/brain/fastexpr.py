@@ -19,6 +19,26 @@ from alpha_agent.evolution import ga_dsl
 # fetched (fundamentals/analyst), they're mixed in on top of these.
 _BASE_FIELDS = ("close", "open", "high", "low", "volume", "returns", "vwap")
 
+# Economically MEANINGFUL fundamental ratios (numerator, denominator), using the
+# real fundamental6 field IDs from the WorldQuant field snapshot. These encode
+# actual financial signal — profitability, cash-flow yield, valuation — which is
+# what beats the bar; random field pairs don't. This is the repo's golden combo
+# group_rank(ts_rank(operating_income/equity, 126), subindustry) made concrete
+# (ebit≈operating income, equity=common equity). Denominator 'close'/'cap' gives
+# valuation ratios (earnings yield); fundamental/fundamental gives quality.
+ECONOMIC_RATIOS: tuple[tuple[str, str], ...] = (
+    ("ebit", "equity"),          # operating return on equity
+    ("ebit", "assets"),          # operating return on assets
+    ("ebitda", "assets"),        # EBITDA / assets
+    ("ebitda", "equity"),        # EBITDA / equity
+    ("cashflow_op", "equity"),   # operating cash-flow yield on equity
+    ("cashflow_op", "assets"),   # cash-flow return on assets
+    ("eps", "close"),            # earnings yield (valuation)
+    ("bookvalue_ps", "close"),   # book-to-price (value)
+    ("equity", "assets"),        # equity ratio (low leverage)
+    ("cashflow_op", "debt"),     # cash-flow debt coverage
+)
+
 # Fields valid in BOTH BRAIN FASTEXPR and the local grammar (_ALLOWED_OPERANDS),
 # so validate_expression can gate them. subindustry first — highest sim pass rate.
 BRAIN_VOCAB = ga_dsl.Vocab(
@@ -84,6 +104,39 @@ def _lit(v: int) -> dict:
 # builds a tree from real fields — the cross-sectional group_rank/neutralize over
 # a normalized time-series signal is what actually beats the Sharpe/Fitness bars,
 # far more than the random price expressions of earlier rounds.
+# Longer windows for fundamental signals (the repo's golden combo uses 126).
+_FUND_WINDOWS = (60, 126, 252)
+
+
+def _ratio_template(rng: random.Random) -> dict:
+    """A golden structure over an economically-meaningful fundamental ratio:
+    group_rank(ts_rank(NUM/DEN, W), GROUP). This is the highest-signal path —
+    the ratio carries real financial meaning (profitability/value), the long
+    window captures the trend, and the group neutralization removes sector beta.
+    """
+    num, den = rng.choice(ECONOMIC_RATIOS)
+    w = _lit(rng.choice(_FUND_WINDOWS))
+    grp = _fld(rng.choice(("subindustry", "industry")))
+    ratio = _op("divide", _fld(num), _fld(den))
+    inner = rng.choice((
+        _op("ts_rank", ratio, w),      # cross-sectional rank of the ratio trend
+        _op("ts_mean", ratio, w),      # smoothed level
+        ratio,                          # raw ratio, group-ranked
+    ))
+    return _op("group_rank", inner, grp)
+
+
+def _blended_ratio_template(rng: random.Random) -> dict:
+    """Blend two different economic ratios (the LOW_FITNESS fix): decorrelated
+    fundamental signals summed after group-ranking raise returns/stability."""
+    (n1, d1), (n2, d2) = rng.sample(ECONOMIC_RATIOS, 2)
+    w = _lit(rng.choice(_FUND_WINDOWS))
+    grp = _fld("subindustry")
+    a = _op("group_rank", _op("ts_rank", _op("divide", _fld(n1), _fld(d1)), w), grp)
+    b = _op("group_rank", _op("ts_rank", _op("divide", _fld(n2), _fld(d2)), w), grp)
+    return _op("add", a, b)
+
+
 def _golden_template(rng: random.Random, v: ga_dsl.Vocab) -> dict:
     f = lambda: _fld(rng.choice(v.fields))  # noqa: E731
     g = lambda: _fld(rng.choice(v.groups))  # noqa: E731
@@ -182,8 +235,15 @@ def generate_brain_candidates(
     while len(out) < n and guard < n * 80:
         guard += 1
         r = rng.random()
-        if r < 0.55:
-            tree = _golden_template(rng, vocab)  # template-first
+        if r < 0.45:
+            # Economic-ratio golden structures first — the highest-signal path.
+            tree = (
+                _blended_ratio_template(rng)
+                if rng.random() < 0.35
+                else _ratio_template(rng)
+            )
+        elif r < 0.65:
+            tree = _golden_template(rng, vocab)  # generic golden over any field
         elif pool and r < 0.85:
             a = rng.choice(pool)
             tree = (
