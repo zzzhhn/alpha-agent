@@ -66,6 +66,29 @@ async def test_poll_pending_then_complete_returns_alpha():
 
 
 @pytest.mark.asyncio
+async def test_poll_warning_is_terminal_success():
+    """BRAIN's WARNING is a terminal state that still yields an alpha (completed
+    with warnings). It must return, not poll to timeout — this was the 7/8
+    sim_error in run #1."""
+    c = _client(
+        lambda req: httpx.Response(200, json={"status": "WARNING", "alpha": "A2"})
+    )
+    data = await c.poll_simulation("SIM", interval_s=0, max_wait_s=100)
+    assert data["alpha"] == "A2"
+    await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_poll_returns_when_alpha_present_regardless_of_status():
+    c = _client(
+        lambda req: httpx.Response(200, json={"status": "SOMETHING", "alpha": "A3"})
+    )
+    data = await c.poll_simulation("SIM", interval_s=0, max_wait_s=100)
+    assert data["alpha"] == "A3"
+    await c.aclose()
+
+
+@pytest.mark.asyncio
 async def test_poll_failed_raises():
     c = _client(
         lambda req: httpx.Response(200, json={"status": "FAILED", "message": "bad expr"})

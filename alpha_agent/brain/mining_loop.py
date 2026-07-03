@@ -71,7 +71,7 @@ async def run_mining_round(
     n_candidates: int = 8,
     seed_exprs: Optional[list[str]] = None,
     rng_seed: int = 1234,
-    sim_timeout_s: float = 600.0,
+    sim_timeout_s: float = 300.0,
 ) -> dict:
     """Execute one round and return a bucket summary. Every candidate's outcome
     is persisted to brain_alphas regardless of pass/fail so the UI + the next

@@ -162,7 +162,13 @@ class BrainClient:
             resp.raise_for_status()
             data = resp.json()
             status = (data.get("status") or "").upper()
-            if status in ("COMPLETE", "COMPLETED"):
+            # A produced `alpha` id is the definitive terminal signal — present
+            # whenever the sim finished, regardless of the status label. BRAIN's
+            # WARNING is a TERMINAL state (completed with warnings, e.g. low
+            # universe coverage) that still yields an alpha; treating it as
+            # "still running" was making every WARNING sim poll to the 600s
+            # timeout even though it had already finished.
+            if data.get("alpha") or status in ("COMPLETE", "COMPLETED", "WARNING"):
                 return data
             if status in ("FAILED", "ERROR", "SIMULATION_ERROR"):
                 raise BrainSimulationError(

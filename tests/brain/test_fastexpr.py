@@ -49,6 +49,15 @@ def test_seeded_generation_stays_valid():
         _assert_brain_valid(e)
 
 
+def test_generation_only_uses_brain_safe_operators():
+    """No candidate may use a level-gated operator (e.g. ts_max) that BRAIN
+    would reject with 'inaccessible or unknown operator'."""
+    for expr in fe.generate_brain_candidates(30, rng_seed=9):
+        ops = ga_dsl.used_operators(expression_to_tree(expr))
+        assert ops  # non-empty (not a bare field)
+        assert all(op in fe.BRAIN_SAFE_OPS for op in ops), f"gated op in {expr}"
+
+
 def test_brain_settings_overrides():
     s = fe.brain_settings(decay=15)
     assert s["decay"] == 15

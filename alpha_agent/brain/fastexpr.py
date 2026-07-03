@@ -27,6 +27,20 @@ BRAIN_VOCAB = ga_dsl.Vocab(
     params=(2, 3, 4),
 )
 
+# BRAIN gates operators by user level ("inaccessible or unknown operator" — a
+# base account can't use the more advanced ones; run #1 proved ts_max is gated).
+# Restrict generation to the operators documented as working in the BRAIN SKILL,
+# and drop any candidate that uses one outside this set. Trim further if a future
+# run's sim_error details surface more gated ops.
+BRAIN_SAFE_OPS = frozenset({
+    "add", "subtract", "multiply", "divide",
+    "rank", "zscore", "normalize", "scale", "sign", "log", "abs", "sqrt",
+    "inverse", "winsorize",
+    "ts_mean", "ts_std_dev", "ts_sum", "ts_delta", "ts_delay",
+    "ts_rank", "ts_zscore", "ts_decay_linear", "ts_corr",
+    "group_rank", "group_zscore", "group_neutralize",
+})
+
 
 def brain_settings(*, decay: int = 0, neutralization: str = "SUBINDUSTRY") -> dict:
     """A per-candidate simulation settings dict. decay controls turnover
@@ -77,6 +91,8 @@ def generate_brain_candidates(
         ops = ga_dsl.used_operators(tree)
         if not ops:  # skip a bare field leaf — nothing for BRAIN to score
             continue
+        if any(op not in BRAIN_SAFE_OPS for op in ops):
+            continue  # skip level-gated operators BRAIN would reject
         try:
             validate_expression(expr, ops)
         except Exception:  # noqa: BLE001 — drop invalid/degenerate (e.g. x-x, x/x)
