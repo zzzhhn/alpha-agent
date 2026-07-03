@@ -18,10 +18,11 @@ from alpha_agent.evolution import ga_dsl
 # Fields valid in BOTH BRAIN FASTEXPR and the local grammar (_ALLOWED_OPERANDS),
 # so validate_expression can gate them. subindustry first — highest sim pass rate.
 BRAIN_VOCAB = ga_dsl.Vocab(
-    fields=(
-        "close", "open", "high", "low", "volume",
-        "returns", "vwap", "cap", "adv20", "adv60",
-    ),
+    # Only fields proven valid on BRAIN (these all simulated in earlier rounds).
+    # adv20/adv60/dollar_volume/cap were guesses — BRAIN rejected adv60 as an
+    # "unknown variable", so they're dropped. Richer fields (fundamentals,
+    # analyst) need the BRAIN data-fields API (see fetch note in mining_loop).
+    fields=("close", "open", "high", "low", "volume", "returns", "vwap"),
     groups=("subindustry", "industry", "sector"),
     windows=(5, 10, 20, 40, 60, 120),
     params=(2, 3, 4),
@@ -35,7 +36,10 @@ BRAIN_VOCAB = ga_dsl.Vocab(
 BRAIN_SAFE_OPS = frozenset({
     "add", "subtract", "multiply", "divide",
     "rank", "zscore", "normalize", "scale", "sign", "log", "abs", "sqrt",
-    "inverse", "winsorize",
+    "inverse",
+    # winsorize dropped: BRAIN's signature is winsorize(x, std=N) — a NAMED
+    # param — but our serializer emits a positional 2nd arg, which BRAIN reads
+    # as a 2nd input and rejects ("should be exactly 1 input").
     "ts_mean", "ts_std_dev", "ts_sum", "ts_delta", "ts_delay",
     "ts_rank", "ts_zscore", "ts_decay_linear", "ts_corr",
     "group_rank", "group_zscore", "group_neutralize",
