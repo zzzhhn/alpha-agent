@@ -27,20 +27,33 @@ async def _main() -> int:
         if uid_env:
             user_id = int(uid_env)
         else:
-            # Single-user default: the (only) account with BRAIN creds in the
-            # vault. Set BRAIN_MINING_USER_ID to disambiguate a multi-user setup.
+            # Single-user default: the account with BRAIN creds in the vault,
+            # else the sole user. Set BRAIN_MINING_USER_ID for a multi-user setup.
             row = await pool.fetchrow(
                 "SELECT user_id FROM user_byok WHERE provider='worldquant_brain' "
                 "ORDER BY encrypted_at DESC LIMIT 1"
             )
             if row is None:
-                print(json.dumps({"ok": False, "error": "no BRAIN credentials in vault; connect an account in Settings"}))
+                row = await pool.fetchrow(
+                    "SELECT id AS user_id FROM users ORDER BY id LIMIT 1"
+                )
+            if row is None:
+                print(json.dumps({"ok": False, "error": "no user found; set BRAIN_MINING_USER_ID"}))
                 return 1
             user_id = row["user_id"]
 
-        creds = await vault.load_brain_credentials(pool, user_id)
+        # Credentials: env-provided GitHub secrets are PREFERRED — that path
+        # needs no BYOK_MASTER_KEY here, which matters because the master key is
+        # often a write-only Vercel "Sensitive" var you can't read back to copy.
+        # Falls back to decrypting the vault (which does need the key).
+        env_user = os.environ.get("BRAIN_USERNAME")
+        env_pass = os.environ.get("BRAIN_PASSWORD")
+        if env_user and env_pass:
+            creds = (env_user, env_pass)
+        else:
+            creds = await vault.load_brain_credentials(pool, user_id)
         if creds is None:
-            print(json.dumps({"ok": False, "error": f"no BRAIN credentials for user {user_id}"}))
+            print(json.dumps({"ok": False, "error": "no BRAIN credentials: set BRAIN_USERNAME + BRAIN_PASSWORD secrets, or BYOK_MASTER_KEY to decrypt the vault"}))
             return 1
         client = BrainClient(creds[0], creds[1])
         try:

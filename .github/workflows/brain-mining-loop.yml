@@ -4,10 +4,12 @@
 # generate FASTEXPR candidates, simulate on BRAIN, gate on the real metrics,
 # self-correlation check, and persist passing/flagged alphas for review.
 #
-# Required repo secrets: DATABASE_URL (Neon), BYOK_MASTER_KEY (same base64 key
-# the backend uses to decrypt the vault). Optional: BRAIN_MINING_USER_ID — the
-# user id to mine for; if unset the runner uses the single account that has BRAIN
-# credentials in the vault (set it only to disambiguate a multi-user setup).
+# Required repo secrets: DATABASE_URL (Neon) + your BRAIN login as
+# BRAIN_USERNAME / BRAIN_PASSWORD. The runner authenticates to BRAIN with those
+# directly, so BYOK_MASTER_KEY is NOT needed here (handy — the backend's master
+# key is a write-only Vercel Sensitive var). Optional: BYOK_MASTER_KEY (falls
+# back to decrypting the vault if the BRAIN_* secrets are absent);
+# BRAIN_MINING_USER_ID (defaults to the sole account).
 name: brain-mining-loop
 
 on:
@@ -41,6 +43,8 @@ jobs:
       - name: Run one mining round
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRAIN_USERNAME: ${{ secrets.BRAIN_USERNAME }}
+          BRAIN_PASSWORD: ${{ secrets.BRAIN_PASSWORD }}
           BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
           BRAIN_N_CANDIDATES: ${{ github.event.inputs.n_candidates || '8' }}
