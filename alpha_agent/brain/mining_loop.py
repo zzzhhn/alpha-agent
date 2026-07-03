@@ -90,12 +90,22 @@ async def run_mining_round(
     if seed_exprs is None and seed_from_user_alphas:
         try:
             seed_exprs = await client.fetch_alpha_expressions(limit=200)
-            logger.info("seeded GA from %d of the user's own alphas", len(seed_exprs))
+            print(f"[seed] {len(seed_exprs or [])} of the user's own alphas", flush=True)
         except Exception:  # noqa: BLE001 — seeding is best-effort
             seed_exprs = None
 
+    # Fetch BRAIN's REAL data-fields (fundamentals/analyst included) so the
+    # generator's golden templates use fields that actually clear the Sharpe/
+    # Fitness bars — not just OHLCV. Falls back to base price fields on failure.
+    real_fields: Optional[list[str]] = None
+    try:
+        real_fields = await client.fetch_data_fields(limit=300)
+        print(f"[fields] {len(real_fields or [])} real BRAIN data-fields", flush=True)
+    except Exception:  # noqa: BLE001 — best-effort; base fields still work
+        real_fields = None
+
     candidates = generate_brain_candidates(
-        n_candidates, seed_exprs=seed_exprs, rng_seed=rng_seed
+        n_candidates, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed
     )
     settings = brain_settings()
     summary = {

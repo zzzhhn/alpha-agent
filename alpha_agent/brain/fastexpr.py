@@ -12,8 +12,12 @@ import random
 from typing import Optional
 
 from alpha_agent.brain.client import DEFAULT_SETTINGS
-from alpha_agent.core.factor_ast import expression_to_tree, validate_expression
+from alpha_agent.core.factor_ast import expression_to_tree
 from alpha_agent.evolution import ga_dsl
+
+# Base price/volume fields, always valid on BRAIN. When real data-fields are
+# fetched (fundamentals/analyst), they're mixed in on top of these.
+_BASE_FIELDS = ("close", "open", "high", "low", "volume", "returns", "vwap")
 
 # Fields valid in BOTH BRAIN FASTEXPR and the local grammar (_ALLOWED_OPERANDS),
 # so validate_expression can gate them. subindustry first — highest sim pass rate.
@@ -52,56 +56,135 @@ def brain_settings(*, decay: int = 0, neutralization: str = "SUBINDUSTRY") -> di
     return {**DEFAULT_SETTINGS, "decay": decay, "neutralization": neutralization}
 
 
+def _build_vocab(fields: Optional[list[str]]) -> ga_dsl.Vocab:
+    """Vocab from real BRAIN data-fields (mixed with the always-valid base
+    fields), or just the base fields when none were fetched."""
+    all_fields = tuple(dict.fromkeys((*_BASE_FIELDS, *(fields or ()))))
+    return ga_dsl.Vocab(
+        fields=all_fields,
+        groups=BRAIN_VOCAB.groups,
+        windows=BRAIN_VOCAB.windows,
+        params=BRAIN_VOCAB.params,
+    )
+
+
+def _op(name: str, *args: dict) -> dict:
+    return {"type": "operator", "name": name, "args": list(args)}
+
+
+def _fld(name: str) -> dict:
+    return {"type": "operand", "name": name}
+
+
+def _lit(v: int) -> dict:
+    return {"type": "literal", "value": v}
+
+
+# Golden alpha structures (WorldQuant's documented high-pass-rate motifs). Each
+# builds a tree from real fields — the cross-sectional group_rank/neutralize over
+# a normalized time-series signal is what actually beats the Sharpe/Fitness bars,
+# far more than the random price expressions of earlier rounds.
+def _golden_template(rng: random.Random, v: ga_dsl.Vocab) -> dict:
+    f = lambda: _fld(rng.choice(v.fields))  # noqa: E731
+    g = lambda: _fld(rng.choice(v.groups))  # noqa: E731
+    w = lambda: _lit(rng.choice(v.windows))  # noqa: E731
+    builders = (
+        # group_rank(ts_rank(FIELD, W), GROUP) — the canonical golden combo
+        lambda: _op("group_rank", _op("ts_rank", f(), w()), g()),
+        # group_neutralize(ts_zscore(FIELD, W), GROUP)
+        lambda: _op("group_neutralize", _op("ts_zscore", f(), w()), g()),
+        # group_rank(divide(FIELD_A, FIELD_B), GROUP) — cross-sectional ratio
+        lambda: _op("group_rank", _op("divide", f(), f()), g()),
+        # rank(ts_delta(FIELD, W)) — momentum/change
+        lambda: _op("rank", _op("ts_delta", f(), w())),
+        # group_rank(ts_mean(FIELD, W), GROUP)
+        lambda: _op("group_rank", _op("ts_mean", f(), w()), g()),
+        # group_zscore(divide(ts_delta(FIELD, W), FIELD), GROUP) — growth rate
+        lambda: _op(
+            "group_zscore", _op("divide", _op("ts_delta", f(), w()), f()), g()
+        ),
+    )
+    return rng.choice(builders)()
+
+
+def _degenerate(tree: dict) -> bool:
+    """subtract(x, x) / divide(x, x) anywhere — BRAIN rejects these as constants."""
+    if tree.get("type") != "operator":
+        return False
+    if tree["name"] in ("subtract", "divide") and len(tree["args"]) == 2:
+        if ga_dsl.tree_to_expression(tree["args"][0]) == ga_dsl.tree_to_expression(
+            tree["args"][1]
+        ):
+            return True
+    return any(_degenerate(a) for a in tree["args"])
+
+
+def _valid_brain_tree(tree: dict) -> Optional[str]:
+    """Grammar-free validation for BRAIN generation (the local factor_ast grammar
+    can't gate real BRAIN fundamental fields). Returns the expression string if
+    the tree is a non-degenerate expression using only BRAIN-safe operators,
+    else None."""
+    ops = ga_dsl.used_operators(tree)
+    if not ops:  # bare field leaf — nothing for BRAIN to score
+        return None
+    if any(op not in BRAIN_SAFE_OPS for op in ops):
+        return None
+    if _degenerate(tree):
+        return None
+    return ga_dsl.tree_to_expression(tree)
+
+
 def generate_brain_candidates(
     n: int,
     *,
     rng_seed: int = 1234,
     seed_exprs: Optional[list[str]] = None,
-    max_depth: int = 4,
+    fields: Optional[list[str]] = None,
+    max_depth: int = 5,
 ) -> list[str]:
-    """Produce n distinct, grammar-valid FASTEXPR expressions over BRAIN_VOCAB
-    for BRAIN to simulate. Seeds (known-good alphas / the current live factor)
-    join the pool and are mutated/crossed for local diversity; generated trees
-    feed back so later candidates explore around promising ones."""
+    """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
+
+    Generation is template-first: most candidates are golden WorldQuant motifs
+    (group_rank/neutralize over a normalized time-series signal) instantiated
+    with REAL BRAIN fields (`fields`, from the data-fields API — fundamentals
+    included), which is what actually clears the Sharpe/Fitness bars. The GA then
+    mutates/crosses those for diversity. Seeds and generated trees feed the pool.
+    Validation is grammar-free (BRAIN's field set is far larger than the local
+    grammar) — structural only: BRAIN-safe ops, non-degenerate."""
     rng = random.Random(rng_seed)
+    vocab = _build_vocab(fields)
+
     pool: list[dict] = []
     for expr in seed_exprs or ():
-        try:
+        try:  # best-effort: seeds using only locally-known ops/fields join the pool
             pool.append(expression_to_tree(expr))
-        except Exception:  # noqa: BLE001 — a bad seed just doesn't join the pool
+        except Exception:  # noqa: BLE001 — a seed we can't parse just doesn't join
             continue
 
     seen: set[str] = set()
     out: list[str] = []
     guard = 0
-    while len(out) < n and guard < n * 50:
+    while len(out) < n and guard < n * 80:
         guard += 1
-        if pool and rng.random() < 0.55:
+        r = rng.random()
+        if r < 0.55:
+            tree = _golden_template(rng, vocab)  # template-first
+        elif pool and r < 0.85:
             a = rng.choice(pool)
-            if len(pool) >= 2 and rng.random() < 0.5:
-                tree = ga_dsl.mutate(
-                    rng, ga_dsl.crossover(rng, a, rng.choice(pool)), BRAIN_VOCAB
-                )
-            else:
-                tree = ga_dsl.mutate(rng, a, BRAIN_VOCAB)
+            tree = (
+                ga_dsl.mutate(rng, ga_dsl.crossover(rng, a, rng.choice(pool)), vocab)
+                if len(pool) >= 2 and rng.random() < 0.5
+                else ga_dsl.mutate(rng, a, vocab)
+            )
         else:
-            tree = ga_dsl.random_tree(rng, max_depth, BRAIN_VOCAB)
+            tree = ga_dsl.random_tree(rng, max_depth, vocab)
 
         if ga_dsl.tree_depth(tree) > max_depth:
             continue
-        expr = ga_dsl.tree_to_expression(tree)
-        if expr in seen:
-            continue
-        ops = ga_dsl.used_operators(tree)
-        if not ops:  # skip a bare field leaf — nothing for BRAIN to score
-            continue
-        if any(op not in BRAIN_SAFE_OPS for op in ops):
-            continue  # skip level-gated operators BRAIN would reject
-        try:
-            validate_expression(expr, ops)
-        except Exception:  # noqa: BLE001 — drop invalid/degenerate (e.g. x-x, x/x)
+        expr = _valid_brain_tree(tree)
+        if expr is None or expr in seen:
             continue
         seen.add(expr)
         out.append(expr)
-        pool.append(tree)  # feed winners back so search explores around them
+        pool.append(tree)  # feed back so the GA explores around good structures
     return out

@@ -300,6 +300,50 @@ class BrainClient:
         results = resp.json().get("results", [])
         return [a for a in results if (a.get("status") or "").upper() == "ACTIVE"]
 
+    async def fetch_data_fields(
+        self,
+        *,
+        region: str = "USA",
+        universe: str = "TOP3000",
+        delay: int = 1,
+        field_type: str = "MATRIX",
+        limit: int = 300,
+        page_size: int = 50,
+    ) -> list[str]:
+        """GET /data-fields → the field IDs actually usable in FASTEXPR for this
+        region/universe/delay (the real BRAIN vocabulary, incl. fundamentals and
+        analyst data — far richer than raw OHLCV, and what winning alphas use).
+        Returns the field `id` strings. Paginated; best-effort per page.
+
+        MATRIX = a per-(date,instrument) numeric value usable as an operand."""
+        out: list[str] = []
+        offset = 0
+        params_base = {
+            "instrumentType": "EQUITY",
+            "region": region,
+            "universe": universe,
+            "delay": delay,
+            "type": field_type,
+        }
+        while len(out) < limit:
+            try:
+                resp = await self._client.get(
+                    "/data-fields",
+                    params={**params_base, "limit": page_size, "offset": offset},
+                )
+                resp.raise_for_status()
+                results = resp.json().get("results", [])
+            except Exception:  # noqa: BLE001 — best-effort field discovery
+                break
+            if not results:
+                break
+            for f in results:
+                fid = f.get("id")
+                if isinstance(fid, str) and fid.strip():
+                    out.append(fid.strip())
+            offset += page_size
+        return out[:limit]
+
     async def fetch_alpha_expressions(
         self, *, limit: int = 200, page_size: int = 50
     ) -> list[str]:

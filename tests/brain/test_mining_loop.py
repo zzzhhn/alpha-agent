@@ -81,6 +81,9 @@ class _FakeBrain:
     async def fetch_alpha_expressions(self, **kw):
         return list(getattr(self, "_seed_alphas", []))
 
+    async def fetch_data_fields(self, **kw):
+        return list(getattr(self, "_data_fields", []))
+
 
 @pytest.mark.asyncio
 async def test_run_mining_round_buckets_and_persists(applied_db):
