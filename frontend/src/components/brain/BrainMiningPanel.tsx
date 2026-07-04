@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   Loader2,
@@ -594,6 +594,82 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
 const OUTCOMES: Array<BrainOutcome | ""> = ["", "passed", "flagged", "rejected", "sim_error"];
 const SORTS = ["created_at", "sharpe", "fitness", "turnover"] as const;
 
+// Outcome filter. A native <select> was invisible on Safari (its value text is
+// painted with system form colors that vanish on the theme-forced dark bg, and
+// appearance-none didn't cure it). This custom dropdown is plain button/span
+// elements that honor `color` in every browser + both LT/DK themes.
+function OutcomeSelect({
+  value,
+  onChange,
+  zh,
+}: {
+  value: BrainOutcome | "";
+  onChange: (v: BrainOutcome | "") => void;
+  zh: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const labelOf = (o: BrainOutcome | "") =>
+    o ? outcomeLabel(o, zh) : zh ? "全部状态" : "all";
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex h-6 min-w-[92px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
+      >
+        <span className="text-tm-fg">{labelOf(value)}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-1 min-w-full border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
+        >
+          {OUTCOMES.map((o) => (
+            <li key={o || "all"}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={o === value}
+                onClick={() => {
+                  onChange(o);
+                  setOpen(false);
+                }}
+                className={`block w-full whitespace-nowrap px-2 py-1 text-left font-tm-mono text-[11px] hover:bg-tm-bg-3 ${
+                  o === value ? "text-tm-accent" : "text-tm-fg"
+                }`}
+              >
+                {labelOf(o)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function BrainMiningPanel() {
   const { locale } = useLocale();
   const zh = locale === "zh";
@@ -687,27 +763,7 @@ export function BrainMiningPanel() {
       >
         {/* filter bar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
-          {/* appearance-none: a native select paints its value with system form
-              colors that vanish on the theme-forced dark bg; strip the native
-              chrome, set explicit option colors (both themes via --tm-* vars),
-              and supply our own chevron for the dropdown affordance. */}
-          <div className="relative">
-            <select
-              value={outcome}
-              onChange={(e) => setOutcome(e.target.value as BrainOutcome | "")}
-              className={`${INPUT} appearance-none pr-6 [&>option]:bg-tm-bg-2 [&>option]:text-tm-fg`}
-            >
-              {OUTCOMES.map((o) => (
-                <option key={o || "all"} value={o}>
-                  {o ? outcomeLabel(o, zh) : zh ? "全部状态" : "all"}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-tm-muted"
-              strokeWidth={1.75}
-            />
-          </div>
+          <OutcomeSelect value={outcome} onChange={setOutcome} zh={zh} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
