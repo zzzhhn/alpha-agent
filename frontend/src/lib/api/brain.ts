@@ -41,6 +41,8 @@ export interface BrainAlpha {
   fitness: number | null;
   turnover: number | null;
   drawdown: number | null;
+  returns: number | null;
+  margin: number | null;
   self_correlation: number | null;
   self_correlation_with: string | null;
   outcome: BrainOutcome;
@@ -89,6 +91,11 @@ export interface PnlPoint {
 
 export const fetchAlphaPnl = (rowId: number, opts?: ApiGetOptions) =>
   apiGet<{ points: PnlPoint[] }>(`/api/brain/alphas/${rowId}/pnl`, opts);
+
+export type YearlyRow = Record<string, string | number | null>;
+
+export const fetchAlphaYearly = (rowId: number, opts?: ApiGetOptions) =>
+  apiGet<{ rows: YearlyRow[] }>(`/api/brain/alphas/${rowId}/yearly`, opts);
 
 export const submitBrainAlpha = (rowId: number) =>
   apiPost<BrainSubmitResult, Record<string, never>>(

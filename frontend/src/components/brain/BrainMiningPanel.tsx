@@ -13,17 +13,19 @@ import {
 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
-import { BrainPnLChart } from "@/components/brain/BrainPnLChart";
+import { BrainPnLChart, type ChartKind } from "@/components/brain/BrainPnLChart";
 import { Play } from "lucide-react";
 import {
   fetchBrainAlphas,
   fetchAlphaPnl,
+  fetchAlphaYearly,
   submitBrainAlpha,
   triggerMining,
   type BrainAlpha,
   type BrainAlphaQuery,
   type BrainOutcome,
   type PnlPoint,
+  type YearlyRow,
 } from "@/lib/api/brain";
 
 const PAGE_SIZE = 20;
@@ -124,11 +126,122 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
 }
 
 // ── expandable row detail: PnL chart + full metrics + submit ─────────────────
+// simulation-settings row (from the stored settings jsonb — what BRAIN
+// actually simulated the alpha with).
+function SettingsRow({ settings }: { settings: Record<string, unknown> }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const s = settings || {};
+  const g = (k: string): string => (s[k] === undefined || s[k] === null ? "—" : String(s[k]));
+  const cells: Array<[string, string]> = [
+    [zh ? "地区" : "Region", g("region")],
+    [zh ? "股池" : "Universe", g("universe")],
+    ["Decay", g("decay")],
+    ["Delay", g("delay")],
+    [zh ? "中性化" : "Neutralization", g("neutralization")],
+    ["Truncation", g("truncation")],
+    ["Pasteurization", g("pasteurization")],
+    [zh ? "语言" : "Language", g("language")],
+  ];
+  return (
+    <div>
+      <div className="mb-1 font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+        {zh ? "仿真参数" : "Simulation settings"}
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+        {cells.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-2 font-mono text-[10.5px]">
+            <span className="text-tm-muted">{k}</span>
+            <span className="tabular-nums text-tm-fg-2">{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// per-year IS Summary table (fetched from BRAIN on demand).
+const YEARLY_COLS = [
+  "year", "sharpe", "turnover", "fitness", "returns", "drawdown", "margin",
+  "longCount", "shortCount",
+];
+
+function YearlyTable({ rowId, hasAlpha }: { rowId: number; hasAlpha: boolean }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const [rows, setRows] = useState<YearlyRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hasAlpha) return;
+    let alive = true;
+    fetchAlphaYearly(rowId)
+      .then((r) => alive && setRows(r.rows))
+      .catch((e) => alive && setErr(e instanceof Error ? e.message : String(e)));
+    return () => {
+      alive = false;
+    };
+  }, [rowId, hasAlpha]);
+
+  if (!hasAlpha) return null;
+  const cols = rows && rows.length > 0
+    ? YEARLY_COLS.filter((c) => c in rows[0])
+    : YEARLY_COLS;
+
+  return (
+    <div>
+      <div className="mb-1 font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+        {zh ? "历年 IS 概要" : "IS Summary by year"}
+      </div>
+      {rows && rows.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse font-mono text-[10.5px]">
+            <thead>
+              <tr className="border-b border-tm-rule text-tm-muted">
+                {cols.map((c) => (
+                  <th key={c} className="px-2 py-1 text-right font-tm-mono text-[9px] uppercase first:text-left">
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="border-b border-tm-rule/50">
+                  {cols.map((c) => (
+                    <td key={c} className="px-2 py-1 text-right tabular-nums text-tm-fg-2 first:text-left first:text-tm-fg">
+                      {r[c] === null || r[c] === undefined
+                        ? "—"
+                        : typeof r[c] === "number"
+                        ? (r[c] as number).toFixed(c === "year" ? 0 : 2)
+                        : String(r[c])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : err ? (
+        <p className="font-tm-mono text-[11px] text-tm-muted">
+          {zh ? "无历年数据" : "no yearly data"}
+        </p>
+      ) : (
+        <p className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-muted">
+          <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.75} />
+          {zh ? "拉取历年数据…" : "fetching yearly…"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [pnl, setPnl] = useState<PnlPoint[] | null>(null);
   const [pnlErr, setPnlErr] = useState<string | null>(null);
+  const [chartKind, setChartKind] = useState<ChartKind>("pnl");
 
   useEffect(() => {
     let alive = true;
@@ -144,26 +257,52 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
     };
   }, [alpha.id, alpha.alpha_id, zh]);
 
+  const CHART_KINDS: Array<[ChartKind, string]> = [
+    ["pnl", "PnL"],
+    ["sharpe", zh ? "滚动 Sharpe" : "Sharpe"],
+    ["drawdown", "Drawdown"],
+  ];
+
   return (
     <div className="flex flex-col gap-3 border-t border-tm-rule bg-tm-bg-2 px-3 py-3">
       <code className="block break-all font-tm-mono text-[11.5px] leading-snug text-tm-fg">
         {alpha.expression}
       </code>
-      <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2 sm:grid-cols-6">
+
+      {/* full IS metric set (6) + self-corr + BRAIN id */}
+      <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2 sm:grid-cols-4 lg:grid-cols-8">
         <Metric label="Sharpe" value={fmt(alpha.sharpe)} />
         <Metric label="Fitness" value={fmt(alpha.fitness)} />
         <Metric label={zh ? "换手" : "Turnover"} value={fmt(alpha.turnover)} />
+        <Metric label={zh ? "收益" : "Returns"} value={fmt(alpha.returns)} />
         <Metric label="Drawdown" value={fmt(alpha.drawdown)} />
+        <Metric label="Margin" value={fmt(alpha.margin, 4)} />
         <Metric label="Self-corr" value={fmt(alpha.self_correlation)} />
         <Metric label="BRAIN" value={alpha.alpha_id ?? "—"} />
       </div>
 
+      <SettingsRow settings={alpha.settings} />
+
       <div>
-        <div className="mb-1 font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
-          {zh ? "累计 PnL 曲线" : "cumulative PnL"}
+        <div className="mb-1 flex items-center justify-between">
+          <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+            {zh ? "曲线" : "chart"}
+          </span>
+          <div className="flex gap-1">
+            {CHART_KINDS.map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setChartKind(k)}
+                className={`border px-1.5 py-px font-tm-mono text-[10px] ${chartKind === k ? "border-tm-accent text-tm-accent" : "border-tm-rule text-tm-muted hover:text-tm-fg"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {pnl && pnl.length > 0 ? (
-          <BrainPnLChart points={pnl} />
+          <BrainPnLChart points={pnl} kind={chartKind} />
         ) : pnlErr ? (
           <p className="font-tm-mono text-[11px] text-tm-muted">{pnlErr}</p>
         ) : (
@@ -173,6 +312,8 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
           </p>
         )}
       </div>
+
+      <YearlyTable rowId={alpha.id} hasAlpha={Boolean(alpha.alpha_id)} />
 
       <div className="flex justify-end">
         <SubmitControl alpha={alpha} onDone={onDone} />
