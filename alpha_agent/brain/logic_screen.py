@@ -21,8 +21,12 @@ from alpha_agent.llm.base import LLMClient, Message
 
 logger = logging.getLogger(__name__)
 
-_WALL_CLOCK_S = 60
-_OUTPUT_TOKEN_CAP = 1500
+_WALL_CLOCK_S = 90
+# Generous cap: Kimi-for-coding (k2.6) is a reasoning model that spends output
+# tokens on internal thinking before the JSON — too small a cap returns empty
+# content (the screen then degrades to a harmless no-op). 4000 leaves room for
+# the reasoning plus a scored array for a full batch.
+_OUTPUT_TOKEN_CAP = 4000
 # Keep candidates scoring at least this (0-10) — 5 = "plausible economic logic".
 DEFAULT_MIN_SCORE = 5.0
 

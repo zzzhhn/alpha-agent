@@ -56,21 +56,34 @@ async def _main() -> int:
             print(json.dumps({"ok": False, "error": "no BRAIN credentials: set BRAIN_USERNAME + BRAIN_PASSWORD secrets, or BYOK_MASTER_KEY to decrypt the vault"}))
             return 1
         # Optional LLM financial-logic pre-screen. If MINING_LLM_KEY is set,
-        # build a LiteLLM client to score candidates' economic sense before the
-        # (slow) BRAIN sims; otherwise the screen is a no-op.
+        # build a client to score candidates' economic sense before the (slow)
+        # BRAIN sims; otherwise the screen is a no-op.
+        #
+        # Provider detection matters: a Kimi-for-coding key (sk-kimi-*) MUST go
+        # through KimiClient, which sets the User-Agent the coding endpoint gates
+        # on — LiteLLM's providers drop it and get a 403. _build_byok_client
+        # handles that exactly (same path as the app's BYOK). The key is only
+        # passed to the client constructor and is never printed/logged.
         logic_llm = None
         llm_key = os.environ.get("MINING_LLM_KEY")
         if llm_key:
             try:
-                from alpha_agent.llm.litellm_client import LiteLLMClient
+                from alpha_agent.api.byok import _build_byok_client
 
-                logic_llm = LiteLLMClient(
-                    model=os.environ.get("MINING_LLM_MODEL", "openai/gpt-4o-mini"),
+                provider = os.environ.get("MINING_LLM_PROVIDER")
+                if not provider:
+                    provider = "kimi" if llm_key.startswith("sk-kimi-") else "openai"
+                logic_llm = _build_byok_client(
+                    provider=provider,
                     api_key=llm_key,
                     api_base=os.environ.get("MINING_LLM_BASE") or None,
+                    model=os.environ.get("MINING_LLM_MODEL") or None,
                 )
+                print(f"[logic] pre-screen LLM ready (provider={provider})", flush=True)
             except Exception as e:  # noqa: BLE001 — screen stays optional
-                print(f"[logic] LLM init failed, screening off: {e}", flush=True)
+                # Print only the exception TYPE, never the message — a provider
+                # error could echo the request incl. the key.
+                print(f"[logic] LLM init failed ({type(e).__name__}), screening off", flush=True)
 
         client = BrainClient(creds[0], creds[1])
         try:
