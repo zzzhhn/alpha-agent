@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 
 async def record_brain_alpha(
@@ -135,6 +136,19 @@ async def query_brain_alphas(
         *params, lim, off,
     )
     return {"alphas": [_decode_row(r) for r in rows], "total": int(total or 0)}
+
+
+async def count_brain_alphas_since(pool, user_id: int, *, since: datetime) -> int:
+    """Count this user's mining rows created after `since`. Every candidate is
+    persisted regardless of outcome (passed/flagged/rejected/sim_error), so this is
+    the honest per-candidate progress signal for an in-flight round. `since` is
+    anchored to the DB clock at dispatch (see /mine), so there is no serverless-vs-DB
+    clock skew to undercount early rows."""
+    n = await pool.fetchval(
+        "SELECT count(*) FROM brain_alphas WHERE user_id=$1 AND created_at > $2",
+        user_id, since,
+    )
+    return int(n or 0)
 
 
 async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:

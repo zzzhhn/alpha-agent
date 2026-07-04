@@ -19,6 +19,7 @@ import {
   fetchBrainAlphas,
   fetchAlphaPnl,
   fetchAlphaYearly,
+  fetchMineStatus,
   submitBrainAlpha,
   triggerMining,
   type BrainAlpha,
@@ -29,6 +30,36 @@ import {
 } from "@/lib/api/brain";
 
 const PAGE_SIZE = 20;
+
+// ── in-flight mining tracker (survives refresh / navigation) ─────────────────
+type ActiveJob = { startedAt: string; n: number; dispatchedAt: number };
+const LS_ACTIVE_MINING = "brain.activeMining.v1";
+const POLL_MS = 25_000;
+// Before this grace window we don't trust running=false (the GH run may not have
+// appeared yet). After it, "no active run" means the round is done.
+const GRACE_MS = 3 * 60_000;
+// Hard safety cap so a failed/stuck run can never lock the button forever.
+const MAX_TRACK_MS = 75 * 60_000;
+
+function loadActiveJob(): ActiveJob | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(LS_ACTIVE_MINING);
+    return raw ? (JSON.parse(raw) as ActiveJob) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveActiveJob(job: ActiveJob | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (job) window.localStorage.setItem(LS_ACTIVE_MINING, JSON.stringify(job));
+    else window.localStorage.removeItem(LS_ACTIVE_MINING);
+  } catch {
+    /* private mode / quota — tracking just won't persist across reloads */
+  }
+}
 
 function fmt(v: number | null | undefined, d = 2): string {
   return typeof v === "number" && !Number.isNaN(v) ? v.toFixed(d) : "—";
@@ -333,29 +364,188 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── manual mining trigger (dispatches the GitHub Actions round) ──────────────
-function MineButton() {
+// BRAIN alpha id, shown inline on the row so the user can find the factor back on
+// the WorldQuant platform without expanding. Click copies it (stopPropagation so it
+// doesn't toggle the row). Only simulated candidates carry one.
+function AlphaIdChip({ alphaId }: { alphaId: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span
+      title={alphaId}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(alphaId).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          },
+          () => undefined,
+        );
+      }}
+      className="shrink-0 cursor-pointer rounded-sm border border-tm-rule px-1 py-px font-tm-mono text-[9px] tabular-nums text-tm-muted hover:border-tm-accent/60 hover:text-tm-accent"
+    >
+      {copied ? "copied" : alphaId}
+    </span>
+  );
+}
+
+// ── segmented per-candidate progress bar ─────────────────────────────────────
+function ProgressSegments({ filled, total }: { filled: number; total: number }) {
+  // Cap the segment count so a large n stays legible; each cell is one candidate.
+  const segs = Math.max(1, total);
+  return (
+    <div
+      className="flex gap-0.5"
+      role="progressbar"
+      aria-valuenow={filled}
+      aria-valuemin={0}
+      aria-valuemax={segs}
+    >
+      {Array.from({ length: segs }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-2 flex-1 rounded-[1px] transition-colors ${
+            i < filled ? "bg-tm-accent" : "bg-tm-rule"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── manual mining trigger + live tracker (dispatches the GitHub Actions round) ─
+function MineButton({ onComplete }: { onComplete: () => void }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [n, setN] = useState("12");
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [msg, setMsg] = useState<string | null>(null);
+  const [state, setState] = useState<"idle" | "sending" | "error">("idle");
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [doneMsg, setDoneMsg] = useState<string | null>(null);
+
+  const [job, setJob] = useState<ActiveJob | null>(null);
+  const [mined, setMined] = useState(0);
+  const [status, setStatus] = useState<{ running: boolean | null } | null>(null);
+
+  // Resume tracking any in-flight round after a refresh / navigation.
+  useEffect(() => {
+    setJob(loadActiveJob());
+  }, []);
+  useEffect(() => {
+    saveActiveJob(job);
+  }, [job]);
+
+  const finish = useCallback(() => {
+    setJob(null);
+    setStatus(null);
+    setDoneMsg(
+      zh ? "本轮挖矿完成,结果已刷新" : "mining round complete, results refreshed",
+    );
+    onComplete();
+  }, [onComplete, zh]);
+
+  // Poll the round's progress while a job is active.
+  useEffect(() => {
+    if (!job) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function tick(current: ActiveJob) {
+      try {
+        const s = await fetchMineStatus(current.startedAt);
+        if (!alive) return;
+        setStatus({ running: s.running });
+        setMined(s.mined);
+        const elapsed = Date.now() - current.dispatchedAt;
+        const done =
+          // GH says nothing is queued/running (past the startup grace) → done.
+          (s.running === false && elapsed > GRACE_MS) ||
+          // GH unavailable → fall back to the raw count reaching the target.
+          (s.running === null && s.mined >= current.n) ||
+          // Safety: never lock the control forever on a stuck/failed run.
+          elapsed > MAX_TRACK_MS;
+        if (done) {
+          finish();
+          return;
+        }
+      } catch {
+        if (alive && Date.now() - current.dispatchedAt > MAX_TRACK_MS) {
+          finish();
+          return;
+        }
+      }
+      if (alive) timer = setTimeout(() => void tick(current), POLL_MS);
+    }
+
+    void tick(job);
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [job, finish]);
 
   async function go() {
     setState("sending");
-    setMsg(null);
+    setErrMsg(null);
+    setDoneMsg(null);
     try {
-      const r = await triggerMining(Math.max(1, Math.min(30, Number(n) || 12)));
-      setState("sent");
-      setMsg(
-        zh
-          ? `已派发挖矿 (${r.n_candidates} 候选) · 约 ${r.eta_minutes} 分钟后出结果`
-          : `mining dispatched (${r.n_candidates} candidates) · ~${r.eta_minutes} min`,
-      );
+      const nc = Math.max(1, Math.min(30, Number(n) || 12));
+      const r = await triggerMining(nc);
+      setMined(0);
+      setStatus(null);
+      setJob({ startedAt: r.started_at, n: r.n_candidates, dispatchedAt: Date.now() });
+      setState("idle");
     } catch (e) {
       setState("error");
-      setMsg(e instanceof Error ? e.message : String(e));
+      setErrMsg(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  // Active round: show the live segmented progress + a guard against re-dispatch.
+  if (job) {
+    const filled = Math.min(mined, job.n);
+    const phase =
+      status?.running === true
+        ? zh
+          ? "仿真中"
+          : "simulating"
+        : status?.running === false
+          ? zh
+            ? "收尾中"
+            : "finishing"
+          : zh
+            ? "已派发"
+            : "dispatched";
+    return (
+      <div className="flex flex-col gap-2 px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-tm-accent" strokeWidth={1.75} />
+          <span className="font-tm-mono text-[11px] text-tm-fg-2">
+            {zh ? "挖矿进行中" : "mining in progress"} · {phase}
+          </span>
+          <span className="font-tm-mono text-[11px] tabular-nums text-tm-accent">
+            {filled} / {job.n}
+          </span>
+          <button
+            type="button"
+            onClick={finish}
+            title={
+              zh
+                ? "仅停止本页跟踪,不会取消已在运行的挖矿任务"
+                : "stops tracking here; does not cancel the running job"
+            }
+            className="ml-auto font-tm-mono text-[10.5px] text-tm-muted hover:text-tm-fg"
+          >
+            {zh ? "停止跟踪" : "stop tracking"}
+          </button>
+        </div>
+        <ProgressSegments filled={filled} total={job.n} />
+        <span className="font-tm-mono text-[10px] text-tm-muted">
+          {zh
+            ? "在 GitHub Actions 上真实仿真,每完成一个候选亮一格 · 可离开本页,回来会继续跟踪"
+            : "real sims on GitHub Actions; one cell per candidate · safe to leave, tracking resumes"}
+        </span>
+      </div>
+    );
   }
 
   return (
@@ -382,11 +572,12 @@ function MineButton() {
         )}
         {zh ? "开始挖矿" : "Start mining"}
       </button>
-      {msg ? (
-        <span
-          className={`font-tm-mono text-[11px] ${state === "error" ? "text-tm-neg" : "text-tm-pos"}`}
-        >
-          {msg}
+      {state === "error" && errMsg ? (
+        <span className="font-tm-mono text-[11px] text-tm-neg">{errMsg}</span>
+      ) : doneMsg ? (
+        <span className="inline-flex items-center gap-1.5 font-tm-mono text-[11px] text-tm-pos">
+          <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+          {doneMsg}
         </span>
       ) : (
         <span className="font-tm-mono text-[10.5px] text-tm-muted">
@@ -477,7 +668,7 @@ export function BrainMiningPanel() {
   return (
     <TmScreen>
       <TmPane title={zh ? "挖矿控制" : "MINING.CONTROL"}>
-        <MineButton />
+        <MineButton onComplete={load} />
       </TmPane>
 
       <TmPane
@@ -496,17 +687,27 @@ export function BrainMiningPanel() {
       >
         {/* filter bar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
-          <select
-            value={outcome}
-            onChange={(e) => setOutcome(e.target.value as BrainOutcome | "")}
-            className={INPUT}
-          >
-            {OUTCOMES.map((o) => (
-              <option key={o || "all"} value={o}>
-                {o ? outcomeLabel(o, zh) : zh ? "全部状态" : "all"}
-              </option>
-            ))}
-          </select>
+          {/* appearance-none: a native select paints its value with system form
+              colors that vanish on the theme-forced dark bg; strip the native
+              chrome, set explicit option colors (both themes via --tm-* vars),
+              and supply our own chevron for the dropdown affordance. */}
+          <div className="relative">
+            <select
+              value={outcome}
+              onChange={(e) => setOutcome(e.target.value as BrainOutcome | "")}
+              className={`${INPUT} appearance-none pr-6 [&>option]:bg-tm-bg-2 [&>option]:text-tm-fg`}
+            >
+              {OUTCOMES.map((o) => (
+                <option key={o || "all"} value={o}>
+                  {o ? outcomeLabel(o, zh) : zh ? "全部状态" : "all"}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-tm-muted"
+              strokeWidth={1.75}
+            />
+          </div>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -590,6 +791,7 @@ export function BrainMiningPanel() {
                       <code className="truncate font-tm-mono text-[11px] text-tm-fg">
                         {a.expression}
                       </code>
+                      {a.alpha_id ? <AlphaIdChip alphaId={a.alpha_id} /> : null}
                       {a.submitted_at ? (
                         <CheckCircle2 className="h-3 w-3 shrink-0 text-tm-pos" strokeWidth={1.75} />
                       ) : null}
@@ -622,8 +824,10 @@ export function BrainMiningPanel() {
             >
               ‹ {zh ? "上一页" : "prev"}
             </button>
-            <span>
-              {zh ? "第" : "page"} {page + 1} / {pageCount}
+            <span className="tabular-nums">
+              {zh
+                ? `第 ${page + 1} / ${pageCount} 页 · 每页 ${PAGE_SIZE} 条 · 共 ${total} 条`
+                : `page ${page + 1} / ${pageCount} · ${PAGE_SIZE}/pg · ${total} total`}
             </span>
             <button
               type="button"

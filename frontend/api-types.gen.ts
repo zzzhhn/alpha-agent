@@ -402,8 +402,40 @@ export interface paths {
          *     the brain-mining-loop GitHub Actions workflow (BRAIN sims poll for minutes —
          *     can't run inside this request). Results land in brain_alphas in ~30-45min; the
          *     /brain page's refresh (or auto-poll) picks them up. Requires GH_PAT.
+         *
+         *     Returns `started_at` anchored to the DB clock: the progress poller counts rows
+         *     created after it, so anchoring to the same clock that stamps `created_at`
+         *     avoids serverless-vs-Neon skew undercounting early candidates.
          */
         post: operations["trigger_mining_api_brain_mine_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/brain/mine/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mining Status
+         * @description Poll target for the manual-mining progress bar. Returns:
+         *       - `mined`: candidates this user has recorded since `since` (every candidate is
+         *         persisted, so this is the real per-candidate progress count);
+         *       - `running`: whether a mining run is queued/in-progress on GitHub Actions (the
+         *         authoritative completion signal — the count alone can't tell "done" from
+         *         "logic-screen pruned below n"). None if GH is unavailable.
+         *
+         *     Never raises on a GH/DB hiccup: the UI polls this repeatedly and must degrade
+         *     gracefully (the bar still fills from `mined` even if the GH read fails).
+         */
+        get: operations["mining_status_api_brain_mine_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4692,6 +4724,41 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mining_status_api_brain_mine_status_get: {
+        parameters: {
+            query?: {
+                since?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

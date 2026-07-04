@@ -83,11 +83,16 @@ async def test_connection(
 async def trigger_mining(
     body: dict = Body(default_factory=dict),
     user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
 ) -> dict:
     """Manually kick a mining round without waiting for the daily cron. Dispatches
     the brain-mining-loop GitHub Actions workflow (BRAIN sims poll for minutes —
     can't run inside this request). Results land in brain_alphas in ~30-45min; the
-    /brain page's refresh (or auto-poll) picks them up. Requires GH_PAT."""
+    /brain page's refresh (or auto-poll) picks them up. Requires GH_PAT.
+
+    Returns `started_at` anchored to the DB clock: the progress poller counts rows
+    created after it, so anchoring to the same clock that stamps `created_at`
+    avoids serverless-vs-Neon skew undercounting early candidates."""
     n = body.get("n_candidates")
     try:
         n = str(max(1, min(int(n), 30))) if n is not None else "12"
@@ -97,6 +102,9 @@ async def trigger_mining(
     gh_token = os.environ.get("GH_PAT")
     if not gh_token:
         raise HTTPException(500, "GH_PAT not configured; cannot dispatch mining")
+
+    # Anchor BEFORE dispatch so no candidate row can land before the anchor.
+    started_at = await pool.fetchval("SELECT now()")
 
     url = (
         f"https://api.github.com/repos/{_GH_REPO}/actions/"
@@ -117,7 +125,76 @@ async def trigger_mining(
         raise HTTPException(502, f"dispatch failed: {type(e).__name__}") from e
     if resp.status_code != 204:
         raise HTTPException(502, f"GitHub API {resp.status_code}: {resp.text[:150]}")
-    return {"ok": True, "n_candidates": int(n), "eta_minutes": 40}
+    return {
+        "ok": True,
+        "n_candidates": int(n),
+        "eta_minutes": 40,
+        "started_at": started_at.isoformat(),
+    }
+
+
+@router.get("/mine/status")
+async def mining_status(
+    since: str | None = None,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Poll target for the manual-mining progress bar. Returns:
+      - `mined`: candidates this user has recorded since `since` (every candidate is
+        persisted, so this is the real per-candidate progress count);
+      - `running`: whether a mining run is queued/in-progress on GitHub Actions (the
+        authoritative completion signal — the count alone can't tell "done" from
+        "logic-screen pruned below n"). None if GH is unavailable.
+
+    Never raises on a GH/DB hiccup: the UI polls this repeatedly and must degrade
+    gracefully (the bar still fills from `mined` even if the GH read fails)."""
+    from datetime import datetime
+
+    from alpha_agent.brain import store
+
+    mined = 0
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+            mined = await store.count_brain_alphas_since(pool, user_id, since=since_dt)
+        except Exception as e:  # noqa: BLE001 — a bad/absent ts must not break the poll
+            logger.warning("count_brain_alphas_since failed: %s", e)
+
+    running: bool | None = None
+    latest_status: str | None = None
+    latest_conclusion: str | None = None
+    gh_token = os.environ.get("GH_PAT")
+    if gh_token:
+        runs_url = (
+            f"https://api.github.com/repos/{_GH_REPO}/actions/"
+            f"workflows/{_MINING_WORKFLOW}/runs?per_page=5"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    runs_url,
+                    headers={
+                        "Authorization": f"Bearer {gh_token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                )
+            if resp.status_code == 200:
+                runs = resp.json().get("workflow_runs", [])
+                active = {"queued", "in_progress", "requested", "waiting", "pending"}
+                running = any((r.get("status") or "") in active for r in runs)
+                if runs:
+                    latest_status = runs[0].get("status")
+                    latest_conclusion = runs[0].get("conclusion")
+        except Exception as e:  # noqa: BLE001 — GH hiccup must not break the poll
+            logger.warning("GH runs poll failed: %s", e)
+
+    return {
+        "running": running,
+        "latest_status": latest_status,
+        "latest_conclusion": latest_conclusion,
+        "mined": mined,
+    }
 
 
 @router.get("/alphas")

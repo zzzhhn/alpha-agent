@@ -4512,7 +4512,7 @@
     },
     "/api/brain/mine": {
       "post": {
-        "description": "Manually kick a mining round without waiting for the daily cron. Dispatches\nthe brain-mining-loop GitHub Actions workflow (BRAIN sims poll for minutes \u2014\ncan't run inside this request). Results land in brain_alphas in ~30-45min; the\n/brain page's refresh (or auto-poll) picks them up. Requires GH_PAT.",
+        "description": "Manually kick a mining round without waiting for the daily cron. Dispatches\nthe brain-mining-loop GitHub Actions workflow (BRAIN sims poll for minutes \u2014\ncan't run inside this request). Results land in brain_alphas in ~30-45min; the\n/brain page's refresh (or auto-poll) picks them up. Requires GH_PAT.\n\nReturns `started_at` anchored to the DB clock: the progress poller counts rows\ncreated after it, so anchoring to the same clock that stamps `created_at`\navoids serverless-vs-Neon skew undercounting early candidates.",
         "operationId": "trigger_mining_api_brain_mine_post",
         "parameters": [
           {
@@ -4568,6 +4568,74 @@
           }
         },
         "summary": "Trigger Mining",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
+    "/api/brain/mine/status": {
+      "get": {
+        "description": "Poll target for the manual-mining progress bar. Returns:\n  - `mined`: candidates this user has recorded since `since` (every candidate is\n    persisted, so this is the real per-candidate progress count);\n  - `running`: whether a mining run is queued/in-progress on GitHub Actions (the\n    authoritative completion signal \u2014 the count alone can't tell \"done\" from\n    \"logic-screen pruned below n\"). None if GH is unavailable.\n\nNever raises on a GH/DB hiccup: the UI polls this repeatedly and must degrade\ngracefully (the bar still fills from `mined` even if the GH read fails).",
+        "operationId": "mining_status_api_brain_mine_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Mining Status Api Brain Mine Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mining Status",
         "tags": [
           "brain"
         ]

@@ -107,9 +107,28 @@ export interface MineTriggerResult {
   ok: boolean;
   n_candidates: number;
   eta_minutes: number;
+  // DB-clock anchor; the progress poller counts rows created after this.
+  started_at: string;
 }
 
 export const triggerMining = (nCandidates: number) =>
   apiPost<MineTriggerResult, { n_candidates: number }>("/api/brain/mine", {
     n_candidates: nCandidates,
   });
+
+// Progress poll for an in-flight manual round. `mined` = candidates recorded since
+// the dispatch anchor (real per-candidate count); `running` = GitHub Actions has a
+// queued/in-progress run (authoritative completion signal), or null if GH is
+// unavailable (the bar still fills from `mined`).
+export interface MineStatus {
+  running: boolean | null;
+  latest_status: string | null;
+  latest_conclusion: string | null;
+  mined: number;
+}
+
+export const fetchMineStatus = (since: string, opts?: ApiGetOptions) =>
+  apiGet<MineStatus>(
+    `/api/brain/mine/status?since=${encodeURIComponent(since)}`,
+    opts,
+  );

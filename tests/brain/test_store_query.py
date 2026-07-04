@@ -73,6 +73,43 @@ async def test_query_submitted_filter(applied_db):
         await pool.close()
 
 
+@pytest.mark.asyncio
+async def test_count_since_is_per_candidate_progress(applied_db):
+    """The mining progress bar counts rows created after the dispatch anchor. Every
+    candidate (any outcome) counts, and the anchor uses the DB clock."""
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        # anchor on the DB clock, exactly like /mine does
+        anchor = await pool.fetchval("SELECT now()")
+        # nothing recorded after the anchor yet
+        assert await store.count_brain_alphas_since(pool, 1, since=anchor) == 0
+
+        # a full round: passed + rejected + sim_error all count as processed
+        await store.record_brain_alpha(
+            pool, user_id=1, expression="a", settings={}, outcome="passed",
+            alpha_id="A1", sharpe=1.9,
+        )
+        await store.record_brain_alpha(
+            pool, user_id=1, expression="b", settings={}, outcome="rejected",
+        )
+        await store.record_brain_alpha(
+            pool, user_id=1, expression="c", settings={}, outcome="sim_error",
+            detail="boom",
+        )
+        assert await store.count_brain_alphas_since(pool, 1, since=anchor) == 3
+
+        # scoped to the user, and to rows AFTER the anchor
+        await store.record_brain_alpha(
+            pool, user_id=2, expression="other", settings={}, outcome="passed",
+            alpha_id="Z1",
+        )
+        assert await store.count_brain_alphas_since(pool, 1, since=anchor) == 3
+        later = await pool.fetchval("SELECT now()")
+        assert await store.count_brain_alphas_since(pool, 1, since=later) == 0
+    finally:
+        await pool.close()
+
+
 # ── PnL parser ────────────────────────────────────────────────────────────
 def test_pnl_to_points_extracts_date_and_cumulative():
     rs = {"records": [["2020-01-02", 0.0], ["2020-01-03", 12.5], ["2020-01-06", 30.1]]}
