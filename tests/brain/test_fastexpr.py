@@ -83,6 +83,31 @@ def test_golden_structures_dominate():
     assert len(golden) >= 12  # a healthy share are golden structures
 
 
+def test_generation_is_family_and_axis_diverse():
+    """Diversification: a batch must spread across peer groups, time-series
+    transforms AND signal families — not collapse onto the single
+    subindustry / ts_rank / value-blend mold that produced look-alike passers.
+    These bounds fail on the old generator (all subindustry, only ts_rank/ts_mean,
+    zero technical-family signals)."""
+    fields = ["ebit", "equity", "assets", "ebitda", "cashflow_op", "eps",
+              "close", "bookvalue_ps", "debt"]
+    cands = fe.generate_brain_candidates(40, rng_seed=7, fields=fields)
+    assert len(cands) == 40 and len(set(cands)) == 40  # all distinct
+    for c in cands:
+        _assert_brain_valid(c)
+    groups = {g for c in cands
+              for g in re.findall(r"subindustry|industry|sector", c)}
+    transforms = {t for c in cands
+                  for t in re.findall(r"ts_(?:rank|zscore|mean|delta|std_dev)", c)}
+    technical = sum(
+        1 for c in cands
+        if re.search(r"volume|ts_std_dev|ts_delta\(close|divide\(close, ts_mean", c)
+    )
+    assert len(groups) >= 2, groups        # not all one peer grouping
+    assert len(transforms) >= 4, transforms  # not just ts_rank/ts_mean
+    assert technical >= 1                   # at least one orthogonal (non-value) family
+
+
 def test_brain_settings_overrides():
     s = fe.brain_settings(decay=15)
     assert s["decay"] == 15

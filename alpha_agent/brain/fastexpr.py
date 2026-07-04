@@ -117,14 +117,75 @@ def _pick_ratio(rng: random.Random, usage: Optional[dict]) -> tuple[str, str]:
     return rng.choices(ECONOMIC_RATIOS, weights=weights, k=1)[0]
 
 
+# Outer cross-sectional normalizations (all BRAIN-safe). group_rank → [0,1],
+# group_zscore/neutralize → demeaned. Rotating the normalization decorrelates
+# single-leg value alphas that would otherwise share an identical book.
+_GROUP_NORMS = ("group_rank", "group_zscore", "group_neutralize")
+# Technical legs prefer longer windows so their turnover stays inside the gate.
+_TECH_WINDOWS = (20, 40, 60, 120)
+
+
 def _neutral_group(rng: random.Random, prefer_industry: bool) -> str:
-    """SUBINDUSTRY is the default (highest pass rate); when self-correlation is
-    running high, rotate toward INDUSTRY — a different peer grouping decorrelates
-    from the existing SUBINDUSTRY-neutral book (the documented SELF_CORRELATION
-    escape)."""
+    """Peer grouping for the cross-sectional neutralization. A DIFFERENT grouping
+    means a DIFFERENT residual, so rotating across subindustry/industry/sector is
+    one of the cheapest decorrelators — the batch of look-alikes was ALL
+    subindustry. subindustry stays the default (highest pass rate); sector is the
+    broadest. When self-correlation runs high, `prefer_industry` biases away from
+    the crowded subindustry book."""
     if prefer_industry:
-        return rng.choices(("industry", "subindustry"), weights=(0.7, 0.3), k=1)[0]
-    return rng.choices(("subindustry", "industry"), weights=(0.7, 0.3), k=1)[0]
+        return rng.choices(
+            ("industry", "subindustry", "sector"), weights=(0.5, 0.3, 0.2), k=1
+        )[0]
+    return rng.choices(
+        ("subindustry", "industry", "sector"), weights=(0.55, 0.3, 0.15), k=1
+    )[0]
+
+
+def _value_leg(
+    rng: random.Random,
+    usage: Optional[dict],
+    group: str,
+    *,
+    norm: str = "group_rank",
+) -> dict:
+    """A group-normalized fundamental value/quality signal — the proven high-Sharpe
+    anchor. Rotates the time-series transform (ts_rank / ts_zscore / ts_mean / raw
+    ratio) and window so two value alphas rarely share an identical normalization."""
+    num, den = _pick_ratio(rng, usage)
+    ratio = _op("divide", _fld(num), _fld(den))
+    w = _lit(rng.choice(_FUND_WINDOWS))
+    inner = rng.choice((
+        _op("ts_rank", ratio, w),
+        _op("ts_zscore", ratio, w),
+        _op("ts_mean", ratio, w),
+        ratio,
+    ))
+    return _op(norm, inner, _fld(group))
+
+
+def _technical_leg(
+    rng: random.Random, group: str, *, norm: str = "group_rank"
+) -> dict:
+    """A group-normalized price/volume signal from a family ORTHOGONAL to the value
+    ratios — momentum, volatility or liquidity. Blending one onto a value anchor
+    (or using it alone) is what actually decorrelates the passed set from a book of
+    co-moving value factors. Uses only always-valid base fields + BRAIN-safe ops."""
+    w = _lit(rng.choice(_TECH_WINDOWS))
+    family = rng.choice(("momentum", "momentum", "volatility", "liquidity"))
+    if family == "momentum":
+        inner = rng.choice((
+            _op("ts_rank", _fld(rng.choice(("close", "returns", "vwap"))), w),
+            _op("ts_delta", _fld("close"), w),
+            _op("divide", _fld("close"), _op("ts_mean", _fld("close"), w)),
+        ))
+    elif family == "volatility":
+        inner = _op("ts_std_dev", _fld("returns"), w)
+    else:  # liquidity
+        inner = rng.choice((
+            _op("ts_mean", _fld("volume"), w),
+            _op("divide", _fld("volume"), _op("ts_mean", _fld("volume"), w)),
+        ))
+    return _op(norm, inner, _fld(group))
 
 
 def _ratio_template(
@@ -132,21 +193,15 @@ def _ratio_template(
     usage: Optional[dict] = None,
     prefer_industry: bool = False,
 ) -> dict:
-    """A golden structure over an economically-meaningful fundamental ratio:
-    group_rank(ts_rank(NUM/DEN, W), GROUP). This is the highest-signal path —
-    the ratio carries real financial meaning (profitability/value), the long
-    window captures the trend, and the group neutralization removes sector beta.
-    """
-    num, den = _pick_ratio(rng, usage)
-    w = _lit(rng.choice(_FUND_WINDOWS))
-    grp = _fld(_neutral_group(rng, prefer_industry))
-    ratio = _op("divide", _fld(num), _fld(den))
-    inner = rng.choice((
-        _op("ts_rank", ratio, w),      # cross-sectional rank of the ratio trend
-        _op("ts_mean", ratio, w),      # smoothed level
-        ratio,                          # raw ratio, group-ranked
-    ))
-    return _op("group_rank", inner, grp)
+    """A single golden signal. Predominantly a fundamental value leg (the proven
+    Sharpe anchor) with a ROTATED transform / peer group / outer normalization so
+    two value alphas don't collapse to the same book; a minority are pure technical
+    signals for signal-family spread."""
+    group = _neutral_group(rng, prefer_industry)
+    norm = rng.choices(_GROUP_NORMS, weights=(0.6, 0.2, 0.2), k=1)[0]
+    if rng.random() < 0.8:
+        return _value_leg(rng, usage, group, norm=norm)
+    return _technical_leg(rng, group, norm=norm)
 
 
 def _blended_ratio_template(
@@ -154,14 +209,22 @@ def _blended_ratio_template(
     usage: Optional[dict] = None,
     prefer_industry: bool = False,
 ) -> dict:
-    """Blend two different economic ratios (the LOW_FITNESS fix): decorrelated
-    fundamental signals summed after group-ranking raise returns/stability."""
-    (n1, d1), (n2, d2) = rng.sample(ECONOMIC_RATIOS, 2)
-    w = _lit(rng.choice(_FUND_WINDOWS))
-    grp = _fld(_neutral_group(rng, prefer_industry))
-    a = _op("group_rank", _op("ts_rank", _op("divide", _fld(n1), _fld(d1)), w), grp)
-    b = _op("group_rank", _op("ts_rank", _op("divide", _fld(n2), _fld(d2)), w), grp)
-    return _op("add", a, b)
+    """Blend two group-RANKED legs (the LOW_FITNESS fix) that are DELIBERATELY
+    cross-family / cross-transform, so the sum decorrelates from a book of
+    look-alike value blends: a fundamental value anchor (keeps the Sharpe hit-rate)
+    plus a second leg that is either a technical signal (momentum/vol/liquidity) or
+    a different value ratio with a different transform. Both legs are group_rank for
+    scale-consistent addition; peer group and window differ per leg for extra
+    decorrelation."""
+    g1 = _neutral_group(rng, prefer_industry)
+    g2 = _neutral_group(rng, prefer_industry)
+    leg_a = _value_leg(rng, usage, g1, norm="group_rank")
+    leg_b = (
+        _technical_leg(rng, g2, norm="group_rank")
+        if rng.random() < 0.5
+        else _value_leg(rng, usage, g2, norm="group_rank")
+    )
+    return _op("add", leg_a, leg_b)
 
 
 def _golden_template(rng: random.Random, v: ga_dsl.Vocab) -> dict:
