@@ -186,6 +186,36 @@ async def test_get_self_correlation_none_when_no_top_level_max():
 
 
 @pytest.mark.asyncio
+async def test_get_pnl_polls_past_202_and_empty_body():
+    """BRAIN computes the PnL recordset lazily: first a 202 (or 200 with empty
+    body), then the data. get_pnl must poll — not throw JSONDecodeError (the
+    spurious 502 that 'worked on re-expand')."""
+    calls = {"n": 0}
+
+    def h(req):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(202, headers={"Retry-After": "0"})
+        if calls["n"] == 2:
+            return httpx.Response(200, text="")  # ready flag not set yet, empty
+        return httpx.Response(200, json={"records": [["2020-01-02", 10.0]]})
+
+    c = _client(h)
+    data = await c.get_pnl("A1", interval_s=0, max_wait_s=100)
+    assert data["records"] == [["2020-01-02", 10.0]]
+    assert calls["n"] == 3
+    await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_pnl_empty_after_budget_returns_empty_recordset():
+    c = _client(lambda req: httpx.Response(202, headers={"Retry-After": "0"}))
+    data = await c.get_pnl("A1", interval_s=0, max_wait_s=0)
+    assert data == {"records": []}  # no crash, caller shows "no PnL"
+    await c.aclose()
+
+
+@pytest.mark.asyncio
 async def test_list_active_alphas_filters_status():
     def h(req):
         return httpx.Response(200, json={"results": [

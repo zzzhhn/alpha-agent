@@ -284,13 +284,35 @@ class BrainClient:
             except Exception:  # noqa: BLE001 — unparseable body → no signal
                 return None
 
-    async def get_pnl(self, alpha_id: str) -> dict:
-        """GET /alphas/{id}/recordsets/pnl → cumulative-PnL recordset. The caller
-        differences it into DAILY returns for the SELF_CORRELATION check (raw
-        cumulative PnL inflates every correlation > 0.9)."""
-        resp = await self._client.get(f"/alphas/{alpha_id}/recordsets/pnl")
-        resp.raise_for_status()
-        return resp.json()
+    async def get_pnl(
+        self, alpha_id: str, *, interval_s: float = 2.0, max_wait_s: float = 30.0
+    ) -> dict:
+        """GET /alphas/{id}/recordsets/pnl → cumulative-PnL recordset.
+
+        Like the correlation endpoint, BRAIN computes this recordset LAZILY: the
+        first request often returns 202 (still computing), sometimes with an
+        EMPTY body — calling .json() on that throws JSONDecodeError (surfaced as
+        a spurious 502 that 'worked on retry'). So poll: honour 202/Retry-After
+        and empty bodies until a 200 with a JSON body arrives (or the budget is
+        spent). The caller differences the result into DAILY returns for the
+        SELF_CORRELATION check (raw cumulative PnL inflates every corr > 0.9)."""
+        waited = 0.0
+        while True:
+            resp = await self._client.get(f"/alphas/{alpha_id}/recordsets/pnl")
+            body = (resp.text or "").strip()
+            if resp.status_code == 200 and body:
+                return resp.json()
+            # 202 (computing) or a 200 with an empty/not-yet-ready body → wait.
+            if resp.status_code in (200, 202) and waited < max_wait_s:
+                retry = resp.headers.get("Retry-After")
+                delay = float(retry) if retry and retry.isdigit() else interval_s
+                await asyncio.sleep(delay)
+                waited += delay
+                continue
+            resp.raise_for_status()  # a real error status → raise
+            # 200 but still empty after the budget — return an empty recordset so
+            # the caller shows "no PnL" rather than crashing.
+            return {"records": []}
 
     async def list_active_alphas(self) -> list[dict]:
         """GET /users/self/alphas → the user's alphas; filter to ACTIVE (the set
