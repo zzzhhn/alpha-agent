@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 
-// Frontend-native deploy-version endpoint. Returns the commit SHA of the
-// deployment currently serving requests (VERCEL_GIT_COMMIT_SHA, a runtime
-// system env on Vercel). A client loaded from an older deploy keeps the SHA
-// baked into its bundle (NEXT_PUBLIC_BUILD_ID); when it polls here and sees a
-// different SHA, a new deploy is live → VersionWatcher prompts a refresh.
+// Frontend-native deploy-version endpoint. Returns FE_VERSION — a hash of the
+// FRONTEND source, baked at build time (see next.config.mjs), NOT the git SHA.
+// A client loaded from an older deploy keeps its FE_VERSION baked in
+// (NEXT_PUBLIC_BUILD_ID); when it polls here and sees a different value, a new
+// frontend version is live → VersionWatcher prompts a refresh. Because the
+// value is content-based, an unrelated backend/workflow/mining commit that
+// rebuilds the frontend without changing it yields the SAME hash → no prompt.
 //
 // Must NOT be cached — always reflect the live deployment.
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  const version = process.env.VERCEL_GIT_COMMIT_SHA || "dev";
+  const version = process.env.FE_VERSION || "dev";
   return NextResponse.json(
     { version },
     { headers: { "Cache-Control": "no-store, max-age=0" } },
