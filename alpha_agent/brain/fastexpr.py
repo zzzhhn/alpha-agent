@@ -108,15 +108,38 @@ def _lit(v: int) -> dict:
 _FUND_WINDOWS = (60, 126, 252)
 
 
-def _ratio_template(rng: random.Random) -> dict:
+def _pick_ratio(rng: random.Random, usage: Optional[dict]) -> tuple[str, str]:
+    """Choose an economic ratio, biased toward UNDER-used ones (self-evolution
+    anti-homogenization): weight each ratio by 1/(1+times_used_recently)."""
+    if not usage:
+        return rng.choice(ECONOMIC_RATIOS)
+    weights = [1.0 / (1 + usage.get(r, 0)) for r in ECONOMIC_RATIOS]
+    return rng.choices(ECONOMIC_RATIOS, weights=weights, k=1)[0]
+
+
+def _neutral_group(rng: random.Random, prefer_industry: bool) -> str:
+    """SUBINDUSTRY is the default (highest pass rate); when self-correlation is
+    running high, rotate toward INDUSTRY — a different peer grouping decorrelates
+    from the existing SUBINDUSTRY-neutral book (the documented SELF_CORRELATION
+    escape)."""
+    if prefer_industry:
+        return rng.choices(("industry", "subindustry"), weights=(0.7, 0.3), k=1)[0]
+    return rng.choices(("subindustry", "industry"), weights=(0.7, 0.3), k=1)[0]
+
+
+def _ratio_template(
+    rng: random.Random,
+    usage: Optional[dict] = None,
+    prefer_industry: bool = False,
+) -> dict:
     """A golden structure over an economically-meaningful fundamental ratio:
     group_rank(ts_rank(NUM/DEN, W), GROUP). This is the highest-signal path —
     the ratio carries real financial meaning (profitability/value), the long
     window captures the trend, and the group neutralization removes sector beta.
     """
-    num, den = rng.choice(ECONOMIC_RATIOS)
+    num, den = _pick_ratio(rng, usage)
     w = _lit(rng.choice(_FUND_WINDOWS))
-    grp = _fld(rng.choice(("subindustry", "industry")))
+    grp = _fld(_neutral_group(rng, prefer_industry))
     ratio = _op("divide", _fld(num), _fld(den))
     inner = rng.choice((
         _op("ts_rank", ratio, w),      # cross-sectional rank of the ratio trend
@@ -126,12 +149,16 @@ def _ratio_template(rng: random.Random) -> dict:
     return _op("group_rank", inner, grp)
 
 
-def _blended_ratio_template(rng: random.Random) -> dict:
+def _blended_ratio_template(
+    rng: random.Random,
+    usage: Optional[dict] = None,
+    prefer_industry: bool = False,
+) -> dict:
     """Blend two different economic ratios (the LOW_FITNESS fix): decorrelated
     fundamental signals summed after group-ranking raise returns/stability."""
     (n1, d1), (n2, d2) = rng.sample(ECONOMIC_RATIOS, 2)
     w = _lit(rng.choice(_FUND_WINDOWS))
-    grp = _fld("subindustry")
+    grp = _fld(_neutral_group(rng, prefer_industry))
     a = _op("group_rank", _op("ts_rank", _op("divide", _fld(n1), _fld(d1)), w), grp)
     b = _op("group_rank", _op("ts_rank", _op("divide", _fld(n2), _fld(d2)), w), grp)
     return _op("add", a, b)
@@ -222,6 +249,9 @@ def generate_brain_candidates(
     seed_exprs: Optional[list[str]] = None,
     fields: Optional[list[str]] = None,
     max_depth: int = 5,
+    ratio_usage: Optional[dict] = None,
+    prefer_industry: bool = False,
+    avoid_signatures: Optional[frozenset] = None,
 ) -> list[str]:
     """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
 
@@ -231,9 +261,17 @@ def generate_brain_candidates(
     included), which is what actually clears the Sharpe/Fitness bars. The GA then
     mutates/crosses those for diversity. Seeds and generated trees feed the pool.
     Validation is grammar-free (BRAIN's field set is far larger than the local
-    grammar) — structural only: BRAIN-safe ops, non-degenerate."""
+    grammar) — structural only: BRAIN-safe ops, non-degenerate.
+
+    Self-evolution hints (Phase F3, from mining history): `ratio_usage` biases
+    generation toward under-used economic ratios; `prefer_industry` rotates
+    neutralization when self-correlation is running high; `avoid_signatures`
+    string-fingerprints of already-mined alphas are skipped (cross-round dedup)."""
+    from alpha_agent.brain.evolution import expr_signature
+
     rng = random.Random(rng_seed)
     vocab = _build_vocab(fields)
+    avoid = avoid_signatures or frozenset()
 
     pool: list[dict] = []
     for expr in seed_exprs or ():
@@ -252,9 +290,9 @@ def generate_brain_candidates(
         if r < 0.45:
             # Economic-ratio golden structures first — the highest-signal path.
             tree = (
-                _blended_ratio_template(rng)
+                _blended_ratio_template(rng, ratio_usage, prefer_industry)
                 if rng.random() < 0.35
-                else _ratio_template(rng)
+                else _ratio_template(rng, ratio_usage, prefer_industry)
             )
         elif r < 0.65:
             tree = _golden_template(rng, vocab)  # generic golden over any field
@@ -272,6 +310,11 @@ def generate_brain_candidates(
             continue
         expr = _valid_brain_tree(tree)
         if expr is None or expr in seen:
+            continue
+        # Cross-round self-evolution: skip a candidate whose string-signature was
+        # already mined (avoids re-proposing near-duplicates of past alphas that
+        # would just fail SELF_CORRELATION).
+        if expr_signature(expr) in avoid:
             continue
         # Diversity gate: skip candidates whose structure+fields duplicate an
         # already-accepted one (differing only by window/param) — don't burn the

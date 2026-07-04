@@ -106,11 +106,27 @@ async def run_mining_round(
     except Exception:  # noqa: BLE001 — best-effort; base fields still work
         real_fields = None
 
+    # Phase F3 self-evolution: read the mining history and steer this round away
+    # from homogenization — skip already-mined structures, prefer under-used
+    # economic ratios, rotate neutralization to INDUSTRY when self-correlation is
+    # running high. Best-effort: empty state → no steering.
+    from alpha_agent.brain.evolution import load_evolution_state
+
+    evo = await load_evolution_state(pool, user_id)
+    if evo.avoid_signatures:
+        print(
+            f"[evolve] avoiding {len(evo.avoid_signatures)} past structures; "
+            f"flagged_rate={evo.flagged_rate:.2f} prefer_industry={evo.prefer_industry}",
+            flush=True,
+        )
+
     # Over-generate so the logic screen has candidates to prune down to
     # n_candidates worth of economically-sensible ones.
     gen_n = n_candidates * 2 if logic_llm is not None else n_candidates
     candidates = generate_brain_candidates(
-        gen_n, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed
+        gen_n, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed,
+        ratio_usage=evo.ratio_usage, prefer_industry=evo.prefer_industry,
+        avoid_signatures=evo.avoid_signatures,
     )
 
     # LLM financial-logic pre-screen (AlphaEval 'Financial Logic'): score the
