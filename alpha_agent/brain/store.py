@@ -55,6 +55,87 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
     return out
 
 
+_ROW_COLS = (
+    "id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
+    "self_correlation, self_correlation_with, outcome, detail, created_at, "
+    "submitted_at, brain_status"
+)
+
+# Whitelisted sort columns (never interpolate user input into SQL).
+_SORT_COLS = {
+    "created_at", "sharpe", "fitness", "turnover", "drawdown", "self_correlation",
+}
+
+
+def _decode_row(r) -> dict:
+    d = dict(r)
+    if isinstance(d.get("settings"), str):
+        d["settings"] = json.loads(d["settings"])
+    for k in ("created_at", "submitted_at"):
+        if d.get(k) is not None:
+            d[k] = d[k].isoformat()
+    return d
+
+
+async def query_brain_alphas(
+    pool,
+    user_id: int,
+    *,
+    limit: int = 25,
+    offset: int = 0,
+    outcome: str | None = None,
+    q: str | None = None,
+    sharpe_min: float | None = None,
+    fitness_min: float | None = None,
+    turnover_max: float | None = None,
+    submitted: bool | None = None,
+    sort: str = "created_at",
+    descending: bool = True,
+) -> dict:
+    """Server-side paginated + filtered listing for the BRAIN UI. Returns
+    {"alphas": [...], "total": N} where total is the count matching the filters
+    (for page controls). All filters are optional and combine with AND."""
+    where = ["user_id = $1"]
+    params: list = [user_id]
+
+    def add(clause: str, value) -> None:
+        params.append(value)
+        where.append(clause.replace("$?", f"${len(params)}"))
+
+    if outcome:
+        add("outcome = $?", outcome)
+    if q:
+        add("expression ILIKE $?", f"%{q}%")
+    if sharpe_min is not None:
+        add("sharpe >= $?", sharpe_min)
+    if fitness_min is not None:
+        add("fitness >= $?", fitness_min)
+    if turnover_max is not None:
+        add("turnover <= $?", turnover_max)
+    if submitted is True:
+        where.append("submitted_at IS NOT NULL")
+    elif submitted is False:
+        where.append("submitted_at IS NULL")
+
+    where_sql = " AND ".join(where)
+    total = await pool.fetchval(
+        f"SELECT count(*) FROM brain_alphas WHERE {where_sql}", *params
+    )
+
+    sort_col = sort if sort in _SORT_COLS else "created_at"
+    direction = "DESC" if descending else "ASC"
+    lim = min(max(int(limit), 1), 200)
+    off = max(int(offset), 0)
+    # NULLS LAST so unscored rows (sim_error) don't dominate a metric sort.
+    rows = await pool.fetch(
+        f"SELECT {_ROW_COLS} FROM brain_alphas WHERE {where_sql} "
+        f"ORDER BY {sort_col} {direction} NULLS LAST, id DESC "
+        f"LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}",
+        *params, lim, off,
+    )
+    return {"alphas": [_decode_row(r) for r in rows], "total": int(total or 0)}
+
+
 async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
     """One mining result by id, scoped to the owner (None if not found / not
     theirs). jsonb settings decoded."""

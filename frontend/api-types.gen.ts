@@ -259,10 +259,33 @@ export interface paths {
         };
         /**
          * List Alphas
-         * @description The user's BRAIN mining results (passed / flagged / rejected / sim_error),
-         *     newest first. Degrades to an empty list if V028 isn't applied yet.
+         * @description The user's BRAIN mining results, server-side paginated + filtered. Returns
+         *     {alphas, total} (total = rows matching the filters, for page controls).
+         *     Degrades to empty if V028 isn't applied yet.
          */
         get: operations["list_alphas_api_brain_alphas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/brain/alphas/{row_id}/pnl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Alpha Pnl
+         * @description Live cumulative-PnL curve for a mined alpha, fetched from BRAIN on demand
+         *     (not stored — it's large and only needed when the user opens the detail).
+         *     Returns {points: [{date, pnl}]}. 400 if the row has no BRAIN alpha id.
+         */
+        get: operations["get_alpha_pnl_api_brain_alphas__row_id__pnl_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4358,11 +4381,55 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
+                outcome?: string | null;
+                q?: string | null;
+                sharpe_min?: number | null;
+                fitness_min?: number | null;
+                turnover_max?: number | null;
+                submitted?: boolean | null;
+                sort?: string;
+                descending?: boolean;
             };
             header?: {
                 authorization?: string | null;
             };
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alpha_pnl_api_brain_alphas__row_id__pnl_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                row_id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;

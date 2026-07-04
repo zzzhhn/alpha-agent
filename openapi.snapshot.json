@@ -3976,7 +3976,7 @@
     },
     "/api/brain/alphas": {
       "get": {
-        "description": "The user's BRAIN mining results (passed / flagged / rejected / sim_error),\nnewest first. Degrades to an empty list if V028 isn't applied yet.",
+        "description": "The user's BRAIN mining results, server-side paginated + filtered. Returns\n{alphas, total} (total = rows matching the filters, for page controls).\nDegrades to empty if V028 isn't applied yet.",
         "operationId": "list_alphas_api_brain_alphas_get",
         "parameters": [
           {
@@ -3984,9 +3984,135 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 100,
+              "default": 25,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sharpe_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sharpe Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fitness_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fitness Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "turnover_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turnover Max"
+            }
+          },
+          {
+            "in": "query",
+            "name": "submitted",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Submitted"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "created_at",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "descending",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Descending",
+              "type": "boolean"
             }
           },
           {
@@ -4031,6 +4157,67 @@
           }
         },
         "summary": "List Alphas",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
+    "/api/brain/alphas/{row_id}/pnl": {
+      "get": {
+        "description": "Live cumulative-PnL curve for a mined alpha, fetched from BRAIN on demand\n(not stored \u2014 it's large and only needed when the user opens the detail).\nReturns {points: [{date, pnl}]}. 400 if the row has no BRAIN alpha id.",
+        "operationId": "get_alpha_pnl_api_brain_alphas__row_id__pnl_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "title": "Row Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Alpha Pnl Api Brain Alphas  Row Id  Pnl Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Alpha Pnl",
         "tags": [
           "brain"
         ]

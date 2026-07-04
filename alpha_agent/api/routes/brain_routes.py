@@ -75,20 +75,69 @@ async def test_connection(
 
 @router.get("/alphas")
 async def list_alphas(
-    limit: int = 100,
+    limit: int = 25,
+    offset: int = 0,
+    outcome: str | None = None,
+    q: str | None = None,
+    sharpe_min: float | None = None,
+    fitness_min: float | None = None,
+    turnover_max: float | None = None,
+    submitted: bool | None = None,
+    sort: str = "created_at",
+    descending: bool = True,
     user_id: int = Depends(require_user),
     pool=Depends(get_db_pool),
 ) -> dict:
-    """The user's BRAIN mining results (passed / flagged / rejected / sim_error),
-    newest first. Degrades to an empty list if V028 isn't applied yet."""
+    """The user's BRAIN mining results, server-side paginated + filtered. Returns
+    {alphas, total} (total = rows matching the filters, for page controls).
+    Degrades to empty if V028 isn't applied yet."""
     from alpha_agent.brain import store
 
     try:
-        alphas = await store.list_brain_alphas(pool, user_id, limit=limit)
+        return await store.query_brain_alphas(
+            pool, user_id, limit=limit, offset=offset, outcome=outcome, q=q,
+            sharpe_min=sharpe_min, fitness_min=fitness_min,
+            turnover_max=turnover_max, submitted=submitted,
+            sort=sort, descending=descending,
+        )
     except Exception as e:  # noqa: BLE001 - table may not exist yet
-        logger.warning("list_brain_alphas failed (table missing?): %s", e)
-        return {"alphas": []}
-    return {"alphas": alphas}
+        logger.warning("query_brain_alphas failed (table missing?): %s", e)
+        return {"alphas": [], "total": 0}
+
+
+@router.get("/alphas/{row_id}/pnl")
+async def get_alpha_pnl(
+    row_id: int,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Live cumulative-PnL curve for a mined alpha, fetched from BRAIN on demand
+    (not stored — it's large and only needed when the user opens the detail).
+    Returns {points: [{date, pnl}]}. 400 if the row has no BRAIN alpha id."""
+    from alpha_agent.brain import store
+    from alpha_agent.brain.client import BrainClient
+    from alpha_agent.brain.pnl import pnl_to_points
+
+    row = await store.get_brain_alpha(pool, user_id, row_id)
+    if row is None:
+        raise HTTPException(404, "alpha not found")
+    if not row.get("alpha_id"):
+        raise HTTPException(400, "this candidate has no BRAIN alpha id (sim failed)")
+
+    creds = await vault.load_brain_credentials(pool, user_id)
+    if creds is None:
+        raise HTTPException(400, "no BRAIN credentials saved")
+
+    client = BrainClient(creds[0], creds[1])
+    try:
+        await client.authenticate()
+        raw = await client.get_pnl(row["alpha_id"])
+    except Exception as e:  # noqa: BLE001 — surface BRAIN failure as a clean 502
+        raise HTTPException(502, f"BRAIN PnL fetch failed: {type(e).__name__}") from e
+    finally:
+        await client.aclose()
+
+    return {"points": pnl_to_points(raw)}
 
 
 @router.post("/alphas/{row_id}/submit")
