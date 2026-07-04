@@ -55,6 +55,28 @@ async def test_query_filters_paginates_and_counts(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_query_search_matches_alpha_id(applied_db):
+    """The search box matches the BRAIN alpha id, not only the expression text."""
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        await store.record_brain_alpha(
+            pool, user_id=1, expression="group_rank(ts_rank(ebit, 60), subindustry)",
+            settings={}, outcome="passed", alpha_id="kRZ4p2A", sharpe=1.8,
+        )
+        await store.record_brain_alpha(
+            pool, user_id=1, expression="rank(volume)", settings={}, outcome="rejected",
+        )
+        # by the BRAIN code
+        r = await store.query_brain_alphas(pool, 1, q="kRZ4p2A")
+        assert r["total"] == 1 and r["alphas"][0]["alpha_id"] == "kRZ4p2A"
+        # still by expression text
+        r = await store.query_brain_alphas(pool, 1, q="volume")
+        assert r["total"] == 1 and "volume" in r["alphas"][0]["expression"]
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
 async def test_query_submitted_filter(applied_db):
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:

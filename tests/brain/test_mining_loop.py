@@ -138,6 +138,40 @@ async def test_brain_authoritative_self_corr_flags(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_intra_batch_diversity_flags_near_duplicate(applied_db):
+    """Diversification fix: two candidates in the SAME round with ~identical daily
+    returns — the first passes, the second is flagged as a near-duplicate even
+    though neither correlates with any ACTIVE alpha (BRAIN's own check scores both
+    ~0 pre-submit). The 'passed' set must be mutually decorrelated."""
+    dup = _records([0, 1, 3, 4, 6, 7, 9, 10])     # daily [1,2,1,2,1,2,1]
+    diff = _records([0, 1, 2, 4, 6, 9, 12, 16])   # daily [1,1,2,2,3,3,4] — low corr
+    client = _FakeBrain([
+        {"metrics": _PASS, "pnl": dup},   # first -> passed, seeds the accepted set
+        {"metrics": _PASS, "pnl": dup},   # identical returns -> flagged (intra-batch)
+        {"metrics": _PASS, "pnl": diff},  # decorrelated -> passed
+    ])
+
+    async def _no_active():
+        return []
+
+    client.list_active_alphas = _no_active  # no ACTIVE alphas to compare against
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        summary = await run_mining_round(
+            client, pool, user_id=1, n_candidates=3, rng_seed=1
+        )
+        assert summary["passed"] == 2 and summary["flagged"] == 1
+        flagged = [r for r in await store.list_brain_alphas(pool, 1)
+                   if r["outcome"] == "flagged"]
+        assert len(flagged) == 1
+        assert flagged[0]["self_correlation"] > 0.7
+        # flagged against the first passer's alpha id (A1), not a BRAIN/active id
+        assert flagged[0]["self_correlation_with"] == "A1"
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
 async def test_mark_submitted(applied_db):
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:

@@ -767,7 +767,7 @@ export function BrainMiningPanel() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={zh ? "搜索表达式…" : "search expression…"}
+            placeholder={zh ? "搜索表达式或编码…" : "search expr or code…"}
             className={`${INPUT} w-56`}
           />
           <input
@@ -800,13 +800,17 @@ export function BrainMiningPanel() {
         </div>
 
         {/* column header */}
-        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
-          <span>{zh ? "表达式" : "expression"}</span>
-          <span className="w-14 text-right">Sharpe</span>
-          <span className="w-14 text-right">Fitness</span>
-          <span className="w-14 text-right">{zh ? "换手" : "TO"}</span>
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
+          <span>{zh ? "表达式" : "expr"}</span>
+          <span className="w-12 text-right">Sharpe</span>
+          <span className="w-12 text-right">Fitness</span>
+          <span className="w-12 text-right">{zh ? "换手" : "TO"}</span>
+          <span className="w-12 text-right">{zh ? "收益" : "Ret"}</span>
+          <span className="w-12 text-right">{zh ? "回撤" : "DD"}</span>
+          <span className="w-14 text-right">Margin</span>
           <span className="w-12 text-right">S-corr</span>
-          <span className="w-14 text-right">{zh ? "状态" : "status"}</span>
+          <span className="w-24 text-right">{zh ? "编码" : "code"}</span>
+          <span className="w-12 text-right">{zh ? "状态" : "status"}</span>
         </div>
 
         {/* rows */}
@@ -836,7 +840,7 @@ export function BrainMiningPanel() {
                   <button
                     type="button"
                     onClick={() => toggle(a.id)}
-                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-3 px-3 py-2 text-left hover:bg-tm-bg-2"
+                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 px-3 py-2 text-left hover:bg-tm-bg-2"
                   >
                     <span className="flex min-w-0 items-center gap-1.5">
                       {open ? (
@@ -847,16 +851,25 @@ export function BrainMiningPanel() {
                       <code className="truncate font-tm-mono text-[11px] text-tm-fg">
                         {a.expression}
                       </code>
-                      {a.alpha_id ? <AlphaIdChip alphaId={a.alpha_id} /> : null}
                       {a.submitted_at ? (
                         <CheckCircle2 className="h-3 w-3 shrink-0 text-tm-pos" strokeWidth={1.75} />
                       ) : null}
                     </span>
-                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.sharpe)}</span>
-                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.fitness)}</span>
-                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.turnover)}</span>
+                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.sharpe)}</span>
+                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.fitness)}</span>
+                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.turnover)}</span>
+                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.returns)}</span>
+                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.drawdown)}</span>
+                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.margin, 4)}</span>
                     <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.self_correlation)}</span>
-                    <span className="flex w-14 justify-end">
+                    <span className="flex w-24 justify-end">
+                      {a.alpha_id ? (
+                        <AlphaIdChip alphaId={a.alpha_id} />
+                      ) : (
+                        <span className="font-tm-mono text-[10px] text-tm-muted">—</span>
+                      )}
+                    </span>
+                    <span className="flex w-12 justify-end">
                       <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${OUTCOME_CLS[a.outcome]}`}>
                         {outcomeLabel(a.outcome, zh)}
                       </span>

@@ -107,7 +107,11 @@ async def query_brain_alphas(
     if outcome:
         add("outcome = $?", outcome)
     if q:
-        add("expression ILIKE $?", f"%{q}%")
+        # match either the expression text or the BRAIN alpha id (one param, used
+        # twice) so the search box finds a factor by its platform code too.
+        params.append(f"%{q}%")
+        idx = len(params)
+        where.append(f"(expression ILIKE ${idx} OR alpha_id ILIKE ${idx})")
     if sharpe_min is not None:
         add("sharpe >= $?", sharpe_min)
     if fitness_min is not None:
@@ -149,6 +153,22 @@ async def count_brain_alphas_since(pool, user_id: int, *, since: datetime) -> in
         user_id, since,
     )
     return int(n or 0)
+
+
+async def recent_passed_unsubmitted_alpha_ids(
+    pool, user_id: int, *, limit: int = 40
+) -> list[str]:
+    """alpha_ids of the user's recent PASSED, not-yet-submitted mined alphas — the
+    set a new round must also stay decorrelated from, so we don't re-pass this
+    round's near-duplicates in a later round. Newest first."""
+    rows = await pool.fetch(
+        "SELECT alpha_id FROM brain_alphas "
+        "WHERE user_id=$1 AND outcome='passed' AND submitted_at IS NULL "
+        "AND alpha_id IS NOT NULL "
+        "ORDER BY created_at DESC LIMIT $2",
+        user_id, min(max(int(limit), 1), 200),
+    )
+    return [r["alpha_id"] for r in rows]
 
 
 async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
