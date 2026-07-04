@@ -95,3 +95,14 @@ export const submitBrainAlpha = (rowId: number) =>
     `/api/brain/alphas/${rowId}/submit`,
     {},
   );
+
+export interface MineTriggerResult {
+  ok: boolean;
+  n_candidates: number;
+  eta_minutes: number;
+}
+
+export const triggerMining = (nCandidates: number) =>
+  apiPost<MineTriggerResult, { n_candidates: number }>("/api/brain/mine", {
+    n_candidates: nCandidates,
+  });

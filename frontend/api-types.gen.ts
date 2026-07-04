@@ -365,6 +365,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/brain/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Mining
+         * @description Manually kick a mining round without waiting for the daily cron. Dispatches
+         *     the brain-mining-loop GitHub Actions workflow (BRAIN sims poll for minutes —
+         *     can't run inside this request). Results land in brain_alphas in ~30-45min; the
+         *     /brain page's refresh (or auto-poll) picks them up. Requires GH_PAT.
+         */
+        post: operations["trigger_mining_api_brain_mine_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/brief/{ticker}": {
         parameters: {
             query?: never;
@@ -4573,6 +4596,45 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_mining_api_brain_mine_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

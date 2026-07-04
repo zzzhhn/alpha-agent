@@ -4449,6 +4449,69 @@
         ]
       }
     },
+    "/api/brain/mine": {
+      "post": {
+        "description": "Manually kick a mining round without waiting for the daily cron. Dispatches\nthe brain-mining-loop GitHub Actions workflow (BRAIN sims poll for minutes \u2014\ncan't run inside this request). Results land in brain_alphas in ~30-45min; the\n/brain page's refresh (or auto-poll) picks them up. Requires GH_PAT.",
+        "operationId": "trigger_mining_api_brain_mine_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Trigger Mining Api Brain Mine Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Mining",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
     "/api/brief/{ticker}": {
       "post": {
         "description": "Generate a Lean thesis.  Rich mode returns 501 until M3.",

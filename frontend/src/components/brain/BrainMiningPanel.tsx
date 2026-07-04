@@ -14,10 +14,12 @@ import {
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { BrainPnLChart } from "@/components/brain/BrainPnLChart";
+import { Play } from "lucide-react";
 import {
   fetchBrainAlphas,
   fetchAlphaPnl,
   submitBrainAlpha,
+  triggerMining,
   type BrainAlpha,
   type BrainAlphaQuery,
   type BrainOutcome,
@@ -190,6 +192,72 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+// ── manual mining trigger (dispatches the GitHub Actions round) ──────────────
+function MineButton() {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const [n, setN] = useState("12");
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function go() {
+    setState("sending");
+    setMsg(null);
+    try {
+      const r = await triggerMining(Math.max(1, Math.min(30, Number(n) || 12)));
+      setState("sent");
+      setMsg(
+        zh
+          ? `已派发挖矿 (${r.n_candidates} 候选) · 约 ${r.eta_minutes} 分钟后出结果`
+          : `mining dispatched (${r.n_candidates} candidates) · ~${r.eta_minutes} min`,
+      );
+    } catch (e) {
+      setState("error");
+      setMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+      <span className="font-tm-mono text-[11px] text-tm-fg-2">
+        {zh ? "候选数" : "candidates"}
+      </span>
+      <input
+        value={n}
+        onChange={(e) => setN(e.target.value)}
+        inputMode="numeric"
+        className="h-7 w-16 border border-tm-rule bg-tm-bg-2 px-2 text-center font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent"
+      />
+      <button
+        type="button"
+        onClick={go}
+        disabled={state === "sending"}
+        className="inline-flex items-center gap-1.5 rounded border border-tm-accent/60 bg-tm-accent px-3 py-1.5 font-tm-mono text-[11px] font-bold text-tm-bg transition-opacity hover:opacity-90 disabled:opacity-50"
+      >
+        {state === "sending" ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+        ) : (
+          <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
+        )}
+        {zh ? "开始挖矿" : "Start mining"}
+      </button>
+      {msg ? (
+        <span
+          className={`font-tm-mono text-[11px] ${state === "error" ? "text-tm-neg" : "text-tm-pos"}`}
+        >
+          {msg}
+        </span>
+      ) : (
+        <span className="font-tm-mono text-[10.5px] text-tm-muted">
+          {zh
+            ? "在 GitHub Actions 上真实仿真,不占用页面"
+            : "runs on GitHub Actions, no page hold"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── main panel ───────────────────────────────────────────────────────────────
 const OUTCOMES: Array<BrainOutcome | ""> = ["", "passed", "flagged", "rejected", "sim_error"];
 const SORTS = ["created_at", "sharpe", "fitness", "turnover"] as const;
@@ -267,6 +335,10 @@ export function BrainMiningPanel() {
 
   return (
     <TmScreen>
+      <TmPane title={zh ? "挖矿控制" : "MINING.CONTROL"}>
+        <MineButton />
+      </TmPane>
+
       <TmPane
         title="WORLDQUANT.BRAIN"
         meta={

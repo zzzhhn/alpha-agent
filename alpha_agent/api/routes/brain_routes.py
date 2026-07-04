@@ -5,7 +5,9 @@ connection test that actually authenticates to BRAIN. The plaintext password is
 accepted once on save and never returned. Every route requires the user's own
 auth — credentials are strictly per-user."""
 import logging
+import os
 
+import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from alpha_agent.api.dependencies import get_db_pool
@@ -16,6 +18,10 @@ from alpha_agent.brain import vault
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/brain", tags=["brain"])
+
+_GH_REPO = os.environ.get("GH_REPO", "zzzhhn/alpha-agent")
+_GH_REF = os.environ.get("GH_REF", "main")
+_MINING_WORKFLOW = "brain-mining-loop.yml"
 
 
 @router.get("/credentials")
@@ -71,6 +77,47 @@ async def test_connection(
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
     finally:
         await client.aclose()
+
+
+@router.post("/mine")
+async def trigger_mining(
+    body: dict = Body(default_factory=dict),
+    user_id: int = Depends(require_user),
+) -> dict:
+    """Manually kick a mining round without waiting for the daily cron. Dispatches
+    the brain-mining-loop GitHub Actions workflow (BRAIN sims poll for minutes —
+    can't run inside this request). Results land in brain_alphas in ~30-45min; the
+    /brain page's refresh (or auto-poll) picks them up. Requires GH_PAT."""
+    n = body.get("n_candidates")
+    try:
+        n = str(max(1, min(int(n), 30))) if n is not None else "12"
+    except (TypeError, ValueError):
+        n = "12"
+
+    gh_token = os.environ.get("GH_PAT")
+    if not gh_token:
+        raise HTTPException(500, "GH_PAT not configured; cannot dispatch mining")
+
+    url = (
+        f"https://api.github.com/repos/{_GH_REPO}/actions/"
+        f"workflows/{_MINING_WORKFLOW}/dispatches"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                url,
+                json={"ref": _GH_REF, "inputs": {"n_candidates": n}},
+                headers={
+                    "Authorization": f"Bearer {gh_token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+    except Exception as e:  # noqa: BLE001 — surface network failure cleanly
+        raise HTTPException(502, f"dispatch failed: {type(e).__name__}") from e
+    if resp.status_code != 204:
+        raise HTTPException(502, f"GitHub API {resp.status_code}: {resp.text[:150]}")
+    return {"ok": True, "n_candidates": int(n), "eta_minutes": 40}
 
 
 @router.get("/alphas")
