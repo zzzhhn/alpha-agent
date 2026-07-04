@@ -16,6 +16,8 @@ async def record_brain_alpha(
     fitness: float | None = None,
     turnover: float | None = None,
     drawdown: float | None = None,
+    returns: float | None = None,
+    margin: float | None = None,
     self_correlation: float | None = None,
     self_correlation_with: str | None = None,
     detail: str | None = None,
@@ -24,10 +26,11 @@ async def record_brain_alpha(
     row = await pool.fetchrow(
         "INSERT INTO brain_alphas "
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
-        " drawdown, self_correlation, self_correlation_with, outcome, detail) "
-        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id",
+        " drawdown, returns, margin, self_correlation, self_correlation_with, "
+        " outcome, detail) "
+        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
-        sharpe, fitness, turnover, drawdown,
+        sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with, outcome, detail,
     )
     return row["id"]
@@ -36,9 +39,7 @@ async def record_brain_alpha(
 async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dict]:
     """Recent mining results for a user, newest first, jsonb decoded."""
     rows = await pool.fetch(
-        "SELECT id, expression, settings, alpha_id, sharpe, fitness, turnover, "
-        "drawdown, self_correlation, self_correlation_with, outcome, detail, "
-        "created_at, submitted_at, brain_status "
+        f"SELECT {_ROW_COLS} "
         "FROM brain_alphas WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2",
         user_id, min(max(int(limit), 1), 500),
     )
@@ -57,8 +58,8 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
 
 _ROW_COLS = (
     "id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
-    "self_correlation, self_correlation_with, outcome, detail, created_at, "
-    "submitted_at, brain_status"
+    "returns, margin, self_correlation, self_correlation_with, outcome, detail, "
+    "created_at, submitted_at, brain_status"
 )
 
 # Whitelisted sort columns (never interpolate user input into SQL).
@@ -140,10 +141,7 @@ async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
     """One mining result by id, scoped to the owner (None if not found / not
     theirs). jsonb settings decoded."""
     r = await pool.fetchrow(
-        "SELECT id, expression, settings, alpha_id, sharpe, fitness, turnover, "
-        "drawdown, self_correlation, self_correlation_with, outcome, detail, "
-        "created_at, submitted_at, brain_status "
-        "FROM brain_alphas WHERE id=$1 AND user_id=$2",
+        f"SELECT {_ROW_COLS} FROM brain_alphas WHERE id=$1 AND user_id=$2",
         row_id, user_id,
     )
     if r is None:

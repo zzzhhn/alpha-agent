@@ -21,7 +21,7 @@ def test_ratios_in_extracts_pairs():
 
 def test_build_state_avoid_sigs_ratio_usage_and_rotation():
     rows = [
-        {"expression": "group_rank(ts_rank(divide(ebit, equity), 126), subindustry)", "outcome": "passed"},
+        {"expression": "group_rank(ts_rank(divide(ebit, equity), 126), subindustry)", "outcome": "flagged"},
         {"expression": "group_rank(ts_rank(divide(ebit, equity), 60), subindustry)", "outcome": "flagged"},
         {"expression": "group_rank(divide(eps, close), industry)", "outcome": "rejected"},
     ]
@@ -30,8 +30,8 @@ def test_build_state_avoid_sigs_ratio_usage_and_rotation():
     assert len(st.avoid_signatures) == 2
     assert st.ratio_usage[("ebit", "equity")] == 2
     assert st.ratio_usage[("eps", "close")] == 1
-    # 1 flagged / 3 considered = 0.33 >= 0.25 → rotate to industry
-    assert st.flagged_rate > 0.25 and st.prefer_industry is True
+    # 2 flagged / 3 considered = 0.67 >= 0.4 → rotate to industry
+    assert st.flagged_rate > 0.4 and st.prefer_industry is True
 
 
 def test_build_state_low_flag_rate_keeps_subindustry():

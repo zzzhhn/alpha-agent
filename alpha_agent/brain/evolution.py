@@ -48,9 +48,12 @@ class EvolutionState:
     prefer_industry: bool = False
 
 
-# Above this recent SELF_CORRELATION-flagged fraction, rotate neutralization to
-# INDUSTRY to decorrelate from the existing SUBINDUSTRY-neutral book.
-_FLAG_ROTATE_THRESHOLD = 0.25
+# This is NOT the self-correlation cutoff (that's 0.7, matching BRAIN, in
+# mining_loop._SELF_CORR_THRESHOLD). It's a RATE: only once this fraction of
+# recent alphas has been self-corr-flagged do we start rotating neutralization
+# to INDUSTRY. Kept modest (0.4) so a couple of flagged alphas don't over-eagerly
+# rotate the whole book.
+_FLAG_ROTATE_THRESHOLD = 0.4
 
 
 def build_evolution_state(rows: list[dict]) -> EvolutionState:

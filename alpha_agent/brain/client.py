@@ -67,6 +67,7 @@ class AlphaMetrics:
     turnover: Optional[float]
     returns: Optional[float]
     drawdown: Optional[float]
+    margin: Optional[float] = None
     # BRAIN's own in-sample check verdicts, keyed by check name (e.g.
     # LOW_SHARPE, LOW_FITNESS, HIGH_TURNOVER, SELF_CORRELATION). Each value is
     # {"result": "PASS"|"FAIL"|"PENDING", "value": float|None, "limit": ...}.
@@ -158,6 +159,7 @@ def _metrics_from_alpha(alpha_id: str, alpha: dict) -> AlphaMetrics:
         turnover=is_block.get("turnover"),
         returns=is_block.get("returns"),
         drawdown=is_block.get("drawdown"),
+        margin=is_block.get("margin"),
         checks=_parse_checks(is_block),
     )
 
@@ -314,6 +316,30 @@ class BrainClient:
             # the caller shows "no PnL" rather than crashing.
             return {"records": []}
 
+    async def get_yearly_stats(
+        self, alpha_id: str, *, interval_s: float = 2.0, max_wait_s: float = 30.0
+    ) -> dict:
+        """GET /alphas/{id}/recordsets/yearly-stats → the per-year IS breakdown
+        (the WorldQuant 'IS Summary' table: sharpe/turnover/fitness/returns/
+        drawdown/margin/long-count/short-count per year). Same lazy-compute
+        polling as get_pnl. Returns the raw recordset ({schema, records})."""
+        waited = 0.0
+        while True:
+            resp = await self._client.get(
+                f"/alphas/{alpha_id}/recordsets/yearly-stats"
+            )
+            body = (resp.text or "").strip()
+            if resp.status_code == 200 and body:
+                return resp.json()
+            if resp.status_code in (200, 202) and waited < max_wait_s:
+                retry = resp.headers.get("Retry-After")
+                delay = float(retry) if retry and retry.isdigit() else interval_s
+                await asyncio.sleep(delay)
+                waited += delay
+                continue
+            resp.raise_for_status()
+            return {"schema": {}, "records": []}
+
     async def list_active_alphas(self) -> list[dict]:
         """GET /users/self/alphas → the user's alphas; filter to ACTIVE (the set
         a new candidate must not correlate with)."""
@@ -328,7 +354,8 @@ class BrainClient:
     # dataset filter /data-fields returns only a small default set, so we query
     # each dataset explicitly and combine.
     _DEFAULT_DATASETS = (
-        "fundamental6", "fundamental2", "analyst4", "news12", "option9", "pv13",
+        "fundamental6", "fundamental2", "analyst4", "news12", "news18",
+        "option8", "option9", "pv1", "pv13", "socialmedia12", "model16",
     )
 
     async def fetch_data_fields(
@@ -338,10 +365,10 @@ class BrainClient:
         universe: str = "TOP3000",
         delay: int = 1,
         field_type: str = "MATRIX",
-        per_dataset: int = 80,
+        per_dataset: int = 100,
         page_size: int = 50,
         datasets: Optional[tuple[str, ...]] = None,
-        min_coverage: float = 0.4,
+        min_coverage: float = 0.35,
     ) -> list[str]:
         """GET /data-fields per dataset → the field IDs usable in FASTEXPR for
         this region/universe/delay, across fundamentals + analyst + alternative

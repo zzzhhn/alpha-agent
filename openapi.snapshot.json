@@ -4284,6 +4284,67 @@
         ]
       }
     },
+    "/api/brain/alphas/{row_id}/yearly": {
+      "get": {
+        "description": "Per-year IS Summary breakdown for a mined alpha (WorldQuant's yearly table:\nsharpe/turnover/fitness/returns/drawdown/margin/long/short per year), fetched\nfrom BRAIN on demand. Returns {rows: [...]}.",
+        "operationId": "get_alpha_yearly_api_brain_alphas__row_id__yearly_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "title": "Row Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Alpha Yearly Api Brain Alphas  Row Id  Yearly Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Alpha Yearly",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
     "/api/brain/credentials": {
       "get": {
         "description": "Non-secret connection status: connected? username last-4? saved when?",

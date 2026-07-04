@@ -318,6 +318,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/brain/alphas/{row_id}/yearly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Alpha Yearly
+         * @description Per-year IS Summary breakdown for a mined alpha (WorldQuant's yearly table:
+         *     sharpe/turnover/fitness/returns/drawdown/margin/long/short per year), fetched
+         *     from BRAIN on demand. Returns {rows: [...]}.
+         */
+        get: operations["get_alpha_yearly_api_brain_alphas__row_id__yearly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/brain/credentials": {
         parameters: {
             query?: never;
@@ -4480,6 +4502,41 @@ export interface operations {
         };
     };
     submit_alpha_api_brain_alphas__row_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                row_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alpha_yearly_api_brain_alphas__row_id__yearly_get: {
         parameters: {
             query?: never;
             header?: {

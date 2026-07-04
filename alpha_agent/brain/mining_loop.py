@@ -173,6 +173,7 @@ async def run_mining_round(
             user_id=user_id, expression=expr, settings=settings, alpha_id=alpha_id,
             sharpe=metrics.sharpe, fitness=metrics.fitness,
             turnover=metrics.turnover, drawdown=metrics.drawdown,
+            returns=metrics.returns, margin=metrics.margin,
         )
 
         if not metrics.passes_gates():

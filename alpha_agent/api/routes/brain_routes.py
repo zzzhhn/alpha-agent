@@ -187,6 +187,41 @@ async def get_alpha_pnl(
     return {"points": pnl_to_points(raw)}
 
 
+@router.get("/alphas/{row_id}/yearly")
+async def get_alpha_yearly(
+    row_id: int,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Per-year IS Summary breakdown for a mined alpha (WorldQuant's yearly table:
+    sharpe/turnover/fitness/returns/drawdown/margin/long/short per year), fetched
+    from BRAIN on demand. Returns {rows: [...]}."""
+    from alpha_agent.brain import store
+    from alpha_agent.brain.client import BrainClient
+    from alpha_agent.brain.pnl import yearly_to_rows
+
+    row = await store.get_brain_alpha(pool, user_id, row_id)
+    if row is None:
+        raise HTTPException(404, "alpha not found")
+    if not row.get("alpha_id"):
+        raise HTTPException(400, "this candidate has no BRAIN alpha id (sim failed)")
+
+    creds = await vault.load_brain_credentials(pool, user_id)
+    if creds is None:
+        raise HTTPException(400, "no BRAIN credentials saved")
+
+    client = BrainClient(creds[0], creds[1])
+    try:
+        await client.authenticate()
+        raw = await client.get_yearly_stats(row["alpha_id"])
+    except Exception as e:  # noqa: BLE001 — surface BRAIN failure cleanly
+        raise HTTPException(502, f"BRAIN yearly fetch failed: {type(e).__name__}") from e
+    finally:
+        await client.aclose()
+
+    return {"rows": yearly_to_rows(raw)}
+
+
 @router.post("/alphas/{row_id}/submit")
 async def submit_alpha(
     row_id: int,
