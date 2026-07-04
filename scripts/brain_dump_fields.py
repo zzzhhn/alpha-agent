@@ -3,9 +3,12 @@
 The generator's economic ratios are hardcoded from CONFIRMED field ids — a wrong
 id simulates as an "unknown variable" error. Before widening the generator into
 new fundamental families (growth / quality / analyst / investment), this lists the
-datasets the account can see and, per fundamental/analyst dataset, prints
-`id | coverage | description` so ratios are built only from real, well-covered
-fields. API-only (no simulations) — finishes in seconds.
+datasets the account can see and dumps each fundamental/analyst dataset's fields
+as `id | coverage | description`, so ratios are built only from real fields.
+
+The /data-fields endpoint rate-limits hard (429); earlier empty dumps were 429,
+not missing access. So this goes SLOWLY with backoff, and only at delay=1 (the sim
+delay — fields available only at delay 0 can't be used in the delay-1 sims).
 
 Env: BRAIN_USERNAME/BRAIN_PASSWORD (preferred) or DATABASE_URL (+ BYOK_MASTER_KEY)
 to decrypt the vault. Optional BRAIN_MINING_USER_ID.
@@ -14,9 +17,8 @@ import asyncio
 import os
 import sys
 
-# Datasets to always dump even if enumeration misses them (the known fundamentals
-# + analyst the generator already draws on). Enumeration adds any others found.
-_SEED_DATASETS = ("fundamental6", "fundamental2", "fundamental3", "analyst4")
+# High-value fundamental/analyst/model datasets to dump (skip news/social/option).
+_DUMP_DATASETS = ("fundamental6", "analyst4", "model16", "model77", "model51", "pv13")
 _REGION = {"instrumentType": "EQUITY", "region": "USA", "universe": "TOP3000", "delay": 1}
 
 
@@ -35,7 +37,7 @@ async def _load_creds():
     pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=2)
     uid = os.environ.get("BRAIN_MINING_USER_ID")
     if uid:
-        user_id: int | None = int(uid)
+        user_id = int(uid)
     else:
         row = await pool.fetchrow(
             "SELECT user_id FROM user_byok WHERE provider='worldquant_brain' "
@@ -46,65 +48,43 @@ async def _load_creds():
     return creds, pool
 
 
-async def _probe(c, ds: str, extra: dict) -> tuple[int, int]:
-    """First-page probe for one query variant. Returns (http_status, result_count)
-    so we can SEE why a dataset comes back empty (403? 0 results at this delay?)."""
-    try:
-        r = await c.get(
-            "/data-fields",
-            params={**_REGION, "dataset.id": ds, "limit": 50, "offset": 0, **extra},
-        )
-        n = len(r.json().get("results", [])) if r.status_code == 200 else 0
-        return r.status_code, n
-    except Exception as e:  # noqa: BLE001
-        print(f"  probe {ds} {extra}: EXC {type(e).__name__}", flush=True)
-        return 0, 0
+async def _get(c, path: str, params: dict, *, retries: int = 6):
+    """GET with 429 backoff — the data-fields endpoint rate-limits aggressively."""
+    r = None
+    for attempt in range(retries):
+        r = await c.get(path, params=params)
+        if r.status_code != 429:
+            return r
+        await asyncio.sleep(2.0 * (attempt + 1))  # 2,4,6,8,10,12s
+    return r
 
 
-async def _dump_dataset(c, ds: str, *, cap: int = 200) -> None:
-    """Dump fields for one dataset. First diagnose the empty case: probe a few
-    query variants (type filter on/off, delay 0/1) and log status+count for each,
-    then dump using the first variant that returns rows."""
+async def _dump_dataset(c, ds: str, *, cap: int = 150) -> None:
+    """Dump MATRIX fields for one dataset at the sim delay, paginated gently."""
     print(f"=== FIELDS {ds} ===", flush=True)
-    variants = [
-        {"type": "MATRIX"},
-        {},                       # no type filter
-        {"type": "MATRIX", "delay": 0},
-        {"delay": 0},
-    ]
-    chosen = None
-    for v in variants:
-        status, n = await _probe(c, ds, v)
-        print(f"  probe {v or '{}'}: status={status} rows={n}", flush=True)
-        if n > 0 and chosen is None:
-            chosen = v
-    if chosen is None:
-        print(f"  ({ds}: no variant returned rows)", flush=True)
-        return
-
     offset = 0
     printed = 0
     while printed < cap:
-        try:
-            r = await c.get(
-                "/data-fields",
-                params={**_REGION, "dataset.id": ds, "limit": 50, "offset": offset,
-                        **chosen},
-            )
-            if r.status_code != 200:
-                break
-            results = r.json().get("results", [])
-        except Exception as e:  # noqa: BLE001 — best-effort per dataset
-            print(f"  (fetch failed: {type(e).__name__})", flush=True)
+        r = await _get(
+            c, "/data-fields",
+            {**_REGION, "type": "MATRIX", "dataset.id": ds, "limit": 50, "offset": offset},
+        )
+        if r is None or r.status_code != 200:
+            print(f"  (status {getattr(r, 'status_code', '?')} at offset {offset})", flush=True)
             break
+        results = r.json().get("results", [])
         if not results:
             break
         for f in results:
             desc = (f.get("description") or "").replace("\t", " ")[:90]
-            print(f"F\t{ds}\t{f.get('id')}\t{f.get('coverage')}\t{desc}", flush=True)
+            fid = f.get("id")
+            cov = f.get("coverage")
+            print("F\t{}\t{}\t{}\t{}".format(ds, fid, cov, desc), flush=True)
             printed += 1
         offset += 50
-    print(f"  ({printed} fields in {ds} via {chosen or 'MATRIX'})", flush=True)
+        await asyncio.sleep(1.5)
+    print(f"  ({printed} fields in {ds})", flush=True)
+    await asyncio.sleep(1.5)
 
 
 async def _main() -> int:
@@ -120,8 +100,7 @@ async def _main() -> int:
         await client.authenticate()
         c = client._client
 
-        # 1) Enumerate datasets (best-effort) to discover families we don't know.
-        datasets: list[str] = list(_SEED_DATASETS)
+        # List datasets once (best-effort) for the family overview.
         try:
             r = await c.get("/data-sets", params=_REGION)
             if r.status_code == 200:
@@ -129,19 +108,14 @@ async def _main() -> int:
                 for d in r.json().get("results", []):
                     cat = d.get("category")
                     cat_name = cat.get("name") if isinstance(cat, dict) else cat
-                    did = d.get("id")
-                    print(f"DS\t{did}\t{d.get('fieldCount')}\t{cat_name}\t{d.get('name')}",
-                          flush=True)
-                    # widen the dump to fundamental/analyst/model families
-                    hay = f"{did} {cat_name} {d.get('name')}".lower()
-                    if any(k in hay for k in ("fundamental", "analyst", "estimate",
-                                              "earnings", "model", "growth")):
-                        datasets.append(did)
+                    print("DS\t{}\t{}\t{}\t{}".format(
+                        d.get("id"), d.get("fieldCount"), cat_name, d.get("name")),
+                        flush=True)
         except Exception as e:  # noqa: BLE001 — enumeration is optional
             print(f"(dataset enumeration failed: {type(e).__name__})", flush=True)
+        await asyncio.sleep(1.5)
 
-        # 2) Dump fields for each fundamental/analyst dataset (deduped, order-kept).
-        for ds in dict.fromkeys(d for d in datasets if d):
+        for ds in _DUMP_DATASETS:
             await _dump_dataset(c, ds)
     finally:
         await client.aclose()
