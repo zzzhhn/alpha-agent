@@ -46,17 +46,50 @@ async def _load_creds():
     return creds, pool
 
 
-async def _dump_dataset(c, ds: str, *, cap: int = 150) -> None:
-    """Print MATRIX fields for one dataset: `F <ds> <id> <coverage> <description>`."""
+async def _probe(c, ds: str, extra: dict) -> tuple[int, int]:
+    """First-page probe for one query variant. Returns (http_status, result_count)
+    so we can SEE why a dataset comes back empty (403? 0 results at this delay?)."""
+    try:
+        r = await c.get(
+            "/data-fields",
+            params={**_REGION, "dataset.id": ds, "limit": 50, "offset": 0, **extra},
+        )
+        n = len(r.json().get("results", [])) if r.status_code == 200 else 0
+        return r.status_code, n
+    except Exception as e:  # noqa: BLE001
+        print(f"  probe {ds} {extra}: EXC {type(e).__name__}", flush=True)
+        return 0, 0
+
+
+async def _dump_dataset(c, ds: str, *, cap: int = 200) -> None:
+    """Dump fields for one dataset. First diagnose the empty case: probe a few
+    query variants (type filter on/off, delay 0/1) and log status+count for each,
+    then dump using the first variant that returns rows."""
+    print(f"=== FIELDS {ds} ===", flush=True)
+    variants = [
+        {"type": "MATRIX"},
+        {},                       # no type filter
+        {"type": "MATRIX", "delay": 0},
+        {"delay": 0},
+    ]
+    chosen = None
+    for v in variants:
+        status, n = await _probe(c, ds, v)
+        print(f"  probe {v or '{}'}: status={status} rows={n}", flush=True)
+        if n > 0 and chosen is None:
+            chosen = v
+    if chosen is None:
+        print(f"  ({ds}: no variant returned rows)", flush=True)
+        return
+
     offset = 0
     printed = 0
-    print(f"=== FIELDS {ds} ===", flush=True)
     while printed < cap:
         try:
             r = await c.get(
                 "/data-fields",
-                params={**_REGION, "type": "MATRIX", "dataset.id": ds,
-                        "limit": 50, "offset": offset},
+                params={**_REGION, "dataset.id": ds, "limit": 50, "offset": offset,
+                        **chosen},
             )
             if r.status_code != 200:
                 break
@@ -71,7 +104,7 @@ async def _dump_dataset(c, ds: str, *, cap: int = 150) -> None:
             print(f"F\t{ds}\t{f.get('id')}\t{f.get('coverage')}\t{desc}", flush=True)
             printed += 1
         offset += 50
-    print(f"  ({printed} fields in {ds})", flush=True)
+    print(f"  ({printed} fields in {ds} via {chosen or 'MATRIX'})", flush=True)
 
 
 async def _main() -> int:
