@@ -202,6 +202,19 @@ def _valid_brain_tree(tree: dict) -> Optional[str]:
     return ga_dsl.tree_to_expression(tree)
 
 
+def _structural_signature(tree: dict) -> tuple:
+    """A structure/field fingerprint that IGNORES window/param literal values, so
+    two candidates differing only by a window (ts_rank(x, 60) vs ts_rank(x, 126))
+    collapse to the same signature. Used to diversify the candidate pool (AlphaEval
+    Diversity dimension): simulating 15 near-identical alphas wastes the slow sim
+    budget — one representative per signature is enough per round."""
+    if tree["type"] == "operand":
+        return ("f", tree["name"])
+    if tree["type"] == "literal":
+        return ("l",)  # value elided on purpose
+    return (tree["name"], *(_structural_signature(a) for a in tree["args"]))
+
+
 def generate_brain_candidates(
     n: int,
     *,
@@ -230,9 +243,10 @@ def generate_brain_candidates(
             continue
 
     seen: set[str] = set()
+    seen_sigs: set[tuple] = set()  # structural fingerprints for pool diversity
     out: list[str] = []
     guard = 0
-    while len(out) < n and guard < n * 80:
+    while len(out) < n and guard < n * 120:
         guard += 1
         r = rng.random()
         if r < 0.45:
@@ -259,7 +273,14 @@ def generate_brain_candidates(
         expr = _valid_brain_tree(tree)
         if expr is None or expr in seen:
             continue
+        # Diversity gate: skip candidates whose structure+fields duplicate an
+        # already-accepted one (differing only by window/param) — don't burn the
+        # slow BRAIN sim budget on near-identical alphas.
+        sig = _structural_signature(tree)
+        if sig in seen_sigs:
+            continue
         seen.add(expr)
+        seen_sigs.add(sig)
         out.append(expr)
         pool.append(tree)  # feed back so the GA explores around good structures
     return out

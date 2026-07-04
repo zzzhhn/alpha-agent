@@ -300,6 +300,15 @@ class BrainClient:
         results = resp.json().get("results", [])
         return [a for a in results if (a.get("status") or "").upper() == "ACTIVE"]
 
+    # High-value BRAIN datasets to draw fields from. Spans fundamentals, analyst
+    # expectations, AND alternative data (news, options) — the last two are where
+    # 'spectacular' alphas usually come from (few users mine them). Without a
+    # dataset filter /data-fields returns only a small default set, so we query
+    # each dataset explicitly and combine.
+    _DEFAULT_DATASETS = (
+        "fundamental6", "fundamental2", "analyst4", "news12", "option9", "pv13",
+    )
+
     async def fetch_data_fields(
         self,
         *,
@@ -307,42 +316,51 @@ class BrainClient:
         universe: str = "TOP3000",
         delay: int = 1,
         field_type: str = "MATRIX",
-        limit: int = 300,
+        per_dataset: int = 80,
         page_size: int = 50,
+        datasets: Optional[tuple[str, ...]] = None,
+        min_coverage: float = 0.4,
     ) -> list[str]:
-        """GET /data-fields → the field IDs actually usable in FASTEXPR for this
-        region/universe/delay (the real BRAIN vocabulary, incl. fundamentals and
-        analyst data — far richer than raw OHLCV, and what winning alphas use).
-        Returns the field `id` strings. Paginated; best-effort per page.
+        """GET /data-fields per dataset → the field IDs usable in FASTEXPR for
+        this region/universe/delay, across fundamentals + analyst + alternative
+        data. Returns field `id` strings (deduped). Best-effort per page/dataset.
 
-        MATRIX = a per-(date,instrument) numeric value usable as an operand."""
+        MATRIX = a per-(date,instrument) numeric value usable as an operand.
+        min_coverage skips ultra-sparse fields that mostly NaN out."""
+        datasets = datasets or self._DEFAULT_DATASETS
+        seen: set[str] = set()
         out: list[str] = []
-        offset = 0
-        params_base = {
-            "instrumentType": "EQUITY",
-            "region": region,
-            "universe": universe,
-            "delay": delay,
-            "type": field_type,
-        }
-        while len(out) < limit:
-            try:
-                resp = await self._client.get(
-                    "/data-fields",
-                    params={**params_base, "limit": page_size, "offset": offset},
-                )
-                resp.raise_for_status()
-                results = resp.json().get("results", [])
-            except Exception:  # noqa: BLE001 — best-effort field discovery
-                break
-            if not results:
-                break
-            for f in results:
-                fid = f.get("id")
-                if isinstance(fid, str) and fid.strip():
-                    out.append(fid.strip())
-            offset += page_size
-        return out[:limit]
+        for ds in datasets:
+            offset = 0
+            got = 0
+            while got < per_dataset:
+                try:
+                    resp = await self._client.get(
+                        "/data-fields",
+                        params={
+                            "instrumentType": "EQUITY", "region": region,
+                            "universe": universe, "delay": delay, "type": field_type,
+                            "dataset.id": ds, "limit": page_size, "offset": offset,
+                        },
+                    )
+                    resp.raise_for_status()
+                    results = resp.json().get("results", [])
+                except Exception:  # noqa: BLE001 — best-effort per dataset
+                    break
+                if not results:
+                    break
+                for f in results:
+                    fid = f.get("id")
+                    try:
+                        cov = float(f.get("coverage", 0) or 0)
+                    except (TypeError, ValueError):
+                        cov = 0.0
+                    if isinstance(fid, str) and fid.strip() and fid not in seen and cov >= min_coverage:
+                        seen.add(fid.strip())
+                        out.append(fid.strip())
+                        got += 1
+                offset += page_size
+        return out
 
     async def fetch_alpha_expressions(
         self, *, limit: int = 200, page_size: int = 50

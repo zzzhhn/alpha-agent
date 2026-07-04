@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from alpha_agent.brain import store
 from alpha_agent.brain.client import BrainClient, BrainSimulationError
 from alpha_agent.brain.fastexpr import brain_settings, generate_brain_candidates
+from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
 from alpha_agent.evolution.correlation_gate import max_corr_against
 
 # WorldQuant's SELF_CORRELATION bar: a new alpha correlating this much with an
@@ -73,6 +74,7 @@ async def run_mining_round(
     rng_seed: int = 1234,
     sim_timeout_s: float = 300.0,
     seed_from_user_alphas: bool = True,
+    logic_llm=None,
 ) -> dict:
     """Execute one round and return a bucket summary. Every candidate's outcome
     is persisted to brain_alphas regardless of pass/fail so the UI + the next
@@ -104,9 +106,21 @@ async def run_mining_round(
     except Exception:  # noqa: BLE001 — best-effort; base fields still work
         real_fields = None
 
+    # Over-generate so the logic screen has candidates to prune down to
+    # n_candidates worth of economically-sensible ones.
+    gen_n = n_candidates * 2 if logic_llm is not None else n_candidates
     candidates = generate_brain_candidates(
-        n_candidates, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed
+        gen_n, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed
     )
+
+    # LLM financial-logic pre-screen (AlphaEval 'Financial Logic'): score the
+    # candidates' economic sense in one batched call and simulate only the
+    # sensible ones — BRAIN sims are the bottleneck, so not wasting them on
+    # nonsense raises hit-rate. No-op without an LLM client.
+    if logic_llm is not None:
+        scores = await score_economic_logic(logic_llm, candidates)
+        candidates = select_by_logic(candidates, scores)[:n_candidates]
+        print(f"[logic] screened to {len(candidates)} sensible candidates", flush=True)
     settings = brain_settings()
     summary = {
         "generated": len(candidates),

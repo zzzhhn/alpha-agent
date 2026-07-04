@@ -48,4 +48,8 @@ jobs:
           BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
           BRAIN_N_CANDIDATES: ${{ github.event.inputs.n_candidates || '8' }}
+          # Optional: enables the LLM financial-logic pre-screen. Unset → skipped.
+          MINING_LLM_KEY: ${{ secrets.MINING_LLM_KEY }}
+          MINING_LLM_MODEL: ${{ secrets.MINING_LLM_MODEL }}
+          MINING_LLM_BASE: ${{ secrets.MINING_LLM_BASE }}
         run: python scripts/brain_mining_loop.py

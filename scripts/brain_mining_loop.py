@@ -55,9 +55,28 @@ async def _main() -> int:
         if creds is None:
             print(json.dumps({"ok": False, "error": "no BRAIN credentials: set BRAIN_USERNAME + BRAIN_PASSWORD secrets, or BYOK_MASTER_KEY to decrypt the vault"}))
             return 1
+        # Optional LLM financial-logic pre-screen. If MINING_LLM_KEY is set,
+        # build a LiteLLM client to score candidates' economic sense before the
+        # (slow) BRAIN sims; otherwise the screen is a no-op.
+        logic_llm = None
+        llm_key = os.environ.get("MINING_LLM_KEY")
+        if llm_key:
+            try:
+                from alpha_agent.llm.litellm_client import LiteLLMClient
+
+                logic_llm = LiteLLMClient(
+                    model=os.environ.get("MINING_LLM_MODEL", "openai/gpt-4o-mini"),
+                    api_key=llm_key,
+                    api_base=os.environ.get("MINING_LLM_BASE") or None,
+                )
+            except Exception as e:  # noqa: BLE001 — screen stays optional
+                print(f"[logic] LLM init failed, screening off: {e}", flush=True)
+
         client = BrainClient(creds[0], creds[1])
         try:
-            summary = await run_mining_round(client, pool, user_id, n_candidates=n)
+            summary = await run_mining_round(
+                client, pool, user_id, n_candidates=n, logic_llm=logic_llm
+            )
         finally:
             await client.aclose()
         print(json.dumps({"ok": True, "user_id": user_id, **summary}))
