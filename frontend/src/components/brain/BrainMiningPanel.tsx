@@ -1,53 +1,54 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, AlertTriangle, Send, RefreshCw } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Send,
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import { BrainPnLChart } from "@/components/brain/BrainPnLChart";
 import {
   fetchBrainAlphas,
+  fetchAlphaPnl,
   submitBrainAlpha,
   type BrainAlpha,
+  type BrainAlphaQuery,
   type BrainOutcome,
+  type PnlPoint,
 } from "@/lib/api/brain";
 
-/**
- * Phase E5: the review surface for real WorldQuant BRAIN mining results.
- * Candidates are bucketed by how they fared on the platform; the operator's one
- * decision is whether to submit a survivor to their BRAIN account. Design intent
- * (per the UI/UX principles): lead with the survivors that need a decision
- * (PASSED, then FLAGGED), demote the noise (REJECTED / SIM_ERROR) into a
- * collapsed tail, and make Submit — the only outward, quota-spending action —
- * the visually dominant control with a confirm step for damping.
- */
+const PAGE_SIZE = 20;
+
 function fmt(v: number | null | undefined, d = 2): string {
   return typeof v === "number" && !Number.isNaN(v) ? v.toFixed(d) : "—";
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
-        {label}
-      </span>
-      <span className="font-mono text-[12px] tabular-nums text-tm-fg">{value}</span>
-    </div>
-  );
+const OUTCOME_CLS: Record<BrainOutcome, string> = {
+  passed: "border-tm-pos text-tm-pos",
+  flagged: "border-tm-warn text-tm-warn",
+  rejected: "border-tm-rule text-tm-muted",
+  sim_error: "border-tm-neg text-tm-neg",
+};
+
+function outcomeLabel(o: BrainOutcome, zh: boolean): string {
+  return zh
+    ? { passed: "通过", flagged: "存疑", rejected: "淘汰", sim_error: "错误" }[o]
+    : { passed: "PASS", flagged: "FLAG", rejected: "OUT", sim_error: "ERR" }[o];
 }
 
+// ── submit control (two-step confirm, matches the app's forgiveness pattern) ──
 type SubmitState = "idle" | "confirm" | "sending" | "done" | "error";
 
-function SubmitControl({
-  alpha,
-  onDone,
-}: {
-  alpha: BrainAlpha;
-  onDone: () => void;
-}) {
+function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
-  const router = useRouter();
   const [state, setState] = useState<SubmitState>(
     alpha.submitted_at ? "done" : "idle",
   );
@@ -57,7 +58,7 @@ function SubmitControl({
     return (
       <span className="inline-flex items-center gap-1.5 font-tm-mono text-[11px] text-tm-pos">
         <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-        {(zh ? "已提交" : "submitted")}
+        {zh ? "已提交" : "submitted"}
         {msg ? ` · ${msg}` : ""}
       </span>
     );
@@ -70,12 +71,13 @@ function SubmitControl({
       setMsg(r.brain_status);
       setState("done");
       onDone();
-      router.refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
       setState("error");
     }
   }
+
+  if (alpha.outcome !== "passed" && alpha.outcome !== "flagged") return null;
 
   return (
     <div className="flex items-center gap-2">
@@ -87,7 +89,7 @@ function SubmitControl({
             className="inline-flex items-center gap-1.5 rounded border border-tm-accent bg-tm-accent px-2.5 py-1 font-tm-mono text-[11px] font-bold text-tm-bg hover:opacity-90"
           >
             <Send className="h-3 w-3" strokeWidth={2} />
-            {zh ? "确认提交到 BRAIN" : "Confirm submit"}
+            {zh ? "确认提交" : "Confirm"}
           </button>
           <button
             type="button"
@@ -119,213 +121,308 @@ function SubmitControl({
   );
 }
 
-function AlphaCard({
-  alpha,
-  submittable,
-  onDone,
-}: {
-  alpha: BrainAlpha;
-  submittable: boolean;
-  onDone: () => void;
-}) {
+// ── expandable row detail: PnL chart + full metrics + submit ─────────────────
+function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
-  const decay = (alpha.settings?.decay as number | undefined) ?? 0;
+  const [pnl, setPnl] = useState<PnlPoint[] | null>(null);
+  const [pnlErr, setPnlErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    if (!alpha.alpha_id) {
+      setPnlErr(zh ? "此候选无 BRAIN alpha(仿真失败)" : "no BRAIN alpha (sim failed)");
+      return;
+    }
+    fetchAlphaPnl(alpha.id)
+      .then((r) => alive && setPnl(r.points))
+      .catch((e) => alive && setPnlErr(e instanceof Error ? e.message : String(e)));
+    return () => {
+      alive = false;
+    };
+  }, [alpha.id, alpha.alpha_id, zh]);
+
   return (
-    <li className="flex flex-col gap-2 px-3 py-2.5">
-      <code className="block break-all font-tm-mono text-[12px] leading-snug text-tm-fg">
+    <div className="flex flex-col gap-3 border-t border-tm-rule bg-tm-bg-2 px-3 py-3">
+      <code className="block break-all font-tm-mono text-[11.5px] leading-snug text-tm-fg">
         {alpha.expression}
       </code>
-      <div className="grid grid-cols-3 gap-x-4 gap-y-1.5 sm:grid-cols-6">
+      <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2 sm:grid-cols-6">
         <Metric label="Sharpe" value={fmt(alpha.sharpe)} />
         <Metric label="Fitness" value={fmt(alpha.fitness)} />
         <Metric label={zh ? "换手" : "Turnover"} value={fmt(alpha.turnover)} />
         <Metric label="Drawdown" value={fmt(alpha.drawdown)} />
         <Metric label="Self-corr" value={fmt(alpha.self_correlation)} />
-        <Metric label="Decay" value={String(decay)} />
+        <Metric label="BRAIN" value={alpha.alpha_id ?? "—"} />
       </div>
-      {alpha.self_correlation_with ? (
-        <div className="inline-flex w-fit items-center gap-1.5 rounded border border-tm-warn/50 px-2 py-0.5 font-tm-mono text-[10.5px] text-tm-warn">
-          <AlertTriangle className="h-3 w-3" strokeWidth={1.75} />
-          {(zh ? "与已有 alpha 相关: " : "correlates with: ") +
-            alpha.self_correlation_with}
+
+      <div>
+        <div className="mb-1 font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+          {zh ? "累计 PnL 曲线" : "cumulative PnL"}
         </div>
-      ) : null}
-      {submittable ? (
-        <div className="flex items-center justify-between">
-          <span className="font-tm-mono text-[10px] text-tm-muted">
-            {alpha.alpha_id ? `BRAIN ${alpha.alpha_id}` : ""}
-          </span>
-          <SubmitControl alpha={alpha} onDone={onDone} />
-        </div>
-      ) : null}
-    </li>
+        {pnl && pnl.length > 0 ? (
+          <BrainPnLChart points={pnl} />
+        ) : pnlErr ? (
+          <p className="font-tm-mono text-[11px] text-tm-muted">{pnlErr}</p>
+        ) : (
+          <p className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-muted">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+            {zh ? "从 BRAIN 拉取 PnL…" : "fetching PnL from BRAIN…"}
+          </p>
+        )}
+      </div>
+
+      <div className="flex justify-end">
+        <SubmitControl alpha={alpha} onDone={onDone} />
+      </div>
+    </div>
   );
 }
 
-const OUTCOME_META: Record<
-  BrainOutcome,
-  { title: (zh: boolean) => string; cls: string }
-> = {
-  passed: {
-    title: (zh) => (zh ? "通过 · 可提交" : "PASSED · ready to submit"),
-    cls: "text-tm-pos",
-  },
-  flagged: {
-    title: (zh) => (zh ? "存疑 · 需审查后提交" : "FLAGGED · review before submit"),
-    cls: "text-tm-warn",
-  },
-  rejected: {
-    title: (zh) => (zh ? "未过闸" : "REJECTED · below gates"),
-    cls: "text-tm-muted",
-  },
-  sim_error: {
-    title: (zh) => (zh ? "仿真失败" : "SIM ERROR"),
-    cls: "text-tm-neg",
-  },
-};
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+        {label}
+      </span>
+      <span className="tabular-nums text-tm-fg">{value}</span>
+    </div>
+  );
+}
+
+// ── main panel ───────────────────────────────────────────────────────────────
+const OUTCOMES: Array<BrainOutcome | ""> = ["", "passed", "flagged", "rejected", "sim_error"];
+const SORTS = ["created_at", "sharpe", "fitness", "turnover"] as const;
 
 export function BrainMiningPanel() {
   const { locale } = useLocale();
   const zh = locale === "zh";
-  const [showTail, setShowTail] = useState(false);
-  // Auth-gated endpoint: fetch client-side (in the browser, where the Next.js
-  // middleware injects the auth token), NOT from a server component — SSR skips
-  // middleware, so /api/brain/alphas would 401 and render "no results" even
-  // when the user has mined alphas. (client.ts: "Auth-gated endpoints are only
-  // called client-side.")
-  const [alphas, setAlphas] = useState<BrainAlpha[] | null>(null);
+  const [page, setPage] = useState(0);
+  const [outcome, setOutcome] = useState<BrainOutcome | "">("");
+  const [q, setQ] = useState("");
+  const [sharpeMin, setSharpeMin] = useState("");
+  const [sort, setSort] = useState<string>("created_at");
+  const [descending, setDescending] = useState(true);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const [data, setData] = useState<{ alphas: BrainAlpha[]; total: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const query = useMemo<BrainAlphaQuery>(
+    () => ({
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+      outcome: outcome || undefined,
+      q: q.trim() || undefined,
+      sharpe_min: sharpeMin ? Number(sharpeMin) : undefined,
+      sort,
+      descending,
+    }),
+    [page, outcome, q, sharpeMin, sort, descending],
+  );
 
   const load = useCallback(async () => {
     try {
-      const res = await fetchBrainAlphas(100);
-      setAlphas(res.alphas);
+      const res = await fetchBrainAlphas(query);
+      setData(res);
       setLoadError(null);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
-      setAlphas([]);
+      setData({ alphas: [], total: 0 });
     }
-  }, []);
+  }, [query]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const groups = useMemo(() => {
-    const g: Record<BrainOutcome, BrainAlpha[]> = {
-      passed: [], flagged: [], rejected: [], sim_error: [],
-    };
-    for (const a of alphas ?? []) g[a.outcome]?.push(a);
-    return g;
-  }, [alphas]);
+  // reset to page 0 whenever a filter changes
+  useEffect(() => {
+    setPage(0);
+  }, [outcome, q, sharpeMin, sort, descending]);
 
-  // Loading (first fetch not yet resolved).
-  if (alphas === null) {
-    return (
-      <TmScreen>
-        <TmPane title="WORLDQUANT.BRAIN" meta={zh ? "加载中" : "loading"}>
-          <p className="flex items-center gap-2 px-3 py-5 font-tm-mono text-[11.5px] text-tm-muted">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-            {zh ? "读取挖矿结果…" : "loading mining results…"}
-          </p>
-        </TmPane>
-      </TmScreen>
-    );
+  function toggle(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
-  const meta = `${groups.passed.length} ${zh ? "通过" : "PASS"} · ${groups.flagged.length} ${zh ? "存疑" : "FLAG"} · ${groups.rejected.length + groups.sim_error.length} ${zh ? "淘汰" : "OUT"}`;
-
-  if (alphas.length === 0) {
-    return (
-      <TmScreen>
-        <TmPane title="WORLDQUANT.BRAIN" meta={zh ? "无结果" : "no results"}>
-          <p className="px-3 py-5 font-tm-mono text-[11.5px] leading-relaxed text-tm-muted">
-            {loadError
-              ? (zh ? `读取失败: ${loadError}` : `load failed: ${loadError}`)
-              : zh
-              ? "还没有挖矿结果。到 GitHub → Actions → brain-mining-loop 手动跑一轮(或等每日 08:00 UTC 自动运行)。GA 会生成 FASTEXPR、在你的 BRAIN 账号上真实仿真、按 Sharpe/Fitness/换手/自相关过闸,过闸的 alpha 会出现在这里供你审查提交。前提:已在「设置」连接 BRAIN 账号。"
-              : "No mining results yet. Run GitHub → Actions → brain-mining-loop (or wait for the daily 08:00 UTC run). The GA generates FASTEXPR, simulates on your BRAIN account, and gates on Sharpe/Fitness/Turnover/self-correlation; survivors appear here for you to review and submit. Requires a connected BRAIN account in Settings."}
-          </p>
-        </TmPane>
-      </TmScreen>
-    );
+  function toggleSort(col: string) {
+    if (sort === col) setDescending((d) => !d);
+    else {
+      setSort(col);
+      setDescending(true);
+    }
   }
 
-  const renderGroup = (outcome: BrainOutcome, submittable: boolean) => {
-    const items = groups[outcome];
-    if (items.length === 0) return null;
-    const m = OUTCOME_META[outcome];
-    return (
-      <TmPane key={outcome} title="" meta="">
-        <div className={`border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[11px] font-bold uppercase tracking-wider ${m.cls}`}>
-          {m.title(zh)} · {items.length}
-        </div>
-        <ul className="flex flex-col divide-y divide-tm-rule">
-          {items.map((a) => (
-            <AlphaCard
-              key={a.id}
-              alpha={a}
-              submittable={submittable}
-              onDone={() => void load()}
-            />
-          ))}
-        </ul>
-      </TmPane>
-    );
-  };
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const meta = `${total} ${zh ? "个 alpha" : "alphas"}`;
+
+  const INPUT =
+    "h-6 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11px] text-tm-fg outline-none focus:border-tm-accent placeholder:text-tm-muted";
 
   return (
     <TmScreen>
       <TmPane
         title="WORLDQUANT.BRAIN"
         meta={
-          <span className="flex items-center gap-2">
-            {meta}
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="text-tm-muted hover:text-tm-fg"
-              aria-label={zh ? "刷新" : "refresh"}
-              title={zh ? "刷新" : "refresh"}
-            >
-              <RefreshCw className="h-3 w-3" strokeWidth={1.75} />
-            </button>
-          </span>
-        }
-      >
-        <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-fg-2">
-          {zh
-            ? "GA 挖出、在你 BRAIN 账号上真实仿真过的 alpha。通过下方闸门的可直接提交(提交是唯一对外动作,需你逐条确认)。"
-            : "Alphas the GA mined and simulated on your real BRAIN account. Gate survivors can be submitted (submit is the only outward action — you confirm each one)."}
-        </p>
-      </TmPane>
-
-      {renderGroup("passed", true)}
-      {renderGroup("flagged", true)}
-
-      {groups.rejected.length + groups.sim_error.length > 0 ? (
-        <TmPane
-          title={zh ? "淘汰候选" : "DISCARDED"}
-          meta={`${groups.rejected.length + groups.sim_error.length}`}
-        >
           <button
             type="button"
-            onClick={() => setShowTail((s) => !s)}
-            className="w-full px-3 py-2 text-left font-tm-mono text-[11px] text-tm-muted hover:text-tm-fg"
+            onClick={() => void load()}
+            className="flex items-center gap-1.5 text-tm-muted hover:text-tm-fg"
+            title={zh ? "刷新" : "refresh"}
           >
-            {showTail
-              ? zh ? "收起" : "hide"
-              : zh ? "展开未过闸 / 仿真失败的候选" : "show rejected / sim-error candidates"}
+            {meta}
+            <RefreshCw className="h-3 w-3" strokeWidth={1.75} />
           </button>
-          {showTail ? (
-            <div className="flex flex-col">
-              {renderGroup("rejected", false)}
-              {renderGroup("sim_error", false)}
-            </div>
-          ) : null}
-        </TmPane>
-      ) : null}
+        }
+      >
+        {/* filter bar */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
+          <select
+            value={outcome}
+            onChange={(e) => setOutcome(e.target.value as BrainOutcome | "")}
+            className={INPUT}
+          >
+            {OUTCOMES.map((o) => (
+              <option key={o || "all"} value={o}>
+                {o ? outcomeLabel(o, zh) : zh ? "全部状态" : "all"}
+              </option>
+            ))}
+          </select>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={zh ? "搜索表达式…" : "search expression…"}
+            className={`${INPUT} w-56`}
+          />
+          <input
+            value={sharpeMin}
+            onChange={(e) => setSharpeMin(e.target.value)}
+            placeholder={zh ? "Sharpe ≥" : "Sharpe ≥"}
+            inputMode="decimal"
+            className={`${INPUT} w-24`}
+          />
+          <span className="ml-auto font-tm-mono text-[10px] text-tm-muted">
+            {zh ? "排序:" : "sort:"}
+          </span>
+          {SORTS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggleSort(s)}
+              className={`inline-flex items-center gap-0.5 font-tm-mono text-[10px] uppercase ${sort === s ? "text-tm-accent" : "text-tm-muted hover:text-tm-fg"}`}
+            >
+              {s === "created_at" ? (zh ? "时间" : "date") : s}
+              {sort === s ? (
+                descending ? (
+                  <ArrowDown className="h-2.5 w-2.5" strokeWidth={2} />
+                ) : (
+                  <ArrowUp className="h-2.5 w-2.5" strokeWidth={2} />
+                )
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        {/* column header */}
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
+          <span>{zh ? "表达式" : "expression"}</span>
+          <span className="w-14 text-right">Sharpe</span>
+          <span className="w-14 text-right">Fitness</span>
+          <span className="w-14 text-right">{zh ? "换手" : "TO"}</span>
+          <span className="w-12 text-right">S-corr</span>
+          <span className="w-14 text-right">{zh ? "状态" : "status"}</span>
+        </div>
+
+        {/* rows */}
+        {data === null ? (
+          <p className="flex items-center gap-2 px-3 py-5 font-tm-mono text-[11px] text-tm-muted">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+            {zh ? "加载中…" : "loading…"}
+          </p>
+        ) : data.alphas.length === 0 ? (
+          <p className="px-3 py-5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+            {loadError
+              ? (zh ? `读取失败: ${loadError}` : `load failed: ${loadError}`)
+              : total === 0
+              ? zh
+                ? "还没有挖矿结果。点上方「开始挖矿」跑一轮,或等每日 08:00 UTC 自动运行。前提:已在「设置」连接 BRAIN 账号。"
+                : "No mining results yet. Click 'Start mining' above, or wait for the daily 08:00 UTC run. Requires a connected BRAIN account in Settings."
+              : zh
+              ? "没有符合筛选的结果。"
+              : "No results match the filters."}
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-tm-rule">
+            {data.alphas.map((a) => {
+              const open = expanded.has(a.id);
+              return (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(a.id)}
+                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-3 px-3 py-2 text-left hover:bg-tm-bg-2"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {open ? (
+                        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
+                      ) : (
+                        <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
+                      )}
+                      <code className="truncate font-tm-mono text-[11px] text-tm-fg">
+                        {a.expression}
+                      </code>
+                      {a.submitted_at ? (
+                        <CheckCircle2 className="h-3 w-3 shrink-0 text-tm-pos" strokeWidth={1.75} />
+                      ) : null}
+                    </span>
+                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.sharpe)}</span>
+                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.fitness)}</span>
+                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.turnover)}</span>
+                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.self_correlation)}</span>
+                    <span className="flex w-14 justify-end">
+                      <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${OUTCOME_CLS[a.outcome]}`}>
+                        {outcomeLabel(a.outcome, zh)}
+                      </span>
+                    </span>
+                  </button>
+                  {open ? <RowDetail alpha={a} onDone={() => void load()} /> : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {/* pagination */}
+        {total > PAGE_SIZE ? (
+          <div className="flex items-center justify-between border-t border-tm-rule px-3 py-2 font-tm-mono text-[11px] text-tm-muted">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="hover:text-tm-fg disabled:opacity-40"
+            >
+              ‹ {zh ? "上一页" : "prev"}
+            </button>
+            <span>
+              {zh ? "第" : "page"} {page + 1} / {pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              disabled={page >= pageCount - 1}
+              className="hover:text-tm-fg disabled:opacity-40"
+            >
+              {zh ? "下一页" : "next"} ›
+            </button>
+          </div>
+        ) : null}
+      </TmPane>
     </TmScreen>
   );
 }

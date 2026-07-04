@@ -56,8 +56,39 @@ export interface BrainSubmitResult {
   alpha_id: string;
 }
 
-export const fetchBrainAlphas = (limit = 100, opts?: ApiGetOptions) =>
-  apiGet<{ alphas: BrainAlpha[] }>(`/api/brain/alphas?limit=${limit}`, opts);
+export interface BrainAlphaQuery {
+  limit?: number;
+  offset?: number;
+  outcome?: BrainOutcome | "";
+  q?: string;
+  sharpe_min?: number | null;
+  fitness_min?: number | null;
+  turnover_max?: number | null;
+  submitted?: boolean | null;
+  sort?: string;
+  descending?: boolean;
+}
+
+export interface BrainAlphaPage {
+  alphas: BrainAlpha[];
+  total: number;
+}
+
+export const fetchBrainAlphas = (query: BrainAlphaQuery = {}, opts?: ApiGetOptions) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+  }
+  return apiGet<BrainAlphaPage>(`/api/brain/alphas?${p.toString()}`, opts);
+};
+
+export interface PnlPoint {
+  date: string;
+  pnl: number;
+}
+
+export const fetchAlphaPnl = (rowId: number, opts?: ApiGetOptions) =>
+  apiGet<{ points: PnlPoint[] }>(`/api/brain/alphas/${rowId}/pnl`, opts);
 
 export const submitBrainAlpha = (rowId: number) =>
   apiPost<BrainSubmitResult, Record<string, never>>(
