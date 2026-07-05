@@ -203,15 +203,21 @@ def _value_leg(
     num, den = _pick_ratio(rng, usage)
     ratio = _op("divide", _fld(num), _fld(den))
     w = _lit(rng.choice(_FUND_WINDOWS))
-    inner = rng.choice((
-        _op("ts_rank", ratio, w),
-        _op("ts_zscore", ratio, w),
-        _op("ts_mean", ratio, w),
-        _op("ts_av_diff", ratio, w),                    # demeaned level
-        _op("ts_scale", ratio, w),                      # scaled to [0,1] over W
-        _op("ts_rank", _op("ts_backfill", ratio, w), w),  # NaN-filled then ranked
-        ratio,
-    ))
+    # ts_rank dominant — it's the proven high-Sharpe transform; the rest are a
+    # minority for variety (they mostly clear the bar less often).
+    inner = rng.choices(
+        (
+            _op("ts_rank", ratio, w),
+            _op("ts_zscore", ratio, w),
+            _op("ts_mean", ratio, w),
+            _op("ts_av_diff", ratio, w),                    # demeaned level
+            _op("ts_scale", ratio, w),                      # scaled to [0,1] over W
+            _op("ts_rank", _op("ts_backfill", ratio, w), w),  # NaN-filled then ranked
+            ratio,
+        ),
+        weights=(0.42, 0.15, 0.15, 0.07, 0.07, 0.07, 0.07),
+        k=1,
+    )[0]
     return _op(norm, inner, _fld(group))
 
 
@@ -259,17 +265,16 @@ def _style_leg(rng: random.Random, group: str, *, norm: str = "group_rank") -> d
 
 
 def _reshape(rng: random.Random, leg: dict) -> dict:
-    """Occasionally reshape the final signal with a batch-A arithmetic op (BRAIN
-    syntax signed_power(x,y)/power(x,y)/reverse(x)): compress tails, emphasize
-    extremes, or flip direction — alters the weighting profile without changing
-    fields. Mostly a no-op so the proven signals stay dominant."""
+    """RARELY reshape the final signal with a batch-A arithmetic op — signed_power
+    compresses tails, power emphasizes extremes. Kept to a few percent: these alter
+    the weighting profile and mostly HURT Sharpe, so the proven un-reshaped signal
+    must dominate. `reverse` is deliberately NOT used here — flipping a good factor's
+    sign turns a +Sharpe into a -Sharpe and just gets it rejected."""
     r = rng.random()
-    if r < 0.10:
+    if r < 0.04:
         return _op("signed_power", leg, {"type": "literal", "value": 0.5})
-    if r < 0.16:
+    if r < 0.06:
         return _op("power", leg, _lit(2))
-    if r < 0.21:
-        return _op("reverse", leg)
     return leg
 
 
@@ -284,11 +289,12 @@ def _ratio_template(
     signals for genuine signal-family spread. An occasional batch-A reshape alters
     the weighting profile."""
     group = _neutral_group(rng, prefer_industry)
-    norm = rng.choices(_GROUP_NORMS, weights=(0.55, 0.15, 0.15, 0.15), k=1)[0]
+    # group_rank dominant (the proven high-Sharpe normalization); the others minority.
+    norm = rng.choices(_GROUP_NORMS, weights=(0.70, 0.10, 0.10, 0.10), k=1)[0]
     r = rng.random()
-    if r < 0.65:
-        leg = _value_leg(rng, usage, group, norm=norm)    # fundamental ratio
-    elif r < 0.85:
+    if r < 0.72:
+        leg = _value_leg(rng, usage, group, norm=norm)    # fundamental ratio (backbone)
+    elif r < 0.88:
         leg = _style_leg(rng, group, norm=norm)           # pre-computed style factor
     else:
         leg = _technical_leg(rng, group, norm=norm)       # price/volume family
@@ -445,16 +451,20 @@ def generate_brain_candidates(
     while len(out) < n and guard < n * 120:
         guard += 1
         r = rng.random()
-        if r < 0.45:
-            # Economic-ratio golden structures first — the highest-signal path.
+        if r < 0.62:
+            # Economic-ratio / style golden structures — the highest-signal path,
+            # now DOMINANT (was 45%). Widening operators/fields diluted this and
+            # tanked the pass rate, so the proven backbone leads again.
             tree = (
                 _blended_ratio_template(rng, ratio_usage, prefer_industry)
                 if rng.random() < 0.35
                 else _ratio_template(rng, ratio_usage, prefer_industry)
             )
-        elif r < 0.65:
-            tree = _golden_template(rng, vocab)  # generic golden over any field
-        elif pool and r < 0.85:
+        elif r < 0.72:
+            # generic golden over any fetched field — kept small: raw single-field
+            # signals over alt-data (news/social/option) fields are mostly junk.
+            tree = _golden_template(rng, vocab)
+        elif pool and r < 0.90:
             a = rng.choice(pool)
             try:
                 tree = (
