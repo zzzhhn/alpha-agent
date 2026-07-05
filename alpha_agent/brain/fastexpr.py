@@ -108,6 +108,11 @@ BRAIN_SAFE_OPS = frozenset({
     "ts_mean", "ts_std_dev", "ts_sum", "ts_delta", "ts_delay",
     "ts_rank", "ts_zscore", "ts_decay_linear", "ts_corr",
     "group_rank", "group_zscore", "group_neutralize",
+    # Widened coverage (all confirmed available via the /operators discovery, all
+    # fit the op(x, int)/op(x, group) grammar so the positional serializer is safe):
+    # NaN-fill, demeaned/scaled series, days-since-extreme momentum, group-scale.
+    "ts_backfill", "ts_av_diff", "ts_scale", "ts_arg_max", "ts_arg_min",
+    "group_scale",
 })
 
 
@@ -161,7 +166,7 @@ def _pick_ratio(rng: random.Random, usage: Optional[dict]) -> tuple[str, str]:
 # Outer cross-sectional normalizations (all BRAIN-safe). group_rank → [0,1],
 # group_zscore/neutralize → demeaned. Rotating the normalization decorrelates
 # single-leg value alphas that would otherwise share an identical book.
-_GROUP_NORMS = ("group_rank", "group_zscore", "group_neutralize")
+_GROUP_NORMS = ("group_rank", "group_zscore", "group_neutralize", "group_scale")
 # Technical legs prefer longer windows so their turnover stays inside the gate.
 _TECH_WINDOWS = (20, 40, 60, 120)
 
@@ -199,6 +204,9 @@ def _value_leg(
         _op("ts_rank", ratio, w),
         _op("ts_zscore", ratio, w),
         _op("ts_mean", ratio, w),
+        _op("ts_av_diff", ratio, w),                    # demeaned level
+        _op("ts_scale", ratio, w),                      # scaled to [0,1] over W
+        _op("ts_rank", _op("ts_backfill", ratio, w), w),  # NaN-filled then ranked
         ratio,
     ))
     return _op(norm, inner, _fld(group))
@@ -218,6 +226,8 @@ def _technical_leg(
             _op("ts_rank", _fld(rng.choice(("close", "returns", "vwap"))), w),
             _op("ts_delta", _fld("close"), w),
             _op("divide", _fld("close"), _op("ts_mean", _fld("close"), w)),
+            _op("ts_arg_max", _fld("close"), w),   # days since the high
+            _op("ts_arg_min", _fld("close"), w),   # days since the low
         ))
     elif family == "volatility":
         inner = _op("ts_std_dev", _fld("returns"), w)
@@ -255,7 +265,7 @@ def _ratio_template(
     normalization; a minority are pre-computed style-factor scores or technical
     signals for genuine signal-family spread."""
     group = _neutral_group(rng, prefer_industry)
-    norm = rng.choices(_GROUP_NORMS, weights=(0.6, 0.2, 0.2), k=1)[0]
+    norm = rng.choices(_GROUP_NORMS, weights=(0.55, 0.15, 0.15, 0.15), k=1)[0]
     r = rng.random()
     if r < 0.65:
         return _value_leg(rng, usage, group, norm=norm)   # fundamental ratio
@@ -422,11 +432,16 @@ def generate_brain_candidates(
             tree = _golden_template(rng, vocab)  # generic golden over any field
         elif pool and r < 0.85:
             a = rng.choice(pool)
-            tree = (
-                ga_dsl.mutate(rng, ga_dsl.crossover(rng, a, rng.choice(pool)), vocab)
-                if len(pool) >= 2 and rng.random() < 0.5
-                else ga_dsl.mutate(rng, a, vocab)
-            )
+            try:
+                tree = (
+                    ga_dsl.mutate(rng, ga_dsl.crossover(rng, a, rng.choice(pool)), vocab)
+                    if len(pool) >= 2 and rng.random() < 0.5
+                    else ga_dsl.mutate(rng, a, vocab)
+                )
+            except Exception:  # noqa: BLE001 — GA can't mutate a BRAIN-only operator
+                # (ts_backfill/ts_av_diff/... aren't in ga_dsl's registry); the
+                # templates still emit those directly, so just skip this GA attempt.
+                continue
         else:
             tree = ga_dsl.random_tree(rng, max_depth, vocab)
 

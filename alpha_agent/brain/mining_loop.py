@@ -114,7 +114,7 @@ async def run_mining_round(
     # Fitness bars — not just OHLCV. Falls back to base price fields on failure.
     real_fields: Optional[list[str]] = None
     try:
-        real_fields = await client.fetch_data_fields(limit=300)
+        real_fields = await client.fetch_data_fields(limit=500)
         print(f"[fields] {len(real_fields or [])} real BRAIN data-fields", flush=True)
     except Exception:  # noqa: BLE001 — best-effort; base fields still work
         real_fields = None
