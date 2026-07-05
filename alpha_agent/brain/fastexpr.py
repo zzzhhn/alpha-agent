@@ -16,8 +16,21 @@ from alpha_agent.core.factor_ast import expression_to_tree
 from alpha_agent.evolution import ga_dsl
 
 # Base price/volume fields, always valid on BRAIN. When real data-fields are
-# fetched (fundamentals/analyst), they're mixed in on top of these.
-_BASE_FIELDS = ("close", "open", "high", "low", "volume", "returns", "vwap")
+# fetched (fundamentals/analyst), they're mixed in on top of these. operating_income
+# / cap / adv20 / liabilities are CONFIRMED valid (they appear in the user's ACTIVE
+# GOOD..SPECTACULAR alphas) — cap/adv20 had wrongly been dropped as "guesses".
+_BASE_FIELDS = (
+    "close", "open", "high", "low", "volume", "returns", "vwap",
+    "operating_income", "cap", "adv20", "liabilities",
+)
+
+# Options fields from the user's ACTIVE options-skew alphas (the SPECTACULAR/
+# EXCELLENT ones). Used only by the options-skew template.
+_OPTION_FIELDS = {
+    "pcr_oi": ("pcr_oi_270", "pcr_oi_120"),
+    "iv_call": ("implied_volatility_call_150", "implied_volatility_call_180"),
+    "iv_put": ("implied_volatility_put_150", "implied_volatility_put_180"),
+}
 
 # Economically MEANINGFUL fundamental ratios (numerator, denominator), grouped by
 # FACTOR FAMILY. Different families are the real decorrelators: profitability and
@@ -29,6 +42,9 @@ _BASE_FIELDS = ("close", "open", "high", "low", "volume", "returns", "vwap")
 # real financial signal.
 _RATIO_FAMILIES: dict[str, tuple[tuple[str, str], ...]] = {
     "profitability": (
+        ("operating_income", "cap"),  # THE proven anchor (ts_rank(op_inc/cap,252))
+        ("operating_income", "assets"),
+        ("operating_income", "equity"),
         ("ebit", "equity"),          # operating return on equity
         ("ebit", "assets"),          # operating return on assets
         ("ebitda", "assets"),        # EBITDA / assets
@@ -38,6 +54,10 @@ _RATIO_FAMILIES: dict[str, tuple[tuple[str, str], ...]] = {
         ("cashflow", "assets"),      # total cash-flow return on assets
     ),
     "value": (
+        ("operating_income", "cap"),         # earnings yield on market cap (proven)
+        ("ebit", "cap"),                     # EBIT yield on market cap
+        ("ebitda", "cap"),                   # EBITDA yield on market cap
+        ("cashflow_op", "cap"),              # cash-flow yield on market cap
         ("eps", "close"),                    # earnings yield
         ("bookvalue_ps", "close"),           # book-to-price
         ("ebit", "enterprise_value"),        # EV/EBIT yield (EV angle)
@@ -116,6 +136,10 @@ BRAIN_SAFE_OPS = frozenset({
     # Batch A (arithmetic, plain positional per the BRAIN /operators definitions:
     # max(x,y..) min(x,y..) power(x,y) signed_power(x,y) reverse(x)).
     "max", "min", "power", "signed_power", "reverse",
+    # Batch B subset — the ops the user's ACTIVE GOOD..SPECTACULAR alphas rely on:
+    # trade_when(cond, alpha, exit) gates the alpha to only trade when liquid;
+    # greater/less build the trigger conditions (function form of > / <).
+    "trade_when", "greater", "less",
 })
 
 
@@ -264,6 +288,33 @@ def _style_leg(rng: random.Random, group: str, *, norm: str = "group_rank") -> d
     return _op(norm, inner, _fld(group))
 
 
+def _trade_when_wrap(rng: random.Random, alpha: dict) -> dict:
+    """The DOMINANT pattern across the user's ACTIVE alphas: gate the signal to only
+    trade when the stock is liquid/active — trade_when(volume-condition, alpha, -1)
+    (exit=-1 = never force-exit). Better execution → higher Sharpe / lower turnover,
+    a big pass-rate lever."""
+    cond = rng.choice((
+        _op("greater", _fld("volume"), _fld("adv20")),                  # volume > adv20
+        _op("less", _op("ts_mean", _fld("volume"), _lit(20)), _fld("volume")),
+        _op("greater", _fld("volume"),
+            _op("divide", _op("ts_sum", _fld("volume"), _lit(5)), _lit(5))),
+    ))
+    return _op("trade_when", cond, alpha, _lit(-1))
+
+
+def _options_leg(rng: random.Random) -> dict:
+    """The user's SPECTACULAR/EXCELLENT options-skew alpha: when the put-call open-
+    interest ratio is low, take the call-minus-put implied-vol skew (same tenor),
+    gated by trade_when and sector-neutralized. A complete alpha, not a blend leg."""
+    i = rng.randint(0, 1)
+    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
+    skew = _op("subtract",
+               _fld(_OPTION_FIELDS["iv_call"][i]), _fld(_OPTION_FIELDS["iv_put"][i]))
+    gated = _op("trade_when", _op("less", pcr, {"type": "literal", "value": 1.1}),
+                skew, _lit(-1))
+    return _op("group_neutralize", gated, _fld("sector"))
+
+
 def _reshape(rng: random.Random, leg: dict) -> dict:
     """RARELY reshape the final signal with a batch-A arithmetic op — signed_power
     compresses tails, power emphasizes extremes. Kept to a few percent: these alter
@@ -288,6 +339,9 @@ def _ratio_template(
     normalization; a minority are pre-computed style-factor scores or technical
     signals for genuine signal-family spread. An occasional batch-A reshape alters
     the weighting profile."""
+    # A minority are the user's proven options IV-skew alpha (a complete signal).
+    if rng.random() < 0.10:
+        return _options_leg(rng)
     group = _neutral_group(rng, prefer_industry)
     # group_rank dominant (the proven high-Sharpe normalization); the others minority.
     norm = rng.choices(_GROUP_NORMS, weights=(0.70, 0.10, 0.10, 0.10), k=1)[0]
@@ -481,6 +535,11 @@ def generate_brain_candidates(
 
         if ga_dsl.tree_depth(tree) > max_depth:
             continue
+        # Dominant ACTIVE pattern: gate the signal by a liquidity condition
+        # (trade_when(volume>adv20, alpha, -1)). Applied after the depth check so the
+        # 2-level wrap doesn't blow the budget; skip if already a trade_when.
+        if tree.get("name") != "trade_when" and rng.random() < 0.35:
+            tree = _trade_when_wrap(rng, tree)
         expr = _valid_brain_tree(tree)
         if expr is None or expr in seen:
             continue
