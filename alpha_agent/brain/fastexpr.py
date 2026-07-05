@@ -19,24 +19,65 @@ from alpha_agent.evolution import ga_dsl
 # fetched (fundamentals/analyst), they're mixed in on top of these.
 _BASE_FIELDS = ("close", "open", "high", "low", "volume", "returns", "vwap")
 
-# Economically MEANINGFUL fundamental ratios (numerator, denominator), using the
-# real fundamental6 field IDs from the WorldQuant field snapshot. These encode
-# actual financial signal — profitability, cash-flow yield, valuation — which is
-# what beats the bar; random field pairs don't. This is the repo's golden combo
-# group_rank(ts_rank(operating_income/equity, 126), subindustry) made concrete
-# (ebit≈operating income, equity=common equity). Denominator 'close'/'cap' gives
-# valuation ratios (earnings yield); fundamental/fundamental gives quality.
-ECONOMIC_RATIOS: tuple[tuple[str, str], ...] = (
-    ("ebit", "equity"),          # operating return on equity
-    ("ebit", "assets"),          # operating return on assets
-    ("ebitda", "assets"),        # EBITDA / assets
-    ("ebitda", "equity"),        # EBITDA / equity
-    ("cashflow_op", "equity"),   # operating cash-flow yield on equity
-    ("cashflow_op", "assets"),   # cash-flow return on assets
-    ("eps", "close"),            # earnings yield (valuation)
-    ("bookvalue_ps", "close"),   # book-to-price (value)
-    ("equity", "assets"),        # equity ratio (low leverage)
-    ("cashflow_op", "debt"),     # cash-flow debt coverage
+# Economically MEANINGFUL fundamental ratios (numerator, denominator), grouped by
+# FACTOR FAMILY. Different families are the real decorrelators: profitability and
+# value ratios co-move, but leverage, liquidity, investment and EV-multiple signals
+# are largely orthogonal — mixing families is what lets the passed set actually
+# diversify. Every field id is CONFIRMED present in fundamental6 for USA/TOP3000/
+# delay=1 (data-fields discovery), so they simulate as real operands, not
+# "unknown variable" errors. random field pairs don't beat the bar; these encode
+# real financial signal.
+_RATIO_FAMILIES: dict[str, tuple[tuple[str, str], ...]] = {
+    "profitability": (
+        ("ebit", "equity"),          # operating return on equity
+        ("ebit", "assets"),          # operating return on assets
+        ("ebitda", "assets"),        # EBITDA / assets
+        ("ebitda", "equity"),        # EBITDA / equity
+        ("cashflow_op", "equity"),   # operating cash-flow yield on equity
+        ("cashflow_op", "assets"),   # cash-flow return on assets
+        ("cashflow", "assets"),      # total cash-flow return on assets
+    ),
+    "value": (
+        ("eps", "close"),                    # earnings yield
+        ("bookvalue_ps", "close"),           # book-to-price
+        ("ebit", "enterprise_value"),        # EV/EBIT yield (EV angle)
+        ("ebitda", "enterprise_value"),      # EV/EBITDA yield
+        ("cashflow_op", "enterprise_value"), # cash-flow to EV
+    ),
+    "leverage": (
+        ("equity", "assets"),        # equity ratio (low leverage = safety)
+        ("debt", "equity"),          # debt-to-equity
+        ("debt", "assets"),          # debt-to-assets
+        ("debt_lt", "assets"),       # long-term leverage
+        ("cashflow_op", "debt"),     # cash-flow debt coverage
+    ),
+    "liquidity": (
+        ("cash", "assets"),          # cash ratio
+        ("cash_st", "assets"),       # cash + short-term investments / assets
+        ("assets_curr", "assets"),   # current-asset intensity
+    ),
+    "investment": (
+        ("capex", "assets"),         # capex intensity (investment factor)
+    ),
+    "payout": (
+        ("cashflow_dividends", "equity"),  # dividend payout on equity
+    ),
+}
+
+# Flat tuple over all families — kept for the evolution usage-weighting + regex,
+# and for callers that iterate every ratio.
+ECONOMIC_RATIOS: tuple[tuple[str, str], ...] = tuple(
+    r for fam in _RATIO_FAMILIES.values() for r in fam
+)
+
+# Pre-computed WorldQuant style-factor SCORES (model16 "Fundamental Scores"). Each
+# is a complete, individually-strong factor DESIGNED to be relatively decorrelated
+# from the others (the classic value/growth/quality/profitability/momentum styles).
+# This is the cleanest diversity source — far better than re-deriving co-moving
+# ratios. Confirmed in model16 for USA/TOP3000/delay=1.
+_STYLE_FIELDS: tuple[str, ...] = (
+    "fscore_value", "fscore_growth", "fscore_quality",
+    "fscore_profitability", "fscore_momentum",
 )
 
 # Fields valid in BOTH BRAIN FASTEXPR and the local grammar (_ALLOWED_OPERANDS),
@@ -188,20 +229,39 @@ def _technical_leg(
     return _op(norm, inner, _fld(group))
 
 
+def _style_leg(rng: random.Random, group: str, *, norm: str = "group_rank") -> dict:
+    """A pre-computed WorldQuant style-factor score (value / growth / quality /
+    profitability / momentum) — a complete, individually-strong signal that is
+    largely decorrelated from the others. The cleanest diversity source: growth and
+    momentum styles genuinely decorrelate from the value/quality book the ratio
+    legs produce, without sacrificing signal strength."""
+    fld = _fld(rng.choice(_STYLE_FIELDS))
+    w = _lit(rng.choice(_FUND_WINDOWS))
+    inner = rng.choice((
+        _op("ts_rank", fld, w),
+        _op("ts_zscore", fld, w),
+        fld,  # the score is already cross-sectional; group-rank it directly
+    ))
+    return _op(norm, inner, _fld(group))
+
+
 def _ratio_template(
     rng: random.Random,
     usage: Optional[dict] = None,
     prefer_industry: bool = False,
 ) -> dict:
-    """A single golden signal. Predominantly a fundamental value leg (the proven
-    Sharpe anchor) with a ROTATED transform / peer group / outer normalization so
-    two value alphas don't collapse to the same book; a minority are pure technical
-    signals for signal-family spread."""
+    """A single golden signal. A fundamental-ratio leg (the proven Sharpe anchor,
+    now spanning 6 factor families) with a ROTATED transform / peer group / outer
+    normalization; a minority are pre-computed style-factor scores or technical
+    signals for genuine signal-family spread."""
     group = _neutral_group(rng, prefer_industry)
     norm = rng.choices(_GROUP_NORMS, weights=(0.6, 0.2, 0.2), k=1)[0]
-    if rng.random() < 0.8:
-        return _value_leg(rng, usage, group, norm=norm)
-    return _technical_leg(rng, group, norm=norm)
+    r = rng.random()
+    if r < 0.65:
+        return _value_leg(rng, usage, group, norm=norm)   # fundamental ratio
+    if r < 0.85:
+        return _style_leg(rng, group, norm=norm)          # pre-computed style factor
+    return _technical_leg(rng, group, norm=norm)          # price/volume family
 
 
 def _blended_ratio_template(
@@ -210,20 +270,21 @@ def _blended_ratio_template(
     prefer_industry: bool = False,
 ) -> dict:
     """Blend two group-RANKED legs (the LOW_FITNESS fix) that are DELIBERATELY
-    cross-family / cross-transform, so the sum decorrelates from a book of
-    look-alike value blends: a fundamental value anchor (keeps the Sharpe hit-rate)
-    plus a second leg that is either a technical signal (momentum/vol/liquidity) or
-    a different value ratio with a different transform. Both legs are group_rank for
-    scale-consistent addition; peer group and window differ per leg for extra
-    decorrelation."""
+    cross-family, so the sum decorrelates from a book of look-alike value blends:
+    a fundamental-ratio anchor (keeps the Sharpe hit-rate) plus a second leg that
+    is a style-factor score, a technical signal, or a different-family ratio. Both
+    legs are group_rank for scale-consistent addition; peer group and window differ
+    per leg for extra decorrelation."""
     g1 = _neutral_group(rng, prefer_industry)
     g2 = _neutral_group(rng, prefer_industry)
     leg_a = _value_leg(rng, usage, g1, norm="group_rank")
-    leg_b = (
-        _technical_leg(rng, g2, norm="group_rank")
-        if rng.random() < 0.5
-        else _value_leg(rng, usage, g2, norm="group_rank")
-    )
+    r = rng.random()
+    if r < 0.4:
+        leg_b = _style_leg(rng, g2, norm="group_rank")          # + style factor
+    elif r < 0.7:
+        leg_b = _technical_leg(rng, g2, norm="group_rank")      # + technical
+    else:
+        leg_b = _value_leg(rng, usage, g2, norm="group_rank")   # + different ratio
     return _op("add", leg_a, leg_b)
 
 

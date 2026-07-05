@@ -369,13 +369,19 @@ class BrainClient:
         page_size: int = 50,
         datasets: Optional[tuple[str, ...]] = None,
         min_coverage: float = 0.35,
+        limit: Optional[int] = None,
     ) -> list[str]:
         """GET /data-fields per dataset → the field IDs usable in FASTEXPR for
         this region/universe/delay, across fundamentals + analyst + alternative
-        data. Returns field `id` strings (deduped). Best-effort per page/dataset.
+        data. Returns field `id` strings (deduped, capped at `limit` if given).
+        Best-effort per page/dataset.
 
         MATRIX = a per-(date,instrument) numeric value usable as an operand.
-        min_coverage skips ultra-sparse fields that mostly NaN out."""
+        min_coverage skips ultra-sparse fields that mostly NaN out. The endpoint
+        rate-limits hard (429) — retried with backoff, since a swallowed 429 is
+        exactly what left this returning nothing before."""
+        import asyncio
+
         datasets = datasets or self._DEFAULT_DATASETS
         seen: set[str] = set()
         out: list[str] = []
@@ -383,19 +389,27 @@ class BrainClient:
             offset = 0
             got = 0
             while got < per_dataset:
-                try:
-                    resp = await self._client.get(
-                        "/data-fields",
-                        params={
-                            "instrumentType": "EQUITY", "region": region,
-                            "universe": universe, "delay": delay, "type": field_type,
-                            "dataset.id": ds, "limit": page_size, "offset": offset,
-                        },
-                    )
-                    resp.raise_for_status()
-                    results = resp.json().get("results", [])
-                except Exception:  # noqa: BLE001 — best-effort per dataset
+                resp = None
+                for attempt in range(4):
+                    try:
+                        resp = await self._client.get(
+                            "/data-fields",
+                            params={
+                                "instrumentType": "EQUITY", "region": region,
+                                "universe": universe, "delay": delay,
+                                "type": field_type, "dataset.id": ds,
+                                "limit": page_size, "offset": offset,
+                            },
+                        )
+                    except Exception:  # noqa: BLE001 — best-effort per dataset
+                        resp = None
+                        break
+                    if resp.status_code != 429:
+                        break
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                if resp is None or resp.status_code != 200:
                     break
+                results = resp.json().get("results", [])
                 if not results:
                     break
                 for f in results:
@@ -409,7 +423,7 @@ class BrainClient:
                         out.append(fid.strip())
                         got += 1
                 offset += page_size
-        return out
+        return out[:limit] if limit else out
 
     async def fetch_alpha_expressions(
         self, *, limit: int = 200, page_size: int = 50

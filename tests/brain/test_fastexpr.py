@@ -85,12 +85,13 @@ def test_golden_structures_dominate():
 
 def test_generation_is_family_and_axis_diverse():
     """Diversification: a batch must spread across peer groups, time-series
-    transforms AND signal families — not collapse onto the single
+    transforms AND factor families — not collapse onto the single
     subindustry / ts_rank / value-blend mold that produced look-alike passers.
     These bounds fail on the old generator (all subindustry, only ts_rank/ts_mean,
-    zero technical-family signals)."""
-    fields = ["ebit", "equity", "assets", "ebitda", "cashflow_op", "eps",
-              "close", "bookvalue_ps", "debt"]
+    zero technical/style/extended-family signals)."""
+    fields = ["ebit", "equity", "assets", "ebitda", "cashflow_op", "eps", "close",
+              "bookvalue_ps", "debt", "debt_lt", "enterprise_value", "capex",
+              "cash", "cash_st", "assets_curr"]
     cands = fe.generate_brain_candidates(40, rng_seed=7, fields=fields)
     assert len(cands) == 40 and len(set(cands)) == 40  # all distinct
     for c in cands:
@@ -103,9 +104,16 @@ def test_generation_is_family_and_axis_diverse():
         1 for c in cands
         if re.search(r"volume|ts_std_dev|ts_delta\(close|divide\(close, ts_mean", c)
     )
-    assert len(groups) >= 2, groups        # not all one peer grouping
+    style = sum(1 for c in cands if "fscore_" in c)
+    ext_family = sum(
+        1 for c in cands
+        if re.search(r"enterprise_value|divide\((debt|debt_lt|cash|cash_st|capex|assets_curr)", c)
+    )
+    assert len(groups) >= 2, groups          # not all one peer grouping
     assert len(transforms) >= 4, transforms  # not just ts_rank/ts_mean
-    assert technical >= 1                   # at least one orthogonal (non-value) family
+    assert technical >= 1                     # a price/volume family signal
+    assert style >= 1                         # a pre-computed style-factor score
+    assert ext_family >= 3                    # ratio families beyond profitability/value
 
 
 def test_brain_settings_overrides():
