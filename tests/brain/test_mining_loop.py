@@ -172,6 +172,55 @@ async def test_intra_batch_diversity_flags_near_duplicate(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_smart_retry_flips_turnover_near_miss(applied_db):
+    """A candidate failing ONLY on turnover at base settings is re-simulated once
+    with higher decay; when the retry clears the gate it's recorded as passed with
+    the WINNING (higher-decay) settings."""
+    near_miss = AlphaMetrics("x", sharpe=1.6, fitness=1.2, turnover=0.5,
+                             returns=0.2, drawdown=0.05)
+    client = _FakeBrain([
+        {"metrics": near_miss, "pnl": {"records": []}},  # base: turnover 0.5 -> fail
+        {"metrics": _PASS, "pnl": {"records": []}},        # retry (more decay) -> pass
+    ])
+
+    async def _no_active():
+        return []
+
+    client.list_active_alphas = _no_active
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        summary = await run_mining_round(client, pool, user_id=1, n_candidates=1, rng_seed=1)
+        assert summary["passed"] == 1 and summary["rejected"] == 0
+        row = [r for r in await store.list_brain_alphas(pool, 1)
+               if r["outcome"] == "passed"][0]
+        assert row["turnover"] == _PASS.turnover      # the retry's metrics won
+        assert int(row["settings"]["decay"]) >= 12    # higher-decay variant stored
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_no_retry_for_hopeless_miss(applied_db):
+    """A catastrophic miss (Sharpe far below the gate) is not worth a retry sim —
+    rejected after the single base simulation (no second sim consumed)."""
+    hopeless = AlphaMetrics("x", sharpe=0.3, fitness=0.2, turnover=0.1,
+                            returns=0.05, drawdown=0.05)
+    client = _FakeBrain([{"metrics": hopeless, "pnl": {"records": []}}])  # ONE outcome
+
+    async def _no_active():
+        return []
+
+    client.list_active_alphas = _no_active
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        summary = await run_mining_round(client, pool, user_id=1, n_candidates=1, rng_seed=1)
+        assert summary["rejected"] == 1 and summary["passed"] == 0
+        assert client._n == 1  # only the base sim ran; no retry
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
 async def test_mark_submitted(applied_db):
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:

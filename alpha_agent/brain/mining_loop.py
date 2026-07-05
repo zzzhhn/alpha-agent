@@ -20,9 +20,21 @@ logger = logging.getLogger(__name__)
 
 from alpha_agent.brain import store
 from alpha_agent.brain.client import BrainClient, BrainSimulationError
-from alpha_agent.brain.fastexpr import brain_settings, generate_brain_candidates
+from alpha_agent.brain.fastexpr import generate_brain_candidates
 from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
+from alpha_agent.brain.tuning import base_settings_for, diagnose, retry_variant
 from alpha_agent.evolution.correlation_gate import max_corr_against
+
+
+async def _simulate_one(client: BrainClient, expr: str, settings: dict, timeout_s: float):
+    """Simulate one expression with one settings dict → (alpha_id, metrics).
+    Raises on sim failure / missing alpha id (caller buckets it as sim_error)."""
+    sim_id = await client.simulate(expr, settings)
+    sim = await client.poll_simulation(sim_id, max_wait_s=timeout_s)
+    alpha_id = sim.get("alpha")
+    if not alpha_id:
+        raise BrainSimulationError("completed sim carried no alpha id")
+    return alpha_id, await client.get_alpha_metrics(alpha_id)
 
 # WorldQuant's SELF_CORRELATION bar: a new alpha correlating this much with an
 # existing ACTIVE one (on daily returns) is a re-discovery, not new alpha.
@@ -75,6 +87,7 @@ async def run_mining_round(
     sim_timeout_s: float = 300.0,
     seed_from_user_alphas: bool = True,
     logic_llm=None,
+    max_retries: int = 12,
 ) -> dict:
     """Execute one round and return a bucket summary. Every candidate's outcome
     is persisted to brain_alphas regardless of pass/fail so the UI + the next
@@ -137,7 +150,6 @@ async def run_mining_round(
         scores = await score_economic_logic(logic_llm, candidates)
         candidates = select_by_logic(candidates, scores)[:n_candidates]
         print(f"[logic] screened to {len(candidates)} sensible candidates", flush=True)
-    settings = brain_settings()
     summary = {
         "generated": len(candidates),
         "passed": 0,
@@ -168,14 +180,12 @@ async def run_mining_round(
     if prior:
         print(f"[diversity] {len(accepted_returns)} reference series (active + prior passed)", flush=True)
 
+    retry_budget = max_retries
     for expr in candidates:
+        # Family-adaptive BASE settings (fast/technical signals get more decay).
+        settings = base_settings_for(expr)
         try:
-            sim_id = await client.simulate(expr, settings)
-            sim = await client.poll_simulation(sim_id, max_wait_s=sim_timeout_s)
-            alpha_id = sim.get("alpha")
-            if not alpha_id:
-                raise BrainSimulationError("completed sim carried no alpha id")
-            metrics = await client.get_alpha_metrics(alpha_id)
+            alpha_id, metrics = await _simulate_one(client, expr, settings, sim_timeout_s)
         except Exception as exc:  # noqa: BLE001 — persist + continue the round
             detail = f"{type(exc).__name__}: {exc}"
             # Also log to stdout so the GitHub Actions run surfaces WHY a sim
@@ -190,6 +200,27 @@ async def run_mining_round(
             )
             summary["sim_error"] += 1
             continue
+
+        # Smart retry: a NEAR-miss on a settings-fixable check gets ONE targeted
+        # re-simulation (bounded per round via retry_budget). If the variant clears
+        # the gate it replaces the base result, and the WINNING settings are what
+        # we store — so the review UI shows the config that actually worked.
+        if not metrics.passes_gates() and retry_budget > 0:
+            variant = retry_variant(settings, diagnose(metrics))
+            if variant is not None:
+                retry_budget -= 1
+                try:
+                    aid2, m2 = await _simulate_one(client, expr, variant, sim_timeout_s)
+                    if m2.passes_gates():
+                        alpha_id, metrics, settings = aid2, m2, variant
+                        print(
+                            f"[tune] fixed {expr[:44]!r} "
+                            f"decay={variant.get('decay')} universe={variant.get('universe')} "
+                            f"trunc={variant.get('truncation')}",
+                            flush=True,
+                        )
+                except Exception:  # noqa: BLE001 — a failed retry just keeps the base
+                    pass
 
         common = dict(
             user_id=user_id, expression=expr, settings=settings, alpha_id=alpha_id,
