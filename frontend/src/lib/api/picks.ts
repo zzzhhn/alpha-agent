@@ -76,6 +76,10 @@ export interface RatingCard {
   // the next trading day's move, over trailing windows. Each value is a
   // fraction in [0,1] or null = insufficient realized history (UI shows "—").
   consistency?: ConsistencyWindows | null;
+  // Evaluated sample count per window backing each rate — lets the tooltip
+  // explain a dash (n below the window's minimum) and qualify a rate (n=4 vs
+  // n=80 are very different claims).
+  consistency_n?: Record<string, number> | null;
   news_items?: NewsItemLite[];
 }
 

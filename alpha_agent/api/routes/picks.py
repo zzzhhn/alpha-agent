@@ -71,6 +71,11 @@ class LeanCard(BaseModel):
     # [0,1], or None when the window has too little realized history (UI shows a
     # dash). See alpha_agent/backtest/consistency.py for the exact definition.
     consistency: dict[str, float | None] = {}
+    # Evaluated sample count per window (how many realized directional
+    # predictions back each rate). Lets the UI explain a dash ("n/N 样本不足")
+    # and distinguish 50% (2/4) from 50% (40/80) instead of leaving the user
+    # guessing — same value for dashed windows shows how close they are.
+    consistency_n: dict[str, int] = {}
 
 
 class PicksResponse(BaseModel):
@@ -246,12 +251,18 @@ async def build_lean_view(
 
     # Per-ticker directional consistency (5d/1m/1y/all-time next-day
     # hit-rate) for the returned tickers, in one batched query. Mode/side
-    # independent: it reads the stored historical predictions, not the
-    # current card's (possibly long-mode re-ranked) rating.
-    from alpha_agent.backtest.consistency import compute_window_consistency
-    consistency_by_ticker = await compute_window_consistency(
+    # independent: it reads the stored historical predictions (fast∪slow),
+    # not the current card's (possibly long-mode re-ranked) rating. Tallies
+    # give both the rates and the evaluated sample counts (for the UI's
+    # dash-explanation hover) from a single query.
+    from alpha_agent.backtest.consistency import (
+        compute_window_tallies,
+        rates_from_tallies,
+    )
+    tallies_by_ticker = await compute_window_tallies(
         pool, [r["ticker"] for r in rows]
     )
+    consistency_by_ticker = rates_from_tallies(tallies_by_ticker)
 
     cards: list[LeanCard] = []
     for r in rows:
@@ -327,6 +338,10 @@ async def build_lean_view(
                 tier_flip_today=tier_flip_today,
                 dimension_grades=grade_dimensions(breakdown_data, dim_thresholds),
                 consistency=consistency_by_ticker.get(r["ticker"], {}),
+                consistency_n={
+                    w: n
+                    for w, (_h, n) in tallies_by_ticker.get(r["ticker"], {}).items()
+                },
             )
         )
 

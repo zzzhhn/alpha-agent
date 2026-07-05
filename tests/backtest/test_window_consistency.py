@@ -88,6 +88,52 @@ async def test_below_min_samples_is_dash(pool):
     assert c == {"d5": None, "m1": None, "y1": None, "hist": None}
 
 
+async def _seed_slow(pool, ticker, d: date, composite_partial: float) -> None:
+    await pool.execute(
+        "INSERT INTO daily_signals_slow (ticker, date, composite_partial, breakdown, fetched_at) "
+        "VALUES ($1,$2,$3,$4::jsonb, now()) "
+        "ON CONFLICT (ticker, date) DO UPDATE "
+        "SET composite_partial = EXCLUDED.composite_partial",
+        ticker, d, composite_partial, json.dumps({"breakdown": []}),
+    )
+
+
+@pytest.mark.asyncio
+async def test_slow_only_history_counts(pool):
+    """The all-dash bug: a long-tail ticker whose prediction history lives ONLY in
+    daily_signals_slow (no fast rows) must still get consistency numbers — its
+    tier derives from composite_partial via map_to_tier (default thresholds:
+    >0.5 -> OW up-call). 10 slow OW days over rising prices = all hits."""
+    base = date.today() - timedelta(days=40)
+    await _seed_prices(pool, "SLOWY", base, [100.0 + i for i in range(12)])
+    for i in range(10):
+        await _seed_slow(pool, "SLOWY", base + timedelta(days=i), 1.0)  # OW
+
+    c = (await compute_window_consistency(pool, ["SLOWY"]))["SLOWY"]
+    assert c["hist"] == 1.0     # 10 realized OW hits (was all-None before the fix)
+    assert c["m1"] == 1.0       # >= 10 samples inside the month window
+    # near-zero partial composite maps to HOLD -> still excluded
+    await _seed_slow(pool, "SLOWY", base + timedelta(days=10), 0.0)
+    c2 = (await compute_window_consistency(pool, ["SLOWY"]))["SLOWY"]
+    assert c2["hist"] == 1.0    # the HOLD day added no sample
+
+
+@pytest.mark.asyncio
+async def test_fast_preferred_over_slow_same_day(pool):
+    """When BOTH tables have a row for the same (ticker, date), the fast row's
+    stored rating is authoritative: 6 days where fast says SELL (all misses on
+    rising prices) while slow says OW (would be hits) must score 0.0, not 1.0."""
+    base = date.today() - timedelta(days=40)
+    await _seed_prices(pool, "BOTH", base, [100.0 + i for i in range(8)])
+    for i in range(6):
+        d = base + timedelta(days=i)
+        await _seed_pred(pool, "BOTH", d, "SELL")   # fast: down-call -> miss
+        await _seed_slow(pool, "BOTH", d, 1.0)      # slow: would be OW hit
+
+    c = (await compute_window_consistency(pool, ["BOTH"]))["BOTH"]
+    assert c["hist"] == 0.0  # fast won the dedup; slow row did not double-count
+
+
 @pytest.mark.asyncio
 async def test_unknown_ticker_all_none(pool):
     c = await compute_window_consistency(pool, ["NOPE"])

@@ -3362,6 +3362,13 @@ export interface components {
                 [key: string]: number | null;
             };
             /**
+             * Consistency N
+             * @default {}
+             */
+            consistency_n: {
+                [key: string]: number;
+            };
+            /**
              * Dimension Grades
              * @default {}
              */

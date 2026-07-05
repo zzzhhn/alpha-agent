@@ -56,18 +56,28 @@ def _rate(hits: int, total: int, window: str) -> float | None:
     return hits / total
 
 
-async def compute_window_consistency(
+async def compute_window_tallies(
     pool, tickers: list[str]
-) -> dict[str, dict[str, float | None]]:
-    """Return {ticker: {"d5":.., "m1":.., "y1":.., "hist":..}} hit-rates.
+) -> dict[str, dict[str, tuple[int, int]]]:
+    """Return {ticker: {window: (hits, evaluated)}} raw tallies.
 
-    Each value is a fraction in [0,1] or None (insufficient data -> dash).
-    Tickers with no realized directional predictions map to all-None.
+    Prediction history is the UNION of BOTH signal tables, deduped per
+    (ticker, date) preferring fast:
+      - daily_signals_fast rows carry the true stored rating (sticky tier) —
+        authoritative when present, incl. HOLD (= no directional call that day).
+      - daily_signals_slow rows (the full-universe daily sweep) carry only
+        composite_partial; their tier is derived via fusion.rating.map_to_tier —
+        the SAME derivation the picks page uses to display slow-only rows.
+    Reading only the fast table made every long-tail / newly-risen ticker show
+    all-dash: its real daily history lived in slow and was ignored.
     """
-    empty = {w: None for w in _ORDER}
-    result: dict[str, dict[str, float | None]] = {t: dict(empty) for t in tickers}
+    from alpha_agent.fusion.rating import map_to_tier
+
+    tallies: dict[str, dict[str, tuple[int, int]]] = {
+        t: {w: (0, 0) for w in _ORDER} for t in tickers
+    }
     if not tickers:
-        return result
+        return tallies
 
     # Market-calendar cutoffs: the Nth most recent trading date overall. Using
     # the global date list (not per-ticker) keeps "past N trading days" the same
@@ -76,14 +86,16 @@ async def compute_window_consistency(
         "SELECT DISTINCT date FROM daily_prices ORDER BY date DESC LIMIT 252"
     )
     if not date_rows:
-        return result
+        return tallies
     dates: list[_date] = [r["date"] for r in date_rows]
     cutoffs: dict[str, _date] = {
         w: dates[min(n - 1, len(dates) - 1)] for w, n in WINDOW_TRADING_DAYS.items()
     }
 
     # Evaluated rows: each stored prediction joined to its realized next-day
-    # return. HOLD and not-yet-realized (next_close NULL) rows are dropped in SQL.
+    # return. Not-yet-realized (next_close NULL) rows are dropped in SQL; the
+    # direction call (incl. HOLD-exclusion) resolves in Python because slow rows
+    # need the tier derived from their score.
     rows = await pool.fetch(
         """
         WITH px AS (
@@ -91,42 +103,85 @@ async def compute_window_consistency(
                    LEAD(close) OVER (PARTITION BY ticker ORDER BY date) AS next_close
             FROM daily_prices
             WHERE ticker = ANY($1::text[])
+        ),
+        preds AS (
+            -- One prediction per (ticker, date): fast (true rating) preferred,
+            -- newest fetched_at within a source breaks intraday ties.
+            SELECT DISTINCT ON (ticker, date) ticker, date, rating, score
+            FROM (
+                SELECT ticker, date, rating, composite AS score,
+                       1 AS pri, fetched_at
+                FROM daily_signals_fast
+                WHERE ticker = ANY($1::text[])
+                UNION ALL
+                SELECT ticker, date, NULL::text AS rating,
+                       composite_partial AS score, 0 AS pri, fetched_at
+                FROM daily_signals_slow
+                WHERE ticker = ANY($1::text[])
+                  AND composite_partial IS NOT NULL
+                  AND composite_partial = composite_partial
+            ) u
+            ORDER BY ticker, date, pri DESC, fetched_at DESC
         )
-        SELECT s.ticker, s.date, s.rating,
+        SELECT p.ticker, p.date, p.rating, p.score,
                (px.next_close / NULLIF(px.close, 0) - 1.0) AS fwd1
-        FROM daily_signals_fast s
-        JOIN px ON px.ticker = s.ticker AND px.date = s.date
-        WHERE s.ticker = ANY($1::text[])
-          AND px.next_close IS NOT NULL
-          AND s.rating IN ('BUY', 'OW', 'UW', 'SELL')
+        FROM preds p
+        JOIN px ON px.ticker = p.ticker AND px.date = p.date
+        WHERE px.next_close IS NOT NULL
         """,
         tickers,
     )
 
-    # tallies[ticker][window] = [hits, total]
-    tallies: dict[str, dict[str, list[int]]] = {
+    # counts[ticker][window] = [hits, total]
+    counts: dict[str, dict[str, list[int]]] = {
         t: {w: [0, 0] for w in _ORDER} for t in tickers
     }
     for r in rows:
         ticker = r["ticker"]
-        if ticker not in tallies:
+        if ticker not in counts:
             continue
         fwd1 = r["fwd1"]
         if fwd1 is None:
             continue
-        hit = _hit(r["rating"], float(fwd1))
+        rating = r["rating"]
+        if rating is None and r["score"] is not None:
+            # Slow-only day: derive the tier from the partial composite exactly
+            # like the picks display path does. HOLD -> no directional call.
+            rating = map_to_tier(float(r["score"]))
+        if rating is None:
+            continue
+        hit = _hit(rating, float(fwd1))
         if hit is None:
             continue
         d = r["date"]
         for w in _ORDER:
             if w == "hist" or d >= cutoffs[w]:
-                bucket = tallies[ticker][w]
+                bucket = counts[ticker][w]
                 bucket[1] += 1
                 if hit:
                     bucket[0] += 1
 
-    for ticker, per_window in tallies.items():
-        result[ticker] = {
-            w: _rate(per_window[w][0], per_window[w][1], w) for w in _ORDER
-        }
-    return result
+    for ticker, per_window in counts.items():
+        tallies[ticker] = {w: (v[0], v[1]) for w, v in per_window.items()}
+    return tallies
+
+
+def rates_from_tallies(
+    tallies: dict[str, dict[str, tuple[int, int]]],
+) -> dict[str, dict[str, float | None]]:
+    """Tallies -> {ticker: {window: rate-or-None}} applying MIN_SAMPLES."""
+    return {
+        t: {w: _rate(h, n, w) for w, (h, n) in per_window.items()}
+        for t, per_window in tallies.items()
+    }
+
+
+async def compute_window_consistency(
+    pool, tickers: list[str]
+) -> dict[str, dict[str, float | None]]:
+    """Return {ticker: {"d5":.., "m1":.., "y1":.., "hist":..}} hit-rates.
+
+    Each value is a fraction in [0,1] or None (insufficient data -> dash).
+    Tickers with no realized directional predictions map to all-None.
+    """
+    return rates_from_tallies(await compute_window_tallies(pool, tickers))

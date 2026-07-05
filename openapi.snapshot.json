@@ -1660,6 +1660,14 @@
             "title": "Consistency",
             "type": "object"
           },
+          "consistency_n": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Consistency N",
+            "type": "object"
+          },
           "dimension_grades": {
             "additionalProperties": {
               "type": "string"

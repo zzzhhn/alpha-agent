@@ -81,11 +81,30 @@ export default function PickRow({
     { key: "y1", labelKey: "picks_table.cons_1y" },
     { key: "hist", labelKey: "picks_table.cons_hist" },
   ] as const;
+  // Mirrors backend MIN_SAMPLES (backtest/consistency.py): below this many
+  // realized predictions the window shows a dash instead of a rate.
+  const CONS_MIN: Record<string, number> = { d5: 3, m1: 10, y1: 120, hist: 5 };
   const consVals = CONS_WINDOWS.map((w) => {
     const v = card.consistency?.[w.key];
     const ok = typeof v === "number" && isFinite(v);
-    return { label: t(locale, w.labelKey), pct: ok ? Math.round(v * 100) : null };
+    const n = card.consistency_n?.[w.key];
+    return {
+      label: t(locale, w.labelKey),
+      pct: ok ? Math.round(v * 100) : null,
+      n: typeof n === "number" ? n : null,
+      min: CONS_MIN[w.key],
+    };
   });
+  // Per-window sample summary for the tooltip: "5日 4/3✓ · 1月 8/10 · …" reads
+  // as evaluated/required; a dashed window shows how far it is from enough.
+  const consSamples = consVals
+    .map((c) =>
+      c.n === null
+        ? null
+        : `${c.label} n=${c.n}${c.pct === null ? `/${c.min}` : ""}`,
+    )
+    .filter(Boolean)
+    .join(" · ");
 
   const drivers = (card.top_drivers ?? [])
     .slice(0, 3)
@@ -183,6 +202,9 @@ export default function PickRow({
           className="justify-end"
           content={
             t(locale, "picks_table.consistency_tooltip") +
+            (consSamples
+              ? " · " + t(locale, "picks_table.cons_samples_label") + " " + consSamples
+              : "") +
             " · " +
             t(locale, "picks_table.agreement_label") +
             " " +
