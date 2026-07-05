@@ -107,8 +107,10 @@ async def test_run_mining_round_buckets_and_persists(applied_db):
         by_outcome = {r["outcome"]: r for r in rows}
         assert set(by_outcome) == {"passed", "flagged", "rejected", "sim_error"}
         assert by_outcome["passed"]["sharpe"] == 1.6
-        assert by_outcome["flagged"]["self_correlation"] > 0.7
-        assert by_outcome["flagged"]["self_correlation_with"] == "E1"
+        # E1 is an ACTIVE alpha but BRAIN gave no official value here, so the
+        # correlation surfaces in the ADJUSTED column (local vs the accepted set).
+        assert by_outcome["flagged"]["self_correlation_adj"] > 0.7
+        assert by_outcome["flagged"]["self_correlation_adj_with"] == "E1"
         assert by_outcome["sim_error"]["alpha_id"] is None
     finally:
         await pool.close()
@@ -164,9 +166,40 @@ async def test_intra_batch_diversity_flags_near_duplicate(applied_db):
         flagged = [r for r in await store.list_brain_alphas(pool, 1)
                    if r["outcome"] == "flagged"]
         assert len(flagged) == 1
-        assert flagged[0]["self_correlation"] > 0.7
-        # flagged against the first passer's alpha id (A1), not a BRAIN/active id
-        assert flagged[0]["self_correlation_with"] == "A1"
+        # near-dup of the first passer (A1, an unsubmitted factor) → adjusted column
+        assert flagged[0]["self_correlation_adj"] > 0.7
+        assert flagged[0]["self_correlation_adj_with"] == "A1"
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_self_corr_across_passed_set(applied_db):
+    """After a round, an EARLY passer's self-correlation reflects a LATER passer
+    (the per-row value is otherwise frozen at mining time). Two moderately
+    correlated passers (~0.24, both under the 0.7 gate) end up BOTH showing that
+    correlation — neither stays at the mining-time 0.00."""
+    b = _records([0, 1, 3, 4, 7, 8, 10, 13])   # daily [1,2,1,3,1,2,3]
+    c = _records([0, 3, 4, 6, 9, 10, 13, 15])  # daily [3,1,2,3,1,3,2]  corr(b,c)=0.235
+    client = _FakeBrain([
+        {"metrics": _PASS, "pnl": b},   # first passer -> mining-time self_corr 0
+        {"metrics": _PASS, "pnl": c},   # second passer -> 0.235 vs the first
+    ])
+
+    async def _no_active():
+        return []
+
+    client.list_active_alphas = _no_active
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        summary = await run_mining_round(client, pool, user_id=1, n_candidates=2, rng_seed=1)
+        assert summary["passed"] == 2 and summary["flagged"] == 0
+        passed = [r for r in await store.list_brain_alphas(pool, 1)
+                  if r["outcome"] == "passed"]
+        assert len(passed) == 2
+        # BOTH reflect the mutual correlation in the ADJUSTED column after
+        # reconciliation — neither frozen at the mining-time 0.00.
+        assert all(0.2 < r["self_correlation_adj"] < 0.3 for r in passed)
     finally:
         await pool.close()
 

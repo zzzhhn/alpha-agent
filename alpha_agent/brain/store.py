@@ -21,19 +21,26 @@ async def record_brain_alpha(
     margin: float | None = None,
     self_correlation: float | None = None,
     self_correlation_with: str | None = None,
+    self_correlation_adj: float | None = None,
+    self_correlation_adj_with: str | None = None,
     detail: str | None = None,
     grade: str | None = None,
 ) -> int:
-    """Insert one mining outcome. Returns the new row id."""
+    """Insert one mining outcome. Returns the new row id.
+
+    Two self-correlations: `self_correlation` is BRAIN's official value (vs ACTIVE
+    alphas); `self_correlation_adj` also counts our passed-but-unsubmitted factors."""
     row = await pool.fetchrow(
         "INSERT INTO brain_alphas "
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
-        " outcome, detail, grade) "
-        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id",
+        " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade) "
+        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) "
+        "RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
-        self_correlation, self_correlation_with, outcome, detail, grade,
+        self_correlation, self_correlation_with,
+        self_correlation_adj, self_correlation_adj_with, outcome, detail, grade,
     )
     return row["id"]
 
@@ -60,7 +67,8 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
 
 _ROW_COLS = (
     "id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
-    "returns, margin, self_correlation, self_correlation_with, outcome, detail, "
+    "returns, margin, self_correlation, self_correlation_with, "
+    "self_correlation_adj, self_correlation_adj_with, outcome, detail, "
     "grade, created_at, submitted_at, brain_status"
 )
 
@@ -188,6 +196,22 @@ async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
         if d.get(k) is not None:
             d[k] = d[k].isoformat()
     return d
+
+
+async def update_adjusted_self_correlation(
+    pool, user_id: int, alpha_id: str, *, value: float, corr_with: str | None
+) -> None:
+    """Rewrite a mined alpha's ADJUSTED self-correlation (keyed by BRAIN alpha_id,
+    scoped to owner). The official `self_correlation` (BRAIN's value) is left
+    untouched; only `self_correlation_adj` is reconciled after each round so an
+    EARLY passer's value reflects LATER passed-but-unsubmitted factors. Only
+    not-yet-submitted rows."""
+    await pool.execute(
+        "UPDATE brain_alphas "
+        "SET self_correlation_adj=$3, self_correlation_adj_with=$4 "
+        "WHERE user_id=$1 AND alpha_id=$2 AND submitted_at IS NULL",
+        user_id, alpha_id, value, corr_with,
+    )
 
 
 async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:

@@ -319,8 +319,14 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         <Metric label={zh ? "收益" : "Returns"} value={fmt(alpha.returns)} />
         <Metric label="Drawdown" value={fmt(alpha.drawdown)} />
         <Metric label="Margin" value={fmt(alpha.margin, 4)} />
-        <Metric label="Self-corr" value={fmt(alpha.self_correlation)} />
-        <Metric label="BRAIN" value={alpha.alpha_id ?? "—"} />
+        <Metric
+          label={zh ? "自相关·官方" : "S-corr (BRAIN)"}
+          value={fmt(alpha.self_correlation)}
+        />
+        <Metric
+          label={zh ? "自相关·调整" : "S-corr⁺ (adj)"}
+          value={fmt(alpha.self_correlation_adj)}
+        />
       </div>
 
       <SettingsRow settings={alpha.settings} />
@@ -836,7 +842,7 @@ export function BrainMiningPanel() {
         </div>
 
         {/* column header */}
-        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
           <span>{zh ? "表达式" : "expr"}</span>
           <span className="w-12 text-right">Sharpe</span>
           <span className="w-12 text-right">Fitness</span>
@@ -844,7 +850,26 @@ export function BrainMiningPanel() {
           <span className="w-12 text-right">{zh ? "收益" : "Ret"}</span>
           <span className="w-12 text-right">{zh ? "回撤" : "DD"}</span>
           <span className="w-14 text-right">Margin</span>
-          <span className="w-12 text-right">S-corr</span>
+          <span
+            className="w-12 cursor-help text-right"
+            title={
+              zh
+                ? "BRAIN 官方自相关性:与你已提交(ACTIVE)因子的最大相关性"
+                : "BRAIN official: max self-correlation vs your ACTIVE (submitted) alphas"
+            }
+          >
+            S-corr
+          </span>
+          <span
+            className="w-14 cursor-help text-right text-tm-info"
+            title={
+              zh
+                ? "调整后自相关性:额外计入已挖出但暂未提交的通过因子后,重新计算的最大相关性"
+                : "Adjusted: recomputed to also count your passed-but-unsubmitted mined factors"
+            }
+          >
+            S-corr⁺
+          </span>
           <span className="w-24 text-right">{zh ? "编码" : "code"}</span>
           <span className="w-14 text-right">{zh ? "评级" : "grade"}</span>
           <span className="w-12 text-right">{zh ? "状态" : "status"}</span>
@@ -877,7 +902,7 @@ export function BrainMiningPanel() {
                   <button
                     type="button"
                     onClick={() => toggle(a.id)}
-                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 px-3 py-2 text-left hover:bg-tm-bg-2"
+                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 px-3 py-2 text-left hover:bg-tm-bg-2"
                   >
                     <span className="flex min-w-0 items-center gap-1.5">
                       {open ? (
@@ -899,6 +924,7 @@ export function BrainMiningPanel() {
                     <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.drawdown)}</span>
                     <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.margin, 4)}</span>
                     <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.self_correlation)}</span>
+                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-info">{fmt(a.self_correlation_adj)}</span>
                     <span className="flex w-24 justify-end">
                       {a.alpha_id ? (
                         <AlphaIdChip alphaId={a.alpha_id} />

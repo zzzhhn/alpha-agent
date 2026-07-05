@@ -166,6 +166,10 @@ async def run_mining_round(
     # correlation locally (on daily returns) to keep the passed set genuinely
     # diverse. Best-effort: any load failure just means fewer references.
     accepted_returns: dict[str, np.ndarray] = dict(existing)
+    # `our_passed` is the subset that is OURS (mined, passed, not yet submitted) —
+    # these are the rows whose self-correlation we reconcile at round end. `existing`
+    # (active alphas) are references only; we never rewrite their rows.
+    our_passed: dict[str, np.ndarray] = {}
     try:
         prior = await store.recent_passed_unsubmitted_alpha_ids(pool, user_id, limit=40)
     except Exception:  # noqa: BLE001 — empty/absent history is fine
@@ -177,6 +181,7 @@ async def run_mining_round(
             continue
         if r is not None:
             accepted_returns[aid] = r
+            our_passed[aid] = r
     if prior:
         print(f"[diversity] {len(accepted_returns)} reference series (active + prior passed)", flush=True)
 
@@ -236,35 +241,38 @@ async def run_mining_round(
             summary["rejected"] += 1
             continue
 
-        # Self-correlation. Two sources, combined by MAX (flag if EITHER trips):
-        #   (a) BRAIN's authoritative SELF_CORRELATION vs the user's ACTIVE alphas —
-        #       is.checks first (free), then the /correlations/self endpoint;
-        #   (b) our local intra-set correlation of daily returns vs `accepted_returns`
-        #       (active + passed-unsubmitted + THIS round's passers). This is the only
-        #       source that catches a batch of mutually near-identical candidates
-        #       BEFORE submit — BRAIN can't, because none of them is ACTIVE yet.
-        self_corr, corr_with = 0.0, None
-        brain_corr = metrics.brain_self_correlation()
-        if brain_corr is None:
-            brain_corr = await client.get_self_correlation(alpha_id)
-        if brain_corr is not None:
-            self_corr, corr_with = brain_corr, "BRAIN"
+        # TWO self-correlations, stored side by side:
+        #   OFFICIAL  = BRAIN's own SELF_CORRELATION vs the user's ACTIVE alphas
+        #               (is.checks first — free — then /correlations/self). None if
+        #               BRAIN hasn't computed one (e.g. no active alphas yet).
+        #   ADJUSTED  = our local corr vs `accepted_returns` (active + passed-but-
+        #               unsubmitted + THIS round's passers) — counts the successful
+        #               factors BRAIN can't see because they aren't submitted. This
+        #               is the only source that catches a batch of mutual near-dups.
+        # The gate flags on the MAX of the two.
+        official = metrics.brain_self_correlation()
+        if official is None:
+            official = await client.get_self_correlation(alpha_id)
+        official_with = "BRAIN" if official is not None else None
 
         cand_rets = None
         try:
             cand_rets = pnl_to_daily_returns(await client.get_pnl(alpha_id))
         except Exception:  # noqa: BLE001 — no PnL just means no local diversity signal
             cand_rets = None
+        adj, adj_with = 0.0, None
         if cand_rets is not None and accepted_returns:
-            local_corr, local_with = max_corr_against(cand_rets, accepted_returns)
-            if local_corr > self_corr:
-                self_corr, corr_with = local_corr, local_with
+            adj, adj_with = max_corr_against(cand_rets, accepted_returns)
 
-        if self_corr >= _SELF_CORR_THRESHOLD:
+        corr_kw = dict(
+            self_correlation=official, self_correlation_with=official_with,
+            self_correlation_adj=adj, self_correlation_adj_with=adj_with,
+        )
+
+        if max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD:
             await store.record_brain_alpha(
-                pool, **common, self_correlation=self_corr,
-                self_correlation_with=corr_with, outcome="flagged",
-                detail=f"self-corr {self_corr:.2f} vs {corr_with}",
+                pool, **common, **corr_kw, outcome="flagged",
+                detail=f"self-corr official={official} adj={adj:.2f} vs {adj_with}",
             )
             summary["flagged"] += 1
             continue
@@ -273,10 +281,26 @@ async def run_mining_round(
         # (and future rounds, via the DB) must stay decorrelated from it too.
         if cand_rets is not None:
             accepted_returns[alpha_id] = cand_rets
+            our_passed[alpha_id] = cand_rets
         await store.record_brain_alpha(
-            pool, **common, self_correlation=self_corr,
-            self_correlation_with=corr_with, outcome="passed",
+            pool, **common, **corr_kw, outcome="passed",
         )
         summary["passed"] += 1
+
+    # Reconcile the ADJUSTED self-correlation across the FULL passed-but-unsubmitted
+    # set so an early passer's value reflects factors mined after it (otherwise
+    # frozen at mining time). Returns are already in memory — no extra BRAIN calls.
+    # The OFFICIAL column is left as BRAIN reported it.
+    for aid, rets in our_passed.items():
+        others = {k: v for k, v in accepted_returns.items() if k != aid}
+        if not others:
+            continue
+        corr, corr_with = max_corr_against(rets, others)
+        try:
+            await store.update_adjusted_self_correlation(
+                pool, user_id, aid, value=corr, corr_with=corr_with
+            )
+        except Exception:  # noqa: BLE001 — reconciliation is best-effort
+            pass
 
     return summary
