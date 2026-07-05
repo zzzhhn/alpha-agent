@@ -2402,6 +2402,69 @@
         "title": "RouterHealth",
         "type": "object"
       },
+      "ScoreboardResponse": {
+        "description": "Portfolio-level evaluation of the picks themselves (the honest headline):\nthe daily top-K basket's compounded forward return vs the universe average,\nthe long-minus-short spread, and the long basket's directional hit-rate vs\nthe always-guess-up base rate. None fields = not enough realized history.",
+        "properties": {
+          "base_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Rate"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "long_cum": {
+            "title": "Long Cum",
+            "type": "number"
+          },
+          "long_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Long Hit Rate"
+          },
+          "market_cum": {
+            "title": "Market Cum",
+            "type": "number"
+          },
+          "short_cum": {
+            "title": "Short Cum",
+            "type": "number"
+          },
+          "spread_cum": {
+            "title": "Spread Cum",
+            "type": "number"
+          },
+          "top_n": {
+            "title": "Top N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days",
+          "top_n",
+          "long_cum",
+          "short_cum",
+          "market_cum",
+          "spread_cum",
+          "long_hit_rate",
+          "base_rate"
+        ],
+        "title": "ScoreboardResponse",
+        "type": "object"
+      },
       "ScreenerFactor": {
         "description": "One factor to include in the composite. `weight` only matters when\n`combine_method == \"user_weighted\"`; ignored otherwise.",
         "properties": {
@@ -7363,6 +7426,72 @@
           }
         },
         "summary": "Picks Lean",
+        "tags": [
+          "picks"
+        ]
+      }
+    },
+    "/api/picks/scoreboard": {
+      "get": {
+        "description": "Portfolio-level picks evaluation over the trailing window. Reconstructs\neach day's top/bottom-K basket from the signals as stored THAT day (no\nlookahead) and scores realized next-day returns against the universe\naverage + the always-up base rate. Returns null (not an error) when there\nis too little realized history to say anything. Changes ~once per trading\nday -> cached aggressively at the edge.",
+        "operationId": "picks_scoreboard_api_picks_scoreboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "top_n",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 3,
+              "title": "Top N",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 21,
+              "maximum": 63,
+              "minimum": 5,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ScoreboardResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Picks Scoreboard Api Picks Scoreboard Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Picks Scoreboard",
         "tags": [
           "picks"
         ]

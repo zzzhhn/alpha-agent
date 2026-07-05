@@ -65,17 +65,29 @@ _cache: dict[str, Any] = {"ts": None, "val": None}
 
 
 # Per-horizon composite + forward-return rows. The composite is the EOD value
-# per (ticker, date) (DISTINCT ON ... ORDER BY fetched_at DESC). The forward
-# return is LEAD(close, h) over daily_prices, joined back on (ticker, date).
-# Rows without an observable forward close (LEAD null) drop out, which is what
-# makes 20d/60d honestly empty while the history is short.
+# per (ticker, date), taken from the UNION of BOTH signal tables — fast (true
+# composite, top-~240 intraday names) preferred over slow (composite_partial,
+# full universe daily) on the same day. Reading only fast capped the usable
+# history at ~3 weeks and starved the 20d/60d horizons into permanent
+# "insufficient"; the slow sweep's deeper full-universe daily history is exactly
+# what those horizons need. The forward return is LEAD(close, h) over
+# daily_prices, joined back on (ticker, date). Rows without an observable
+# forward close (LEAD null) drop out honestly.
 _EDGE_SQL = """
 WITH comp AS (
     SELECT DISTINCT ON (ticker, date)
         ticker, date, composite
-    FROM daily_signals_fast
-    WHERE composite IS NOT NULL AND composite = composite
-    ORDER BY ticker, date, fetched_at DESC
+    FROM (
+        SELECT ticker, date, composite, 1 AS pri, fetched_at
+        FROM daily_signals_fast
+        WHERE composite IS NOT NULL AND composite = composite
+        UNION ALL
+        SELECT ticker, date, composite_partial AS composite, 0 AS pri, fetched_at
+        FROM daily_signals_slow
+        WHERE composite_partial IS NOT NULL
+          AND composite_partial = composite_partial
+    ) u
+    ORDER BY ticker, date, pri DESC, fetched_at DESC
 ),
 fwd AS (
     SELECT
@@ -193,9 +205,16 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
 
 async def _compute_edge() -> BasketEdgeResponse:
     pool = await get_db_pool()
+    # Universe breadth across BOTH tables (matches what _EDGE_SQL now scans).
     universe_n = await pool.fetchval(
-        "SELECT count(DISTINCT ticker) FROM daily_signals_fast "
-        "WHERE composite IS NOT NULL AND composite = composite"
+        "SELECT count(DISTINCT ticker) FROM ("
+        "  SELECT ticker FROM daily_signals_fast"
+        "  WHERE composite IS NOT NULL AND composite = composite"
+        "  UNION"
+        "  SELECT ticker FROM daily_signals_slow"
+        "  WHERE composite_partial IS NOT NULL"
+        "    AND composite_partial = composite_partial"
+        ") u"
     )
     horizons: list[HorizonEdge] = []
     for h in _HORIZONS:

@@ -1618,6 +1618,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/picks/scoreboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Picks Scoreboard
+         * @description Portfolio-level picks evaluation over the trailing window. Reconstructs
+         *     each day's top/bottom-K basket from the signals as stored THAT day (no
+         *     lookahead) and scores realized next-day returns against the universe
+         *     average + the always-up base rate. Returns null (not an error) when there
+         *     is too little realized history to say anything. Changes ~once per trading
+         *     day -> cached aggressively at the edge.
+         */
+        get: operations["picks_scoreboard_api_picks_scoreboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stock/personas": {
         parameters: {
             query?: never;
@@ -3614,6 +3639,31 @@ export interface components {
             loaded: boolean;
             /** Name */
             name: string;
+        };
+        /**
+         * ScoreboardResponse
+         * @description Portfolio-level evaluation of the picks themselves (the honest headline):
+         *     the daily top-K basket's compounded forward return vs the universe average,
+         *     the long-minus-short spread, and the long basket's directional hit-rate vs
+         *     the always-guess-up base rate. None fields = not enough realized history.
+         */
+        ScoreboardResponse: {
+            /** Base Rate */
+            base_rate: number | null;
+            /** Days */
+            days: number;
+            /** Long Cum */
+            long_cum: number;
+            /** Long Hit Rate */
+            long_hit_rate: number | null;
+            /** Market Cum */
+            market_cum: number;
+            /** Short Cum */
+            short_cum: number;
+            /** Spread Cum */
+            spread_cum: number;
+            /** Top N */
+            top_n: number;
         };
         /**
          * ScreenerFactor
@@ -6488,6 +6538,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PicksResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    picks_scoreboard_api_picks_scoreboard_get: {
+        parameters: {
+            query?: {
+                top_n?: number;
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreboardResponse"] | null;
                 };
             };
             /** @description Validation Error */

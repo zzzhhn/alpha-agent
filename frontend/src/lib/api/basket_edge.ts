@@ -30,3 +30,22 @@ export interface BasketEdgeResponse {
 
 export const fetchBasketEdge = (opts?: ApiGetOptions) =>
   apiGet<BasketEdgeResponse>("/api/picks/edge", opts);
+
+// Portfolio-level realized scoreboard: each trailing day's top/bottom-K basket
+// (from the signals as stored THAT day, no lookahead) compounded forward, vs
+// the equal-weight universe average, plus the long basket's directional
+// hit-rate vs the always-guess-up base rate (the blind-guess baseline).
+// null = not enough realized history yet.
+export interface PicksScoreboard {
+  days: number;
+  top_n: number;
+  long_cum: number;
+  short_cum: number;
+  market_cum: number;
+  spread_cum: number;
+  long_hit_rate: number | null;
+  base_rate: number | null;
+}
+
+export const fetchPicksScoreboard = (opts?: ApiGetOptions) =>
+  apiGet<PicksScoreboard | null>("/api/picks/scoreboard", opts);

@@ -84,6 +84,22 @@ class PicksResponse(BaseModel):
     stale: bool
 
 
+class ScoreboardResponse(BaseModel):
+    """Portfolio-level evaluation of the picks themselves (the honest headline):
+    the daily top-K basket's compounded forward return vs the universe average,
+    the long-minus-short spread, and the long basket's directional hit-rate vs
+    the always-guess-up base rate. None fields = not enough realized history."""
+
+    days: int
+    top_n: int
+    long_cum: float
+    short_cum: float
+    market_cum: float
+    spread_cum: float
+    long_hit_rate: float | None
+    base_rate: float | None
+
+
 def _safe_float(v: float | None, default: float = 0.0) -> float:
     """NaN/Inf/None → default. PG DOUBLE PRECISION columns can hold NaN
     if cron wrote it; Pydantic + JSON serialization both choke on NaN."""
@@ -414,3 +430,30 @@ async def picks_lean(
             status_code=500,
             detail=f"picks_lean failed: {type(e).__name__}: {e}\n{traceback.format_exc()[:1500]}",
         ) from e
+
+
+@router.get("/scoreboard", response_model=ScoreboardResponse | None)
+async def picks_scoreboard(
+    response: Response,
+    top_n: int = Query(10, ge=3, le=50),
+    days: int = Query(21, ge=5, le=63),
+) -> ScoreboardResponse | None:
+    """Portfolio-level picks evaluation over the trailing window. Reconstructs
+    each day's top/bottom-K basket from the signals as stored THAT day (no
+    lookahead) and scores realized next-day returns against the universe
+    average + the always-up base rate. Returns null (not an error) when there
+    is too little realized history to say anything. Changes ~once per trading
+    day -> cached aggressively at the edge."""
+    from alpha_agent.backtest.scoreboard import compute_picks_scoreboard
+
+    pool = await get_db_pool()
+    sb = await compute_picks_scoreboard(pool, top_n=top_n, days=days)
+    set_public_cache(response, s_maxage=3600, swr=86400)
+    if sb is None:
+        return None
+    return ScoreboardResponse(
+        days=sb.days, top_n=sb.top_n, long_cum=sb.long_cum,
+        short_cum=sb.short_cum, market_cum=sb.market_cum,
+        spread_cum=sb.spread_cum, long_hit_rate=sb.long_hit_rate,
+        base_rate=sb.base_rate,
+    )

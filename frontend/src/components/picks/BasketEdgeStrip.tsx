@@ -14,8 +14,10 @@ import { useEffect, useState } from "react";
 
 import {
   fetchBasketEdge,
+  fetchPicksScoreboard,
   type BasketEdgeResponse,
   type HorizonEdge,
+  type PicksScoreboard,
 } from "@/lib/api/basket_edge";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
@@ -69,9 +71,63 @@ function HorizonCell({ h }: { h: HorizonEdge }) {
   );
 }
 
+// Realized portfolio scoreboard segment: "had you followed the daily top-K,
+// here is the compounded result vs the market average + the blind-guess base
+// rate". This is the honest headline the per-name next-day hit-rate can't be.
+function ScoreboardCells({ sb }: { sb: PicksScoreboard }) {
+  const { locale } = useLocale();
+  const items: Array<{ label: string; value: string; tone: string }> = [
+    {
+      label: t(locale, "edge.sb_long").replace("{n}", String(sb.top_n)),
+      value: fmtPct(sb.long_cum),
+      tone: spreadToneClass(sb.long_cum),
+    },
+    {
+      label: t(locale, "edge.sb_market"),
+      value: fmtPct(sb.market_cum),
+      tone: "text-tm-fg-2",
+    },
+    {
+      label: t(locale, "edge.sb_spread"),
+      value: fmtPct(sb.spread_cum),
+      tone: spreadToneClass(sb.spread_cum),
+    },
+  ];
+  if (sb.long_hit_rate !== null && sb.base_rate !== null) {
+    const beats = sb.long_hit_rate > sb.base_rate;
+    items.push({
+      label: t(locale, "edge.sb_hit"),
+      value: `${Math.round(sb.long_hit_rate * 100)}% (${t(locale, "edge.sb_base")} ${Math.round(sb.base_rate * 100)}%)`,
+      tone: beats ? "text-tm-pos" : "text-tm-neg",
+    });
+  }
+  return (
+    <HoverTip
+      content={t(locale, "edge.sb_tip").replace("{d}", String(sb.days))}
+      placement="bottom"
+      width={272}
+    >
+      <div className="flex cursor-help flex-wrap items-center gap-x-4 gap-y-1 border-l border-tm-rule pl-4">
+        <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
+          {t(locale, "edge.sb_title").replace("{d}", String(sb.days))}
+        </span>
+        {items.map((it) => (
+          <span key={it.label} className="flex items-baseline gap-1">
+            <span className="font-tm-mono text-[10px] text-tm-muted">{it.label}</span>
+            <span className={`font-tm-mono text-[12px] font-semibold tabular-nums ${it.tone}`}>
+              {it.value}
+            </span>
+          </span>
+        ))}
+      </div>
+    </HoverTip>
+  );
+}
+
 export default function BasketEdgeStrip() {
   const { locale } = useLocale();
   const [data, setData] = useState<BasketEdgeResponse | null>(null);
+  const [sb, setSb] = useState<PicksScoreboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
@@ -95,6 +151,13 @@ export default function BasketEdgeStrip() {
         if (cancelled) return;
         setLoading(false);
       });
+    // The realized scoreboard loads independently; null (not enough history)
+    // or failure just means the segment doesn't render.
+    fetchPicksScoreboard()
+      .then((res) => {
+        if (!cancelled) setSb(res);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -147,6 +210,8 @@ export default function BasketEdgeStrip() {
           ))}
         </div>
       )}
+
+      {sb ? <ScoreboardCells sb={sb} /> : null}
     </div>
   );
 }
