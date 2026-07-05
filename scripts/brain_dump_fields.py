@@ -111,9 +111,13 @@ async def _main() -> int:
                 print(f"=== OPERATORS ({len(ops)}) ===", flush=True)
                 for o in ops:
                     if isinstance(o, dict):
-                        print("OP\t{}\t{}\t{}".format(
-                            o.get("name"), o.get("category"),
-                            o.get("scope") or o.get("level") or ""), flush=True)
+                        # definition = the exact call syntax (named params, arity);
+                        # description = what it does. Both needed to serialize the
+                        # named-param / multi-arg operators correctly.
+                        defn = (o.get("definition") or "").replace("\t", " ")
+                        desc = (o.get("description") or "").replace("\t", " ")[:130]
+                        print("OP\t{}\t{}\t{}\t{}".format(
+                            o.get("name"), o.get("category"), defn, desc), flush=True)
         except Exception as e:  # noqa: BLE001 — operators dump is best-effort
             print(f"(operators fetch failed: {type(e).__name__})", flush=True)
         await asyncio.sleep(1.0)
@@ -126,8 +130,11 @@ async def _main() -> int:
                 for d in r.json().get("results", []):
                     cat = d.get("category")
                     cat_name = cat.get("name") if isinstance(cat, dict) else cat
-                    print("DS\t{}\t{}\t{}\t{}".format(
-                        d.get("id"), d.get("fieldCount"), cat_name, d.get("name")),
+                    # alphaCount/userCount = how heavily the dataset is used on the
+                    # platform — the popularity signal for picking high-frequency ones.
+                    print("DS\t{}\t{}\t{}\t{}\t{}\t{}".format(
+                        d.get("id"), d.get("fieldCount"), d.get("alphaCount"),
+                        d.get("userCount"), cat_name, d.get("name")),
                         flush=True)
         except Exception as e:  # noqa: BLE001 — enumeration is optional
             print(f"(dataset enumeration failed: {type(e).__name__})", flush=True)
