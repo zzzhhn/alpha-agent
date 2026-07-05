@@ -380,9 +380,15 @@ class BrainClient:
     # 'spectacular' alphas usually come from (few users mine them). Without a
     # dataset filter /data-fields returns only a small default set, so we query
     # each dataset explicitly and combine.
+    # Ordered by the platform's alphaCount usage (data-sets discovery): the most
+    # heavily-used datasets first. model77 (Analysts' Factor Model, 3256 fields,
+    # 138K alphas) + model51 (Systematic Risk Metrics) added — both high-usage and
+    # were missing. pv1 (1.9M alphas) is the base price-volume the generator already
+    # leans on; the rest are the popular fundamental / analyst / model / alt-data sets.
     _DEFAULT_DATASETS = (
-        "fundamental6", "fundamental2", "analyst4", "news12", "news18",
-        "option8", "option9", "pv1", "pv13", "socialmedia12", "model16",
+        "fundamental6", "analyst4", "pv1", "pv13", "model77",
+        "news12", "option8", "fundamental2", "model16", "model51",
+        "option9", "news18", "socialmedia12",
     )
 
     async def fetch_data_fields(

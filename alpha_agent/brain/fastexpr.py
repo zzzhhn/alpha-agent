@@ -113,6 +113,9 @@ BRAIN_SAFE_OPS = frozenset({
     # NaN-fill, demeaned/scaled series, days-since-extreme momentum, group-scale.
     "ts_backfill", "ts_av_diff", "ts_scale", "ts_arg_max", "ts_arg_min",
     "group_scale",
+    # Batch A (arithmetic, plain positional per the BRAIN /operators definitions:
+    # max(x,y..) min(x,y..) power(x,y) signed_power(x,y) reverse(x)).
+    "max", "min", "power", "signed_power", "reverse",
 })
 
 
@@ -255,6 +258,21 @@ def _style_leg(rng: random.Random, group: str, *, norm: str = "group_rank") -> d
     return _op(norm, inner, _fld(group))
 
 
+def _reshape(rng: random.Random, leg: dict) -> dict:
+    """Occasionally reshape the final signal with a batch-A arithmetic op (BRAIN
+    syntax signed_power(x,y)/power(x,y)/reverse(x)): compress tails, emphasize
+    extremes, or flip direction — alters the weighting profile without changing
+    fields. Mostly a no-op so the proven signals stay dominant."""
+    r = rng.random()
+    if r < 0.10:
+        return _op("signed_power", leg, {"type": "literal", "value": 0.5})
+    if r < 0.16:
+        return _op("power", leg, _lit(2))
+    if r < 0.21:
+        return _op("reverse", leg)
+    return leg
+
+
 def _ratio_template(
     rng: random.Random,
     usage: Optional[dict] = None,
@@ -263,15 +281,18 @@ def _ratio_template(
     """A single golden signal. A fundamental-ratio leg (the proven Sharpe anchor,
     now spanning 6 factor families) with a ROTATED transform / peer group / outer
     normalization; a minority are pre-computed style-factor scores or technical
-    signals for genuine signal-family spread."""
+    signals for genuine signal-family spread. An occasional batch-A reshape alters
+    the weighting profile."""
     group = _neutral_group(rng, prefer_industry)
     norm = rng.choices(_GROUP_NORMS, weights=(0.55, 0.15, 0.15, 0.15), k=1)[0]
     r = rng.random()
     if r < 0.65:
-        return _value_leg(rng, usage, group, norm=norm)   # fundamental ratio
-    if r < 0.85:
-        return _style_leg(rng, group, norm=norm)          # pre-computed style factor
-    return _technical_leg(rng, group, norm=norm)          # price/volume family
+        leg = _value_leg(rng, usage, group, norm=norm)    # fundamental ratio
+    elif r < 0.85:
+        leg = _style_leg(rng, group, norm=norm)           # pre-computed style factor
+    else:
+        leg = _technical_leg(rng, group, norm=norm)       # price/volume family
+    return _reshape(rng, leg)
 
 
 def _blended_ratio_template(
@@ -295,7 +316,10 @@ def _blended_ratio_template(
         leg_b = _technical_leg(rng, g2, norm="group_rank")      # + technical
     else:
         leg_b = _value_leg(rng, usage, g2, norm="group_rank")   # + different ratio
-    return _op("add", leg_a, leg_b)
+    # Combine two group-RANKED legs. add = average both; max/min = take the
+    # stronger/weaker signal per stock (batch-A max(x,y)/min(x,y)).
+    combine = rng.choices(("add", "max", "min"), weights=(0.7, 0.15, 0.15), k=1)[0]
+    return _op(combine, leg_a, leg_b)
 
 
 def _golden_template(rng: random.Random, v: ga_dsl.Vocab) -> dict:
