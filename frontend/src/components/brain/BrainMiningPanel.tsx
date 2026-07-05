@@ -311,6 +311,9 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         </span>
       </div>
 
+      {/* why rejected (failing checks) + retried tag */}
+      <OutcomeTags alpha={alpha} />
+
       {/* full IS metric set (6) + self-corr + BRAIN id */}
       <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2 sm:grid-cols-4 lg:grid-cols-8">
         <Metric label="Sharpe" value={fmt(alpha.sharpe)} />
@@ -403,6 +406,57 @@ function GradeBadge({ grade, full = false }: { grade: string | null; full?: bool
     <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${cls}`}>
       {label}
     </span>
+  );
+}
+
+// Friendly labels for BRAIN's in-sample check names (why a factor was rejected).
+const CHECK_LABELS: Record<string, { zh: string; en: string }> = {
+  LOW_SHARPE: { zh: "Sharpe 偏低", en: "low Sharpe" },
+  LOW_FITNESS: { zh: "Fitness 偏低", en: "low Fitness" },
+  HIGH_TURNOVER: { zh: "换手过高", en: "high turnover" },
+  LOW_TURNOVER: { zh: "换手过低", en: "low turnover" },
+  HIGH_DRAWDOWN: { zh: "回撤过大", en: "high drawdown" },
+  CONCENTRATED_WEIGHT: { zh: "持仓过于集中", en: "concentrated" },
+};
+
+function checkLabel(c: string, zh: boolean): string {
+  const m = CHECK_LABELS[c.toUpperCase()];
+  return m ? (zh ? m.zh : m.en) : c;
+}
+
+// Why a factor was rejected (failing checks) + whether settings-tuning was tried.
+function OutcomeTags({ alpha }: { alpha: BrainAlpha }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const checks = (alpha.fail_checks || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!alpha.retried && checks.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {alpha.retried ? (
+        <span
+          title={
+            zh
+              ? "对该因子做过一次参数自适应重试(调 decay / universe / truncation)"
+              : "a settings-adaptation retry was run for this factor"
+          }
+          className="rounded-sm border border-tm-info/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-info"
+        >
+          {zh ? "已调参重试" : "retried"}
+        </span>
+      ) : null}
+      {checks.map((c) => (
+        <span
+          key={c}
+          title={zh ? "未通过的在样内检查" : "failed in-sample check"}
+          className="rounded-sm border border-tm-warn/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-warn"
+        >
+          {checkLabel(c, zh)}
+        </span>
+      ))}
+    </div>
   );
 }
 

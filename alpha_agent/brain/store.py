@@ -25,22 +25,27 @@ async def record_brain_alpha(
     self_correlation_adj_with: str | None = None,
     detail: str | None = None,
     grade: str | None = None,
+    fail_checks: str | None = None,
+    retried: bool = False,
 ) -> int:
     """Insert one mining outcome. Returns the new row id.
 
     Two self-correlations: `self_correlation` is BRAIN's official value (vs ACTIVE
-    alphas); `self_correlation_adj` also counts our passed-but-unsubmitted factors."""
+    alphas); `self_correlation_adj` also counts our passed-but-unsubmitted factors.
+    `fail_checks` (rejected only) + `retried` explain the outcome for the UI."""
     row = await pool.fetchrow(
         "INSERT INTO brain_alphas "
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
-        " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade) "
-        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) "
-        "RETURNING id",
+        " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade, "
+        " fail_checks, retried) "
+        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,"
+        " $18,$19) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with,
         self_correlation_adj, self_correlation_adj_with, outcome, detail, grade,
+        fail_checks, retried,
     )
     return row["id"]
 
@@ -69,7 +74,7 @@ _ROW_COLS = (
     "id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
     "returns, margin, self_correlation, self_correlation_with, "
     "self_correlation_adj, self_correlation_adj_with, outcome, detail, "
-    "grade, created_at, submitted_at, brain_status"
+    "grade, fail_checks, retried, created_at, submitted_at, brain_status"
 )
 
 # Whitelisted sort columns (never interpolate user input into SQL).

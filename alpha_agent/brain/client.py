@@ -127,6 +127,28 @@ class AlphaMetrics:
             return False
         return True
 
+    def failing_checks(self) -> list[str]:
+        """Names of the in-sample checks this alpha FAILS — BRAIN's own FAIL
+        verdicts when present, else derived from the raw metrics vs the gates.
+        SELF_CORRELATION is excluded (the miner treats correlation separately).
+        Used to show the user WHY a rejected factor was rejected."""
+        checks = {
+            k: v for k, v in (self.checks or {}).items() if k != "SELF_CORRELATION"
+        }
+        brain_failed = [n for n, c in checks.items() if c.get("result") == "FAIL"]
+        if brain_failed:
+            return brain_failed
+        out: list[str] = []
+        if self.sharpe is not None and self.sharpe < MIN_SHARPE:
+            out.append("LOW_SHARPE")
+        if self.fitness is not None and self.fitness < MIN_FITNESS:
+            out.append("LOW_FITNESS")
+        if self.turnover is not None and self.turnover > MAX_TURNOVER:
+            out.append("HIGH_TURNOVER")
+        if self.drawdown is not None and self.drawdown > MAX_DRAWDOWN:
+            out.append("HIGH_DRAWDOWN")
+        return out
+
 
 def _max_self_corr(body: dict) -> Optional[float]:
     """Extract the max self-correlation from a /correlations/self response.

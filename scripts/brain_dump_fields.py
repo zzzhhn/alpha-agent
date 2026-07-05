@@ -100,6 +100,24 @@ async def _main() -> int:
         await client.authenticate()
         c = client._client
 
+        # Operators available to THIS account (for coverage: how many of BRAIN's
+        # official operators the generator uses). Print name + category + scope.
+        try:
+            r = await c.get("/operators")
+            if r.status_code == 200:
+                ops = r.json()
+                if isinstance(ops, dict):
+                    ops = ops.get("results", [])
+                print(f"=== OPERATORS ({len(ops)}) ===", flush=True)
+                for o in ops:
+                    if isinstance(o, dict):
+                        print("OP\t{}\t{}\t{}".format(
+                            o.get("name"), o.get("category"),
+                            o.get("scope") or o.get("level") or ""), flush=True)
+        except Exception as e:  # noqa: BLE001 — operators dump is best-effort
+            print(f"(operators fetch failed: {type(e).__name__})", flush=True)
+        await asyncio.sleep(1.0)
+
         # List datasets once (best-effort) for the family overview.
         try:
             r = await c.get("/data-sets", params=_REGION)

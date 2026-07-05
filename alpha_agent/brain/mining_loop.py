@@ -189,6 +189,7 @@ async def run_mining_round(
     for expr in candidates:
         # Family-adaptive BASE settings (fast/technical signals get more decay).
         settings = base_settings_for(expr)
+        did_retry = False
         try:
             alpha_id, metrics = await _simulate_one(client, expr, settings, sim_timeout_s)
         except Exception as exc:  # noqa: BLE001 — persist + continue the round
@@ -214,6 +215,7 @@ async def run_mining_round(
             variant = retry_variant(settings, diagnose(metrics))
             if variant is not None:
                 retry_budget -= 1
+                did_retry = True
                 try:
                     aid2, m2 = await _simulate_one(client, expr, variant, sim_timeout_s)
                     if m2.passes_gates():
@@ -232,11 +234,14 @@ async def run_mining_round(
             sharpe=metrics.sharpe, fitness=metrics.fitness,
             turnover=metrics.turnover, drawdown=metrics.drawdown,
             returns=metrics.returns, margin=metrics.margin, grade=metrics.grade,
+            retried=did_retry,
         )
 
         if not metrics.passes_gates():
             await store.record_brain_alpha(
-                pool, **common, outcome="rejected", detail="below in-sample gates"
+                pool, **common, outcome="rejected",
+                fail_checks=",".join(metrics.failing_checks()) or None,
+                detail="below in-sample gates",
             )
             summary["rejected"] += 1
             continue

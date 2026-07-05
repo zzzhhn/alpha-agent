@@ -48,6 +48,8 @@ export interface BrainAlpha {
   self_correlation_adj: number | null;
   self_correlation_adj_with: string | null;
   grade: string | null;
+  fail_checks: string | null;
+  retried: boolean;
   outcome: BrainOutcome;
   detail: string | null;
   created_at: string | null;
