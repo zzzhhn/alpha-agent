@@ -45,6 +45,7 @@ export interface BrainAlpha {
   margin: number | null;
   self_correlation: number | null;
   self_correlation_with: string | null;
+  grade: string | null;
   outcome: BrainOutcome;
   detail: string | null;
   created_at: string | null;

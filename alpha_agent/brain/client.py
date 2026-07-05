@@ -68,6 +68,10 @@ class AlphaMetrics:
     returns: Optional[float]
     drawdown: Optional[float]
     margin: Optional[float] = None
+    # BRAIN's own performance tier for the alpha (top-level `grade` on the alpha
+    # object): SPECTACULAR / EXCELLENT / GOOD / AVERAGE / INFERIOR / POOR. Stored
+    # + surfaced as-is; the exact enum is BRAIN's, so we never invent one.
+    grade: Optional[str] = None
     # BRAIN's own in-sample check verdicts, keyed by check name (e.g.
     # LOW_SHARPE, LOW_FITNESS, HIGH_TURNOVER, SELF_CORRELATION). Each value is
     # {"result": "PASS"|"FAIL"|"PENDING", "value": float|None, "limit": ...}.
@@ -160,6 +164,7 @@ def _metrics_from_alpha(alpha_id: str, alpha: dict) -> AlphaMetrics:
         returns=is_block.get("returns"),
         drawdown=is_block.get("drawdown"),
         margin=is_block.get("margin"),
+        grade=alpha.get("grade"),  # top-level performance tier, not in `is`
         checks=_parse_checks(is_block),
     )
 

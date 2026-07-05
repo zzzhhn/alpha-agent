@@ -300,6 +300,17 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         {alpha.expression}
       </code>
 
+      {/* BRAIN's overall performance grade for this alpha */}
+      <div className="flex items-center gap-2">
+        <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+          {zh ? "性能评级" : "performance"}
+        </span>
+        <GradeBadge grade={alpha.grade} full />
+        <span className="font-tm-mono text-[10px] text-tm-muted">
+          {zh ? "BRAIN 综合评级" : "BRAIN overall grade"}
+        </span>
+      </div>
+
       {/* full IS metric set (6) + self-corr + BRAIN id */}
       <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2 sm:grid-cols-4 lg:grid-cols-8">
         <Metric label="Sharpe" value={fmt(alpha.sharpe)} />
@@ -361,6 +372,31 @@ function Metric({ label, value }: { label: string; value: string }) {
       </span>
       <span className="tabular-nums text-tm-fg">{value}</span>
     </div>
+  );
+}
+
+// BRAIN's performance tier for the alpha. Colored best→worst; unknown grades
+// render as-is (never invent a tier). `short` keeps the row column compact.
+const GRADE_STYLE: Record<string, { cls: string; short: string }> = {
+  SPECTACULAR: { cls: "border-tm-accent text-tm-accent", short: "SPEC" },
+  EXCELLENT: { cls: "border-tm-pos text-tm-pos", short: "EXCL" },
+  GOOD: { cls: "border-tm-info text-tm-info", short: "GOOD" },
+  AVERAGE: { cls: "border-tm-rule text-tm-fg-2", short: "AVG" },
+  INFERIOR: { cls: "border-tm-warn text-tm-warn", short: "INFR" },
+  POOR: { cls: "border-tm-neg text-tm-neg", short: "POOR" },
+};
+
+function GradeBadge({ grade, full = false }: { grade: string | null; full?: boolean }) {
+  if (!grade) {
+    return <span className="font-tm-mono text-[10px] text-tm-muted">—</span>;
+  }
+  const s = GRADE_STYLE[grade.toUpperCase()];
+  const label = full ? grade : (s?.short ?? grade.slice(0, 4).toUpperCase());
+  const cls = s?.cls ?? "border-tm-rule text-tm-muted";
+  return (
+    <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${cls}`}>
+      {label}
+    </span>
   );
 }
 
@@ -800,7 +836,7 @@ export function BrainMiningPanel() {
         </div>
 
         {/* column header */}
-        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
           <span>{zh ? "表达式" : "expr"}</span>
           <span className="w-12 text-right">Sharpe</span>
           <span className="w-12 text-right">Fitness</span>
@@ -810,6 +846,7 @@ export function BrainMiningPanel() {
           <span className="w-14 text-right">Margin</span>
           <span className="w-12 text-right">S-corr</span>
           <span className="w-24 text-right">{zh ? "编码" : "code"}</span>
+          <span className="w-14 text-right">{zh ? "评级" : "grade"}</span>
           <span className="w-12 text-right">{zh ? "状态" : "status"}</span>
         </div>
 
@@ -840,7 +877,7 @@ export function BrainMiningPanel() {
                   <button
                     type="button"
                     onClick={() => toggle(a.id)}
-                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 px-3 py-2 text-left hover:bg-tm-bg-2"
+                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 px-3 py-2 text-left hover:bg-tm-bg-2"
                   >
                     <span className="flex min-w-0 items-center gap-1.5">
                       {open ? (
@@ -868,6 +905,9 @@ export function BrainMiningPanel() {
                       ) : (
                         <span className="font-tm-mono text-[10px] text-tm-muted">—</span>
                       )}
+                    </span>
+                    <span className="flex w-14 justify-end">
+                      <GradeBadge grade={a.grade} />
                     </span>
                     <span className="flex w-12 justify-end">
                       <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${OUTCOME_CLS[a.outcome]}`}>

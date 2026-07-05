@@ -22,17 +22,18 @@ async def record_brain_alpha(
     self_correlation: float | None = None,
     self_correlation_with: str | None = None,
     detail: str | None = None,
+    grade: str | None = None,
 ) -> int:
     """Insert one mining outcome. Returns the new row id."""
     row = await pool.fetchrow(
         "INSERT INTO brain_alphas "
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
-        " outcome, detail) "
-        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id",
+        " outcome, detail, grade) "
+        "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
-        self_correlation, self_correlation_with, outcome, detail,
+        self_correlation, self_correlation_with, outcome, detail, grade,
     )
     return row["id"]
 
@@ -60,7 +61,7 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
 _ROW_COLS = (
     "id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
     "returns, margin, self_correlation, self_correlation_with, outcome, detail, "
-    "created_at, submitted_at, brain_status"
+    "grade, created_at, submitted_at, brain_status"
 )
 
 # Whitelisted sort columns (never interpolate user input into SQL).
