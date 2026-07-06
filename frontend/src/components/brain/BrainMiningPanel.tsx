@@ -435,8 +435,8 @@ function OfficialSCorrCell({ alpha, zh }: { alpha: BrainAlpha; zh: boolean }) {
         className="cursor-help text-tm-muted"
         title={
           zh
-            ? "BRAIN 仅在因子提交后才计算官方自相关(提交前 IS 检查恒为 PENDING、/correlations/self 返回空)。右侧「调整后 S-corr⁺」已包含与你 ACTIVE 因子的相关性(正是官方值所衡量的)外加与本地未提交通过因子的相关性,是官方值的超集,据此把关更严格。"
-            : "BRAIN computes the official self-corr only after submit (the IS check is PENDING pre-submit and /correlations/self is empty). The adjusted S-corr⁺ on the right already measures correlation vs your ACTIVE alphas (what official measures) plus your local not-yet-submitted passers — a strict superset, so gating on it is stricter."
+            ? "官方自相关由 BRAIN 惰性计算,通常提交前即可获得;本行显示待定表示挖矿/回填时尚未算完或未拉取。右侧「调整后 S-corr⁺」在官方值基础上还计入本地未提交的通过因子,是其超集,据此把关更严格。"
+            : "The official self-corr is computed lazily by BRAIN and is usually available pre-submit; 待定 here means it wasn't ready/fetched at mine or backfill time. The adjusted S-corr⁺ on the right is a superset (official plus your local not-yet-submitted passers), so gating on it is stricter."
         }
       >
         {zh ? "待定" : "pend"}
