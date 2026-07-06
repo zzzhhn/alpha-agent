@@ -39,22 +39,35 @@ async def _load_creds():
 
 
 async def _dump_corr(c, aid: str) -> None:
-    """Poll /correlations/self past 202 and print the full body + its keys."""
-    for _ in range(8):
+    """Poll /correlations/self through BOTH 202 AND empty-200 (BRAIN's lazy-compute
+    'still computing' signals) for up to ~150s, printing each poll, then dump the
+    final body. This is the corrected poll: the old version gave up on the first
+    empty 200, which is exactly why official self-corr looked 'unavailable'."""
+
+    waited = 0.0
+    poll = 0
+    while waited < 150.0:
+        poll += 1
         r = await c.get(f"/alphas/{aid}/correlations/self")
-        if r.status_code == 202:
-            await asyncio.sleep(3.0)
-            continue
-        print(f"  corr/self status={r.status_code}", flush=True)
-        if r.status_code == 200:
+        body_txt = (r.text or "").strip()
+        print(f"  poll#{poll} status={r.status_code} body_len={len(body_txt)} "
+              f"waited={waited:.0f}s", flush=True)
+        if r.status_code == 200 and body_txt:
             body = r.json()
             if isinstance(body, dict):
-                print(f"  corr/self TOP-LEVEL KEYS: {sorted(body.keys())}", flush=True)
+                print(f"  ✅ corr/self TOP-LEVEL KEYS: {sorted(body.keys())}", flush=True)
                 for k in ("max", "min", "self", "prod"):
                     if k in body:
                         print(f"    body[{k!r}] = {json.dumps(body[k])[:200]}", flush=True)
-            print(f"  corr/self BODY[:1200]: {json.dumps(body)[:1200]}", flush=True)
+            print(f"  corr/self BODY[:800]: {json.dumps(body)[:800]}", flush=True)
+            return
+        if r.status_code in (200, 202):
+            await asyncio.sleep(5.0)
+            waited += 5.0
+            continue
+        print(f"  corr/self non-2xx status={r.status_code} → stop", flush=True)
         return
+    print("  ⏱ still empty after 150s budget", flush=True)
 
 
 async def _main() -> int:

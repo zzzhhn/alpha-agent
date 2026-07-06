@@ -298,20 +298,25 @@ class BrainClient:
                 resp = await self._client.get(f"/alphas/{alpha_id}/correlations/self")
             except Exception:  # noqa: BLE001 — best-effort
                 return None
-            if resp.status_code == 202:
-                if waited >= max_wait_s:
+            body = (resp.text or "").strip()
+            # BRAIN computes this LAZILY and, like /recordsets/pnl, signals "still
+            # computing" with EITHER 202 OR a 200 whose body is empty. The old code
+            # treated the first empty 200 as terminal (json() threw → None), so the
+            # official self-corr came back None forever and the UI showed 待定. Poll
+            # through both, exactly as get_pnl/get_yearly_stats do, until a 200 with
+            # a real body arrives (or the budget is spent).
+            if resp.status_code == 200 and body:
+                try:
+                    return _max_self_corr(resp.json())
+                except Exception:  # noqa: BLE001 — unparseable body → no signal
                     return None
+            if resp.status_code in (200, 202) and waited < max_wait_s:
                 retry = resp.headers.get("Retry-After")
                 delay = float(retry) if retry and retry.isdigit() else interval_s
                 await asyncio.sleep(delay)
                 waited += delay
                 continue
-            if resp.status_code != 200:
-                return None
-            try:
-                return _max_self_corr(resp.json())
-            except Exception:  # noqa: BLE001 — unparseable body → no signal
-                return None
+            return None
 
     async def get_pnl(
         self, alpha_id: str, *, interval_s: float = 2.0, max_wait_s: float = 30.0
