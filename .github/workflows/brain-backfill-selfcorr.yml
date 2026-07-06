@@ -1,0 +1,32 @@
+# Backfill BRAIN's OFFICIAL self-correlation for mined alphas recorded before the
+# empty-200 poll fix (they stored None → UI showed 待定). API-only, no simulation.
+# Manual trigger.
+name: brain-backfill-selfcorr
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "max unsubmitted alphas to backfill"
+        default: "120"
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[storage]"
+      - name: Backfill official self-corr
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRAIN_USERNAME: ${{ secrets.BRAIN_USERNAME }}
+          BRAIN_PASSWORD: ${{ secrets.BRAIN_PASSWORD }}
+          BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
+          BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
+          BACKFILL_LIMIT: ${{ github.event.inputs.limit }}
+        run: python scripts/brain_backfill_selfcorr.py

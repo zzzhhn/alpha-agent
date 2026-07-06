@@ -222,6 +222,38 @@ async def update_adjusted_self_correlation(
     )
 
 
+async def update_official_self_correlation(
+    pool, user_id: int, alpha_id: str, *, value: float, corr_with: str | None = "BRAIN"
+) -> None:
+    """Write BRAIN's OFFICIAL self-correlation (the `self_correlation` column) for a
+    mined alpha, keyed by alpha_id, scoped to owner, not-yet-submitted only. Used to
+    backfill rows recorded before the get_self_correlation empty-200 poll fix, when
+    the official value came back None and the UI showed 待定."""
+    await pool.execute(
+        "UPDATE brain_alphas "
+        "SET self_correlation=$3, self_correlation_with=$4 "
+        "WHERE user_id=$1 AND alpha_id=$2 AND submitted_at IS NULL",
+        user_id, alpha_id, value, corr_with,
+    )
+
+
+async def unsubmitted_alpha_ids_missing_official(
+    pool, user_id: int, *, limit: int = 120
+) -> list[str]:
+    """alpha_ids of the user's not-yet-submitted mined alphas that still lack an
+    OFFICIAL self-correlation (passed/flagged first — the review-worthy ones —
+    then the rest), newest first. Drives the backfill."""
+    rows = await pool.fetch(
+        "SELECT alpha_id FROM brain_alphas "
+        "WHERE user_id=$1 AND alpha_id IS NOT NULL AND submitted_at IS NULL "
+        "AND self_correlation IS NULL "
+        "ORDER BY (outcome IN ('passed','flagged')) DESC, created_at DESC "
+        "LIMIT $2",
+        user_id, min(max(int(limit), 1), 400),
+    )
+    return [r["alpha_id"] for r in rows]
+
+
 async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:
     """Record that the user submitted this alpha to BRAIN + BRAIN's status."""
     await pool.execute(
