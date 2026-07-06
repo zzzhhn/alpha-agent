@@ -141,11 +141,52 @@ async def calibration() -> dict[str, Any]:
     }
 
 
+async def _signal_ic_around(
+    pool, signal: str, at, *, window_days: int = 7
+) -> tuple[float | None, float | None]:
+    """Mean 5d-horizon IC of `signal` in the `window_days` BEFORE vs AFTER `at`.
+    The retrospection primitive: did this change coincide with the signal's IC
+    getting better or worse? (Correlation-grounded — a delta is what HAPPENED
+    around the change, never a causal claim.) None side = no IC rows there."""
+    row = await pool.fetchrow(
+        """
+        SELECT
+          avg(ic) FILTER (WHERE computed_at <  $2
+                            AND computed_at >= $2 - make_interval(days => $3)) AS before,
+          avg(ic) FILTER (WHERE computed_at >= $2
+                            AND computed_at <  $2 + make_interval(days => $3)) AS after
+        FROM signal_ic_history
+        WHERE signal_name = $1 AND horizon_days = 5
+        """,
+        signal, at, window_days,
+    )
+    b = float(row["before"]) if row and row["before"] is not None else None
+    a = float(row["after"]) if row and row["after"] is not None else None
+    return b, a
+
+
+def _signal_from_value(raw: str | None) -> str | None:
+    """Best-effort signal name from a change's new_value JSON payload."""
+    if not raw:
+        return None
+    try:
+        v = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(v, dict) and isinstance(v.get("signal"), str):
+        return v["signal"]
+    return None
+
+
 @router.get("/changes")
 async def changes(
     limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
-    """Recent signal-weight config changes (auto_promote / auto_rollback / etc.)."""
+    """Recent signal-weight config changes (auto_promote / auto_rollback /
+    inversion_guard / ...), each enriched with the affected signal's mean IC in
+    the 7 days before vs after the change — retrospection, so the evolution
+    loop (and the user) can see whether past changes coincided with
+    improvement instead of firing blind."""
     pool = await get_db_pool()
     rows = await pool.fetch(
         "SELECT id, field, old_value, new_value, changed_at, source, rollback_of "
@@ -153,18 +194,25 @@ async def changes(
         "ORDER BY changed_at DESC LIMIT $1",
         limit,
     )
-    return {
-        "changes": [
+    out = []
+    for r in rows:
+        sig = _signal_from_value(r["new_value"])
+        ic_before = ic_after = None
+        if sig:
+            ic_before, ic_after = await _signal_ic_around(pool, sig, r["changed_at"])
+        out.append(
             {
                 "id": r["id"],
                 "source": r["source"],
                 "changed_at": r["changed_at"].isoformat(),
                 "rollback_of": r["rollback_of"],
                 "new_value": r["new_value"],
+                "signal": sig,
+                "ic_before": ic_before,
+                "ic_after": ic_after,
             }
-            for r in rows
-        ]
-    }
+        )
+    return {"changes": out}
 
 
 # ---------------------------------------------------------------------------

@@ -6060,7 +6060,7 @@
     },
     "/api/evolution/changes": {
       "get": {
-        "description": "Recent signal-weight config changes (auto_promote / auto_rollback / etc.).",
+        "description": "Recent signal-weight config changes (auto_promote / auto_rollback /\ninversion_guard / ...), each enriched with the affected signal's mean IC in\nthe 7 days before vs after the change \u2014 retrospection, so the evolution\nloop (and the user) can see whether past changes coincided with\nimprovement instead of firing blind.",
         "operationId": "changes_api_evolution_changes_get",
         "parameters": [
           {

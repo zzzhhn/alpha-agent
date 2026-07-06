@@ -18,11 +18,22 @@ import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { nativeHorizon } from "@/lib/signal-horizons";
 import { formatIcAnnotation } from "@/lib/ic-annotation-format";
 
+// A weight-config change event drawn as a dashed vertical marker on the chart,
+// so every promote / rollback / inversion-guard flip is visible ON the IC
+// timeline it may have affected (traceability: show WHEN, never invent WHY).
+export interface WeightChangeEvent {
+  readonly ts: string;      // changed_at ISO
+  readonly source: string;  // auto_promote / auto_rollback / inversion_guard / ...
+  readonly label: string;   // short display, e.g. "guard: options"
+}
+
 interface IcTrendChartProps {
   readonly series: IcTrendSeries[];
   readonly locale: Locale;
   // Traceability overlay: material IC moves to mark + explain on hover.
   readonly annotations?: IcAnnotation[];
+  // Weight-change events to mark as vertical lines on the date axis.
+  readonly events?: WeightChangeEvent[];
 }
 
 // One color per signal, cycling through tm vars then fallback hex values.
@@ -172,10 +183,30 @@ function IcTooltip(props: {
   );
 }
 
-export function IcTrendChart({ series, locale, annotations }: IcTrendChartProps) {
+export function IcTrendChart({ series, locale, annotations, events }: IcTrendChartProps) {
   const hasData = series.length > 0 && series.some((s) => s.points.length > 0);
 
   const merged = useMemo(() => mergeIcSeries(series), [series]);
+
+  // Config-change markers: land each event on the nearest chart day that
+  // exists (category x-axis), dedup multiple events on the same day into one
+  // line with a combined label. Events outside the plotted range drop out.
+  const eventLines = useMemo(() => {
+    if (!events?.length || merged.length === 0) return [];
+    const dates = new Set(merged.map((r) => r.date));
+    const byDate = new Map<string, string[]>();
+    for (const ev of events) {
+      const d = shortDate(ev.ts);
+      if (!dates.has(d)) continue;
+      const list = byDate.get(d) ?? [];
+      if (!list.includes(ev.label)) list.push(ev.label);
+      byDate.set(d, list);
+    }
+    return Array.from(byDate.entries()).map(([date, labels]) => ({
+      date,
+      label: labels.slice(0, 2).join(" · ") + (labels.length > 2 ? " +" : ""),
+    }));
+  }, [events, merged]);
 
   // Index annotations both per (signal, day) for the dots and per day for the
   // tooltip card.
@@ -238,6 +269,21 @@ export function IcTrendChart({ series, locale, annotations }: IcTrendChartProps)
             stroke="var(--tm-rule-2)"
             strokeDasharray="4 4"
           />
+          {eventLines.map((ev) => (
+            <ReferenceLine
+              key={`ev-${ev.date}`}
+              x={ev.date}
+              stroke="var(--tm-warn)"
+              strokeDasharray="3 3"
+              label={{
+                value: ev.label,
+                position: "insideTopRight",
+                fontSize: 9,
+                fill: "var(--tm-warn)",
+                fontFamily: "var(--font-jetbrains-mono)",
+              }}
+            />
+          ))}
           {series.map((s, i) => (
             <Line
               key={s.signal_name}

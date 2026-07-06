@@ -116,3 +116,90 @@ async def test_get_effective_weights_blends_only_eligible_and_persists(pool):
         )
     }
     assert rows["factor"] == pytest.approx(0.32)
+
+
+# --- inversion guard (2026-07-05): persistently negative IC -> zeroed ---
+
+from alpha_agent.fusion.guarded_weights import (  # noqa: E402
+    inverted_signals,
+    inverted_signals_from_series,
+)
+
+
+def test_inversion_rule_pure():
+    series = {
+        "options": [-0.04, -0.05, -0.02, -0.03, -0.06, -0.01, -0.04, -0.05],  # inverted
+        "factor": [0.02, 0.01, 0.03, 0.02, 0.01, 0.02, 0.03, 0.01],           # healthy
+        "mixed": [-0.04, 0.05, -0.02, 0.06, -0.01, 0.04, 0.03, 0.02],         # mean>-0.01
+        "thin": [-0.5, -0.4],                                                  # too few points
+    }
+    inv = inverted_signals_from_series(series)
+    assert inv == {"options"}
+
+
+async def _seed_ic_recent(pool, sig, ics):
+    """IC history INSIDE the guard's trailing 30d window (now()-based)."""
+    from datetime import UTC, datetime, timedelta
+    now = datetime.now(UTC)
+    for i, ic in enumerate(ics):
+        await pool.execute(
+            "INSERT INTO signal_ic_history "
+            "(signal_name, window_days, horizon_days, computed_at, ic, n_observations) "
+            "VALUES ($1, 30, 5, $2, $3, 50)",
+            sig, now - timedelta(days=len(ics) - i), float(ic),
+        )
+
+
+@pytest.mark.asyncio
+async def test_inversion_guard_zeroes_and_logs_transitions(pool):
+    static = {"factor": 0.30, "options": 0.10}
+    await _seed_adaptive(pool, {"factor": 0.50, "options": 0.50})
+    await _seed_ic_recent(pool, "factor", [0.02] * 12)          # healthy, eligible
+    await _seed_ic_recent(pool, "options", [-0.04] * 12)        # persistently inverted
+
+    eff = await get_effective_weights(pool, static=static, alpha=0.10, persist=True)
+    assert eff["factor"] == pytest.approx(0.32)   # normal guarded blend
+    assert eff["options"] == 0.0                   # zeroed by the guard
+
+    # guard state row exists while zeroed; the flip was logged ONCE
+    inv = await inverted_signals(pool)
+    assert inv == {"options"}
+    guard_rows = await pool.fetch(
+        "SELECT signal_name FROM signal_weight_current WHERE status='inversion_guard'"
+    )
+    assert [r["signal_name"] for r in guard_rows] == ["options"]
+    logs = await pool.fetch(
+        "SELECT new_value FROM config_change_log WHERE source='inversion_guard'"
+    )
+    assert len(logs) == 1 and "zeroed" in logs[0]["new_value"]
+
+    # second fusion: still zeroed, but NO duplicate log row (transition-only)
+    await get_effective_weights(pool, static=static, alpha=0.10, persist=True)
+    logs2 = await pool.fetch(
+        "SELECT id FROM config_change_log WHERE source='inversion_guard'"
+    )
+    assert len(logs2) == 1
+
+
+@pytest.mark.asyncio
+async def test_inversion_guard_lifts_on_recovery(pool):
+    static = {"options": 0.10}
+    await _seed_adaptive(pool, {"options": 0.50})
+    await _seed_ic_recent(pool, "options", [-0.04] * 12)
+    eff = await get_effective_weights(pool, static=static, persist=True)
+    assert eff["options"] == 0.0
+
+    # IC recovers: wipe the negative history, seed positive
+    await pool.execute("DELETE FROM signal_ic_history WHERE signal_name='options'")
+    await _seed_ic_recent(pool, "options", [0.03] * 12)
+    eff2 = await get_effective_weights(pool, static=static, persist=True)
+    assert eff2["options"] > 0.0                   # guard lifted
+    guard_rows = await pool.fetch(
+        "SELECT 1 FROM signal_weight_current WHERE status='inversion_guard'"
+    )
+    assert guard_rows == []                        # state row removed
+    logs = await pool.fetch(
+        "SELECT new_value FROM config_change_log WHERE source='inversion_guard' "
+        "ORDER BY id"
+    )
+    assert len(logs) == 2 and "active" in logs[1]["new_value"]  # zero then lift

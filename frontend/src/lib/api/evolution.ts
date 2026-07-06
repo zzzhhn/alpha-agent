@@ -57,6 +57,12 @@ export interface EvolutionChange {
   changed_at: string;
   rollback_of: number | null;
   new_value: string;
+  // Retrospection (correlation-grounded): the affected signal (parsed from
+  // new_value) and its mean 5d-horizon IC in the 7 days before vs after this
+  // change. Nulls = no signal attribution / no IC rows on that side yet.
+  signal?: string | null;
+  ic_before?: number | null;
+  ic_after?: number | null;
 }
 export interface EvolutionChangesResponse {
   changes: EvolutionChange[];

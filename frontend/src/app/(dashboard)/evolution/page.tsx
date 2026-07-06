@@ -125,6 +125,23 @@ export default async function EvolutionPage() {
   const unavailable = tr("evolution.unavailable");
   const loadFailed = tr("evolution.load_failed");
 
+  // Weight-change events → vertical markers on the IC chart (traceability:
+  // every promote / rollback / inversion-guard flip is visible ON the timeline
+  // it may have affected). The signal name is parsed from new_value when the
+  // change carries one; unparseable payloads just show the source.
+  const weightEvents = (changes?.changes ?? []).map((c) => {
+    let label = c.source;
+    try {
+      const v = JSON.parse(c.new_value);
+      if (v && typeof v === "object" && typeof v.signal === "string") {
+        label = `${c.source === "inversion_guard" ? "guard" : c.source}: ${v.signal}`;
+      }
+    } catch {
+      /* non-JSON new_value → source-only label */
+    }
+    return { ts: c.changed_at, source: c.source, label };
+  });
+
   return (
     <TmScreen>
       <EvolutionHealthStrip health={health} locale={locale} />
@@ -153,6 +170,7 @@ export default async function EvolutionPage() {
               series={icTrend.series}
               locale={locale}
               annotations={icAnnotations}
+              events={weightEvents}
             />
           </div>
         ) : (
