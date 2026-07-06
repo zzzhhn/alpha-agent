@@ -181,20 +181,31 @@ def _lit(v: int) -> dict:
 _FUND_WINDOWS = (60, 126, 252)
 
 
-def _pick_ratio(rng: random.Random, usage: Optional[dict]) -> tuple[str, str]:
-    """Choose an economic ratio, biased toward UNDER-used ones (self-evolution
-    anti-homogenization): weight each ratio by 1/(1+times_used_recently).
+# Empirically-highest-Sharpe ratio family (315-row mining history): the VALUE
+# ratios — earnings/cash-flow yields and book-to-price on cap/close/enterprise_value
+# denominators — average mean-Sharpe ~1.2-1.4 (cap 1.41, bookvalue_ps 1.31, eps
+# 1.17), vs the profitability ratios on assets/equity denominators at ~0.67-0.86.
+# So we TILT selection toward value. This is a QUALITY tilt (toward proven high
+# Sharpe), the opposite of the reverted G4 diversity rotation (toward weak, under-
+# used families); it optimizes the same objective the in-sample gate scores.
+_VALUE_RATIOS = frozenset(_RATIO_FAMILIES["value"])
+_VALUE_TILT = 2.2
 
-    NOTE: an earlier family-level UCB rotation (G4) was reverted — over exhausted
-    vocabulary it pushed generation OUT of the proven high-Sharpe profitability/
-    value families into weak leverage/liquidity/investment ratios, halving the
-    round's median Sharpe (0.39 -> 0.19) so every candidate failed the in-sample
-    gate. Diversity is enforced at ACCEPTANCE (the G1 basket-orthogonality gate),
-    where it costs no Sharpe, NOT at generation. The uniform-over-ratios default
-    keeps the big proven families dominant, which is the quality-optimal choice."""
-    if not usage:
-        return rng.choice(ECONOMIC_RATIOS)
-    weights = [1.0 / (1 + usage.get(r, 0)) for r in ECONOMIC_RATIOS]
+
+def _pick_ratio(rng: random.Random, usage: Optional[dict]) -> tuple[str, str]:
+    """Choose an economic ratio: a QUALITY tilt toward the empirically-strongest
+    value family, times an inverse-usage anti-homogenization factor.
+
+    Diversity is enforced at ACCEPTANCE (the G1 basket-orthogonality gate), where
+    it costs no Sharpe — NOT here. An earlier family-UCB rotation (G4) that tilted
+    the OTHER way (toward weak under-used families) was reverted: over exhausted
+    vocabulary it halved the round's median Sharpe (0.39 -> 0.19) and every
+    candidate failed the in-sample gate."""
+    usage = usage or {}
+    weights = [
+        (_VALUE_TILT if r in _VALUE_RATIOS else 1.0) / (1 + usage.get(r, 0))
+        for r in ECONOMIC_RATIOS
+    ]
     return rng.choices(ECONOMIC_RATIOS, weights=weights, k=1)[0]
 
 
@@ -347,8 +358,11 @@ def _ratio_template(
     normalization; a minority are pre-computed style-factor scores or technical
     signals for genuine signal-family spread. An occasional batch-A reshape alters
     the weighting profile."""
-    # A minority are the user's proven options IV-skew alpha (a complete signal).
-    if rng.random() < 0.10:
+    # The user's options IV-skew alpha (a complete signal) — empirically the
+    # HIGHEST-Sharpe family in the mining history (implied_volatility_*_180 mean
+    # ~2.23, vs ~0.7-1.4 for fundamentals), yet it was a 10% minority. Raised to
+    # ~22% so the generator actually spends budget on its strongest known motif.
+    if rng.random() < 0.22:
         return _options_leg(rng)
     group = _neutral_group(rng, prefer_industry)
     # group_rank dominant (the proven high-Sharpe normalization); the others minority.
