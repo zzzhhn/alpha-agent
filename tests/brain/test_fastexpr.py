@@ -121,3 +121,50 @@ def test_brain_settings_overrides():
     assert s["decay"] == 15
     assert s["language"] == "FASTEXPR"
     assert s["neutralization"] == "SUBINDUSTRY"
+
+
+# --- G2: family signature + per-family cap ----------------------------------
+from alpha_agent.brain.fastexpr import (  # noqa: E402
+    _family_signature,
+    _fld,
+    _op,
+    generate_brain_candidates,
+)
+
+
+def test_family_signature_collapses_denominator_swaps():
+    # Same profitability bet, swapped denominator -> one family fingerprint.
+    a = _op("divide", _fld("operating_income"), _fld("assets"))
+    b = _op("divide", _fld("operating_income"), _fld("equity"))
+    assert _family_signature(a) == _family_signature(b) == ("ratio", "profitability")
+
+
+def test_family_signature_separates_distinct_families():
+    prof = _op("divide", _fld("operating_income"), _fld("assets"))  # profitability
+    lev = _op("divide", _fld("debt"), _fld("equity"))               # leverage
+    assert _family_signature(prof) != _family_signature(lev)
+
+
+def test_family_signature_unknown_field_not_over_collapsed():
+    # An unknown fundamental keeps its exact name so two different signals stay
+    # distinct (never fold together by accident).
+    x = _op("rank", _fld("some_unknown_field"))
+    y = _op("rank", _fld("other_unknown_field"))
+    assert _family_signature(x) != _family_signature(y)
+
+
+def test_family_cap_bounds_per_family_output():
+    # With cap=2, no family fingerprint may appear more than twice in the output.
+    from collections import Counter
+
+    from alpha_agent.brain.fastexpr import _family_signature, expression_to_tree
+
+    exprs = generate_brain_candidates(24, rng_seed=7, family_cap=2)
+    counts: Counter = Counter()
+    for e in exprs:
+        try:
+            counts[_family_signature(expression_to_tree(e))] += 1
+        except Exception:
+            pass
+    assert exprs, "generator produced nothing"
+    assert max(counts.values()) <= 2

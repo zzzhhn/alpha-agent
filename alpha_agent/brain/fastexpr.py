@@ -460,6 +460,51 @@ def _structural_signature(tree: dict) -> tuple:
     return (tree["name"], *(_structural_signature(a) for a in tree["args"]))
 
 
+# G2 family signature. The structural signature keeps the EXACT field leaf, so
+# divide(op_income, assets) and divide(op_income, equity) — the same profitability
+# bet with a swapped denominator — read as distinct and both burn a slow sim slot.
+# The family signature collapses a known economic-ratio subtree to its FAMILY and
+# each field leaf to a coarse category, so field-swapped clones share one
+# fingerprint; a per-round cap then stops any single family from dominating the
+# batch (the mechanism behind "keep mining and only get near-duplicates").
+_RATIO_FAMILY: dict[tuple[str, str], str] = {}
+for _fam, _pairs in _RATIO_FAMILIES.items():
+    for _pair in _pairs:
+        _RATIO_FAMILY.setdefault(_pair, _fam)  # first family listing a shared pair wins
+_STYLE_SET = frozenset(_STYLE_FIELDS)
+_OPTION_SET = frozenset(f for grp in _OPTION_FIELDS.values() for f in grp)
+_BASE_SET = frozenset(_BASE_FIELDS)
+
+
+def _field_category(name: str) -> str:
+    """Coarse bucket for a field leaf. Unknown fundamentals keep their exact name
+    so we never OVER-collapse (two genuinely different fundamental signals must
+    stay distinct); only the well-known style/option/base groups fold together."""
+    if name in _STYLE_SET:
+        return "style"
+    if name in _OPTION_SET:
+        return "option"
+    if name in _BASE_SET:
+        return "base"
+    return name
+
+
+def _family_signature(tree: dict) -> tuple:
+    """Like _structural_signature but collapses a known ratio to its family and
+    field leaves to categories — the granularity at which near-duplicates cluster."""
+    if tree["type"] == "operand":
+        return ("fld", _field_category(tree["name"]))
+    if tree["type"] == "literal":
+        return ("l",)
+    if tree["name"] == "divide" and len(tree["args"]) == 2:
+        a, b = tree["args"]
+        if a.get("type") == "operand" and b.get("type") == "operand":
+            fam = _RATIO_FAMILY.get((a["name"], b["name"]))
+            if fam is not None:
+                return ("ratio", fam)
+    return (tree["name"], *(_family_signature(x) for x in tree["args"]))
+
+
 def generate_brain_candidates(
     n: int,
     *,
@@ -470,6 +515,7 @@ def generate_brain_candidates(
     ratio_usage: Optional[dict] = None,
     prefer_industry: bool = False,
     avoid_signatures: Optional[frozenset] = None,
+    family_cap: int = 3,
 ) -> list[str]:
     """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
 
@@ -498,8 +544,11 @@ def generate_brain_candidates(
         except Exception:  # noqa: BLE001 — a seed we can't parse just doesn't join
             continue
 
+    from collections import Counter
+
     seen: set[str] = set()
     seen_sigs: set[tuple] = set()  # structural fingerprints for pool diversity
+    family_counts: Counter = Counter()  # G2: cap near-duplicates per factor family
     out: list[str] = []
     guard = 0
     while len(out) < n and guard < n * 120:
@@ -554,8 +603,15 @@ def generate_brain_candidates(
         sig = _structural_signature(tree)
         if sig in seen_sigs:
             continue
+        # G2 family cap: a family (e.g. all profitability ratios, regardless of
+        # denominator) contributes at most `family_cap` candidates per round, so a
+        # single over-mined family can't crowd out the diverse set. 0 disables it.
+        fam_sig = _family_signature(tree)
+        if family_cap > 0 and family_counts[fam_sig] >= family_cap:
+            continue
         seen.add(expr)
         seen_sigs.add(sig)
+        family_counts[fam_sig] += 1
         out.append(expr)
         pool.append(tree)  # feed back so the GA explores around good structures
     return out
