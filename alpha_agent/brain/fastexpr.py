@@ -181,36 +181,21 @@ def _lit(v: int) -> dict:
 _FUND_WINDOWS = (60, 126, 252)
 
 
-# G4: base prior per factor family. Proven anchors (profitability/value) stay
-# favoured so the pass rate holds; the weaker-but-decorrelating families keep a
-# real, non-trivial share (vs the old size-proportional ~2-3%). The UCB term
-# below then decays whichever family gets over-mined, auto-rotating exploration.
-_FAMILY_PRIOR: dict[str, float] = {
-    "profitability": 1.0, "value": 1.0,
-    "leverage": 0.6, "liquidity": 0.6, "investment": 0.5, "payout": 0.5,
-}
-
-
 def _pick_ratio(rng: random.Random, usage: Optional[dict]) -> tuple[str, str]:
-    """Choose an economic ratio with FAMILY-aware UCB exploration (G4).
+    """Choose an economic ratio, biased toward UNDER-used ones (self-evolution
+    anti-homogenization): weight each ratio by 1/(1+times_used_recently).
 
-    The old rule weighted each ratio by 1/(1+usage) — but with 10 profitability
-    ratios and 1 investment ratio, that still picks the big families ~50% of the
-    time and starves the small ones, so the dominant fundamental path keeps
-    re-mining the same two families and homogenizes. Here selection is two-stage:
-    pick a FAMILY by prior x inverse-family-usage (so families compete evenly and
-    an over-mined one decays), THEN a ratio within it by inverse-ratio-usage.
-    Family usage is summed from `usage` (the per-ratio history) — no new state."""
-    usage = usage or {}
-    fams = list(_RATIO_FAMILIES.keys())
-    fam_used = {
-        f: sum(usage.get(r, 0) for r in _RATIO_FAMILIES[f]) for f in fams
-    }
-    fam_w = [_FAMILY_PRIOR.get(f, 0.6) / (1 + fam_used[f]) for f in fams]
-    fam = rng.choices(fams, weights=fam_w, k=1)[0]
-    ratios = _RATIO_FAMILIES[fam]
-    ratio_w = [1.0 / (1 + usage.get(r, 0)) for r in ratios]
-    return rng.choices(ratios, weights=ratio_w, k=1)[0]
+    NOTE: an earlier family-level UCB rotation (G4) was reverted — over exhausted
+    vocabulary it pushed generation OUT of the proven high-Sharpe profitability/
+    value families into weak leverage/liquidity/investment ratios, halving the
+    round's median Sharpe (0.39 -> 0.19) so every candidate failed the in-sample
+    gate. Diversity is enforced at ACCEPTANCE (the G1 basket-orthogonality gate),
+    where it costs no Sharpe, NOT at generation. The uniform-over-ratios default
+    keeps the big proven families dominant, which is the quality-optimal choice."""
+    if not usage:
+        return rng.choice(ECONOMIC_RATIOS)
+    weights = [1.0 / (1 + usage.get(r, 0)) for r in ECONOMIC_RATIOS]
+    return rng.choices(ECONOMIC_RATIOS, weights=weights, k=1)[0]
 
 
 # Outer cross-sectional normalizations (all BRAIN-safe). group_rank → [0,1],
@@ -538,7 +523,7 @@ def generate_brain_candidates(
     ratio_usage: Optional[dict] = None,
     prefer_industry: bool = False,
     avoid_signatures: Optional[frozenset] = None,
-    family_cap: int = 3,
+    family_cap: int = 0,
 ) -> list[str]:
     """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
 
@@ -626,9 +611,13 @@ def generate_brain_candidates(
         sig = _structural_signature(tree)
         if sig in seen_sigs:
             continue
-        # G2 family cap: a family (e.g. all profitability ratios, regardless of
-        # denominator) contributes at most `family_cap` candidates per round, so a
-        # single over-mined family can't crowd out the diverse set. 0 disables it.
+        # G2 family cap (OFF by default, family_cap=0). A family contributes at
+        # most `family_cap` candidates per round. Reverted from default-on: capping
+        # the proven high-Sharpe families at generation forces weak filler from
+        # other families, which fails the in-sample gate. Diversity is enforced at
+        # ACCEPTANCE (G1) instead, where it costs no Sharpe. Kept + tested so it can
+        # be re-enabled once the vocabulary carries more than a couple strong
+        # families. 0 disables it.
         fam_sig = _family_signature(tree)
         if family_cap > 0 and family_counts[fam_sig] >= family_cap:
             continue
