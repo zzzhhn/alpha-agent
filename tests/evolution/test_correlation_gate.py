@@ -32,3 +32,46 @@ def test_gate_with_no_existing_factors_is_a_noop():
     (0.0 correlation), so a fresh install proposes exactly as before."""
     gate = SelfCorrelationGate(existing=[])
     assert gate.check("rank(ts_mean(returns, 12))") == (0.0, None)
+
+
+# --- G1: incremental (basket-level) orthogonality gate ---------------------
+import numpy as np  # noqa: E402
+from alpha_agent.evolution.correlation_gate import (  # noqa: E402
+    incremental_contribution,
+    max_corr_against,
+)
+
+
+def test_incremental_contribution_novel_when_basket_empty():
+    c = np.random.default_rng(0).standard_normal(120)
+    assert incremental_contribution(c, {}) == (1.0, None)
+
+
+def test_incremental_contribution_low_when_basket_spans_candidate():
+    rng = np.random.default_rng(1)
+    a, b = rng.standard_normal(300), rng.standard_normal(300)
+    cand = 0.6 * a + 0.4 * b + 1e-6 * rng.standard_normal(300)
+    m, who = incremental_contribution(cand, {"a": a, "b": b})
+    assert m < 0.1
+    assert who in {"a", "b"}
+
+
+def test_incremental_contribution_high_when_orthogonal():
+    rng = np.random.default_rng(2)
+    a, b = rng.standard_normal(300), rng.standard_normal(300)
+    cand = rng.standard_normal(300)  # independent of the basket
+    m, _ = incremental_contribution(cand, {"a": a, "b": b})
+    assert m > 0.7
+
+
+def test_incremental_contribution_catches_collective_low_rank():
+    # THE money case: candidate is BELOW 0.7 pairwise with every basket series,
+    # so the pairwise gate would pass it — but it's fully spanned by the trio,
+    # so the basket gate must reject it (marginal ~0).
+    rng = np.random.default_rng(3)
+    a, b, c = (rng.standard_normal(500) for _ in range(3))
+    cand = (a + b + c) / np.sqrt(3)
+    pw, _ = max_corr_against(cand, {"a": a, "b": b, "c": c})
+    m, _ = incremental_contribution(cand, {"a": a, "b": b, "c": c})
+    assert pw < 0.7   # pairwise gate would NOT flag this
+    assert m < 0.15   # basket gate DOES flag it

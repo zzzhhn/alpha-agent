@@ -73,6 +73,70 @@ def max_corr_against(
     return (best, best_name)
 
 
+def incremental_contribution(
+    candidate_ret: np.ndarray,
+    basket: dict[str, np.ndarray],
+    *,
+    k: int = 12,
+    min_obs: int = 60,
+) -> tuple[float, Optional[str]]:
+    """Marginal variance a candidate adds ON TOP of the accepted basket — the
+    basket-level generalization of the pairwise self-corr gate (G1).
+
+    The pairwise gate (``max_corr_against``) misses COLLECTIVE redundancy: N
+    factors can each sit below 0.7 pairwise yet together span a tiny subspace, so
+    a 'diverse' batch is really low-rank and homogenizes the book. This regresses
+    the candidate's daily returns on its K nearest basket neighbours (least
+    squares) and returns ``1 - R^2`` — the fraction of the candidate's variance
+    the basket does NOT already reproduce. 1.0 = fully novel; ~0.0 = the basket
+    already spans it (reject as redundant).
+
+    Neighbours, not the whole basket, keep the regression well-posed: a design
+    with more columns than rows fits any target (R^2=1) and would reject
+    everything. K is auto-capped to keep the system overdetermined. Pure (no IO);
+    best-effort — anything unmeasurable degrades to 1.0 (treat as novel) so the
+    gate never blocks a round by erroring, matching the rest of this module.
+    """
+    if not basket:
+        return (1.0, None)
+    scored: list[tuple[float, str, np.ndarray]] = []
+    for name, ret in basket.items():
+        c = _pairwise_pearson(candidate_ret, ret)
+        if c is not None:
+            scored.append((abs(c), name, np.asarray(ret, dtype=np.float64)))
+    if not scored:
+        return (1.0, None)
+    scored.sort(key=lambda t: t[0], reverse=True)
+    partner = scored[0][1]
+
+    cand = np.asarray(candidate_ret, dtype=np.float64)
+    n = cand.size
+    for _, _, r in scored:
+        n = min(n, r.size)
+    if n < min_obs:
+        return (1.0, partner)
+    # Keep the design overdetermined: at most ~n/4 regressors.
+    k_eff = max(1, min(k, len(scored), n // 4))
+    cand = cand[-n:]
+    cols = [r[-n:] for _, _, r in scored[:k_eff]]
+    mask = ~np.isnan(cand)
+    for col in cols:
+        mask &= ~np.isnan(col)
+    if int(mask.sum()) < max(min_obs, k_eff + 2):
+        return (1.0, partner)
+    y = cand[mask]
+    design = np.column_stack([np.ones(int(mask.sum())), *[c[mask] for c in cols]])
+    ss_tot = float(((y - y.mean()) ** 2).sum())
+    if ss_tot < 1e-18:
+        return (0.0, partner)  # constant candidate → no signal, treat as redundant
+    beta, *_ = np.linalg.lstsq(design, y, rcond=None)
+    ss_res = float(((y - design @ beta) ** 2).sum())
+    # marginal = 1 - R^2 = ss_res/ss_tot (the variance the basket does NOT
+    # explain). Do NOT write 1 - ss_res/ss_tot — that is R^2 itself, the inverse.
+    marginal = ss_res / ss_tot
+    return (max(0.0, min(1.0, marginal)), partner)
+
+
 def _daily_returns_for(panel, fwd, expression: str, name: str) -> Optional[np.ndarray]:
     """Evaluate one expression on the panel and reduce to its daily long-short
     return series. None on any evaluation failure (e.g. the candidate uses a

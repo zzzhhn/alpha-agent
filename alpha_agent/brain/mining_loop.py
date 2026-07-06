@@ -23,7 +23,10 @@ from alpha_agent.brain.client import BrainClient, BrainSimulationError
 from alpha_agent.brain.fastexpr import generate_brain_candidates
 from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
 from alpha_agent.brain.tuning import base_settings_for, diagnose, retry_variant
-from alpha_agent.evolution.correlation_gate import max_corr_against
+from alpha_agent.evolution.correlation_gate import (
+    incremental_contribution,
+    max_corr_against,
+)
 
 
 async def _simulate_one(client: BrainClient, expr: str, settings: dict, timeout_s: float):
@@ -39,6 +42,11 @@ async def _simulate_one(client: BrainClient, expr: str, settings: dict, timeout_
 # WorldQuant's SELF_CORRELATION bar: a new alpha correlating this much with an
 # existing ACTIVE one (on daily returns) is a re-discovery, not new alpha.
 _SELF_CORR_THRESHOLD = 0.7
+# G1: a passer must add at least this fraction of NOVEL variance (1 - R^2) on top
+# of its nearest accepted-basket neighbours. Deliberately low (0.15) so it flags
+# only the clearly-spanned (the pairwise gate missed collective low-rank), NOT
+# merely-correlated good factors — keeping the pass rate healthy.
+_MARGINAL_MIN = 0.15
 
 
 def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
@@ -284,10 +292,35 @@ async def run_mining_round(
             self_correlation_adj=adj, self_correlation_adj_with=adj_with,
         )
 
-        if max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD:
+        # G1 basket-orthogonality gate. Pairwise self-corr passes a batch that is
+        # collectively low-rank (each member <0.7 yet the set jointly spans a tiny
+        # subspace — the real homogenization escape). Require the candidate to add
+        # genuine variance ON TOP of the accepted basket: 1 - R^2 of its daily
+        # returns regressed on its 8 nearest basket neighbours. Best-effort → 1.0
+        # (fully novel) when unmeasurable, so it can only ever flag MORE, never
+        # fewer, than the pairwise gate.
+        marginal, marginal_with = (
+            incremental_contribution(cand_rets, accepted_returns, k=8)
+            if cand_rets is not None and accepted_returns
+            else (1.0, None)
+        )
+
+        too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
+        too_redundant = marginal < _MARGINAL_MIN
+        if too_correlated or too_redundant:
+            reason = (
+                f"self-corr official={official} adj={adj:.2f} vs {adj_with}"
+                if too_correlated
+                else f"low marginal contribution {marginal:.2f} "
+                f"(<{_MARGINAL_MIN}) — spanned by basket ({marginal_with})"
+            )
+            print(
+                f"[flag] {expr[:44]!r} corr={adj:.2f} marginal={marginal:.2f} "
+                f"({'corr' if too_correlated else 'redundant'})",
+                flush=True,
+            )
             await store.record_brain_alpha(
-                pool, **common, **corr_kw, outcome="flagged",
-                detail=f"self-corr official={official} adj={adj:.2f} vs {adj_with}",
+                pool, **common, **corr_kw, outcome="flagged", detail=reason,
             )
             summary["flagged"] += 1
             continue
