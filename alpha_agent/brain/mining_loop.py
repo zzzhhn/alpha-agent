@@ -185,6 +185,15 @@ async def run_mining_round(
     if prior:
         print(f"[diversity] {len(accepted_returns)} reference series (active + prior passed)", flush=True)
 
+    # One timestamp for the whole round, from the DB clock (same anchor the
+    # progress counter uses), so every row this round shares a batch id the UI
+    # can group on and show on the batch divider. Best-effort: None just means
+    # these rows fall into the "legacy" group and draw no divider.
+    try:
+        batch_started_at = await pool.fetchval("SELECT now()")
+    except Exception:  # noqa: BLE001 — batch tagging is cosmetic, never abort a round
+        batch_started_at = None
+
     retry_budget = max_retries
     for expr in candidates:
         # Family-adaptive BASE settings (fast/technical signals get more decay).
@@ -203,6 +212,7 @@ async def run_mining_round(
             await store.record_brain_alpha(
                 pool, user_id=user_id, expression=expr, settings=settings,
                 outcome="sim_error", detail=detail,
+                batch_started_at=batch_started_at,
             )
             summary["sim_error"] += 1
             continue
@@ -234,7 +244,7 @@ async def run_mining_round(
             sharpe=metrics.sharpe, fitness=metrics.fitness,
             turnover=metrics.turnover, drawdown=metrics.drawdown,
             returns=metrics.returns, margin=metrics.margin, grade=metrics.grade,
-            retried=did_retry,
+            retried=did_retry, batch_started_at=batch_started_at,
         )
 
         if not metrics.passes_gates():

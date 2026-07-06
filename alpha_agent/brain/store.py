@@ -27,25 +27,27 @@ async def record_brain_alpha(
     grade: str | None = None,
     fail_checks: str | None = None,
     retried: bool = False,
+    batch_started_at=None,
 ) -> int:
     """Insert one mining outcome. Returns the new row id.
 
     Two self-correlations: `self_correlation` is BRAIN's official value (vs ACTIVE
     alphas); `self_correlation_adj` also counts our passed-but-unsubmitted factors.
-    `fail_checks` (rejected only) + `retried` explain the outcome for the UI."""
+    `fail_checks` (rejected only) + `retried` explain the outcome for the UI.
+    `batch_started_at` tags the mining round for the batch-divider UI."""
     row = await pool.fetchrow(
         "INSERT INTO brain_alphas "
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
         " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade, "
-        " fail_checks, retried) "
+        " fail_checks, retried, batch_started_at) "
         "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,"
-        " $18,$19) RETURNING id",
+        " $18,$19,$20) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with,
         self_correlation_adj, self_correlation_adj_with, outcome, detail, grade,
-        fail_checks, retried,
+        fail_checks, retried, batch_started_at,
     )
     return row["id"]
 
@@ -63,7 +65,7 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
         settings = d.get("settings")
         if isinstance(settings, str):
             d["settings"] = json.loads(settings)
-        for k in ("created_at", "submitted_at"):
+        for k in ("created_at", "submitted_at", "batch_started_at"):
             if d.get(k) is not None:
                 d[k] = d[k].isoformat()
         out.append(d)
@@ -74,7 +76,8 @@ _ROW_COLS = (
     "id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
     "returns, margin, self_correlation, self_correlation_with, "
     "self_correlation_adj, self_correlation_adj_with, outcome, detail, "
-    "grade, fail_checks, retried, created_at, submitted_at, brain_status"
+    "grade, fail_checks, retried, batch_started_at, created_at, submitted_at, "
+    "brain_status"
 )
 
 # Whitelisted sort columns (never interpolate user input into SQL).
@@ -87,7 +90,7 @@ def _decode_row(r) -> dict:
     d = dict(r)
     if isinstance(d.get("settings"), str):
         d["settings"] = json.loads(d["settings"])
-    for k in ("created_at", "submitted_at"):
+    for k in ("created_at", "submitted_at", "batch_started_at"):
         if d.get(k) is not None:
             d[k] = d[k].isoformat()
     return d
@@ -197,7 +200,7 @@ async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
     d = dict(r)
     if isinstance(d.get("settings"), str):
         d["settings"] = json.loads(d["settings"])
-    for k in ("created_at", "submitted_at"):
+    for k in ("created_at", "submitted_at", "batch_started_at"):
         if d.get(k) is not None:
             d[k] = d[k].isoformat()
     return d

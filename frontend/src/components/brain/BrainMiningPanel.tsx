@@ -1000,11 +1000,24 @@ export function BrainMiningPanel() {
               : "No results match the filters."}
           </p>
         ) : (
-          <ul className="flex flex-col divide-y divide-tm-rule">
-            {data.alphas.map((a) => {
+          <ul className="flex flex-col">
+            {data.alphas.flatMap((a, i) => {
               const open = expanded.has(a.id);
-              return (
-                <li key={a.id}>
+              const prev = i > 0 ? data.alphas[i - 1] : null;
+              // Batch divider: only under the default time sort are rows from the
+              // same mining round contiguous. Any metric sort interleaves batches,
+              // so a divider would be noise — suppress it there. Rows carry the
+              // per-row separator manually now (divide-y is gone) so a batch
+              // boundary can swap the thin rule for the accent divider below.
+              const newBatch =
+                sort === "created_at" &&
+                prev != null &&
+                (a.batch_started_at ?? "") !== (prev.batch_started_at ?? "");
+              const row = (
+                <li
+                  key={a.id}
+                  className={i > 0 && !newBatch ? "border-t border-tm-rule" : ""}
+                >
                   <button
                     type="button"
                     onClick={() => toggle(a.id)}
@@ -1050,6 +1063,29 @@ export function BrainMiningPanel() {
                   {open ? <RowDetail alpha={a} onDone={() => void load()} /> : null}
                 </li>
               );
+              if (!newBatch) return [row];
+              // The accent line "where two boxes meet"; hover reveals the round's
+              // dispatch time (UTC+8). Labels the batch BELOW it (time sort is DESC,
+              // so crossing down enters the round dispatched at this timestamp).
+              return [
+                <li key={`div-${a.id}`} aria-hidden>
+                  <div
+                    className="group relative flex cursor-help items-center py-1.5"
+                    title={
+                      a.batch_started_at
+                        ? `${zh ? "本批次发起于 " : "batch dispatched "}${fmtUtc8(a.batch_started_at)} UTC+8`
+                        : undefined
+                    }
+                  >
+                    <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />
+                    <span className="whitespace-nowrap px-2 font-tm-mono text-[9px] uppercase tracking-wide text-tm-muted opacity-0 transition-opacity group-hover:opacity-100">
+                      {a.batch_started_at ? `${fmtUtc8(a.batch_started_at)} UTC+8` : "—"}
+                    </span>
+                    <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />
+                  </div>
+                </li>,
+                row,
+              ];
             })}
           </ul>
         )}

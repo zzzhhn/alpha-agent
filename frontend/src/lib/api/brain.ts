@@ -55,6 +55,8 @@ export interface BrainAlpha {
   created_at: string | null;
   submitted_at: string | null;
   brain_status: string | null;
+  /** Round this row was mined in (DB clock at dispatch); groups the batch-divider UI. */
+  batch_started_at: string | null;
 }
 
 export interface BrainSubmitResult {
