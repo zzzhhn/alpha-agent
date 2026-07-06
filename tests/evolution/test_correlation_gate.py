@@ -6,6 +6,7 @@ import numpy as np
 
 from alpha_agent.evolution.correlation_gate import (
     SelfCorrelationGate,
+    incremental_contribution,
     max_corr_against,
 )
 
@@ -35,13 +36,6 @@ def test_gate_with_no_existing_factors_is_a_noop():
 
 
 # --- G1: incremental (basket-level) orthogonality gate ---------------------
-import numpy as np  # noqa: E402
-from alpha_agent.evolution.correlation_gate import (  # noqa: E402
-    incremental_contribution,
-    max_corr_against,
-)
-
-
 def test_incremental_contribution_novel_when_basket_empty():
     c = np.random.default_rng(0).standard_normal(120)
     assert incremental_contribution(c, {}) == (1.0, None)
