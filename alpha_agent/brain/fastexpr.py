@@ -181,13 +181,36 @@ def _lit(v: int) -> dict:
 _FUND_WINDOWS = (60, 126, 252)
 
 
+# G4: base prior per factor family. Proven anchors (profitability/value) stay
+# favoured so the pass rate holds; the weaker-but-decorrelating families keep a
+# real, non-trivial share (vs the old size-proportional ~2-3%). The UCB term
+# below then decays whichever family gets over-mined, auto-rotating exploration.
+_FAMILY_PRIOR: dict[str, float] = {
+    "profitability": 1.0, "value": 1.0,
+    "leverage": 0.6, "liquidity": 0.6, "investment": 0.5, "payout": 0.5,
+}
+
+
 def _pick_ratio(rng: random.Random, usage: Optional[dict]) -> tuple[str, str]:
-    """Choose an economic ratio, biased toward UNDER-used ones (self-evolution
-    anti-homogenization): weight each ratio by 1/(1+times_used_recently)."""
-    if not usage:
-        return rng.choice(ECONOMIC_RATIOS)
-    weights = [1.0 / (1 + usage.get(r, 0)) for r in ECONOMIC_RATIOS]
-    return rng.choices(ECONOMIC_RATIOS, weights=weights, k=1)[0]
+    """Choose an economic ratio with FAMILY-aware UCB exploration (G4).
+
+    The old rule weighted each ratio by 1/(1+usage) — but with 10 profitability
+    ratios and 1 investment ratio, that still picks the big families ~50% of the
+    time and starves the small ones, so the dominant fundamental path keeps
+    re-mining the same two families and homogenizes. Here selection is two-stage:
+    pick a FAMILY by prior x inverse-family-usage (so families compete evenly and
+    an over-mined one decays), THEN a ratio within it by inverse-ratio-usage.
+    Family usage is summed from `usage` (the per-ratio history) — no new state."""
+    usage = usage or {}
+    fams = list(_RATIO_FAMILIES.keys())
+    fam_used = {
+        f: sum(usage.get(r, 0) for r in _RATIO_FAMILIES[f]) for f in fams
+    }
+    fam_w = [_FAMILY_PRIOR.get(f, 0.6) / (1 + fam_used[f]) for f in fams]
+    fam = rng.choices(fams, weights=fam_w, k=1)[0]
+    ratios = _RATIO_FAMILIES[fam]
+    ratio_w = [1.0 / (1 + usage.get(r, 0)) for r in ratios]
+    return rng.choices(ratios, weights=ratio_w, k=1)[0]
 
 
 # Outer cross-sectional normalizations (all BRAIN-safe). group_rank → [0,1],

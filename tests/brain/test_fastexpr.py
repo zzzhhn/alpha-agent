@@ -66,8 +66,15 @@ def test_generation_uses_real_fundamental_fields():
     real = ["fnd6_operating_income", "fnd6_equity", "anl4_esteps"]
     cands = fe.generate_brain_candidates(25, rng_seed=2, fields=real)
     assert len(cands) == 25
-    joined = " ".join(cands)
-    # at least one fundamental field actually made it into the candidates
+    # Real fields enter only via the minority golden/GA paths, so whether any
+    # single seed's 25 candidates include one is probabilistic (~60% per seed).
+    # Aggregate a few seeds so the invariant — real fields DO reach the pool —
+    # is checked without depending on one lucky RNG stream.
+    joined = " ".join(
+        e
+        for s in range(2, 9)
+        for e in fe.generate_brain_candidates(25, rng_seed=s, fields=real)
+    )
     assert any(rf in joined for rf in real)
     # every candidate uses only BRAIN-safe operators
     for e in cands:
@@ -168,3 +175,39 @@ def test_family_cap_bounds_per_family_output():
             pass
     assert exprs, "generator produced nothing"
     assert max(counts.values()) <= 2
+
+
+# --- G4: family-aware UCB ratio selection -----------------------------------
+def test_pick_ratio_lifts_small_family_out_of_size_bias():
+    import random
+    from collections import Counter
+
+    from alpha_agent.brain.fastexpr import _RATIO_FAMILY, _pick_ratio
+
+    rng = random.Random(0)
+    fam = Counter()
+    for _ in range(6000):
+        fam[_RATIO_FAMILY[_pick_ratio(rng, None)]] += 1
+    total = sum(fam.values())
+    # 'investment' has ONE ratio (capex/assets). The old size-proportional rule
+    # gave it ~1/38 ≈ 2.6%; family-balanced selection must lift it well above.
+    assert fam["investment"] / total > 0.06
+
+
+def test_pick_ratio_rotates_away_from_overmined_family():
+    import random
+    from collections import Counter
+
+    from alpha_agent.brain.fastexpr import _RATIO_FAMILIES, _RATIO_FAMILY, _pick_ratio
+
+    def inv_share(usage, seed):
+        rng = random.Random(seed)
+        fam = Counter()
+        for _ in range(6000):
+            fam[_RATIO_FAMILY[_pick_ratio(rng, usage)]] += 1
+        return fam["investment"] / sum(fam.values())
+
+    fresh = inv_share(None, 1)
+    overmined = inv_share({r: 50 for r in _RATIO_FAMILIES["profitability"]}, 1)
+    # over-mining profitability must free up share for the untouched family.
+    assert overmined > fresh
