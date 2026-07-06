@@ -1,0 +1,27 @@
+# One-off diagnostic: dump the raw shape of an alpha's IS checks +
+# /correlations/self response, so the miner parses BRAIN's OFFICIAL
+# self-correlation correctly. API-only, seconds. Manual trigger.
+name: brain-diag
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[storage]"
+      - name: Dump self-corr diagnostic
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRAIN_USERNAME: ${{ secrets.BRAIN_USERNAME }}
+          BRAIN_PASSWORD: ${{ secrets.BRAIN_PASSWORD }}
+          BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
+          BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
+        run: python scripts/brain_diag.py
