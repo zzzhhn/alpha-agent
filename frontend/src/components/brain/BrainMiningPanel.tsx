@@ -29,7 +29,20 @@ import {
   type YearlyRow,
 } from "@/lib/api/brain";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
+
+// Format an ISO timestamp as Beijing time (UTC+8), to the second.
+function fmtUtc8(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const t = new Date(d.getTime() + 8 * 3600 * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())} ` +
+    `${p(t.getUTCHours())}:${p(t.getUTCMinutes())}:${p(t.getUTCSeconds())}`
+  );
+}
 
 // ── in-flight mining tracker (survives refresh / navigation) ─────────────────
 type ActiveJob = { startedAt: string; n: number; dispatchedAt: number };
@@ -300,7 +313,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         {alpha.expression}
       </code>
 
-      {/* BRAIN's overall performance grade for this alpha */}
+      {/* BRAIN's overall performance grade for this alpha + record timestamp */}
       <div className="flex items-center gap-2">
         <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
           {zh ? "性能评级" : "performance"}
@@ -309,6 +322,15 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         <span className="font-tm-mono text-[10px] text-tm-muted">
           {zh ? "BRAIN 综合评级" : "BRAIN overall grade"}
         </span>
+        {alpha.created_at ? (
+          <span
+            className="ml-auto flex items-center gap-1 font-tm-mono text-[10px] tabular-nums text-tm-muted"
+            title={zh ? "该回测结果记录时间(UTC+8)" : "backtest record time (UTC+8)"}
+          >
+            {fmtUtc8(alpha.created_at)}
+            <span className="opacity-60">UTC+8</span>
+          </span>
+        ) : null}
       </div>
 
       {/* why rejected (failing checks) + retried tag */}
@@ -322,10 +344,14 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         <Metric label={zh ? "收益" : "Returns"} value={fmt(alpha.returns)} />
         <Metric label="Drawdown" value={fmt(alpha.drawdown)} />
         <Metric label="Margin" value={fmt(alpha.margin, 4)} />
-        <Metric
-          label={zh ? "自相关·官方" : "S-corr (BRAIN)"}
-          value={fmt(alpha.self_correlation)}
-        />
+        <div className="flex flex-col">
+          <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+            {zh ? "自相关·官方" : "S-corr (BRAIN)"}
+          </span>
+          <span className="tabular-nums text-tm-fg">
+            <OfficialSCorrCell alpha={alpha} zh={zh} />
+          </span>
+        </div>
         <Metric
           label={zh ? "自相关·调整" : "S-corr⁺ (adj)"}
           value={fmt(alpha.self_correlation_adj)}
@@ -394,6 +420,31 @@ const GRADE_STYLE: Record<string, { cls: string; short: string }> = {
   INFERIOR: { cls: "border-tm-warn text-tm-warn", short: "INFR" },
   POOR: { cls: "border-tm-neg text-tm-neg", short: "POOR" },
 };
+
+// Official BRAIN self-correlation. BRAIN computes it only AFTER submit (pre-submit
+// the IS SELF_CORRELATION check is PENDING and /correlations/self is empty), so an
+// unsubmitted alpha shows a "pending" marker — not a bare dash that reads as a bug.
+// Use the adjusted S-corr⁺ for pre-submit diversity gating.
+function OfficialSCorrCell({ alpha, zh }: { alpha: BrainAlpha; zh: boolean }) {
+  if (typeof alpha.self_correlation === "number") {
+    return <>{fmt(alpha.self_correlation)}</>;
+  }
+  if (!alpha.submitted_at) {
+    return (
+      <span
+        className="cursor-help text-tm-muted"
+        title={
+          zh
+            ? "BRAIN 仅在因子提交后计算官方自相关(提交前 IS 检查为 PENDING);当前请参考右侧「调整后 S-corr⁺」"
+            : "BRAIN computes official self-corr only after submit (IS check is PENDING pre-submit); use the adjusted S-corr⁺"
+        }
+      >
+        {zh ? "待定" : "pend"}
+      </span>
+    );
+  }
+  return <>—</>;
+}
 
 function GradeBadge({ grade, full = false }: { grade: string | null; full?: boolean }) {
   if (!grade) {
@@ -770,6 +821,7 @@ export function BrainMiningPanel() {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [outcome, setOutcome] = useState<BrainOutcome | "">("");
   const [q, setQ] = useState("");
   const [sharpeMin, setSharpeMin] = useState("");
@@ -782,15 +834,15 @@ export function BrainMiningPanel() {
 
   const query = useMemo<BrainAlphaQuery>(
     () => ({
-      limit: PAGE_SIZE,
-      offset: page * PAGE_SIZE,
+      limit: pageSize,
+      offset: page * pageSize,
       outcome: outcome || undefined,
       q: q.trim() || undefined,
       sharpe_min: sharpeMin ? Number(sharpeMin) : undefined,
       sort,
       descending,
     }),
-    [page, outcome, q, sharpeMin, sort, descending],
+    [page, pageSize, outcome, q, sharpeMin, sort, descending],
   );
 
   const load = useCallback(async () => {
@@ -808,10 +860,10 @@ export function BrainMiningPanel() {
     void load();
   }, [load]);
 
-  // reset to page 0 whenever a filter changes
+  // reset to page 0 whenever a filter or the page size changes
   useEffect(() => {
     setPage(0);
-  }, [outcome, q, sharpeMin, sort, descending]);
+  }, [outcome, q, sharpeMin, sort, descending, pageSize]);
 
   function toggle(id: number) {
     setExpanded((prev) => {
@@ -831,7 +883,7 @@ export function BrainMiningPanel() {
   }
 
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const meta = `${total} ${zh ? "个 alpha" : "alphas"}`;
 
   const INPUT =
@@ -977,7 +1029,7 @@ export function BrainMiningPanel() {
                     <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.returns)}</span>
                     <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.drawdown)}</span>
                     <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.margin, 4)}</span>
-                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.self_correlation)}</span>
+                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2"><OfficialSCorrCell alpha={a} zh={zh} /></span>
                     <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-info">{fmt(a.self_correlation_adj)}</span>
                     <span className="flex w-24 justify-end">
                       {a.alpha_id ? (
@@ -1002,9 +1054,9 @@ export function BrainMiningPanel() {
           </ul>
         )}
 
-        {/* pagination */}
-        {total > PAGE_SIZE ? (
-          <div className="flex items-center justify-between border-t border-tm-rule px-3 py-2 font-tm-mono text-[11px] text-tm-muted">
+        {/* pagination + custom page size */}
+        {total > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-tm-rule px-3 py-2 font-tm-mono text-[11px] text-tm-muted">
             <button
               type="button"
               onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -1013,10 +1065,28 @@ export function BrainMiningPanel() {
             >
               ‹ {zh ? "上一页" : "prev"}
             </button>
-            <span className="tabular-nums">
-              {zh
-                ? `第 ${page + 1} / ${pageCount} 页 · 每页 ${PAGE_SIZE} 条 · 共 ${total} 条`
-                : `page ${page + 1} / ${pageCount} · ${PAGE_SIZE}/pg · ${total} total`}
+            <span className="flex items-center gap-2 tabular-nums">
+              <span>
+                {zh
+                  ? `第 ${page + 1} / ${pageCount} 页 · 共 ${total} 条`
+                  : `page ${page + 1} / ${pageCount} · ${total} total`}
+              </span>
+              <span className="flex items-center gap-1">
+                <span>{zh ? "每页" : "per page"}</span>
+                <input
+                  value={String(pageSize)}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                    // clamp 1..200 (server also caps limit at 200); empty -> keep
+                    if (Number.isFinite(n) && n > 0) setPageSize(Math.min(200, n));
+                    else if (e.target.value === "") setPageSize(1);
+                  }}
+                  inputMode="numeric"
+                  aria-label={zh ? "每页条数" : "rows per page"}
+                  className="h-5 w-12 border border-tm-rule bg-tm-bg-2 px-1 text-center text-tm-fg outline-none focus:border-tm-accent"
+                />
+                <span>{zh ? "条" : "rows"}</span>
+              </span>
             </span>
             <button
               type="button"
