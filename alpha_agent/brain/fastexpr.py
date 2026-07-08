@@ -322,17 +322,40 @@ def _trade_when_wrap(rng: random.Random, alpha: dict) -> dict:
 
 
 def _options_leg(rng: random.Random) -> dict:
-    """The user's SPECTACULAR/EXCELLENT options-skew alpha: when the put-call open-
-    interest ratio is low, take the call-minus-put implied-vol skew (same tenor),
-    gated by trade_when and sector-neutralized. A complete alpha, not a blend leg."""
-    i = rng.randint(0, 1)
+    """Options implied-volatility family — empirically the user's HIGHEST-Sharpe
+    source (~2.23 mean) and economically ORTHOGONAL to fundamental value, so it is
+    the key book diversifier. Mine it properly (not just the one proven structure):
+    skew level, skew change, PCR change, and variance-risk-premium, both signs,
+    industry/sector/subindustry-neutralized. reverse(x) = -x flips the sign so
+    BRAIN's sim decides which direction pays. Run on a coverage-dense universe —
+    base_settings_for pins options to TOP500, since these fields are nan-sparse on
+    TOP3000 (the likely reason this family kept dying in-sample despite high Sharpe)."""
+    i = rng.randint(0, 1)  # tenor 150 vs 180
+    ivc = _fld(_OPTION_FIELDS["iv_call"][i])
+    ivp = _fld(_OPTION_FIELDS["iv_put"][i])
     pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
-    skew = _op("subtract",
-               _fld(_OPTION_FIELDS["iv_call"][i]), _fld(_OPTION_FIELDS["iv_put"][i]))
-    gated = _op("trade_when", _op("less", pcr, {"type": "literal", "value": 1.1}),
-                skew, _lit(-1))
-    return _op("group_neutralize", gated, _fld("sector"))
-
+    group = _fld(rng.choice(("industry", "sector", "subindustry")))
+    w = _lit(rng.choice((10, 20)))
+    variant = rng.randint(0, 4)
+    if variant == 0:
+        gated = _op("trade_when",
+                    _op("less", pcr, {"type": "literal", "value": 1.1}),
+                    _op("subtract", ivc, ivp), _lit(-1))
+        return _op("group_neutralize", gated, _fld("sector"))
+    skew = _op("subtract", ivp, ivc)  # put-minus-call vol skew (fear gauge)
+    if variant == 1:
+        leg = _op("rank", skew)  # skew level
+    elif variant == 2:
+        leg = _op("rank", _op("ts_delta", _op("ts_mean", skew, w), _lit(20)))
+    elif variant == 3:
+        leg = _op("rank", _op("ts_delta", _op("ts_mean", pcr, w), _lit(20)))
+    else:
+        rv = _op("multiply", _op("ts_std_dev", _fld("returns"), _lit(20)),
+                 {"type": "literal", "value": 15.87})
+        leg = _op("rank", _op("subtract", ivc, rv))
+    if rng.random() < 0.5:
+        leg = _op("reverse", leg)  # test both signs
+    return _op("group_neutralize", leg, group)
 
 def _reshape(rng: random.Random, leg: dict) -> dict:
     """RARELY reshape the final signal with a batch-A arithmetic op — signed_power
@@ -538,6 +561,7 @@ def generate_brain_candidates(
     prefer_industry: bool = False,
     avoid_signatures: Optional[frozenset] = None,
     family_cap: int = 0,
+    family_focus: Optional[str] = None,
 ) -> list[str]:
     """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
 
@@ -576,7 +600,11 @@ def generate_brain_candidates(
     while len(out) < n and guard < n * 120:
         guard += 1
         r = rng.random()
-        if r < 0.62:
+        if family_focus == "options":
+            # Family-constrained round: mine ONLY the options-IV family (highest
+            # Sharpe, orthogonal to value); base_settings_for runs it on TOP500.
+            tree = _options_leg(rng)
+        elif r < 0.62:
             # Economic-ratio / style golden structures — the highest-signal path,
             # now DOMINANT (was 45%). Widening operators/fields diluted this and
             # tanked the pass rate, so the proven backbone leads again.

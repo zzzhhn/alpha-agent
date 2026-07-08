@@ -33,6 +33,8 @@ from alpha_agent.brain.client import (
 # An expression that looks "fast" (high-turnover-prone): momentum / volatility /
 # liquidity legs built from price-volume fields.
 _TECHNICAL_RE = re.compile(r"volume|ts_std_dev|ts_delta\(close|divide\(close, ts_mean")
+# Options/IV fields — used to pin these signals to a coverage-dense universe.
+_OPTIONS_RE = re.compile(r"implied_volatility|pcr_oi")
 
 # Near-miss margins — beyond these a settings tweak won't realistically flip it,
 # so it isn't worth a retry sim.
@@ -48,7 +50,13 @@ def base_settings_for(
     decay (they're the high-turnover ones); fundamental/style signals keep the
     proven decay-0 config so nothing that already passes regresses."""
     decay = 12 if _TECHNICAL_RE.search(expr) else fundamental_decay
-    return {**DEFAULT_SETTINGS, "decay": decay, "neutralization": neutralization}
+    settings = {**DEFAULT_SETTINGS, "decay": decay, "neutralization": neutralization}
+    # Options/IV fields are dense only on liquid names; on TOP3000 they are
+    # nan-sparse and the alpha degenerates (misses turnover/drawdown). Pin them
+    # to TOP500 — the likely reason the highest-Sharpe family kept dying.
+    if _OPTIONS_RE.search(expr):
+        settings = {**settings, "universe": "TOP500"}
+    return settings
 
 
 def _failed(metrics, name: str) -> bool:

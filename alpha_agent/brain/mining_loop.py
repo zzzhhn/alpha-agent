@@ -144,10 +144,14 @@ async def run_mining_round(
     # Over-generate so the logic screen has candidates to prune down to
     # n_candidates worth of economically-sensible ones.
     gen_n = n_candidates * 2 if logic_llm is not None else n_candidates
+    import os
+    family_focus = os.environ.get("BRAIN_FAMILY_FOCUS") or None
+    if family_focus:
+        print(f"[focus] family-constrained round: {family_focus}", flush=True)
     candidates = generate_brain_candidates(
         gen_n, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed,
         ratio_usage=evo.ratio_usage, prefer_industry=evo.prefer_industry,
-        avoid_signatures=evo.avoid_signatures,
+        avoid_signatures=evo.avoid_signatures, family_focus=family_focus,
     )
 
     # LLM financial-logic pre-screen (AlphaEval 'Financial Logic'): score the

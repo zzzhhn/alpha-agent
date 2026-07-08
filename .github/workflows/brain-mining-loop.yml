@@ -18,6 +18,9 @@ on:
       n_candidates:
         description: "candidates to generate this round"
         default: "8"
+      family_focus:
+        description: "restrict generation to one family (e.g. options); blank = normal"
+        default: ""
   schedule:
     - cron: "0 8 * * *" # daily 08:00 UTC
 
@@ -48,6 +51,7 @@ jobs:
           BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
           BRAIN_N_CANDIDATES: ${{ github.event.inputs.n_candidates || '8' }}
+          BRAIN_FAMILY_FOCUS: ${{ github.event.inputs.family_focus || '' }}
           # Optional: enables the LLM financial-logic pre-screen. Unset → skipped.
           MINING_LLM_KEY: ${{ secrets.MINING_LLM_KEY }}
           MINING_LLM_MODEL: ${{ secrets.MINING_LLM_MODEL }}
