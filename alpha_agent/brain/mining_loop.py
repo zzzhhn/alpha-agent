@@ -92,7 +92,7 @@ async def run_mining_round(
     n_candidates: int = 8,
     seed_exprs: Optional[list[str]] = None,
     rng_seed: int = 1234,
-    sim_timeout_s: float = 300.0,
+    sim_timeout_s: float = 420.0,
     seed_from_user_alphas: bool = True,
     logic_llm=None,
     max_retries: int = 12,
