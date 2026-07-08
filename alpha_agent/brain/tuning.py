@@ -35,6 +35,8 @@ from alpha_agent.brain.client import (
 _TECHNICAL_RE = re.compile(r"volume|ts_std_dev|ts_delta\(close|divide\(close, ts_mean")
 # Options/IV fields — used to pin these signals to a coverage-dense universe.
 _OPTIONS_RE = re.compile(r"implied_volatility|pcr_oi")
+# Analyst estimate fields — sparse on TOP3000, pin to TOP1000.
+_ANALYST_RE = re.compile(r"anl4_")
 
 # Near-miss margins — beyond these a settings tweak won't realistically flip it,
 # so it isn't worth a retry sim.
@@ -56,6 +58,8 @@ def base_settings_for(
     # to TOP500 — the likely reason the highest-Sharpe family kept dying.
     if _OPTIONS_RE.search(expr):
         settings = {**settings, "universe": "TOP500"}
+    elif _ANALYST_RE.search(expr):
+        settings = {**settings, "universe": "TOP1000"}
     return settings
 
 

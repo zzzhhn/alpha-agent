@@ -321,6 +321,45 @@ def _trade_when_wrap(rng: random.Random, alpha: dict) -> dict:
     return _op("trade_when", cond, alpha, _lit(-1))
 
 
+# Analyst consensus-estimate fields CONFIRMED present in this account's mining
+# history (the council's assumed anl4_eps_fy1_* names do NOT exist). Revision
+# momentum = the CHANGE in these, which is the value-orthogonal anomaly.
+_REVISION_FIELDS = (
+    "anl4_afv4_eps_mean", "anl4_afv4_median_eps", "anl4_fcf_median",
+    "anl4_cfo_mean", "anl4_capex_mean", "anl4_bvps_value",
+)
+
+
+def _revision_leg(rng: random.Random) -> dict:
+    """Analyst estimate-REVISION momentum — the change in a consensus estimate,
+    not its raw level (raw analyst levels average ~0.85 Sharpe and are value-
+    contaminated; the revision is the real, value-orthogonal anomaly). Built only
+    from CONFIRMED fields. Estimates are sparse on TOP3000, so base_settings_for
+    pins anl4 signals to TOP1000. reverse(x) = -x tests both directions."""
+    name = rng.choice(_REVISION_FIELDS)
+
+    def bf() -> dict:
+        return _op("ts_backfill", _fld(name), _lit(60))
+
+    d = _lit(rng.choice((21, 63)))  # ~1 month / 1 quarter revision horizon
+    group = _fld(rng.choice(("industry", "subindustry", "sector")))
+    variant = rng.randint(0, 2)
+    if variant == 0:
+        # percent revision: change over d, scaled by |level| to normalize
+        rev = _op("divide", _op("ts_delta", bf(), d),
+                  _op("add", _op("abs", bf()), {"type": "literal", "value": 0.01}))
+        leg = _op("rank", rev)
+    elif variant == 1:
+        rev = _op("ts_delta", _op("ts_mean", bf(), _lit(10)), d)  # smoothed revision
+        leg = _op("rank", rev)
+    else:
+        rev = _op("ts_delta", _op("ts_delta", bf(), d), d)  # revision acceleration
+        leg = _op("rank", rev)
+    if rng.random() < 0.5:
+        leg = _op("reverse", leg)
+    return _op("group_neutralize", leg, group)
+
+
 def _options_leg(rng: random.Random) -> dict:
     """Options implied-volatility family — empirically the user's HIGHEST-Sharpe
     source (~2.23 mean) and economically ORTHOGONAL to fundamental value, so it is
@@ -604,6 +643,10 @@ def generate_brain_candidates(
             # Family-constrained round: mine ONLY the options-IV family (highest
             # Sharpe, orthogonal to value); base_settings_for runs it on TOP500.
             tree = _options_leg(rng)
+        elif family_focus == "revision":
+            # Family-constrained round: analyst estimate-revision momentum
+            # (value-orthogonal); base_settings_for runs anl4 on TOP1000.
+            tree = _revision_leg(rng)
         elif r < 0.62:
             # Economic-ratio / style golden structures — the highest-signal path,
             # now DOMINANT (was 45%). Widening operators/fields diluted this and
