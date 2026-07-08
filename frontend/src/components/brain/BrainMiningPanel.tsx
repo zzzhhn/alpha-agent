@@ -707,20 +707,7 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
         inputMode="numeric"
         className="h-7 w-16 border border-tm-rule bg-tm-bg-2 px-2 text-center font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent"
       />
-      <select
-        value={family}
-        onChange={(e) => setFamily(e.target.value)}
-        title={
-          zh
-            ? "挖矿家族。普通=混合(value 已饱和,基本挖不出);options=期权偏度(最高夏普正交源,能出);revision=分析师修正(偏弱)"
-            : "mining family. normal=mixed (value saturated); options=IV-skew (top orthogonal source); revision=analyst revisions (weak)"
-        }
-        className="h-7 border border-tm-rule bg-tm-bg-2 px-1.5 font-tm-mono text-[11px] text-tm-fg outline-none focus:border-tm-accent"
-      >
-        <option value="">{zh ? "普通(混合)" : "normal"}</option>
-        <option value="options">options</option>
-        <option value="revision">revision</option>
-      </select>
+      <FamilySelect value={family} onChange={setFamily} zh={zh} />
       <button
         type="button"
         onClick={go}
@@ -831,6 +818,91 @@ function OutcomeSelect({
     </div>
   );
 }
+
+const FAMILIES: Array<[string, string, string]> = [
+  ["", "普通(混合)", "normal"],
+  ["options", "options", "options"],
+  ["revision", "revision", "revision"],
+];
+
+// Native <select> is invisible on Safari (see OutcomeSelect) — same custom
+// button/span dropdown so the family label is readable in every browser + theme.
+function FamilySelect({
+  value,
+  onChange,
+  zh,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  zh: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const labelOf = (v: string) => {
+    const f = FAMILIES.find((x) => x[0] === v) ?? FAMILIES[0];
+    return zh ? f[1] : f[2];
+  };
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={
+          zh
+            ? "挖矿家族。普通=混合(value 已饱和);options=期权偏度(最高夏普正交源);revision=分析师修正(偏弱)"
+            : "mining family. normal=mixed (value saturated); options=IV-skew; revision=analyst revisions (weak)"
+        }
+        className="flex h-7 min-w-[104px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
+      >
+        <span className="text-tm-fg">{labelOf(value)}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-1 min-w-full border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
+        >
+          {FAMILIES.map((f) => (
+            <li key={f[0] || "normal"}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={f[0] === value}
+                onClick={() => {
+                  onChange(f[0]);
+                  setOpen(false);
+                }}
+                className={`block w-full whitespace-nowrap px-2 py-1 text-left font-tm-mono text-[11px] hover:bg-tm-bg-3 ${
+                  f[0] === value ? "text-tm-accent" : "text-tm-fg"
+                }`}
+              >
+                {zh ? f[1] : f[2]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 
 export function BrainMiningPanel() {
   const { locale } = useLocale();
