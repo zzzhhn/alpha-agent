@@ -165,8 +165,16 @@ async def count_brain_alphas_since(pool, user_id: int, *, since: datetime) -> in
     the honest per-candidate progress signal for an in-flight round. `since` is
     anchored to the DB clock at dispatch (see /mine), so there is no serverless-vs-DB
     clock skew to undercount early rows."""
+    # Anchor on batch_started_at (round START), not created_at (row creation): when
+    # a new round is dispatched while the PREVIOUS one is still finishing (workflow
+    # concurrency queues it), the previous round's tail rows have created_at > since
+    # but an EARLIER batch, so counting by created_at inflated the new round's
+    # progress (e.g. showed 9/12 when the new batch had only 4). The NULL-batch OR
+    # keeps counting a current-round row if batch tagging happened to fail.
     n = await pool.fetchval(
-        "SELECT count(*) FROM brain_alphas WHERE user_id=$1 AND created_at > $2",
+        "SELECT count(*) FROM brain_alphas WHERE user_id=$1 "
+        "AND (batch_started_at > $2 "
+        "     OR (batch_started_at IS NULL AND created_at > $2))",
         user_id, since,
     )
     return int(n or 0)
