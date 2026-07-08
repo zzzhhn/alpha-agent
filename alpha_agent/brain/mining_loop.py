@@ -41,12 +41,17 @@ async def _simulate_one(client: BrainClient, expr: str, settings: dict, timeout_
 
 # WorldQuant's SELF_CORRELATION bar: a new alpha correlating this much with an
 # existing ACTIVE one (on daily returns) is a re-discovery, not new alpha.
-_SELF_CORR_THRESHOLD = 0.7
+_SELF_CORR_THRESHOLD = 0.65
 # G1: a passer must add at least this fraction of NOVEL variance (1 - R^2) on top
 # of its nearest accepted-basket neighbours. Deliberately low (0.15) so it flags
 # only the clearly-spanned (the pairwise gate missed collective low-rank), NOT
 # merely-correlated good factors — keeping the pass rate healthy.
 _MARGINAL_MIN = 0.15
+# #1/#2 book-saturation cap: passed-but-unsubmitted representatives kept per
+# economic family. Value collapses to ONE (it saturates first and co-moves);
+# orthogonal families keep two. Beyond the cap, further passers are flagged as
+# family-saturated so a round yields a DIVERSIFIED book, not value clones.
+_FAMILY_CAP = {"value": 1, "options": 2, "revision": 2, "momentum": 2, "lowvol": 2}
 
 
 def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
@@ -96,6 +101,7 @@ async def run_mining_round(
     seed_from_user_alphas: bool = True,
     logic_llm=None,
     max_retries: int = 12,
+    family_caps: Optional[dict] = None,
 ) -> dict:
     """Execute one round and return a bucket summary. Every candidate's outcome
     is persisted to brain_alphas regardless of pass/fail so the UI + the next
@@ -205,6 +211,18 @@ async def run_mining_round(
         batch_started_at = await pool.fetchval("SELECT now()")
     except Exception:  # noqa: BLE001 — batch tagging is cosmetic, never abort a round
         batch_started_at = None
+
+    from collections import Counter
+    from alpha_agent.brain.evolution import family_of
+    family_counts: Counter = Counter()
+    try:
+        for _e in await store.passed_unsubmitted_expressions(pool, user_id, limit=200):
+            family_counts[family_of(_e)] += 1
+    except Exception:  # noqa: BLE001 — empty history is fine
+        pass
+    if family_counts:
+        print(f"[family] prior book: {dict(family_counts)}", flush=True)
+    caps = family_caps if family_caps is not None else _FAMILY_CAP
 
     retry_budget = max_retries
     for expr in candidates:
@@ -328,6 +346,22 @@ async def run_mining_round(
             )
             summary["flagged"] += 1
             continue
+
+        # #1/#2 family saturation: cap the value cluster at ONE representative and
+        # each orthogonal family at two, so a round yields a DIVERSIFIED book, not N
+        # value clones (miner-side equivalent of "submit one per family"). A
+        # saturated-family candidate is flagged, not passed.
+        fam = family_of(expr)
+        if family_counts[fam] >= caps.get(fam, 2):
+            print(f"[flag] {expr[:44]!r} family-saturated: {fam} "
+                  f"({family_counts[fam]})", flush=True)
+            await store.record_brain_alpha(
+                pool, **common, **corr_kw, outcome="flagged",
+                detail=f"family '{fam}' saturated ({family_counts[fam]} rep(s))",
+            )
+            summary["flagged"] += 1
+            continue
+        family_counts[fam] += 1
 
         # Passed → joins the accepted diverse set, so later candidates in the round
         # (and future rounds, via the DB) must stay decorrelated from it too.

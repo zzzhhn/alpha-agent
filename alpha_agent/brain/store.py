@@ -254,6 +254,20 @@ async def unsubmitted_alpha_ids_missing_official(
     return [r["alpha_id"] for r in rows]
 
 
+async def passed_unsubmitted_expressions(
+    pool, user_id: int, *, limit: int = 200
+) -> list[str]:
+    """Expressions of the user's passed-but-unsubmitted mined alphas, newest first —
+    seeds the per-family representative counts for the #1/#2 saturation cap."""
+    rows = await pool.fetch(
+        "SELECT expression FROM brain_alphas "
+        "WHERE user_id=$1 AND outcome='passed' AND submitted_at IS NULL "
+        "AND expression IS NOT NULL ORDER BY created_at DESC LIMIT $2",
+        user_id, min(max(int(limit), 1), 400),
+    )
+    return [r["expression"] for r in rows]
+
+
 async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:
     """Record that the user submitted this alpha to BRAIN + BRAIN's status."""
     await pool.execute(

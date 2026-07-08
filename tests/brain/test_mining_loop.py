@@ -159,8 +159,12 @@ async def test_intra_batch_diversity_flags_near_duplicate(applied_db):
     client.list_active_alphas = _no_active  # no ACTIVE alphas to compare against
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:
+        # Permissive family caps: isolate the CORR near-dup behavior from the
+        # separate family-saturation gate (tested elsewhere).
         summary = await run_mining_round(
-            client, pool, user_id=1, n_candidates=3, rng_seed=1
+            client, pool, user_id=1, n_candidates=3, rng_seed=1,
+            family_caps={"value": 99, "options": 99, "revision": 99,
+                         "momentum": 99, "lowvol": 99, "other": 99},
         )
         assert summary["passed"] == 2 and summary["flagged"] == 1
         flagged = [r for r in await store.list_brain_alphas(pool, 1)

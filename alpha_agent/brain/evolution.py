@@ -91,3 +91,22 @@ async def load_evolution_state(pool, user_id: int, *, lookback: int = 300):
     except Exception:  # noqa: BLE001 — evolution is auxiliary
         return EvolutionState()
     return build_evolution_state([dict(r) for r in rows])
+
+
+def family_of(expr: str) -> str:
+    """Coarse economic family of an alpha expression, for the #1/#2 book-saturation
+    cap. options/revision are the value-orthogonal new sources; everything built on
+    fundamental ratios collapses into the co-moving 'value' cluster."""
+    e = expr or ""
+    if re.search(r"implied_volatility|pcr_oi", e):
+        return "options"
+    if "anl4_" in e:
+        return "revision"
+    if re.search(r"cap|enterprise_value|assets|equity|debt|operating_income|"
+                 r"ebit|ebitda|cashflow|\beps\b|bookvalue|fscore", e):
+        return "value"
+    if re.search(r"ts_std_dev\(returns", e):
+        return "lowvol"
+    if re.search(r"returns|ts_delta\(close|ts_arg_m|vwap", e):
+        return "momentum"
+    return "other"
