@@ -118,10 +118,11 @@ export interface MineTriggerResult {
   started_at: string;
 }
 
-export const triggerMining = (nCandidates: number) =>
-  apiPost<MineTriggerResult, { n_candidates: number }>("/api/brain/mine", {
-    n_candidates: nCandidates,
-  });
+export const triggerMining = (nCandidates: number, familyFocus = "") =>
+  apiPost<MineTriggerResult, { n_candidates: number; family_focus: string }>(
+    "/api/brain/mine",
+    { n_candidates: nCandidates, family_focus: familyFocus },
+  );
 
 // Progress poll for an in-flight manual round. `mined` = candidates recorded since
 // the dispatch anchor (real per-candidate count); `running` = GitHub Actions has a

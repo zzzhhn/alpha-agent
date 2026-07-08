@@ -565,6 +565,7 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [n, setN] = useState("12");
+  const [family, setFamily] = useState("options");
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
@@ -636,7 +637,7 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
     setDoneMsg(null);
     try {
       const nc = Math.max(1, Math.min(30, Number(n) || 12));
-      const r = await triggerMining(nc);
+      const r = await triggerMining(nc, family);
       setMined(0);
       setStatus(null);
       setJob({ startedAt: r.started_at, n: r.n_candidates, dispatchedAt: Date.now() });
@@ -706,6 +707,20 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
         inputMode="numeric"
         className="h-7 w-16 border border-tm-rule bg-tm-bg-2 px-2 text-center font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent"
       />
+      <select
+        value={family}
+        onChange={(e) => setFamily(e.target.value)}
+        title={
+          zh
+            ? "挖矿家族。普通=混合(value 已饱和,基本挖不出);options=期权偏度(最高夏普正交源,能出);revision=分析师修正(偏弱)"
+            : "mining family. normal=mixed (value saturated); options=IV-skew (top orthogonal source); revision=analyst revisions (weak)"
+        }
+        className="h-7 border border-tm-rule bg-tm-bg-2 px-1.5 font-tm-mono text-[11px] text-tm-fg outline-none focus:border-tm-accent"
+      >
+        <option value="">{zh ? "普通(混合)" : "normal"}</option>
+        <option value="options">options</option>
+        <option value="revision">revision</option>
+      </select>
       <button
         type="button"
         onClick={go}

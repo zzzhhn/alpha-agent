@@ -99,6 +99,9 @@ async def trigger_mining(
     except (TypeError, ValueError):
         n = "12"
 
+    fam = body.get("family_focus")
+    fam = str(fam) if fam in ("options", "revision", "momentum", "lowvol") else ""
+
     gh_token = os.environ.get("GH_PAT")
     if not gh_token:
         raise HTTPException(500, "GH_PAT not configured; cannot dispatch mining")
@@ -114,7 +117,7 @@ async def trigger_mining(
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
                 url,
-                json={"ref": _GH_REF, "inputs": {"n_candidates": n}},
+                json={"ref": _GH_REF, "inputs": {"n_candidates": n, "family_focus": fam}},
                 headers={
                     "Authorization": f"Bearer {gh_token}",
                     "Accept": "application/vnd.github+json",
