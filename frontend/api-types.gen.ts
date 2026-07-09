@@ -944,7 +944,11 @@ export interface paths {
         };
         /**
          * Changes
-         * @description Recent signal-weight config changes (auto_promote / auto_rollback / etc.).
+         * @description Recent signal-weight config changes (auto_promote / auto_rollback /
+         *     inversion_guard / ...), each enriched with the affected signal's mean IC in
+         *     the 7 days before vs after the change — retrospection, so the evolution
+         *     loop (and the user) can see whether past changes coincided with
+         *     improvement instead of firing blind.
          */
         get: operations["changes_api_evolution_changes_get"];
         put?: never;
@@ -4522,6 +4526,7 @@ export interface operations {
                 fitness_min?: number | null;
                 turnover_max?: number | null;
                 submitted?: boolean | null;
+                family?: string | null;
                 sort?: string;
                 descending?: boolean;
             };
