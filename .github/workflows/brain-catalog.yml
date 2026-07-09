@@ -1,0 +1,24 @@
+# One-off: dump the full BRAIN vocabulary (datasets/operators/fields) so new
+# orthogonal factor families can be built from real fields. API-only. Manual.
+name: brain-catalog
+on:
+  workflow_dispatch: {}
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[storage]"
+      - name: Dump BRAIN catalog
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRAIN_USERNAME: ${{ secrets.BRAIN_USERNAME }}
+          BRAIN_PASSWORD: ${{ secrets.BRAIN_PASSWORD }}
+          BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
+          BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
+        run: python scripts/brain_catalog_dump.py
