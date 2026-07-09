@@ -461,16 +461,49 @@ const FAMILY_LABEL: Record<string, string> = {
   other: "other",
 };
 const FAMILY_SATURATED = new Set(["value", "other"]);
-function FamilyBadge({ family }: { family?: string | null }) {
+// When `onClick` is passed the badge becomes a family filter toggle (click to
+// filter to that family, click the active one to clear). `active` highlights the
+// badge whose family is the current filter.
+function FamilyBadge({
+  family,
+  onClick,
+  active = false,
+}: {
+  family?: string | null;
+  onClick?: (fam: string) => void;
+  active?: boolean;
+}) {
   if (!family) return null;
   const label = FAMILY_LABEL[family] ?? family;
-  const cls = FAMILY_SATURATED.has(family)
+  const base = FAMILY_SATURATED.has(family)
     ? "border-tm-rule text-tm-muted"
     : "border-tm-accent/40 text-tm-fg-2";
+  const cls = active ? "border-tm-accent text-tm-accent" : base;
+  const shape = "shrink-0 border px-1 py-px font-tm-mono text-[9px] uppercase leading-none";
+  if (!onClick) {
+    return (
+      <span title={family} className={`${shape} ${cls}`}>
+        {label}
+      </span>
+    );
+  }
   return (
     <span
-      title={family}
-      className={`shrink-0 border px-1 py-px font-tm-mono text-[9px] uppercase leading-none ${cls}`}
+      role="button"
+      tabIndex={0}
+      title={active ? `clear ${label} filter` : `filter: ${label}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick(family);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.stopPropagation();
+          e.preventDefault();
+          onClick(family);
+        }
+      }}
+      className={`${shape} cursor-pointer hover:border-tm-accent ${cls}`}
     >
       {label}
     </span>
@@ -850,6 +883,81 @@ function OutcomeSelect({
   );
 }
 
+// Family filter for the results table (distinct from FamilySelect, which picks
+// the mining round's family). Includes 'value'/'other' (not mining options) and
+// an all-families default. Custom button/span dropdown (native <select> invisible
+// on Safari, see OutcomeSelect).
+const FAMILY_FILTER_KEYS = ["", "value", "options", "lowvol", "sentiment", "momentum", "score", "revision", "other"];
+function FamilyFilterSelect({
+  value,
+  onChange,
+  zh,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  zh: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const labelOf = (v: string) =>
+    v ? FAMILY_LABEL[v] ?? v : zh ? "全部家族" : "all families";
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={zh ? "按家族筛选结果" : "filter results by family"}
+        className="flex h-6 min-w-[104px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
+      >
+        <span className="text-tm-fg">{labelOf(value)}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-1 min-w-full border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
+        >
+          {FAMILY_FILTER_KEYS.map((v) => (
+            <li key={v || "all"}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={v === value}
+                onClick={() => {
+                  onChange(v);
+                  setOpen(false);
+                }}
+                className={`block w-full whitespace-nowrap px-2 py-1 text-left font-tm-mono text-[11px] hover:bg-tm-bg-3 ${
+                  v === value ? "text-tm-accent" : "text-tm-fg"
+                }`}
+              >
+                {labelOf(v)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 const FAMILIES: Array<[string, string, string]> = [
   ["", "普通(混合)", "normal"],
   ["options", "options", "options"],
@@ -947,6 +1055,7 @@ export function BrainMiningPanel() {
   const [outcome, setOutcome] = useState<BrainOutcome | "">("");
   const [q, setQ] = useState("");
   const [sharpeMin, setSharpeMin] = useState("");
+  const [familyFilter, setFamilyFilter] = useState("");
   const [sort, setSort] = useState<string>("created_at");
   const [descending, setDescending] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -961,10 +1070,11 @@ export function BrainMiningPanel() {
       outcome: outcome || undefined,
       q: q.trim() || undefined,
       sharpe_min: sharpeMin ? Number(sharpeMin) : undefined,
+      family: familyFilter || undefined,
       sort,
       descending,
     }),
-    [page, pageSize, outcome, q, sharpeMin, sort, descending],
+    [page, pageSize, outcome, q, sharpeMin, familyFilter, sort, descending],
   );
 
   const load = useCallback(async () => {
@@ -985,7 +1095,7 @@ export function BrainMiningPanel() {
   // reset to page 0 whenever a filter or the page size changes
   useEffect(() => {
     setPage(0);
-  }, [outcome, q, sharpeMin, sort, descending, pageSize]);
+  }, [outcome, q, sharpeMin, familyFilter, sort, descending, pageSize]);
 
   function toggle(id: number) {
     setExpanded((prev) => {
@@ -1034,6 +1144,7 @@ export function BrainMiningPanel() {
         {/* filter bar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
           <OutcomeSelect value={outcome} onChange={setOutcome} zh={zh} />
+          <FamilyFilterSelect value={familyFilter} onChange={setFamilyFilter} zh={zh} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -1151,7 +1262,13 @@ export function BrainMiningPanel() {
                       ) : (
                         <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
                       )}
-                      <FamilyBadge family={a.family} />
+                      <FamilyBadge
+                        family={a.family}
+                        active={familyFilter === a.family}
+                        onClick={(fam) =>
+                          setFamilyFilter((cur) => (cur === fam ? "" : fam))
+                        }
+                      />
                       <code className="truncate font-tm-mono text-[11px] text-tm-fg">
                         {a.expression}
                       </code>

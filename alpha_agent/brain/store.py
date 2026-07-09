@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
+from alpha_agent.brain.evolution import family_of
+
 
 async def record_brain_alpha(
     pool,
@@ -93,6 +95,8 @@ def _decode_row(r) -> dict:
     for k in ("created_at", "submitted_at", "batch_started_at"):
         if d.get(k) is not None:
             d[k] = d[k].isoformat()
+    # Derived economic family — single source of truth for the UI badge + filter.
+    d["family"] = family_of(d.get("expression") or "")
     return d
 
 
@@ -108,6 +112,7 @@ async def query_brain_alphas(
     fitness_min: float | None = None,
     turnover_max: float | None = None,
     submitted: bool | None = None,
+    family: str | None = None,
     sort: str = "created_at",
     descending: bool = True,
 ) -> dict:
@@ -141,14 +146,30 @@ async def query_brain_alphas(
         where.append("submitted_at IS NULL")
 
     where_sql = " AND ".join(where)
-    total = await pool.fetchval(
-        f"SELECT count(*) FROM brain_alphas WHERE {where_sql}", *params
-    )
-
     sort_col = sort if sort in _SORT_COLS else "created_at"
     direction = "DESC" if descending else "ASC"
     lim = min(max(int(limit), 1), 200)
     off = max(int(offset), 0)
+
+    if family:
+        # `family` is derived (evolution.family_of), not a column, so it can't be
+        # a SQL predicate. Per-user rows are in the hundreds, so fetch all that
+        # match the SQL-expressible filters, classify + filter in Python, then
+        # paginate in memory. Keeps family_of the single source of truth (no
+        # drift-prone SQL regex) and still returns an accurate total.
+        all_rows = await pool.fetch(
+            f"SELECT {_ROW_COLS} FROM brain_alphas WHERE {where_sql} "
+            f"ORDER BY {sort_col} {direction} NULLS LAST, id DESC",
+            *params,
+        )
+        matched = [
+            d for d in (_decode_row(r) for r in all_rows) if d["family"] == family
+        ]
+        return {"alphas": matched[off:off + lim], "total": len(matched)}
+
+    total = await pool.fetchval(
+        f"SELECT count(*) FROM brain_alphas WHERE {where_sql}", *params
+    )
     # NULLS LAST so unscored rows (sim_error) don't dominate a metric sort.
     rows = await pool.fetch(
         f"SELECT {_ROW_COLS} FROM brain_alphas WHERE {where_sql} "

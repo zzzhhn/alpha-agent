@@ -78,6 +78,7 @@ export interface BrainAlphaQuery {
   fitness_min?: number | null;
   turnover_max?: number | null;
   submitted?: boolean | null;
+  family?: string;
   sort?: string;
   descending?: boolean;
 }

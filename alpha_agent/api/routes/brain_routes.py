@@ -216,6 +216,7 @@ async def list_alphas(
     fitness_min: float | None = None,
     turnover_max: float | None = None,
     submitted: bool | None = None,
+    family: str | None = None,
     sort: str = "created_at",
     descending: bool = True,
     user_id: int = Depends(require_user),
@@ -225,22 +226,16 @@ async def list_alphas(
     {alphas, total} (total = rows matching the filters, for page controls).
     Degrades to empty if V028 isn't applied yet."""
     from alpha_agent.brain import store
-    from alpha_agent.brain.evolution import family_of
 
     try:
-        page = await store.query_brain_alphas(
+        # query_brain_alphas tags each row with its economic family (family_of,
+        # single source of truth) and applies the optional `family` filter.
+        return await store.query_brain_alphas(
             pool, user_id, limit=limit, offset=offset, outcome=outcome, q=q,
             sharpe_min=sharpe_min, fitness_min=fitness_min,
-            turnover_max=turnover_max, submitted=submitted,
+            turnover_max=turnover_max, submitted=submitted, family=family,
             sort=sort, descending=descending,
         )
-        # Tag each row with its economic family (options/value/lowvol/...),
-        # derived from the expression via evolution.family_of — the SAME fn the
-        # saturation cap uses (single source of truth). Surfacing it makes a
-        # mis-routed round obvious (e.g. a 'score' round that produced 'value').
-        for a in page.get("alphas", ()):
-            a["family"] = family_of(a.get("expression") or "")
-        return page
     except Exception as e:  # noqa: BLE001 - table may not exist yet
         logger.warning("query_brain_alphas failed (table missing?): %s", e)
         return {"alphas": [], "total": 0}
