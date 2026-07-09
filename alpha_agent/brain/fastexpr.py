@@ -360,6 +360,43 @@ def _revision_leg(rng: random.Random) -> dict:
     return _op("group_neutralize", leg, group)
 
 
+# NEW orthogonal families from the BRAIN catalog dump (real fields, cov>=0.9),
+# built to break the value+options vocabulary ceiling. These are pre-built,
+# individually-strong signals from the risk / factor-model / sentiment datasets.
+_LOWVOL_FIELDS = (  # model51 Systematic Risk Metrics — the low-vol / BAB anomaly
+    "beta_last_60_days_spy", "beta_last_90_days_spy", "beta_last_360_days_spy",
+    "unsystematic_risk_last_90_days", "systematic_risk_last_90_days",
+)
+_SENTIMENT_FIELDS = (  # socialmedia12 + sentiment1 — news/social sentiment
+    "scl12_sentiment", "snt_value", "snt_buzz_ret", "scl12_buzz",
+    "snt1_d1_netrecpercent", "daily_equity_mood_indicator",
+)
+_MOMENTUM_FIELDS = (  # model77 — price & earnings momentum
+    "fifty_to_two_hundred_day_price_ratio", "fifteen_to_thirtysix_week_price_ratio",
+    "earnings_momentum_composite_score", "earnings_momentum_analyst_score",
+)
+_SCORE_FIELDS = (  # model77 + model16 — complete factor-model scores
+    "financial_statement_value_score", "equity_value_score", "asset_growth_rate",
+    "consensus_analyst_rating", "earnings_revision_magnitude", "distress_risk_measure",
+    "growth_potential_rank_derivative", "earnings_certainty_rank_derivative",
+    "multi_factor_acceleration_score_derivative",
+)
+
+
+def _catalog_leg(rng: random.Random, fields: tuple, *, low_is_good: bool = False) -> dict:
+    """A pre-built factor score / risk metric ranked + group-neutralized — a complete
+    signal from BRAIN's factor-model / risk / sentiment datasets (cov>=0.9, orthogonal
+    to value/options). ~40% take the ts_delta (momentum of the score). reverse(x)=-x
+    tests both signs (and long low-beta for the risk family)."""
+    f = _fld(rng.choice(fields))
+    if rng.random() < 0.4:
+        f = _op("ts_delta", _op("ts_backfill", f, _lit(20)), _lit(rng.choice((20, 63))))
+    leg = _op("rank", f)
+    if low_is_good or rng.random() < 0.5:
+        leg = _op("reverse", leg)
+    return _op("group_neutralize", leg, _fld(rng.choice(("industry", "subindustry", "sector"))))
+
+
 def _options_leg(rng: random.Random) -> dict:
     """The user's PROVEN options-skew alpha (S=1.6-2.5 on TOP3000/TOP1000, verified
     from mining history): when the put-call OI ratio is LOW, take the CALL-minus-PUT
@@ -635,6 +672,14 @@ def generate_brain_candidates(
             # Family-constrained round: analyst estimate-revision momentum
             # (value-orthogonal); base_settings_for runs anl4 on TOP1000.
             tree = _revision_leg(rng)
+        elif family_focus == "lowvol":
+            tree = _catalog_leg(rng, _LOWVOL_FIELDS, low_is_good=True)
+        elif family_focus == "sentiment":
+            tree = _catalog_leg(rng, _SENTIMENT_FIELDS)
+        elif family_focus == "momentum":
+            tree = _catalog_leg(rng, _MOMENTUM_FIELDS)
+        elif family_focus == "score":
+            tree = _catalog_leg(rng, _SCORE_FIELDS)
         elif r < 0.62:
             # Economic-ratio / style golden structures — the highest-signal path,
             # now DOMINANT (was 45%). Widening operators/fields diluted this and

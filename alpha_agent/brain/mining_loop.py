@@ -51,7 +51,8 @@ _MARGINAL_MIN = 0.15
 # economic family. Value collapses to ONE (it saturates first and co-moves);
 # orthogonal families keep two. Beyond the cap, further passers are flagged as
 # family-saturated so a round yields a DIVERSIFIED book, not value clones.
-_FAMILY_CAP = {"value": 1, "options": 2, "revision": 2, "momentum": 2, "lowvol": 2}
+_FAMILY_CAP = {"value": 1, "options": 2, "revision": 2, "momentum": 2,
+               "lowvol": 2, "sentiment": 2, "score": 3}
 
 
 def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:

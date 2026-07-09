@@ -822,6 +822,10 @@ function OutcomeSelect({
 const FAMILIES: Array<[string, string, string]> = [
   ["", "普通(混合)", "normal"],
   ["options", "options", "options"],
+  ["lowvol", "low-vol", "low-vol"],
+  ["sentiment", "sentiment", "sentiment"],
+  ["momentum", "momentum", "momentum"],
+  ["score", "factor-score", "factor-score"],
   ["revision", "revision", "revision"],
 ];
 

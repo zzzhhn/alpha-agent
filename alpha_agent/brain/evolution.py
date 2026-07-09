@@ -98,8 +98,17 @@ def family_of(expr: str) -> str:
     cap. options/revision are the value-orthogonal new sources; everything built on
     fundamental ratios collapses into the co-moving 'value' cluster."""
     e = expr or ""
-    if re.search(r"implied_volatility|pcr_oi", e):
+    if re.search(r"implied_volatility|pcr_oi|historical_volatility", e):
         return "options"
+    if re.search(r"beta_last|systematic_risk|unsystematic_risk|correlation_last", e):
+        return "lowvol"
+    if re.search(r"scl12_|snt_|snt1_|mood_indicator", e):
+        return "sentiment"
+    if re.search(r"_day_price_ratio|_week_price_ratio|earnings_momentum", e):
+        return "momentum"
+    if re.search(r"_score|_rank_derivative|distress_risk|asset_growth_rate|"
+                 r"consensus_analyst_rating|earnings_revision_magnitude", e):
+        return "score"
     if "anl4_" in e:
         return "revision"
     if re.search(r"cap|enterprise_value|assets|equity|debt|operating_income|"
