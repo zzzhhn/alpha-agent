@@ -35,6 +35,10 @@ export type BrainOutcome = "passed" | "flagged" | "rejected" | "sim_error";
 export interface BrainAlpha {
   id: number;
   expression: string;
+  // Economic family of the expression (options/value/lowvol/sentiment/
+  // momentum/score/revision/other), classified server-side by family_of.
+  // Optional: absent on responses served before the /alphas family tag shipped.
+  family?: string | null;
   settings: Record<string, unknown>;
   alpha_id: string | null;
   sharpe: number | null;

@@ -446,6 +446,37 @@ function OfficialSCorrCell({ alpha, zh }: { alpha: BrainAlpha; zh: boolean }) {
   return <>—</>;
 }
 
+// Economic family of the alpha (from evolution.family_of, server-side). Labels
+// mirror the FamilySelect dropdown so the same family reads the same everywhere.
+// The six value-orthogonal sources get an accent-tinted border (the families we
+// WANT); the saturated 'value'/'other' cluster stays muted.
+const FAMILY_LABEL: Record<string, string> = {
+  value: "value",
+  options: "options",
+  lowvol: "low-vol",
+  sentiment: "sentiment",
+  momentum: "momentum",
+  score: "factor-score",
+  revision: "revision",
+  other: "other",
+};
+const FAMILY_SATURATED = new Set(["value", "other"]);
+function FamilyBadge({ family }: { family?: string | null }) {
+  if (!family) return null;
+  const label = FAMILY_LABEL[family] ?? family;
+  const cls = FAMILY_SATURATED.has(family)
+    ? "border-tm-rule text-tm-muted"
+    : "border-tm-accent/40 text-tm-fg-2";
+  return (
+    <span
+      title={family}
+      className={`shrink-0 border px-1 py-px font-tm-mono text-[9px] uppercase leading-none ${cls}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function GradeBadge({ grade, full = false }: { grade: string | null; full?: boolean }) {
   if (!grade) {
     return <span className="font-tm-mono text-[10px] text-tm-muted">—</span>;
@@ -870,8 +901,8 @@ function FamilySelect({
         aria-expanded={open}
         title={
           zh
-            ? "挖矿家族。普通=混合(value 已饱和);options=期权偏度(最高夏普正交源);revision=分析师修正(偏弱)"
-            : "mining family. normal=mixed (value saturated); options=IV-skew; revision=analyst revisions (weak)"
+            ? "挖矿家族。普通=混合（value 已饱和）；options=期权偏度（最高夏普正交源）；low-vol、momentum、sentiment、factor-score=新正交源（待验证）；revision=分析师修正（偏弱）"
+            : "mining family. normal=mixed (value saturated); options=IV-skew; low-vol/momentum/sentiment/factor-score=new orthogonal sources (unvalidated); revision=analyst revisions (weak)"
         }
         className="flex h-7 min-w-[104px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
       >
@@ -1120,6 +1151,7 @@ export function BrainMiningPanel() {
                       ) : (
                         <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
                       )}
+                      <FamilyBadge family={a.family} />
                       <code className="truncate font-tm-mono text-[11px] text-tm-fg">
                         {a.expression}
                       </code>

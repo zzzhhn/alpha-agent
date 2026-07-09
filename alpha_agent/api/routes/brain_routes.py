@@ -22,6 +22,12 @@ router = APIRouter(prefix="/api/brain", tags=["brain"])
 _GH_REPO = os.environ.get("GH_REPO", "zzzhhn/alpha-agent")
 _GH_REF = os.environ.get("GH_REF", "main")
 _MINING_WORKFLOW = "brain-mining-loop.yml"
+# Valid family_focus values. MUST stay in sync with generate_brain_candidates'
+# family branches AND the UI FamilySelect options — a value the UI can send
+# but we omit here gets silently coerced to "" (a normal, value-heavy round),
+# which is exactly why 'sentiment'/'score' rounds never actually ran.
+_VALID_FAMILY_FOCUS = ("options", "revision", "lowvol", "sentiment",
+                       "momentum", "score")
 
 
 @router.get("/credentials")
@@ -100,7 +106,7 @@ async def trigger_mining(
         n = "12"
 
     fam = body.get("family_focus")
-    fam = str(fam) if fam in ("options", "revision", "momentum", "lowvol") else ""
+    fam = str(fam) if fam in _VALID_FAMILY_FOCUS else ""
 
     gh_token = os.environ.get("GH_PAT")
     if not gh_token:
@@ -219,14 +225,22 @@ async def list_alphas(
     {alphas, total} (total = rows matching the filters, for page controls).
     Degrades to empty if V028 isn't applied yet."""
     from alpha_agent.brain import store
+    from alpha_agent.brain.evolution import family_of
 
     try:
-        return await store.query_brain_alphas(
+        page = await store.query_brain_alphas(
             pool, user_id, limit=limit, offset=offset, outcome=outcome, q=q,
             sharpe_min=sharpe_min, fitness_min=fitness_min,
             turnover_max=turnover_max, submitted=submitted,
             sort=sort, descending=descending,
         )
+        # Tag each row with its economic family (options/value/lowvol/...),
+        # derived from the expression via evolution.family_of — the SAME fn the
+        # saturation cap uses (single source of truth). Surfacing it makes a
+        # mis-routed round obvious (e.g. a 'score' round that produced 'value').
+        for a in page.get("alphas", ()):
+            a["family"] = family_of(a.get("expression") or "")
+        return page
     except Exception as e:  # noqa: BLE001 - table may not exist yet
         logger.warning("query_brain_alphas failed (table missing?): %s", e)
         return {"alphas": [], "total": 0}
