@@ -19,7 +19,12 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 from alpha_agent.brain import store
-from alpha_agent.brain.client import BrainClient, BrainSimulationError
+from alpha_agent.brain.client import (
+    BrainClient,
+    BrainSimulationError,
+    MIN_FITNESS_DIVERSIFIER,
+    MIN_SHARPE_DIVERSIFIER,
+)
 from alpha_agent.brain.fastexpr import generate_brain_candidates
 from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
 from alpha_agent.brain.tuning import base_settings_for, diagnose, retry_variant
@@ -47,6 +52,12 @@ _SELF_CORR_THRESHOLD = 0.65
 # only the clearly-spanned (the pairwise gate missed collective low-rank), NOT
 # merely-correlated good factors — keeping the pass rate healthy.
 _MARGINAL_MIN = 0.15
+# value-ORTHOGONAL diversifier families: a LOWER Sharpe/Fitness bar (client.MIN_*_
+# DIVERSIFIER) but a MUCH stronger orthogonality requirement — a Sharpe-0.8 factor
+# uncorrelated to the value/options book earns its place by marginal contribution.
+# value/options/other keep the strong single-alpha bars.
+_DIVERSIFIER_FAMILIES = frozenset({"score", "sentiment", "lowvol", "momentum", "revision"})
+_MARGINAL_MIN_DIVERSIFIER = 0.40
 # #1/#2 book-saturation cap: passed-but-unsubmitted representatives kept per
 # economic family. Value collapses to ONE (it saturates first and co-moves);
 # orthogonal families keep two. Beyond the cap, further passers are flagged as
@@ -248,18 +259,30 @@ async def run_mining_round(
             summary["sim_error"] += 1
             continue
 
+        # Family-aware gate: value-orthogonal diversifier families clear a LOWER
+        # Sharpe/Fitness bar but a STRONGER orthogonality bar; the rest keep the
+        # full single-alpha bars. Computed once here, reused by every gate below.
+        fam = family_of(expr)
+        relaxed = fam in _DIVERSIFIER_FAMILIES
+        gate_kw = (
+            {"relaxed_magnitude": True, "min_sharpe": MIN_SHARPE_DIVERSIFIER,
+             "min_fitness": MIN_FITNESS_DIVERSIFIER}
+            if relaxed else {}
+        )
+        marginal_min = _MARGINAL_MIN_DIVERSIFIER if relaxed else _MARGINAL_MIN
+
         # Smart retry: a NEAR-miss on a settings-fixable check gets ONE targeted
         # re-simulation (bounded per round via retry_budget). If the variant clears
         # the gate it replaces the base result, and the WINNING settings are what
         # we store — so the review UI shows the config that actually worked.
-        if not metrics.passes_gates() and retry_budget > 0:
+        if not metrics.passes_gates(**gate_kw) and retry_budget > 0:
             variant = retry_variant(settings, diagnose(metrics))
             if variant is not None:
                 retry_budget -= 1
                 did_retry = True
                 try:
                     aid2, m2 = await _simulate_one(client, expr, variant, sim_timeout_s)
-                    if m2.passes_gates():
+                    if m2.passes_gates(**gate_kw):
                         alpha_id, metrics, settings = aid2, m2, variant
                         print(
                             f"[tune] fixed {expr[:44]!r} "
@@ -278,11 +301,11 @@ async def run_mining_round(
             retried=did_retry, batch_started_at=batch_started_at,
         )
 
-        if not metrics.passes_gates():
+        if not metrics.passes_gates(**gate_kw):
             await store.record_brain_alpha(
                 pool, **common, outcome="rejected",
                 fail_checks=",".join(metrics.failing_checks()) or None,
-                detail="below in-sample gates",
+                detail=f"below in-sample gates ({'diversifier' if relaxed else 'strong'} bar)",
             )
             summary["rejected"] += 1
             continue
@@ -329,13 +352,13 @@ async def run_mining_round(
         )
 
         too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
-        too_redundant = marginal < _MARGINAL_MIN
+        too_redundant = marginal < marginal_min
         if too_correlated or too_redundant:
             reason = (
                 f"self-corr official={official} adj={adj:.2f} vs {adj_with}"
                 if too_correlated
                 else f"low marginal contribution {marginal:.2f} "
-                f"(<{_MARGINAL_MIN}) — spanned by basket ({marginal_with})"
+                f"(<{marginal_min}) — spanned by basket ({marginal_with})"
             )
             print(
                 f"[flag] {expr[:44]!r} corr={adj:.2f} marginal={marginal:.2f} "
@@ -352,7 +375,6 @@ async def run_mining_round(
         # each orthogonal family at two, so a round yields a DIVERSIFIED book, not N
         # value clones (miner-side equivalent of "submit one per family"). A
         # saturated-family candidate is flagged, not passed.
-        fam = family_of(expr)
         if family_counts[fam] >= caps.get(fam, 2):
             print(f"[flag] {expr[:44]!r} family-saturated: {fam} "
                   f"({family_counts[fam]})", flush=True)

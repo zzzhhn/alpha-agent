@@ -270,3 +270,30 @@ def test_passes_gates_enforces_all_thresholds():
     assert not AlphaMetrics("A", 1.3, 1.15, 0.5, 0.2, 0.1).passes_gates()  # turnover
     assert not AlphaMetrics("A", 1.3, 1.15, 0.2, 0.2, 0.3).passes_gates()  # drawdown
     assert not AlphaMetrics("A", None, 1.15, 0.2, 0.2, 0.1).passes_gates()  # missing
+
+
+def test_relaxed_magnitude_gate_for_diversifiers():
+    """Value-orthogonal diversifier families clear a lower Sharpe/Fitness bar via
+    relaxed_magnitude: BRAIN's magnitude checks (LOW_SHARPE / LOW_FITNESS /
+    LOW_SUB_UNIVERSE_SHARPE) are ignored, its STRUCTURAL checks (turnover /
+    concentration) are still honored, and the caller's lower local bars apply."""
+    def chk(**kv):
+        return {k: {"result": v} for k, v in kv.items()}
+    # Sharpe 0.87: BRAIN fails the magnitude checks, structural checks pass.
+    m = AlphaMetrics("A", 0.87, 0.60, 0.10, 0.05, 0.08,
+                     checks=chk(LOW_SHARPE="FAIL", LOW_FITNESS="FAIL",
+                                LOW_SUB_UNIVERSE_SHARPE="FAIL",
+                                HIGH_TURNOVER="PASS", CONCENTRATED_WEIGHT="PASS"))
+    assert m.passes_gates() is False  # strong bar (value/options) rejects
+    assert m.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
+                          min_fitness=0.50) is True  # diversifier bar accepts
+    # A structural FAIL (concentration) is honored even in relaxed mode.
+    bad = AlphaMetrics("A", 0.87, 0.60, 0.10, 0.05, 0.08,
+                       checks=chk(LOW_SHARPE="FAIL", CONCENTRATED_WEIGHT="FAIL"))
+    assert bad.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
+                            min_fitness=0.50) is False
+    # Below the diversifier Sharpe bar still rejects.
+    low = AlphaMetrics("A", 0.50, 0.30, 0.10, 0.05, 0.08,
+                       checks=chk(CONCENTRATED_WEIGHT="PASS"))
+    assert low.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
+                            min_fitness=0.50) is False

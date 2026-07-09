@@ -26,6 +26,16 @@ MIN_SHARPE = 1.25
 MIN_FITNESS = 1.1
 MAX_TURNOVER = 0.35
 MAX_DRAWDOWN = 0.15
+# Relaxed in-sample bars for value-ORTHOGONAL diversifier families (score /
+# sentiment / lowvol / momentum / revision): a modest factor uncorrelated to the
+# value/options book earns its place by MARGINAL contribution, so it clears a
+# lower Sharpe/Fitness bar PLUS a much stronger orthogonality gate (mining_loop).
+# value/options keep the full single-alpha bars above.
+MIN_SHARPE_DIVERSIFIER = 0.80
+MIN_FITNESS_DIVERSIFIER = 0.50
+# BRAIN's Sharpe-MAGNITUDE checks, relaxed for diversifiers (we apply our own
+# lower bar locally). Structural checks (turnover / concentration) stay honored.
+_MAGNITUDE_CHECKS = ("LOW_SHARPE", "LOW_FITNESS", "LOW_SUB_UNIVERSE_SHARPE")
 
 # Default simulation settings (USA TOP3000, delay-1, subindustry-neutral) — the
 # highest-pass-rate config. Callers override per-signal (e.g. decay for turnover).
@@ -109,14 +119,27 @@ class AlphaMetrics:
         min_fitness: float = MIN_FITNESS,
         max_turnover: float = MAX_TURNOVER,
         max_drawdown: float = MAX_DRAWDOWN,
+        relaxed_magnitude: bool = False,
     ) -> bool:
         """True only if every in-sample gate is present and cleared. Prefers
         BRAIN's own check verdict when available (authoritative); otherwise
         falls back to comparing the raw metrics against our thresholds. A
-        missing metric fails closed (never surface an alpha we couldn't vet)."""
-        verdict = self.brain_checks_verdict()
-        if verdict is not None:
-            return verdict
+        missing metric fails closed (never surface an alpha we couldn't vet).
+
+        `relaxed_magnitude` (value-orthogonal diversifier families): do NOT defer
+        to BRAIN's bundled verdict — its Sharpe-magnitude checks (LOW_SHARPE /
+        LOW_FITNESS / LOW_SUB_UNIVERSE_SHARPE) are the fixed single-alpha level
+        (~1.25) and would reject a modest orthogonal diversifier. Instead honor
+        BRAIN's STRUCTURAL checks (turnover / concentration) and apply the caller's
+        lower Sharpe/Fitness bars locally."""
+        if not relaxed_magnitude:
+            verdict = self.brain_checks_verdict()
+            if verdict is not None:
+                return verdict
+        elif self.brain_checks_verdict(
+            exclude=("SELF_CORRELATION",) + _MAGNITUDE_CHECKS
+        ) is False:
+            return False
         if None in (self.sharpe, self.fitness, self.turnover):
             return False
         if self.sharpe < min_sharpe or self.fitness < min_fitness:
