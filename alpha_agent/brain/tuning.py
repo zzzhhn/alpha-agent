@@ -53,12 +53,11 @@ def base_settings_for(
     proven decay-0 config so nothing that already passes regresses."""
     decay = 12 if _TECHNICAL_RE.search(expr) else fundamental_decay
     settings = {**DEFAULT_SETTINGS, "decay": decay, "neutralization": neutralization}
-    # Options/IV fields are dense only on liquid names; on TOP3000 they are
-    # nan-sparse and the alpha degenerates (misses turnover/drawdown). Pin them
-    # to TOP500 — the likely reason the highest-Sharpe family kept dying.
-    if _OPTIONS_RE.search(expr):
-        settings = {**settings, "universe": "TOP500"}
-    elif _ANALYST_RE.search(expr):
+    # NOTE: an options->TOP500 pin was REVERTED — the DB proved the opposite: the
+    # proven high-Sharpe options factors (S=1.6-2.5) all ran on TOP3000/TOP1000, and
+    # TOP500 dropped them to ~0. Options now use the default TOP3000. Analyst
+    # estimates ARE sparse, so they still pin to TOP1000.
+    if _ANALYST_RE.search(expr):
         settings = {**settings, "universe": "TOP1000"}
     return settings
 

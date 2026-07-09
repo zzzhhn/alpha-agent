@@ -361,40 +361,28 @@ def _revision_leg(rng: random.Random) -> dict:
 
 
 def _options_leg(rng: random.Random) -> dict:
-    """Options implied-volatility family — empirically the user's HIGHEST-Sharpe
-    source (~2.23 mean) and economically ORTHOGONAL to fundamental value, so it is
-    the key book diversifier. Mine it properly (not just the one proven structure):
-    skew level, skew change, PCR change, and variance-risk-premium, both signs,
-    industry/sector/subindustry-neutralized. reverse(x) = -x flips the sign so
-    BRAIN's sim decides which direction pays. Run on a coverage-dense universe —
-    base_settings_for pins options to TOP500, since these fields are nan-sparse on
-    TOP3000 (the likely reason this family kept dying in-sample despite high Sharpe)."""
-    i = rng.randint(0, 1)  # tenor 150 vs 180
-    ivc = _fld(_OPTION_FIELDS["iv_call"][i])
-    ivp = _fld(_OPTION_FIELDS["iv_put"][i])
+    """The user's PROVEN options-skew alpha (S=1.6-2.5 on TOP3000/TOP1000, verified
+    from mining history): when the put-call OI ratio is LOW, take the CALL-minus-PUT
+    implied-vol skew — RAW (ranking it, flipping the sign to put-call, dropping the
+    PCR gate, and pinning to TOP500 each dropped Sharpe to ~0 / negative and were
+    reverted) — gated by low PCR, group-neutralized, then wrapped in a liquidity
+    trade_when (the passing variants all carry the outer volume gate; the ungated
+    raw version is high-Sharpe but rejected on turnover). Variation only in tenor,
+    PCR tenor, and neutralization group, so every candidate stays on the proven
+    structure. Runs on the DEFAULT TOP3000 (see base_settings_for — no options pin)."""
+    i = rng.randint(0, 1)  # implied-vol tenor 150 vs 180
     pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
-    group = _fld(rng.choice(("industry", "sector", "subindustry")))
-    w = _lit(rng.choice((10, 20)))
-    variant = rng.randint(0, 4)
-    if variant == 0:
-        gated = _op("trade_when",
-                    _op("less", pcr, {"type": "literal", "value": 1.1}),
-                    _op("subtract", ivc, ivp), _lit(-1))
-        return _op("group_neutralize", gated, _fld("sector"))
-    skew = _op("subtract", ivp, ivc)  # put-minus-call vol skew (fear gauge)
-    if variant == 1:
-        leg = _op("rank", skew)  # skew level
-    elif variant == 2:
-        leg = _op("rank", _op("ts_delta", _op("ts_mean", skew, w), _lit(20)))
-    elif variant == 3:
-        leg = _op("rank", _op("ts_delta", _op("ts_mean", pcr, w), _lit(20)))
-    else:
-        rv = _op("multiply", _op("ts_std_dev", _fld("returns"), _lit(20)),
-                 {"type": "literal", "value": 15.87})
-        leg = _op("rank", _op("subtract", ivc, rv))
-    if rng.random() < 0.5:
-        leg = _op("reverse", leg)  # test both signs
-    return _op("group_neutralize", leg, group)
+    skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
+               _fld(_OPTION_FIELDS["iv_put"][i]))  # CALL - PUT (proven sign)
+    inner = _op("trade_when",
+                _op("less", pcr, {"type": "literal", "value": 1.1}), skew, _lit(-1))
+    neut = _op("group_neutralize", inner, _fld(rng.choice(("sector", "subindustry"))))
+    vol_cond = rng.choice((
+        _op("greater", _fld("volume"), _fld("adv20")),
+        _op("greater", _fld("volume"),
+            _op("divide", _op("ts_sum", _fld("volume"), _lit(5)), _lit(5))),
+    ))
+    return _op("trade_when", vol_cond, neut, _lit(-1))
 
 def _reshape(rng: random.Random, leg: dict) -> dict:
     """RARELY reshape the final signal with a batch-A arithmetic op — signed_power
