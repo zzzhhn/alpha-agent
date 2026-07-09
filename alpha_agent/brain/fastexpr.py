@@ -389,8 +389,13 @@ def _catalog_leg(rng: random.Random, fields: tuple, *, low_is_good: bool = False
     to value/options). ~40% take the ts_delta (momentum of the score). reverse(x)=-x
     tests both signs (and long low-beta for the risk family)."""
     f = _fld(rng.choice(fields))
-    if rng.random() < 0.4:
-        f = _op("ts_delta", _op("ts_backfill", f, _lit(20)), _lit(rng.choice((20, 63))))
+    # These fields are pre-built scores / risk metrics / levels — the LEVEL is the
+    # signal. Differencing them (esp. the *_rank_derivative composites, already a
+    # change) was pure noise: the random ts_delta diluted each family to a coin-flip
+    # around Sharpe 0 while the plain rank surfaced real signal
+    # (earnings_certainty_rank_derivative: reverse(rank)=+0.80 vs differenced=+0.25).
+    # So rank the LEVEL + group-neutralize; reverse tests the opposite sign (and
+    # longs low-beta/low-risk for the risk family).
     leg = _op("rank", f)
     if low_is_good or rng.random() < 0.5:
         leg = _op("reverse", leg)
