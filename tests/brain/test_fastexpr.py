@@ -239,3 +239,39 @@ def test_score_focus_generation_skips_dead_fields():
     for dead in ("asset_growth_rate", "consensus_analyst_rating", "distress_risk_measure"):
         assert dead not in joined, f"dead field {dead} was mined"
     assert any("add(" in e for e in exprs)  # composites present
+
+
+_FRONTIER_EXPECTED_FAMILY = {
+    "pv_corr": "microstructure", "pv_deep": "microstructure",
+    "vol_shock": "microstructure", "rsv_corr": "microstructure",
+    "resid_mom": "momentum", "seasonality": "seasonality",
+    "overnight": "overnight", "iv_term": "iv_term", "iv_mom": "iv_term",
+    "vrp": "vrp", "quality": "quality",
+}
+
+
+def test_frontier_motifs_valid_and_classified():
+    """Every frontier motif must serialize to a BRAIN-valid expression AND
+    classify into its intended economic family (the badge, saturation cap, and
+    diversifier gate all key off family_of — a misclassification silently gives
+    a new mechanism the wrong bar, e.g. iv-momentum swallowed by the saturated
+    options family)."""
+    from alpha_agent.brain.evolution import family_of
+    for name, fn in fe._FRONTIER_MOTIFS:
+        for seed in range(10):
+            expr = fe._valid_brain_tree(fn(random.Random(seed)))
+            assert expr is not None, f"motif {name} seed {seed} invalid"
+            fam = family_of(expr)
+            assert fam == _FRONTIER_EXPECTED_FAMILY[name], (
+                f"motif {name} classified {fam}, expected "
+                f"{_FRONTIER_EXPECTED_FAMILY[name]}: {expr[:80]}")
+
+
+def test_frontier_round_covers_many_mechanisms():
+    """A frontier round must spread its sims across mechanisms (niche quota),
+    not re-roll one basin: >=5 distinct families in 12 candidates."""
+    from alpha_agent.brain.evolution import family_of
+    exprs = fe.generate_brain_candidates(12, family_focus="frontier", rng_seed=3)
+    assert len(exprs) == 12
+    fams = {family_of(e) for e in exprs}
+    assert len(fams) >= 5, f"only {fams}"

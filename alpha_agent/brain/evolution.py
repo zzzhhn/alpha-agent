@@ -98,6 +98,22 @@ def family_of(expr: str) -> str:
     cap. options/revision are the value-orthogonal new sources; everything built on
     fundamental ratios collapses into the co-moving 'value' cluster."""
     e = expr or ""
+    # Frontier mechanisms FIRST — their field mixes would otherwise be swallowed
+    # by the broader options/value/momentum regexes below.
+    if re.search(r"implied_volatility_\w+_(?:60|120)\b[\s\S]*implied_volatility_\w+_(?:180|270|1080)", e):
+        return "iv_term"  # two-tenor slope: tenor dimension, not strike skew
+    if re.search(r"ts_std_dev\(returns", e) and "implied_volatility" in e:
+        return "vrp"  # realized-vs-implied spread
+    if re.search(r"ts_delta\(implied_volatility", e):
+        return "iv_term"  # IV momentum: surface dynamics, not skew level
+    if "gross_profit" in e:
+        return "quality"  # GP/A (would match the value regex via "assets")
+    if re.search(r"ts_delay\([^()]*\(?[\s\S]*?, (?:231|483|735)\)", e):
+        return "seasonality"  # same-month annual-lag averages
+    if re.search(r"divide\(open, ts_delay\(close", e):
+        return "overnight"  # overnight/intraday decomposition
+    if re.search(r"ts_corr\([\s\S]*(?:volume|adv20)", e) or re.search(r"ts_rank\(divide\(volume, adv20", e):
+        return "microstructure"  # price-volume co-movement family
     if re.search(r"implied_volatility|pcr_oi|historical_volatility", e):
         return "options"
     if re.search(r"beta_last|systematic_risk|unsystematic_risk|correlation_last", e):
@@ -114,6 +130,8 @@ def family_of(expr: str) -> str:
     if re.search(r"cap|enterprise_value|assets|equity|debt|operating_income|"
                  r"ebit|ebitda|cashflow|\beps\b|bookvalue|fscore", e):
         return "value"
+    if re.search(r"ts_sum\(returns, 2\d\d\)", e):
+        return "momentum"  # 12-1 residual momentum (vol-scaled): scaler != signal
     if re.search(r"ts_std_dev\(returns", e):
         return "lowvol"
     if re.search(r"returns|ts_delta\(close|ts_arg_m|vwap", e):

@@ -27,7 +27,7 @@ _MINING_WORKFLOW = "brain-mining-loop.yml"
 # but we omit here gets silently coerced to "" (a normal, value-heavy round),
 # which is exactly why 'sentiment'/'score' rounds never actually ran.
 _VALID_FAMILY_FOCUS = ("options", "revision", "lowvol", "sentiment",
-                       "momentum", "score")
+                       "momentum", "score", "frontier")
 
 
 @router.get("/credentials")

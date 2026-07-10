@@ -127,8 +127,12 @@ async def test_brain_authoritative_self_corr_flags(applied_db):
     ])
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:
+        # max_retries=0: this test asserts the AUTHORITATIVE flag is honored; the
+        # settings-axis rescue (a separate path) would otherwise consume the
+        # mock's canned responses and convert the flag into a rescue attempt.
         summary = await run_mining_round(
-            client, pool, user_id=1, n_candidates=2, rng_seed=1
+            client, pool, user_id=1, n_candidates=2, rng_seed=1,
+            max_retries=0, family_caps={},
         )
         assert summary["flagged"] == 1 and summary["passed"] == 1
         rows = {r["outcome"]: r for r in await store.list_brain_alphas(pool, 1)}
@@ -196,7 +200,7 @@ async def test_reconcile_self_corr_across_passed_set(applied_db):
     client.list_active_alphas = _no_active
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:
-        summary = await run_mining_round(client, pool, user_id=1, n_candidates=2, rng_seed=1)
+        summary = await run_mining_round(client, pool, user_id=1, n_candidates=2, rng_seed=1, family_caps={})
         assert summary["passed"] == 2 and summary["flagged"] == 0
         passed = [r for r in await store.list_brain_alphas(pool, 1)
                   if r["outcome"] == "passed"]

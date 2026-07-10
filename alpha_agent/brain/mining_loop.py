@@ -57,14 +57,21 @@ _MARGINAL_MIN = 0.15
 # DIVERSIFIER) but a MUCH stronger orthogonality requirement — a Sharpe-0.8 factor
 # uncorrelated to the value/options book earns its place by marginal contribution.
 # value/options/other keep the strong single-alpha bars.
-_DIVERSIFIER_FAMILIES = frozenset({"score", "sentiment", "lowvol", "momentum", "revision"})
+_DIVERSIFIER_FAMILIES = frozenset({
+    "score", "sentiment", "lowvol", "momentum", "revision",
+    # Frontier mechanisms: value-orthogonal by construction, same relaxed bar
+    "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality",
+})
 _MARGINAL_MIN_DIVERSIFIER = 0.40
 # #1/#2 book-saturation cap: passed-but-unsubmitted representatives kept per
 # economic family. Value collapses to ONE (it saturates first and co-moves);
 # orthogonal families keep two. Beyond the cap, further passers are flagged as
 # family-saturated so a round yields a DIVERSIFIED book, not value clones.
 _FAMILY_CAP = {"value": 1, "options": 2, "revision": 2, "momentum": 2,
-               "lowvol": 2, "sentiment": 2, "score": 3}
+               "lowvol": 2, "sentiment": 2, "score": 3,
+               # Frontier mechanisms (2026-07-11 research sweep)
+               "microstructure": 3, "seasonality": 2, "overnight": 2,
+               "iv_term": 2, "vrp": 2, "quality": 2}
 
 
 def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
@@ -367,6 +374,62 @@ async def run_mining_round(
 
         too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
         too_redundant = marginal < marginal_min
+
+        # Escape hatch (BRAIN's own submit rule): a candidate correlated >=0.7
+        # with an existing alpha is still submittable if its Sharpe beats that
+        # alpha's by >=10%. Apply the same logic locally when the culprit is one
+        # of OUR mined alphas with a known Sharpe — an upgrade-in-place.
+        if too_correlated and not too_redundant and adj_with and metrics.sharpe:
+            culprit_sharpe = await store.sharpe_of_alpha_id(pool, user_id, adj_with)
+            if culprit_sharpe and metrics.sharpe > 1.10 * float(culprit_sharpe):
+                print(f"[hatch] {expr[:44]!r} corr={adj:.2f} vs {adj_with} but "
+                      f"sharpe {metrics.sharpe:.2f} > 1.1x{float(culprit_sharpe):.2f}",
+                      flush=True)
+                too_correlated = False
+
+        # Settings-axis rescue (community-documented: the SAME expression on a
+        # different universe/neutralization has materially different PnL and can
+        # clear self-corr): one near-miss (corr in [thr, 0.90)) per retry budget
+        # gets ONE resim on a rotated axis before being flagged.
+        if (too_correlated and not too_redundant and retry_budget > 0
+                and max(official or 0.0, adj) < 0.90):
+            retry_budget -= 1
+            alt = dict(settings)
+            alt["universe"] = "TOP1000" if settings.get("universe") == "TOP3000" else "TOP500"
+            alt["neutralization"] = "MARKET" if settings.get("neutralization") != "MARKET" else "SECTOR"
+            alt["decay"] = 15
+            try:
+                aid3, m3 = await _simulate_one(client, expr, alt, sim_timeout_s)
+                r3 = pnl_to_daily_returns(await client.get_pnl(aid3))
+                adj3, adj3_with = (max_corr_against(r3, accepted_returns)
+                                   if r3 is not None and accepted_returns else (0.0, None))
+                if m3.passes_gates(**gate_kw) and adj3 < _SELF_CORR_THRESHOLD:
+                    print(f"[axis] {expr[:44]!r} rescued: {alt['universe']}/"
+                          f"{alt['neutralization']} corr {adj:.2f}->{adj3:.2f}", flush=True)
+                    alpha_id, metrics, settings = aid3, m3, alt
+                    cand_rets, adj, adj_with = r3, adj3, adj3_with
+                    official = m3.brain_self_correlation()
+                    if official is None:
+                        official = await client.get_self_correlation(aid3)
+                    official_with = "BRAIN" if official is not None else None
+                    marginal, marginal_with = (
+                        incremental_contribution(cand_rets, accepted_returns, k=8)
+                        if cand_rets is not None and accepted_returns else (1.0, None)
+                    )
+                    corr_kw = dict(
+                        self_correlation=official, self_correlation_with=official_with,
+                        self_correlation_adj=adj, self_correlation_adj_with=adj_with,
+                    )
+                    common = dict(common, settings=alt, alpha_id=aid3,
+                                  sharpe=m3.sharpe, fitness=m3.fitness,
+                                  turnover=m3.turnover, drawdown=m3.drawdown,
+                                  returns=m3.returns, margin=m3.margin,
+                                  grade=m3.grade, retried=True)
+                    too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
+                    too_redundant = marginal < marginal_min
+            except Exception:  # noqa: BLE001 — a failed rescue keeps the flag
+                pass
+
         if too_correlated or too_redundant:
             reason = (
                 f"self-corr official={official} adj={adj:.2f} vs {adj_with}"

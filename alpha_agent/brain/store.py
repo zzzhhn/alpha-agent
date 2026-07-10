@@ -312,6 +312,17 @@ async def passed_unsubmitted_expressions(
     return [r["expression"] for r in rows]
 
 
+async def sharpe_of_alpha_id(pool, user_id: int, alpha_id: str):
+    """Sharpe of one of the user's mined alphas by BRAIN alpha_id (None if
+    unknown/not ours). Feeds the 10%%-better escape hatch: BRAIN allows submitting
+    a candidate that self-correlates >=0.7 with an existing alpha IF its Sharpe
+    beats that alpha's by >=10%%."""
+    return await pool.fetchval(
+        "SELECT sharpe FROM brain_alphas WHERE user_id=$1 AND alpha_id=$2 "
+        "ORDER BY created_at DESC LIMIT 1", user_id, alpha_id,
+    )
+
+
 async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:
     """Record that the user submitted this alpha to BRAIN + BRAIN's status."""
     await pool.execute(

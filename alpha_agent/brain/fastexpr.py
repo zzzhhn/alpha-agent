@@ -140,6 +140,10 @@ BRAIN_SAFE_OPS = frozenset({
     # trade_when(cond, alpha, exit) gates the alpha to only trade when liquid;
     # greater/less build the trigger conditions (function form of > / <).
     "trade_when", "greater", "less",
+    # Frontier motifs (P1 research upgrade, all verified in the /operators catalog
+    # and positional-arg safe): rolling extrema for RSV/stochastic shapes,
+    # covariance for rank-cov divergence, last_diff_value for QoQ deltas.
+    "ts_min", "ts_max", "ts_covariance", "last_diff_value",
 })
 
 
@@ -455,6 +459,170 @@ def _catalog_composite_leg(
                _fld(rng.choice(("industry", "subindustry", "sector"))))
 
 
+# --- Frontier motifs (2026-07-11 research sweep: Alpha101/GTJA/qlib census + ---
+# --- academic anomalies; see docs/superpowers/audits + memory brain_miner) ------
+# Conventions extracted from the corpora: volume enters as volume/adv20 or
+# rank(volume); price legs are rank()ed before ts_corr; corr windows 3-10,
+# decay windows 4-16, outer ts_rank 15-32; depth sweet spot 3-5.
+
+_IV_TENOR_PAIRS = (  # verified fields: term-structure slope = short - long tenor
+    ("implied_volatility_call_60", "implied_volatility_call_270"),
+    ("implied_volatility_call_120", "implied_volatility_call_1080"),
+    ("implied_volatility_call_60", "implied_volatility_call_180"),
+)
+_IV_MOM_FIELDS = (
+    "implied_volatility_call_60", "implied_volatility_call_120",
+    "implied_volatility_mean_10", "implied_volatility_mean_120",
+)
+
+
+def _m_pv_corr(rng: random.Random) -> dict:
+    """Price-volume divergence family — THE most recurring Alpha101 motif
+    (58/83 use ts_corr; #3/#6/#13/#16/#44): fade windows where price rank and
+    volume rank co-move."""
+    p = rng.choice(("close", "open", "vwap", "high"))
+    d = rng.choice((5, 8, 10))
+    inner = _op("ts_corr", _op("rank", _fld(p)), _op("rank", _fld("volume")), _lit(d))
+    leg = _op("reverse", inner)
+    if rng.random() < 0.5:
+        leg = _op("group_neutralize", leg, _fld(rng.choice(("industry", "subindustry"))))
+    return leg
+
+
+def _m_pv_deep(rng: random.Random) -> dict:
+    """Deep composite (Alpha101 #71/GTJA workhorse):
+    ts_rank(decay(corr(ts_rank(price), ts_rank(liquidity)))) — co-movement of
+    time-series-normalized price and liquidity, then 'is that unusual?'."""
+    p = rng.choice(("close", "low", "vwap"))
+    return _op("ts_rank",
+               _op("ts_decay_linear",
+                   _op("ts_corr", _op("ts_rank", _fld(p), _lit(3)),
+                       _op("ts_rank", _fld("adv20"), _lit(12)), _lit(18)),
+                   _lit(4)),
+               _lit(16))
+
+
+def _m_vol_shock(rng: random.Random) -> dict:
+    """Volume-surge x price-reversal (Alpha101 #43 / Gervais high-volume
+    premium): high-volume selloffs bounce harder."""
+    return _op("multiply",
+               _op("ts_rank", _op("divide", _fld("volume"), _fld("adv20")), _lit(20)),
+               _op("ts_rank", _op("reverse", _op("ts_delta", _fld("close"), _lit(7))),
+                   _lit(8)))
+
+
+def _m_rsv_corr(rng: random.Random) -> dict:
+    """Stochastic-position x volume (Alpha101 #55 / qlib RSV): heavy volume at
+    range extremes -> reversal."""
+    w = rng.choice((12, 20))
+    rsv = _op("divide",
+              _op("subtract", _fld("close"), _op("ts_min", _fld("low"), _lit(w))),
+              _op("subtract", _op("ts_max", _fld("high"), _lit(w)),
+                  _op("ts_min", _fld("low"), _lit(w))))
+    return _op("reverse",
+               _op("ts_corr", _op("rank", rsv), _op("rank", _fld("volume")), _lit(6)))
+
+
+def _m_resid_mom(rng: random.Random) -> dict:
+    """Residual momentum approximation (Blitz/Huij/Martens; Robeco iMOM):
+    12-1 month momentum, vol-scaled (the crash-killer detail), industry-
+    neutralized (strips the sector bet ts_regression would need)."""
+    sig = _op("divide",
+              _op("subtract", _op("ts_sum", _fld("returns"), _lit(231)),
+                  _op("ts_sum", _fld("returns"), _lit(21))),
+              _op("ts_std_dev", _fld("returns"), _lit(231)))
+    return _op("group_neutralize", _op("rank", sig),
+               _fld(rng.choice(("industry", "subindustry"))))
+
+
+def _m_seasonality(rng: random.Random) -> dict:
+    """Cross-sectional seasonality (Heston-Sadka JFE 2008): same-calendar-month
+    return repeats at annual lags; avg of the last 3 years' same-month return.
+    Mechanically orthogonal to every level-based fundamental/option signal."""
+    def mo(lag: int) -> dict:
+        m = _op("divide", _op("ts_delta", _fld("close"), _lit(21)),
+                _op("ts_delay", _fld("close"), _lit(21)))
+        return _op("ts_delay", m, _lit(lag))
+    avg = _op("add", _op("add", mo(231), mo(483)), mo(735))
+    return _op("group_neutralize", _op("rank", avg), _fld("industry"))
+
+
+def _m_overnight(rng: random.Random) -> dict:
+    """Overnight-vs-intraday tug-of-war (Lou/Polk/Skouras JFE 2019): the
+    overnight component of returns persists; intraday reverses."""
+    on = _op("subtract", _op("divide", _fld("open"),
+                             _op("ts_delay", _fld("close"), _lit(1))), _lit(1))
+    if rng.random() < 0.5:  # pure overnight persistence
+        sig = _op("ts_mean", on, _lit(21))
+    else:  # tug-of-war spread: overnight minus intraday
+        intra = _op("subtract", _op("divide", _fld("close"), _fld("open")), _lit(1))
+        sig = _op("subtract", _op("ts_mean", on, _lit(21)),
+                  _op("ts_mean", intra, _lit(21)))
+    return _op("group_neutralize", _op("rank", sig), _fld("industry"))
+
+
+def _m_iv_term(rng: random.Random) -> dict:
+    """IV term-structure slope (Vasquez JFQA 2017): tenor dimension of the
+    surface — mechanically distinct from the saturated call-put SKEW (strike
+    dimension). Slope innovations via ts_zscore."""
+    short, long_ = rng.choice(_IV_TENOR_PAIRS)
+    slope = _op("subtract", _fld(short), _fld(long_))
+    leg = _op("rank", _op("ts_zscore", slope, _lit(60)))
+    if rng.random() < 0.5:
+        leg = _op("reverse", leg)  # sign unknown a priori — explore both
+    return _op("group_neutralize", leg, _fld(rng.choice(("sector", "subindustry"))))
+
+
+def _m_iv_mom(rng: random.Random) -> dict:
+    """IV momentum (community-documented alternative to skew level):
+    decay-smoothed change in implied vol."""
+    f = rng.choice(_IV_MOM_FIELDS)
+    leg = _op("rank", _op("ts_decay_linear",
+                          _op("ts_delta", _fld(f), _lit(25)), _lit(20)))
+    if rng.random() < 0.5:
+        leg = _op("reverse", leg)
+    return _op("group_neutralize", leg, _fld("subindustry"))
+
+
+def _m_vrp(rng: random.Random) -> dict:
+    """Stock-level variance risk premium (Bali & Hovakimian 2009), rank-space
+    form (unit-free): short names whose realized vol runs hot vs implied."""
+    w, iv = rng.choice(((120, "implied_volatility_mean_120"),
+                        (21, "implied_volatility_mean_10")))
+    spread = _op("subtract",
+                 _op("rank", _op("ts_std_dev", _fld("returns"), _lit(w))),
+                 _op("rank", _fld(iv)))
+    leg = _op("reverse", spread) if rng.random() < 0.85 else spread
+    return _op("group_neutralize", leg, _fld("subindustry"))
+
+
+def _m_quality(rng: random.Random) -> dict:
+    """Gross profitability GP/A (Novy-Marx 2013, 'the other side of value'):
+    the quality ratio with the strongest large-cap evidence, NEGATIVELY
+    correlated with value — hedges the saturated value book."""
+    leg = _op("rank", _op("divide", _fld("gross_profit"), _fld("assets")))
+    return _op("group_rank" if rng.random() < 0.5 else "group_neutralize",
+               leg, _fld(rng.choice(("industry", "subindustry"))))
+
+
+# Registry: mechanism name -> generator. The frontier round cycles mechanisms
+# (quota) so 12 sims always cover >=6 distinct mechanisms — the AutoAlpha/
+# AlphaForge niche-quota idea at our scale.
+_FRONTIER_MOTIFS: tuple = (
+    ("pv_corr", _m_pv_corr),
+    ("pv_deep", _m_pv_deep),
+    ("vol_shock", _m_vol_shock),
+    ("rsv_corr", _m_rsv_corr),
+    ("resid_mom", _m_resid_mom),
+    ("seasonality", _m_seasonality),
+    ("overnight", _m_overnight),
+    ("iv_term", _m_iv_term),
+    ("iv_mom", _m_iv_mom),
+    ("vrp", _m_vrp),
+    ("quality", _m_quality),
+)
+
+
 def _catalog_leg(
     rng: random.Random,
     fields: tuple,
@@ -762,6 +930,11 @@ def generate_brain_candidates(
     from collections import Counter
 
     seen: set[str] = set()
+    # Frontier mechanism cycle: shuffled once, then round-robin, so a 12-candidate
+    # round covers >=6 distinct mechanisms instead of re-rolling one basin.
+    _frontier_order = list(_FRONTIER_MOTIFS)
+    rng.shuffle(_frontier_order)
+    _frontier_i = 0
     seen_sigs: set[tuple] = set()  # structural fingerprints for pool diversity
     family_counts: Counter = Counter()  # G2: cap near-duplicates per factor family
     out: list[str] = []
@@ -769,7 +942,14 @@ def generate_brain_candidates(
     while len(out) < n and guard < n * 120:
         guard += 1
         r = rng.random()
-        if family_focus == "options":
+        curated = False  # curated template trees skip the GA depth cap
+        if family_focus == "frontier":
+            # Research-derived motif round: cycle mechanisms (niche quota).
+            _name, _fn = _frontier_order[_frontier_i % len(_frontier_order)]
+            _frontier_i += 1
+            tree = _fn(rng)
+            curated = True
+        elif family_focus == "options":
             # Family-constrained round: mine ONLY the options-IV family (highest
             # Sharpe, orthogonal to value); base_settings_for runs it on TOP500.
             tree = _options_leg(rng)
@@ -799,7 +979,8 @@ def generate_brain_candidates(
                 tree = _catalog_leg(
                     rng, fam_fields, low_is_good=(family_focus == "lowvol"),
                     hints=field_hints, banned=banned)
-        elif r < 0.62:
+            curated = True
+        elif r < 0.50:
             # Economic-ratio / style golden structures — the highest-signal path,
             # now DOMINANT (was 45%). Widening operators/fields diluted this and
             # tanked the pass rate, so the proven backbone leads again.
@@ -808,6 +989,14 @@ def generate_brain_candidates(
                 if rng.random() < 0.35
                 else _ratio_template(rng, ratio_usage, prefer_industry)
             )
+        elif r < 0.68:
+            # Frontier motifs (research-validated structures: pv-corr, seasonality,
+            # overnight, iv-term, vrp, quality...) get a fixed share of every
+            # normal round so new mechanisms keep flowing into the book.
+            _name, _fn = _frontier_order[_frontier_i % len(_frontier_order)]
+            _frontier_i += 1
+            tree = _fn(rng)
+            curated = True
         elif r < 0.72:
             # generic golden over any fetched field — kept small: raw single-field
             # signals over alt-data (news/social/option) fields are mostly junk.
@@ -827,7 +1016,10 @@ def generate_brain_candidates(
         else:
             tree = ga_dsl.random_tree(rng, max_depth, vocab)
 
-        if ga_dsl.tree_depth(tree) > max_depth:
+        if not curated and ga_dsl.tree_depth(tree) > max_depth:
+            # GA/random trees respect the depth cap; curated research templates
+            # (seasonality's 3-lag average, deep pv composites) are exempt — their
+            # depth is by construction, not runaway growth.
             continue
         # Dominant ACTIVE pattern: gate the signal by a liquidity condition
         # (trade_when(volume>adv20, alpha, -1)). Applied after the depth check so the
