@@ -33,6 +33,11 @@ MAX_DRAWDOWN = 0.15
 # value/options keep the full single-alpha bars above.
 MIN_SHARPE_DIVERSIFIER = 0.80
 MIN_FITNESS_DIVERSIFIER = 0.50
+# Drawdown cap for diversifiers: 0.15 is OUR bar (BRAIN's submit checks have NO
+# drawdown item) and it killed 4 Sharpe-clearing candidates (0.84-0.90, DD
+# 0.15-0.22) in the 2026-07-10 round. A diversifier's standalone drawdown is
+# diluted inside the book, so it gets a wider cap; value/options keep 0.15.
+MAX_DRAWDOWN_DIVERSIFIER = 0.25
 # BRAIN's Sharpe-MAGNITUDE checks, relaxed for diversifiers (we apply our own
 # lower bar locally). Structural checks (turnover / concentration) stay honored.
 _MAGNITUDE_CHECKS = ("LOW_SHARPE", "LOW_FITNESS", "LOW_SUB_UNIVERSE_SHARPE")

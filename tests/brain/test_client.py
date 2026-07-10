@@ -297,3 +297,11 @@ def test_relaxed_magnitude_gate_for_diversifiers():
                        checks=chk(CONCENTRATED_WEIGHT="PASS"))
     assert low.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
                             min_fitness=0.50) is False
+    # Drawdown 0.22 (a 0.90-Sharpe composite killed on 2026-07-10): rejected at
+    # the default 0.15 cap, accepted at the diversifier 0.25 cap.
+    dd = AlphaMetrics("A", 0.90, 0.81, 0.10, 0.05, 0.22,
+                      checks=chk(LOW_SHARPE="FAIL", CONCENTRATED_WEIGHT="PASS"))
+    assert dd.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
+                           min_fitness=0.50) is False
+    assert dd.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
+                           min_fitness=0.50, max_drawdown=0.25) is True

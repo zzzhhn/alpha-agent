@@ -22,6 +22,7 @@ from alpha_agent.brain import store
 from alpha_agent.brain.client import (
     BrainClient,
     BrainSimulationError,
+    MAX_DRAWDOWN_DIVERSIFIER,
     MIN_FITNESS_DIVERSIFIER,
     MIN_SHARPE_DIVERSIFIER,
 )
@@ -278,7 +279,8 @@ async def run_mining_round(
         relaxed = fam in _DIVERSIFIER_FAMILIES
         gate_kw = (
             {"relaxed_magnitude": True, "min_sharpe": MIN_SHARPE_DIVERSIFIER,
-             "min_fitness": MIN_FITNESS_DIVERSIFIER}
+             "min_fitness": MIN_FITNESS_DIVERSIFIER,
+             "max_drawdown": MAX_DRAWDOWN_DIVERSIFIER}
             if relaxed else {}
         )
         marginal_min = _MARGINAL_MIN_DIVERSIFIER if relaxed else _MARGINAL_MIN
