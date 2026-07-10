@@ -283,6 +283,21 @@ async def unsubmitted_alpha_ids_missing_official(
     return [r["alpha_id"] for r in rows]
 
 
+async def scored_expressions(
+    pool, user_id: int, *, limit: int = 800
+) -> list[tuple[str, float]]:
+    """(expression, sharpe) for the user's scored mining rows, newest first —
+    feeds fastexpr.build_field_hints so generation exploits mining history
+    (pin winning signs, skip dead fields) instead of re-flipping known coins."""
+    rows = await pool.fetch(
+        "SELECT expression, sharpe FROM brain_alphas "
+        "WHERE user_id=$1 AND sharpe IS NOT NULL "
+        "ORDER BY created_at DESC LIMIT $2",
+        user_id, min(max(int(limit), 1), 2000),
+    )
+    return [(r["expression"], float(r["sharpe"])) for r in rows]
+
+
 async def passed_unsubmitted_expressions(
     pool, user_id: int, *, limit: int = 200
 ) -> list[str]:

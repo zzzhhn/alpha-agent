@@ -2,6 +2,7 @@
 STRUCTURALLY-valid expression (BRAIN-safe operators, non-degenerate) — note the
 generator now uses real BRAIN fundamental field IDs (ebit, equity, ...) that the
 LOCAL grammar doesn't know, so validation is structural, not local-grammar."""
+import random
 import re
 
 from alpha_agent.brain import fastexpr as fe
@@ -175,3 +176,66 @@ def test_family_cap_bounds_per_family_output():
             pass
     assert exprs, "generator produced nothing"
     assert max(counts.values()) <= 2
+
+
+def test_build_field_hints_pins_sign_and_flags_dead():
+    """Field hints from history: a plain rank() at -0.99 pins the REVERSE
+    direction; a reversed leg at +0.80 pins reverse too; a field tried twice
+    that never beat |0.35| is dead; a strong single observation pins nothing
+    below the 0.5 confidence bar."""
+    from alpha_agent.brain.fastexpr import build_field_hints
+    scored = [
+        ("group_neutralize(rank(equity_value_score), sector)", -0.99),
+        ("group_neutralize(reverse(rank(earnings_certainty_rank_derivative)), industry)", 0.80),
+        ("group_neutralize(rank(asset_growth_rate), industry)", -0.02),
+        ("group_neutralize(reverse(rank(asset_growth_rate)), sector)", 0.03),
+        ("group_neutralize(rank(snt_value), industry)", 0.47),
+    ]
+    h = build_field_hints(scored)
+    assert h["equity_value_score"]["sign"] == -1
+    assert h["earnings_certainty_rank_derivative"]["sign"] == -1
+    assert h["asset_growth_rate"]["dead"] is True
+    assert h["asset_growth_rate"]["sign"] is None
+    assert h["snt_value"]["sign"] is None and not h["snt_value"]["dead"]
+
+
+def test_catalog_composite_blends_known_good_fields_with_pinned_signs():
+    from alpha_agent.brain.fastexpr import (
+        _SCORE_FIELDS, _catalog_composite_leg, _valid_brain_tree)
+    hints = {
+        "equity_value_score": {"n": 3, "best_abs": 0.99, "sign": -1, "dead": False},
+        "financial_statement_value_score": {"n": 5, "best_abs": 0.83, "sign": -1, "dead": False},
+        "multi_factor_acceleration_score_derivative": {"n": 6, "best_abs": 0.97, "sign": 1, "dead": False},
+    }
+    rng = random.Random(3)
+    expr = _valid_brain_tree(_catalog_composite_leg(rng, _SCORE_FIELDS, hints))
+    assert expr and "add(" in expr and "group_neutralize(" in expr
+    # a pinned-negative field must appear reversed when present
+    if "equity_value_score" in expr:
+        assert "reverse(rank(equity_value_score" in expr
+    # fewer than two eligible fields -> None (caller falls back to single leg)
+    assert _catalog_composite_leg(
+        rng, _SCORE_FIELDS,
+        {"equity_value_score": {"n": 3, "best_abs": 0.99, "sign": -1, "dead": False}},
+    ) is None
+
+
+def test_score_focus_generation_skips_dead_fields():
+    """A hint-steered score round must never spend a sim on a proven-dead field
+    (the 2026-07-09 round burned ~9 of 12 sims re-testing dead fields and
+    known-wrong signs)."""
+    hints = {
+        "equity_value_score": {"n": 3, "best_abs": 0.99, "sign": -1, "dead": False},
+        "financial_statement_value_score": {"n": 5, "best_abs": 0.83, "sign": -1, "dead": False},
+        "earnings_certainty_rank_derivative": {"n": 6, "best_abs": 0.84, "sign": -1, "dead": False},
+        "asset_growth_rate": {"n": 5, "best_abs": 0.03, "sign": None, "dead": True},
+        "consensus_analyst_rating": {"n": 4, "best_abs": 0.12, "sign": None, "dead": True},
+        "distress_risk_measure": {"n": 3, "best_abs": 0.04, "sign": None, "dead": True},
+    }
+    exprs = generate_brain_candidates(
+        10, family_focus="score", field_hints=hints, rng_seed=11)
+    joined = " ".join(exprs)
+    assert len(exprs) == 10
+    for dead in ("asset_growth_rate", "consensus_analyst_rating", "distress_risk_measure"):
+        assert dead not in joined, f"dead field {dead} was mined"
+    assert any("add(" in e for e in exprs)  # composites present

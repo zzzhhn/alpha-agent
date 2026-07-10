@@ -381,14 +381,106 @@ _SCORE_FIELDS = (  # model77 + model16 — complete factor-model scores
     "growth_potential_rank_derivative", "earnings_certainty_rank_derivative",
     "multi_factor_acceleration_score_derivative",
 )
+_CATALOG_FAMILY_FIELDS = {
+    "lowvol": _LOWVOL_FIELDS,
+    "sentiment": _SENTIMENT_FIELDS,
+    "momentum": _MOMENTUM_FIELDS,
+    "score": _SCORE_FIELDS,
+}
+_ALL_CATALOG_FIELDS = (
+    _LOWVOL_FIELDS + _SENTIMENT_FIELDS + _MOMENTUM_FIELDS + _SCORE_FIELDS
+)
 
 
-def _catalog_leg(rng: random.Random, fields: tuple, *, low_is_good: bool = False) -> dict:
+def build_field_hints(scored: list) -> dict:
+    """Per-field steering hints from mining history (the miner's own DB rows).
+
+    `scored` is [(expression, sharpe), ...]. For each catalog field, look at every
+    scored expression that used it and take the observation with the largest
+    |Sharpe|. Its direction pins the money sign: a plain rank() at -0.99 means the
+    REVERSED leg is the money side (rank-based legs are antisymmetric), and a
+    reversed leg at +0.80 means reversed too. Returns
+      {field: {"n", "best_abs", "sign" (+1 plain / -1 reverse / None unknown),
+               "dead" (tried >=2x, never past |0.35|)}}
+    so generation stops re-flipping coins history has already called: 2026-07-09
+    a 12-sim score round spent ~9 sims re-testing known-wrong signs and known-dead
+    fields (rank(equity_value_score) at -0.99 TWICE when history showed the
+    reverse at ~+0.99) and yielded zero passers."""
+    hints: dict = {}
+    for f in _ALL_CATALOG_FIELDS:
+        best_abs, money, n = 0.0, None, 0
+        for expr, sh in scored:
+            if sh is None or f not in expr:
+                continue
+            n += 1
+            plain_sign = -1 if f"reverse(rank({f}" in expr else 1
+            direction = plain_sign if sh >= 0 else -plain_sign
+            if abs(sh) > best_abs:
+                best_abs, money = abs(sh), direction
+        if n:
+            hints[f] = {
+                "n": n,
+                "best_abs": best_abs,
+                "sign": money if best_abs >= 0.5 else None,
+                "dead": n >= 2 and best_abs < 0.35,
+            }
+    return hints
+
+
+def _catalog_composite_leg(
+    rng: random.Random, fields: tuple, hints: dict, *, banned: frozenset = frozenset()
+) -> Optional[dict]:
+    """Blend 2-3 KNOWN-GOOD catalog fields (history sign pinned, best |Sharpe|
+    >= 0.55) into one rank-sum composite. The score family's best singles top out
+    at ~0.8-1.0 individually — below the bar — but their sub-themes (anti-value /
+    quality / acceleration) are internally diverse, so the blend can clear what no
+    single field can, and dilutes correlation to any one existing alpha. None when
+    fewer than two eligible fields (caller falls back to a single-field leg)."""
+    good = []
+    for f in fields:
+        h = hints.get(f)
+        if (f not in banned and h and not h["dead"] and h["sign"] is not None
+                and h["best_abs"] >= 0.55):
+            good.append(f)
+    if len(good) < 2:
+        return None
+    k = 2 if len(good) == 2 or rng.random() < 0.5 else 3
+    tree = None
+    for f in rng.sample(good, k):
+        leg = _op("rank", _fld(f))
+        if hints[f]["sign"] < 0:
+            leg = _op("reverse", leg)
+        tree = leg if tree is None else _op("add", tree, leg)
+    return _op("group_neutralize", tree,
+               _fld(rng.choice(("industry", "subindustry", "sector"))))
+
+
+def _catalog_leg(
+    rng: random.Random,
+    fields: tuple,
+    *,
+    low_is_good: bool = False,
+    hints: Optional[dict] = None,
+    banned: frozenset = frozenset(),
+) -> dict:
     """A pre-built factor score / risk metric ranked + group-neutralized — a complete
     signal from BRAIN's factor-model / risk / sentiment datasets (cov>=0.9, orthogonal
     to value/options). ~40% take the ts_delta (momentum of the score). reverse(x)=-x
     tests both signs (and long low-beta for the risk family)."""
-    f = _fld(rng.choice(fields))
+    hints = hints or {}
+    # History steering: never spend a sim on a field history has proven dead, and
+    # respect the per-round repeat cap (banned) so one field can't eat the round.
+    alive = [x for x in fields
+             if x not in banned and not hints.get(x, {}).get("dead")]
+    if not alive:
+        # All good fields hit the per-round cap: over-cap a GOOD field (the sig
+        # dedup still forces a different neutralization/wrap) rather than
+        # resurrect a proven-dead one — a dead-field sim is a wasted slot.
+        alive = [x for x in fields if not hints.get(x, {}).get("dead")]
+    if not alive:  # the whole family is dead (e.g. lowvol): explore anyway
+        alive = [x for x in fields if x not in banned] or list(fields)
+    fname = rng.choice(alive)
+    f = _fld(fname)
     # These fields are pre-built scores / risk metrics / levels — the LEVEL is the
     # signal. Differencing them (esp. the *_rank_derivative composites, already a
     # change) was pure noise: the random ts_delta diluted each family to a coin-flip
@@ -397,7 +489,14 @@ def _catalog_leg(rng: random.Random, fields: tuple, *, low_is_good: bool = False
     # So rank the LEVEL + group-neutralize; reverse tests the opposite sign (and
     # longs low-beta/low-risk for the risk family).
     leg = _op("rank", f)
-    if low_is_good or rng.random() < 0.5:
+    sign = (hints.get(fname) or {}).get("sign")
+    if low_is_good:
+        want_reverse = True  # long low-beta / low-risk by construction
+    elif sign is not None and rng.random() < 0.85:
+        want_reverse = sign < 0  # exploit the historically-winning direction
+    else:
+        want_reverse = rng.random() < 0.5  # explore (unknown or the 15% probe)
+    if want_reverse:
         leg = _op("reverse", leg)
     return _op("group_neutralize", leg, _fld(rng.choice(("industry", "subindustry", "sector"))))
 
@@ -631,6 +730,7 @@ def generate_brain_candidates(
     avoid_signatures: Optional[frozenset] = None,
     family_cap: int = 0,
     family_focus: Optional[str] = None,
+    field_hints: Optional[dict] = None,
 ) -> list[str]:
     """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
 
@@ -677,14 +777,28 @@ def generate_brain_candidates(
             # Family-constrained round: analyst estimate-revision momentum
             # (value-orthogonal); base_settings_for runs anl4 on TOP1000.
             tree = _revision_leg(rng)
-        elif family_focus == "lowvol":
-            tree = _catalog_leg(rng, _LOWVOL_FIELDS, low_is_good=True)
-        elif family_focus == "sentiment":
-            tree = _catalog_leg(rng, _SENTIMENT_FIELDS)
-        elif family_focus == "momentum":
-            tree = _catalog_leg(rng, _MOMENTUM_FIELDS)
-        elif family_focus == "score":
-            tree = _catalog_leg(rng, _SCORE_FIELDS)
+        elif family_focus in _CATALOG_FAMILY_FIELDS:
+            # Family-constrained catalog round, steered by mining history
+            # (field_hints): dead fields skipped, winning sign pinned (85%
+            # exploit / 15% probe), each field capped at 2 accepted uses per
+            # round, and ~45% of candidates are 2-3 field COMPOSITES of the
+            # known-good fields — individually ~0.8-Sharpe signals blended to
+            # clear the bar a single field can't.
+            fam_fields = _CATALOG_FAMILY_FIELDS[family_focus]
+            used: Counter = Counter()
+            for _e in out:
+                for _cf in fam_fields:
+                    if _cf in _e:
+                        used[_cf] += 1
+            banned = frozenset(_cf for _cf in fam_fields if used[_cf] >= 2)
+            tree = None
+            if rng.random() < 0.45:
+                tree = _catalog_composite_leg(
+                    rng, fam_fields, field_hints or {}, banned=banned)
+            if tree is None:
+                tree = _catalog_leg(
+                    rng, fam_fields, low_is_good=(family_focus == "lowvol"),
+                    hints=field_hints, banned=banned)
         elif r < 0.62:
             # Economic-ratio / style golden structures — the highest-signal path,
             # now DOMINANT (was 45%). Widening operators/fields diluted this and

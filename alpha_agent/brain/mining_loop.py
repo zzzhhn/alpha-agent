@@ -25,7 +25,7 @@ from alpha_agent.brain.client import (
     MIN_FITNESS_DIVERSIFIER,
     MIN_SHARPE_DIVERSIFIER,
 )
-from alpha_agent.brain.fastexpr import generate_brain_candidates
+from alpha_agent.brain.fastexpr import build_field_hints, generate_brain_candidates
 from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
 from alpha_agent.brain.tuning import base_settings_for, diagnose, retry_variant
 from alpha_agent.evolution.correlation_gate import (
@@ -166,10 +166,22 @@ async def run_mining_round(
     family_focus = os.environ.get("BRAIN_FAMILY_FOCUS") or None
     if family_focus:
         print(f"[focus] family-constrained round: {family_focus}", flush=True)
+    # History steering for catalog families: pin each field's winning sign and
+    # skip proven-dead fields, so the round spends sims on NEW information
+    # instead of re-testing directions the DB already scored.
+    field_hints = None
+    if family_focus in ("lowvol", "sentiment", "momentum", "score"):
+        field_hints = build_field_hints(
+            await store.scored_expressions(pool, user_id, limit=800))
+        pinned = sum(1 for h in field_hints.values() if h["sign"] is not None)
+        dead = sum(1 for h in field_hints.values() if h["dead"])
+        print(f"[hints] fields known={len(field_hints)} "
+              f"sign-pinned={pinned} dead={dead}", flush=True)
     candidates = generate_brain_candidates(
         gen_n, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed,
         ratio_usage=evo.ratio_usage, prefer_industry=evo.prefer_industry,
         avoid_signatures=evo.avoid_signatures, family_focus=family_focus,
+        field_hints=field_hints,
     )
 
     # LLM financial-logic pre-screen (AlphaEval 'Financial Logic'): score the
