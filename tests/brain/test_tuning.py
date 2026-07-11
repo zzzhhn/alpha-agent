@@ -85,3 +85,38 @@ def test_fitness_turnover_retry_for_sharpe_strong_candidates():
     weak = AlphaMetrics("A", 1.10, 0.90, 0.32, 0.08, 0.04,
                         checks=chk(LOW_SHARPE="FAIL", LOW_FITNESS="FAIL"))
     assert diagnose(weak) != "fitness_turnover"
+
+
+def test_vary_settings_explores_only_unproven_families():
+    """Settings exploration (2026-07-11: 255 sims ran 100% delay-1 / 100%
+    SUBINDUSTRY / 86% TOP3000 — three axes frozen): frontier families get
+    universe/neutralization/decay (+delay-0 for fast signals) jitter with
+    default-heavy priors; PROVEN families (value/options) are never touched
+    (the TOP500 options pin regression)."""
+    import random
+    from alpha_agent.brain.tuning import vary_settings
+
+    base = {"universe": "TOP3000", "delay": 1,
+            "neutralization": "SUBINDUSTRY", "decay": 12}
+    # proven families: identical object content, no exploration
+    for fam in ("value", "options", "other"):
+        assert vary_settings(base, fam, random.Random(0)) == base
+    # frontier: valid values only, and the full sweep hits every axis eventually
+    seen_uni, seen_neu, seen_delay = set(), set(), set()
+    for seed in range(300):
+        s = vary_settings(base, "microstructure", random.Random(seed))
+        assert s["universe"] in ("TOP3000", "TOP1000", "TOP500")
+        assert s["neutralization"] in ("SUBINDUSTRY", "INDUSTRY", "MARKET")
+        assert s["delay"] in (0, 1) and s["decay"] <= 40
+        seen_uni.add(s["universe"])
+        seen_neu.add(s["neutralization"])
+        seen_delay.add(s["delay"])
+    assert seen_uni == {"TOP3000", "TOP1000", "TOP500"}
+    assert seen_neu == {"SUBINDUSTRY", "INDUSTRY", "MARKET"}
+    assert seen_delay == {0, 1}
+    # delay-0 probes are reserved for fast signals
+    assert all(vary_settings(base, "seasonality", random.Random(s))["delay"] == 1
+               for s in range(300))
+    # deterministic: same rng seed, same result
+    assert (vary_settings(base, "iv_term", random.Random(7))
+            == vary_settings(base, "iv_term", random.Random(7)))

@@ -67,6 +67,48 @@ def _failed(metrics, name: str) -> bool:
     return chk.get("result") == "FAIL"
 
 
+# Settings-EXPLORATION families: the frontier/catalog mechanisms whose configs
+# are unproven. value/options/other keep their DB-proven TOP3000/delay-1/
+# SUBINDUSTRY untouched (the blanket TOP500 options pin that tanked a proven
+# Sharpe 2.5 alpha is the cautionary tale: explore on NEW mechanisms, never
+# re-pin proven ones).
+_EXPLORE_FAMILIES = frozenset({
+    "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality",
+    "score", "sentiment", "lowvol", "momentum", "revision",
+})
+# Fast signals decay hardest by t+1 — the only families worth a delay-0 probe
+# (BRAIN's own D0 checks apply their D0 bars; the verdict stays authoritative).
+_DELAY0_FAMILIES = frozenset({"microstructure", "overnight"})
+
+
+def vary_settings(base: dict, family: str, rng) -> dict:
+    """Per-candidate settings exploration for unproven mechanisms. 2026-07-11
+    audit: 255 sims over 3 days ran 100% delay-1, 100% SUBINDUSTRY, 86% TOP3000
+    — three of four settings axes frozen, while community evidence shows the
+    SAME expression re-rates materially across universe/neutralization/decay
+    (documented triple-pass of one expression on three configs). Default-heavy
+    priors so most sims still run the base config; the exploration tail buys
+    information, not a regime change."""
+    if family not in _EXPLORE_FAMILIES:
+        return base
+    s = dict(base)
+    r = rng.random()
+    if r < 0.15:
+        s["universe"] = "TOP500"
+    elif r < 0.40:
+        s["universe"] = "TOP1000"
+    r = rng.random()
+    if r < 0.20:
+        s["neutralization"] = "INDUSTRY"
+    elif r < 0.30:
+        s["neutralization"] = "MARKET"
+    if family in _DELAY0_FAMILIES and rng.random() < 0.15:
+        s["delay"] = 0
+    if rng.random() < 0.45:
+        s["decay"] = min(int(s.get("decay", 0)) + rng.choice((4, 8, 16)), 40)
+    return s
+
+
 def diagnose(metrics) -> Optional[str]:
     """The primary settings-fixable problem for a gate failure, or None when the
     failure isn't settings-addressable or is too far off to be worth a retry.

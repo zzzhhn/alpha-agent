@@ -12,6 +12,8 @@ pool-injected so it unit-tests against a fake BrainClient with no network."""
 from __future__ import annotations
 
 import logging
+import random
+import zlib
 from typing import Optional
 
 import numpy as np
@@ -22,7 +24,12 @@ from alpha_agent.brain import store
 from alpha_agent.brain.client import BrainClient, BrainSimulationError
 from alpha_agent.brain.fastexpr import build_field_hints, generate_brain_candidates
 from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
-from alpha_agent.brain.tuning import base_settings_for, diagnose, retry_variant
+from alpha_agent.brain.tuning import (
+    base_settings_for,
+    diagnose,
+    retry_variant,
+    vary_settings,
+)
 from alpha_agent.evolution.correlation_gate import (
     incremental_contribution,
     max_corr_against,
@@ -250,7 +257,11 @@ async def run_mining_round(
     retry_budget = max_retries
     for expr in candidates:
         # Family-adaptive BASE settings (fast/technical signals get more decay).
-        settings = base_settings_for(expr)
+        # Base config + per-candidate settings exploration (unproven mechanisms
+        # only; deterministic per expr so reruns are reproducible).
+        fam = family_of(expr)
+        _srng = random.Random(zlib.crc32(expr.encode()) ^ (rng_seed or 0))
+        settings = vary_settings(base_settings_for(expr), fam, _srng)
         did_retry = False
         try:
             alpha_id, metrics = await _simulate_one(client, expr, settings, sim_timeout_s)
@@ -269,8 +280,6 @@ async def run_mining_round(
             )
             summary["sim_error"] += 1
             continue
-
-        fam = family_of(expr)
 
         # Smart retry: a NEAR-miss on a settings-fixable check gets ONE targeted
         # re-simulation (bounded per round via retry_budget). If the variant clears
