@@ -81,10 +81,10 @@ async def _main() -> int:
     try:
         await client.authenticate()
         c = client._client
-        r = await c.get("/users/self/alphas", params={"limit": 6, "offset": 0})
+        r = await c.get("/users/self/alphas", params={"limit": 8, "offset": 0})
         results = r.json().get("results", []) if r.status_code == 200 else []
         print(f"=== user has >= {len(results)} alphas (inspecting up to 3) ===", flush=True)
-        for a in results[:3]:
+        for a in results[:6]:
             aid = a.get("id")
             print(f"\n### ALPHA {aid} status={a.get('status')} grade={a.get('grade')} ###",
                   flush=True)
@@ -99,7 +99,11 @@ async def _main() -> int:
                 if "CORR" in name.upper() or "SELF" in name.upper():
                     print(f"  SELF-CORR CHECK (full): {json.dumps(chk)}", flush=True)
                 else:
-                    print(f"  check {name}: keys={sorted(chk.keys())}", flush=True)
+                    # result VALUES matter: a WARNING (neither PASS nor FAIL)
+                    # silently fails brain_checks_verdict with empty fail_checks
+                    print(f"  check {name}: result={chk.get('result')} "
+                          f"value={chk.get('value')} limit={chk.get('limit')}",
+                          flush=True)
             await _dump_corr(c, aid)
     finally:
         await client.aclose()
