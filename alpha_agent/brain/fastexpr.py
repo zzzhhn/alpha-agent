@@ -659,6 +659,11 @@ def _m_frontier_composite(rng: random.Random) -> dict:
               and not (k in option_legs and a in option_legs)]
     b = rng.choice(others)
     tree = _op("add", pool[a](), pool[b]())
+    # Fitness lever (35%): signed_power(zscore(x), 2) amplifies conviction tails
+    # keeping sign — composites clear Sharpe (1.56/1.32/1.18) but stall at
+    # F≈0.8-0.9 because returns run at 0.07; tail emphasis lifts the return leg.
+    if rng.random() < 0.35:
+        tree = _op("signed_power", _op("zscore", tree), _lit(2))
     return _op("group_neutralize", tree,
                _fld(rng.choice(("industry", "subindustry"))))
 
@@ -1001,7 +1006,12 @@ def generate_brain_candidates(
         guard += 1
         r = rng.random()
         curated = False  # curated template trees skip the GA depth cap
-        if family_focus == "frontier":
+        if family_focus == "composite":
+            # All-composite round: the only structures clearing Sharpe 1.25;
+            # this focus exists to grind their Fitness over 1.0.
+            tree = _m_frontier_composite(rng)
+            curated = True
+        elif family_focus == "frontier":
             # 40% cross-mechanism composites (the DB-proven route over the bar);
             # 60% single-mechanism cycle (keeps per-mechanism info flowing).
             if rng.random() < 0.40:

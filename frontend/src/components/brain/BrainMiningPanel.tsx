@@ -975,6 +975,7 @@ const FAMILIES: Array<[string, string, string]> = [
   // Research-derived structural motifs (pv-corr / seasonality / overnight /
   // iv-term / vrp / quality...): one focus value cycling ~11 mechanisms.
   ["frontier", "前沿结构", "frontier"],
+  ["composite", "跨机制复合", "composite"],
 ];
 
 // Native <select> is invisible on Safari (see OutcomeSelect) — same custom

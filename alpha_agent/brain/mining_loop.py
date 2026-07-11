@@ -262,6 +262,10 @@ async def run_mining_round(
         fam = family_of(expr)
         _srng = random.Random(zlib.crc32(expr.encode()) ^ (rng_seed or 0))
         settings = vary_settings(base_settings_for(expr), fam, _srng)
+        if family_focus == "composite":
+            # Fitness round: F = S*sqrt(ret/max(T,0.125)) — force heavy smoothing
+            # so turnover approaches the 0.125 floor.
+            settings["decay"] = max(int(settings.get("decay", 0)), 16)
         did_retry = False
         try:
             alpha_id, metrics = await _simulate_one(client, expr, settings, sim_timeout_s)
