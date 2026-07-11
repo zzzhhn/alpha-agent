@@ -275,3 +275,27 @@ def test_frontier_round_covers_many_mechanisms():
     assert len(exprs) == 12
     fams = {family_of(e) for e in exprs}
     assert len(fams) >= 5, f"only {fams}"
+
+
+def test_blend_expressions_stitches_with_safety_caps():
+    """User-directed technique: stitch real passers with near-misses via add()
+    (+optional weight/constant tilt). Contract: parents tracked (excluded from
+    adjusted-corr), op-count/length submission caps enforced (community-reported
+    ~64-op BRAIN limit; we hold 48), degenerate same-expression pairs skipped."""
+    from alpha_agent.brain.fastexpr import (
+        _MAX_EXPR_CHARS, _MAX_OPS_PER_EXPR, _OP_CALL_RE, blend_expressions)
+    passed = [("group_rank(ts_rank(divide(ebit, cap), 252), subindustry)", "P1", 1.55)]
+    near = [("group_neutralize(reverse(ts_corr(rank(close), rank(volume), 5)), subindustry)",
+             "N1", 0.9)]
+    out = blend_expressions(passed, near, random.Random(0), 6)
+    assert out, "expected blends"
+    for expr, parents in out:
+        assert expr.startswith("add(")
+        assert parents == frozenset({"P1", "N1"})
+        assert len(_OP_CALL_RE.findall(expr)) <= _MAX_OPS_PER_EXPR
+        assert len(expr) <= _MAX_EXPR_CHARS
+    # no sources -> no blends (never fabricate)
+    assert blend_expressions([], near, random.Random(0), 4) == []
+    # an over-long parent cannot produce an over-long blend
+    huge = [("rank(" + "ts_mean(close, 5), " * 200 + "close)", "P2", 2.0)]
+    assert blend_expressions(huge, near, random.Random(0), 4) == []

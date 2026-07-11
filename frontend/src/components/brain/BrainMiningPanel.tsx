@@ -976,6 +976,7 @@ const FAMILIES: Array<[string, string, string]> = [
   // iv-term / vrp / quality...): one focus value cycling ~11 mechanisms.
   ["frontier", "前沿结构", "frontier"],
   ["composite", "跨机制复合", "composite"],
+  ["blend", "拼接(passer×近失)", "blend"],
 ];
 
 // Native <select> is invisible on Safari (see OutcomeSelect) — same custom

@@ -9,6 +9,7 @@ the ones that clear the metric gates."""
 from __future__ import annotations
 
 import random
+import re
 from typing import Optional
 
 from alpha_agent.brain.client import DEFAULT_SETTINGS
@@ -118,6 +119,11 @@ BRAIN_VOCAB = ga_dsl.Vocab(
 # Restrict generation to the operators documented as working in the BRAIN SKILL,
 # and drop any candidate that uses one outside this set. Trim further if a future
 # run's sim_error details surface more gated ops.
+# BRAIN per-expression complexity caps (submission-safety; the platform has
+# rejected over-long/over-complex expressions — user recalls a ~64-operator
+# rule; 48/1400 keeps margin under whatever the current limit is).
+_MAX_OPS_PER_EXPR = 48
+_MAX_EXPR_CHARS = 1400
 BRAIN_SAFE_OPS = frozenset({
     "add", "subtract", "multiply", "divide",
     "rank", "zscore", "normalize", "scale", "sign", "log", "abs", "sqrt",
@@ -668,6 +674,54 @@ def _m_frontier_composite(rng: random.Random) -> dict:
                _fld(rng.choice(("industry", "subindustry"))))
 
 
+_OP_CALL_RE = re.compile(r"[a-z_]+\(")
+
+
+def blend_expressions(
+    passed: list, near_misses: list, rng: random.Random, n: int
+) -> list[tuple[str, frozenset]]:
+    """Stitch REAL passers with near-miss candidates into new submissable
+    factors (user-directed technique): add(P, N) or add(P, 0.5*N). The blend
+    DILUTES correlation vs the ACTIVE book (official self-corr only sees
+    submitted alphas — unsubmitted parents are invisible to the platform) while
+    stacking performance. Parents are returned so the miner can EXCLUDE them
+    from the adjusted-corr reference set (a blend always correlates with its
+    own parents; that comparison is meaningless for a replacement candidate).
+
+    `passed`/`near_misses`: [(expression, alpha_id, sharpe)]. Pairs prefer
+    cross-family combinations. Submission-safety: op-count and length caps
+    (community-reported ~64-op limit; margin held)."""
+    from alpha_agent.brain.evolution import family_of
+    out: list[tuple[str, frozenset]] = []
+    seen: set[str] = set()
+    if not passed or not near_misses:
+        return out
+    guard = 0
+    while len(out) < n and guard < n * 30:
+        guard += 1
+        p_expr, p_id, _ = passed[rng.randrange(len(passed))]
+        m_expr, m_id, _ = near_misses[rng.randrange(len(near_misses))]
+        if p_expr == m_expr:
+            continue
+        # prefer cross-family pairs (same-family blends stay near the parent)
+        if family_of(p_expr) == family_of(m_expr) and rng.random() < 0.7:
+            continue
+        w = rng.choice(("", "0.5", "0.75"))
+        leg = m_expr if not w else f"multiply({m_expr}, {w})"
+        expr = f"add({p_expr}, {leg})"
+        if rng.random() < 0.25:  # small constant tilt variant
+            expr = f"add({expr}, 0.1)"
+        if expr in seen:
+            continue
+        if (len(expr) > _MAX_EXPR_CHARS
+                or len(_OP_CALL_RE.findall(expr)) > _MAX_OPS_PER_EXPR):
+            continue
+        seen.add(expr)
+        parents = frozenset(x for x in (p_id, m_id) if x)
+        out.append((expr, parents))
+    return out
+
+
 # Registry: mechanism name -> generator. The frontier round cycles mechanisms
 # (quota) so 12 sims always cover >=6 distinct mechanisms — the AutoAlpha/
 # AlphaForge niche-quota idea at our scale.
@@ -884,11 +938,18 @@ def _valid_brain_tree(tree: dict) -> Optional[str]:
     ops = ga_dsl.used_operators(tree)
     if not ops:  # bare field leaf — nothing for BRAIN to score
         return None
+    # Submission-safety: BRAIN rejects over-complex expressions (community-
+    # reported per-expression operator cap ~64; we hold a safety margin).
+    if len(ops) > _MAX_OPS_PER_EXPR:
+        return None
     if any(op not in BRAIN_SAFE_OPS for op in ops):
         return None
     if _degenerate(tree):
         return None
-    return ga_dsl.tree_to_expression(tree)
+    expr = ga_dsl.tree_to_expression(tree)
+    if len(expr) > _MAX_EXPR_CHARS:
+        return None
+    return expr
 
 
 def _structural_signature(tree: dict) -> tuple:

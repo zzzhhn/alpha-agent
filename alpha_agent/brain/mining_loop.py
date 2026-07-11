@@ -22,7 +22,11 @@ logger = logging.getLogger(__name__)
 
 from alpha_agent.brain import store
 from alpha_agent.brain.client import BrainClient, BrainSimulationError
-from alpha_agent.brain.fastexpr import build_field_hints, generate_brain_candidates
+from alpha_agent.brain.fastexpr import (
+    blend_expressions,
+    build_field_hints,
+    generate_brain_candidates,
+)
 from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
 from alpha_agent.brain.tuning import (
     base_settings_for,
@@ -183,12 +187,25 @@ async def run_mining_round(
         dead = sum(1 for h in field_hints.values() if h["dead"])
         print(f"[hints] fields known={len(field_hints)} "
               f"sign-pinned={pinned} dead={dead}", flush=True)
-    candidates = generate_brain_candidates(
-        gen_n, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed,
-        ratio_usage=evo.ratio_usage, prefer_industry=evo.prefer_industry,
-        avoid_signatures=evo.avoid_signatures, family_focus=family_focus,
-        field_hints=field_hints,
-    )
+    # Blend round (user-directed): stitch real passers with near-miss candidates
+    # — add(P, N) dilutes correlation vs the ACTIVE book while stacking
+    # performance; parents (unsubmitted) are invisible to official self-corr.
+    blend_parents: dict[str, frozenset] = {}
+    if family_focus == "blend":
+        import random as _random
+        _passed, _near = await store.blend_source_expressions(pool, user_id)
+        blends = blend_expressions(_passed, _near, _random.Random(rng_seed), n_candidates)
+        candidates = [e for e, _ in blends]
+        blend_parents = {e: p for e, p in blends}
+        print(f"[blend] {len(candidates)} stitches from {len(_passed)} passed x "
+              f"{len(_near)} near-misses", flush=True)
+    else:
+        candidates = generate_brain_candidates(
+            gen_n, seed_exprs=seed_exprs, fields=real_fields, rng_seed=rng_seed,
+            ratio_usage=evo.ratio_usage, prefer_industry=evo.prefer_industry,
+            avoid_signatures=evo.avoid_signatures, family_focus=family_focus,
+            field_hints=field_hints,
+        )
 
     # LLM financial-logic pre-screen (AlphaEval 'Financial Logic'): score the
     # candidates' economic sense in one batched call and simulate only the
@@ -343,9 +360,15 @@ async def run_mining_round(
             cand_rets = pnl_to_daily_returns(await client.get_pnl(alpha_id))
         except Exception:  # noqa: BLE001 — no PnL just means no local diversity signal
             cand_rets = None
+        # A blend ALWAYS correlates with its own (unsubmitted) parents — that
+        # comparison is meaningless for a replacement candidate; official corr
+        # (vs ACTIVE alphas) still applies in full.
+        _parents = blend_parents.get(expr, frozenset())
+        _ref = ({k: v for k, v in accepted_returns.items() if k not in _parents}
+                if _parents else accepted_returns)
         adj, adj_with = 0.0, None
-        if cand_rets is not None and accepted_returns:
-            adj, adj_with = max_corr_against(cand_rets, accepted_returns)
+        if cand_rets is not None and _ref:
+            adj, adj_with = max_corr_against(cand_rets, _ref)
 
         corr_kw = dict(
             self_correlation=official, self_correlation_with=official_with,
@@ -360,8 +383,8 @@ async def run_mining_round(
         # (fully novel) when unmeasurable, so it can only ever flag MORE, never
         # fewer, than the pairwise gate.
         marginal, marginal_with = (
-            incremental_contribution(cand_rets, accepted_returns, k=8)
-            if cand_rets is not None and accepted_returns
+            incremental_contribution(cand_rets, _ref, k=8)
+            if cand_rets is not None and _ref
             else (1.0, None)
         )
 

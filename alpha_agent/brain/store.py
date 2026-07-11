@@ -315,6 +315,31 @@ async def passed_unsubmitted_expressions(
     return [r["expression"] for r in rows]
 
 
+async def blend_source_expressions(pool, user_id: int) -> tuple[list, list]:
+    """(passed, near_misses) as [(expression, alpha_id, sharpe)] for the blend
+    round: passed = real unsubmitted passers (BRAIN-verdict); near-miss = the
+    strongest rejected/flagged (sharpe >= 0.85, not degenerate). Newest first,
+    bounded."""
+    passed = [
+        (r["expression"], r["alpha_id"], float(r["sharpe"]))
+        for r in await pool.fetch(
+            "SELECT expression, alpha_id, sharpe FROM brain_alphas "
+            "WHERE user_id=$1 AND outcome='passed' AND submitted_at IS NULL "
+            "AND expression IS NOT NULL AND sharpe IS NOT NULL "
+            "ORDER BY sharpe DESC LIMIT 12", user_id)
+    ]
+    near = [
+        (r["expression"], r["alpha_id"], float(r["sharpe"]))
+        for r in await pool.fetch(
+            "SELECT expression, alpha_id, sharpe FROM brain_alphas "
+            "WHERE user_id=$1 AND outcome IN ('rejected','flagged') "
+            "AND sharpe >= 0.85 AND coalesce(turnover,0) > 0 "
+            "AND expression IS NOT NULL "
+            "ORDER BY sharpe DESC LIMIT 30", user_id)
+    ]
+    return passed, near
+
+
 async def sharpe_of_alpha_id(pool, user_id: int, alpha_id: str):
     """Sharpe of one of the user's mined alphas by BRAIN alpha_id (None if
     unknown/not ours). Feeds the 10%%-better escape hatch: BRAIN allows submitting
