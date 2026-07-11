@@ -266,8 +266,12 @@ async def test_submit_true_on_201():
 def test_passes_gates_enforces_all_thresholds():
     assert AlphaMetrics("A", 1.3, 1.15, 0.2, 0.2, 0.1).passes_gates()
     assert not AlphaMetrics("A", 1.0, 1.15, 0.2, 0.2, 0.1).passes_gates()  # sharpe
-    assert not AlphaMetrics("A", 1.3, 1.0, 0.2, 0.2, 0.1).passes_gates()   # fitness
-    assert not AlphaMetrics("A", 1.3, 1.15, 0.5, 0.2, 0.1).passes_gates()  # turnover
+    # platform-verified limits (API 2026-07-11): LOW_FITNESS limit=1.0,
+    # HIGH_TURNOVER limit=0.7 — 1.0/0.5 now pass; below-limit values fail
+    assert AlphaMetrics("A", 1.3, 1.0, 0.2, 0.2, 0.1).passes_gates()
+    assert not AlphaMetrics("A", 1.3, 0.9, 0.2, 0.2, 0.1).passes_gates()   # fitness
+    assert AlphaMetrics("A", 1.3, 1.15, 0.5, 0.2, 0.1).passes_gates()
+    assert not AlphaMetrics("A", 1.3, 1.15, 0.8, 0.2, 0.1).passes_gates()  # turnover
     assert not AlphaMetrics("A", 1.3, 1.15, 0.2, 0.2, 0.3).passes_gates()  # drawdown
     assert not AlphaMetrics("A", None, 1.15, 0.2, 0.2, 0.1).passes_gates()  # missing
 
@@ -293,3 +297,25 @@ def test_passed_always_mirrors_brain_verdict():
                       checks=chk(LOW_SHARPE="PASS", LOW_FITNESS="PASS",
                                  CONCENTRATED_WEIGHT="PASS"))
     assert ok.passes_gates() is True
+
+
+def test_warning_checks_do_not_block_the_gate():
+    """REGRESSION (2026-07-11): three EXCELLENT blends (S=2.16-2.39, every
+    metric check PASS) were rejected solely because UNITS came back WARNING —
+    the verdict treated any non-PASS as fail while failing_checks() only lists
+    FAILs, so the rejection showed an EMPTY reason. BRAIN warnings do not block
+    submission: WARNING passes; FAIL still blocks; warnings are surfaced via
+    warning_checks()."""
+    def chk(**kv):
+        return {k: {"result": v} for k, v in kv.items()}
+    m = AlphaMetrics("A", 2.39, 2.35, 0.11, 0.12, 0.04,
+                     checks=chk(LOW_SHARPE="PASS", LOW_FITNESS="PASS",
+                                HIGH_TURNOVER="PASS", CONCENTRATED_WEIGHT="PASS",
+                                UNITS="WARNING", MATCHES_COMPETITION="PASS"))
+    assert m.passes_gates() is True
+    assert m.warning_checks() == ["UNITS"]
+    assert m.failing_checks() == []
+    # FAIL still blocks even alongside warnings
+    bad2 = AlphaMetrics("A", 2.39, 0.5, 0.11, 0.12, 0.04,
+                        checks=chk(LOW_FITNESS="FAIL", UNITS="WARNING"))
+    assert bad2.passes_gates() is False and "LOW_FITNESS" in bad2.failing_checks()

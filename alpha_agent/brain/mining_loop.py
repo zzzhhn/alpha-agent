@@ -484,8 +484,10 @@ async def run_mining_round(
         if cand_rets is not None:
             accepted_returns[alpha_id] = cand_rets
             our_passed[alpha_id] = cand_rets
+        _warns = metrics.warning_checks()
         await store.record_brain_alpha(
             pool, **common, **corr_kw, outcome="passed",
+            detail=("warnings: " + ",".join(_warns)) if _warns else None,
         )
         summary["passed"] += 1
 

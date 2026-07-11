@@ -217,7 +217,7 @@ async def test_smart_retry_flips_turnover_near_miss(applied_db):
     """A candidate failing ONLY on turnover at base settings is re-simulated once
     with higher decay; when the retry clears the gate it's recorded as passed with
     the WINNING (higher-decay) settings."""
-    near_miss = AlphaMetrics("x", sharpe=1.6, fitness=1.2, turnover=0.5,
+    near_miss = AlphaMetrics("x", sharpe=1.6, fitness=1.2, turnover=0.8,
                              returns=0.2, drawdown=0.05)
     client = _FakeBrain([
         {"metrics": near_miss, "pnl": {"records": []}},  # base: turnover 0.5 -> fail

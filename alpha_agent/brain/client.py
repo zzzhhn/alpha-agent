@@ -23,8 +23,11 @@ BRAIN_API_BASE = "https://api.worldquantbrain.com"
 # In-sample gate thresholds (BRAIN's published bars). A candidate must clear all
 # of these before it's worth the SELF_CORRELATION check + surfacing to the user.
 MIN_SHARPE = 1.25
-MIN_FITNESS = 1.1
-MAX_TURNOVER = 0.35
+# Platform-verified limits (API check payloads, 2026-07-11): LOW_FITNESS
+# limit=1.0, HIGH_TURNOVER limit=0.7. These are only the FALLBACK when BRAIN's
+# verdict is absent; the verdict rules when present.
+MIN_FITNESS = 1.0
+MAX_TURNOVER = 0.7
 MAX_DRAWDOWN = 0.15
 # REVERTED 2026-07-11: a 'diversifier' relaxed gate (Sharpe 0.80 / Fitness 0.50,
 # ignoring BRAIN's magnitude checks) produced 4 'passed' rows that BRAIN itself
@@ -105,7 +108,11 @@ class AlphaMetrics:
         results = [c.get("result") for c in checks.values()]
         if any(r in (None, "PENDING") for r in results):
             return None
-        return all(r == "PASS" for r in results)
+        # WARNING does not block submission on BRAIN (2026-07-11: three
+        # EXCELLENT S=2.2-2.4 blends were rejected here solely on
+        # UNITS: WARNING while every metric check PASSed). FAIL blocks;
+        # unknown result values fail closed.
+        return all(r in ("PASS", "WARNING") for r in results)
 
     def passes_gates(
         self,
@@ -132,6 +139,13 @@ class AlphaMetrics:
         if self.drawdown is not None and self.drawdown > max_drawdown:
             return False
         return True
+
+    def warning_checks(self) -> list[str]:
+        """Names of checks BRAIN marked WARNING (submittable, but surfaced
+        so a passed alpha's quirks — e.g. UNITS on constant-mixing blends —
+        are visible at review time)."""
+        return [n for n, c in (self.checks or {}).items()
+                if c.get("result") == "WARNING"]
 
     def failing_checks(self) -> list[str]:
         """Names of the in-sample checks this alpha FAILS — BRAIN's own FAIL
