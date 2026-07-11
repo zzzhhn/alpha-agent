@@ -191,12 +191,15 @@ async def run_mining_round(
     # — add(P, N) dilutes correlation vs the ACTIVE book while stacking
     # performance; parents (unsubmitted) are invisible to official self-corr.
     blend_parents: dict[str, frozenset] = {}
+    parent_family: dict[str, str] = {}
     if family_focus == "blend":
         import random as _random
+        from alpha_agent.brain.evolution import family_of as _fam
         _passed, _near = await store.blend_source_expressions(pool, user_id)
         blends = blend_expressions(_passed, _near, _random.Random(rng_seed), n_candidates)
         candidates = [e for e, _ in blends]
         blend_parents = {e: p for e, p in blends}
+        parent_family = {aid: _fam(px) for px, aid, _ in (_passed + _near) if aid}
         print(f"[blend] {len(candidates)} stitches from {len(_passed)} passed x "
               f"{len(_near)} near-misses", flush=True)
     else:
@@ -388,14 +391,28 @@ async def run_mining_round(
             else (1.0, None)
         )
 
-        too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
-        too_redundant = marginal < _MARGINAL_MIN
+        # Blend candidates (user rule, 2026-07-11): the OFFICIAL self-corr test is
+        # the ONLY correlation gate — parents are unsubmitted, so the local
+        # adjusted/marginal comparisons against our own book do not reflect what
+        # BRAIN checks at submission. adj/marginal are still recorded for display.
+        _is_blend = expr in blend_parents
+        if _is_blend:
+            too_correlated = (official or 0.0) >= _SELF_CORR_THRESHOLD
+            too_redundant = False
+        else:
+            too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
+            too_redundant = marginal < _MARGINAL_MIN
 
         # Escape hatch (BRAIN's own submit rule): a candidate correlated >=0.7
         # with an existing alpha is still submittable if its Sharpe beats that
         # alpha's by >=10%. Apply the same logic locally when the culprit is one
         # of OUR mined alphas with a known Sharpe — an upgrade-in-place.
-        if too_correlated and not too_redundant and adj_with and metrics.sharpe:
+        if (too_correlated and not too_redundant and adj_with and metrics.sharpe
+                and (official or 0.0) < _SELF_CORR_THRESHOLD):
+            # Hatch applies only when the ADJUSTED corr is the binding side — an
+            # OFFICIAL-corr flag is vs an unknown ACTIVE alpha; BRAIN arbitrates
+            # its own 10%-better rule at submission (2026-07-11: the hatch was
+            # clearing official-0.79 blends using the unrelated adjusted culprit).
             culprit_sharpe = await store.sharpe_of_alpha_id(pool, user_id, adj_with)
             if culprit_sharpe and metrics.sharpe > 1.10 * float(culprit_sharpe):
                 print(f"[hatch] {expr[:44]!r} corr={adj:.2f} vs {adj_with} but "
@@ -468,7 +485,9 @@ async def run_mining_round(
         # each orthogonal family at two, so a round yields a DIVERSIFIED book, not N
         # value clones (miner-side equivalent of "submit one per family"). A
         # saturated-family candidate is flagged, not passed.
-        if family_counts[fam] >= caps.get(fam, 2):
+        _fam_parents = sum(1 for p in blend_parents.get(expr, ())
+                           if parent_family.get(p) == fam)
+        if family_counts[fam] - _fam_parents >= caps.get(fam, 2):
             print(f"[flag] {expr[:44]!r} family-saturated: {fam} "
                   f"({family_counts[fam]})", flush=True)
             await store.record_brain_alpha(
