@@ -81,8 +81,16 @@ async def _main() -> int:
     try:
         await client.authenticate()
         c = client._client
-        r = await c.get("/users/self/alphas", params={"limit": 8, "offset": 0})
-        results = r.json().get("results", []) if r.status_code == 200 else []
+        target = [x for x in os.environ.get("BRAIN_DIAG_ALPHA_IDS", "").split(",") if x.strip()]
+        if target:
+            results = []
+            for aid in target[:6]:
+                ra = await c.get(f"/alphas/{aid.strip()}")
+                if ra.status_code == 200:
+                    results.append(ra.json())
+        else:
+            r = await c.get("/users/self/alphas", params={"limit": 8, "offset": 0})
+            results = r.json().get("results", []) if r.status_code == 200 else []
         print(f"=== user has >= {len(results)} alphas (inspecting up to 3) ===", flush=True)
         for a in results[:6]:
             aid = a.get("id")

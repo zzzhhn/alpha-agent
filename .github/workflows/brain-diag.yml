@@ -4,7 +4,11 @@
 name: brain-diag
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      alpha_ids:
+        description: comma-separated alpha ids to inspect (optional)
+        default: ""
 
 jobs:
   diag:
@@ -24,4 +28,5 @@ jobs:
           BRAIN_PASSWORD: ${{ secrets.BRAIN_PASSWORD }}
           BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
+          BRAIN_DIAG_ALPHA_IDS: ${{ github.event.inputs.alpha_ids || '' }}
         run: python scripts/brain_diag.py
