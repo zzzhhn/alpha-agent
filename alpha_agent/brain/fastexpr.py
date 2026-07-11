@@ -606,10 +606,61 @@ def _m_quality(rng: random.Random) -> dict:
     correlated with value — hedges the saturated value book."""
     # gross_profit_to_assets_ratio: model77, coverage 1.0 — the exact Novy-Marx
     # TTM GP/A, pre-built (raw gross_profit is NOT a valid field; sim-errored).
-    leg = _op("rank", _fld(rng.choice((
-        "gross_profit_to_assets_ratio", "gross_profit_margin_ttm_2"))))
+    # gross_profit_margin_ttm_2 dropped: flat S=0.00/grade UNKN in two rounds.
+    leg = _op("rank", _fld("gross_profit_to_assets_ratio"))
     return _op("group_rank" if rng.random() < 0.5 else "group_neutralize",
                leg, _fld(rng.choice(("industry", "subindustry"))))
+
+
+def _m_frontier_composite(rng: random.Random) -> dict:
+    """Cross-mechanism rank-sum composite — the DB-proven path over the bar:
+    7 of our 14 REAL passers are add() two-leg composites (top one S=2.24),
+    while single frontier legs plateau at ~0.9-1.1. Two near-uncorrelated ~0.9
+    legs sum to ~1.25+ (rank scale is comparable across legs). Legs use the
+    history-pinned money signs; pairs prefer cross-dataset combinations
+    (option-surface x price legs share nothing mechanically)."""
+    def leg_iv_mom() -> dict:  # +0.94/+0.93 twice (plain)
+        f = rng.choice(_IV_MOM_FIELDS)
+        return _op("rank", _op("ts_decay_linear",
+                               _op("ts_delta", _fld(f), _lit(25)), _lit(20)))
+    def leg_iv_slope() -> dict:  # +1.12 best (plain)
+        short, long_ = rng.choice(_IV_TENOR_PAIRS)
+        return _op("ts_decay_linear",
+                   _op("rank", _op("ts_zscore",
+                                   _op("subtract", _fld(short), _fld(long_)),
+                                   _lit(60))), _lit(15))
+    def leg_seasonality() -> dict:  # +0.95 twice (REVERSED = contrarian)
+        def mo(lag: int) -> dict:
+            m = _op("divide", _op("ts_delta", _fld("close"), _lit(21)),
+                    _op("ts_delay", _fld("close"), _lit(21)))
+            return _op("ts_delay", m, _lit(lag))
+        return _op("reverse",
+                   _op("rank", _op("add", _op("add", mo(231), mo(483)), mo(735))))
+    def leg_overnight() -> dict:  # +0.87 best (plain)
+        on = _op("subtract", _op("divide", _fld("open"),
+                                 _op("ts_delay", _fld("close"), _lit(1))), _lit(1))
+        return _op("rank", _op("ts_mean", on, _lit(21)))
+    def leg_vol_shock() -> dict:  # +1.40 best (fails only Fitness solo)
+        return _op("rank", _op("multiply",
+                               _op("ts_rank", _op("divide", _fld("volume"),
+                                                  _fld("adv20")), _lit(20)),
+                               _op("ts_rank", _op("reverse",
+                                                  _op("ts_delta", _fld("close"), _lit(7))),
+                                   _lit(8))))
+    pool = {
+        "iv_mom": leg_iv_mom, "iv_slope": leg_iv_slope,
+        "seasonality": leg_seasonality, "overnight": leg_overnight,
+        "vol_shock": leg_vol_shock,
+    }
+    option_legs = {"iv_mom", "iv_slope"}
+    a = rng.choice(sorted(pool))
+    # prefer cross-dataset pairs: an option leg pairs with a price leg
+    others = [k for k in sorted(pool) if k != a
+              and not (k in option_legs and a in option_legs)]
+    b = rng.choice(others)
+    tree = _op("add", pool[a](), pool[b]())
+    return _op("group_neutralize", tree,
+               _fld(rng.choice(("industry", "subindustry"))))
 
 
 # Registry: mechanism name -> generator. The frontier round cycles mechanisms
@@ -951,10 +1002,14 @@ def generate_brain_candidates(
         r = rng.random()
         curated = False  # curated template trees skip the GA depth cap
         if family_focus == "frontier":
-            # Research-derived motif round: cycle mechanisms (niche quota).
-            _name, _fn = _frontier_order[_frontier_i % len(_frontier_order)]
-            _frontier_i += 1
-            tree = _fn(rng)
+            # 40% cross-mechanism composites (the DB-proven route over the bar);
+            # 60% single-mechanism cycle (keeps per-mechanism info flowing).
+            if rng.random() < 0.40:
+                tree = _m_frontier_composite(rng)
+            else:
+                _name, _fn = _frontier_order[_frontier_i % len(_frontier_order)]
+                _frontier_i += 1
+                tree = _fn(rng)
             curated = True
         elif family_focus == "options":
             # Family-constrained round: mine ONLY the options-IV family (highest
