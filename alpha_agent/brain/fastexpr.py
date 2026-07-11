@@ -140,10 +140,10 @@ BRAIN_SAFE_OPS = frozenset({
     # trade_when(cond, alpha, exit) gates the alpha to only trade when liquid;
     # greater/less build the trigger conditions (function form of > / <).
     "trade_when", "greater", "less",
-    # Frontier motifs (P1 research upgrade, all verified in the /operators catalog
-    # and positional-arg safe): rolling extrema for RSV/stochastic shapes,
-    # covariance for rank-cov divergence, last_diff_value for QoQ deltas.
-    "ts_min", "ts_max", "ts_covariance", "last_diff_value",
+    # Frontier motifs (P1). VERIFIED against the API /operators dump (GH run
+    # 29000147527) — NOT the hand-curated wq_catalog json, which listed ts_min/
+    # ts_max that BRAIN rejects ("unknown operator", 2026-07-11 sim_error).
+    "ts_covariance", "last_diff_value",
 })
 
 
@@ -514,13 +514,12 @@ def _m_vol_shock(rng: random.Random) -> dict:
 def _m_rsv_corr(rng: random.Random) -> dict:
     """Stochastic-position x volume (Alpha101 #55 / qlib RSV): heavy volume at
     range extremes -> reversal."""
+    # ts_rank(close, w) IS the stochastic position-in-range (BRAIN has no
+    # ts_min/ts_max — API-verified; the (close-min)/(max-min) form sim_errors).
     w = rng.choice((12, 20))
-    rsv = _op("divide",
-              _op("subtract", _fld("close"), _op("ts_min", _fld("low"), _lit(w))),
-              _op("subtract", _op("ts_max", _fld("high"), _lit(w)),
-                  _op("ts_min", _fld("low"), _lit(w))))
     return _op("reverse",
-               _op("ts_corr", _op("rank", rsv), _op("rank", _fld("volume")), _lit(6)))
+               _op("ts_corr", _op("ts_rank", _fld("close"), _lit(w)),
+                   _op("rank", _fld("volume")), _lit(6)))
 
 
 def _m_resid_mom(rng: random.Random) -> dict:
@@ -544,7 +543,10 @@ def _m_seasonality(rng: random.Random) -> dict:
                 _op("ts_delay", _fld("close"), _lit(21)))
         return _op("ts_delay", m, _lit(lag))
     avg = _op("add", _op("add", mo(231), mo(483)), mo(735))
-    return _op("group_neutralize", _op("rank", avg), _fld("industry"))
+    leg = _op("rank", avg)
+    if rng.random() < 0.85:
+        leg = _op("reverse", leg)  # 2026-07-11: plain scored -0.89 => contrarian wins
+    return _op("group_neutralize", leg, _fld("industry"))
 
 
 def _m_overnight(rng: random.Random) -> dict:
@@ -567,9 +569,11 @@ def _m_iv_term(rng: random.Random) -> dict:
     dimension). Slope innovations via ts_zscore."""
     short, long_ = rng.choice(_IV_TENOR_PAIRS)
     slope = _op("subtract", _fld(short), _fld(long_))
-    leg = _op("rank", _op("ts_zscore", slope, _lit(60)))
-    if rng.random() < 0.5:
-        leg = _op("reverse", leg)  # sign unknown a priori — explore both
+    # ts_decay_linear: the raw slope churned at 0.81 turnover (cap 0.35)
+    leg = _op("ts_decay_linear", _op("rank", _op("ts_zscore", slope, _lit(60))),
+              _lit(15))
+    if rng.random() < 0.15:
+        leg = _op("reverse", leg)  # 2026-07-11: reversed scored -1.24 => plain wins
     return _op("group_neutralize", leg, _fld(rng.choice(("sector", "subindustry"))))
 
 
@@ -579,8 +583,8 @@ def _m_iv_mom(rng: random.Random) -> dict:
     f = rng.choice(_IV_MOM_FIELDS)
     leg = _op("rank", _op("ts_decay_linear",
                           _op("ts_delta", _fld(f), _lit(25)), _lit(20)))
-    if rng.random() < 0.5:
-        leg = _op("reverse", leg)
+    if rng.random() < 0.15:
+        leg = _op("reverse", leg)  # 2026-07-11: reversed scored -1.20 => plain wins
     return _op("group_neutralize", leg, _fld("subindustry"))
 
 
@@ -600,7 +604,10 @@ def _m_quality(rng: random.Random) -> dict:
     """Gross profitability GP/A (Novy-Marx 2013, 'the other side of value'):
     the quality ratio with the strongest large-cap evidence, NEGATIVELY
     correlated with value — hedges the saturated value book."""
-    leg = _op("rank", _op("divide", _fld("gross_profit"), _fld("assets")))
+    # gross_profit_to_assets_ratio: model77, coverage 1.0 — the exact Novy-Marx
+    # TTM GP/A, pre-built (raw gross_profit is NOT a valid field; sim-errored).
+    leg = _op("rank", _fld(rng.choice((
+        "gross_profit_to_assets_ratio", "gross_profit_margin_ttm_2"))))
     return _op("group_rank" if rng.random() < 0.5 else "group_neutralize",
                leg, _fld(rng.choice(("industry", "subindustry"))))
 
