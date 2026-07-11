@@ -77,11 +77,24 @@ def diagnose(metrics) -> Optional[str]:
         return "turnover"
 
     sh = metrics.sharpe
+    fi = metrics.fitness
+    # Sharpe-strong / Fitness-weak (e.g. vol_shock 2026-07-11: S=1.40, F=0.70,
+    # T=0.32): Fitness = Sharpe*sqrt(|returns|/max(turnover, 0.125)), so cutting
+    # turnover via decay lifts Fitness by sqrt(T/0.125) at Sharpe held. Eligible
+    # when that ceiling clears the bar — a PHYSICS test, not the generic 70%
+    # floor (which wrongly excluded F=0.70).
+    to_ = metrics.turnover
+    if (sh is not None and sh >= MIN_SHARPE
+            and (_failed(metrics, "LOW_FITNESS") or (fi is not None and fi < MIN_FITNESS))
+            and fi is not None and fi > 0 and to_ is not None and to_ > 0.125):
+        potential = fi * (to_ / 0.125) ** 0.5
+        if potential >= MIN_FITNESS:
+            return "fitness_turnover"
+
     if (_failed(metrics, "LOW_SHARPE") or (sh is not None and sh < MIN_SHARPE)) \
             and sh is not None and sh >= MIN_SHARPE * _METRIC_FLOOR:
         return "sharpe"
 
-    fi = metrics.fitness
     if (_failed(metrics, "LOW_FITNESS") or (fi is not None and fi < MIN_FITNESS)) \
             and fi is not None and fi >= MIN_FITNESS * _METRIC_FLOOR:
         return "fitness"
@@ -97,6 +110,10 @@ def retry_variant(base: dict, problem: Optional[str]) -> Optional[dict]:
     """A single settings variant targeted at the diagnosed problem (or None)."""
     if problem == "turnover":
         return {**base, "decay": min(int(base.get("decay", 0)) + 12, 32)}
+    if problem == "fitness_turnover":
+        # Aggressive smoothing: halve-ish the turnover so Fitness gains ~sqrt(2)x
+        # while the (already-clearing) Sharpe absorbs the small decay drag.
+        return {**base, "decay": min(int(base.get("decay", 0)) + 16, 40)}
     if problem in ("sharpe", "fitness"):
         return {**base, "universe": "TOP1000"}
     if problem == "drawdown":

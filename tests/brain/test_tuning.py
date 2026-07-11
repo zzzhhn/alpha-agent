@@ -58,3 +58,30 @@ def test_retry_variant_targets_problem():
     assert t.retry_variant(base, "fitness")["universe"] == "TOP1000"
     assert t.retry_variant(base, "drawdown")["truncation"] == 0.04
     assert t.retry_variant(base, None) is None
+
+
+def test_fitness_turnover_retry_for_sharpe_strong_candidates():
+    """REGRESSION (vol_shock 2026-07-11: S=1.40 F=0.70 T=0.32 got NO retry —
+    the generic 70% floor excluded it): a Sharpe-clearing candidate whose
+    Fitness ceiling (fi * sqrt(turnover/0.125)) clears the bar is diagnosed
+    fitness_turnover and retried with a decay bump, the lever that actually
+    moves Fitness."""
+    from alpha_agent.brain.client import AlphaMetrics
+    from alpha_agent.brain.tuning import diagnose, retry_variant
+
+    def chk(**kv):
+        return {k: {"result": v} for k, v in kv.items()}
+    m = AlphaMetrics("A", 1.40, 0.70, 0.32, 0.08, 0.04,
+                     checks=chk(LOW_SHARPE="PASS", LOW_FITNESS="FAIL"))
+    assert diagnose(m) == "fitness_turnover"
+    v = retry_variant({"decay": 12}, "fitness_turnover")
+    assert v is not None and v["decay"] == 28
+    # No headroom: turnover already at the 0.125 fitness floor -> decay cannot
+    # lift Fitness -> not diagnosed as fitness_turnover.
+    flat = AlphaMetrics("A", 1.40, 0.70, 0.12, 0.08, 0.04,
+                        checks=chk(LOW_SHARPE="PASS", LOW_FITNESS="FAIL"))
+    assert diagnose(flat) != "fitness_turnover"
+    # Weak Sharpe stays on the old path (universe retry), not the decay path.
+    weak = AlphaMetrics("A", 1.10, 0.90, 0.32, 0.08, 0.04,
+                        checks=chk(LOW_SHARPE="FAIL", LOW_FITNESS="FAIL"))
+    assert diagnose(weak) != "fitness_turnover"
