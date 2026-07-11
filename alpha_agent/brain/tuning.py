@@ -141,6 +141,17 @@ def diagnose(metrics) -> Optional[str]:
             and fi is not None and fi >= MIN_FITNESS * _METRIC_FLOOR:
         return "fitness"
 
+    # Degenerate empty book (2026-07-11 gp/a case: metrics all zero, grade
+    # UNKNOWN, LONGCOUNT/SHORTCOUNT=0 across all years): BRAIN accepted the
+    # expression but never built positions. Says nothing about the signal —
+    # retry once on the PROVEN config (SUBINDUSTRY / decay 12).
+    if (metrics.sharpe == 0 and (metrics.turnover or 0) == 0
+            and (metrics.returns or 0) == 0):
+        return "degenerate"
+
+    if _failed(metrics, "CONCENTRATED_WEIGHT"):
+        return "concentration"
+
     dd = metrics.drawdown
     if dd is not None and dd > MAX_DRAWDOWN and dd <= MAX_DRAWDOWN * _DRAWDOWN_SLACK:
         return "drawdown"
@@ -160,4 +171,9 @@ def retry_variant(base: dict, problem: Optional[str]) -> Optional[dict]:
         return {**base, "universe": "TOP1000"}
     if problem == "drawdown":
         return {**base, "truncation": 0.04}
+    if problem == "concentration":
+        # CONCENTRATED_WEIGHT: tighter truncation caps single-name weight
+        return {**base, "truncation": 0.04}
+    if problem == "degenerate":
+        return {**base, "neutralization": "SUBINDUSTRY", "decay": 12}
     return None

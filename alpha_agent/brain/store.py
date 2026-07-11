@@ -292,6 +292,9 @@ async def scored_expressions(
     rows = await pool.fetch(
         "SELECT expression, sharpe FROM brain_alphas "
         "WHERE user_id=$1 AND sharpe IS NOT NULL "
+        # degenerate empty-book sims (all-zero, no positions) say nothing about
+        # the field's signal — excluding them keeps dead-field marking honest
+        "AND NOT (sharpe = 0 AND coalesce(turnover, 0) = 0) "
         "ORDER BY created_at DESC LIMIT $2",
         user_id, min(max(int(limit), 1), 2000),
     )

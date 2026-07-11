@@ -120,3 +120,25 @@ def test_vary_settings_explores_only_unproven_families():
     # deterministic: same rng seed, same result
     assert (vary_settings(base, "iv_term", random.Random(7))
             == vary_settings(base, "iv_term", random.Random(7)))
+
+
+def test_degenerate_and_concentration_retries():
+    """Empty-book sims (all-zero metrics, grade UNKNOWN) retry on the proven
+    SUBINDUSTRY/decay-12 config; CONCENTRATED_WEIGHT retries with tighter
+    truncation (the 2026-07-11 S=1.56 composite failed exactly this check
+    with no retry path)."""
+    from alpha_agent.brain.client import AlphaMetrics
+    from alpha_agent.brain.tuning import diagnose, retry_variant
+
+    def chk(**kv):
+        return {k: {"result": v} for k, v in kv.items()}
+    empty = AlphaMetrics("A", 0.0, None, 0.0, 0.0, 0.0,
+                         checks=chk(LOW_SHARPE="FAIL", LOW_TURNOVER="FAIL"))
+    assert diagnose(empty) == "degenerate"
+    v = retry_variant({"neutralization": "INDUSTRY", "decay": 4}, "degenerate")
+    assert v["neutralization"] == "SUBINDUSTRY" and v["decay"] == 12
+    conc = AlphaMetrics("A", 1.56, 0.88, 0.23, 0.07, 0.07,
+                        checks=chk(LOW_SHARPE="PASS", CONCENTRATED_WEIGHT="FAIL"))
+    # fitness_turnover outranks concentration here (Sharpe clears, F liftable)
+    assert diagnose(conc) in ("fitness_turnover", "concentration")
+    assert retry_variant({}, "concentration")["truncation"] == 0.04
