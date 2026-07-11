@@ -173,7 +173,7 @@ export default function BasketEdgeStrip() {
   return (
     <div className="mx-4 mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2">
       <div className="flex items-center gap-1.5">
-        <span className="font-tm-mono text-[11px] font-semibold uppercase tracking-wider text-tm-accent">
+        <span className="font-tm-mono text-[12px] font-semibold uppercase tracking-wider text-tm-accent">
           {title}
         </span>
         <HoverTip content={t(locale, "edge.tip")} placement="bottom" width={272}>

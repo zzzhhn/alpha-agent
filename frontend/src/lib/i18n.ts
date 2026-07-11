@@ -1122,6 +1122,14 @@ const translations = {
     "picks_table.dim_flow": "资金流 Flow（期权 / 盘前 / 宏观）",
     "picks_table.partial_badge": "partial",
     "picks_table.partial_tooltip": "仅日线 pipeline 数据，无 fast 因子，可能最旧 1 天",
+    /* Column header tooltips */
+    "picks_table.col_rank_tip": "当前排名。综合分越高排名越靠前，做空榜则综合分越低排名越靠前。",
+    "picks_table.col_rating_tip": "五档评级。综合分 >1.5σ = BUY，>0.5σ = OW，≥-0.5σ = HOLD，≥-1.5σ = UW，其余 = SELL。含迟滞缓冲带以避免频繁来回跳动。",
+    "picks_table.col_suggestion_tip": "根据评级和历史方向命中率派生的操作建议。命中率接近随机时标注警告符号。",
+    "picks_table.col_composite_tip": "综合分（σ）。将所有信号的 z-score 按自适应权重加权融合后的最终得分，衡量多空方向强度。",
+    "picks_table.col_confidence_tip": "四个时间窗口（近 5 个交易日，近 1 个月，近 1 年，历史全部）的方向命中率。定义：引擎当日预测方向与该股次一交易日实际涨跌是否一致。约 50% 是接近市场中性信号的正常水平。样本不足时显示「—」。",
+    "picks_table.col_grades_tip": "六个维度的字母评级（动量，技术面，情绪，催化剂，内部人，资金流）。从各维度 breakdown z-score 映射到 A+ 至 F，方便一眼识别每个维度的强弱。",
+    "picks_table.col_drivers_drags_tip": "对综合分贡献最大的正向信号（驱动）和负向信号（拖累），最多各 3 个。",
     /* ── Evolution (演化监控) ───────────────────────────────────────── */
     "evolution.pane.ic_trend": "信号 IC 趋势",
     "evolution.pane.calibration": "置信度校准",
@@ -2330,6 +2338,14 @@ const translations = {
     "picks_table.dim_flow": "Flow (options / premarket / macro)",
     "picks_table.partial_badge": "partial",
     "picks_table.partial_tooltip": "Slow-only row: daily pipeline data, no fast factors, may be up to ~1 day old",
+    /* Column header tooltips */
+    "picks_table.col_rank_tip": "Current rank. Higher composite score means a better rank on the long board; the short board is ranked by lowest composite first.",
+    "picks_table.col_rating_tip": "Five-tier rating. Composite >1.5σ = BUY, >0.5σ = OW, ≥-0.5σ = HOLD, ≥-1.5σ = UW, otherwise SELL. A hysteresis band absorbs small oscillations near tier boundaries.",
+    "picks_table.col_suggestion_tip": "Action label derived from the rating tier and calibrated historical directional hit-rate. A warning icon appears when the hit-rate is near coin-flip.",
+    "picks_table.col_composite_tip": "Composite score (σ). Weighted fusion of all signal z-scores using adaptive weights. Measures directional conviction: positive = bullish, negative = bearish.",
+    "picks_table.col_confidence_tip": "Directional hit-rate across four trailing windows (past 5 trading days, past month, past year, all-time). Definition: did the engine's predicted direction for this stock match the actual next-trading-day move? ~50% is normal for a near-market-neutral signal. Windows with too few realized predictions show \"—\".",
+    "picks_table.col_grades_tip": "Letter grades (A+ to F) for six dimensions: Momentum, Technical, Sentiment, Catalyst, Insider, Flow. Each grade is mapped from the dimension's breakdown z-score against the cross-sectional distribution.",
+    "picks_table.col_drivers_drags_tip": "The signals contributing most positively (drivers) and most negatively (drags) to the composite score. Up to 3 each.",
     /* ── Evolution ──────────────────────────────────────────────────── */
     "evolution.pane.ic_trend": "SIGNAL IC TREND",
     "evolution.pane.calibration": "CONFIDENCE CALIBRATION",
