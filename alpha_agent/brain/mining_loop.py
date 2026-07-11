@@ -19,13 +19,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 from alpha_agent.brain import store
-from alpha_agent.brain.client import (
-    BrainClient,
-    BrainSimulationError,
-    MAX_DRAWDOWN_DIVERSIFIER,
-    MIN_FITNESS_DIVERSIFIER,
-    MIN_SHARPE_DIVERSIFIER,
-)
+from alpha_agent.brain.client import BrainClient, BrainSimulationError
 from alpha_agent.brain.fastexpr import build_field_hints, generate_brain_candidates
 from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
 from alpha_agent.brain.tuning import base_settings_for, diagnose, retry_variant
@@ -57,12 +51,9 @@ _MARGINAL_MIN = 0.15
 # DIVERSIFIER) but a MUCH stronger orthogonality requirement — a Sharpe-0.8 factor
 # uncorrelated to the value/options book earns its place by marginal contribution.
 # value/options/other keep the strong single-alpha bars.
-_DIVERSIFIER_FAMILIES = frozenset({
-    "score", "sentiment", "lowvol", "momentum", "revision",
-    # Frontier mechanisms: value-orthogonal by construction, same relaxed bar
-    "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality",
-})
-_MARGINAL_MIN_DIVERSIFIER = 0.40
+# REVERTED 2026-07-11: the diversifier relaxed bar produced BRAIN-unsubmittable
+# "passed" rows (user-verified on the platform). One gate for all families:
+# BRAIN's authoritative checks.
 # #1/#2 book-saturation cap: passed-but-unsubmitted representatives kept per
 # economic family. Value collapses to ONE (it saturates first and co-moves);
 # orthogonal families keep two. Beyond the cap, further passers are flagged as
@@ -279,31 +270,20 @@ async def run_mining_round(
             summary["sim_error"] += 1
             continue
 
-        # Family-aware gate: value-orthogonal diversifier families clear a LOWER
-        # Sharpe/Fitness bar but a STRONGER orthogonality bar; the rest keep the
-        # full single-alpha bars. Computed once here, reused by every gate below.
         fam = family_of(expr)
-        relaxed = fam in _DIVERSIFIER_FAMILIES
-        gate_kw = (
-            {"relaxed_magnitude": True, "min_sharpe": MIN_SHARPE_DIVERSIFIER,
-             "min_fitness": MIN_FITNESS_DIVERSIFIER,
-             "max_drawdown": MAX_DRAWDOWN_DIVERSIFIER}
-            if relaxed else {}
-        )
-        marginal_min = _MARGINAL_MIN_DIVERSIFIER if relaxed else _MARGINAL_MIN
 
         # Smart retry: a NEAR-miss on a settings-fixable check gets ONE targeted
         # re-simulation (bounded per round via retry_budget). If the variant clears
         # the gate it replaces the base result, and the WINNING settings are what
         # we store — so the review UI shows the config that actually worked.
-        if not metrics.passes_gates(**gate_kw) and retry_budget > 0:
+        if not metrics.passes_gates() and retry_budget > 0:
             variant = retry_variant(settings, diagnose(metrics))
             if variant is not None:
                 retry_budget -= 1
                 did_retry = True
                 try:
                     aid2, m2 = await _simulate_one(client, expr, variant, sim_timeout_s)
-                    if m2.passes_gates(**gate_kw):
+                    if m2.passes_gates():
                         alpha_id, metrics, settings = aid2, m2, variant
                         print(
                             f"[tune] fixed {expr[:44]!r} "
@@ -322,11 +302,11 @@ async def run_mining_round(
             retried=did_retry, batch_started_at=batch_started_at,
         )
 
-        if not metrics.passes_gates(**gate_kw):
+        if not metrics.passes_gates():
             await store.record_brain_alpha(
                 pool, **common, outcome="rejected",
                 fail_checks=",".join(metrics.failing_checks()) or None,
-                detail=f"below in-sample gates ({'diversifier' if relaxed else 'strong'} bar)",
+                detail="below in-sample gates (BRAIN submission bars)",
             )
             summary["rejected"] += 1
             continue
@@ -373,7 +353,7 @@ async def run_mining_round(
         )
 
         too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
-        too_redundant = marginal < marginal_min
+        too_redundant = marginal < _MARGINAL_MIN
 
         # Escape hatch (BRAIN's own submit rule): a candidate correlated >=0.7
         # with an existing alpha is still submittable if its Sharpe beats that
@@ -403,7 +383,7 @@ async def run_mining_round(
                 r3 = pnl_to_daily_returns(await client.get_pnl(aid3))
                 adj3, adj3_with = (max_corr_against(r3, accepted_returns)
                                    if r3 is not None and accepted_returns else (0.0, None))
-                if m3.passes_gates(**gate_kw) and adj3 < _SELF_CORR_THRESHOLD:
+                if m3.passes_gates() and adj3 < _SELF_CORR_THRESHOLD:
                     print(f"[axis] {expr[:44]!r} rescued: {alt['universe']}/"
                           f"{alt['neutralization']} corr {adj:.2f}->{adj3:.2f}", flush=True)
                     alpha_id, metrics, settings = aid3, m3, alt
@@ -426,7 +406,7 @@ async def run_mining_round(
                                   returns=m3.returns, margin=m3.margin,
                                   grade=m3.grade, retried=True)
                     too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
-                    too_redundant = marginal < marginal_min
+                    too_redundant = marginal < _MARGINAL_MIN
             except Exception:  # noqa: BLE001 — a failed rescue keeps the flag
                 pass
 
@@ -435,7 +415,7 @@ async def run_mining_round(
                 f"self-corr official={official} adj={adj:.2f} vs {adj_with}"
                 if too_correlated
                 else f"low marginal contribution {marginal:.2f} "
-                f"(<{marginal_min}) — spanned by basket ({marginal_with})"
+                f"(<{_MARGINAL_MIN}) — spanned by basket ({marginal_with})"
             )
             print(
                 f"[flag] {expr[:44]!r} corr={adj:.2f} marginal={marginal:.2f} "

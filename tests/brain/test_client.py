@@ -272,36 +272,24 @@ def test_passes_gates_enforces_all_thresholds():
     assert not AlphaMetrics("A", None, 1.15, 0.2, 0.2, 0.1).passes_gates()  # missing
 
 
-def test_relaxed_magnitude_gate_for_diversifiers():
-    """Value-orthogonal diversifier families clear a lower Sharpe/Fitness bar via
-    relaxed_magnitude: BRAIN's magnitude checks (LOW_SHARPE / LOW_FITNESS /
-    LOW_SUB_UNIVERSE_SHARPE) are ignored, its STRUCTURAL checks (turnover /
-    concentration) are still honored, and the caller's lower local bars apply."""
+def test_passed_always_mirrors_brain_verdict():
+    """REGRESSION (2026-07-11): a 'diversifier' relaxed gate once let S=0.85-1.40
+    factors with FAILING BRAIN magnitude checks record outcome='passed' — the
+    user verified on the platform they were NOT submittable (grade INFERIOR).
+    'passed' must mirror BRAIN's own verdict: any BRAIN check FAIL => not passed,
+    regardless of how good the metrics look locally."""
     def chk(**kv):
         return {k: {"result": v} for k, v in kv.items()}
-    # Sharpe 0.87: BRAIN fails the magnitude checks, structural checks pass.
-    m = AlphaMetrics("A", 0.87, 0.60, 0.10, 0.05, 0.08,
-                     checks=chk(LOW_SHARPE="FAIL", LOW_FITNESS="FAIL",
-                                LOW_SUB_UNIVERSE_SHARPE="FAIL",
-                                HIGH_TURNOVER="PASS", CONCENTRATED_WEIGHT="PASS"))
-    assert m.passes_gates() is False  # strong bar (value/options) rejects
-    assert m.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
-                          min_fitness=0.50) is True  # diversifier bar accepts
-    # A structural FAIL (concentration) is honored even in relaxed mode.
-    bad = AlphaMetrics("A", 0.87, 0.60, 0.10, 0.05, 0.08,
-                       checks=chk(LOW_SHARPE="FAIL", CONCENTRATED_WEIGHT="FAIL"))
-    assert bad.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
-                            min_fitness=0.50) is False
-    # Below the diversifier Sharpe bar still rejects.
-    low = AlphaMetrics("A", 0.50, 0.30, 0.10, 0.05, 0.08,
-                       checks=chk(CONCENTRATED_WEIGHT="PASS"))
-    assert low.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
-                            min_fitness=0.50) is False
-    # Drawdown 0.22 (a 0.90-Sharpe composite killed on 2026-07-10): rejected at
-    # the default 0.15 cap, accepted at the diversifier 0.25 cap.
-    dd = AlphaMetrics("A", 0.90, 0.81, 0.10, 0.05, 0.22,
-                      checks=chk(LOW_SHARPE="FAIL", CONCENTRATED_WEIGHT="PASS"))
-    assert dd.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
-                           min_fitness=0.50) is False
-    assert dd.passes_gates(relaxed_magnitude=True, min_sharpe=0.80,
-                           min_fitness=0.50, max_drawdown=0.25) is True
+    # vol_shock shape: Sharpe 1.40 clears OUR bar but BRAIN fails LOW_FITNESS
+    m = AlphaMetrics("A", 1.40, 0.70, 0.32, 0.08, 0.04,
+                     checks=chk(LOW_SHARPE="PASS", LOW_FITNESS="FAIL",
+                                CONCENTRATED_WEIGHT="PASS"))
+    assert m.passes_gates() is False
+    # passes_gates no longer accepts a relaxed-magnitude mode at all
+    import inspect
+    assert "relaxed_magnitude" not in inspect.signature(m.passes_gates).parameters
+    # BRAIN all-PASS is authoritative even when a local threshold would object
+    ok = AlphaMetrics("A", 1.30, 1.02, 0.20, 0.10, 0.05,
+                      checks=chk(LOW_SHARPE="PASS", LOW_FITNESS="PASS",
+                                 CONCENTRATED_WEIGHT="PASS"))
+    assert ok.passes_gates() is True
