@@ -1254,6 +1254,8 @@ const translations = {
     "sim.estimated_cost": "预计成本",
     "sim.available_cash": "可用现金",
     "sim.account.tab": "账户概况",
+    "sim.modal_title": "模拟仓",
+    "sim.open_btn": "模拟仓",
   },
   en: {
     "stage.data": "Data Collection",
@@ -2499,6 +2501,8 @@ const translations = {
     "sim.estimated_cost": "Est. Cost",
     "sim.available_cash": "Available Cash",
     "sim.account.tab": "Overview",
+    "sim.modal_title": "模拟仓 · Paper Trading",
+    "sim.open_btn": "Paper Trading",
   },
 } as const;
 

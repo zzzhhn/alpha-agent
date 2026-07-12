@@ -13,7 +13,7 @@ import {
   type RatingCard,
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
-import PaperTab from "./PaperTab";
+import PaperTradingModal from "./PaperTradingModal";
 import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
 import ConvictionBand from "./ConvictionBand";
@@ -58,16 +58,12 @@ export default function PicksBrowser({
   // never surfaces). Local state — not persisted; each visit starts on
   // the long board.
   const [side, setSide] = useState<PicksSide>("long");
-  const [activeMainTab, setActiveMainTab] = useState<"picks" | "paper">("picks");
+  const [paperOpen, setPaperOpen] = useState(false);
   const [simPositions, setSimPositions] = useState<ReadonlyMap<string, number>>(new Map());
-  // paperCash starts at 0; updated when PaperTab propagates account data.
-  const [paperCash, setPaperCash] = useState(0);
+  const [paperCash] = useState(0);
 
   const handlePositionsChange = useCallback((positions: ReadonlyMap<string, number>) => {
     setSimPositions(positions);
-    // Cash is not in the positions map; suppress unused-set warning by
-    // reading the setter only here. Cash propagation is a V2 enhancement.
-    void setPaperCash;
   }, []);
 
   const { locale } = useLocale();
@@ -307,29 +303,19 @@ export default function PicksBrowser({
             <TmStatusPill tone="err">{copy.stale}</TmStatusPill>
           </>
         ) : null}
-        <TmSubbarSep />
-        <button
-          type="button"
-          onClick={() => setActiveMainTab(activeMainTab === "paper" ? "picks" : "paper")}
-          className={
-            activeMainTab === "paper"
-              ? "px-3 py-2 font-tm-mono text-[11px] uppercase tracking-wide text-tm-accent font-semibold transition-colors"
-              : "px-3 py-2 font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted hover:text-tm-fg transition-colors"
-          }
-        >
-          {t(locale, "sim.tab")}
-        </button>
+
       </TmSubbar>
 
-      {activeMainTab === "paper" && (
-        <PaperTab onPositionsChange={handlePositionsChange} />
-      )}
+      <PaperTradingModal
+        open={paperOpen}
+        onClose={() => setPaperOpen(false)}
+        onPositionsChange={handlePositionsChange}
+      />
 
-      {activeMainTab === "picks" && (
-        <>
-          {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
-              basket, not single-name direction. Pinned above the picks table. */}
-          <BasketEdgeStrip />
+      <>
+        {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
+            basket, not single-name direction. Pinned above the picks table. */}
+        <BasketEdgeStrip onOpenPaper={() => setPaperOpen(true)} />
 
           <div className="flex justify-end px-4 pt-3">
             <RefreshButton />
@@ -392,7 +378,6 @@ export default function PicksBrowser({
             )}
           </TmPane>
         </>
-      )}
     </>
   );
 }

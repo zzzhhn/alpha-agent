@@ -12,6 +12,7 @@
 // "—" / "数据不足" rather than fabricating an edge.
 import { useEffect, useState } from "react";
 
+import { Wallet } from "lucide-react";
 import {
   fetchBasketEdge,
   fetchPicksScoreboard,
@@ -205,7 +206,11 @@ function HonestMetricsBlock({
   );
 }
 
-export default function BasketEdgeStrip() {
+export default function BasketEdgeStrip({
+  onOpenPaper,
+}: {
+  readonly onOpenPaper?: () => void;
+}) {
   const { locale } = useLocale();
   const [data, setData] = useState<BasketEdgeResponse | null>(null);
   const [sb, setSb] = useState<PicksScoreboard | null>(null);
@@ -298,6 +303,18 @@ export default function BasketEdgeStrip() {
           sb={sb}
           h5={data.horizons.find((h) => h.horizon === 5)}
         />
+      ) : null}
+
+      {/* Paper Trading entry button — right side of strip */}
+      {onOpenPaper ? (
+        <button
+          type="button"
+          onClick={onOpenPaper}
+          className="ml-auto flex shrink-0 items-center gap-1.5 rounded border border-tm-accent bg-tm-accent px-3 py-1.5 font-tm-mono text-[11px] font-semibold tracking-wide text-tm-bg transition-opacity hover:opacity-85 focus:outline-none focus:ring-1 focus:ring-tm-accent focus:ring-offset-1 focus:ring-offset-tm-bg-2"
+        >
+          <Wallet className="h-3.5 w-3.5" strokeWidth={1.75} />
+          {t(locale, "sim.open_btn")}
+        </button>
       ) : null}
     </div>
   );
