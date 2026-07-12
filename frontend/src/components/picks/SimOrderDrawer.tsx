@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import SimOrderForm from "./SimOrderForm";
+import { t } from "@/lib/i18n";
 
 interface Props {
   readonly ticker: string;
@@ -66,6 +67,9 @@ export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }:
             locale={locale}
             onPlaced={() => { onOrderPlaced(); onClose(); }}
           />
+          <p className="mt-3 font-tm-mono text-[10px] leading-snug text-tm-muted">
+            ⚠ {t(locale, "sim.disclaimer")}
+          </p>
         </div>
       </div>
     </>
