@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
-import { placeOrder } from "@/lib/api/paper";
+import { placeOrder, fetchPaperAccount} from "@/lib/api/paper";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import clsx from "clsx";
@@ -24,10 +24,22 @@ export default function SimOrderDrawer({ ticker, card, cash, onClose, onOrderPla
   const [limitPrice, setLimitPrice] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Self-fetch the live account cash: the drawer is opened from the picks
+  // table where the caller does not have the balance, so relying on the
+  // `cash` prop alone showed a misleading $0. Falls back to the prop.
+  const [liveCash, setLiveCash] = useState<number | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Suppress unused-variable warning; card is available for future price display
   void card;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPaperAccount()
+      .then((a) => { if (!cancelled) setLiveCash(a.cash); })
+      .catch(() => { /* keep the prop fallback */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Close on Escape
   useEffect(() => {
@@ -205,7 +217,7 @@ export default function SimOrderDrawer({ ticker, card, cash, onClose, onOrderPla
             )}
             <div className="flex justify-between text-tm-muted">
               <span>{t(locale, "sim.available_cash")}</span>
-              <span>${cash.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+              <span>${(liveCash ?? cash).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
             </div>
           </div>
 
