@@ -310,9 +310,9 @@ export default function BasketEdgeStrip({
         <button
           type="button"
           onClick={onOpenPaper}
-          className="ml-auto flex shrink-0 items-center gap-1.5 rounded border border-tm-accent bg-tm-accent px-3 py-1.5 font-tm-mono text-[11px] font-semibold tracking-wide text-tm-bg transition-opacity hover:opacity-85 focus:outline-none focus:ring-1 focus:ring-tm-accent focus:ring-offset-1 focus:ring-offset-tm-bg-2"
+          className="ml-auto flex shrink-0 items-center gap-2 rounded border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-[13px] font-semibold uppercase tracking-wide text-tm-bg shadow-sm transition-opacity hover:opacity-85 focus:outline-none focus:ring-1 focus:ring-tm-accent focus:ring-offset-1 focus:ring-offset-tm-bg-2"
         >
-          <Wallet className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <Wallet className="h-4 w-4" strokeWidth={1.75} />
           {t(locale, "sim.open_btn")}
         </button>
       ) : null}
