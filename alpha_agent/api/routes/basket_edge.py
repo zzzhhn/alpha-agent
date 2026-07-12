@@ -39,6 +39,7 @@ from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.backtest.ic_engine import _spearman_rho
+from alpha_agent.backtest.scoreboard import _newey_west_se, _nw_lag
 
 router = APIRouter(prefix="/api/picks", tags=["picks"])
 
@@ -117,6 +118,10 @@ class HorizonEdge(BaseModel):
     long_short_spread: float | None
     n_days: int
     insufficient: bool
+    # 2026-07-12: IC significance fields (display-only, do not affect ranking)
+    ic_t_stat: float | None = None      # Newey-West t-stat of mean IC
+    ic_t_gt2: bool | None = None        # |t| > 2.0 (conventional significance)
+    ic_t_gt3: bool | None = None        # |t| > 3.0 (Harvey-Liu-Zhu multiple-testing)
 
 
 class BasketEdgeResponse(BaseModel):
@@ -187,10 +192,18 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
     mean_ic = float(np.mean(per_ic))
     # ic_ir = mean_ic / std(per-date ICs); null when < 2 dates or zero spread.
     ic_ir: float | None = None
+    ic_t: float | None = None
     if n_days >= 2:
         ic_std = float(np.std(per_ic, ddof=1))
         if ic_std > 0:
             ic_ir = mean_ic / ic_std
+        # Newey-West t-stat for mean IC (same HAC lag rule as scoreboard)
+        ic_arr = np.array(per_ic, dtype=float)
+        residuals = ic_arr - mean_ic
+        lag = _nw_lag(n_days)
+        nw_se = _newey_west_se(residuals, np.ones(n_days), lag)
+        if nw_se > 0:
+            ic_t = mean_ic / nw_se
     mean_spread = float(np.mean(per_spread))
 
     return HorizonEdge(
@@ -200,6 +213,9 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
         long_short_spread=_clean(mean_spread),
         n_days=n_days,
         insufficient=False,
+        ic_t_stat=_clean(ic_t),
+        ic_t_gt2=(abs(ic_t) > 2.0) if ic_t is not None and not math.isnan(ic_t) else None,
+        ic_t_gt3=(abs(ic_t) > 3.0) if ic_t is not None and not math.isnan(ic_t) else None,
     )
 
 

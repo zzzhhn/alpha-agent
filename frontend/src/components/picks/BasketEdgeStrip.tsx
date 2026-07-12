@@ -124,6 +124,75 @@ function ScoreboardCells({ sb }: { sb: PicksScoreboard }) {
   );
 }
 
+// 2026-07-12: Compact honest metrics block — cost/turnover/SPY/significance.
+// Display-only: these numbers measure the ranking, they do not affect it.
+function HonestMetricsBlock({
+  sb,
+  h5,
+}: {
+  sb: PicksScoreboard;
+  h5: import("@/lib/api/basket_edge").HorizonEdge | undefined;
+}) {
+  const { locale } = useLocale();
+  const netPct =
+    sb.long_net_cum !== null ? fmtPct(sb.long_net_cum) : "—";
+  const spyPct = sb.spy_cum !== null ? fmtPct(sb.spy_cum) : "—";
+  const toStr =
+    sb.mean_daily_turnover !== null
+      ? `${(sb.mean_daily_turnover * 100).toFixed(1)}%`
+      : "—";
+  const beStr =
+    sb.breakeven_cost_bps !== null
+      ? `${sb.breakeven_cost_bps.toFixed(0)} bps`
+      : "—";
+
+  // IC significance from the 5d horizon edge
+  let icSigStr = "—";
+  if (h5 && !h5.insufficient && h5.ic_t_stat !== null && h5.ic_ir !== null) {
+    const hurdle =
+      h5.ic_t_gt3 === true
+        ? "★★"
+        : h5.ic_t_gt2 === true
+          ? "★"
+          : "";
+    icSigStr = `t=${h5.ic_t_stat.toFixed(2)}${hurdle} (ICIR=${h5.ic_ir.toFixed(2)}, n=${h5.n_days})`;
+  }
+
+  const isZh = locale === "zh";
+  const label =
+    isZh
+      ? t(locale, "edge.honest_title")
+      : t(locale, "edge.honest_title");
+
+  return (
+    <HoverTip
+      content={t(locale, "edge.honest_tip").replace("{bps}", String(sb.cost_bps_used))}
+      placement="bottom"
+      width={320}
+    >
+      <div className="flex cursor-help flex-wrap items-center gap-x-3 gap-y-0.5 border-l border-tm-rule pl-4">
+        <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
+          {label}
+        </span>
+        <span className="font-tm-mono text-[11px] tabular-nums text-tm-fg-2">
+          {isZh
+            ? `净收益(计成本) ${netPct} vs SPY ${spyPct}`
+            : `net(cost) ${netPct} vs SPY ${spyPct}`}
+        </span>
+        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+          {isZh ? `换手 ${toStr}/日` : `to ${toStr}/d`}
+        </span>
+        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+          {isZh ? `盈亏平衡成本 ${beStr}` : `breakeven ${beStr}`}
+        </span>
+        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+          {isZh ? `IC t=${icSigStr}` : `IC ${icSigStr}`}
+        </span>
+      </div>
+    </HoverTip>
+  );
+}
+
 export default function BasketEdgeStrip() {
   const { locale } = useLocale();
   const [data, setData] = useState<BasketEdgeResponse | null>(null);
@@ -212,6 +281,12 @@ export default function BasketEdgeStrip() {
       )}
 
       {sb ? <ScoreboardCells sb={sb} /> : null}
+      {sb && data ? (
+        <HonestMetricsBlock
+          sb={sb}
+          h5={data.horizons.find((h) => h.horizon === 5)}
+        />
+      ) : null}
     </div>
   );
 }

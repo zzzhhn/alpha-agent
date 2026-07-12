@@ -20,6 +20,10 @@ export interface HorizonEdge {
   n_days: number;
   // True when n_days is below the statistical floor (~10): metrics are null.
   insufficient: boolean;
+  // 2026-07-12: IC significance (display-only, does not affect ranking)
+  ic_t_stat: number | null;
+  ic_t_gt2: boolean | null;   // |t| > 2.0 conventional significance
+  ic_t_gt3: boolean | null;   // |t| > 3.0 Harvey-Liu-Zhu multiple-testing hurdle
 }
 
 export interface BasketEdgeResponse {
@@ -45,6 +49,15 @@ export interface PicksScoreboard {
   spread_cum: number;
   long_hit_rate: number | null;
   base_rate: number | null;
+  // 2026-07-12: cost/turnover/SPY/significance (display-only, does not affect ranking)
+  spy_cum: number | null;
+  mean_daily_turnover: number | null;
+  long_net_cum: number | null;
+  cost_bps_used: number;
+  breakeven_cost_bps: number | null;
+  beta: number | null;
+  alpha_ann: number | null;
+  alpha_t: number | null;
 }
 
 export const fetchPicksScoreboard = (opts?: ApiGetOptions) =>

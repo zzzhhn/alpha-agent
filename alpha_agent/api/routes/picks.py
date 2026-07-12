@@ -88,7 +88,16 @@ class ScoreboardResponse(BaseModel):
     """Portfolio-level evaluation of the picks themselves (the honest headline):
     the daily top-K basket's compounded forward return vs the universe average,
     the long-minus-short spread, and the long basket's directional hit-rate vs
-    the always-guess-up base rate. None fields = not enough realized history."""
+    the always-guess-up base rate. None fields = not enough realized history.
+
+    2026-07-12 additions (display-only — does not affect ranking/selection):
+      - spy_cum: SPY compounded over the same dates.
+      - mean_daily_turnover: mean one-sided daily name-overlap turnover (long basket).
+      - long_net_cum: cost-adjusted net cumulative return (cost_bps default 10bps).
+      - cost_bps_used: the cost_bps parameter that produced long_net_cum.
+      - breakeven_cost_bps: cost at which net return equals SPY return.
+      - beta, alpha_ann, alpha_t: OLS regression of daily long returns on SPY.
+    """
 
     days: int
     top_n: int
@@ -98,6 +107,15 @@ class ScoreboardResponse(BaseModel):
     spread_cum: float
     long_hit_rate: float | None
     base_rate: float | None
+    # --- 2026-07-12 additions ---
+    spy_cum: float | None = None
+    mean_daily_turnover: float | None = None
+    long_net_cum: float | None = None
+    cost_bps_used: float = 10.0
+    breakeven_cost_bps: float | None = None
+    beta: float | None = None
+    alpha_ann: float | None = None
+    alpha_t: float | None = None
 
 
 def _safe_float(v: float | None, default: float = 0.0) -> float:
@@ -456,4 +474,12 @@ async def picks_scoreboard(
         short_cum=sb.short_cum, market_cum=sb.market_cum,
         spread_cum=sb.spread_cum, long_hit_rate=sb.long_hit_rate,
         base_rate=sb.base_rate,
+        spy_cum=sb.spy_cum,
+        mean_daily_turnover=sb.mean_daily_turnover,
+        long_net_cum=sb.long_net_cum,
+        cost_bps_used=sb.cost_bps_used,
+        breakeven_cost_bps=sb.breakeven_cost_bps,
+        beta=sb.beta,
+        alpha_ann=sb.alpha_ann,
+        alpha_t=sb.alpha_t,
     )
