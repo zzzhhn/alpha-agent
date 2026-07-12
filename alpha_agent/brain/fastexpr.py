@@ -769,7 +769,12 @@ def _dispersion_leg(rng: random.Random) -> dict:
                    _op("subtract", _fld(hi), _fld(lo)),
                    _op("abs", _fld(mean)))
         leg = _op("rank", disp)
-    if rng.random() < 0.85:
+    # EXPERIMENT 2026-07-13 (REVERT after this round): the validation round showed
+    # reversed dispersion => negative Sharpe (adj_net_income_stddev reversed = -0.59
+    # on TOP3000), i.e. the Diether "long low dispersion" direction is INVERTED on
+    # liquid US large-cap in this window. Flip 0.85 -> 0.15 to confirm the opposite
+    # sign (85% long HIGH dispersion, un-reversed). Restore to 0.85 once confirmed.
+    if rng.random() < 0.15:
         leg = _op("reverse", leg)  # short high dispersion => long low dispersion
     return _op("group_neutralize", leg,
                _fld(rng.choice(("industry", "subindustry", "sector"))))
