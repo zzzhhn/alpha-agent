@@ -104,11 +104,19 @@ def _evaluate_for_universe(as_of: datetime, expr: str | None = None) -> dict[str
     """
     if expr is None:
         expr = _resolve_default_expr()
-    from alpha_agent.factor_engine.factor_backtest import _load_panel
+    from alpha_agent.factor_engine.factor_backtest import _load_panel, load_live_panel
     from alpha_agent.factor_engine.kernel import evaluate_cross_section
     from alpha_agent.core.types import FactorSpec
 
-    panel = _load_panel()
+    # Prefer the LIVE panel (daily_prices, fresh every session) for the DEFAULT
+    # SHORT expr so the 0.30-weight factor is never served from the frozen
+    # parquet (it was ~50 trading days stale). Custom exprs and LONG mode (252d,
+    # needs more history than daily_prices holds yet) stay on the parquet.
+    panel = None
+    if expr == SHORT_TERM_FACTOR_EXPR:
+        panel = load_live_panel(min_days=65)
+    if panel is None:
+        panel = _load_panel()
     # FactorSpec requires 6 fields beyond expression. Surfaced by F1 smoke
     # against deployed /api/stock/AAPL: factor.raw was always null because
     # FactorSpec(expression=...) raised ValidationError, caught silently by

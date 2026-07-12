@@ -1048,3 +1048,103 @@ def _compute_monthly_returns(
             "n_days": len(rets),
         })
     return out
+
+
+# ── Live panel from daily_prices (fixes the frozen-parquet staleness) ────────
+# The static parquet freezes at its last commit date (a 0.30-weight factor was
+# being served ~50 trading days stale). daily_prices updates daily and has close
+# for the live universe (incl. SPY) over ~96 sessions — enough for the DEFAULT
+# SHORT expr (12d momentum + 60d vol, lookback 60). We build a close-only panel
+# from it ALONE (no parquet splice — splicing Alpaca-adjusted history onto
+# yfinance close would inject a spurious return at the seam and corrupt the
+# momentum/vol factor). LONG mode (252d) still needs the parquet until
+# daily_prices accumulates enough history.
+_LIVE_PANEL_CACHE: dict[str, "_Panel"] = {}
+
+
+def _db_url_sync() -> str | None:
+    import os
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        p = Path(__file__).resolve().parents[2] / ".env"
+        if p.exists():
+            for line in p.read_text().splitlines():
+                if line.startswith("DATABASE_URL="):
+                    url = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if not url:
+        return None
+    url = url.replace("postgresql+asyncpg://", "postgresql://")
+    url = url.replace("postgres+asyncpg://", "postgresql://")
+    if "channel_binding" in url:
+        url = url.split("?")[0]
+    return url
+
+
+def load_live_panel(min_days: int = 65) -> "_Panel | None":
+    """Close-only panel from the live daily_prices table (fresh each day).
+
+    Returns None so the caller falls back to the frozen parquet when the DB is
+    unreachable or there are fewer than `min_days` trading days for the lookback.
+    daily_prices carries only close, so open/high/low are filled with close and
+    volume is NaN — harmless for the close-only default factor expression.
+    Cached by latest trading date so a new session busts the cache."""
+    url = _db_url_sync()
+    if not url:
+        return None
+    try:
+        import psycopg
+        with psycopg.connect(url, connect_timeout=10) as conn:
+            rows = conn.execute(
+                "SELECT date::text, ticker, close FROM daily_prices "
+                "WHERE close IS NOT NULL ORDER BY date"
+            ).fetchall()
+    except Exception as e:  # noqa: BLE001 — fall back to parquet, but say why
+        print(
+            f"[factor] live panel DB read failed ({type(e).__name__}: "
+            f"{str(e)[:100]}); falling back to frozen parquet",
+            flush=True,
+        )
+        return None
+    if not rows:
+        return None
+    latest = rows[-1][0]
+    cached = _LIVE_PANEL_CACHE.get(latest)
+    if cached is not None:
+        return cached
+
+    df = pd.DataFrame(rows, columns=["date", "ticker", "close"])
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    dates = tuple(sorted(df["date"].unique()))
+    if len(dates) < min_days:
+        return None
+    all_tickers = sorted(df["ticker"].unique())
+    benches = tuple(t for t in BENCHMARK_TICKERS if t in all_tickers)
+    universe = tuple(t for t in all_tickers if t not in benches)
+    if not universe:
+        return None
+    wide = df.pivot(index="date", columns="ticker", values="close").sort_index()
+    close = wide.reindex(columns=list(universe)).to_numpy(dtype=np.float64)
+    bench_series = (
+        wide[BENCHMARK_TICKER].to_numpy(dtype=np.float64)
+        if BENCHMARK_TICKER in wide.columns
+        else np.full(len(dates), np.nan)
+    )
+    bench_alts = {
+        b: wide[b].to_numpy(dtype=np.float64) for b in benches if b in wide.columns
+    }
+    panel = _Panel(
+        dates=np.array(dates),
+        tickers=universe,
+        close=close,
+        open_=close.copy(),
+        high=close.copy(),
+        low=close.copy(),
+        volume=np.full_like(close, np.nan),
+        benchmark_close=bench_series,
+        benchmark_alts=bench_alts or None,
+    )
+    _LIVE_PANEL_CACHE[latest] = panel
+    for k in list(_LIVE_PANEL_CACHE)[:-2]:  # keep the cache tiny
+        _LIVE_PANEL_CACHE.pop(k, None)
+    return panel
