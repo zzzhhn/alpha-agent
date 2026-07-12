@@ -29,6 +29,7 @@ mirroring alpha_agent/fusion/grade_thresholds.py.
 from __future__ import annotations
 
 import math
+from datetime import date as _date
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -55,6 +56,12 @@ _MIN_TICKERS_PER_DATE: int = 20
 # Honesty floor: below this many usable dates the aggregate is statistically
 # empty -> report insufficient rather than a noisy point estimate.
 _MIN_DATES: int = 10
+# Out-of-sample cutoff: the frozen-factor-panel fix shipped 2026-07-12
+# (commit 8fc3b3c). IC/spread over dates >= this measure whether the fix (+ the
+# #479 inversion guard) actually flips the edge positive on FORWARD data — the
+# only honest test, since the trailing window is dominated by pre-fix signals.
+# Empty until post-fix sessions accrue; the UI shows an 累积中 N/M flag.
+_OOS_CUTOFF: _date = _date(2026, 7, 12)
 # Quintile = top/bottom 20%.
 _QUINTILE_FRAC: float = 0.2
 
@@ -122,6 +129,11 @@ class HorizonEdge(BaseModel):
     ic_t_stat: float | None = None      # Newey-West t-stat of mean IC
     ic_t_gt2: bool | None = None        # |t| > 2.0 (conventional significance)
     ic_t_gt3: bool | None = None        # |t| > 3.0 (Harvey-Liu-Zhu multiple-testing)
+    # Out-of-sample (post frozen-panel-fix) split — accrues forward from 2026-07-12
+    oos_mean_ic: float | None = None
+    oos_long_short_spread: float | None = None
+    oos_n_days: int = 0
+    oos_insufficient: bool = True
 
 
 class BasketEdgeResponse(BaseModel):
@@ -157,6 +169,8 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
 
     per_ic: list[float] = []
     per_spread: list[float] = []
+    per_ic_oos: list[float] = []
+    per_spread_oos: list[float] = []
     # Most-recent window of dates that clear the breadth floor.
     for d in sorted(by_date.keys())[-_WINDOW_DATES:]:
         pairs = by_date[d]
@@ -176,6 +190,9 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
             continue
         per_ic.append(float(ic))
         per_spread.append(spread)
+        if d >= _OOS_CUTOFF:
+            per_ic_oos.append(float(ic))
+            per_spread_oos.append(spread)
 
     n_days = len(per_ic)
     if n_days < _MIN_DATES:
@@ -187,6 +204,8 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
             long_short_spread=None,
             n_days=n_days,
             insufficient=True,
+            oos_n_days=0,
+            oos_insufficient=True,
         )
 
     mean_ic = float(np.mean(per_ic))
@@ -206,6 +225,10 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
             ic_t = mean_ic / nw_se
     mean_spread = float(np.mean(per_spread))
 
+    oos_n = len(per_ic_oos)
+    oos_ic = float(np.mean(per_ic_oos)) if oos_n else None
+    oos_spread = float(np.mean(per_spread_oos)) if oos_n else None
+
     return HorizonEdge(
         horizon=horizon,
         mean_ic=_clean(mean_ic),
@@ -216,6 +239,10 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
         ic_t_stat=_clean(ic_t),
         ic_t_gt2=(abs(ic_t) > 2.0) if ic_t is not None and not math.isnan(ic_t) else None,
         ic_t_gt3=(abs(ic_t) > 3.0) if ic_t is not None and not math.isnan(ic_t) else None,
+        oos_mean_ic=_clean(oos_ic),
+        oos_long_short_spread=_clean(oos_spread),
+        oos_n_days=oos_n,
+        oos_insufficient=oos_n < _MIN_DATES,
     )
 
 

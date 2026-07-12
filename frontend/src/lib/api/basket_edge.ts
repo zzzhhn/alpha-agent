@@ -22,6 +22,11 @@ export interface HorizonEdge {
   insufficient: boolean;
   // 2026-07-12: IC significance (display-only, does not affect ranking)
   ic_t_stat: number | null;
+  // Out-of-sample (post frozen-panel-fix, 2026-07-12) split; accrues forward.
+  oos_mean_ic?: number | null;
+  oos_long_short_spread?: number | null;
+  oos_n_days?: number;
+  oos_insufficient?: boolean;
   ic_t_gt2: boolean | null;   // |t| > 2.0 conventional significance
   ic_t_gt3: boolean | null;   // |t| > 3.0 Harvey-Liu-Zhu multiple-testing hurdle
 }

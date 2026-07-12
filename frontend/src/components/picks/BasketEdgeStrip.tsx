@@ -158,6 +158,15 @@ function HonestMetricsBlock({
     icSigStr = `t=${h5.ic_t_stat.toFixed(2)}${hurdle} (ICIR=${h5.ic_ir.toFixed(2)}, n=${h5.n_days})`;
   }
 
+  // Out-of-sample (post frozen-panel-fix) IC — the honest forward test. Empty
+  // until post-2026-07-12 sessions accrue, so it shows an 累积中 N/10 flag.
+  const oosN = h5?.oos_n_days ?? 0;
+  const _zh = locale === "zh";
+  let oosStr = _zh ? `累积中 ${oosN}/10` : `accruing ${oosN}/10`;
+  if (h5 && !h5.oos_insufficient && h5.oos_mean_ic !== null && h5.oos_mean_ic !== undefined) {
+    oosStr = `IC=${h5.oos_mean_ic.toFixed(3)} (n=${oosN})`;
+  }
+
   const isZh = locale === "zh";
   const label =
     isZh
@@ -187,6 +196,9 @@ function HonestMetricsBlock({
         </span>
         <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
           {isZh ? `IC t=${icSigStr}` : `IC ${icSigStr}`}
+        </span>
+        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+          {isZh ? `修复后样本外 ${oosStr}` : `OOS(post-fix) ${oosStr}`}
         </span>
       </div>
     </HoverTip>
