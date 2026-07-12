@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import clsx from "clsx";
 import WatchlistStar from "@/components/ui/WatchlistStar";
@@ -10,6 +13,7 @@ import { t, type Locale } from "@/lib/i18n";
 // AND stays consistent with how the same signals are labeled elsewhere.
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { getSuggestion } from "@/lib/suggestion";
+import SimOrderDrawer from "./SimOrderDrawer";
 
 const TIER_COLOR: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -26,6 +30,9 @@ export default function PickRow({
   locale = "zh",
   hiddenDims,
   freshestAsOf,
+  simPositions,
+  cash = 0,
+  onOrderPlaced,
 }: {
   rank: number;
   card: RatingCard;
@@ -36,6 +43,9 @@ export default function PickRow({
   // data is from an earlier day) is flagged — the list header alone shows the
   // max, which would otherwise hide a stale row behind a fresh-looking time.
   freshestAsOf?: string | null;
+  simPositions?: ReadonlyMap<string, number>;  // ticker → qty currently held
+  cash?: number;
+  onOrderPlaced?: () => void;
 }) {
   // Days this row's data lags the freshest row in the list (0 if within ~20h).
   const staleDays = (() => {
@@ -112,6 +122,9 @@ export default function PickRow({
   const drags = (card.top_drags ?? [])
     .slice(0, 3)
     .map((s) => getSignalDisplayLabel(s, locale));
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const heldQty = simPositions?.get(card.ticker) ?? 0;
 
   return (
     <tr className="border-b border-tm-rule hover:bg-tm-bg-2 transition-colors">
@@ -262,6 +275,34 @@ export default function PickRow({
             <span className="text-tm-muted">—</span>
           ) : null}
         </span>
+      </td>
+      <td className="px-2 py-2.5">
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          className={clsx(
+            "rounded border px-1.5 py-0.5 font-tm-mono text-[11px] transition-colors",
+            heldQty > 0
+              ? "border-tm-pos text-tm-pos cursor-pointer hover:border-tm-accent hover:text-tm-accent"
+              : "border-tm-rule text-tm-muted hover:border-tm-accent hover:text-tm-accent",
+          )}
+        >
+          {heldQty > 0
+            ? t(locale, "sim.held_btn")
+            : t(locale, "sim.order_btn")}
+        </button>
+        {drawerOpen && (
+          <SimOrderDrawer
+            ticker={card.ticker}
+            card={card}
+            cash={cash}
+            onClose={() => setDrawerOpen(false)}
+            onOrderPlaced={() => {
+              setDrawerOpen(false);
+              onOrderPlaced?.();
+            }}
+          />
+        )}
       </td>
     </tr>
   );
