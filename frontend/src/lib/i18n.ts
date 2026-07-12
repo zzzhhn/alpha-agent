@@ -2524,7 +2524,7 @@ const translations = {
     "sim.form.qty_error": "Qty must be > 0",
     "sim.form.limit_error": "Limit price must be > 0",
     "sim.form.submitting": "Submitting...",
-    "sim.form.order_placed": "Order submitted — T+1 fill",
+    "sim.form.order_placed": "Order submitted, T+1 fill",
   },
 } as const;
 
