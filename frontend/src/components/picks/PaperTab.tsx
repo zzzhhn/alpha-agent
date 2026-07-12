@@ -17,6 +17,7 @@ import SimPositionRow from "./SimPositionRow";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import clsx from "clsx";
+import SimOrderForm from "./SimOrderForm";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -28,7 +29,7 @@ import {
   Legend,
 } from "recharts";
 
-type SubTab = "overview" | "curve" | "orders";
+type SubTab = "overview" | "trade" | "curve" | "orders";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const PCT = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
@@ -98,6 +99,7 @@ export default function PaperTab({ onPositionsChange }: {
 
   const subTabs: ReadonlyArray<SegmentedTabItem<SubTab>> = [
     { key: "overview", label: t(locale, "sim.account.tab") },
+    { key: "trade", label: t(locale, "sim.trade.tab") },
     { key: "curve", label: t(locale, "sim.equity_curve.title") },
     { key: "orders", label: t(locale, "sim.orders.title") },
   ];
@@ -189,6 +191,12 @@ export default function PaperTab({ onPositionsChange }: {
           <p className="font-tm-mono text-[10px] text-tm-muted">
             ⚠ {t(locale, "sim.disclaimer")}
           </p>
+        </div>
+      )}
+
+      {tab === "trade" && (
+        <div className="px-4 py-4">
+          <SimOrderForm locale={locale} onPlaced={loadAccount} />
         </div>
       )}
 
