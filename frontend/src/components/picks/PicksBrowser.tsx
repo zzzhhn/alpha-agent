@@ -13,6 +13,7 @@ import {
   type RatingCard,
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
+import PaperTab from "./PaperTab";
 import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
 import ConvictionBand from "./ConvictionBand";
@@ -57,6 +58,18 @@ export default function PicksBrowser({
   // never surfaces). Local state — not persisted; each visit starts on
   // the long board.
   const [side, setSide] = useState<PicksSide>("long");
+  const [activeMainTab, setActiveMainTab] = useState<"picks" | "paper">("picks");
+  const [simPositions, setSimPositions] = useState<ReadonlyMap<string, number>>(new Map());
+  // paperCash starts at 0; updated when PaperTab propagates account data.
+  const [paperCash, setPaperCash] = useState(0);
+
+  const handlePositionsChange = useCallback((positions: ReadonlyMap<string, number>) => {
+    setSimPositions(positions);
+    // Cash is not in the positions map; suppress unused-set warning by
+    // reading the setter only here. Cash propagation is a V2 enhancement.
+    void setPaperCash;
+  }, []);
+
   const { locale } = useLocale();
   const mounted = useRef(false);
   // Called once here, threaded down as a prop, so the localStorage read +
@@ -294,66 +307,92 @@ export default function PicksBrowser({
             <TmStatusPill tone="err">{copy.stale}</TmStatusPill>
           </>
         ) : null}
+        <TmSubbarSep />
+        <button
+          type="button"
+          onClick={() => setActiveMainTab(activeMainTab === "paper" ? "picks" : "paper")}
+          className={
+            activeMainTab === "paper"
+              ? "px-3 py-2 font-tm-mono text-[11px] uppercase tracking-wide text-tm-accent font-semibold transition-colors"
+              : "px-3 py-2 font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted hover:text-tm-fg transition-colors"
+          }
+        >
+          {t(locale, "sim.tab")}
+        </button>
       </TmSubbar>
 
-      {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
-          basket, not single-name direction. Pinned above the picks table. */}
-      <BasketEdgeStrip />
+      {activeMainTab === "paper" && (
+        <PaperTab onPositionsChange={handlePositionsChange} />
+      )}
 
-      <div className="flex justify-end px-4 pt-3">
-        <RefreshButton />
-      </div>
+      {activeMainTab === "picks" && (
+        <>
+          {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
+              basket, not single-name direction. Pinned above the picks table. */}
+          <BasketEdgeStrip />
 
-      {/* ★ Highest-Conviction hero band — top-3 of the current board as
-          decision-first cards (ALPHACORE design). Hidden during an active
-          search, where the result set is a lookup, not a conviction ranking. */}
-      {!searching ? <ConvictionBand picks={data.picks} /> : null}
+          <div className="flex justify-end px-4 pt-3">
+            <RefreshButton />
+          </div>
 
-      <TmPane
-        title={copy.paneTitle}
-        meta={
-          searching
-            ? copy.paneMeta
-            : side === "short"
-              ? copy.metaShort
-              : copy.metaLong
-        }
-      >
-        {refreshing ? (
-          <div className="mx-3 mt-2 rounded border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
-            {t(locale, "picks.freeze_banner").replace(
-              "{min}",
-              String(refreshRemainingMin),
+          {/* ★ Highest-Conviction hero band — top-3 of the current board as
+              decision-first cards (ALPHACORE design). Hidden during an active
+              search, where the result set is a lookup, not a conviction ranking. */}
+          {!searching ? <ConvictionBand picks={data.picks} /> : null}
+
+          <TmPane
+            title={copy.paneTitle}
+            meta={
+              searching
+                ? copy.paneMeta
+                : side === "short"
+                  ? copy.metaShort
+                  : copy.metaLong
+            }
+          >
+            {refreshing ? (
+              <div className="mx-3 mt-2 rounded border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
+                {t(locale, "picks.freeze_banner").replace(
+                  "{min}",
+                  String(refreshRemainingMin),
+                )}
+              </div>
+            ) : justRefreshed ? (
+              <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
+                {t(locale, "picks.refreshed_banner")}
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2 px-3 py-2">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={copy.placeholder}
+                maxLength={12}
+                className="w-56 rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 font-tm-mono text-[11px] text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none"
+              />
+              {loading ? (
+                <span className="font-tm-mono text-[11px] text-tm-muted">
+                  {copy.loading}
+                </span>
+              ) : null}
+            </div>
+            {count === 0 && searching ? (
+              <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
+                {copy.empty}
+              </div>
+            ) : (
+              <PicksTable
+                picks={data.picks}
+                isWatched={isWatched}
+                simPositions={simPositions}
+                cash={paperCash}
+                onOrderPlaced={() => { /* PaperTab reloads on next open */ }}
+              />
             )}
-          </div>
-        ) : justRefreshed ? (
-          <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
-            {t(locale, "picks.refreshed_banner")}
-          </div>
-        ) : null}
-        <div className="flex items-center gap-2 px-3 py-2">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={copy.placeholder}
-            maxLength={12}
-            className="w-56 rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 font-tm-mono text-[11px] text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none"
-          />
-          {loading ? (
-            <span className="font-tm-mono text-[11px] text-tm-muted">
-              {copy.loading}
-            </span>
-          ) : null}
-        </div>
-        {count === 0 && searching ? (
-          <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
-            {copy.empty}
-          </div>
-        ) : (
-          <PicksTable picks={data.picks} isWatched={isWatched} />
-        )}
-      </TmPane>
+          </TmPane>
+        </>
+      )}
     </>
   );
 }

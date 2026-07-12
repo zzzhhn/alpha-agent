@@ -13,9 +13,15 @@ const TH = "px-3 py-2.5 font-tm-mono text-[12px] font-semibold uppercase trackin
 export default function PicksTable({
   picks,
   isWatched,
+  simPositions,
+  cash,
+  onOrderPlaced,
 }: {
   picks: RatingCard[];
   isWatched?: (ticker: string) => boolean;
+  simPositions?: ReadonlyMap<string, number>;
+  cash?: number;
+  onOrderPlaced?: () => void;
 }) {
   const { locale } = useLocale();
   // Drop dimension columns that are dead across every visible pick.
@@ -81,6 +87,7 @@ export default function PicksTable({
               <span className="cursor-help">{t(locale, "picks_table.col_drivers_drags")}</span>
             </HoverTip>
           </th>
+          <th className={`${TH} text-left`}>{t(locale, "sim.tab")}</th>
         </tr>
       </thead>
       <tbody>
@@ -93,6 +100,9 @@ export default function PicksTable({
             locale={locale}
             hiddenDims={hiddenDims}
             freshestAsOf={freshestAsOf}
+            simPositions={simPositions}
+            cash={cash}
+            onOrderPlaced={onOrderPlaced}
           />
         ))}
       </tbody>
