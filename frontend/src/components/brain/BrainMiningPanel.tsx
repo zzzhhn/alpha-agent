@@ -452,6 +452,7 @@ function OfficialSCorrCell({ alpha, zh }: { alpha: BrainAlpha; zh: boolean }) {
 // WANT); the saturated 'value'/'other' cluster stays muted.
 const FAMILY_LABEL: Record<string, string> = {
   value: "value",
+  dispersion: "dispersion",
   microstructure: "micro-pv",
   seasonality: "seasonal",
   overnight: "overnight",
@@ -893,7 +894,7 @@ function OutcomeSelect({
 // the mining round's family). Includes 'value'/'other' (not mining options) and
 // an all-families default. Custom button/span dropdown (native <select> invisible
 // on Safari, see OutcomeSelect).
-const FAMILY_FILTER_KEYS = ["", "value", "options", "lowvol", "sentiment", "momentum", "score", "revision", "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality", "other"];
+const FAMILY_FILTER_KEYS = ["", "value", "options", "lowvol", "sentiment", "momentum", "score", "revision", "dispersion", "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality", "other"];
 function FamilyFilterSelect({
   value,
   onChange,
@@ -972,6 +973,7 @@ const FAMILIES: Array<[string, string, string]> = [
   ["momentum", "momentum", "momentum"],
   ["score", "factor-score", "factor-score"],
   ["revision", "revision", "revision"],
+  ["dispersion", "分歧度", "dispersion"],
   // Research-derived structural motifs (pv-corr / seasonality / overnight /
   // iv-term / vrp / quality...): one focus value cycling ~11 mechanisms.
   ["frontier", "前沿结构", "frontier"],

@@ -125,6 +125,10 @@ def family_of(expr: str) -> str:
     if re.search(r"_score|_rank_derivative|distress_risk|asset_growth_rate|"
                  r"consensus_analyst_rating|earnings_revision_magnitude", e):
         return "score"
+    if re.search(r"anl4_\w+_high", e) and re.search(r"anl4_\w+_low", e):
+        return "dispersion"  # high-low forecast spread = analyst disagreement
+    if "adj_net_income_stddev" in e:
+        return "dispersion"  # direct estimate stddev
     if "anl4_" in e:
         return "revision"
     if re.search(r"cap|enterprise_value|assets|equity|debt|operating_income|"

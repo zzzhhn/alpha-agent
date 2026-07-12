@@ -299,3 +299,19 @@ def test_blend_expressions_stitches_with_safety_caps():
     # an over-long parent cannot produce an over-long blend
     huge = [("rank(" + "ts_mean(close, 5), " * 200 + "close)", "P2", 2.0)]
     assert blend_expressions(huge, near, random.Random(0), 4) == []
+
+
+def test_dispersion_family_valid_and_classified():
+    """P3 analyst-dispersion family: every leg serializes to a BRAIN-valid
+    expression, uses only API-dump-verified anl4 fields, and classifies as
+    'dispersion' (NOT 'revision' — the high-low spread detector must precede the
+    anl4->revision rule, else the second-moment signal inherits the wrong family
+    cap and money sign)."""
+    from alpha_agent.brain.evolution import family_of
+    for seed in range(15):
+        expr = fe._valid_brain_tree(fe._dispersion_leg(random.Random(seed)))
+        assert expr is not None, f"dispersion seed {seed} invalid"
+        assert family_of(expr) == "dispersion", f"{expr[:70]} -> {family_of(expr)}"
+    exprs = fe.generate_brain_candidates(8, family_focus="dispersion", rng_seed=1)
+    assert len(exprs) == 8
+    assert all(family_of(e) == "dispersion" for e in exprs)

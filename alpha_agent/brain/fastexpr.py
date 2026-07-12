@@ -740,6 +740,41 @@ _FRONTIER_MOTIFS: tuple = (
 )
 
 
+# Analyst-forecast DISPERSION (P3, 2026-07-12). Diether/Malloy/Scherbina: high
+# analyst disagreement predicts LOW future returns (short high dispersion). This
+# is a SECOND-moment signal on anl4 estimates — orthogonal to our revision alpha
+# (a first-moment level). All fields API-dump-verified (news12 VECTOR fields do
+# NOT exist in our subscription, so the vec_avg/vec_sum route is dead; dispersion
+# is the buildable P3 source). dispersion = (high - low) / |mean| = normalized
+# forecast range. Metrics carry high/low/mean at the coverages noted.
+_DISPERSION_METRICS = (
+    ("anl4_afv4_eps_high", "anl4_afv4_eps_low", "anl4_afv4_eps_mean"),        # cov 1.0
+    ("anl4_afv4_div_high", "anl4_afv4_div_low", "anl4_afv4_div_mean"),        # 0.82
+    ("anl4_afv4_cfps_high", "anl4_afv4_cfps_low", "anl4_afv4_cfps_mean"),     # 0.68
+    ("anl4_bvps_high", "anl4_bvps_low", "anl4_bvps_mean"),                    # 0.65
+    ("anl4_ebitda_high", "anl4_ebitda_low", "anl4_ebitda_mean"),             # 0.58
+)
+_DISPERSION_STDDEV_FIELDS = ("adj_net_income_stddev",)  # direct stddev field
+
+
+def _dispersion_leg(rng: random.Random) -> dict:
+    """Analyst-forecast dispersion: rank(normalized high-low spread), REVERSED
+    (Diether: short high dispersion -> long LOW dispersion is the money side; 85%
+    exploit / 15% probe), group-neutralized. ~25% use the direct stddev field."""
+    if rng.random() < 0.25:
+        leg = _op("rank", _fld(rng.choice(_DISPERSION_STDDEV_FIELDS)))
+    else:
+        hi, lo, mean = rng.choice(_DISPERSION_METRICS)
+        disp = _op("divide",
+                   _op("subtract", _fld(hi), _fld(lo)),
+                   _op("abs", _fld(mean)))
+        leg = _op("rank", disp)
+    if rng.random() < 0.85:
+        leg = _op("reverse", leg)  # short high dispersion => long low dispersion
+    return _op("group_neutralize", leg,
+               _fld(rng.choice(("industry", "subindustry", "sector"))))
+
+
 def _catalog_leg(
     rng: random.Random,
     fields: tuple,
@@ -1090,6 +1125,11 @@ def generate_brain_candidates(
             # Family-constrained round: analyst estimate-revision momentum
             # (value-orthogonal); base_settings_for runs anl4 on TOP1000.
             tree = _revision_leg(rng)
+        elif family_focus == "dispersion":
+            # Analyst-forecast dispersion (Diether second-moment signal),
+            # orthogonal to the revision first-moment alpha.
+            tree = _dispersion_leg(rng)
+            curated = True
         elif family_focus in _CATALOG_FAMILY_FIELDS:
             # Family-constrained catalog round, steered by mining history
             # (field_hints): dead fields skipped, winning sign pinned (85%

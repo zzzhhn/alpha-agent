@@ -73,7 +73,7 @@ _FAMILY_CAP = {"value": 1, "options": 2, "revision": 2, "momentum": 2,
                "lowvol": 2, "sentiment": 2, "score": 3,
                # Frontier mechanisms (2026-07-11 research sweep)
                "microstructure": 3, "seasonality": 2, "overnight": 2,
-               "iv_term": 2, "vrp": 2, "quality": 2}
+               "iv_term": 2, "vrp": 2, "quality": 2, "dispersion": 2}
 
 
 def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
