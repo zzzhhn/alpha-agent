@@ -72,6 +72,18 @@ async def handler(
             error_count += 1
             if len(errors) < 10:
                 errors.append(f"{tk}: {type(exc).__name__}: {exc}")
+    # Materialize consistency outcomes now that today's closes (and thus
+    # yesterday's realized next-day returns) are in — keeps the durable
+    # consistency_outcomes history current so daily_signals_slow/fast can be
+    # pruned in a future disk emergency without losing 历史一致性. Best-effort:
+    # a failure here must not fail the price cron.
+    consistency_materialized = 0
+    try:
+        from alpha_agent.backtest.consistency import materialize_outcomes
+        consistency_materialized = await materialize_outcomes(pool)
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"consistency_materialize: {type(exc).__name__}: {exc}")
+
     # Stamp cron_runs for observability, mirroring the other cron handlers.
     await pool.execute(
         "INSERT INTO cron_runs "
@@ -88,6 +100,7 @@ async def handler(
             "errors": errors,
             "skipped_count": len(skipped),
             "skipped": skipped[:40],
+            "consistency_materialized": consistency_materialized,
         }),
     )
     return {
@@ -98,4 +111,5 @@ async def handler(
         "errors": errors,
         "skipped_count": len(skipped),
         "skipped": skipped[:40],
+        "consistency_materialized": consistency_materialized,
     }

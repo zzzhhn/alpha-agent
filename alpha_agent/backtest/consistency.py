@@ -24,7 +24,7 @@ days" means the same 5 calendar sessions for every ticker.
 """
 from __future__ import annotations
 
-from datetime import date as _date
+from datetime import date as _date, timedelta
 
 from alpha_agent.backtest.confidence_calibration import _DOWN_TIERS, _UP_TIERS
 
@@ -56,48 +56,25 @@ def _rate(hits: int, total: int, window: str) -> float | None:
     return hits / total
 
 
-async def compute_window_tallies(
-    pool, tickers: list[str]
-) -> dict[str, dict[str, tuple[int, int]]]:
-    """Return {ticker: {window: (hits, evaluated)}} raw tallies.
-
-    Prediction history is the UNION of BOTH signal tables, deduped per
-    (ticker, date) preferring fast:
-      - daily_signals_fast rows carry the true stored rating (sticky tier) —
-        authoritative when present, incl. HOLD (= no directional call that day).
-      - daily_signals_slow rows (the full-universe daily sweep) carry only
-        composite_partial; their tier is derived via fusion.rating.map_to_tier —
-        the SAME derivation the picks page uses to display slow-only rows.
-    Reading only the fast table made every long-tail / newly-risen ticker show
-    all-dash: its real daily history lived in slow and was ignored.
-    """
+async def _fetch_live_outcomes(
+    pool, tickers: list[str], *, after_date: "_date | None" = None
+) -> list[tuple[str, "_date", bool]]:
+    """(ticker, date, hit) for every REALIZED, DIRECTIONAL prediction in
+    fast∪slow joined to its next-day return. HOLD and not-yet-realized rows are
+    excluded (they never enter a hit-rate). `after_date` restricts to dates
+    strictly greater than it — the unmaterialized recent tail. The tier for
+    slow-only rows is derived exactly like the picks display path."""
     from alpha_agent.fusion.rating import map_to_tier
 
-    tallies: dict[str, dict[str, tuple[int, int]]] = {
-        t: {w: (0, 0) for w in _ORDER} for t in tickers
-    }
     if not tickers:
-        return tallies
-
-    # Market-calendar cutoffs: the Nth most recent trading date overall. Using
-    # the global date list (not per-ticker) keeps "past N trading days" the same
-    # sessions for every row even when a ticker has gaps.
-    date_rows = await pool.fetch(
-        "SELECT DISTINCT date FROM daily_prices ORDER BY date DESC LIMIT 252"
-    )
-    if not date_rows:
-        return tallies
-    dates: list[_date] = [r["date"] for r in date_rows]
-    cutoffs: dict[str, _date] = {
-        w: dates[min(n - 1, len(dates) - 1)] for w, n in WINDOW_TRADING_DAYS.items()
-    }
-
-    # Evaluated rows: each stored prediction joined to its realized next-day
-    # return. Not-yet-realized (next_close NULL) rows are dropped in SQL; the
-    # direction call (incl. HOLD-exclusion) resolves in Python because slow rows
-    # need the tier derived from their score.
+        return []
+    params: list = [tickers]
+    date_clause = ""
+    if after_date is not None:
+        params.append(after_date)
+        date_clause = "AND p.date > $2"
     rows = await pool.fetch(
-        """
+        f"""
         WITH px AS (
             SELECT ticker, date, close,
                    LEAD(close) OVER (PARTITION BY ticker ORDER BY date) AS next_close
@@ -105,8 +82,6 @@ async def compute_window_tallies(
             WHERE ticker = ANY($1::text[])
         ),
         preds AS (
-            -- One prediction per (ticker, date): fast (true rating) preferred,
-            -- newest fetched_at within a source breaks intraday ties.
             SELECT DISTINCT ON (ticker, date) ticker, date, rating, score
             FROM (
                 SELECT ticker, date, rating, composite AS score,
@@ -127,33 +102,102 @@ async def compute_window_tallies(
                (px.next_close / NULLIF(px.close, 0) - 1.0) AS fwd1
         FROM preds p
         JOIN px ON px.ticker = p.ticker AND px.date = p.date
-        WHERE px.next_close IS NOT NULL
+        WHERE px.next_close IS NOT NULL {date_clause}
         """,
-        tickers,
+        *params,
     )
-
-    # counts[ticker][window] = [hits, total]
-    counts: dict[str, dict[str, list[int]]] = {
-        t: {w: [0, 0] for w in _ORDER} for t in tickers
-    }
+    out: list[tuple[str, "_date", bool]] = []
     for r in rows:
-        ticker = r["ticker"]
-        if ticker not in counts:
-            continue
         fwd1 = r["fwd1"]
         if fwd1 is None:
             continue
         rating = r["rating"]
         if rating is None and r["score"] is not None:
-            # Slow-only day: derive the tier from the partial composite exactly
-            # like the picks display path does. HOLD -> no directional call.
             rating = map_to_tier(float(r["score"]))
         if rating is None:
             continue
         hit = _hit(rating, float(fwd1))
         if hit is None:
             continue
-        d = r["date"]
+        out.append((r["ticker"], r["date"], hit))
+    return out
+
+
+async def materialize_outcomes(pool, *, full: bool = False) -> int:
+    """Upsert realized directional outcomes into consistency_outcomes so the
+    durable history survives any future prune of daily_signals_fast/slow. Called
+    once for backfill (full=True) and daily by the daily_prices cron (full=False,
+    which re-scans a short tail to catch late-realized predictions). Idempotent.
+    Returns the number of rows upserted."""
+    trows = await pool.fetch("SELECT DISTINCT ticker FROM daily_signals_slow")
+    tickers = [r["ticker"] for r in trows]
+    if not tickers:
+        return 0
+    after = None
+    if not full:
+        mx = await pool.fetchval("SELECT max(date) FROM consistency_outcomes")
+        if mx is not None:
+            after = mx - timedelta(days=10)  # re-scan tail for late realizations
+    outcomes = await _fetch_live_outcomes(pool, tickers, after_date=after)
+    if not outcomes:
+        return 0
+    await pool.executemany(
+        "INSERT INTO consistency_outcomes (ticker, date, hit) VALUES ($1, $2, $3) "
+        "ON CONFLICT (ticker, date) DO UPDATE SET hit = EXCLUDED.hit",
+        outcomes,
+    )
+    return len(outcomes)
+
+
+async def compute_window_tallies(
+    pool, tickers: list[str]
+) -> dict[str, dict[str, tuple[int, int]]]:
+    """Return {ticker: {window: (hits, evaluated)}} raw tallies.
+
+    Reads the DURABLE consistency_outcomes table (immune to signal pruning) for
+    history, UNIONed with a live recompute of the recent tail (dates after the
+    last materialized date) so the newest realized predictions are always counted
+    even between materialization runs. If the table is missing/empty (e.g. before
+    the V035 backfill), max_mat is None and the live path covers ALL dates — the
+    original behavior, so there is no regression.
+    """
+    tallies: dict[str, dict[str, tuple[int, int]]] = {
+        t: {w: (0, 0) for w in _ORDER} for t in tickers
+    }
+    if not tickers:
+        return tallies
+
+    date_rows = await pool.fetch(
+        "SELECT DISTINCT date FROM daily_prices ORDER BY date DESC LIMIT 252"
+    )
+    if not date_rows:
+        return tallies
+    dates: list[_date] = [r["date"] for r in date_rows]
+    cutoffs: dict[str, _date] = {
+        w: dates[min(n - 1, len(dates) - 1)] for w, n in WINDOW_TRADING_DAYS.items()
+    }
+
+    outcomes: list[tuple[str, _date, bool]] = []
+    max_mat: _date | None = None
+    try:
+        mat = await pool.fetch(
+            "SELECT ticker, date, hit FROM consistency_outcomes "
+            "WHERE ticker = ANY($1::text[])",
+            tickers,
+        )
+        outcomes = [(r["ticker"], r["date"], r["hit"]) for r in mat]
+        max_mat = max((d for _, d, _ in outcomes), default=None)
+    except Exception:  # noqa: BLE001 — table not yet created: pure-live fallback
+        outcomes = []
+        max_mat = None
+    outcomes += await _fetch_live_outcomes(pool, tickers, after_date=max_mat)
+
+    counts: dict[str, dict[str, list[int]]] = {
+        t: {w: [0, 0] for w in _ORDER} for t in tickers
+    }
+    for ticker, d, hit in outcomes:
+        if ticker not in counts:
+            continue
         for w in _ORDER:
             if w == "hist" or d >= cutoffs[w]:
                 bucket = counts[ticker][w]
