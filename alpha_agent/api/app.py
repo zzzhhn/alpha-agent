@@ -293,6 +293,10 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.brain_routes import router
         return router
 
+    def _import_paper():
+        from alpha_agent.api.routes.paper import router
+        return router
+
     _load("picks", _import_picks)
     _load("basket_edge", _import_basket_edge)
     _load("stock", _import_stock)
@@ -307,6 +311,7 @@ def create_app() -> FastAPI:
     _load("factor_lab", _import_factor_lab)
     _load("admin", _import_admin)
     _load("brain", _import_brain)
+    _load("paper", _import_paper)
 
     if not SERVERLESS:
         def _import_websocket():

@@ -1,6 +1,67 @@
 {
   "components": {
     "schemas": {
+      "AccountResponse": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "integer"
+          },
+          "cash": {
+            "title": "Cash",
+            "type": "number"
+          },
+          "initial_cash": {
+            "title": "Initial Cash",
+            "type": "number"
+          },
+          "pending_orders": {
+            "title": "Pending Orders",
+            "type": "integer"
+          },
+          "portfolio_value": {
+            "title": "Portfolio Value",
+            "type": "number"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/PositionOut"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "realized_pnl": {
+            "title": "Realized Pnl",
+            "type": "number"
+          },
+          "reset_count": {
+            "title": "Reset Count",
+            "type": "integer"
+          },
+          "total_return_pct": {
+            "title": "Total Return Pct",
+            "type": "number"
+          },
+          "unrealized_pnl": {
+            "title": "Unrealized Pnl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "account_id",
+          "cash",
+          "initial_cash",
+          "portfolio_value",
+          "total_return_pct",
+          "unrealized_pnl",
+          "realized_pnl",
+          "positions",
+          "pending_orders",
+          "reset_count"
+        ],
+        "title": "AccountResponse",
+        "type": "object"
+      },
       "BasketEdgeResponse": {
         "properties": {
           "as_of": {
@@ -511,6 +572,57 @@
           "failed_batches"
         ],
         "title": "EnrichResponse",
+        "type": "object"
+      },
+      "EquityCurveResponse": {
+        "properties": {
+          "base_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Date"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/EquityPoint"
+            },
+            "title": "Series",
+            "type": "array"
+          }
+        },
+        "required": [
+          "series",
+          "base_date"
+        ],
+        "title": "EquityCurveResponse",
+        "type": "object"
+      },
+      "EquityPoint": {
+        "properties": {
+          "benchmark_index": {
+            "title": "Benchmark Index",
+            "type": "number"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "portfolio_value": {
+            "title": "Portfolio Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "portfolio_value",
+          "benchmark_index"
+        ],
+        "title": "EquityPoint",
         "type": "object"
       },
       "ExplainAstRequest": {
@@ -2217,6 +2329,134 @@
         "title": "OperandCatalogResponse",
         "type": "object"
       },
+      "OrderListResponse": {
+        "properties": {
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/OrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "orders",
+          "total"
+        ],
+        "title": "OrderListResponse",
+        "type": "object"
+      },
+      "OrderOut": {
+        "properties": {
+          "fill_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Date"
+          },
+          "fill_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Price"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "limit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "order_type": {
+            "title": "Order Type",
+            "type": "string"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "integer"
+          },
+          "side": {
+            "title": "Side",
+            "type": "string"
+          },
+          "signal_date": {
+            "title": "Signal Date",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "side",
+          "order_type",
+          "qty",
+          "limit_price",
+          "signal_date",
+          "fill_date",
+          "fill_price",
+          "status"
+        ],
+        "title": "OrderOut",
+        "type": "object"
+      },
+      "OrderResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "signal_date": {
+            "title": "Signal Date",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "status",
+          "signal_date",
+          "message"
+        ],
+        "title": "OrderResponse",
+        "type": "object"
+      },
       "PerFactorScore": {
         "properties": {
           "contribution": {
@@ -2309,6 +2549,95 @@
           "stale"
         ],
         "title": "PicksResponse",
+        "type": "object"
+      },
+      "PlaceOrderRequest": {
+        "properties": {
+          "limit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "order_type": {
+            "pattern": "^(market|limit)$",
+            "title": "Order Type",
+            "type": "string"
+          },
+          "qty": {
+            "exclusiveMinimum": 0.0,
+            "title": "Qty",
+            "type": "integer"
+          },
+          "side": {
+            "pattern": "^(buy|sell)$",
+            "title": "Side",
+            "type": "string"
+          },
+          "ticker": {
+            "maxLength": 10,
+            "minLength": 1,
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "side",
+          "order_type",
+          "qty"
+        ],
+        "title": "PlaceOrderRequest",
+        "type": "object"
+      },
+      "PositionOut": {
+        "properties": {
+          "avg_cost": {
+            "title": "Avg Cost",
+            "type": "number"
+          },
+          "current_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Price"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "integer"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "unrealized_pct": {
+            "title": "Unrealized Pct",
+            "type": "number"
+          },
+          "unrealized_pnl": {
+            "title": "Unrealized Pnl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "qty",
+          "avg_cost",
+          "current_price",
+          "unrealized_pnl",
+          "unrealized_pct"
+        ],
+        "title": "PositionOut",
         "type": "object"
       },
       "Recommendation": {
@@ -2435,6 +2764,29 @@
           "ok"
         ],
         "title": "RefreshResponse",
+        "type": "object"
+      },
+      "ResetResponse": {
+        "properties": {
+          "cash": {
+            "title": "Cash",
+            "type": "number"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "reset_count": {
+            "title": "Reset Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reset_count",
+          "cash",
+          "message"
+        ],
+        "title": "ResetResponse",
         "type": "object"
       },
       "RouterHealth": {
@@ -7484,6 +7836,342 @@
         "summary": "Enrich Stream",
         "tags": [
           "news"
+        ]
+      }
+    },
+    "/api/paper/account": {
+      "get": {
+        "operationId": "get_account_api_paper_account_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Account",
+        "tags": [
+          "paper"
+        ]
+      }
+    },
+    "/api/paper/equity-curve": {
+      "get": {
+        "operationId": "equity_curve_api_paper_equity_curve_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EquityCurveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Equity Curve",
+        "tags": [
+          "paper"
+        ]
+      }
+    },
+    "/api/paper/order": {
+      "post": {
+        "operationId": "place_order_api_paper_order_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place Order",
+        "tags": [
+          "paper"
+        ]
+      }
+    },
+    "/api/paper/order/{order_id}": {
+      "delete": {
+        "operationId": "cancel_order_api_paper_order__order_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Order",
+        "tags": [
+          "paper"
+        ]
+      }
+    },
+    "/api/paper/orders": {
+      "get": {
+        "operationId": "list_orders_api_paper_orders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Orders",
+        "tags": [
+          "paper"
+        ]
+      }
+    },
+    "/api/paper/reset": {
+      "post": {
+        "operationId": "reset_account_api_paper_reset_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Account",
+        "tags": [
+          "paper"
         ]
       }
     },

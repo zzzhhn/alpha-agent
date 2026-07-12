@@ -1553,6 +1553,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/paper/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Account */
+        get: operations["get_account_api_paper_account_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/equity-curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Equity Curve */
+        get: operations["equity_curve_api_paper_equity_curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Place Order */
+        post: operations["place_order_api_paper_order_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/order/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel Order */
+        delete: operations["cancel_order_api_paper_order__order_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Orders */
+        get: operations["list_orders_api_paper_orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Account */
+        post: operations["reset_account_api_paper_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/picks/edge": {
         parameters: {
             query?: never;
@@ -2681,6 +2783,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountResponse */
+        AccountResponse: {
+            /** Account Id */
+            account_id: number;
+            /** Cash */
+            cash: number;
+            /** Initial Cash */
+            initial_cash: number;
+            /** Pending Orders */
+            pending_orders: number;
+            /** Portfolio Value */
+            portfolio_value: number;
+            /** Positions */
+            positions: components["schemas"]["PositionOut"][];
+            /** Realized Pnl */
+            realized_pnl: number;
+            /** Reset Count */
+            reset_count: number;
+            /** Total Return Pct */
+            total_return_pct: number;
+            /** Unrealized Pnl */
+            unrealized_pnl: number;
+        };
         /** BasketEdgeResponse */
         BasketEdgeResponse: {
             /** As Of */
@@ -2858,6 +2983,22 @@ export interface components {
             failed_batches: number;
             /** Ticker */
             ticker: string;
+        };
+        /** EquityCurveResponse */
+        EquityCurveResponse: {
+            /** Base Date */
+            base_date: string | null;
+            /** Series */
+            series: components["schemas"]["EquityPoint"][];
+        };
+        /** EquityPoint */
+        EquityPoint: {
+            /** Benchmark Index */
+            benchmark_index: number;
+            /** Date */
+            date: string;
+            /** Portfolio Value */
+            portfolio_value: number;
         };
         /** ExplainAstRequest */
         ExplainAstRequest: {
@@ -3577,6 +3718,47 @@ export interface components {
                 };
             };
         };
+        /** OrderListResponse */
+        OrderListResponse: {
+            /** Orders */
+            orders: components["schemas"]["OrderOut"][];
+            /** Total */
+            total: number;
+        };
+        /** OrderOut */
+        OrderOut: {
+            /** Fill Date */
+            fill_date: string | null;
+            /** Fill Price */
+            fill_price: number | null;
+            /** Id */
+            id: number;
+            /** Limit Price */
+            limit_price: number | null;
+            /** Order Type */
+            order_type: string;
+            /** Qty */
+            qty: number;
+            /** Side */
+            side: string;
+            /** Signal Date */
+            signal_date: string;
+            /** Status */
+            status: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** OrderResponse */
+        OrderResponse: {
+            /** Message */
+            message: string;
+            /** Order Id */
+            order_id: number;
+            /** Signal Date */
+            signal_date: string;
+            /** Status */
+            status: string;
+        };
         /** PerFactorScore */
         PerFactorScore: {
             /** Contribution */
@@ -3611,6 +3793,34 @@ export interface components {
             picks: components["schemas"]["LeanCard"][];
             /** Stale */
             stale: boolean;
+        };
+        /** PlaceOrderRequest */
+        PlaceOrderRequest: {
+            /** Limit Price */
+            limit_price?: number | null;
+            /** Order Type */
+            order_type: string;
+            /** Qty */
+            qty: number;
+            /** Side */
+            side: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** PositionOut */
+        PositionOut: {
+            /** Avg Cost */
+            avg_cost: number;
+            /** Current Price */
+            current_price: number | null;
+            /** Qty */
+            qty: number;
+            /** Ticker */
+            ticker: string;
+            /** Unrealized Pct */
+            unrealized_pct: number;
+            /** Unrealized Pnl */
+            unrealized_pnl: number;
         };
         /** Recommendation */
         Recommendation: {
@@ -3648,6 +3858,15 @@ export interface components {
             ok: boolean;
             /** Reason */
             reason?: string | null;
+        };
+        /** ResetResponse */
+        ResetResponse: {
+            /** Cash */
+            cash: number;
+            /** Message */
+            message: string;
+            /** Reset Count */
+            reset_count: number;
         };
         /**
          * RouterHealth
@@ -6536,6 +6755,200 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_account_api_paper_account_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    equity_curve_api_paper_equity_curve_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquityCurveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_order_api_paper_order_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_order_api_paper_order__order_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_orders_api_paper_orders_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_account_api_paper_reset_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetResponse"];
                 };
             };
             /** @description Validation Error */
