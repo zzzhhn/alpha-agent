@@ -29,7 +29,7 @@ import {
   Legend,
 } from "recharts";
 
-type SubTab = "overview" | "trade" | "curve" | "orders";
+type SubTab = "overview" | "curve" | "orders";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const PCT = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
@@ -99,7 +99,6 @@ export default function PaperTab({ onPositionsChange }: {
 
   const subTabs: ReadonlyArray<SegmentedTabItem<SubTab>> = [
     { key: "overview", label: t(locale, "sim.account.tab") },
-    { key: "trade", label: t(locale, "sim.trade.tab") },
     { key: "curve", label: t(locale, "sim.equity_curve.title") },
     { key: "orders", label: t(locale, "sim.orders.title") },
   ];
@@ -187,16 +186,19 @@ export default function PaperTab({ onPositionsChange }: {
             )}
           </div>
 
+          {/* Order ticket — integrated into the account view (one screen: KPIs,
+              positions, then place an order), matching the reference mockup */}
+          <div className="border-t border-tm-rule pt-4">
+            <h3 className="mb-3 font-tm-mono text-[11px] uppercase tracking-wide text-tm-fg-2">
+              {t(locale, "sim.trade.tab")}
+            </h3>
+            <SimOrderForm locale={locale} onPlaced={loadAccount} />
+          </div>
+
           {/* Disclaimer */}
           <p className="font-tm-mono text-[10px] text-tm-muted">
             ⚠ {t(locale, "sim.disclaimer")}
           </p>
-        </div>
-      )}
-
-      {tab === "trade" && (
-        <div className="px-4 py-4">
-          <SimOrderForm locale={locale} onPlaced={loadAccount} />
         </div>
       )}
 
