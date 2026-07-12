@@ -6274,6 +6274,52 @@
         ]
       }
     },
+    "/api/cron/paper_fill": {
+      "get": {
+        "description": "Daily post-close fill simulation for all pending sim_orders.\n\nRuns after daily_prices cron (at 01:00 UTC = ~21:00 ET).\nIdempotent: re-running on the same day is safe (ON CONFLICT DO UPDATE\non sim_equity_daily; already-filled orders are skipped by status='pending' filter).",
+        "operationId": "cron_paper_fill_api_cron_paper_fill_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Paper Fill Api Cron Paper Fill Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron Paper Fill",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Daily post-close fill simulation for all pending sim_orders.\n\nRuns after daily_prices cron (at 01:00 UTC = ~21:00 ET).\nIdempotent: re-running on the same day is safe (ON CONFLICT DO UPDATE\non sim_equity_daily; already-filled orders are skipped by status='pending' filter).",
+        "operationId": "cron_paper_fill_api_cron_paper_fill_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Paper Fill Api Cron Paper Fill Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cron Paper Fill",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/run_propose_jobs": {
       "get": {
         "description": "Reliable execution path for the LLM factor proposer (the /evolution\n'propose factors' button).\n\nPOST /api/factor-lab/propose only ENQUEUES a job. The old design ran the\nwork in a FastAPI BackgroundTask after the 202 response, but Vercel freezes\nthe function once the response is sent, so that task never completed and the\nbutton silently produced nothing after the 2026-05-26 async refactor. A\nGitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,\nplus a fallback schedule) calls this endpoint instead; here the work runs\nINSIDE the request (server-to-server, no browser long-hold, completes within\nthe function budget) so it always finishes and writes a terminal job state\nthe frontend poll can read.\n\nDrains queued jobs oldest-first until the queue empties or the budget is\nhit. Each job's failure is persisted onto its row, never swallowed.",

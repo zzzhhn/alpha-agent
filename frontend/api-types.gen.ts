@@ -796,6 +796,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/paper_fill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Paper Fill
+         * @description Daily post-close fill simulation for all pending sim_orders.
+         *
+         *     Runs after daily_prices cron (at 01:00 UTC = ~21:00 ET).
+         *     Idempotent: re-running on the same day is safe (ON CONFLICT DO UPDATE
+         *     on sim_equity_daily; already-filled orders are skipped by status='pending' filter).
+         */
+        get: operations["cron_paper_fill_api_cron_paper_fill_get"];
+        put?: never;
+        /**
+         * Cron Paper Fill
+         * @description Daily post-close fill simulation for all pending sim_orders.
+         *
+         *     Runs after daily_prices cron (at 01:00 UTC = ~21:00 ET).
+         *     Idempotent: re-running on the same day is safe (ON CONFLICT DO UPDATE
+         *     on sim_equity_daily; already-filled orders are skipped by status='pending' filter).
+         */
+        post: operations["cron_paper_fill_api_cron_paper_fill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/run_propose_jobs": {
         parameters: {
             query?: never;
@@ -5762,6 +5794,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_paper_fill_api_cron_paper_fill_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    cron_paper_fill_api_cron_paper_fill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
