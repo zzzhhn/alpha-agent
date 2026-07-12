@@ -3277,6 +3277,12 @@ export interface components {
             horizon: number;
             /** Ic Ir */
             ic_ir: number | null;
+            /** Ic T Gt2 */
+            ic_t_gt2?: boolean | null;
+            /** Ic T Gt3 */
+            ic_t_gt3?: boolean | null;
+            /** Ic T Stat */
+            ic_t_stat?: number | null;
             /** Insufficient */
             insufficient: boolean;
             /** Long Short Spread */
@@ -3285,6 +3291,20 @@ export interface components {
             mean_ic: number | null;
             /** N Days */
             n_days: number;
+            /**
+             * Oos Insufficient
+             * @default true
+             */
+            oos_insufficient: boolean;
+            /** Oos Long Short Spread */
+            oos_long_short_spread?: number | null;
+            /** Oos Mean Ic */
+            oos_mean_ic?: number | null;
+            /**
+             * Oos N Days
+             * @default 0
+             */
+            oos_n_days: number;
         };
         /** HypothesisTranslateRequest */
         HypothesisTranslateRequest: {
@@ -3650,22 +3670,49 @@ export interface components {
          *     the daily top-K basket's compounded forward return vs the universe average,
          *     the long-minus-short spread, and the long basket's directional hit-rate vs
          *     the always-guess-up base rate. None fields = not enough realized history.
+         *
+         *     2026-07-12 additions (display-only — does not affect ranking/selection):
+         *       - spy_cum: SPY compounded over the same dates.
+         *       - mean_daily_turnover: mean one-sided daily name-overlap turnover (long basket).
+         *       - long_net_cum: cost-adjusted net cumulative return (cost_bps default 10bps).
+         *       - cost_bps_used: the cost_bps parameter that produced long_net_cum.
+         *       - breakeven_cost_bps: cost at which net return equals SPY return.
+         *       - beta, alpha_ann, alpha_t: OLS regression of daily long returns on SPY.
          */
         ScoreboardResponse: {
+            /** Alpha Ann */
+            alpha_ann?: number | null;
+            /** Alpha T */
+            alpha_t?: number | null;
             /** Base Rate */
             base_rate: number | null;
+            /** Beta */
+            beta?: number | null;
+            /** Breakeven Cost Bps */
+            breakeven_cost_bps?: number | null;
+            /**
+             * Cost Bps Used
+             * @default 10
+             */
+            cost_bps_used: number;
             /** Days */
             days: number;
             /** Long Cum */
             long_cum: number;
             /** Long Hit Rate */
             long_hit_rate: number | null;
+            /** Long Net Cum */
+            long_net_cum?: number | null;
             /** Market Cum */
             market_cum: number;
+            /** Mean Daily Turnover */
+            mean_daily_turnover?: number | null;
             /** Short Cum */
             short_cum: number;
             /** Spread Cum */
             spread_cum: number;
+            /** Spy Cum */
+            spy_cum?: number | null;
             /** Top N */
             top_n: number;
         };

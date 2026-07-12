@@ -1410,6 +1410,39 @@
             ],
             "title": "Ic Ir"
           },
+          "ic_t_gt2": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ic T Gt2"
+          },
+          "ic_t_gt3": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ic T Gt3"
+          },
+          "ic_t_stat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ic T Stat"
+          },
           "insufficient": {
             "title": "Insufficient",
             "type": "boolean"
@@ -1438,6 +1471,38 @@
           },
           "n_days": {
             "title": "N Days",
+            "type": "integer"
+          },
+          "oos_insufficient": {
+            "default": true,
+            "title": "Oos Insufficient",
+            "type": "boolean"
+          },
+          "oos_long_short_spread": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oos Long Short Spread"
+          },
+          "oos_mean_ic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oos Mean Ic"
+          },
+          "oos_n_days": {
+            "default": 0,
+            "title": "Oos N Days",
             "type": "integer"
           }
         },
@@ -2403,8 +2468,30 @@
         "type": "object"
       },
       "ScoreboardResponse": {
-        "description": "Portfolio-level evaluation of the picks themselves (the honest headline):\nthe daily top-K basket's compounded forward return vs the universe average,\nthe long-minus-short spread, and the long basket's directional hit-rate vs\nthe always-guess-up base rate. None fields = not enough realized history.",
+        "description": "Portfolio-level evaluation of the picks themselves (the honest headline):\nthe daily top-K basket's compounded forward return vs the universe average,\nthe long-minus-short spread, and the long basket's directional hit-rate vs\nthe always-guess-up base rate. None fields = not enough realized history.\n\n2026-07-12 additions (display-only \u2014 does not affect ranking/selection):\n  - spy_cum: SPY compounded over the same dates.\n  - mean_daily_turnover: mean one-sided daily name-overlap turnover (long basket).\n  - long_net_cum: cost-adjusted net cumulative return (cost_bps default 10bps).\n  - cost_bps_used: the cost_bps parameter that produced long_net_cum.\n  - breakeven_cost_bps: cost at which net return equals SPY return.\n  - beta, alpha_ann, alpha_t: OLS regression of daily long returns on SPY.",
         "properties": {
+          "alpha_ann": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Ann"
+          },
+          "alpha_t": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha T"
+          },
           "base_rate": {
             "anyOf": [
               {
@@ -2415,6 +2502,33 @@
               }
             ],
             "title": "Base Rate"
+          },
+          "beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beta"
+          },
+          "breakeven_cost_bps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakeven Cost Bps"
+          },
+          "cost_bps_used": {
+            "default": 10.0,
+            "title": "Cost Bps Used",
+            "type": "number"
           },
           "days": {
             "title": "Days",
@@ -2435,9 +2549,31 @@
             ],
             "title": "Long Hit Rate"
           },
+          "long_net_cum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Long Net Cum"
+          },
           "market_cum": {
             "title": "Market Cum",
             "type": "number"
+          },
+          "mean_daily_turnover": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Daily Turnover"
           },
           "short_cum": {
             "title": "Short Cum",
@@ -2446,6 +2582,17 @@
           "spread_cum": {
             "title": "Spread Cum",
             "type": "number"
+          },
+          "spy_cum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spy Cum"
           },
           "top_n": {
             "title": "Top N",
