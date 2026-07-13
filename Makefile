@@ -50,7 +50,7 @@ print(f'  ticker={card.ticker} tier={card.tier} confidence={card.confidence:.3f}
 	@echo "M1 acceptance PASS"
 
 openapi-export:
-	python -c "from alpha_agent.api.app import create_app; \
+	./.venv/bin/python -c "from alpha_agent.api.app import create_app; \
 import json; \
 open('openapi.snapshot.json','w').write(json.dumps(create_app().openapi(), indent=2, sort_keys=True))"
 	@echo "Snapshot updated. Commit openapi.snapshot.json."
