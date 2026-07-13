@@ -16,7 +16,7 @@ on:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75  # up to max_wait(120s) x limit alphas, plus install
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,6 +24,10 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: pip install -e ".[storage]"
+      - name: Apply pending migrations (idempotent — code here reads the same schema)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/apply_migrations.py
       - name: Backfill official self-corr
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
