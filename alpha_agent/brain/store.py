@@ -30,26 +30,31 @@ async def record_brain_alpha(
     fail_checks: str | None = None,
     retried: bool = False,
     batch_started_at=None,
+    blend_parents: list[str] | None = None,
 ) -> int:
     """Insert one mining outcome. Returns the new row id.
 
     Two self-correlations: `self_correlation` is BRAIN's official value (vs ACTIVE
     alphas); `self_correlation_adj` also counts our passed-but-unsubmitted factors.
     `fail_checks` (rejected only) + `retried` explain the outcome for the UI.
-    `batch_started_at` tags the mining round for the batch-divider UI."""
+    `batch_started_at` tags the mining round for the batch-divider UI.
+    `blend_parents` is the list of parent expressions when this candidate was
+    stitched by a blend round (family_focus == "blend"); None for every other
+    candidate. NULL, not the string "null", is written when absent."""
     row = await pool.fetchrow(
         "INSERT INTO brain_alphas "
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
         " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade, "
-        " fail_checks, retried, batch_started_at) "
+        " fail_checks, retried, batch_started_at, blend_parents) "
         "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,"
-        " $18,$19,$20) RETURNING id",
+        " $18,$19,$20,$21::jsonb) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with,
         self_correlation_adj, self_correlation_adj_with, outcome, detail, grade,
         fail_checks, retried, batch_started_at,
+        json.dumps(blend_parents) if blend_parents is not None else None,
     )
     return row["id"]
 
@@ -70,6 +75,11 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
         for k in ("created_at", "submitted_at", "batch_started_at"):
             if d.get(k) is not None:
                 d[k] = d[k].isoformat()
+        bp = d.get("blend_parents")
+        if isinstance(bp, str):
+            bp = json.loads(bp)
+        d["blend_parents"] = bp
+        d["is_blend"] = bool(bp)
         out.append(d)
     return out
 
@@ -79,7 +89,7 @@ _ROW_COLS = (
     "returns, margin, self_correlation, self_correlation_with, "
     "self_correlation_adj, self_correlation_adj_with, outcome, detail, "
     "grade, fail_checks, retried, batch_started_at, created_at, submitted_at, "
-    "brain_status"
+    "brain_status, blend_parents"
 )
 
 # Whitelisted sort columns (never interpolate user input into SQL).
@@ -97,6 +107,13 @@ def _decode_row(r) -> dict:
             d[k] = d[k].isoformat()
     # Derived economic family — single source of truth for the UI badge + filter.
     d["family"] = family_of(d.get("expression") or "")
+    # `is_blend` is derived from blend_parents (never a stored column) so it can
+    # never drift from the parent list — NULL/absent means "not a blend".
+    bp = d.get("blend_parents")
+    if isinstance(bp, str):
+        bp = json.loads(bp)
+    d["blend_parents"] = bp
+    d["is_blend"] = bool(bp)
     return d
 
 
@@ -232,6 +249,11 @@ async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
     for k in ("created_at", "submitted_at", "batch_started_at"):
         if d.get(k) is not None:
             d[k] = d[k].isoformat()
+    bp = d.get("blend_parents")
+    if isinstance(bp, str):
+        bp = json.loads(bp)
+    d["blend_parents"] = bp
+    d["is_blend"] = bool(bp)
     return d
 
 

@@ -286,6 +286,12 @@ async def run_mining_round(
             # Fitness round: F = S*sqrt(ret/max(T,0.125)) — force heavy smoothing
             # so turnover approaches the 0.125 floor.
             settings["decay"] = max(int(settings.get("decay", 0)), 16)
+        # This candidate's blend provenance (None for every non-blend round/expr) —
+        # threaded into every record_brain_alpha call below so a blend that ends up
+        # rejected/flagged is still tagged as a blend, not just the ones that pass.
+        _blend_parents_of_expr = (
+            sorted(blend_parents[expr]) if expr in blend_parents else None
+        )
         did_retry = False
         try:
             alpha_id, metrics = await _simulate_one(client, expr, settings, sim_timeout_s)
@@ -301,6 +307,7 @@ async def run_mining_round(
                 pool, user_id=user_id, expression=expr, settings=settings,
                 outcome="sim_error", detail=detail,
                 batch_started_at=batch_started_at,
+                blend_parents=_blend_parents_of_expr,
             )
             summary["sim_error"] += 1
             continue
@@ -333,6 +340,7 @@ async def run_mining_round(
             turnover=metrics.turnover, drawdown=metrics.drawdown,
             returns=metrics.returns, margin=metrics.margin, grade=metrics.grade,
             retried=did_retry, batch_started_at=batch_started_at,
+            blend_parents=_blend_parents_of_expr,
         )
 
         if not metrics.passes_gates():

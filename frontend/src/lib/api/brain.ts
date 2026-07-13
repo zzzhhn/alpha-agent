@@ -61,6 +61,13 @@ export interface BrainAlpha {
   brain_status: string | null;
   /** Round this row was mined in (DB clock at dispatch); groups the batch-divider UI. */
   batch_started_at: string | null;
+  // Blend provenance (family_focus == "blend" rounds only): the parent expressions
+  // this candidate was stitched from. null for every non-blend row, including all
+  // rows recorded before this shipped (we do not retro-tag historical blends).
+  // is_blend is derived server-side from blend_parents (never stored separately),
+  // so it can never disagree with the parent list.
+  blend_parents?: string[] | null;
+  is_blend?: boolean;
 }
 
 export interface BrainSubmitResult {

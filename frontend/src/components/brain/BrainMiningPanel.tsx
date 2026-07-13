@@ -309,9 +309,37 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
 
   return (
     <div className="flex flex-col gap-3 border-t border-tm-rule bg-tm-bg-2 px-3 py-3">
-      <code className="block break-all font-tm-mono text-[11.5px] leading-snug text-tm-fg">
+      <code
+        className={`block break-all font-tm-mono text-[11.5px] leading-snug ${alpha.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
+      >
         {alpha.expression}
       </code>
+
+      {/* Blend provenance: this candidate was stitched from real parent alphas
+          (family_focus == "blend" round). Old rows have no blend_parents and
+          never render this — we don't retro-tag historical blends. */}
+      {alpha.is_blend && alpha.blend_parents && alpha.blend_parents.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="rounded-sm border border-tm-accent/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-accent">
+              BLEND
+            </span>
+            <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+              {zh ? "父因子" : "parents"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            {alpha.blend_parents.map((p, i) => (
+              <code
+                key={i}
+                className="block break-all font-tm-mono text-[10.5px] leading-snug text-tm-muted"
+              >
+                {p}
+              </code>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* BRAIN's overall performance grade for this alpha + record timestamp */}
       <div className="flex items-center gap-2">
@@ -1282,7 +1310,9 @@ export function BrainMiningPanel() {
                           setFamilyFilter((cur) => (cur === fam ? "" : fam))
                         }
                       />
-                      <code className="truncate font-tm-mono text-[11px] text-tm-fg">
+                      <code
+                        className={`truncate font-tm-mono text-[11px] ${a.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
+                      >
                         {a.expression}
                       </code>
                       {a.submitted_at ? (

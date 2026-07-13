@@ -132,6 +132,43 @@ async def test_count_since_is_per_candidate_progress(applied_db):
         await pool.close()
 
 
+@pytest.mark.asyncio
+async def test_blend_parents_round_trip_and_is_blend_derivation(applied_db):
+    """A blend candidate's parent expressions persist and come back with
+    is_blend=True; a normal candidate has neither, and is_blend is derived
+    (never a stored column) so it can't drift from blend_parents."""
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        parents = ["rank(volume)", "ts_rank(ebit, 60)"]
+        blend_id = await store.record_brain_alpha(
+            pool, user_id=1, expression="add(rank(volume), ts_rank(ebit, 60))",
+            settings={}, outcome="passed", alpha_id="B1", sharpe=1.7,
+            blend_parents=parents,
+        )
+        plain_id = await store.record_brain_alpha(
+            pool, user_id=1, expression="rank(close)", settings={}, outcome="passed",
+            alpha_id="B2", sharpe=1.2,
+        )
+
+        blend_row = await store.get_brain_alpha(pool, 1, blend_id)
+        assert blend_row["is_blend"] is True
+        assert blend_row["blend_parents"] == parents
+
+        plain_row = await store.get_brain_alpha(pool, 1, plain_id)
+        assert plain_row["is_blend"] is False
+        assert plain_row["blend_parents"] is None
+
+        # same guarantees through the paginated/filtered query path used by the API
+        r = await store.query_brain_alphas(pool, 1, sort="created_at", descending=False)
+        by_id = {a["id"]: a for a in r["alphas"]}
+        assert by_id[blend_id]["is_blend"] is True
+        assert by_id[blend_id]["blend_parents"] == parents
+        assert by_id[plain_id]["is_blend"] is False
+        assert by_id[plain_id]["blend_parents"] is None
+    finally:
+        await pool.close()
+
+
 # ── PnL parser ────────────────────────────────────────────────────────────
 def test_pnl_to_points_extracts_date_and_cumulative():
     rs = {"records": [["2020-01-02", 0.0], ["2020-01-03", 12.5], ["2020-01-06", 30.1]]}
