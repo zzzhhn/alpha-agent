@@ -319,3 +319,21 @@ def test_warning_checks_do_not_block_the_gate():
     bad2 = AlphaMetrics("A", 2.39, 0.5, 0.11, 0.12, 0.04,
                         checks=chk(LOW_FITNESS="FAIL", UNITS="WARNING"))
     assert bad2.passes_gates() is False and "LOW_FITNESS" in bad2.failing_checks()
+
+
+def test_retry_after_parses_fractional_and_never_polls_faster_than_floor():
+    """BRAIN sends Retry-After: "1.0" — the old `str.isdigit()` gate was False for
+    that, so the header was silently discarded on every poll. Parsing it is not
+    enough: obeying a 1s backoff would poll 5x harder than our interval, which is
+    what appears to have throttled /correlations/self into permanent empty-200."""
+    from alpha_agent.brain.client import _retry_after
+
+    # The real production value — must parse, and must NOT poll faster than floor.
+    assert _retry_after("1.0", 5.0) == 5.0
+    # Server asks for MORE delay than our interval → obey it.
+    assert _retry_after("30.0", 5.0) == 30.0
+    assert _retry_after("12", 5.0) == 12.0
+    # Absent / junk → fall back to our own interval, never crash.
+    assert _retry_after(None, 5.0) == 5.0
+    assert _retry_after("", 5.0) == 5.0
+    assert _retry_after("soon", 5.0) == 5.0

@@ -170,6 +170,24 @@ class AlphaMetrics:
         return out
 
 
+def _retry_after(header: Optional[str], floor_s: float) -> float:
+    """Seconds to wait, honouring BRAIN's Retry-After but never polling FASTER
+    than our own interval. Shared by all three lazy-compute pollers.
+
+    BRAIN sends a FRACTIONAL value ("1.0"), and the old code gated on
+    `str.isdigit()` — False for "1.0" — so the header was silently discarded on
+    every poll of every endpoint. Parsing it is necessary but NOT sufficient:
+    obeying a 1s Retry-After would poll 5x harder, and this endpoint throttles
+    under exactly that (2026-07-13: after ~45 rapid requests /correlations/self
+    returned empty-200 "computing" indefinitely for EVERY alpha, including one it
+    had answered minutes before). Clamp to floor_s — obey the server when it asks
+    for MORE delay, never when it invites us to hammer."""
+    try:
+        return max(float(header), floor_s) if header else floor_s
+    except (TypeError, ValueError):
+        return floor_s
+
+
 def _max_self_corr(body: dict) -> Optional[float]:
     """Extract the max self-correlation from a /correlations/self response.
 
@@ -331,8 +349,7 @@ class BrainClient:
                 except Exception:  # noqa: BLE001 — unparseable body → no signal
                     return None
             if resp.status_code in (200, 202) and waited < max_wait_s:
-                retry = resp.headers.get("Retry-After")
-                delay = float(retry) if retry and retry.isdigit() else interval_s
+                delay = _retry_after(resp.headers.get("Retry-After"), interval_s)
                 await asyncio.sleep(delay)
                 waited += delay
                 continue
@@ -358,8 +375,7 @@ class BrainClient:
                 return resp.json()
             # 202 (computing) or a 200 with an empty/not-yet-ready body → wait.
             if resp.status_code in (200, 202) and waited < max_wait_s:
-                retry = resp.headers.get("Retry-After")
-                delay = float(retry) if retry and retry.isdigit() else interval_s
+                delay = _retry_after(resp.headers.get("Retry-After"), interval_s)
                 await asyncio.sleep(delay)
                 waited += delay
                 continue
@@ -384,8 +400,7 @@ class BrainClient:
             if resp.status_code == 200 and body:
                 return resp.json()
             if resp.status_code in (200, 202) and waited < max_wait_s:
-                retry = resp.headers.get("Retry-After")
-                delay = float(retry) if retry and retry.isdigit() else interval_s
+                delay = _retry_after(resp.headers.get("Retry-After"), interval_s)
                 await asyncio.sleep(delay)
                 waited += delay
                 continue
