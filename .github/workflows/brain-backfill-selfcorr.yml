@@ -12,6 +12,9 @@ on:
       max_wait:
         description: "seconds to wait per alpha (BRAIN computes self-corr lazily; cold alphas need >30s)"
         default: "120"
+      diag:
+        description: "evidence mode: comma-separated alpha_ids to raw-poll (dumps status/headers/body); skips the batch"
+        default: ""
 
 jobs:
   backfill:
@@ -37,4 +40,5 @@ jobs:
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
           BACKFILL_LIMIT: ${{ github.event.inputs.limit }}
           BACKFILL_MAX_WAIT: ${{ github.event.inputs.max_wait || '120' }}
+          BACKFILL_DIAG: ${{ github.event.inputs.diag || '' }}
         run: python scripts/brain_backfill_selfcorr.py

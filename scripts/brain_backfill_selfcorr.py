@@ -58,6 +58,37 @@ async def _main() -> int:
     updated = miss = 0
     try:
         await client.authenticate()
+
+        diag = os.environ.get("BACKFILL_DIAG", "").strip()
+        if diag:
+            # Evidence mode: get_self_correlation returns a bare None for THREE very
+            # different causes (still-computing timeout / 200 whose body has no `max`
+            # / non-2xx we swallow). Dump the raw exchange so we can tell them apart
+            # instead of guessing at the fix.
+            import time as _time
+            for aid in [a.strip() for a in diag.split(",") if a.strip()]:
+                print(f"\n===== DIAG {aid} =====", flush=True)
+                t0 = _time.monotonic()
+                for i in range(1, 41):  # up to ~200s at 5s intervals
+                    r = await client._client.get(f"/alphas/{aid}/correlations/self")
+                    body = (r.text or "").strip()
+                    print(
+                        f"[{i:02d}] t={_time.monotonic()-t0:6.1f}s "
+                        f"status={r.status_code} len={len(body)} "
+                        f"retry-after={r.headers.get('Retry-After')!r} "
+                        f"body[:200]={body[:200]!r}",
+                        flush=True,
+                    )
+                    if r.status_code == 200 and body:
+                        print(f"  -> TERMINAL 200 with body after "
+                              f"{_time.monotonic()-t0:.1f}s", flush=True)
+                        break
+                    if r.status_code not in (200, 202):
+                        print(f"  -> NON-2xx {r.status_code} (swallowed as None "
+                              f"by get_self_correlation)", flush=True)
+                        break
+                    await asyncio.sleep(5.0)
+            return 0
         for i, aid in enumerate(ids, 1):
             # BRAIN computes self-corr LAZILY: our GET is what TRIGGERS the compute
             # for a cold alpha, and it answers 202/empty-200 until it finishes. The
