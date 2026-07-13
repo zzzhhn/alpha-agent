@@ -49,6 +49,7 @@ async def _main() -> int:
         print("no BRAIN credentials / user_id", flush=True)
         return 1
     limit = int(os.environ.get("BACKFILL_LIMIT", "120"))
+    max_wait = float(os.environ.get("BACKFILL_MAX_WAIT", "120"))
     ids = await store.unsubmitted_alpha_ids_missing_official(pool, user_id, limit=limit)
     print(f"backfill target: {len(ids)} unsubmitted alphas missing official self-corr",
           flush=True)
@@ -58,9 +59,14 @@ async def _main() -> int:
     try:
         await client.authenticate()
         for i, aid in enumerate(ids, 1):
-            # 30s per call: the empty-200 phase resolved in <=10s in diagnostics,
-            # so this is ample without letting one slow alpha stall the batch.
-            v = await client.get_self_correlation(aid, max_wait_s=30.0)
+            # BRAIN computes self-corr LAZILY: our GET is what TRIGGERS the compute
+            # for a cold alpha, and it answers 202/empty-200 until it finishes. The
+            # old 30s ceiling was calibrated on an already-computed alpha (<=10s) and
+            # so timed out on every cold one — 2026-07-13 backfill: 1/15, the single
+            # success being the one BRAIN had already cached, the other 14 each
+            # burning exactly 30.0s. Default to the client's own 120s budget;
+            # BACKFILL_MAX_WAIT tunes it without another code change.
+            v = await client.get_self_correlation(aid, max_wait_s=max_wait)
             if v is None:
                 miss += 1
                 print(f"[{i}/{len(ids)}] {aid} → still None", flush=True)

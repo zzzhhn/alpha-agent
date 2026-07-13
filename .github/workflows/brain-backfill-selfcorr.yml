@@ -9,6 +9,9 @@ on:
       limit:
         description: "max unsubmitted alphas to backfill"
         default: "120"
+      max_wait:
+        description: "seconds to wait per alpha (BRAIN computes self-corr lazily; cold alphas need >30s)"
+        default: "120"
 
 jobs:
   backfill:
@@ -29,4 +32,5 @@ jobs:
           BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
           BACKFILL_LIMIT: ${{ github.event.inputs.limit }}
+          BACKFILL_MAX_WAIT: ${{ github.event.inputs.max_wait || '120' }}
         run: python scripts/brain_backfill_selfcorr.py
