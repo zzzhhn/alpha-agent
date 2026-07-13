@@ -758,9 +758,20 @@ _DISPERSION_STDDEV_FIELDS = ("adj_net_income_stddev",)  # direct stddev field
 
 
 def _dispersion_leg(rng: random.Random) -> dict:
-    """Analyst-forecast dispersion: rank(normalized high-low spread), REVERSED
-    (Diether: short high dispersion -> long LOW dispersion is the money side; 85%
-    exploit / 15% probe), group-neutralized. ~25% use the direct stddev field."""
+    """Analyst-forecast dispersion: rank(normalized high-low spread), group-neutralized.
+    ~25% use the direct stddev field.
+
+    EMPIRICALLY DEAD — kept opt-in only, NOT in any default rotation. Two BRAIN
+    rounds (2026-07-12/13, n=24) settled both questions:
+      * Sign: Diether's "long LOW dispersion" is INVERTED on liquid US large-cap in
+        this window. Reversed legs: median Sharpe -0.52 (2/11 positive). Plain legs
+        (long HIGH dispersion): median +0.51 (11/13 positive), positive in BOTH
+        TOP1000 and TOP3000 — so the flip is real, not a one-universe artifact.
+      * Ceiling: even with the sign corrected the family tops out at Sharpe +0.59 /
+        Fitness 0.29 (best: group_neutralize(rank(adj_net_income_stddev), subindustry)).
+        BRAIN's bar is 1.25 / 1.0. Zero dispersion alphas have ever passed.
+    Fixing the sign turned "loses money" into "makes no money". Do not spend rounds
+    here; the sign is pinned below only so an opt-in round is not actively wrong."""
     if rng.random() < 0.25:
         leg = _op("rank", _fld(rng.choice(_DISPERSION_STDDEV_FIELDS)))
     else:
@@ -769,13 +780,10 @@ def _dispersion_leg(rng: random.Random) -> dict:
                    _op("subtract", _fld(hi), _fld(lo)),
                    _op("abs", _fld(mean)))
         leg = _op("rank", disp)
-    # EXPERIMENT 2026-07-13 (REVERT after this round): the validation round showed
-    # reversed dispersion => negative Sharpe (adj_net_income_stddev reversed = -0.59
-    # on TOP3000), i.e. the Diether "long low dispersion" direction is INVERTED on
-    # liquid US large-cap in this window. Flip 0.85 -> 0.15 to confirm the opposite
-    # sign (85% long HIGH dispersion, un-reversed). Restore to 0.85 once confirmed.
+    # Sign pinned to the measured winner: PLAIN = long high dispersion (see docstring).
+    # 15% probe the (losing) Diether direction so a regime flip would show up.
     if rng.random() < 0.15:
-        leg = _op("reverse", leg)  # short high dispersion => long low dispersion
+        leg = _op("reverse", leg)
     return _op("group_neutralize", leg,
                _fld(rng.choice(("industry", "subindustry", "sector"))))
 
