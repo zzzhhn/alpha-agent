@@ -34,6 +34,9 @@ class HealthResponse(BaseModel):
     last_slow_cron: str | None
     last_fast_cron: str | None
     last_dispatcher: str | None
+    # WHY the db is down, verbatim from the driver. A bare "down" sends you
+    # digging; "exceeded the data transfer quota" names the fix. Null when ok.
+    db_error: str | None = None
 
 
 class SignalStatus(BaseModel):
@@ -111,25 +114,46 @@ async def _compute_signal_metrics(
 
 @router.get("", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    """Liveness probe: DB ping + last cron run timestamps."""
-    pool = await get_db_pool()
+    """Liveness probe: DB ping + last cron run timestamps.
+
+    A health probe must never be taken down by the outage it exists to report.
+    This one was: it correctly caught the ping failure and set db="down", then
+    threw that away one line later because the _last() cron lookups queried the
+    same dead pool unguarded, so the whole response 500'd with a bare "Internal
+    Server Error". That is how the 2026-07-24 Neon data-transfer-quota outage
+    stayed anonymous for two days — every DB-touching workflow emailed a
+    failure, and the endpoint built to explain it could only 500 too.
+
+    So: pool creation AND every query are guarded, and the driver's own message
+    is surfaced in db_error rather than swallowed.
+    """
+    db_status = "ok"
+    db_error: str | None = None
+    pool = None
     try:
+        pool = await get_db_pool()
         await pool.fetchval("SELECT 1")
-        db_status = "ok"
-    except Exception:  # noqa: BLE001 — surface as field, not 500
+    except Exception as exc:  # noqa: BLE001 — a probe reports, never raises
         db_status = "down"
+        db_error = f"{type(exc).__name__}: {exc}"[:300]
 
     async def _last(cron_name: str) -> str | None:
-        row = await pool.fetchrow(
-            "SELECT started_at FROM cron_runs WHERE cron_name = $1 "
-            "ORDER BY started_at DESC LIMIT 1",
-            cron_name,
-        )
+        if pool is None or db_status != "ok":
+            return None
+        try:
+            row = await pool.fetchrow(
+                "SELECT started_at FROM cron_runs WHERE cron_name = $1 "
+                "ORDER BY started_at DESC LIMIT 1",
+                cron_name,
+            )
+        except Exception:  # noqa: BLE001 — a stale timestamp must not 500 the probe
+            return None
         return row["started_at"].isoformat() if row else None
 
     return HealthResponse(
         tunnel="ok",
         db=db_status,
+        db_error=db_error,
         last_slow_cron=await _last("slow_daily"),
         last_fast_cron=await _last("fast_intraday"),
         last_dispatcher=await _last("alert_dispatcher"),

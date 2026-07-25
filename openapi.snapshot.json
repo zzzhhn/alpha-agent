@@ -1441,6 +1441,17 @@
             "title": "Db",
             "type": "string"
           },
+          "db_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db Error"
+          },
           "last_dispatcher": {
             "anyOf": [
               {
@@ -4187,7 +4198,7 @@
     },
     "/api/_health": {
       "get": {
-        "description": "Liveness probe: DB ping + last cron run timestamps.",
+        "description": "Liveness probe: DB ping + last cron run timestamps.\n\nA health probe must never be taken down by the outage it exists to report.\nThis one was: it correctly caught the ping failure and set db=\"down\", then\nthrew that away one line later because the _last() cron lookups queried the\nsame dead pool unguarded, so the whole response 500'd with a bare \"Internal\nServer Error\". That is how the 2026-07-24 Neon data-transfer-quota outage\nstayed anonymous for two days \u2014 every DB-touching workflow emailed a\nfailure, and the endpoint built to explain it could only 500 too.\n\nSo: pool creation AND every query are guarded, and the driver's own message\nis surfaced in db_error rather than swallowed.",
         "operationId": "health_api__health_get",
         "responses": {
           "200": {

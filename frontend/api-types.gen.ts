@@ -31,6 +31,17 @@ export interface paths {
         /**
          * Health
          * @description Liveness probe: DB ping + last cron run timestamps.
+         *
+         *     A health probe must never be taken down by the outage it exists to report.
+         *     This one was: it correctly caught the ping failure and set db="down", then
+         *     threw that away one line later because the _last() cron lookups queried the
+         *     same dead pool unguarded, so the whole response 500'd with a bare "Internal
+         *     Server Error". That is how the 2026-07-24 Neon data-transfer-quota outage
+         *     stayed anonymous for two days — every DB-touching workflow emailed a
+         *     failure, and the endpoint built to explain it could only 500 too.
+         *
+         *     So: pool creation AND every query are guarded, and the driver's own message
+         *     is surfaced in db_error rather than swallowed.
          */
         get: operations["health_api__health_get"];
         put?: never;
@@ -3430,6 +3441,8 @@ export interface components {
         HealthResponse: {
             /** Db */
             db: string;
+            /** Db Error */
+            db_error?: string | null;
             /** Last Dispatcher */
             last_dispatcher: string | null;
             /** Last Fast Cron */
