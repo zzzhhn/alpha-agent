@@ -37,10 +37,17 @@ on:
     - cron: '10 14,18 * * 1-5'
     # News: per-ticker hourly during market (Finnhub primary + FMP failover + RSS)
     - cron: '0 14-20 * * 1-5'
-    # News: Truth Social every 5 min (aligned with CNN mirror refresh), 24/7
-    - cron: '*/5 * * * *'
+    # News: macro (Truth/Fed/OFAC). Was '*/5 * * * *' 24/7 = 288 triggers/day,
+    # 82% of this workflow's entire schedule — it exhausted the Neon free-tier
+    # DATA TRANSFER quota on 2026-07-24 and took every DB-touching workflow down
+    # with it. The system trades on daily close-to-close signals, so 5-min macro
+    # granularity at 03:00 has no decision value. Market-adjacent weekdays only
+    # (12-21 UTC = 08:00-17:00 ET covers pre-market through post-close).
+    - cron: '*/15 12-21 * * 1-5'
     # News: Fed + OFAC hourly, 24/7
-    - cron: '0 * * * *'
+    # Off-hours backstop: Fed/OFAC headlines do land overnight and on weekends,
+    # so keep a sparse 24/7 sweep rather than going fully dark. 4/day, not 24.
+    - cron: '0 */6 * * *'
     # Minute bars puller for event-study CAR, every 4h during market hours
     - cron: '15 14,18 * * 1-5'
     # IC backtest monthly, 1st of month 04:00 UTC
@@ -330,8 +337,8 @@ jobs:
 
   news_macro:
     if: |
-      github.event.schedule == '*/5 * * * *' ||
-      github.event.schedule == '0 * * * *' ||
+      github.event.schedule == '*/15 12-21 * * 1-5' ||
+      github.event.schedule == '0 */6 * * *' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'news_macro')
     runs-on: ubuntu-latest
     timeout-minutes: 5

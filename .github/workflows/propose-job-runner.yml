@@ -17,7 +17,9 @@ on:
   workflow_dispatch:
   schedule:
     # Fallback only. Instant dispatch is the primary path; this catches misses.
-    - cron: "*/15 * * * *"
+    # Was */15 24/7 (96/day) for a path that only catches dispatch misses —
+    # cut to hourly as part of the 2026-07-24 Neon egress-quota remediation.
+    - cron: "0 * * * *"
 
 # Serialize runners: the DB claim is race-safe (FOR UPDATE SKIP LOCKED), but
 # serializing avoids piling up runner invocations when a user clicks repeatedly.
