@@ -63,7 +63,11 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
-    "ruff>=0.4",
+    # PINNED, not >=: an unpinned linter makes CI non-reproducible. 2026-07-25
+    # ruff 0.16.0 shipped new rules (UP041 et al.) and turned CI red across files
+    # nobody had touched, on a commit whose own diff was clean. Bump this
+    # deliberately (and fix the new findings in that same commit), never by drift.
+    "ruff==0.15.13",
 ]
 storage = [
     "asyncpg>=0.29",
