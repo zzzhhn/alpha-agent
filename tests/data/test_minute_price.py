@@ -80,11 +80,17 @@ class _CapturePool:
         return "DELETE 42"
 
 
-def test_minute_bars_retention_is_two_days():
+def test_minute_bars_retention_is_one_day():
     """7-day retention (~1.4M rows, ~324MB) crowded out every other table on
-    the 512MB Neon free tier and caused DiskFullError cascades (2026-06-26).
-    2 days is all the intraday signals consume."""
-    assert MINUTE_BARS_RETENTION_DAYS == 2
+    the Neon free tier and caused DiskFullError cascades (2026-06-26).
+
+    Tightened 2 -> 1 on 2026-07-26: at 2 days this table hit ~275MB on a SINGLE
+    day's data (2026-07-08), i.e. it can approach the entire 0.5GB budget alone,
+    and storage was already at 460/500MB when the 2026-07-25 outage hit. One day
+    is all the intraday signals consume. `stock.py` imports this constant rather
+    than restating it, so the API's out_of_range contract follows automatically.
+    """
+    assert MINUTE_BARS_RETENTION_DAYS == 1
 
 
 @pytest.mark.asyncio

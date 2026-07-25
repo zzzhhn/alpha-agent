@@ -24,7 +24,10 @@ _INTERVAL = "1m"
 # surfaced as unhandled 500s and flooded GH Actions with cron-failure emails.
 # The intraday signals only consume the last 1-2 sessions, so 2 days is ample
 # and keeps the table near ~100MB with headroom for the rest of the schema.
-MINUTE_BARS_RETENTION_DAYS = 2
+# 1 day, not 2: at 2 days this single table reached ~275MB on ONE day's data
+# (2026-07-08) and can approach the whole 512MB budget by itself. Storage was
+# at 460/500MB when the 2026-07-25 outage hit.
+MINUTE_BARS_RETENTION_DAYS = 1
 
 
 def _yf_history(ticker: str) -> pd.DataFrame:

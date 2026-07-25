@@ -1083,10 +1083,14 @@ class MinuteBarsResponse(BaseModel):
     out_of_range: bool
 
 
-# Minute bars are kept on a rolling ~30 day window by minute_bars_puller.
-# yfinance only retains 1m bars for the last 7-30 days, so older dates
-# return an empty bars list with out_of_range=True instead of querying.
-_MINUTE_BARS_RETENTION_DAYS = 30
+# Derived, never hardcoded: this used to claim a "rolling ~30 day window" while
+# the puller actually kept 2 days (now 1), so requests for days 3-30 fell through
+# the out_of_range branch, queried, and returned an empty bars list — the drawer
+# showed "no data" for dates that were really outside retention. Importing the
+# real constant makes the API's contract track the data layer automatically.
+from alpha_agent.data.minute_price import (  # noqa: E402
+    MINUTE_BARS_RETENTION_DAYS as _MINUTE_BARS_RETENTION_DAYS,
+)
 
 
 @router.get("/{ticker}/minute_bars", response_model=MinuteBarsResponse)

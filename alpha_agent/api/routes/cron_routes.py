@@ -114,19 +114,30 @@ async def cron_minute_bars(
         prune_minute_bars,
         pull_and_store_minute_bars,
     )
+    from alpha_agent.data.retention import prune_daily_signals, prune_news_items
 
     started_at = datetime.now(UTC)
     pool = await get_pool(os.environ["DATABASE_URL"])
 
-    # Retention prune (first shard only, once per cycle): keep a rolling window
-    # of MINUTE_BARS_RETENTION_DAYS. The Neon free-tier 512MB limit cannot hold
-    # a 7-day window (~1.4M rows / ~324MB crowded out every other table and
-    # produced DiskFullError on 2026-06-26), so the window is now 2 days. A
-    # daily DELETE stabilizes the table at its high-water mark: plain VACUUM
-    # does not shrink the file on Neon, but it marks pages reusable so new
-    # inserts reuse them instead of extending the file.
+    # Retention prune (first shard only, once per cycle). The Neon free-tier
+    # storage limit cannot hold a 7-day minute_bars window (~1.4M rows / ~324MB
+    # crowded out every other table and produced DiskFullError on 2026-06-26),
+    # so the window is now 1 day. A daily DELETE stabilizes each table at its
+    # high-water mark: plain VACUUM does not shrink the file on Neon, but it
+    # marks pages reusable so new inserts reuse them instead of extending it.
+    #
+    # daily_signals_fast and news_items had NO prune at all until 2026-07-26 —
+    # they grew unbounded and were the tables sitting under the 460/500MB
+    # storage reading when the 2026-07-25 quota outage hit. prune_daily_signals
+    # refuses to outrun consistency_outcomes, so pruning cannot destroy the
+    # picks-page consistency history.
     if offset == 0:
-        await prune_minute_bars(pool)
+        prune_results = {
+            "minute_bars": await prune_minute_bars(pool),
+            "news_items": await prune_news_items(pool),
+            "daily_signals_fast": await prune_daily_signals(pool),
+        }
+        print(f"[retention] {prune_results}", flush=True)
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(
