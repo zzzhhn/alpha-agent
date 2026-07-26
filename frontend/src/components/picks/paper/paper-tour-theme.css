@@ -1,0 +1,163 @@
+/*
+ * paper-tour-theme.css — overrides driver.js's default light, rounded
+ * popover to match the platform's tm- terminal design language (dark
+ * surface, hairline borders, font-tm-mono, zero border-radius). Loaded
+ * after driver.js/dist/driver.css so these rules win on equal specificity.
+ * Source tokens: src/app/globals.css --tm-* custom properties.
+ */
+
+.driver-popover {
+  all: unset;
+  box-sizing: border-box;
+  font-family: var(--font-tm-mono, ui-monospace, monospace);
+  background-color: var(--tm-bg-2);
+  color: var(--tm-fg);
+  border: 1px solid var(--tm-rule);
+  border-radius: 0;
+  min-width: 260px;
+  max-width: 320px;
+  margin: 0;
+  padding: 14px 16px;
+  position: fixed;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+}
+
+.driver-popover-title {
+  zoom: 1;
+  margin: 0;
+  display: block;
+  position: relative;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tm-accent);
+}
+
+.driver-popover-description {
+  zoom: 1;
+  margin-bottom: 0;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--tm-fg-2);
+}
+
+.driver-popover-close-btn {
+  all: unset;
+  cursor: pointer;
+  color: var(--tm-muted);
+  z-index: 1;
+  text-align: center;
+  width: 28px;
+  height: 24px;
+  font-size: 16px;
+  font-weight: 500;
+  transition: color 0.15s ease;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.driver-popover-close-btn:hover,
+.driver-popover-close-btn:focus {
+  color: var(--tm-fg);
+}
+
+.driver-popover-footer {
+  text-align: right;
+  zoom: 1;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  display: flex;
+}
+
+.driver-popover-progress-text {
+  color: var(--tm-muted);
+  zoom: 1;
+  font-size: 10px;
+  font-weight: 400;
+  font-family: var(--font-tm-mono, ui-monospace, monospace);
+}
+
+.driver-popover-footer-btn {
+  all: unset;
+  box-sizing: border-box;
+  color: var(--tm-fg-2);
+  cursor: pointer;
+  zoom: 1;
+  background-color: transparent;
+  border: 1px solid var(--tm-rule);
+  border-radius: 0;
+  outline: 0;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+  text-decoration: none;
+  display: inline-block;
+  font-family: var(--font-tm-mono, ui-monospace, monospace);
+}
+.driver-popover-footer-btn:hover,
+.driver-popover-footer-btn:focus {
+  background-color: transparent;
+  border-color: var(--tm-rule-2);
+  color: var(--tm-fg);
+}
+.driver-popover-footer .driver-popover-btn-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.driver-popover-next-btn {
+  border-color: var(--tm-accent);
+  background-color: var(--tm-accent);
+  color: var(--tm-bg);
+}
+.driver-popover-next-btn:hover,
+.driver-popover-next-btn:focus {
+  background-color: var(--tm-accent);
+  border-color: var(--tm-accent);
+  opacity: 0.9;
+}
+
+.driver-popover-navigation-btns {
+  flex-grow: 1;
+  justify-content: flex-end;
+  display: flex;
+}
+.driver-popover-navigation-btns button + button {
+  margin-left: 6px;
+}
+
+/* Arrow — same shape driver.js ships (5px solid triangle via transparent
+   sides), recolored to tm-bg-2 to match the popover surface. */
+.driver-popover-arrow {
+  content: "";
+  border: 5px solid var(--tm-bg-2);
+  position: absolute;
+}
+.driver-popover-arrow-side-left {
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  border-right-color: transparent;
+}
+.driver-popover-arrow-side-right {
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+}
+.driver-popover-arrow-side-top {
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+.driver-popover-arrow-side-bottom {
+  border-top-color: transparent;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}

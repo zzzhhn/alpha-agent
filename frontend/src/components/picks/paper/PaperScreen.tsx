@@ -9,8 +9,11 @@
  * "尊重时间"). All 4 panes share this one load rather than re-fetching per
  * tab switch.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { CircleHelp } from "lucide-react";
+import "driver.js/dist/driver.css";
+import "./paper-tour-theme.css";
 import {
   fetchPaperAccount,
   fetchOrders,
@@ -26,6 +29,7 @@ import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmChip } from "@/components/tm/TmSubbar";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { startPaperTour, hasSeenPaperTour } from "@/lib/paperTour";
 import PaperOverviewPane from "./PaperOverviewPane";
 import PaperTradePane from "./PaperTradePane";
 import PaperCurvePane from "./PaperCurvePane";
@@ -39,6 +43,17 @@ const TAB_LABEL_KEY: Record<PaperTabKey, Parameters<typeof t>[1]> = {
   trade: "sim.tabs.trade",
   curve: "sim.tabs.curve",
   orders: "sim.tabs.orders",
+};
+
+// Stable hooks for the onboarding tour (docs/superpowers/specs/
+// 2026-07-26-paper-trading-v2-design.md "Onboarding") — targeted by
+// data-tour rather than class names so a future style pass can't
+// silently break the tour's element selectors.
+const TAB_TOUR_KEY: Record<PaperTabKey, string> = {
+  overview: "paper-tab-overview",
+  trade: "paper-tab-trade",
+  curve: "paper-tab-curve",
+  orders: "paper-tab-orders",
 };
 
 export default function PaperScreen({ initialTab }: { readonly initialTab: PaperTabKey }) {
@@ -85,6 +100,18 @@ export default function PaperScreen({ initialTab }: { readonly initialTab: Paper
     router.replace(`${pathname}?tab=${next}`, { scroll: false });
   }
 
+  // Auto-start the onboarding tour on first visit, once loading settles
+  // and the tabbed panes are actually in the DOM. The ref guards against
+  // React strict-mode's double effect invocation firing it twice.
+  const tourAutoStarted = useRef(false);
+  useEffect(() => {
+    if (loading || tourAutoStarted.current || hasSeenPaperTour()) return;
+    tourAutoStarted.current = true;
+    const timer = setTimeout(() => startPaperTour(locale, changeTab), 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   async function handleCancel(orderId: number) {
     await cancelOrder(orderId);
     await loadAll();
@@ -92,10 +119,34 @@ export default function PaperScreen({ initialTab }: { readonly initialTab: Paper
 
   return (
     <TmScreen>
-      <TmPane title={t(locale, "sim.page_title")} meta="T+1">
+      <TmPane
+        title={t(locale, "sim.page_title")}
+        meta={
+          <span className="flex items-center gap-2">
+            <span>T+1</span>
+            <button
+              type="button"
+              onClick={() => startPaperTour(locale, changeTab)}
+              aria-label={t(locale, "sim.tour.help_btn")}
+              title={t(locale, "sim.tour.help_btn")}
+              className="text-tm-muted hover:text-tm-fg"
+            >
+              <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </button>
+          </span>
+        }
+      >
         <div role="tablist" aria-label="Paper trading tabs" className="flex flex-wrap items-center gap-1.5 px-3 py-2">
           {PAPER_TABS.map((k) => (
-            <TmChip key={k} on={tab === k} type="button" role="tab" aria-selected={tab === k} onClick={() => changeTab(k)}>
+            <TmChip
+              key={k}
+              data-tour={TAB_TOUR_KEY[k]}
+              on={tab === k}
+              type="button"
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => changeTab(k)}
+            >
               {t(locale, TAB_LABEL_KEY[k])}
             </TmChip>
           ))}
@@ -112,7 +163,7 @@ export default function PaperScreen({ initialTab }: { readonly initialTab: Paper
         ) : (
           <>
             {tab === "overview" && account ? (
-              <PaperOverviewPane account={account} onReset={loadAll} />
+              <PaperOverviewPane account={account} onReset={loadAll} onGoToTrade={() => changeTab("trade")} />
             ) : null}
             {tab === "trade" ? <PaperTradePane onPlaced={loadAll} /> : null}
             {tab === "curve" ? <PaperCurvePane curve={curve} /> : null}

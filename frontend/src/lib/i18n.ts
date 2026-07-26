@@ -1289,6 +1289,33 @@ const translations = {
     "sim.attribution.unavailable": "归因接口暂不可用",
     "sim.followed_tag": "跟单",
     "sim.close": "关闭",
+
+    /* Paper trading onboarding tour (driver.js) */
+    "sim.tour.step1_title": "模拟账户",
+    "sim.tour.step1_desc": "这是用来验证每日推荐表现的模拟账户，初始资金 100 万美元，随时可重置。",
+    "sim.tour.step2_title": "成交规则",
+    "sim.tour.step2_desc": "T 日下单，市价单在 T+1 收盘后成交；限价单在收盘价穿越时成交，最多等待 5 个交易日。",
+    "sim.tour.step3_title": "第一单从 Picks 页开始",
+    "sim.tour.step3_desc": "回到 Picks 页，每行都有一个“模拟”按钮，点击即可就地下单，系统会自动记录你跟随的这条推荐。",
+    "sim.tour.step4_overview_title": "账户概况",
+    "sim.tour.step4_overview_desc": "这里查看持仓明细与实时盈亏。",
+    "sim.tour.step4_curve_title": "净值曲线",
+    "sim.tour.step4_curve_desc": "对比你的模拟账户净值与 SPY 基准走势。",
+    "sim.tour.step4_orders_title": "订单记录",
+    "sim.tour.step4_orders_desc": "查看每笔订单明细，以及按标的汇总的归因数据。",
+    "sim.tour.step5_title": "诚实标签",
+    "sim.tour.step5_desc": "所有成交价均来自收盘价模拟，不代表真实盘中成交。",
+    "sim.tour.step6_title": "开始你的第一笔模拟交易",
+    "sim.tour.step6_desc": "点击下方按钮前往“下单”标签，或返回 Picks 页跟随一条推荐。",
+    "sim.tour.next_btn": "下一步",
+    "sim.tour.prev_btn": "上一步",
+    "sim.tour.done_btn": "开始下单",
+    "sim.tour.help_btn": "重新查看引导",
+    "sim.tour.progress": "{{current}} / {{total}}",
+
+    /* Paper overview empty state */
+    "sim.overview.empty_hint": "你还没有持仓，从“下单”标签开始你的第一笔模拟交易。",
+    "sim.overview.empty_cta": "去下单",
   },
   en: {
     "stage.data": "Data Collection",
@@ -2569,6 +2596,33 @@ const translations = {
     "sim.attribution.unavailable": "Attribution endpoint not available yet",
     "sim.followed_tag": "Followed",
     "sim.close": "Close",
+
+    /* Paper trading onboarding tour (driver.js) */
+    "sim.tour.step1_title": "Paper Account",
+    "sim.tour.step1_desc": "This paper account tracks how the daily picks perform. It starts with $1,000,000 and can be reset anytime.",
+    "sim.tour.step2_title": "Fill Rules",
+    "sim.tour.step2_desc": "Orders are placed on day T. Market orders fill at the T+1 close; limit orders fill once the close price crosses the limit, waiting up to 5 trading days.",
+    "sim.tour.step3_title": "Trade From Picks",
+    "sim.tour.step3_desc": "Back on the Picks page, every row has a Sim button. Click it to place an order in place, and the system automatically records which pick you followed.",
+    "sim.tour.step4_overview_title": "Overview",
+    "sim.tour.step4_overview_desc": "See your positions and live PnL here.",
+    "sim.tour.step4_curve_title": "Equity Curve",
+    "sim.tour.step4_curve_desc": "Compare your paper account's equity against the SPY benchmark.",
+    "sim.tour.step4_orders_title": "Order History",
+    "sim.tour.step4_orders_desc": "See every order plus attribution rolled up by ticker.",
+    "sim.tour.step5_title": "Honesty Label",
+    "sim.tour.step5_desc": "All fill prices are simulated from closing prices. They do not represent real intraday execution.",
+    "sim.tour.step6_title": "Get Started",
+    "sim.tour.step6_desc": "Click below to go to the Trade tab, or head back to Picks to follow a recommendation.",
+    "sim.tour.next_btn": "Next",
+    "sim.tour.prev_btn": "Previous",
+    "sim.tour.done_btn": "Start Trading",
+    "sim.tour.help_btn": "Replay tour",
+    "sim.tour.progress": "{{current}} of {{total}}",
+
+    /* Paper overview empty state */
+    "sim.overview.empty_hint": "No positions yet. Start your first simulated trade from the Trade tab.",
+    "sim.overview.empty_cta": "Go to Trade",
   },
 } as const;
 

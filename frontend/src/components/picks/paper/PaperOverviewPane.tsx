@@ -8,6 +8,7 @@ import { resetAccount } from "@/lib/api/paper";
 import SimPositionRow from "../SimPositionRow";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t, type Locale } from "@/lib/i18n";
+import { TmButton } from "@/components/tm/TmButton";
 import { Metric, Disclaimer, TwoStepConfirm } from "./PaperUi";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -21,9 +22,11 @@ const POS_HEADERS: Record<Locale, string[]> = {
 export default function PaperOverviewPane({
   account,
   onReset,
+  onGoToTrade,
 }: {
   readonly account: AccountResponse;
   readonly onReset: () => Promise<void>;
+  readonly onGoToTrade: () => void;
 }) {
   const { locale } = useLocale();
 
@@ -69,7 +72,12 @@ export default function PaperOverviewPane({
           />
         </div>
         {account.positions.length === 0 ? (
-          <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "common.noData")}</p>
+          <div className="flex flex-col items-start gap-2 py-2">
+            <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "sim.overview.empty_hint")}</p>
+            <TmButton variant="ghost" onClick={onGoToTrade}>
+              {t(locale, "sim.overview.empty_cta")}
+            </TmButton>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left">

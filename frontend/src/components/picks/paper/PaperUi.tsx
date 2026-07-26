@@ -54,7 +54,10 @@ export function StatusChip({ status, label }: { readonly status: string; readonl
 export function Disclaimer() {
   const { locale } = useLocale();
   return (
-    <p className="flex items-center gap-1.5 font-tm-mono text-[10px] leading-snug text-tm-muted">
+    <p
+      data-tour="sim-disclaimer"
+      className="flex items-center gap-1.5 font-tm-mono text-[10px] leading-snug text-tm-muted"
+    >
       <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.75} />
       {t(locale, "sim.disclaimer")}
     </p>

@@ -16,6 +16,7 @@
     "@hookform/resolvers": "^5.2.2",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
+    "driver.js": "^1.8.0",
     "jose": "^6.2.3",
     "lightweight-charts": "^4.2.3",
     "lucide-react": "^1.14.0",
