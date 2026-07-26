@@ -76,9 +76,17 @@ _EXPLORE_FAMILIES = frozenset({
     "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality",
     "score", "sentiment", "lowvol", "momentum", "revision",
 })
-# Fast signals decay hardest by t+1 — the only families worth a delay-0 probe
-# (BRAIN's own D0 checks apply their D0 bars; the verdict stays authoritative).
-_DELAY0_FAMILIES = frozenset({"microstructure", "overnight"})
+# Fast signals decay hardest by t+1 — only THOSE families are worth a delay-0
+# probe (BRAIN's own D0 checks apply their stricter D0 bars; the verdict stays
+# authoritative). 2026-07-26 expansion (backlog "delay-0 探索扩大"): sentiment
+# (news/social scores decay within the day), iv_term and vrp (options surfaces
+# reprice intraday) join the original two. Deliberately EXCLUDED: quality /
+# score / lowvol / revision — slow-moving fundamentals gain nothing at D0 but
+# still pay its tighter submission bars. Probe rate stays 15%: scope expanded,
+# prior unchanged, until post-Aug-1 rounds provide evidence either way.
+_DELAY0_FAMILIES = frozenset(
+    {"microstructure", "overnight", "sentiment", "iv_term", "vrp"}
+)
 
 
 def vary_settings(base: dict, family: str, rng) -> dict:

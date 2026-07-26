@@ -4,6 +4,12 @@
 name: brain-backfill-selfcorr
 
 on:
+  schedule:
+    # Daily, one hour after brain-mining-loop (08:00) so freshly mined alphas
+    # get their official self-corr while BRAIN's lazy compute is warm. Scheduled
+    # runs use the LOW default limit below — 2026-07-13 evidence: ~45 rapid
+    # /correlations/self requests locked the endpoint into permanent empty-200.
+    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       limit:
@@ -38,7 +44,9 @@ jobs:
           BRAIN_PASSWORD: ${{ secrets.BRAIN_PASSWORD }}
           BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
-          BACKFILL_LIMIT: ${{ github.event.inputs.limit }}
+          # inputs.* are EMPTY on schedule events (int("") crashes the script) —
+          # and the scheduled default stays far under the ~45-request throttle.
+          BACKFILL_LIMIT: ${{ github.event.inputs.limit || '30' }}
           BACKFILL_MAX_WAIT: ${{ github.event.inputs.max_wait || '120' }}
           BACKFILL_DIAG: ${{ github.event.inputs.diag || '' }}
         run: python scripts/brain_backfill_selfcorr.py
