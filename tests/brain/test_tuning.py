@@ -142,3 +142,20 @@ def test_degenerate_and_concentration_retries():
     # fitness_turnover outranks concentration here (Sharpe clears, F liftable)
     assert diagnose(conc) in ("fitness_turnover", "concentration")
     assert retry_variant({}, "concentration")["truncation"] == 0.04
+
+
+def test_base_settings_composite_gets_technical_decay():
+    """Evidence-backed (platform dump run 30197834229): composites at decay=12
+    ran median Fitness 1.00 vs 0.59 at decay=0 (returns up AND turnover down),
+    so a multi-leg add() composite gets the technical decay even when its
+    fields are fundamental. Single-leg fundamentals keep the proven decay-0."""
+    comp = t.base_settings_for(
+        "add(group_rank(equity_value_score, subindustry), "
+        "reverse(group_rank(distress_risk_measure, subindustry)))"
+    )
+    assert comp["decay"] == 12
+    # regression: the single-leg fundamental config must NOT regress
+    single = t.base_settings_for(
+        "group_rank(ts_rank(divide(ebit, equity), 126), subindustry)"
+    )
+    assert single["decay"] == 0

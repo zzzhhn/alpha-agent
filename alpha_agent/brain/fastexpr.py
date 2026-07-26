@@ -461,8 +461,18 @@ def _catalog_composite_leg(
         if hints[f]["sign"] < 0:
             leg = _op("reverse", leg)
         tree = leg if tree is None else _op("add", tree, leg)
-    return _op("group_neutralize", tree,
+    tree = _op("group_neutralize", tree,
                _fld(rng.choice(("industry", "subindustry", "sector"))))
+    # Volume gate, 80% (platform dump run 30197834229, n=152 composites): gated
+    # composites ran median Fitness 1.16 vs 0.54 ungated, return-thickness
+    # (ret/max(TO,0.125)) 0.605 vs 0.315 — and every top-5-Fitness composite was
+    # gated. The gate concentrates the book in confirmed-flow windows, which is
+    # exactly the Fitness lever (#491: returns too thin). 20% stay ungated as a
+    # continuing control group.
+    if rng.random() < 0.80:
+        tree = _op("trade_when",
+                   _op("greater", _fld("volume"), _fld("adv20")), tree, _lit(-1))
+    return tree
 
 
 # --- Frontier motifs (2026-07-11 research sweep: Alpha101/GTJA/qlib census + ---

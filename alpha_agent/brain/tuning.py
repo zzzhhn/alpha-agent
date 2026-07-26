@@ -52,6 +52,17 @@ def base_settings_for(
     decay (they're the high-turnover ones); fundamental/style signals keep the
     proven decay-0 config so nothing that already passes regresses."""
     decay = 12 if _TECHNICAL_RE.search(expr) else fundamental_decay
+    # Multi-leg composites want the technical decay, not the fundamental 0
+    # (platform dump run 30197834229): composites at decay=12 ran median
+    # Fitness 1.00 / RET 0.064 / TO 0.085 vs decay=0's 0.59 / 0.050 / 0.130 —
+    # smoothing raises returns AND cuts turnover here, and the F>=1.0 survivors
+    # separate from the S-ok/F-thin group almost entirely on turnover
+    # (0.119 vs 0.212). Detection mirrors the analysis: an add() head with >=2
+    # grouped legs.
+    if decay == 0 and expr.startswith("add(") and (
+            expr.count("group_rank(") + expr.count("group_zscore(")
+            + expr.count("group_neutralize(") >= 2):
+        decay = 12
     settings = {**DEFAULT_SETTINGS, "decay": decay, "neutralization": neutralization}
     # NOTE: an options->TOP500 pin was REVERTED — the DB proved the opposite: the
     # proven high-Sharpe options factors (S=1.6-2.5) all ran on TOP3000/TOP1000, and

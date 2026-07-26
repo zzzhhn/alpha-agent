@@ -315,3 +315,29 @@ def test_dispersion_family_valid_and_classified():
     exprs = fe.generate_brain_candidates(8, family_focus="dispersion", rng_seed=1)
     assert len(exprs) == 8
     assert all(family_of(e) == "dispersion" for e in exprs)
+
+
+def test_catalog_composite_volume_gate_majority_and_valid():
+    """Evidence-backed (platform dump run 30197834229): gated composites ran
+    median Fitness 1.16 vs 0.54 ungated, so ~80% get the trade_when volume
+    gate — while ~20% must stay ungated as the control group. Both shapes
+    must remain valid FASTEXPR."""
+    from alpha_agent.brain.fastexpr import (
+        _SCORE_FIELDS, _catalog_composite_leg, _valid_brain_tree)
+    hints = {
+        "equity_value_score": {"n": 3, "best_abs": 0.99, "sign": -1, "dead": False},
+        "financial_statement_value_score": {"n": 5, "best_abs": 0.83, "sign": -1, "dead": False},
+        "multi_factor_acceleration_score_derivative": {"n": 6, "best_abs": 0.97, "sign": 1, "dead": False},
+    }
+    rng = random.Random(11)
+    exprs = []
+    for _ in range(60):
+        tree = _catalog_composite_leg(rng, _SCORE_FIELDS, hints)
+        e = _valid_brain_tree(tree)
+        assert e, "every composite (gated or not) must stay valid"
+        exprs.append(e)
+    gated = [e for e in exprs if e.startswith("trade_when(greater(volume, adv20)")]
+    assert 0 < len(gated) < len(exprs), "both gated and ungated shapes must occur"
+    assert len(gated) / len(exprs) > 0.6, "gate must be the majority path (~80%)"
+    # the gate wraps the WHOLE composite: group_neutralize stays inside it
+    assert all("group_neutralize(" in e for e in gated)
