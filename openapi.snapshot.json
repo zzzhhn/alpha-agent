@@ -62,6 +62,22 @@
         "title": "AccountResponse",
         "type": "object"
       },
+      "AttributionResponse": {
+        "properties": {
+          "tickers": {
+            "items": {
+              "$ref": "#/components/schemas/TickerAttribution"
+            },
+            "title": "Tickers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "title": "AttributionResponse",
+        "type": "object"
+      },
       "BasketEdgeResponse": {
         "properties": {
           "as_of": {
@@ -2386,6 +2402,17 @@
       },
       "OrderOut": {
         "properties": {
+          "fail_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fail Reason"
+          },
           "fill_date": {
             "anyOf": [
               {
@@ -2426,6 +2453,28 @@
           "order_type": {
             "title": "Order Type",
             "type": "string"
+          },
+          "pick_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Date"
+          },
+          "pick_ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Ticker"
           },
           "qty": {
             "title": "Qty",
@@ -2602,6 +2651,30 @@
             "pattern": "^(market|limit)$",
             "title": "Order Type",
             "type": "string"
+          },
+          "pick_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Date"
+          },
+          "pick_ticker": {
+            "anyOf": [
+              {
+                "maxLength": 10,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Ticker"
           },
           "qty": {
             "exclusiveMinimum": 0.0,
@@ -3408,6 +3481,39 @@
           "bear"
         ],
         "title": "Thesis",
+        "type": "object"
+      },
+      "TickerAttribution": {
+        "properties": {
+          "pick_linked_trades": {
+            "title": "Pick Linked Trades",
+            "type": "integer"
+          },
+          "realized_pnl": {
+            "title": "Realized Pnl",
+            "type": "number"
+          },
+          "self_directed_trades": {
+            "title": "Self Directed Trades",
+            "type": "integer"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "unrealized_pnl": {
+            "title": "Unrealized Pnl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "realized_pnl",
+          "unrealized_pnl",
+          "pick_linked_trades",
+          "self_directed_trades"
+        ],
+        "title": "TickerAttribution",
         "type": "object"
       },
       "TickerCoverage": {
@@ -7963,6 +8069,56 @@
           }
         },
         "summary": "Get Account",
+        "tags": [
+          "paper"
+        ]
+      }
+    },
+    "/api/paper/attribution": {
+      "get": {
+        "description": "Per-ticker PnL attribution, split into pick-linked vs self-directed fills.",
+        "operationId": "get_attribution_api_paper_attribution_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttributionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Attribution",
         "tags": [
           "paper"
         ]

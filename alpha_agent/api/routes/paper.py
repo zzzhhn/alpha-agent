@@ -47,6 +47,10 @@ class PlaceOrderRequest(BaseModel):
     order_type: str = Field(..., pattern="^(market|limit)$")
     qty: int = Field(..., gt=0)
     limit_price: float | None = None
+    # Pick attribution: set automatically when placed from a pick's inline
+    # drawer; left null for manual /paper orders. Both null or both set.
+    pick_date: date | None = None
+    pick_ticker: str | None = Field(default=None, max_length=10)
 
 
 class OrderResponse(BaseModel):
@@ -67,6 +71,9 @@ class OrderOut(BaseModel):
     fill_date: str | None
     fill_price: float | None
     status: str
+    fail_reason: str | None = None
+    pick_date: str | None = None
+    pick_ticker: str | None = None
 
 
 class OrderListResponse(BaseModel):
@@ -89,6 +96,18 @@ class ResetResponse(BaseModel):
     reset_count: int
     cash: float
     message: str
+
+
+class TickerAttribution(BaseModel):
+    ticker: str
+    realized_pnl: float
+    unrealized_pnl: float
+    pick_linked_trades: int
+    self_directed_trades: int
+
+
+class AttributionResponse(BaseModel):
+    tickers: list[TickerAttribution]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -121,6 +140,27 @@ async def _current_closes(pool: Any, tickers: list[str]) -> dict[str, float]:
         tickers,
     )
     return {r["ticker"]: r["close"] for r in rows}
+
+
+def _is_en_locale() -> bool:
+    return os.environ.get("LOCALE", "zh") == "en"
+
+
+def _insufficient_cash_message(ticker: str, est_cost: float, cash: float) -> str:
+    return (
+        f"Insufficient cash: buying {ticker} costs an estimated ${est_cost:,.2f}, "
+        f"but available cash is ${cash:,.2f}"
+        if _is_en_locale()
+        else f"现金不足：买入 {ticker} 预计需要 ${est_cost:,.2f}，可用现金仅 ${cash:,.2f}"
+    )
+
+
+def _insufficient_position_message(ticker: str, qty: int, held_qty: int) -> str:
+    return (
+        f"Insufficient position: you hold {held_qty} shares of {ticker}, cannot sell {qty}"
+        if _is_en_locale()
+        else f"持仓不足：{ticker} 现持有 {held_qty} 股，无法卖出 {qty} 股"
+    )
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -201,15 +241,43 @@ async def place_order(
     account_id: int = account["id"]
     today = date.today()
 
+    if body.side == "buy":
+        # Estimate cost off the latest close (decision: no buffer). If no
+        # price data exists yet for this ticker, skip the check rather than
+        # block the order, same "no data, no opinion" stance as get_account's
+        # current_price=null handling.
+        closes = await _current_closes(pool, [body.ticker])
+        latest_close = closes.get(body.ticker)
+        if latest_close is not None:
+            est_cost = latest_close * body.qty
+            if est_cost > account["cash"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=_insufficient_cash_message(body.ticker, est_cost, account["cash"]),
+                )
+    else:  # sell
+        position = await pool.fetchrow(
+            "SELECT qty FROM sim_position WHERE account_id = $1 AND ticker = $2",
+            account_id, body.ticker,
+        )
+        held_qty = int(position["qty"]) if position else 0
+        if held_qty < body.qty:
+            raise HTTPException(
+                status_code=400,
+                detail=_insufficient_position_message(body.ticker, body.qty, held_qty),
+            )
+
     order_id: int = await pool.fetchval(
         """
         INSERT INTO sim_order
-            (account_id, ticker, side, order_type, qty, limit_price, signal_date)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+            (account_id, ticker, side, order_type, qty, limit_price, signal_date,
+             pick_date, pick_ticker)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id
         """,
         account_id, body.ticker, body.side, body.order_type,
         body.qty, body.limit_price, today,
+        body.pick_date, body.pick_ticker,
     )
 
     if body.order_type == "limit" and body.limit_price is not None:
@@ -241,7 +309,7 @@ async def list_orders(
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
 
-    valid_statuses = {"pending", "filled", "expired", "cancelled", "all"}
+    valid_statuses = {"pending", "filled", "expired", "cancelled", "failed", "all"}
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"status must be one of {valid_statuses}")
 
@@ -275,6 +343,9 @@ async def list_orders(
             fill_date=r["fill_date"].isoformat() if r["fill_date"] else None,
             fill_price=r["fill_price"],
             status=r["status"],
+            fail_reason=r["fail_reason"],
+            pick_date=r["pick_date"].isoformat() if r["pick_date"] else None,
+            pick_ticker=r["pick_ticker"],
         )
         for r in rows
     ]
@@ -366,3 +437,55 @@ async def reset_account(
         cash=initial_cash,
         message="账户已重置",
     )
+
+
+@router.get("/attribution", response_model=AttributionResponse)
+async def get_attribution(
+    user_id: int = Depends(require_user),
+) -> AttributionResponse:
+    """Per-ticker PnL attribution, split into pick-linked vs self-directed fills."""
+    pool = await get_db_pool()
+    account = await _get_or_create_account(pool, user_id)
+    account_id: int = account["id"]
+
+    positions = await pool.fetch(
+        "SELECT ticker, qty, avg_cost, realized_pnl FROM sim_position WHERE account_id = $1",
+        account_id,
+    )
+    trade_counts = await pool.fetch(
+        """
+        SELECT ticker,
+               COUNT(*) FILTER (WHERE pick_date IS NOT NULL) AS pick_linked,
+               COUNT(*) FILTER (WHERE pick_date IS NULL) AS self_directed
+        FROM sim_order
+        WHERE account_id = $1 AND status = 'filled'
+        GROUP BY ticker
+        """,
+        account_id,
+    )
+
+    pos_by_ticker = {p["ticker"]: p for p in positions}
+    counts_by_ticker = {r["ticker"]: r for r in trade_counts}
+    all_tickers = set(pos_by_ticker) | set(counts_by_ticker)
+
+    live_tickers = [t for t, p in pos_by_ticker.items() if p["qty"] > 0]
+    closes = await _current_closes(pool, live_tickers)
+
+    rows: list[TickerAttribution] = []
+    for ticker in sorted(all_tickers):
+        pos = pos_by_ticker.get(ticker)
+        realized = pos["realized_pnl"] if pos else 0.0
+        unrealized = 0.0
+        if pos and pos["qty"] > 0:
+            current = closes.get(ticker)
+            if current is not None:
+                unrealized = (current - pos["avg_cost"]) * pos["qty"]
+        counts = counts_by_ticker.get(ticker)
+        rows.append(TickerAttribution(
+            ticker=ticker,
+            realized_pnl=realized,
+            unrealized_pnl=unrealized,
+            pick_linked_trades=int(counts["pick_linked"]) if counts else 0,
+            self_directed_trades=int(counts["self_directed"]) if counts else 0,
+        ))
+    return AttributionResponse(tickers=rows)

@@ -83,3 +83,13 @@ def unrealized_pnl(qty: int, avg_cost: float, current_close: float) -> float:
 def realized_pnl_delta(avg_cost: float, fill_price: float, sold_qty: int) -> float:
     """Incremental realized PnL for a sell fill."""
     return (fill_price - avg_cost) * sold_qty
+
+
+def has_sufficient_cash(cash: float, fill_price: float, qty: int) -> bool:
+    """True if cash covers a buy fill of qty shares at fill_price.
+
+    Called at fill time (not just order time) because cash charged by an
+    earlier fill in the same batch can make a later, already-pending order
+    unaffordable even though it passed the order-time estimate.
+    """
+    return cash >= fill_price * qty

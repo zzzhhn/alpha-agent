@@ -192,11 +192,21 @@ async def cron_minute_bars(
 
 # ── Paper-trading daily fill ──────────────────────────────────────────────
 
+def _insufficient_cash_fail_reason(cost: float, cash: float | None) -> str:
+    cash_str = f"${cash:,.2f}" if cash is not None else "N/A"
+    return (
+        f"Insufficient cash at fill time: needed ${cost:,.2f}, account balance was {cash_str}"
+        if os.environ.get("LOCALE", "zh") == "en"
+        else f"成交时现金不足：需要 ${cost:,.2f}，账户余额为 {cash_str}"
+    )
+
+
 async def _run_paper_fill(dsn: str) -> dict[str, Any]:
     """Core fill logic — separated so tests can call it directly with a test DSN."""
     from alpha_agent.paper.fill_engine import (
         compute_limit_fill,
         compute_market_fill,
+        has_sufficient_cash,
         new_avg_cost,
         realized_pnl_delta,
     )
@@ -205,6 +215,7 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
     today = datetime.now(UTC).date()
     filled_count = 0
     expired_count = 0
+    failed_count = 0
 
     # Fetch all pending orders across all accounts
     async with pool.acquire() as conn:
@@ -217,7 +228,7 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
     # Group by ticker to batch price lookups
     tickers = list({r["ticker"] for r in pending_orders})
     if not tickers:
-        return {"ok": True, "filled": 0, "expired": 0}
+        return {"ok": True, "filled": 0, "expired": 0, "failed": 0}
 
     async with pool.acquire() as conn:
         price_rows = await conn.fetch(
@@ -263,14 +274,29 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                 qty = order["qty"]
                 account_id = order["account_id"]
 
-                # Update order
-                await conn.execute(
-                    "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, filled_at=now() "
-                    "WHERE id=$3",
-                    fill_date, fill_price, order["id"],
-                )
-
                 if order["side"] == "buy":
+                    # Fill-time re-check: order-time validation only estimated
+                    # against cash at submission; an earlier fill in this same
+                    # batch may have already spent it. FOR UPDATE serializes
+                    # concurrent fills against the same account.
+                    current_cash = await conn.fetchval(
+                        "SELECT cash FROM sim_account WHERE id=$1 FOR UPDATE", account_id
+                    )
+                    if current_cash is None or not has_sufficient_cash(current_cash, fill_price, qty):
+                        await conn.execute(
+                            "UPDATE sim_order SET status='failed', fail_reason=$1 WHERE id=$2",
+                            _insufficient_cash_fail_reason(fill_price * qty, current_cash),
+                            order["id"],
+                        )
+                        failed_count += 1
+                        continue
+
+                    # Update order
+                    await conn.execute(
+                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, filled_at=now() "
+                        "WHERE id=$3",
+                        fill_date, fill_price, order["id"],
+                    )
                     # Upsert position with new avg_cost
                     existing = await conn.fetchrow(
                         "SELECT qty, avg_cost FROM sim_position WHERE account_id=$1 AND ticker=$2",
@@ -310,6 +336,13 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                         )
                         expired_count += 1
                         continue
+
+                    # Update order
+                    await conn.execute(
+                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, filled_at=now() "
+                        "WHERE id=$3",
+                        fill_date, fill_price, order["id"],
+                    )
                     pnl_delta = realized_pnl_delta(existing["avg_cost"], fill_price, qty)
                     new_qty = existing["qty"] - qty
                     new_realized = (existing["realized_pnl"] or 0.0) + pnl_delta
@@ -391,7 +424,12 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                 unrealized, total_realized, spy_close,
             )
 
-    return {"ok": True, "filled": filled_count, "expired": expired_count}
+    return {
+        "ok": True,
+        "filled": filled_count,
+        "expired": expired_count,
+        "failed": failed_count,
+    }
 
 
 @router.post("/paper_fill")
