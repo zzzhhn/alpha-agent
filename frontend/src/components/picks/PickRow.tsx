@@ -116,6 +116,21 @@ export default function PickRow({
     .filter(Boolean)
     .join(" · ");
 
+  // HOLD-inclusive 口径 (2026-07-26): a second reading where a HOLD prediction
+  // counts as a hit inside the flat band, surfaced as an extra tooltip line.
+  // Only d5/m1 are ever non-null on the backend (y1/hist structurally
+  // unavailable, see alpha_agent/backtest/consistency.py) — reuse the same
+  // dash rendering as the primary row for null.
+  const HOLD_WINDOWS = [
+    { key: "d5", labelKey: "picks_table.cons_5d" },
+    { key: "m1", labelKey: "picks_table.cons_1m" },
+  ] as const;
+  const consHoldStr = HOLD_WINDOWS.map((w) => {
+    const v = card.consistency_hold?.[w.key];
+    const pct = typeof v === "number" && isFinite(v) ? Math.round(v * 100) : null;
+    return `${t(locale, w.labelKey)} ${pct === null ? "—" : `${pct}%`}`;
+  }).join(" · ");
+
   const drivers = (card.top_drivers ?? [])
     .slice(0, 3)
     .map((s) => getSignalDisplayLabel(s, locale));
@@ -226,7 +241,10 @@ export default function PickRow({
             t(locale, "picks_table.hitrate_label") +
             " " +
             hitPct +
-            "%"
+            "%" +
+            "\n" +
+            t(locale, "picks_table.cons_hold_label") +
+            consHoldStr
           }
           placement="bottom"
         >

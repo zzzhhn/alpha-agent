@@ -80,6 +80,12 @@ export interface RatingCard {
   // explain a dash (n below the window's minimum) and qualify a rate (n=4 vs
   // n=80 are very different claims).
   consistency_n?: Record<string, number> | null;
+  // HOLD-inclusive 口径: same shape as `consistency`, but a HOLD prediction
+  // counts as a hit when the next day's move stayed inside the flat band
+  // (backend HOLD_FLAT_BAND). Only d5/m1 are ever non-null; y1/hist are
+  // structurally unavailable (see alpha_agent/backtest/consistency.py).
+  consistency_hold?: ConsistencyWindows | null;
+  consistency_hold_n?: Record<string, number> | null;
   news_items?: NewsItemLite[];
 }
 

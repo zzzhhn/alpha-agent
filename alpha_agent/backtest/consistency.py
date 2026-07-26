@@ -39,6 +39,16 @@ MIN_SAMPLES: dict[str, int] = {"d5": 3, "m1": 10, "y1": 120, "hist": 5}
 
 _ORDER: tuple[str, ...] = ("d5", "m1", "y1", "hist")
 
+# HOLD-inclusive consistency (2026-07-26): a second, opt-in 口径 alongside the
+# directional-only rate above. A HOLD prediction counts as a hit when the
+# next-day move stayed inside +-0.5%. 0.5% is below the S&P 500 constituent's
+# typical daily absolute move (median ~0.8-1.2%), so "flatter than a typical
+# day" is a real claim, not a free pass; the band is symmetric so it cannot
+# bias toward up or down calls. Only d5/m1 are computable live (see
+# compute_hold_inclusive_consistency); y1/hist stay None (durable
+# consistency_outcomes has no HOLD rows, and raw signals are pruned past 30d).
+HOLD_FLAT_BAND = 0.005
+
 
 def _hit(rating: str, fwd1: float) -> bool | None:
     """True/False if the tier's directional call matched the next-day return
@@ -57,13 +67,23 @@ def _rate(hits: int, total: int, window: str) -> float | None:
 
 
 async def _fetch_live_outcomes(
-    pool, tickers: list[str], *, after_date: "_date | None" = None
+    pool,
+    tickers: list[str],
+    *,
+    after_date: "_date | None" = None,
+    hold_band: float | None = None,
 ) -> list[tuple[str, "_date", bool]]:
-    """(ticker, date, hit) for every REALIZED, DIRECTIONAL prediction in
-    fast∪slow joined to its next-day return. HOLD and not-yet-realized rows are
-    excluded (they never enter a hit-rate). `after_date` restricts to dates
-    strictly greater than it — the unmaterialized recent tail. The tier for
-    slow-only rows is derived exactly like the picks display path."""
+    """(ticker, date, hit) for every REALIZED prediction in fast∪slow joined to
+    its next-day return. Not-yet-realized rows are always excluded. `after_date`
+    restricts to dates strictly greater than it — the unmaterialized recent
+    tail. The tier for slow-only rows is derived exactly like the picks display
+    path.
+
+    `hold_band` (default None) is the opt-in HOLD-inclusive knob: None keeps
+    the original directional-only behavior byte-identical (HOLD dropped) —
+    required so materialize_outcomes' durable history stays directional-only.
+    When set, a HOLD row is scored a hit iff abs(fwd1) <= hold_band instead of
+    being dropped."""
     from alpha_agent.fusion.rating import map_to_tier
 
     if not tickers:
@@ -118,7 +138,9 @@ async def _fetch_live_outcomes(
             continue
         hit = _hit(rating, float(fwd1))
         if hit is None:
-            continue
+            if hold_band is None or rating != "HOLD":
+                continue
+            hit = abs(float(fwd1)) <= hold_band
         out.append((r["ticker"], r["date"], hit))
     return out
 
@@ -229,3 +251,72 @@ async def compute_window_consistency(
     Tickers with no realized directional predictions map to all-None.
     """
     return rates_from_tallies(await compute_window_tallies(pool, tickers))
+
+
+# HOLD-inclusive is only computable live for the SHORT windows: d5 (5
+# trading days) and m1 (21) both fit inside daily_signals_fast's 30-day
+# retention + the unpruned daily_signals_slow, so the underlying HOLD rows
+# are still on disk to recompute from. y1/hist are structurally unavailable
+# (see compute_hold_inclusive_consistency docstring) and always None.
+_HOLD_WINDOWS: tuple[str, ...] = ("d5", "m1")
+
+
+async def compute_hold_inclusive_consistency(
+    pool, tickers: list[str]
+) -> tuple[dict[str, dict[str, float | None]], dict[str, dict[str, int]]]:
+    """Second, HOLD-inclusive 口径 alongside compute_window_consistency's
+    directional-only rate. A HOLD prediction counts as a hit when the next
+    day's move stayed within HOLD_FLAT_BAND (see its docstring). Rate =
+    (directional hits + HOLD hits) / (directional n + HOLD n), reusing
+    MIN_SAMPLES[window] as the floor on that combined n.
+
+    d5/m1 only — computed live from fast∪slow (both fit inside the 30-day
+    fast retention). y1/hist are ALWAYS None: the durable consistency_outcomes
+    table stores only directional verdicts (HOLD rows are structurally
+    absent), and the raw signals needed to recompute a year/all-time HOLD
+    rate live are pruned long before then — so this reports the honest dash
+    rather than a fake number.
+
+    Returns ({ticker: {"d5":.., "m1":.., "y1":None, "hist":None}},
+             {ticker: {"d5":n, "m1":n, "y1":0, "hist":0}}).
+    """
+    rates: dict[str, dict[str, float | None]] = {
+        t: {"d5": None, "m1": None, "y1": None, "hist": None} for t in tickers
+    }
+    ns: dict[str, dict[str, int]] = {
+        t: {"d5": 0, "m1": 0, "y1": 0, "hist": 0} for t in tickers
+    }
+    if not tickers:
+        return rates, ns
+
+    date_rows = await pool.fetch(
+        "SELECT DISTINCT date FROM daily_prices ORDER BY date DESC LIMIT 21"
+    )
+    if not date_rows:
+        return rates, ns
+    dates: list[_date] = [r["date"] for r in date_rows]
+    cutoffs: dict[str, _date] = {
+        w: dates[min(WINDOW_TRADING_DAYS[w] - 1, len(dates) - 1)]
+        for w in _HOLD_WINDOWS
+    }
+
+    outcomes = await _fetch_live_outcomes(pool, tickers, hold_band=HOLD_FLAT_BAND)
+
+    counts: dict[str, dict[str, list[int]]] = {
+        t: {w: [0, 0] for w in _HOLD_WINDOWS} for t in tickers
+    }
+    for ticker, d, hit in outcomes:
+        if ticker not in counts:
+            continue
+        for w in _HOLD_WINDOWS:
+            if d >= cutoffs[w]:
+                bucket = counts[ticker][w]
+                bucket[1] += 1
+                if hit:
+                    bucket[0] += 1
+
+    for ticker, per_window in counts.items():
+        for w, (h, n) in per_window.items():
+            ns[ticker][w] = n
+            rates[ticker][w] = _rate(h, n, w)
+    return rates, ns

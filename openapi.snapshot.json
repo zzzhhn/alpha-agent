@@ -1848,6 +1848,29 @@
             "title": "Consistency",
             "type": "object"
           },
+          "consistency_hold": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "default": {},
+            "title": "Consistency Hold",
+            "type": "object"
+          },
+          "consistency_hold_n": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Consistency Hold N",
+            "type": "object"
+          },
           "consistency_n": {
             "additionalProperties": {
               "type": "integer"

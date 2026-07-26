@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Query, Response
@@ -23,6 +24,8 @@ from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import grade_dimensions
 from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.fusion.rating import compute_confidence, map_to_tier
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/picks", tags=["picks"])
 
@@ -76,6 +79,12 @@ class LeanCard(BaseModel):
     # and distinguish 50% (2/4) from 50% (40/80) instead of leaving the user
     # guessing — same value for dashed windows shows how close they are.
     consistency_n: dict[str, int] = {}
+    # HOLD-inclusive 口径 (2026-07-26): same shape as `consistency` but a HOLD
+    # prediction counts as a hit when the next day stayed within the flat band
+    # (see alpha_agent/backtest/consistency.py HOLD_FLAT_BAND). Only d5/m1 are
+    # ever non-None; y1/hist are structurally unavailable (see that module).
+    consistency_hold: dict[str, float | None] = {}
+    consistency_hold_n: dict[str, int] = {}
 
 
 class PicksResponse(BaseModel):
@@ -298,6 +307,24 @@ async def build_lean_view(
     )
     consistency_by_ticker = rates_from_tallies(tallies_by_ticker)
 
+    # HOLD-inclusive consistency (2026-07-26): a second, opt-in 口径 alongside
+    # the directional-only rate above (alpha_agent/backtest/consistency.py).
+    # d5/m1 only, live-computed — never 500s the picks endpoint: any DB error
+    # (or a not-yet-migrated backend) degrades to all-dash rather than taking
+    # the whole response down.
+    from alpha_agent.backtest.consistency import compute_hold_inclusive_consistency
+    tickers = [r["ticker"] for r in rows]
+    try:
+        cons_hold_by_ticker, cons_hold_n_by_ticker = (
+            await compute_hold_inclusive_consistency(pool, tickers)
+        )
+    except Exception as exc:  # noqa: BLE001 — degrade to dash, never 500 the picks page
+        # MUST log: a dash from a DB error is indistinguishable on screen from a
+        # dash for "not enough samples", so without this the failure is silent.
+        logger.warning("hold-inclusive consistency unavailable: %s: %s",
+                       type(exc).__name__, exc)
+        cons_hold_by_ticker, cons_hold_n_by_ticker = {}, {}
+
     cards: list[LeanCard] = []
     for r in rows:
         try:
@@ -376,6 +403,8 @@ async def build_lean_view(
                     w: n
                     for w, (_h, n) in tallies_by_ticker.get(r["ticker"], {}).items()
                 },
+                consistency_hold=cons_hold_by_ticker.get(r["ticker"], {}),
+                consistency_hold_n=cons_hold_n_by_ticker.get(r["ticker"], {}),
             )
         )
 

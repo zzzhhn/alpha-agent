@@ -3597,6 +3597,20 @@ export interface components {
                 [key: string]: number | null;
             };
             /**
+             * Consistency Hold
+             * @default {}
+             */
+            consistency_hold: {
+                [key: string]: number | null;
+            };
+            /**
+             * Consistency Hold N
+             * @default {}
+             */
+            consistency_hold_n: {
+                [key: string]: number;
+            };
+            /**
              * Consistency N
              * @default {}
              */
