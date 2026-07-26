@@ -1,0 +1,29 @@
+# Dump the user's full platform-side alpha history as a JSONL artifact.
+# Deliberately DB-free: only BRAIN_* creds, no DATABASE_URL and no migrations
+# step, so it works during Neon outages (its reason for existing, 2026-07-26).
+name: brain-dump-alphas
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e "."
+      - name: Dump alphas
+        env:
+          BRAIN_USERNAME: ${{ secrets.BRAIN_USERNAME }}
+          BRAIN_PASSWORD: ${{ secrets.BRAIN_PASSWORD }}
+        run: python scripts/brain_dump_alphas.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brain-alphas-dump
+          path: brain_alphas_dump.jsonl
+          retention-days: 7
