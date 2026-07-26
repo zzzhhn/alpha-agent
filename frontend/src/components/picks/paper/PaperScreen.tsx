@@ -35,8 +35,9 @@ import PaperTradePane from "./PaperTradePane";
 import PaperCurvePane from "./PaperCurvePane";
 import PaperOrdersPane from "./PaperOrdersPane";
 
-export type PaperTabKey = "overview" | "trade" | "curve" | "orders";
-export const PAPER_TABS: readonly PaperTabKey[] = ["overview", "trade", "curve", "orders"];
+import type { PaperTabKey } from "./tabs";
+export type { PaperTabKey } from "./tabs";
+import { PAPER_TABS } from "./tabs";  // shared with the server page — see tabs.ts
 
 const TAB_LABEL_KEY: Record<PaperTabKey, Parameters<typeof t>[1]> = {
   overview: "sim.tabs.overview",

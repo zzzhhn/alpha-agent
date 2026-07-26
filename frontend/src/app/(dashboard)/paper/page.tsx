@@ -1,4 +1,5 @@
-import PaperScreen, { PAPER_TABS, type PaperTabKey } from "@/components/picks/paper/PaperScreen";
+import PaperScreen from "@/components/picks/paper/PaperScreen";
+import { PAPER_TABS, type PaperTabKey } from "@/components/picks/paper/tabs";
 
 // /paper — the standalone 模拟仓 route (V2 redesign). Server component so the
 // initial tab is resolved from the URL query without needing a client-side
