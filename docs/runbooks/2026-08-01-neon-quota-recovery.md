@@ -94,11 +94,15 @@ VACUUM FULL daily_signals_fast;
 ### 6. 最后才恢复定时任务
 
 ```bash
-for wf in cron-shards propose-job-runner brain-mining-loop daily-factor-loop earnings-finnhub insider-form4; do
+# 7 个：原 6 个 + brain-backfill-selfcorr（2026-07-26 加了每日 09:00 UTC 调度后一并停用）
+for wf in cron-shards propose-job-runner brain-mining-loop daily-factor-loop earnings-finnhub insider-form4 brain-backfill-selfcorr; do
   gh workflow enable "$wf"
 done
 gh workflow list --all --json name,state --jq '.[] | "\(.state)\t\(.name)"'
 ```
+
+恢复 backfill 前提醒：BRAIN 的 /correlations/self 在 2026-07-13 被约 45 次密集请求打进过持续 empty-200 状态。
+调度默认 limit=30 已按此校准；恢复首日先手动跑一次 `-f limit=5` 探针确认端点已解锁，再放任调度。
 
 ### 7. 恢复后 24 小时复查
 
