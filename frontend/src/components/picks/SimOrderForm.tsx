@@ -6,23 +6,32 @@
  * Layout: one horizontal controls row (side · type · qty · limit · ticker) that
  * wraps gracefully in the narrow row-drawer, then a footer row with buying
  * power + a single primary "下单" action. Matches the dense reference mockup —
- * no full-width giant buttons, one green primary, subtle segmented toggles.
+ * no full-width giant buttons, one green primary, border+text segmented toggles
+ * (GradeBadge geometry — visual parity fix #4, no solid-fill segments besides
+ * the one primary CTA).
  *
  * Used by:
- *  - SimOrderDrawer (fixedTicker set → ticker input hidden)
- *  - PaperTab 账户概况 view (ticker editable)
+ *  - SimOrderDrawer (fixedTicker set → ticker input hidden; attribution props
+ *    set so the order links back to the pick it came from)
+ *  - PaperTradePane, the /paper "下单" tab (ticker editable, no attribution)
  */
 import { useEffect, useState } from "react";
 import { placeOrder, fetchPaperAccount } from "@/lib/api/paper";
 import { t, type Locale } from "@/lib/i18n";
 import { CheckCircle } from "lucide-react";
 import clsx from "clsx";
+import { TmButton } from "@/components/tm/TmButton";
 
 interface Props {
   /** When provided the ticker input is hidden and this value is used. */
   readonly fixedTicker?: string;
   readonly locale: Locale;
   readonly onPlaced: () => void;
+  /** Attribution (V038): set together by SimOrderDrawer when the order
+   *  originates from a picks-row quick action. Omitted from the /paper trade
+   *  tab, where orders are manual by definition. */
+  readonly pickDate?: string;
+  readonly pickTicker?: string;
 }
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -30,9 +39,10 @@ const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const FIELD_LABEL =
   "mb-1 block font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted";
 const INPUT =
-  "rounded border border-tm-rule bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[13px] text-tm-fg focus:border-tm-accent focus:outline-none";
+  "border border-tm-rule bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[13px] text-tm-fg focus:border-tm-accent focus:outline-none";
 
-/** Compact segmented pills — auto width, subtle fill on the active option. */
+/** Compact segmented pills — border+text active state (GradeBadge language),
+ *  no solid fill. The order form's one primary CTA (submit) stays solid. */
 function Segmented<T extends string>({
   value,
   options,
@@ -43,7 +53,7 @@ function Segmented<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="inline-flex overflow-hidden rounded border border-tm-rule">
+    <div className="inline-flex overflow-hidden border border-tm-rule">
       {options.map((o, i) => (
         <button
           key={o.key}
@@ -64,7 +74,7 @@ function Segmented<T extends string>({
   );
 }
 
-export default function SimOrderForm({ fixedTicker, locale, onPlaced }: Props) {
+export default function SimOrderForm({ fixedTicker, locale, onPlaced, pickDate, pickTicker }: Props) {
   const [ticker, setTicker] = useState(fixedTicker ?? "");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -105,6 +115,8 @@ export default function SimOrderForm({ fixedTicker, locale, onPlaced }: Props) {
       await placeOrder({
         ticker: effectiveTicker, side, order_type: orderType, qty: qtyNum,
         ...(orderType === "limit" ? { limit_price: limitNum } : {}),
+        ...(pickDate ? { pick_date: pickDate } : {}),
+        ...(pickTicker ? { pick_ticker: pickTicker } : {}),
       });
       setPlaced(true);
       fetchPaperAccount().then((a) => setCash(a.cash)).catch(() => {});
@@ -144,8 +156,8 @@ export default function SimOrderForm({ fixedTicker, locale, onPlaced }: Props) {
             value={side}
             onChange={setSide}
             options={[
-              { key: "buy", label: t(locale, "sim.order_side.buy"), active: "bg-tm-pos text-tm-bg" },
-              { key: "sell", label: t(locale, "sim.order_side.sell"), active: "bg-tm-neg text-tm-bg" },
+              { key: "buy", label: t(locale, "sim.order_side.buy"), active: "bg-tm-pos/10 text-tm-pos" },
+              { key: "sell", label: t(locale, "sim.order_side.sell"), active: "bg-tm-neg/10 text-tm-neg" },
             ]}
           />
         </div>
@@ -155,8 +167,8 @@ export default function SimOrderForm({ fixedTicker, locale, onPlaced }: Props) {
             value={orderType}
             onChange={setOrderType}
             options={[
-              { key: "market", label: t(locale, "sim.order_type.market"), active: "bg-tm-accent text-tm-bg" },
-              { key: "limit", label: t(locale, "sim.order_type.limit"), active: "bg-tm-accent text-tm-bg" },
+              { key: "market", label: t(locale, "sim.order_type.market"), active: "bg-tm-accent-soft text-tm-accent" },
+              { key: "limit", label: t(locale, "sim.order_type.limit"), active: "bg-tm-accent-soft text-tm-accent" },
             ]}
           />
         </div>
@@ -193,20 +205,16 @@ export default function SimOrderForm({ fixedTicker, locale, onPlaced }: Props) {
             </>
           )}
         </div>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded border border-tm-accent bg-tm-accent px-6 py-1.5 font-tm-mono text-[12px] font-semibold uppercase tracking-wide text-tm-bg transition-opacity hover:opacity-85 disabled:opacity-50"
-        >
+        <TmButton type="submit" disabled={submitting}>
           {submitting ? t(locale, "sim.form.submitting") : t(locale, "sim.place_order")}
-        </button>
+        </TmButton>
       </div>
 
       {error && (
-        <p className="rounded bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] text-tm-neg">{error}</p>
+        <p className="border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] text-tm-neg">{error}</p>
       )}
       {placed && (
-        <div className="flex items-center gap-2 rounded bg-tm-pos/10 px-3 py-2 font-tm-mono text-[11px] text-tm-pos">
+        <div className="flex items-center gap-2 border border-tm-pos/40 bg-tm-pos/10 px-3 py-2 font-tm-mono text-[11px] text-tm-pos">
           <CheckCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
           {t(locale, "sim.form.order_placed")}
         </div>

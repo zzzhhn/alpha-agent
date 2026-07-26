@@ -30,6 +30,12 @@ export interface PlaceOrderRequest {
   readonly order_type: "market" | "limit";
   readonly qty: number;
   readonly limit_price?: number;
+  // Attribution (V038, optional): when the order originates from a picks-row
+  // "模拟" quick action, the pick's as_of date + ticker are sent so the
+  // backend can link the fill back to the recommendation. Manual orders
+  // placed from the /paper trade tab omit these — backend column is nullable.
+  readonly pick_date?: string;
+  readonly pick_ticker?: string;
 }
 
 export interface OrderResponse {
@@ -50,6 +56,26 @@ export interface OrderOut {
   readonly fill_date: string | null;
   readonly fill_price: number | null;
   readonly status: string;
+  // Optional — populated once the backend fill-review lands (cash-shortfall
+  // check at fill time). Absent on older rows / before the backend deploys;
+  // the orders table renders it only when present.
+  readonly fail_reason?: string | null;
+  readonly pick_date?: string | null;
+  readonly pick_ticker?: string | null;
+}
+
+// Per-ticker attribution rollup (V038). Field names/shape confirmed against
+// the backend's generated api-types.gen.ts (TickerAttribution/AttributionResponse).
+export interface TickerAttribution {
+  readonly ticker: string;
+  readonly realized_pnl: number;
+  readonly unrealized_pnl: number;
+  readonly pick_linked_trades: number;
+  readonly self_directed_trades: number;
+}
+
+export interface AttributionResponse {
+  readonly tickers: readonly TickerAttribution[];
 }
 
 export interface OrderListResponse {
@@ -128,4 +154,8 @@ export async function fetchEquityCurve(): Promise<EquityCurveResponse> {
 
 export async function resetAccount(): Promise<ResetResponse> {
   return paperFetch<ResetResponse>("/api/paper/reset", { method: "POST" });
+}
+
+export async function fetchAttribution(): Promise<AttributionResponse> {
+  return paperFetch<AttributionResponse>("/api/paper/attribution");
 }

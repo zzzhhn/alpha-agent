@@ -62,6 +62,7 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
     titleKey: "nav.group.decisions",
     items: [
       { id: "picks", href: "/picks", labelKey: "nav.picks" },
+      { id: "paper", href: "/paper", labelKey: "nav.paper" },
       { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
       { id: "alerts", href: "/alerts", labelKey: "nav.alerts" },
       // Evolution now also hosts the methodology-proposals UI (the former

@@ -1613,6 +1613,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/paper/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attribution
+         * @description Per-ticker PnL attribution, split into pick-linked vs self-directed fills.
+         */
+        get: operations["get_attribution_api_paper_attribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/paper/equity-curve": {
         parameters: {
             query?: never;
@@ -2849,6 +2869,11 @@ export interface components {
             /** Unrealized Pnl */
             unrealized_pnl: number;
         };
+        /** AttributionResponse */
+        AttributionResponse: {
+            /** Tickers */
+            tickers: components["schemas"]["TickerAttribution"][];
+        };
         /** BasketEdgeResponse */
         BasketEdgeResponse: {
             /** As Of */
@@ -3786,6 +3811,8 @@ export interface components {
         };
         /** OrderOut */
         OrderOut: {
+            /** Fail Reason */
+            fail_reason?: string | null;
             /** Fill Date */
             fill_date: string | null;
             /** Fill Price */
@@ -3796,6 +3823,10 @@ export interface components {
             limit_price: number | null;
             /** Order Type */
             order_type: string;
+            /** Pick Date */
+            pick_date?: string | null;
+            /** Pick Ticker */
+            pick_ticker?: string | null;
             /** Qty */
             qty: number;
             /** Side */
@@ -3859,6 +3890,10 @@ export interface components {
             limit_price?: number | null;
             /** Order Type */
             order_type: string;
+            /** Pick Date */
+            pick_date?: string | null;
+            /** Pick Ticker */
+            pick_ticker?: string | null;
             /** Qty */
             qty: number;
             /** Side */
@@ -4177,6 +4212,19 @@ export interface components {
             bear: string[];
             /** Bull */
             bull: string[];
+        };
+        /** TickerAttribution */
+        TickerAttribution: {
+            /** Pick Linked Trades */
+            pick_linked_trades: number;
+            /** Realized Pnl */
+            realized_pnl: number;
+            /** Self Directed Trades */
+            self_directed_trades: number;
+            /** Ticker */
+            ticker: string;
+            /** Unrealized Pnl */
+            unrealized_pnl: number;
         };
         /** TickerCoverage */
         TickerCoverage: {
@@ -6889,6 +6937,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attribution_api_paper_attribution_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttributionResponse"];
                 };
             };
             /** @description Validation Error */

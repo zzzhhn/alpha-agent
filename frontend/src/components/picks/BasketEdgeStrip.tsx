@@ -12,6 +12,7 @@
 // "—" / "数据不足" rather than fabricating an edge.
 import { useEffect, useState } from "react";
 
+import Link from "next/link";
 import { Wallet } from "lucide-react";
 import {
   fetchBasketEdge,
@@ -206,11 +207,7 @@ function HonestMetricsBlock({
   );
 }
 
-export default function BasketEdgeStrip({
-  onOpenPaper,
-}: {
-  readonly onOpenPaper?: () => void;
-}) {
+export default function BasketEdgeStrip() {
   const { locale } = useLocale();
   const [data, setData] = useState<BasketEdgeResponse | null>(null);
   const [sb, setSb] = useState<PicksScoreboard | null>(null);
@@ -305,17 +302,16 @@ export default function BasketEdgeStrip({
         />
       ) : null}
 
-      {/* Paper Trading entry button — right side of strip */}
-      {onOpenPaper ? (
-        <button
-          type="button"
-          onClick={onOpenPaper}
-          className="ml-auto flex shrink-0 items-center gap-2 rounded border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-[13px] font-semibold uppercase tracking-wide text-tm-bg shadow-sm transition-opacity hover:opacity-85 focus:outline-none focus:ring-1 focus:ring-tm-accent focus:ring-offset-1 focus:ring-offset-tm-bg-2"
-        >
-          <Wallet className="h-4 w-4" strokeWidth={1.75} />
-          {t(locale, "sim.open_btn")}
-        </button>
-      ) : null}
+      {/* Paper Trading entry — navigates to the standalone /paper route
+          (V2: no longer a modal). TmButton-primary styling on an <a> since
+          this is a navigation, not an action. */}
+      <Link
+        href="/paper"
+        className="ml-auto flex shrink-0 items-center gap-2 border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-[13px] font-semibold uppercase tracking-wide text-tm-bg transition-opacity hover:opacity-90"
+      >
+        <Wallet className="h-4 w-4" strokeWidth={1.75} />
+        {t(locale, "sim.open_btn")}
+      </Link>
     </div>
   );
 }

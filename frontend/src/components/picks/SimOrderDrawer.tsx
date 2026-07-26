@@ -2,9 +2,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import type { RatingCard } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import SimOrderForm from "./SimOrderForm";
+import { Disclaimer } from "./paper/PaperUi";
 import { t } from "@/lib/i18n";
 
 interface Props {
@@ -15,12 +17,16 @@ interface Props {
   readonly onOrderPlaced: () => void;
 }
 
+// card.as_of is a full ISO timestamp (fetched_at.isoformat()); the date
+// portion is what the backend's pick_date column (DATE) expects.
+function pickDateFromAsOf(asOf: string): string | undefined {
+  return /^\d{4}-\d{2}-\d{2}/.test(asOf) ? asOf.slice(0, 10) : undefined;
+}
+
 export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }: Props) {
   const { locale } = useLocale();
   const drawerRef = useRef<HTMLDivElement>(null);
-
-  // Suppress unused-variable warning; card is available for future price display
-  void card;
+  const pickDate = pickDateFromAsOf(card.as_of);
 
   // Close on Escape
   useEffect(() => {
@@ -53,10 +59,10 @@ export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }:
           <button
             type="button"
             onClick={onClose}
-            className="text-lg leading-none text-tm-muted hover:text-tm-fg"
-            aria-label="Close"
+            className="text-tm-muted hover:text-tm-fg"
+            aria-label={t(locale, "sim.close")}
           >
-            ×
+            <X className="h-4 w-4" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -66,10 +72,12 @@ export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }:
             fixedTicker={ticker}
             locale={locale}
             onPlaced={() => { onOrderPlaced(); onClose(); }}
+            pickDate={pickDate}
+            pickTicker={card.ticker}
           />
-          <p className="mt-3 font-tm-mono text-[10px] leading-snug text-tm-muted">
-            ⚠ {t(locale, "sim.disclaimer")}
-          </p>
+          <div className="mt-3">
+            <Disclaimer />
+          </div>
         </div>
       </div>
     </>

@@ -13,7 +13,7 @@ import {
   type RatingCard,
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
-import PaperTradingModal from "./PaperTradingModal";
+import { fetchPaperAccount } from "@/lib/api/paper";
 import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
 import ConvictionBand from "./ConvictionBand";
@@ -58,13 +58,26 @@ export default function PicksBrowser({
   // never surfaces). Local state — not persisted; each visit starts on
   // the long board.
   const [side, setSide] = useState<PicksSide>("long");
-  const [paperOpen, setPaperOpen] = useState(false);
   const [simPositions, setSimPositions] = useState<ReadonlyMap<string, number>>(new Map());
   const [paperCash] = useState(0);
 
-  const handlePositionsChange = useCallback((positions: ReadonlyMap<string, number>) => {
-    setSimPositions(positions);
+  // Paper trading is now the standalone /paper route (V2), not an in-page
+  // modal, so this is the sole source of the "held qty" badge on each pick
+  // row: load once on mount, then refresh after any order placed from the
+  // SimOrderDrawer quick-entry so the badge stays live without reopening
+  // anything.
+  const loadSimPositions = useCallback(async () => {
+    try {
+      const acct = await fetchPaperAccount();
+      setSimPositions(new Map(acct.positions.map((p) => [p.ticker, p.qty])));
+    } catch {
+      // non-fatal — badge just stays at its last known state
+    }
   }, []);
+
+  useEffect(() => {
+    void loadSimPositions();
+  }, [loadSimPositions]);
 
   const { locale } = useLocale();
   const mounted = useRef(false);
@@ -306,16 +319,11 @@ export default function PicksBrowser({
 
       </TmSubbar>
 
-      <PaperTradingModal
-        open={paperOpen}
-        onClose={() => setPaperOpen(false)}
-        onPositionsChange={handlePositionsChange}
-      />
-
       <>
         {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
-            basket, not single-name direction. Pinned above the picks table. */}
-        <BasketEdgeStrip onOpenPaper={() => setPaperOpen(true)} />
+            basket, not single-name direction. Pinned above the picks table.
+            Its Paper Trading entry now links to /paper (V2: no longer a modal). */}
+        <BasketEdgeStrip />
 
           <div className="flex justify-end px-4 pt-3">
             <RefreshButton />
@@ -373,7 +381,7 @@ export default function PicksBrowser({
                 isWatched={isWatched}
                 simPositions={simPositions}
                 cash={paperCash}
-                onOrderPlaced={() => { /* PaperTab reloads on next open */ }}
+                onOrderPlaced={loadSimPositions}
               />
             )}
           </TmPane>
