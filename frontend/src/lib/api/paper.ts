@@ -100,6 +100,16 @@ export interface ResetResponse {
   readonly message: string;
 }
 
+/** Fetch error that keeps the HTTP status: the UI must render a 401 as a
+ * sign-in prompt, not parrot the backend's raw English detail at the user. */
+export class PaperApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function paperFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, {
     ...init,
@@ -108,7 +118,7 @@ async function paperFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!r.ok) {
     const body = await r.json().catch(() => ({})) as { detail?: string };
-    throw new Error(body.detail ?? `HTTP ${r.status}`);
+    throw new PaperApiError(body.detail ?? `HTTP ${r.status}`, r.status);
   }
   return r.json() as Promise<T>;
 }

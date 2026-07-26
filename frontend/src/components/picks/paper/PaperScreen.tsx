@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 /**
  * PaperScreen — client orchestrator for /paper. Owns the 4-tab state (synced
  * to the ?tab= URL query via router.replace, no Suspense boundary needed —
@@ -15,6 +17,7 @@ import { CircleHelp } from "lucide-react";
 import "driver.js/dist/driver.css";
 import "./paper-tour-theme.css";
 import {
+  PaperApiError,
   fetchPaperAccount,
   fetchOrders,
   fetchEquityCurve,
@@ -70,16 +73,20 @@ export default function PaperScreen({ initialTab }: { readonly initialTab: Paper
   const [attributionStatus, setAttributionStatus] = useState<"loading" | "ready" | "unavailable">("loading");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setAuthRequired(false);
     await Promise.all([
       fetchPaperAccount().then(setAccount).catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
+        if (e instanceof PaperApiError && e.status === 401) setAuthRequired(true);
+        else setError(e instanceof Error ? e.message : String(e));
       }),
       fetchOrders({ limit: 100 }).then((r) => setOrders(r.orders)).catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
+        if (e instanceof PaperApiError && e.status === 401) setAuthRequired(true);
+        else setError(e instanceof Error ? e.message : String(e));
       }),
       fetchEquityCurve().then(setCurve).catch(() => null),
       fetchAttribution()
@@ -159,8 +166,21 @@ export default function PaperScreen({ initialTab }: { readonly initialTab: Paper
           <div className="flex items-center justify-center py-12 font-tm-mono text-[12px] text-tm-muted">
             {t(locale, "common.loading")}
           </div>
+        ) : authRequired ? (
+          <div className="flex flex-col items-center gap-3 px-4 py-14 text-center">
+            <p className="font-tm-mono text-[12px] text-tm-muted">{t(locale, "sim.auth.hint")}</p>
+            <Link
+              href="/signin?callbackUrl=/paper"
+              className="border border-tm-accent px-4 py-1.5 font-tm-mono text-[11px] uppercase tracking-wide text-tm-accent transition-colors hover:bg-tm-accent hover:text-tm-bg"
+            >
+              {t(locale, "sim.auth.cta")}
+            </Link>
+          </div>
         ) : error ? (
-          <div className="px-4 py-4 font-tm-mono text-[12px] text-tm-neg">{error}</div>
+          <div className="px-4 py-4 font-tm-mono text-[12px] text-tm-neg">
+            {t(locale, "sim.load_error_hint")}
+            <span className="ml-2 text-tm-muted">({error})</span>
+          </div>
         ) : (
           <>
             {tab === "overview" && account ? (
