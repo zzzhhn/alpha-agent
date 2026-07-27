@@ -39,6 +39,11 @@ export interface NewsItemLite {
 
 export interface RatingCard {
   ticker: string;
+  company_name?: string | null;
+  company_name_zh?: string | null;
+  latest_price?: number | null;
+  price_date?: string | null;
+  daily_change_pct?: number | null;
   rating: "BUY" | "OW" | "HOLD" | "UW" | "SELL";
   // Same nullable contract as BreakdownEntry — composite/confidence
   // may arrive as null when DB column held NaN before storage-side fix

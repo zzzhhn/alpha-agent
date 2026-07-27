@@ -15,14 +15,22 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { Disclaimer } from "./PaperUi";
 
-export default function PaperCurvePane({ curve }: { readonly curve: EquityCurveResponse | null }) {
+export default function PaperCurvePane({
+  curve,
+  compact = false,
+  showDisclaimer = true,
+}: {
+  readonly curve: EquityCurveResponse | null;
+  readonly compact?: boolean;
+  readonly showDisclaimer?: boolean;
+}) {
   const { locale } = useLocale();
   return (
     <div className="flex flex-col gap-3 px-3 py-3">
       {!curve || curve.series.length === 0 ? (
         <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "common.noData")}</p>
       ) : (
-        <div style={{ width: "100%", height: 300 }}>
+        <div style={{ width: "100%", height: compact ? 210 : 300 }}>
           <ResponsiveContainer>
             <ComposedChart data={curve.series as unknown as Record<string, unknown>[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-tm-rule)" />
@@ -33,14 +41,14 @@ export default function PaperCurvePane({ curve }: { readonly curve: EquityCurveR
               <Line
                 type="monotone"
                 dataKey="portfolio_value"
-                stroke="var(--color-tm-accent)"
+                stroke="var(--tm-accent)"
                 dot={false}
                 name={t(locale, "sim.account.nav")}
               />
               <Line
                 type="monotone"
                 dataKey="benchmark_index"
-                stroke="var(--color-tm-muted)"
+                stroke="var(--tm-muted)"
                 strokeDasharray="4 2"
                 dot={false}
                 name="SPY"
@@ -49,7 +57,7 @@ export default function PaperCurvePane({ curve }: { readonly curve: EquityCurveR
           </ResponsiveContainer>
         </div>
       )}
-      <Disclaimer />
+      {showDisclaimer ? <Disclaimer /> : null}
     </div>
   );
 }

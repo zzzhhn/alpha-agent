@@ -104,6 +104,8 @@ class TickerAttribution(BaseModel):
     unrealized_pnl: float
     pick_linked_trades: int
     self_directed_trades: int
+    latest_pick_date: str | None = None
+    source_type: str = Field(pattern="^(pick|manual|mixed)$")
 
 
 class AttributionResponse(BaseModel):
@@ -443,7 +445,11 @@ async def reset_account(
 async def get_attribution(
     user_id: int = Depends(require_user),
 ) -> AttributionResponse:
-    """Per-ticker PnL attribution, split into pick-linked vs self-directed fills."""
+    """Per-ticker PnL plus the observable source mix of filled orders.
+
+    PnL remains ticker-level because sim_position stores one blended cost basis.
+    `source_type` therefore describes provenance, not a fabricated PnL split.
+    """
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
@@ -456,7 +462,8 @@ async def get_attribution(
         """
         SELECT ticker,
                COUNT(*) FILTER (WHERE pick_date IS NOT NULL) AS pick_linked,
-               COUNT(*) FILTER (WHERE pick_date IS NULL) AS self_directed
+               COUNT(*) FILTER (WHERE pick_date IS NULL) AS self_directed,
+               MAX(pick_date) AS latest_pick_date
         FROM sim_order
         WHERE account_id = $1 AND status = 'filled'
         GROUP BY ticker
@@ -481,11 +488,26 @@ async def get_attribution(
             if current is not None:
                 unrealized = (current - pos["avg_cost"]) * pos["qty"]
         counts = counts_by_ticker.get(ticker)
+        pick_linked = int(counts["pick_linked"]) if counts else 0
+        self_directed = int(counts["self_directed"]) if counts else 0
+        source_type = (
+            "mixed"
+            if pick_linked and self_directed
+            else "pick"
+            if pick_linked
+            else "manual"
+        )
         rows.append(TickerAttribution(
             ticker=ticker,
             realized_pnl=realized,
             unrealized_pnl=unrealized,
-            pick_linked_trades=int(counts["pick_linked"]) if counts else 0,
-            self_directed_trades=int(counts["self_directed"]) if counts else 0,
+            pick_linked_trades=pick_linked,
+            self_directed_trades=self_directed,
+            latest_pick_date=(
+                counts["latest_pick_date"].isoformat()
+                if counts and counts["latest_pick_date"]
+                else None
+            ),
+            source_type=source_type,
         ))
     return AttributionResponse(tickers=rows)

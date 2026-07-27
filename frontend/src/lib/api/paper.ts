@@ -72,6 +72,8 @@ export interface TickerAttribution {
   readonly unrealized_pnl: number;
   readonly pick_linked_trades: number;
   readonly self_directed_trades: number;
+  readonly latest_pick_date: string | null;
+  readonly source_type: "pick" | "manual" | "mixed";
 }
 
 export interface AttributionResponse {

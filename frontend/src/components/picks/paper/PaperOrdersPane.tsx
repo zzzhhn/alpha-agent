@@ -18,11 +18,15 @@ export default function PaperOrdersPane({
   onCancel,
   attribution,
   attributionStatus,
+  showAttribution = true,
+  showDisclaimer = true,
 }: {
   readonly orders: readonly OrderOut[];
   readonly onCancel: (orderId: number) => Promise<void>;
   readonly attribution: readonly TickerAttribution[];
   readonly attributionStatus: "loading" | "ready" | "unavailable";
+  readonly showAttribution?: boolean;
+  readonly showDisclaimer?: boolean;
 }) {
   const { locale } = useLocale();
 
@@ -51,14 +55,14 @@ export default function PaperOrdersPane({
         )}
       </div>
 
-      <div>
+      {showAttribution ? <div>
         <div className="mb-2 border-b border-tm-rule pb-1.5 font-tm-mono text-[10px] uppercase tracking-[0.08em] text-tm-muted">
           {t(locale, "sim.attribution.title")}
         </div>
         <PaperAttributionTable rows={attribution} status={attributionStatus} />
-      </div>
+      </div> : null}
 
-      <Disclaimer />
+      {showDisclaimer ? <Disclaimer /> : null}
     </div>
   );
 }

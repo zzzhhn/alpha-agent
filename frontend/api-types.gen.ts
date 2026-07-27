@@ -1622,7 +1622,10 @@ export interface paths {
         };
         /**
          * Get Attribution
-         * @description Per-ticker PnL attribution, split into pick-linked vs self-directed fills.
+         * @description Per-ticker PnL plus the observable source mix of filled orders.
+         *
+         *     PnL remains ticker-level because sim_position stores one blended cost basis.
+         *     `source_type` therefore describes provenance, not a fabricated PnL split.
          */
         get: operations["get_attribution_api_paper_attribution_get"];
         put?: never;
@@ -3610,6 +3613,10 @@ export interface components {
             agreement: number;
             /** As Of */
             as_of: string;
+            /** Company Name */
+            company_name?: string | null;
+            /** Company Name Zh */
+            company_name_zh?: string | null;
             /** Composite Score */
             composite_score: number;
             /** Confidence */
@@ -3642,6 +3649,8 @@ export interface components {
             consistency_n: {
                 [key: string]: number;
             };
+            /** Daily Change Pct */
+            daily_change_pct?: number | null;
             /**
              * Dimension Grades
              * @default {}
@@ -3649,11 +3658,15 @@ export interface components {
             dimension_grades: {
                 [key: string]: string;
             };
+            /** Latest Price */
+            latest_price?: number | null;
             /**
              * Partial
              * @default false
              */
             partial: boolean;
+            /** Price Date */
+            price_date?: string | null;
             /** Rating */
             rating: string;
             /** Ticker */
@@ -4215,12 +4228,16 @@ export interface components {
         };
         /** TickerAttribution */
         TickerAttribution: {
+            /** Latest Pick Date */
+            latest_pick_date?: string | null;
             /** Pick Linked Trades */
             pick_linked_trades: number;
             /** Realized Pnl */
             realized_pnl: number;
             /** Self Directed Trades */
             self_directed_trades: number;
+            /** Source Type */
+            source_type: string;
             /** Ticker */
             ticker: string;
             /** Unrealized Pnl */

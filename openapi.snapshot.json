@@ -1841,6 +1841,28 @@
             "title": "As Of",
             "type": "string"
           },
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "company_name_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name Zh"
+          },
           "composite_score": {
             "title": "Composite Score",
             "type": "number"
@@ -1895,6 +1917,17 @@
             "title": "Consistency N",
             "type": "object"
           },
+          "daily_change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Change Pct"
+          },
           "dimension_grades": {
             "additionalProperties": {
               "type": "string"
@@ -1903,10 +1936,32 @@
             "title": "Dimension Grades",
             "type": "object"
           },
+          "latest_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Price"
+          },
           "partial": {
             "default": false,
             "title": "Partial",
             "type": "boolean"
+          },
+          "price_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Date"
           },
           "rating": {
             "title": "Rating",
@@ -3485,6 +3540,17 @@
       },
       "TickerAttribution": {
         "properties": {
+          "latest_pick_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Pick Date"
+          },
           "pick_linked_trades": {
             "title": "Pick Linked Trades",
             "type": "integer"
@@ -3496,6 +3562,11 @@
           "self_directed_trades": {
             "title": "Self Directed Trades",
             "type": "integer"
+          },
+          "source_type": {
+            "pattern": "^(pick|manual|mixed)$",
+            "title": "Source Type",
+            "type": "string"
           },
           "ticker": {
             "title": "Ticker",
@@ -3511,7 +3582,8 @@
           "realized_pnl",
           "unrealized_pnl",
           "pick_linked_trades",
-          "self_directed_trades"
+          "self_directed_trades",
+          "source_type"
         ],
         "title": "TickerAttribution",
         "type": "object"
@@ -8076,7 +8148,7 @@
     },
     "/api/paper/attribution": {
       "get": {
-        "description": "Per-ticker PnL attribution, split into pick-linked vs self-directed fills.",
+        "description": "Per-ticker PnL plus the observable source mix of filled orders.\n\nPnL remains ticker-level because sim_position stores one blended cost basis.\n`source_type` therefore describes provenance, not a fabricated PnL split.",
         "operationId": "get_attribution_api_paper_attribution_get",
         "parameters": [
           {

@@ -25,7 +25,7 @@
  */
 
 import { type ReactNode } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNav, Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { LocaleProvider } from "@/components/layout/LocaleProvider";
 import VersionWatcher from "@/components/layout/VersionWatcher";
@@ -45,7 +45,8 @@ export default async function DashboardLayout({
       <LocaleProvider initialLocale={locale}>
         <div className="flex h-screen flex-col bg-tm-bg text-tm-fg">
           <Topbar />
-          <div className="grid min-h-0 flex-1 grid-cols-[200px_1fr]">
+          <MobileNav />
+          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[200px_1fr]">
             <Sidebar />
             {/* No padding on <main> — pages render edge-to-edge as
                 workstation screens (TmScreen establishes the bg-tm-bg

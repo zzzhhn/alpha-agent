@@ -88,7 +88,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="flex h-full w-[200px] flex-col overflow-y-auto border-r border-tm-rule bg-tm-bg font-tm-mono text-[12px]"
+      className="hidden h-full w-[200px] flex-col overflow-y-auto border-r border-tm-rule bg-tm-bg font-tm-mono text-[12px] md:flex"
       role="navigation"
       aria-label="Lifecycle navigation"
     >
@@ -142,5 +142,34 @@ export function Sidebar() {
 
       <SidebarAuthSlot />
     </aside>
+  );
+}
+
+export function MobileNav() {
+  const pathname = usePathname();
+  const { locale } = useLocale();
+  return (
+    <details className="relative z-50 border-b border-tm-rule bg-tm-bg md:hidden">
+      <summary className="cursor-pointer list-none px-3 py-2 font-tm-mono text-[10.5px] uppercase tracking-[0.08em] text-tm-accent">
+        {t(locale, "nav.mobile_menu")}
+      </summary>
+      <nav className="absolute inset-x-0 top-full grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto border-b border-tm-rule bg-tm-bg p-3 shadow-lg" aria-label={t(locale, "nav.mobile_menu")}>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.titleKey}>
+            <div className="mb-1 font-tm-mono text-[9.5px] uppercase tracking-[0.1em] text-tm-muted">
+              {t(locale, group.titleKey as Parameters<typeof t>[1])}
+            </div>
+            {group.items.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <Link key={item.id} href={item.href} className={clsx("block px-2 py-1.5 font-tm-mono text-[11px]", active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2")}>
+                  {t(locale, item.labelKey as Parameters<typeof t>[1])}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+    </details>
   );
 }

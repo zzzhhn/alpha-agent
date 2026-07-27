@@ -1,101 +1,73 @@
 "use client";
 
 import Link from "next/link";
-
-/**
- * PaperScreen — client orchestrator for /paper. Owns the 4-tab state (synced
- * to the ?tab= URL query via router.replace, no Suspense boundary needed —
- * that's only required for useSearchParams, and the initial tab is read
- * server-side by page.tsx and passed in as a prop instead), and the
- * Promise.all concurrent data load PaperTab used to do (kept: principle 8,
- * "尊重时间"). All 4 panes share this one load rather than re-fetching per
- * tab switch.
- */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { CircleHelp } from "lucide-react";
-import "driver.js/dist/driver.css";
-import "./paper-tour-theme.css";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CircleHelp, X } from "lucide-react";
+import { fetchPicks, type RatingCard } from "@/lib/api/picks";
 import {
   PaperApiError,
-  fetchPaperAccount,
-  fetchOrders,
-  fetchEquityCurve,
-  fetchAttribution,
   cancelOrder,
+  fetchAttribution,
+  fetchEquityCurve,
+  fetchOrders,
+  fetchPaperAccount,
+  resetAccount,
   type AccountResponse,
-  type OrderOut,
   type EquityCurveResponse,
+  type OrderOut,
   type TickerAttribution,
 } from "@/lib/api/paper";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
-import { TmChip } from "@/components/tm/TmSubbar";
+import { TmButton } from "@/components/tm/TmButton";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { startPaperTour, hasSeenPaperTour } from "@/lib/paperTour";
-import PaperOverviewPane from "./PaperOverviewPane";
-import PaperTradePane from "./PaperTradePane";
+import SimOrderForm from "../SimOrderForm";
+import { Metric, TwoStepConfirm } from "./PaperUi";
+import PaperRecommendations from "./PaperRecommendations";
+import PaperPositionsWithSource from "./PaperPositionsWithSource";
 import PaperCurvePane from "./PaperCurvePane";
+import PaperSourceSummary from "./PaperSourceSummary";
 import PaperOrdersPane from "./PaperOrdersPane";
 
-import type { PaperTabKey } from "./tabs";
-export type { PaperTabKey } from "./tabs";
-import { PAPER_TABS } from "./tabs";  // shared with the server page — see tabs.ts
+const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
-const TAB_LABEL_KEY: Record<PaperTabKey, Parameters<typeof t>[1]> = {
-  overview: "sim.tabs.overview",
-  trade: "sim.tabs.trade",
-  curve: "sim.tabs.curve",
-  orders: "sim.tabs.orders",
-};
-
-// Stable hooks for the onboarding tour (docs/superpowers/specs/
-// 2026-07-26-paper-trading-v2-design.md "Onboarding") — targeted by
-// data-tour rather than class names so a future style pass can't
-// silently break the tour's element selectors.
-const TAB_TOUR_KEY: Record<PaperTabKey, string> = {
-  overview: "paper-tab-overview",
-  trade: "paper-tab-trade",
-  curve: "paper-tab-curve",
-  orders: "paper-tab-orders",
-};
-
-export default function PaperScreen({ initialTab }: { readonly initialTab: PaperTabKey }) {
+export default function PaperScreen() {
   const { locale } = useLocale();
-  const router = useRouter();
-  const pathname = usePathname();
-  const [tab, setTab] = useState<PaperTabKey>(initialTab);
-
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [orders, setOrders] = useState<readonly OrderOut[]>([]);
   const [curve, setCurve] = useState<EquityCurveResponse | null>(null);
   const [attribution, setAttribution] = useState<readonly TickerAttribution[]>([]);
-  const [attributionStatus, setAttributionStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [picks, setPicks] = useState<readonly RatingCard[]>([]);
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
+  const [paperError, setPaperError] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setAuthRequired(false);
-    await Promise.all([
-      fetchPaperAccount().then(setAccount).catch((e: unknown) => {
-        if (e instanceof PaperApiError && e.status === 401) setAuthRequired(true);
-        else setError(e instanceof Error ? e.message : String(e));
-      }),
-      fetchOrders({ limit: 100 }).then((r) => setOrders(r.orders)).catch((e: unknown) => {
-        if (e instanceof PaperApiError && e.status === 401) setAuthRequired(true);
-        else setError(e instanceof Error ? e.message : String(e));
-      }),
-      fetchEquityCurve().then(setCurve).catch(() => null),
-      fetchAttribution()
-        .then((r) => {
-          setAttribution(r.tickers);
-          setAttributionStatus("ready");
-        })
-        .catch(() => setAttributionStatus("unavailable")),
+  const loadAll = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    setPaperError(null);
+    const [picksResult, accountResult, ordersResult, curveResult, attributionResult] = await Promise.allSettled([
+      fetchPicks(5),
+      fetchPaperAccount(),
+      fetchOrders({ limit: 20 }),
+      fetchEquityCurve(),
+      fetchAttribution(),
     ]);
+
+    if (picksResult.status === "fulfilled") setPicks(picksResult.value.picks);
+    if (accountResult.status === "fulfilled") {
+      setAccount(accountResult.value);
+      setAuthRequired(false);
+    } else if (accountResult.reason instanceof PaperApiError && accountResult.reason.status === 401) {
+      setAuthRequired(true);
+      setAccount(null);
+    } else {
+      setPaperError(accountResult.reason instanceof Error ? accountResult.reason.message : String(accountResult.reason));
+    }
+    if (ordersResult.status === "fulfilled") setOrders(ordersResult.value.orders);
+    if (curveResult.status === "fulfilled") setCurve(curveResult.value);
+    if (attributionResult.status === "fulfilled") setAttribution(attributionResult.value.tickers);
     setLoading(false);
   }, []);
 
@@ -103,102 +75,127 @@ export default function PaperScreen({ initialTab }: { readonly initialTab: Paper
     void loadAll();
   }, [loadAll]);
 
-  function changeTab(next: PaperTabKey) {
-    setTab(next);
-    router.replace(`${pathname}?tab=${next}`, { scroll: false });
-  }
-
-  // Auto-start the onboarding tour on first visit, once loading settles
-  // and the tabbed panes are actually in the DOM. The ref guards against
-  // React strict-mode's double effect invocation firing it twice.
-  const tourAutoStarted = useRef(false);
   useEffect(() => {
-    if (loading || tourAutoStarted.current || hasSeenPaperTour()) return;
-    tourAutoStarted.current = true;
-    const timer = setTimeout(() => startPaperTour(locale, changeTab), 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+    if (picks.length === 0) {
+      setSelectedTicker(null);
+      return;
+    }
+    if (!selectedTicker || !picks.some((pick) => pick.ticker === selectedTicker)) {
+      setSelectedTicker(picks[0].ticker);
+    }
+  }, [picks, selectedTicker]);
+
+  const selectedPick = useMemo(
+    () => picks.find((pick) => pick.ticker === selectedTicker) ?? null,
+    [picks, selectedTicker],
+  );
 
   async function handleCancel(orderId: number) {
     await cancelOrder(orderId);
-    await loadAll();
+    await loadAll(false);
   }
 
+  async function handleReset() {
+    await resetAccount();
+    await loadAll(false);
+  }
+
+  const totalReturn = account?.total_return_pct ?? 0;
+
   return (
-    <TmScreen>
+    <TmScreen className="overflow-y-auto">
       <TmPane
         title={t(locale, "sim.page_title")}
         meta={
           <span className="flex items-center gap-2">
-            <span>T+1</span>
+            <span>{t(locale, "sim.workspace.disclosure")}</span>
             <button
               type="button"
-              onClick={() => startPaperTour(locale, changeTab)}
-              aria-label={t(locale, "sim.tour.help_btn")}
-              title={t(locale, "sim.tour.help_btn")}
+              aria-label={t(locale, "sim.workspace.guide_title")}
               className="text-tm-muted hover:text-tm-fg"
+              onClick={() => setGuideOpen((open) => !open)}
             >
               <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
             </button>
           </span>
         }
       >
-        <div role="tablist" aria-label="Paper trading tabs" className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-          {PAPER_TABS.map((k) => (
-            <TmChip
-              key={k}
-              data-tour={TAB_TOUR_KEY[k]}
-              on={tab === k}
-              type="button"
-              role="tab"
-              aria-selected={tab === k}
-              onClick={() => changeTab(k)}
-            >
-              {t(locale, TAB_LABEL_KEY[k])}
-            </TmChip>
-          ))}
+        <div className="grid grid-cols-1 gap-3 px-3 py-2.5 sm:grid-cols-[minmax(14rem,1fr)_minmax(0,2fr)_auto] sm:items-center">
+          <div className="min-w-0">
+            <div className="font-tm-mono text-[12px] text-tm-fg">{t(locale, "sim.workspace.subtitle")}</div>
+            <div className="mt-1 flex items-center gap-2 font-tm-mono text-[9.5px] uppercase tracking-wide text-tm-muted">
+              <span>01 {t(locale, "sim.workspace.guide_step1")}</span><span>→</span>
+              <span>02 {t(locale, "sim.workspace.guide_step2")}</span><span>→</span>
+              <span>03 {t(locale, "sim.workspace.guide_step3")}</span>
+            </div>
+          </div>
+          <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+            <Metric label={t(locale, "sim.account.nav")} value={account ? `$${FMT.format(account.portfolio_value)}` : "—"} tone={totalReturn >= 0 ? "text-tm-pos" : "text-tm-neg"} />
+            <Metric label={t(locale, "sim.account.cash")} value={account ? `$${FMT.format(account.cash)}` : "—"} />
+            <Metric label={t(locale, "sim.account.unrealized")} value={account ? `${account.unrealized_pnl >= 0 ? "+" : "-"}$${FMT.format(Math.abs(account.unrealized_pnl))}` : "—"} tone={(account?.unrealized_pnl ?? 0) >= 0 ? "text-tm-pos" : "text-tm-neg"} />
+            <Metric label={t(locale, "sim.workspace.total_return")} value={account ? `${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(2)}%` : "—"} tone={totalReturn >= 0 ? "text-tm-pos" : "text-tm-neg"} />
+          </div>
+          {account ? <div className="justify-self-start sm:justify-self-end"><TwoStepConfirm idleLabel={t(locale, "sim.reset_btn")} warnText={t(locale, "sim.reset_confirm")} doneText={t(locale, "sim.reset_done")} onConfirm={handleReset} /></div> : null}
         </div>
+        {guideOpen ? (
+          <div className="relative border-t border-tm-rule bg-tm-bg-2 px-3 py-2 pr-10 font-tm-mono text-[10px] leading-5 text-tm-muted">
+            {t(locale, "sim.tour.step2_desc")} {t(locale, "sim.workspace.source_note")}
+            <button type="button" aria-label={t(locale, "sim.close")} className="absolute right-3 top-2 text-tm-muted hover:text-tm-fg" onClick={() => setGuideOpen(false)}><X className="h-3.5 w-3.5" /></button>
+          </div>
+        ) : null}
       </TmPane>
 
-      <TmPane>
-        {loading ? (
-          <div className="flex items-center justify-center py-12 font-tm-mono text-[12px] text-tm-muted">
-            {t(locale, "common.loading")}
-          </div>
-        ) : authRequired ? (
-          <div className="flex flex-col items-center gap-3 px-4 py-14 text-center">
-            <p className="font-tm-mono text-[12px] text-tm-muted">{t(locale, "sim.auth.hint")}</p>
-            <Link
-              href="/signin?callbackUrl=/paper"
-              className="border border-tm-accent px-4 py-1.5 font-tm-mono text-[11px] uppercase tracking-wide text-tm-accent transition-colors hover:bg-tm-accent hover:text-tm-bg"
-            >
-              {t(locale, "sim.auth.cta")}
-            </Link>
-          </div>
-        ) : error ? (
-          <div className="px-4 py-4 font-tm-mono text-[12px] text-tm-neg">
-            {t(locale, "sim.load_error_hint")}
-            <span className="ml-2 text-tm-muted">({error})</span>
-          </div>
-        ) : (
-          <>
-            {tab === "overview" && account ? (
-              <PaperOverviewPane account={account} onReset={loadAll} onGoToTrade={() => changeTab("trade")} />
-            ) : null}
-            {tab === "trade" ? <PaperTradePane onPlaced={loadAll} /> : null}
-            {tab === "curve" ? <PaperCurvePane curve={curve} /> : null}
-            {tab === "orders" ? (
-              <PaperOrdersPane
-                orders={orders}
-                onCancel={handleCancel}
-                attribution={attribution}
-                attributionStatus={attributionStatus}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
+        <TmPane standalone title={t(locale, "sim.workspace.today_picks")} meta={picks[0]?.price_date ?? "—"}>
+          {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
+        </TmPane>
+        <TmPane standalone title={selectedPick ? `${t(locale, "sim.workspace.order_title")} · ${selectedPick.ticker}` : t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelectedTicker(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
+          <div className="px-3 py-3">
+            {authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : selectedPick && account ? (
+              <SimOrderForm
+                key={selectedPick.ticker}
+                fixedTicker={selectedPick.ticker}
+                locale={locale}
+                onPlaced={() => { void loadAll(false); }}
+                pickDate={selectedPick.as_of.slice(0, 10)}
+                pickTicker={selectedPick.ticker}
+                latestPrice={selectedPick.latest_price}
+                priceDate={selectedPick.price_date}
+                availableCash={account.cash}
+                initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
               />
-            ) : null}
-          </>
-        )}
+            ) : paperError ? <PaperError detail={paperError} /> : <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "sim.workspace.no_picks")}</p>}
+          </div>
+        </TmPane>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
+        <TmPane standalone title={t(locale, "sim.workspace.positions")}>
+          {authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : <PaperPositionsWithSource positions={account?.positions ?? []} attribution={attribution} />}
+        </TmPane>
+        <TmPane standalone title={t(locale, "sim.workspace.performance")}>
+          <PaperCurvePane curve={curve} compact showDisclaimer={false} />
+          <PaperSourceSummary rows={attribution} />
+        </TmPane>
+      </div>
+
+      <TmPane title={t(locale, "sim.workspace.recent_orders")} meta={t(locale, "sim.workspace.disclosure")}>
+        <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus="ready" showAttribution={false} />
       </TmPane>
     </TmScreen>
   );
+}
+
+function Loading() {
+  const { locale } = useLocale();
+  return <div className="px-3 py-10 font-tm-mono text-[11px] text-tm-muted">{t(locale, "common.loading")}</div>;
+}
+
+function AuthPrompt({ hint, cta }: { readonly hint: string; readonly cta: string }) {
+  return <div className="flex flex-col items-start gap-3 px-3 py-8"><p className="font-tm-mono text-[11px] text-tm-muted">{hint}</p><Link href="/signin?callbackUrl=/paper" className="border border-tm-accent px-3 py-1.5 font-tm-mono text-[11px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg">{cta}</Link></div>;
+}
+
+function PaperError({ detail }: { readonly detail: string }) {
+  const { locale } = useLocale();
+  return <p className="font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "sim.load_error_hint")} <span className="text-tm-muted">({detail})</span></p>;
 }

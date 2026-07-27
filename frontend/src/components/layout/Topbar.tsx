@@ -98,7 +98,8 @@ export function Topbar() {
           ▲
         </span>
         <span className="font-semibold tracking-[0.04em] text-tm-fg">
-          ALPHACORE.WORKSTATION
+          <span className="sm:hidden">ALPHACORE</span>
+          <span className="hidden sm:inline">ALPHACORE.WORKSTATION</span>
         </span>
         <span className="hidden items-center gap-1.5 text-tm-muted md:flex">
           <span

@@ -32,6 +32,10 @@ interface Props {
    *  tab, where orders are manual by definition. */
   readonly pickDate?: string;
   readonly pickTicker?: string;
+  readonly latestPrice?: number | null;
+  readonly priceDate?: string | null;
+  readonly availableCash?: number | null;
+  readonly initialSide?: "buy" | "sell";
 }
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -74,30 +78,45 @@ function Segmented<T extends string>({
   );
 }
 
-export default function SimOrderForm({ fixedTicker, locale, onPlaced, pickDate, pickTicker }: Props) {
+export default function SimOrderForm({
+  fixedTicker,
+  locale,
+  onPlaced,
+  pickDate,
+  pickTicker,
+  latestPrice,
+  priceDate,
+  availableCash,
+  initialSide = "buy",
+}: Props) {
   const [ticker, setTicker] = useState(fixedTicker ?? "");
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [side, setSide] = useState<"buy" | "sell">(initialSide);
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [qty, setQty] = useState<string>("10");
   const [limitPrice, setLimitPrice] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [placed, setPlaced] = useState(false);
-  const [cash, setCash] = useState<number | null>(null);
+  const [cash, setCash] = useState<number | null>(availableCash ?? null);
 
   useEffect(() => {
+    if (availableCash !== undefined) {
+      setCash(availableCash);
+      return;
+    }
     let cancelled = false;
     fetchPaperAccount()
       .then((a) => { if (!cancelled) setCash(a.cash); })
       .catch(() => { /* non-fatal — cash display remains blank */ });
     return () => { cancelled = true; };
-  }, []);
+  }, [availableCash]);
 
   const qtyNum = parseInt(qty, 10);
   const limitNum = parseFloat(limitPrice);
+  const referencePrice = orderType === "limit" ? limitNum : latestPrice;
   const estimatedCost =
-    !isNaN(qtyNum) && orderType === "limit" && !isNaN(limitNum)
-      ? qtyNum * limitNum
+    !isNaN(qtyNum) && typeof referencePrice === "number" && isFinite(referencePrice)
+      ? qtyNum * referencePrice
       : null;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -146,8 +165,15 @@ export default function SimOrderForm({ fixedTicker, locale, onPlaced, pickDate, 
           </div>
         )}
         {fixedTicker && (
-          <div className="self-center">
+          <div>
+            <span className={FIELD_LABEL}>{t(locale, "sim.workspace.selected")}</span>
             <span className="font-tm-mono text-[15px] font-bold text-tm-fg">{fixedTicker}</span>
+            {typeof latestPrice === "number" ? (
+              <span className="ml-2 font-tm-mono text-[11px] tabular-nums text-tm-fg-2">
+                ${latestPrice.toFixed(2)}
+                {priceDate ? <span className="ml-1 text-tm-muted">({priceDate})</span> : null}
+              </span>
+            ) : null}
           </div>
         )}
         <div>

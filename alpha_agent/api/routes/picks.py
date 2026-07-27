@@ -50,6 +50,12 @@ class LeanCard(BaseModel):
     """
 
     ticker: str
+    company_name: str | None = None
+    company_name_zh: str | None = None
+    # Latest available daily close, never presented as a real-time quote.
+    latest_price: float | None = None
+    price_date: str | None = None
+    daily_change_pct: float | None = None
     rating: str
     # Calibrated directional hit-rate (isotonic map over realized 5d outcomes).
     # Honest "edge", structurally modest (~50%); also feeds Kelly position sizing.
@@ -140,6 +146,55 @@ def _safe_float(v: float | None, default: float = 0.0) -> float:
         return f
     except (TypeError, ValueError):
         return default
+
+
+async def _load_market_context(pool, tickers: list[str]) -> dict[str, dict]:
+    """Load company names and the latest two closes in one batched query."""
+    if not tickers:
+        return {}
+    rows = await pool.fetch(
+        """
+        WITH ranked_prices AS (
+            SELECT ticker, date, close,
+                   row_number() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+            FROM daily_prices
+            WHERE ticker = ANY($1::text[])
+        ), price_context AS (
+            SELECT ticker,
+                   max(close) FILTER (WHERE rn = 1) AS latest_price,
+                   max(date) FILTER (WHERE rn = 1) AS price_date,
+                   max(close) FILTER (WHERE rn = 2) AS previous_price
+            FROM ranked_prices
+            WHERE rn <= 2
+            GROUP BY ticker
+        )
+        SELECT requested.ticker,
+               profiles.name AS company_name,
+               profiles.name_zh AS company_name_zh,
+               prices.latest_price,
+               prices.price_date,
+               prices.previous_price
+        FROM unnest($1::text[]) AS requested(ticker)
+        LEFT JOIN price_context prices USING (ticker)
+        LEFT JOIN company_profiles profiles USING (ticker)
+        """,
+        tickers,
+    )
+    result: dict[str, dict] = {}
+    for row in rows:
+        latest = row["latest_price"]
+        previous = row["previous_price"]
+        change = None
+        if latest is not None and previous not in (None, 0):
+            change = (float(latest) / float(previous) - 1.0) * 100.0
+        result[row["ticker"]] = {
+            "company_name": row["company_name"],
+            "company_name_zh": row["company_name_zh"],
+            "latest_price": float(latest) if latest is not None else None,
+            "price_date": row["price_date"].isoformat() if row["price_date"] else None,
+            "daily_change_pct": change,
+        }
+    return result
 
 
 async def build_lean_view(
@@ -302,11 +357,6 @@ async def build_lean_view(
         compute_window_tallies,
         rates_from_tallies,
     )
-    tallies_by_ticker = await compute_window_tallies(
-        pool, [r["ticker"] for r in rows]
-    )
-    consistency_by_ticker = rates_from_tallies(tallies_by_ticker)
-
     # HOLD-inclusive consistency (2026-07-26): a second, opt-in 口径 alongside
     # the directional-only rate above (alpha_agent/backtest/consistency.py).
     # d5/m1 only, live-computed — never 500s the picks endpoint: any DB error
@@ -314,19 +364,33 @@ async def build_lean_view(
     # the whole response down.
     from alpha_agent.backtest.consistency import compute_hold_inclusive_consistency
     tickers = [r["ticker"] for r in rows]
-    try:
-        cons_hold_by_ticker, cons_hold_n_by_ticker = (
-            await compute_hold_inclusive_consistency(pool, tickers)
-        )
-    except Exception as exc:  # noqa: BLE001 — degrade to dash, never 500 the picks page
-        # MUST log: a dash from a DB error is indistinguishable on screen from a
-        # dash for "not enough samples", so without this the failure is silent.
-        logger.warning("hold-inclusive consistency unavailable: %s: %s",
-                       type(exc).__name__, exc)
-        cons_hold_by_ticker, cons_hold_n_by_ticker = {}, {}
+
+    async def safe_hold_consistency() -> tuple[dict, dict]:
+        try:
+            return await compute_hold_inclusive_consistency(pool, tickers)
+        except Exception as exc:  # noqa: BLE001 — degrade to dash, never 500 the picks page
+            # MUST log: a dash from a DB error is indistinguishable on screen
+            # from a dash for "not enough samples".
+            logger.warning(
+                "hold-inclusive consistency unavailable: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            return {}, {}
+
+    # These enrichments are independent. Run them in one wave so adding the
+    # visible price context does not add another transpacific DB round trip.
+    tallies_by_ticker, hold_result, market_context_by_ticker = await asyncio.gather(
+        compute_window_tallies(pool, tickers),
+        safe_hold_consistency(),
+        _load_market_context(pool, tickers),
+    )
+    consistency_by_ticker = rates_from_tallies(tallies_by_ticker)
+    cons_hold_by_ticker, cons_hold_n_by_ticker = hold_result
 
     cards: list[LeanCard] = []
     for r in rows:
+        market = market_context_by_ticker.get(r["ticker"], {})
         try:
             parsed_breakdown: dict = json.loads(r["breakdown"])
             breakdown_data: list[dict] = parsed_breakdown.get("breakdown", [])
@@ -388,6 +452,11 @@ async def build_lean_view(
         cards.append(
             LeanCard(
                 ticker=r["ticker"],
+                company_name=market.get("company_name"),
+                company_name_zh=market.get("company_name_zh"),
+                latest_price=market.get("latest_price"),
+                price_date=market.get("price_date"),
+                daily_change_pct=market.get("daily_change_pct"),
                 rating=rating,
                 confidence=confidence,
                 agreement=agreement,

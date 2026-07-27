@@ -251,6 +251,38 @@ async def test_attribution_aggregates_realized_unrealized_and_trade_counts(clien
     assert row["unrealized_pnl"] == pytest.approx((220.0 - 200.0) * 10)
     assert row["pick_linked_trades"] == 1
     assert row["self_directed_trades"] == 1
+    assert row["latest_pick_date"] == (date.today() - timedelta(days=2)).isoformat()
+    assert row["source_type"] == "mixed"
+
+
+@pytest.mark.parametrize(
+    ("pick_date", "expected_source"),
+    [
+        (date.today() - timedelta(days=1), "pick"),
+        (None, "manual"),
+    ],
+)
+async def test_attribution_classifies_single_source(
+    client_with_db, applied_db, pick_date, expected_source
+):
+    user_id, account_id = await _seed_user_and_account(applied_db)
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute(
+            "INSERT INTO sim_order (account_id, ticker, side, order_type, qty, "
+            "signal_date, status, pick_date, pick_ticker) "
+            "VALUES ($1, 'MSFT', 'buy', 'market', 1, $2, 'filled', $3, $4)",
+            account_id,
+            date.today(),
+            pick_date,
+            "MSFT" if pick_date else None,
+        )
+    finally:
+        await conn.close()
+
+    response = client_with_db.get("/api/paper/attribution", headers=_auth(user_id))
+    row = response.json()["tickers"][0]
+    assert row["source_type"] == expected_source
 
 
 async def test_attribution_empty_account_returns_empty_list(client_with_db, applied_db):
