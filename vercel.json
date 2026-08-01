@@ -2,10 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "regions": ["iad1"],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/qcore", "destination": "/api/index" }
-  ],
   "crons": [
     { "path": "/api/cron/slow_daily", "schedule": "30 13 * * *" },
     { "path": "/api/cron/paper_fill", "schedule": "0 1 * * *" }
