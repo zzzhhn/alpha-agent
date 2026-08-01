@@ -21,6 +21,7 @@ import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmButton } from "@/components/tm/TmButton";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { isPicksSnapshotStale } from "@/lib/picks-freshness";
 import SimOrderForm from "../SimOrderForm";
 import { Metric, TwoStepConfirm } from "./PaperUi";
 import PaperRecommendations from "./PaperRecommendations";
@@ -38,6 +39,9 @@ export default function PaperScreen() {
   const [curve, setCurve] = useState<EquityCurveResponse | null>(null);
   const [attribution, setAttribution] = useState<readonly TickerAttribution[]>([]);
   const [picks, setPicks] = useState<readonly RatingCard[]>([]);
+  const [picksAsOf, setPicksAsOf] = useState<string | null>(null);
+  const [picksServerStale, setPicksServerStale] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
@@ -55,7 +59,11 @@ export default function PaperScreen() {
       fetchAttribution(),
     ]);
 
-    if (picksResult.status === "fulfilled") setPicks(picksResult.value.picks);
+    if (picksResult.status === "fulfilled") {
+      setPicks(picksResult.value.picks);
+      setPicksAsOf(picksResult.value.as_of);
+      setPicksServerStale(picksResult.value.stale);
+    }
     if (accountResult.status === "fulfilled") {
       setAccount(accountResult.value);
       setAuthRequired(false);
@@ -76,6 +84,11 @@ export default function PaperScreen() {
   }, [loadAll]);
 
   useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     if (picks.length === 0) {
       setSelectedTicker(null);
       return;
@@ -89,6 +102,8 @@ export default function PaperScreen() {
     () => picks.find((pick) => pick.ticker === selectedTicker) ?? null,
     [picks, selectedTicker],
   );
+  const picksFrozen =
+    picks.length > 0 && isPicksSnapshotStale(picksAsOf, picksServerStale, now);
 
   async function handleCancel(orderId: number) {
     await cancelOrder(orderId);
@@ -147,11 +162,12 @@ export default function PaperScreen() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
         <TmPane standalone title={t(locale, "sim.workspace.today_picks")} meta={picks[0]?.price_date ?? "—"}>
+          {picksFrozen ? <FrozenRecommendations /> : null}
           {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
         </TmPane>
         <TmPane standalone title={selectedPick ? `${t(locale, "sim.workspace.order_title")} · ${selectedPick.ticker}` : t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelectedTicker(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
           <div className="px-3 py-3">
-            {authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : selectedPick && account ? (
+            {picksFrozen ? <FrozenRecommendations /> : authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : selectedPick && account ? (
               <SimOrderForm
                 key={selectedPick.ticker}
                 fixedTicker={selectedPick.ticker}
@@ -198,4 +214,9 @@ function AuthPrompt({ hint, cta }: { readonly hint: string; readonly cta: string
 function PaperError({ detail }: { readonly detail: string }) {
   const { locale } = useLocale();
   return <p className="font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "sim.load_error_hint")} <span className="text-tm-muted">({detail})</span></p>;
+}
+
+function FrozenRecommendations() {
+  const { locale } = useLocale();
+  return <p className="mx-3 my-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
 }

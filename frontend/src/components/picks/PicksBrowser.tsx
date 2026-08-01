@@ -30,6 +30,7 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 // Shared hook so a flip on Stock detail's AttributionTable / Radar
 // propagates back here via the storage event broadcast inside the hook.
 import { useFactorMode } from "@/hooks/useFactorMode";
+import { isPicksSnapshotStale } from "@/lib/picks-freshness";
 import {
   DISPATCH_EVENT,
   clearDispatch,
@@ -211,6 +212,8 @@ export default function PicksBrowser({
 
   const searching = search.trim().length > 0;
   const count = data.picks.length;
+  const snapshotStale =
+    count > 0 && isPicksSnapshotStale(data.as_of, data.stale, now);
   const asOf = data.as_of
     ? new Date(data.as_of).toLocaleString()
     : locale === "zh"
@@ -310,7 +313,7 @@ export default function PicksBrowser({
             {side === "short" ? copy.sideShort : copy.sideLong}
           </span>
         </button>
-        {data.stale ? (
+        {snapshotStale ? (
           <>
             <TmSubbarSep />
             <TmStatusPill tone="err">{copy.stale}</TmStatusPill>
@@ -332,7 +335,7 @@ export default function PicksBrowser({
           {/* ★ Highest-Conviction hero band — top-3 of the current board as
               decision-first cards (ALPHACORE design). Hidden during an active
               search, where the result set is a lookup, not a conviction ranking. */}
-          {!searching ? <ConvictionBand picks={data.picks} /> : null}
+          {!searching && !snapshotStale ? <ConvictionBand picks={data.picks} /> : null}
 
           <TmPane
             title={copy.paneTitle}
@@ -354,6 +357,10 @@ export default function PicksBrowser({
             ) : justRefreshed ? (
               <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
                 {t(locale, "picks.refreshed_banner")}
+              </div>
+            ) : snapshotStale ? (
+              <div className="mx-3 mt-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">
+                {t(locale, "picks.stale_freeze_banner")}
               </div>
             ) : null}
             <div className="flex items-center gap-2 px-3 py-2">
@@ -382,6 +389,7 @@ export default function PicksBrowser({
                 simPositions={simPositions}
                 cash={paperCash}
                 onOrderPlaced={loadSimPositions}
+                ordersDisabled={snapshotStale}
               />
             )}
           </TmPane>

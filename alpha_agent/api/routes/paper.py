@@ -6,8 +6,10 @@ access (UPSERT pattern). Fill simulation runs in the daily cron, not here.
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import UTC, date, datetime
+from functools import lru_cache
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
@@ -165,6 +167,32 @@ def _insufficient_position_message(ticker: str, qty: int, held_qty: int) -> str:
     )
 
 
+@lru_cache(maxsize=1)
+def _xnys_calendar():
+    # Keep the pandas-backed calendar import off the application startup path.
+    # It is only needed when an order is placed, and is cached thereafter.
+    import exchange_calendars as xcals
+
+    return xcals.get_calendar("XNYS")
+
+
+def _paper_signal_session(now: datetime | None = None) -> date:
+    """Map an order instant to the latest applicable US market session.
+
+    Fills select the first daily close strictly after signal_date. Using the
+    server's UTC calendar date after the US close can therefore skip the next
+    US session. The New York date, rolled back across weekends and exchange
+    holidays, preserves the intended D+1-session fill.
+    """
+    instant = now or datetime.now(UTC)
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=UTC)
+    new_york_date = instant.astimezone(ZoneInfo("America/New_York")).date()
+    return _xnys_calendar().date_to_session(
+        new_york_date, direction="previous"
+    ).date()
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/account", response_model=AccountResponse)
@@ -241,7 +269,7 @@ async def place_order(
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
-    today = date.today()
+    signal_session = _paper_signal_session()
 
     if body.side == "buy":
         # Estimate cost off the latest close (decision: no buffer). If no
@@ -278,7 +306,7 @@ async def place_order(
         RETURNING id
         """,
         account_id, body.ticker, body.side, body.order_type,
-        body.qty, body.limit_price, today,
+        body.qty, body.limit_price, signal_session,
         body.pick_date, body.pick_ticker,
     )
 
@@ -295,7 +323,7 @@ async def place_order(
     return OrderResponse(
         order_id=order_id,
         status="pending",
-        signal_date=today.isoformat(),
+        signal_date=signal_session.isoformat(),
         message=message,
     )
 

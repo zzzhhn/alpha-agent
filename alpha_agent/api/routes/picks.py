@@ -232,10 +232,10 @@ async def build_lean_view(
     `mode` (Phase 2 dual-factor): "short" (default, 12d/60d momentum-vol,
     aligned with the rest of the short-window composite) or "long"
     (252d/126d academic Jegadeesh-Titman/Daniel-Moskowitz framework). When
-    "long", the picks list is re-ranked in Python using factor.raw.z_long
-    (populated by fast_intraday's universe-wide eval) instead of the stored
-    short-mode composite. SQL ordering is unchanged; we re-sort in Python
-    after the score swap. Rows without z_long (legacy / partial) keep their
+    "long", the full eligible universe is re-ranked in Python using
+    factor.raw.z_long (populated by fast_intraday's universe-wide eval)
+    instead of the stored short-mode composite, and only then sliced to the
+    requested limit. Rows without z_long (legacy / partial) keep their
     original composite under either mode.
     """
     from alpha_agent.backtest.confidence_calibration import (
@@ -278,6 +278,11 @@ async def build_lean_view(
     # must always outrank partial ones. Within each group, score DESC.
     # Net effect: the default top-N view stays all-real (240 fast
     # cards), partial rows only surface on search or a high limit.
+    # Long mode must rank the full eligible universe before applying the
+    # requested limit. PostgreSQL treats LIMIT NULL as no limit. Short mode can
+    # retain the efficient SQL-side slice because its stored score is already
+    # the active ranking score.
+    query_limit = None if mode == "long" else limit
     rows = await pool.fetch(
         f"""
         WITH fast_latest AS (
@@ -334,15 +339,38 @@ async def build_lean_view(
         ORDER BY partial ASC, score {score_dir}
         LIMIT $1
         """,
-        limit,
+        query_limit,
         search_norm,
         fresh_cutoff,
     )
     if not rows:
         return [], None, False
 
-    most_recent: datetime = max(r["fetched_at"] for r in rows)
-    stale = (datetime.now(UTC) - most_recent) > timedelta(hours=_STALE_THRESHOLD_HOURS)
+    if mode == "long":
+        def long_mode_score(row) -> float:
+            score = _safe_float(row["score"], 0.0)
+            if row["partial"]:
+                return score
+            try:
+                breakdown = json.loads(row["breakdown"]).get("breakdown", [])
+            except (AttributeError, TypeError, json.JSONDecodeError):
+                return score
+            for entry in breakdown:
+                if entry.get("signal") != "factor":
+                    continue
+                raw = entry.get("raw")
+                if isinstance(raw, dict) and "z_long" in raw:
+                    return score + _safe_float(entry.get("weight_effective"), 0.0) * (
+                        _safe_float(raw.get("z_long"), 0.0)
+                        - _safe_float(entry.get("z"), 0.0)
+                    )
+                break
+            return score
+
+        if side == "short":
+            rows = sorted(rows, key=lambda r: (r["partial"], long_mode_score(r)))[:limit]
+        else:
+            rows = sorted(rows, key=lambda r: (r["partial"], -long_mode_score(r)))[:limit]
 
     # dim_thresholds (universe-wide band breakpoints, so each dimension is graded
     # against its own cross-sectional distribution) was fetched in the gather above.
@@ -480,11 +508,15 @@ async def build_lean_view(
     # SQL ordered by short-mode composite; after long-mode swap the
     # short order is stale. Re-sort in Python (partial-last preserved),
     # respecting side: long = score DESC, short = score ASC.
-    if mode == "long":
-        if side == "short":
-            cards.sort(key=lambda c: (c.partial, c.composite_score))
-        else:
-            cards.sort(key=lambda c: (c.partial, -c.composite_score))
+    # Report freshness for the exact visible board. A single recent row must
+    # not make older visible recommendations look fresh.
+    fetched_times = [datetime.fromisoformat(card.as_of) for card in cards]
+    most_recent = max(fetched_times)
+    now = datetime.now(UTC)
+    stale = any(
+        now - fetched_at > timedelta(hours=_STALE_THRESHOLD_HOURS)
+        for fetched_at in fetched_times
+    )
 
     return cards, most_recent, stale
 
@@ -520,11 +552,10 @@ async def picks_lean(
     `mode` (Phase 2 dual-factor): "short" (default, 12d/60d momentum-vol,
     aligned with the rest of the short-window composite) or "long"
     (252d/126d academic Jegadeesh-Titman/Daniel-Moskowitz framework). When
-    "long", the picks list is re-ranked in Python using factor.raw.z_long
-    (populated by fast_intraday's universe-wide eval) instead of the stored
-    short-mode composite. SQL ordering is unchanged; we re-sort in Python
-    after the score swap. Rows without z_long (legacy / partial) keep their
-    original composite under either mode.
+    "long", the full eligible universe is re-ranked in Python using
+    factor.raw.z_long (populated by fast_intraday's universe-wide eval) before
+    the response limit is applied. Rows without z_long (legacy / partial) keep
+    their original composite under either mode.
     """
     import traceback
     try:

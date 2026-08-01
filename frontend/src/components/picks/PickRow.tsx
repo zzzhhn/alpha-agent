@@ -33,6 +33,7 @@ export default function PickRow({
   simPositions,
   cash = 0,
   onOrderPlaced,
+  ordersDisabled = false,
 }: {
   rank: number;
   card: RatingCard;
@@ -46,6 +47,7 @@ export default function PickRow({
   simPositions?: ReadonlyMap<string, number>;  // ticker → qty currently held
   cash?: number;
   onOrderPlaced?: () => void;
+  ordersDisabled?: boolean;
 }) {
   // Days this row's data lags the freshest row in the list (0 if within ~20h).
   const staleDays = (() => {
@@ -298,9 +300,13 @@ export default function PickRow({
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
+          disabled={ordersDisabled}
+          title={ordersDisabled ? t(locale, "picks.stale_order_disabled") : undefined}
           className={clsx(
             "rounded border px-1.5 py-0.5 font-tm-mono text-[11px] transition-colors",
-            heldQty > 0
+            ordersDisabled
+              ? "cursor-not-allowed border-tm-rule text-tm-muted opacity-50"
+              : heldQty > 0
               ? "border-tm-pos text-tm-pos cursor-pointer hover:border-tm-accent hover:text-tm-accent"
               : "border-tm-rule text-tm-muted hover:border-tm-accent hover:text-tm-accent",
           )}
@@ -309,7 +315,7 @@ export default function PickRow({
             ? t(locale, "sim.held_btn")
             : t(locale, "sim.order_btn")}
         </button>
-        {drawerOpen && (
+        {drawerOpen && !ordersDisabled && (
           <SimOrderDrawer
             ticker={card.ticker}
             card={card}

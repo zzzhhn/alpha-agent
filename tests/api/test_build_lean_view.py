@@ -6,6 +6,7 @@ over this; test_picks.py pins the wrapper's HTTP behavior unchanged."""
 from __future__ import annotations
 
 from datetime import date, timedelta
+import json
 
 import pytest
 
@@ -78,3 +79,33 @@ async def test_build_lean_view_empty_db(pool):
     assert cards == []
     assert as_of is None
     assert stale is False
+
+
+@pytest.mark.asyncio
+async def test_long_mode_ranks_full_universe_before_limit(pool):
+    today = date.today()
+    rows = [
+        ("SHORTWIN", 10.0, 0.0),
+        ("LONGWIN", 1.0, 20.0),
+    ]
+    for ticker, short_score, long_z in rows:
+        breakdown = json.dumps({
+            "breakdown": [{
+                "signal": "factor",
+                "z": 0.0,
+                "weight_effective": 1.0,
+                "raw": {"z_long": long_z},
+            }],
+        })
+        await pool.execute(
+            "INSERT INTO daily_signals_fast "
+            "(ticker, date, composite, rating, confidence, breakdown, partial) "
+            "VALUES ($1, $2, $3, 'BUY', 0.8, $4::jsonb, false)",
+            ticker, today, short_score, breakdown,
+        )
+
+    cards, _as_of, _stale = await build_lean_view(
+        pool, limit=1, search=None, mode="long", side="long"
+    )
+
+    assert [card.ticker for card in cards] == ["LONGWIN"]

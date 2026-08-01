@@ -16,12 +16,14 @@ export default function PicksTable({
   simPositions,
   cash,
   onOrderPlaced,
+  ordersDisabled = false,
 }: {
   picks: RatingCard[];
   isWatched?: (ticker: string) => boolean;
   simPositions?: ReadonlyMap<string, number>;
   cash?: number;
   onOrderPlaced?: () => void;
+  ordersDisabled?: boolean;
 }) {
   const { locale } = useLocale();
   // Drop dimension columns that are dead across every visible pick.
@@ -103,6 +105,7 @@ export default function PicksTable({
             simPositions={simPositions}
             cash={cash}
             onOrderPlaced={onOrderPlaced}
+            ordersDisabled={ordersDisabled}
           />
         ))}
       </tbody>

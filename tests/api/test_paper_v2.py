@@ -7,13 +7,31 @@ daily_prices/sim_position and the attribution endpoint does GROUP BY.
 from __future__ import annotations
 
 import time
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import asyncpg
 import pytest
 from jose import jwt
 
+from alpha_agent.api.routes.paper import _paper_signal_session
+
 _SECRET = "test-secret-not-real-0123456789"
+
+
+@pytest.mark.parametrize(
+    ("instant", "expected"),
+    [
+        # 20:30 New York is already the next UTC date. The signal session must
+        # remain Thursday so Friday is still the D+1 fill candidate.
+        (datetime(2026, 7, 10, 0, 30, tzinfo=UTC), date(2026, 7, 9)),
+        # Weekend rolls back to the latest exchange session.
+        (datetime(2026, 7, 12, 12, 0, tzinfo=UTC), date(2026, 7, 10)),
+        # 2026-07-03 is the observed Independence Day market holiday.
+        (datetime(2026, 7, 3, 16, 0, tzinfo=UTC), date(2026, 7, 2)),
+    ],
+)
+def test_paper_signal_session_uses_new_york_exchange_calendar(instant, expected):
+    assert _paper_signal_session(instant) == expected
 
 
 def _auth(user_id: int) -> dict:

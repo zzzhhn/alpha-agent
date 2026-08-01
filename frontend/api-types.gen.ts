@@ -1775,11 +1775,10 @@ export interface paths {
          *     `mode` (Phase 2 dual-factor): "short" (default, 12d/60d momentum-vol,
          *     aligned with the rest of the short-window composite) or "long"
          *     (252d/126d academic Jegadeesh-Titman/Daniel-Moskowitz framework). When
-         *     "long", the picks list is re-ranked in Python using factor.raw.z_long
-         *     (populated by fast_intraday's universe-wide eval) instead of the stored
-         *     short-mode composite. SQL ordering is unchanged; we re-sort in Python
-         *     after the score swap. Rows without z_long (legacy / partial) keep their
-         *     original composite under either mode.
+         *     "long", the full eligible universe is re-ranked in Python using
+         *     factor.raw.z_long (populated by fast_intraday's universe-wide eval) before
+         *     the response limit is applied. Rows without z_long (legacy / partial) keep
+         *     their original composite under either mode.
          */
         get: operations["picks_lean_api_picks_lean_get"];
         put?: never;
