@@ -745,4 +745,4 @@ P1 主提交为 `1d4ce86`，生产浏览器验收后的冻结态补丁为 `9f025
 
 本次浏览器验收还确认了 Next.js 60 秒 ISR 的一个边界：缓存过期后的首次访问可以先返回旧页面，并在后台重验证；下一次访问才获得 run 33。它没有改变 API 或订单门控的正确性，但可能让刚发布后的用户短暂看到冻结态。后续 P2 可以在原子发布后增加显式 tag invalidation，或让客户端对比最新 run id 后自刷新，以消除这一短暂不一致。
 
-最终生产别名对应部署为：后端 `dpl_9qqTCHcwWpVJwzptKDTPrtb3sDV1`，前端 `dpl_BxX4HQqNKVxTf7aFnfkNuvrZSPhc`。报告与验收基线提交为 `c54b620`，本节记录的是其上线后恢复结果。
+run 33 首次健康发布的功能验收部署为：后端 `dpl_9qqTCHcwWpVJwzptKDTPrtb3sDV1`，前端 `dpl_BxX4HQqNKVxTf7aFnfkNuvrZSPhc`。报告与验收基线提交为 `c54b620`，本节记录的是其上线后恢复结果。部署 ID 会随报告类提交自动更新，因此当前生产别名与 Ready 状态应以每次交付时的生产路径复查为准。
