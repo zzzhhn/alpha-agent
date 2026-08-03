@@ -731,4 +731,18 @@ P1 主提交为 `1d4ce86`，生产浏览器验收后的冻结态补丁为 `9f025
 
 第一次浏览器验收曾发现：非 tradable 的 long 探索视图虽然禁用了订单，却仍显示“模型领先”。补丁 `9f02552` 将任何 `tradable=false` 的视图统一纳入冻结状态。修复后复验通过。
 
-当前未完成的不是 P1 代码，而是数据恢复后的首个健康发布。`daily_prices` 将按新 schedule 在 22:00 UTC 更新，完整信号在 23:00 UTC 运行并原子发布。只有当实际市场日等于最近完成的 XNYS session、SPY 存在、完整股票价格覆盖率至少 95% 且最小 eligible 门槛通过时，生产推荐才会自动解除冻结。冻结期间系统的正确行为就是不提供可交易的“今日推荐”。
+截至本轮初次部署验收，当时未完成的不是 P1 代码，而是数据恢复后的首个健康发布。`daily_prices` 按新 schedule 在 22:00 UTC 更新，完整信号在 23:00 UTC 运行并原子发布。只有当实际市场日等于最近完成的 XNYS session、SPY 存在、完整股票价格覆盖率至少 95% 且最小 eligible 门槛通过时，生产推荐才会自动解除冻结。冻结期间系统的正确行为就是不提供可交易的“今日推荐”。
+
+### 17.6 数据恢复与首个健康 canonical run
+
+2026-08-03 已按新恢复路径完成首个健康发布，上述未完成项正式关闭。
+
+1. GitHub Actions `30784245193` 完成 8 个 `daily_prices` 分片，全部 HTTP 200，错误数为 0，共补写 2,665 条价格记录；随后以 2,499 个样本对完成 IC 校准。
+2. GitHub Actions `30784628650` 完成 6 个 Top-240 完整信号分片，合计写入 245 行，错误数为 0；最后一步只发布一个 immutable snapshot。
+3. 新快照为 run 33，`market_date=2026-07-31`，等于当时最近完成的 XNYS session。健康门槛返回 `passed=true`，eligible 278，价格候选 278，`price_coverage=1.0`，`benchmark_fresh=true`，无拒绝原因。
+4. 生产 short 与 long 榜均返回 `canonical=true`、`ranked=true`、`tradable=true`、`stale=false`，所有抽样卡片的 `run_id`、`market_date` 和 `price_date` 一致。AAPL 搜索视图仍保持 `canonical=false`、`ranked=false`、`tradable=false`。
+5. 真实 Chrome 验收中，`/picks` 显示市场日 2026-07-31、快照 #33 和“模型领先”，50 个模拟按钮均解除冻结；`/paper` 显示 `2026-07-31 · RUN #33`，没有冻结提示，跟单按钮可用，未登录用户只在提交阶段进入登录门槛。
+
+本次浏览器验收还确认了 Next.js 60 秒 ISR 的一个边界：缓存过期后的首次访问可以先返回旧页面，并在后台重验证；下一次访问才获得 run 33。它没有改变 API 或订单门控的正确性，但可能让刚发布后的用户短暂看到冻结态。后续 P2 可以在原子发布后增加显式 tag invalidation，或让客户端对比最新 run id 后自刷新，以消除这一短暂不一致。
+
+最终生产别名对应部署为：后端 `dpl_9qqTCHcwWpVJwzptKDTPrtb3sDV1`，前端 `dpl_BxX4HQqNKVxTf7aFnfkNuvrZSPhc`。报告与验收基线提交为 `c54b620`，本节记录的是其上线后恢复结果。
