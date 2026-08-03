@@ -11,6 +11,8 @@ import { HypothesisInputCard } from "@/components/alpha/HypothesisInputCard";
 import type { InputCardHistoryEntry } from "@/components/alpha/HypothesisInputCard";
 import { useAlphaChain } from "@/components/alpha/useAlphaChain";
 import { VerdictBar } from "@/components/alpha/VerdictBar";
+import { AlphaResearchContext } from "@/components/alpha/AlphaResearchContext";
+import { AlphaExperimentLedger } from "@/components/alpha/AlphaExperimentLedger";
 import { useToast } from "@/components/ui/toast";
 import { addToZoo, isInZoo, removeFromZoo } from "@/lib/factor-zoo";
 import { getFavorites, getRecent } from "@/lib/hypothesis-history";
@@ -26,7 +28,7 @@ export default function AlphaPage() {
 
   // History loader: localStorage via getFavorites + getRecent (same as old page lines 114-116).
   // Favorites appear first, then recent non-favorites.
-  useEffect(() => {
+  const reloadHistory = useCallback(() => {
     const favs = getFavorites();
     const recents = getRecent();
     // Merge: favorites first, then non-duplicate recents
@@ -34,6 +36,12 @@ export default function AlphaPage() {
     const merged = [...favs, ...recents.filter((e) => !seen.has(e.id))];
     setHistory(merged);
   }, []);
+
+  useEffect(() => {
+    reloadHistory();
+    window.addEventListener("alphacore:hypothesis-history", reloadHistory);
+    return () => window.removeEventListener("alphacore:hypothesis-history", reloadHistory);
+  }, [reloadHistory]);
 
   // Selecting an example here loads its hypothesis prose into the textarea
   // (the alpha flow translates prose -> expression -> backtest). Locale-aware.
@@ -73,6 +81,25 @@ export default function AlphaPage() {
 
   const canSave =
     translate !== null && !(translate.smoke.degenerate ?? false);
+
+  const handleOpenBacktest = useCallback(() => {
+    if (!translate || typeof window === "undefined") return;
+    window.sessionStorage.setItem("alphacore.backtest.prefill.v1", JSON.stringify({
+      name: translate.spec.name,
+      expression: translate.spec.expression,
+      operators_used: translate.spec.operators_used,
+      lookback: translate.spec.lookback,
+      hypothesis: translate.spec.hypothesis,
+      direction: "long_short",
+      neutralize: "none",
+      benchmarkTicker: "SPY",
+      mode: "static",
+      topPct: 0.3,
+      bottomPct: 0.3,
+      transactionCostBps: 10,
+    }));
+    window.location.assign("/backtest");
+  }, [translate]);
 
   // Save-to-Zoo: localStorage via addToZoo (mirrors ZooSaveButton internals).
   // Payload mirrors old page's ZooSaveButton props (lines 276-297):
@@ -126,6 +153,7 @@ export default function AlphaPage() {
 
   return (
     <main className="flex flex-col gap-4 p-4">
+      <AlphaResearchContext state={chain.state} universe={universe} onOpenBacktest={handleOpenBacktest} />
       <HypothesisInputCard
         text={text}
         onTextChange={setText}
@@ -153,6 +181,7 @@ export default function AlphaPage() {
         onRetryBacktest={chain.retryBacktest}
       />
       <AnalyticsAccordion translate={translate} />
+      <AlphaExperimentLedger history={history} onOpen={handleHistorySelect} />
     </main>
   );
 }

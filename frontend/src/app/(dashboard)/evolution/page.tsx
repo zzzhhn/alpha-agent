@@ -20,13 +20,9 @@ import {
   fetchBriefing,
   type MiningBriefing,
 } from "@/lib/api/factor-lab";
-import { t } from "@/lib/i18n";
-import { TmScreen, TmPane } from "@/components/tm/TmPane";
-import { IcTrendChart } from "@/components/evolution/IcTrendChart";
-import { ReliabilityChart } from "@/components/evolution/ReliabilityChart";
-import { WeightDeltaTable } from "@/components/evolution/WeightDeltaTable";
-import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
+import { TmScreen } from "@/components/tm/TmPane";
 import EvolutionHealthStrip from "@/components/evolution/EvolutionHealthStrip";
+import EvolutionObservatory from "@/components/evolution/EvolutionObservatory";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
 // Methodology-proposals UI, merged in from the former /factor-lab page (the two
 // nav slots both surfaced proposals; consolidated into this one monitor).
@@ -116,156 +112,28 @@ export default async function EvolutionPage() {
   // one-glance "is the self-evolution effective & trustworthy?" read.
   const health = assessEvolutionHealth({ icTrend, calibration, weights, proposals });
 
-  const tr = (key: string) => t(locale, key as Parameters<typeof t>[1]);
-  const fill = (key: string, vars: Record<string, string | number>) => {
-    let s = tr(key);
-    for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
-    return s;
-  };
-  const unavailable = tr("evolution.unavailable");
-  const loadFailed = tr("evolution.load_failed");
-
-  // Weight-change events → vertical markers on the IC chart (traceability:
-  // every promote / rollback / inversion-guard flip is visible ON the timeline
-  // it may have affected). The signal name is parsed from new_value when the
-  // change carries one; unparseable payloads just show the source.
-  const weightEvents = (changes?.changes ?? []).map((c) => {
-    let label = c.source;
-    try {
-      const v = JSON.parse(c.new_value);
-      if (v && typeof v === "object" && typeof v.signal === "string") {
-        label = `${c.source === "inversion_guard" ? "guard" : c.source}: ${v.signal}`;
-      }
-    } catch {
-      /* non-JSON new_value → source-only label */
-    }
-    return { ts: c.changed_at, source: c.source, label };
-  });
+  const pendingCount = proposals?.proposals.filter((proposal) => proposal.status === "pending").length ?? 0;
 
   return (
     <TmScreen>
       <EvolutionHealthStrip health={health} locale={locale} />
-
-      {/* ── Section 1: Signal IC Trend ──────────────────────────────── */}
-      <TmPane
-        title={tr("evolution.pane.ic_trend")}
-        meta={
-          icTrend
-            ? fill("evolution.ic.meta", {
-                n: icTrend.series.length,
-                d: icTrend.window_days,
-              })
-            : unavailable
-        }
-      >
-        {icTrend ? (
-          <div className="px-3 py-2.5">
-            <p className="font-tm-mono text-[11px] text-tm-fg-2">
-              {fill("evolution.ic.sub", {
-                n: icTrend.series.length,
-                d: icTrend.window_days,
-              })}
-            </p>
-            <IcTrendChart
-              series={icTrend.series}
-              locale={locale}
-              annotations={icAnnotations}
-              events={weightEvents}
-            />
-          </div>
-        ) : (
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            {loadFailed}
-          </p>
-        )}
-      </TmPane>
-
-      {/* ── Section 2: Confidence Calibration ──────────────────────── */}
-      <TmPane
-        title={tr("evolution.pane.calibration")}
-        meta={
-          calibration
-            ? calibration.applied
-              ? fill("evolution.cal.meta_applied", { n: calibration.n_pairs })
-              : fill("evolution.cal.meta_accumulating", { n: calibration.n_pairs })
-            : unavailable
-        }
-      >
-        {calibration ? (
-          <div className="px-3 py-2.5">
-            {calibration.applied ? (
-              <p className="font-tm-mono text-[11px] text-tm-fg-2">
-                {fill("evolution.cal.sub_applied", {
-                  n: calibration.n_pairs,
-                  b: calibration.buckets.length,
-                })}
-                {calibration.as_of ? ` · ${calibration.as_of}` : ""}
-              </p>
-            ) : (
-              <p className="font-tm-mono text-[11px] text-tm-warn">
-                {fill("evolution.cal.sub_accumulating", { n: calibration.n_pairs })}
-              </p>
-            )}
-            <ReliabilityChart calibration={calibration} locale={locale} />
-          </div>
-        ) : (
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            {loadFailed}
-          </p>
-        )}
-      </TmPane>
-
-      {/* ── Section 3: Adaptive Weights ────────────────────────────── */}
-      <TmPane
-        title={tr("evolution.pane.weights")}
-        meta={
-          weights
-            ? fill("evolution.weights.meta", { n: weights.weights.length })
-            : unavailable
-        }
-      >
-        {weights ? (
-          <div className="px-3 py-2.5">
-            <p className="font-tm-mono text-[11px] text-tm-fg-2">
-              {fill("evolution.weights.sub", { n: weights.weights.length })}
-            </p>
-            <WeightDeltaTable weights={weights.weights} locale={locale} />
-          </div>
-        ) : (
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            {loadFailed}
-          </p>
-        )}
-      </TmPane>
-
-      {/* ── Section 4: Change History ───────────────────────────────── */}
-      <TmPane
-        title={tr("evolution.pane.changes")}
-        meta={
-          changes
-            ? fill("evolution.changes.meta", { n: changes.changes.length })
-            : unavailable
-        }
-      >
-        {changes ? (
-          <div className="px-3 py-2.5">
-            <p className="font-tm-mono text-[11px] text-tm-fg-2">
-              {fill("evolution.changes.sub", { n: changes.changes.length })}
-            </p>
-            <ChangeHistoryTable changes={changes.changes} locale={locale} />
-          </div>
-        ) : (
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            {loadFailed}
-          </p>
-        )}
-      </TmPane>
+      <EvolutionObservatory
+        locale={locale}
+        icTrend={icTrend}
+        annotations={icAnnotations}
+        weights={weights?.weights ?? []}
+        calibration={calibration}
+        changes={changes?.changes ?? []}
+        pendingCount={pendingCount}
+      />
 
       {/* ── Section 5: Methodology Proposals (merged from /factor-lab) ──
           The decision card + actionable pending list + collapsed history,
           richer than the prior read-only table. `proposals` (fetchProposals)
           still feeds the health strip above. */}
-      <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
+      <div id="evolution-review">
+        <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
+      </div>
 
       {/* Phase D: compressed 3-bucket briefing — the miner's output squeezed to
           validated / flagged / repeated-failure directions. Sits right under the

@@ -30,6 +30,7 @@ import { BacktestVerdictBar } from "@/components/backtest/BacktestVerdictBar";
 import { BacktestEvidenceGrid } from "@/components/backtest/BacktestEvidenceGrid";
 import { BacktestAnalyticsGroups } from "@/components/backtest/BacktestAnalyticsGroups";
 import { RecentRunsTable } from "@/components/backtest/RecentRunsTable";
+import { BacktestEmptyState } from "@/components/backtest/BacktestEmptyState";
 import { parseFactorError } from "@/lib/factor-errors";
 import { addToZoo, removeFromZoo } from "@/lib/factor-zoo";
 import type { BacktestParams, Run } from "@/components/backtest/types";
@@ -292,11 +293,18 @@ export default function BacktestPage() {
           onTogglePin={handleTogglePinCurrent}
           onReRun={session.runOnce}
         />
-        <BacktestEvidenceGrid
-          runState={session.runState}
-          currentRun={session.currentRun}
-        />
-        <BacktestAnalyticsGroups currentRun={session.currentRun} />
+        {session.currentRun ? (
+          <>
+            <BacktestEvidenceGrid
+              runState={session.runState}
+              currentRun={session.currentRun}
+              thresholds={session.thresholds}
+            />
+            <BacktestAnalyticsGroups currentRun={session.currentRun} />
+          </>
+        ) : (
+          <BacktestEmptyState running={session.isRunning} />
+        )}
         <RecentRunsTable
           runs={session.recentRuns}
           baselineRunId={session.baselineRunId}

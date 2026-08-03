@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { runFactorBacktest, translateHypothesis } from "@/lib/api";
 import type { FactorUniverse } from "@/lib/types";
+import { addToHistory } from "@/lib/hypothesis-history";
 import type {
   ChainPaneStates,
   ChainState,
@@ -76,6 +77,10 @@ export function useAlphaChain() {
         return;
       }
       translate = resp.data;
+      addToHistory({ text, universe }, translate);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("alphacore:hypothesis-history"));
+      }
     } catch (e) {
       setState({
         kind: "translate_error",
