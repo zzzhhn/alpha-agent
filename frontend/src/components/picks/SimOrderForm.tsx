@@ -32,6 +32,7 @@ interface Props {
    *  tab, where orders are manual by definition. */
   readonly pickDate?: string;
   readonly pickTicker?: string;
+  readonly pickRunId?: number;
   readonly latestPrice?: number | null;
   readonly priceDate?: string | null;
   readonly availableCash?: number | null;
@@ -84,6 +85,7 @@ export default function SimOrderForm({
   onPlaced,
   pickDate,
   pickTicker,
+  pickRunId,
   latestPrice,
   priceDate,
   availableCash,
@@ -106,7 +108,7 @@ export default function SimOrderForm({
     }
     let cancelled = false;
     fetchPaperAccount()
-      .then((a) => { if (!cancelled) setCash(a.cash); })
+      .then((a) => { if (!cancelled) setCash(a.available_cash); })
       .catch(() => { /* non-fatal — cash display remains blank */ });
     return () => { cancelled = true; };
   }, [availableCash]);
@@ -136,9 +138,10 @@ export default function SimOrderForm({
         ...(orderType === "limit" ? { limit_price: limitNum } : {}),
         ...(pickDate ? { pick_date: pickDate } : {}),
         ...(pickTicker ? { pick_ticker: pickTicker } : {}),
+        ...(pickRunId ? { pick_run_id: pickRunId } : {}),
       });
       setPlaced(true);
-      fetchPaperAccount().then((a) => setCash(a.cash)).catch(() => {});
+      fetchPaperAccount().then((a) => setCash(a.available_cash)).catch(() => {});
       onPlaced();
       setTimeout(() => setPlaced(false), 2000);
     } catch (err) {

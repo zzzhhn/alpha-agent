@@ -37,7 +37,12 @@ DEFAULT_PARAMS: dict = {
 _PREFERRED_TIERS = frozenset({"BUY", "OW"})
 
 
-def select_holdings(snapshots, *, top_n: int) -> list[dict]:
+def select_holdings(
+    snapshots,
+    *,
+    top_n: int,
+    max_position: float = DEFAULT_PARAMS["max_position"],
+) -> list[dict]:
     """Pick the book from a run's snapshots: eligible names, BUY/OW preferred,
     then by rank; take top_n; equal-weight across the selected (cash fills any
     shortfall vs top_n, so a full top_n book is each name at 1/top_n)."""
@@ -51,7 +56,10 @@ def select_holdings(snapshots, *, top_n: int) -> list[dict]:
     chosen = sorted(eligible, key=_key)[:top_n]
     if not chosen:
         return []
-    w = 1.0 / len(chosen)
+    # A sparse eligible set must not silently defeat the declared risk limit.
+    # Keep the unused allocation in cash instead of redistributing it above
+    # max_position.
+    w = min(1.0 / len(chosen), float(max_position))
     return [
         {"ticker": s["ticker"], "target_weight": w, "rank": s["rank"], "tier": s["tier"]}
         for s in chosen
@@ -101,7 +109,11 @@ async def generate_orders(pool, *, strategy_id: int, run_id: int) -> int:
 
     params = await _params(pool, strategy_id)
     snaps = await get_run_snapshots(pool, run_id)
-    holdings = select_holdings(snaps, top_n=int(params["top_n"]))
+    holdings = select_holdings(
+        snaps,
+        top_n=int(params["top_n"]),
+        max_position=float(params["max_position"]),
+    )
     if not holdings:
         return 0
 
@@ -201,22 +213,24 @@ async def mark_equity(
 
     # benchmark return measured over the same hold: fill_date close -> mark close.
     bench_ret = await _benchmark_return(pool, benchmark, strategy_id, signal_date, mark_date)
+    rsp_ret = await _benchmark_return(pool, "RSP", strategy_id, signal_date, mark_date)
 
     row = await pool.fetchrow(
         """
         INSERT INTO l2_equity_daily
             (strategy_id, as_of_date, gross_return, net_return, benchmark_return,
-             turnover, n_positions, stale_count, missing_count, cost_bps)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9)
+             rsp_return, turnover, n_positions, stale_count, missing_count, cost_bps)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, $10)
         ON CONFLICT (strategy_id, as_of_date) DO UPDATE SET
             gross_return=EXCLUDED.gross_return, net_return=EXCLUDED.net_return,
-            benchmark_return=EXCLUDED.benchmark_return, turnover=EXCLUDED.turnover,
+            benchmark_return=EXCLUDED.benchmark_return,
+            rsp_return=EXCLUDED.rsp_return, turnover=EXCLUDED.turnover,
             n_positions=EXCLUDED.n_positions, missing_count=EXCLUDED.missing_count,
             cost_bps=EXCLUDED.cost_bps, marked_at=now()
-        RETURNING gross_return, net_return, benchmark_return, turnover,
-                  n_positions, missing_count
+        RETURNING gross_return, net_return, benchmark_return, rsp_return,
+                  turnover, n_positions, missing_count
         """,
-        strategy_id, mark_date, gross, net, bench_ret, turnover,
+        strategy_id, mark_date, gross, net, bench_ret, rsp_ret, turnover,
         n_positions, missing, cost_bps,
     )
     return dict(row)

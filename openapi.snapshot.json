@@ -7,6 +7,10 @@
             "title": "Account Id",
             "type": "integer"
           },
+          "available_cash": {
+            "title": "Available Cash",
+            "type": "number"
+          },
           "cash": {
             "title": "Cash",
             "type": "number"
@@ -34,6 +38,10 @@
             "title": "Realized Pnl",
             "type": "number"
           },
+          "reserved_cash": {
+            "title": "Reserved Cash",
+            "type": "number"
+          },
           "reset_count": {
             "title": "Reset Count",
             "type": "integer"
@@ -50,6 +58,8 @@
         "required": [
           "account_id",
           "cash",
+          "reserved_cash",
+          "available_cash",
           "initial_cash",
           "portfolio_value",
           "total_return_pct",
@@ -2479,6 +2489,11 @@
       },
       "OrderOut": {
         "properties": {
+          "cohort_id": {
+            "default": 0,
+            "title": "Cohort Id",
+            "type": "integer"
+          },
           "fail_reason": {
             "anyOf": [
               {
@@ -2489,6 +2504,11 @@
               }
             ],
             "title": "Fail Reason"
+          },
+          "fee_bps": {
+            "default": 0.0,
+            "title": "Fee Bps",
+            "type": "number"
           },
           "fill_date": {
             "anyOf": [
@@ -2557,6 +2577,11 @@
             "title": "Qty",
             "type": "integer"
           },
+          "reserved_notional": {
+            "default": 0.0,
+            "title": "Reserved Notional",
+            "type": "number"
+          },
           "side": {
             "title": "Side",
             "type": "string"
@@ -2565,6 +2590,39 @@
             "title": "Signal Date",
             "type": "string"
           },
+          "source_payload_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Payload Hash"
+          },
+          "source_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Policy Id"
+          },
+          "source_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Run Id"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -2572,6 +2630,11 @@
           "ticker": {
             "title": "Ticker",
             "type": "string"
+          },
+          "transaction_cost": {
+            "default": 0.0,
+            "title": "Transaction Cost",
+            "type": "number"
           }
         },
         "required": [
@@ -2765,6 +2828,18 @@
               }
             ],
             "title": "Pick Date"
+          },
+          "pick_run_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Run Id"
           },
           "pick_ticker": {
             "anyOf": [
@@ -4552,6 +4627,30 @@
           }
         },
         "summary": "Health Cron",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/_health/dag": {
+      "get": {
+        "description": "Critical decision DAG, evaluated from durable DB evidence.\n\nOne bounded query returns the latest successful or failed execution for\neach scheduled node plus the latest immutable recommendation publication.",
+        "operationId": "health_dag_api__health_dag_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Dag Api  Health Dag Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Dag",
         "tags": [
           "health"
         ]
@@ -8813,6 +8912,30 @@
           }
         },
         "summary": "Healthz Sandbox"
+      }
+    },
+    "/api/l2/summary": {
+      "get": {
+        "description": "Cost, benchmark, risk and exception evidence from the frozen L2 book.",
+        "operationId": "l2_summary_api_l2_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response L2 Summary Api L2 Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "L2 Summary",
+        "tags": [
+          "l2"
+        ]
       }
     },
     "/api/macro_context": {

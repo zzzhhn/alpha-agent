@@ -263,7 +263,10 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
     rows = await conn.fetch(
         """
         WITH active_tickers AS (
-            SELECT DISTINCT ticker FROM sim_position WHERE qty > 0
+            SELECT DISTINCT sp.ticker
+            FROM sim_position sp
+            JOIN sim_account sa ON sa.id=sp.account_id
+            WHERE sp.qty > 0 AND sp.cohort_id=sa.reset_count
         ),
         latest_prices AS (
             SELECT DISTINCT ON (dp.ticker) dp.ticker, dp.close
@@ -285,7 +288,9 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
                    ), 0) AS unrealized_pnl,
                    COALESCE(SUM(sp.realized_pnl), 0) AS realized_pnl
             FROM sim_position sp
+            JOIN sim_account sa ON sa.id=sp.account_id
             LEFT JOIN latest_prices lp ON lp.ticker = sp.ticker
+            WHERE sp.cohort_id=sa.reset_count
             GROUP BY sp.account_id
         ),
         spy AS (
@@ -293,6 +298,7 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
             WHERE ticker = 'SPY' ORDER BY date DESC LIMIT 1
         )
         SELECT sa.id AS account_id,
+               sa.reset_count AS cohort_id,
                sa.cash,
                sa.cash + COALESCE(pa.market_value, 0) AS portfolio_value,
                COALESCE(pa.unrealized_pnl, 0) AS unrealized_pnl,
@@ -309,16 +315,17 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
     await conn.executemany(
         """
         INSERT INTO sim_equity_daily
-            (account_id, as_of_date, portfolio_value, cash, unrealized_pnl,
-             realized_pnl, benchmark_close)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (account_id, as_of_date) DO UPDATE
-        SET portfolio_value=$3, cash=$4, unrealized_pnl=$5,
-            realized_pnl=$6, benchmark_close=$7
+            (account_id, cohort_id, as_of_date, portfolio_value, cash,
+             unrealized_pnl, realized_pnl, benchmark_close)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (account_id, cohort_id, as_of_date) DO UPDATE
+        SET portfolio_value=$4, cash=$5, unrealized_pnl=$6,
+            realized_pnl=$7, benchmark_close=$8
         """,
         [
             (
                 row["account_id"],
+                row["cohort_id"],
                 today,
                 row["portfolio_value"],
                 row["cash"],
@@ -349,7 +356,8 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
     async with pool.acquire() as conn:
         pending_orders = await conn.fetch(
             "SELECT so.* FROM sim_order so "
-            "WHERE so.status = 'pending' AND EXISTS ("
+            "JOIN sim_account sa ON sa.id=so.account_id "
+            "WHERE so.status='pending' AND so.cohort_id=sa.reset_count AND EXISTS ("
             "  SELECT 1 FROM daily_prices dp "
             "  WHERE dp.ticker=so.ticker AND dp.date>so.signal_date"
             ") "
@@ -430,20 +438,33 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                 fill_date, fill_price = result
                 qty = locked_order["qty"]
                 account_id = locked_order["account_id"]
-                current_cash = await conn.fetchval(
-                    "SELECT cash FROM sim_account WHERE id=$1 FOR UPDATE",
+                account = await conn.fetchrow(
+                    "SELECT cash, reset_count FROM sim_account WHERE id=$1 FOR UPDATE",
                     account_id,
                 )
+                if account is None or int(account["reset_count"] or 0) != int(
+                    locked_order["cohort_id"] or 0
+                ):
+                    await conn.execute(
+                        "UPDATE sim_order SET status='cancelled' WHERE id=$1",
+                        locked_order["id"],
+                    )
+                    continue
+                current_cash = float(account["cash"])
+                cohort_id = int(locked_order["cohort_id"] or 0)
+                fee_bps = float(locked_order["fee_bps"] or 0.0)
+                fee = float(fill_price) * int(qty) * fee_bps / 10000.0
 
                 if locked_order["side"] == "buy":
                     # Fill-time re-check: order-time validation only estimated
                     # against cash at submission; an earlier fill in this same
                     # batch may have already spent it. The account row lock also
                     # serializes cash updates for buys and sells.
-                    if current_cash is None or not has_sufficient_cash(current_cash, fill_price, qty):
+                    total_cost = float(fill_price) * int(qty) + fee
+                    if not has_sufficient_cash(current_cash, total_cost, 1):
                         await conn.execute(
                             "UPDATE sim_order SET status='failed', fail_reason=$1 WHERE id=$2",
-                            _insufficient_cash_fail_reason(fill_price * qty, current_cash),
+                            _insufficient_cash_fail_reason(total_cost, current_cash),
                             locked_order["id"],
                         )
                         failed_count += 1
@@ -451,42 +472,47 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
 
                     # Update order
                     await conn.execute(
-                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, filled_at=now() "
-                        "WHERE id=$3",
-                        fill_date, fill_price, locked_order["id"],
+                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, "
+                        "transaction_cost=$3, filled_at=now() WHERE id=$4",
+                        fill_date, fill_price, fee, locked_order["id"],
                     )
                     # Upsert position with new avg_cost
                     existing = await conn.fetchrow(
                         "SELECT qty, avg_cost FROM sim_position "
-                        "WHERE account_id=$1 AND ticker=$2 FOR UPDATE",
-                        account_id, ticker,
+                        "WHERE account_id=$1 AND cohort_id=$2 AND ticker=$3 FOR UPDATE",
+                        account_id, cohort_id, ticker,
                     )
+                    effective_unit_cost = float(fill_price) + fee / int(qty)
                     if existing and existing["qty"] > 0:
-                        na = new_avg_cost(existing["qty"], existing["avg_cost"], qty, fill_price)
+                        na = new_avg_cost(
+                            existing["qty"], existing["avg_cost"], qty,
+                            effective_unit_cost,
+                        )
                         new_qty = existing["qty"] + qty
                         await conn.execute(
                             "UPDATE sim_position SET qty=$1, avg_cost=$2, updated_at=now() "
-                            "WHERE account_id=$3 AND ticker=$4",
-                            new_qty, na, account_id, ticker,
+                            "WHERE account_id=$3 AND cohort_id=$4 AND ticker=$5",
+                            new_qty, na, account_id, cohort_id, ticker,
                         )
                     else:
                         await conn.execute(
-                            "INSERT INTO sim_position (account_id, ticker, qty, avg_cost) "
-                            "VALUES ($1, $2, $3, $4) "
-                            "ON CONFLICT (account_id, ticker) DO UPDATE "
-                            "SET qty=$3, avg_cost=$4, updated_at=now()",
-                            account_id, ticker, qty, fill_price,
+                            "INSERT INTO sim_position "
+                            "(account_id, cohort_id, ticker, qty, avg_cost) "
+                            "VALUES ($1, $2, $3, $4, $5) "
+                            "ON CONFLICT (account_id, cohort_id, ticker) DO UPDATE "
+                            "SET qty=$4, avg_cost=$5, updated_at=now()",
+                            account_id, cohort_id, ticker, qty, effective_unit_cost,
                         )
                     # Deduct cash
                     await conn.execute(
                         "UPDATE sim_account SET cash = cash - $1 WHERE id = $2",
-                        fill_price * qty, account_id,
+                        total_cost, account_id,
                     )
                 else:  # sell
                     existing = await conn.fetchrow(
                         "SELECT qty, avg_cost, realized_pnl FROM sim_position "
-                        "WHERE account_id=$1 AND ticker=$2 FOR UPDATE",
-                        account_id, ticker,
+                        "WHERE account_id=$1 AND cohort_id=$2 AND ticker=$3 FOR UPDATE",
+                        account_id, cohort_id, ticker,
                     )
                     if existing is None or existing["qty"] < qty:
                         # Oversell guard: expire the order, do not process
@@ -498,22 +524,25 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
 
                     # Update order
                     await conn.execute(
-                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, filled_at=now() "
-                        "WHERE id=$3",
-                        fill_date, fill_price, locked_order["id"],
+                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, "
+                        "transaction_cost=$3, filled_at=now() WHERE id=$4",
+                        fill_date, fill_price, fee, locked_order["id"],
                     )
-                    pnl_delta = realized_pnl_delta(existing["avg_cost"], fill_price, qty)
+                    pnl_delta = (
+                        realized_pnl_delta(existing["avg_cost"], fill_price, qty)
+                        - fee
+                    )
                     new_qty = existing["qty"] - qty
                     new_realized = (existing["realized_pnl"] or 0.0) + pnl_delta
                     await conn.execute(
                         "UPDATE sim_position SET qty=$1, realized_pnl=$2, updated_at=now() "
-                        "WHERE account_id=$3 AND ticker=$4",
-                        new_qty, new_realized, account_id, ticker,
+                        "WHERE account_id=$3 AND cohort_id=$4 AND ticker=$5",
+                        new_qty, new_realized, account_id, cohort_id, ticker,
                     )
                     # Credit cash
                     await conn.execute(
                         "UPDATE sim_account SET cash = cash + $1 WHERE id = $2",
-                        fill_price * qty, account_id,
+                        float(fill_price) * int(qty) - fee, account_id,
                     )
 
                 filled_count += 1

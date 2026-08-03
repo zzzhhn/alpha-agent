@@ -139,6 +139,9 @@ def run_one(name: str, expr: str, ops: list[str],
             "name": name,
             "neutralize": neutralize,
             "top_pct": top_pct,
+            "train_sr": r.train_metrics.sharpe,
+            "train_ic": r.train_metrics.ic_spearman,
+            "train_psr": r.train_metrics.psr,
             "test_sr": r.test_metrics.sharpe,
             "ic": r.test_metrics.ic_spearman,
             "ic_p": r.test_metrics.ic_pvalue,
@@ -198,7 +201,12 @@ def main() -> int:
         if not variants:
             print(f"  {name}: ALL VARIANTS FAILED", file=sys.stderr)
             continue
-        best = max(variants, key=lambda v: v["alpha_t"])
+        # Freeze top_pct using only the training slice. The test slice is
+        # reported after selection instead of being searched for best alpha-t.
+        best = max(
+            variants,
+            key=lambda v: (v["train_psr"], v["train_sr"], v["train_ic"]),
+        )
         best["family"] = fam
         best["thesis"] = thesis
         best["expression"] = expr

@@ -5,6 +5,8 @@ access (UPSERT pattern). Fill simulation runs in the daily cron, not here.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from datetime import UTC, date, datetime
 from functools import lru_cache
@@ -18,6 +20,7 @@ from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_user
 
 router = APIRouter(prefix="/api/paper", tags=["paper"])
+PAPER_FEE_BPS = 10.0
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
@@ -33,6 +36,8 @@ class PositionOut(BaseModel):
 class AccountResponse(BaseModel):
     account_id: int
     cash: float
+    reserved_cash: float
+    available_cash: float
     initial_cash: float
     portfolio_value: float
     total_return_pct: float
@@ -53,6 +58,7 @@ class PlaceOrderRequest(BaseModel):
     # drawer; left null for manual /paper orders. Both null or both set.
     pick_date: date | None = None
     pick_ticker: str | None = Field(default=None, max_length=10)
+    pick_run_id: int | None = Field(default=None, gt=0)
 
 
 class OrderResponse(BaseModel):
@@ -76,6 +82,13 @@ class OrderOut(BaseModel):
     fail_reason: str | None = None
     pick_date: str | None = None
     pick_ticker: str | None = None
+    source_run_id: int | None = None
+    source_policy_id: str | None = None
+    source_payload_hash: str | None = None
+    reserved_notional: float = 0.0
+    fee_bps: float = 0.0
+    transaction_cost: float = 0.0
+    cohort_id: int = 0
 
 
 class OrderListResponse(BaseModel):
@@ -167,6 +180,69 @@ def _insufficient_position_message(ticker: str, qty: int, held_qty: int) -> str:
     )
 
 
+def _price_unavailable_message(ticker: str) -> str:
+    return (
+        f"No trusted close is available for {ticker}; the order was not reserved"
+        if _is_en_locale()
+        else f"{ticker} 暂无可信收盘价，无法预留资金，订单未提交"
+    )
+
+
+def _canonical_payload_hash(payload: Any) -> str:
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            payload = payload
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+async def _resolve_pick_provenance(
+    conn: Any,
+    body: PlaceOrderRequest,
+) -> tuple[int | None, str | None, str | None]:
+    """Verify a pick-linked order against the immutable product ledger.
+
+    The client identifies the run; the server derives policy and payload hash
+    from the ledger so neither can be forged by a browser request.
+    """
+    supplied = (body.pick_date, body.pick_ticker, body.pick_run_id)
+    if not any(value is not None for value in supplied):
+        return None, None, None
+    if not all(value is not None for value in supplied):
+        raise HTTPException(
+            status_code=400,
+            detail="pick_date, pick_ticker and pick_run_id must be set together",
+        )
+    if body.pick_ticker.upper() != body.ticker.upper():
+        raise HTTPException(status_code=400, detail="pick_ticker must match ticker")
+    row = await conn.fetchrow(
+        """
+        SELECT rr.id, rr.scheduled_for_date, rr.weight_policy_id,
+               rs.user_visible_payload_json
+        FROM research_run rr
+        JOIN rating_snapshot rs ON rs.run_id = rr.id
+        WHERE rr.id=$1 AND rr.status='complete' AND rs.ticker=$2
+          AND rs.eligible=true
+        """,
+        body.pick_run_id,
+        body.ticker.upper(),
+    )
+    if row is None or row["scheduled_for_date"] != body.pick_date:
+        raise HTTPException(status_code=400, detail="pick provenance is not canonical")
+    return (
+        int(row["id"]),
+        row["weight_policy_id"],
+        _canonical_payload_hash(row["user_visible_payload_json"]),
+    )
+
+
 @lru_cache(maxsize=1)
 def _xnys_calendar():
     # Keep the pandas-backed calendar import off the application startup path.
@@ -202,10 +278,12 @@ async def get_account(
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
+    cohort_id = int(account["reset_count"] or 0)
 
     position_rows = await pool.fetch(
-        "SELECT * FROM sim_position WHERE account_id = $1",
+        "SELECT * FROM sim_position WHERE account_id = $1 AND cohort_id = $2",
         account_id,
+        cohort_id,
     )
     positions = [row for row in position_rows if row["qty"] > 0]
     tickers = [r["ticker"] for r in positions]
@@ -240,13 +318,23 @@ async def get_account(
     total_return_pct = (portfolio_value - initial_cash) / initial_cash * 100.0
 
     pending_count = await pool.fetchval(
-        "SELECT COUNT(*) FROM sim_order WHERE account_id = $1 AND status = 'pending'",
+        "SELECT COUNT(*) FROM sim_order "
+        "WHERE account_id = $1 AND cohort_id = $2 AND status = 'pending'",
         account_id,
+        cohort_id,
     ) or 0
+    reserved_cash = await pool.fetchval(
+        "SELECT COALESCE(SUM(reserved_notional), 0) FROM sim_order "
+        "WHERE account_id=$1 AND cohort_id=$2 AND side='buy' AND status='pending'",
+        account_id,
+        cohort_id,
+    ) or 0.0
 
     return AccountResponse(
         account_id=account_id,
         cash=cash,
+        reserved_cash=float(reserved_cash),
+        available_cash=max(0.0, float(cash) - float(reserved_cash)),
         initial_cash=initial_cash,
         portfolio_value=portfolio_value,
         total_return_pct=total_return_pct,
@@ -269,48 +357,109 @@ async def place_order(
         raise HTTPException(status_code=400, detail="limit_price must be positive")
 
     pool = await get_db_pool()
-    account = await _get_or_create_account(pool, user_id)
-    account_id: int = account["id"]
     signal_session = _paper_signal_session()
+    ticker = body.ticker.strip().upper()
 
-    if body.side == "buy":
-        # Estimate cost off the latest close (decision: no buffer). If no
-        # price data exists yet for this ticker, skip the check rather than
-        # block the order, same "no data, no opinion" stance as get_account's
-        # current_price=null handling.
-        closes = await _current_closes(pool, [body.ticker])
-        latest_close = closes.get(body.ticker)
-        if latest_close is not None:
-            est_cost = latest_close * body.qty
-            if est_cost > account["cash"]:
-                raise HTTPException(
-                    status_code=400,
-                    detail=_insufficient_cash_message(body.ticker, est_cost, account["cash"]),
-                )
-    else:  # sell
-        position = await pool.fetchrow(
-            "SELECT qty FROM sim_position WHERE account_id = $1 AND ticker = $2",
-            account_id, body.ticker,
-        )
-        held_qty = int(position["qty"]) if position else 0
-        if held_qty < body.qty:
-            raise HTTPException(
-                status_code=400,
-                detail=_insufficient_position_message(body.ticker, body.qty, held_qty),
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            account = await _get_or_create_account(conn, user_id)
+            account_id = int(account["id"])
+            account = dict(await conn.fetchrow(
+                "SELECT * FROM sim_account WHERE id=$1 FOR UPDATE",
+                account_id,
+            ))
+            cohort_id = int(account["reset_count"] or 0)
+            source_run_id, source_policy_id, source_payload_hash = (
+                await _resolve_pick_provenance(conn, body)
             )
 
-    order_id: int = await pool.fetchval(
-        """
-        INSERT INTO sim_order
-            (account_id, ticker, side, order_type, qty, limit_price, signal_date,
-             pick_date, pick_ticker)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id
-        """,
-        account_id, body.ticker, body.side, body.order_type,
-        body.qty, body.limit_price, signal_session,
-        body.pick_date, body.pick_ticker,
-    )
+            reserved_notional = 0.0
+            if body.side == "buy":
+                closes = await _current_closes(conn, [ticker])
+                reference_price = (
+                    body.limit_price
+                    if body.order_type == "limit"
+                    else closes.get(ticker)
+                )
+                if reference_price is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=_price_unavailable_message(ticker),
+                    )
+                est_notional = float(reference_price) * body.qty
+                reserved_notional = est_notional * (1.0 + PAPER_FEE_BPS / 10000.0)
+                already_reserved = await conn.fetchval(
+                    "SELECT COALESCE(SUM(reserved_notional), 0) FROM sim_order "
+                    "WHERE account_id=$1 AND cohort_id=$2 AND side='buy' "
+                    "AND status='pending'",
+                    account_id,
+                    cohort_id,
+                ) or 0.0
+                available_cash = float(account["cash"]) - float(already_reserved)
+                if reserved_notional > available_cash:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=_insufficient_cash_message(
+                            ticker,
+                            reserved_notional,
+                            available_cash,
+                        ),
+                    )
+            else:
+                position = await conn.fetchrow(
+                    "SELECT qty FROM sim_position "
+                    "WHERE account_id=$1 AND cohort_id=$2 AND ticker=$3 FOR UPDATE",
+                    account_id,
+                    cohort_id,
+                    ticker,
+                )
+                held_qty = int(position["qty"]) if position else 0
+                pending_sell = await conn.fetchval(
+                    "SELECT COALESCE(SUM(qty), 0) FROM sim_order "
+                    "WHERE account_id=$1 AND cohort_id=$2 AND ticker=$3 "
+                    "AND side='sell' AND status='pending'",
+                    account_id,
+                    cohort_id,
+                    ticker,
+                ) or 0
+                available_qty = max(0, held_qty - int(pending_sell))
+                if available_qty < body.qty:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=_insufficient_position_message(
+                            ticker,
+                            body.qty,
+                            available_qty,
+                        ),
+                    )
+
+            order_id: int = await conn.fetchval(
+                """
+                INSERT INTO sim_order
+                    (account_id, ticker, side, order_type, qty, limit_price,
+                     signal_date, pick_date, pick_ticker, source_run_id,
+                     source_policy_id, source_payload_hash, reserved_notional,
+                     fee_bps, cohort_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                        $12, $13, $14, $15)
+                RETURNING id
+                """,
+                account_id,
+                ticker,
+                body.side,
+                body.order_type,
+                body.qty,
+                body.limit_price,
+                signal_session,
+                body.pick_date,
+                body.pick_ticker.upper() if body.pick_ticker else None,
+                source_run_id,
+                source_policy_id,
+                source_payload_hash,
+                reserved_notional,
+                PAPER_FEE_BPS,
+                cohort_id,
+            )
 
     if body.order_type == "limit" and body.limit_price is not None:
         message = (
@@ -340,6 +489,7 @@ async def list_orders(
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
+    cohort_id = int(account["reset_count"] or 0)
 
     valid_statuses = {"pending", "filled", "expired", "cancelled", "failed", "all"}
     if status not in valid_statuses:
@@ -347,20 +497,24 @@ async def list_orders(
 
     if status == "all":
         rows = await pool.fetch(
-            "SELECT * FROM sim_order WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-            account_id, min(limit, 200), offset,
+            "SELECT * FROM sim_order WHERE account_id=$1 AND cohort_id=$2 "
+            "ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+            account_id, cohort_id, min(limit, 200), offset,
         )
         total = await pool.fetchval(
-            "SELECT COUNT(*) FROM sim_order WHERE account_id = $1", account_id
+            "SELECT COUNT(*) FROM sim_order WHERE account_id=$1 AND cohort_id=$2",
+            account_id, cohort_id,
         ) or 0
     else:
         rows = await pool.fetch(
-            "SELECT * FROM sim_order WHERE account_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
-            account_id, status, min(limit, 200), offset,
+            "SELECT * FROM sim_order WHERE account_id=$1 AND cohort_id=$2 "
+            "AND status=$3 ORDER BY created_at DESC LIMIT $4 OFFSET $5",
+            account_id, cohort_id, status, min(limit, 200), offset,
         )
         total = await pool.fetchval(
-            "SELECT COUNT(*) FROM sim_order WHERE account_id = $1 AND status = $2",
-            account_id, status,
+            "SELECT COUNT(*) FROM sim_order "
+            "WHERE account_id=$1 AND cohort_id=$2 AND status=$3",
+            account_id, cohort_id, status,
         ) or 0
 
     orders = [
@@ -378,6 +532,13 @@ async def list_orders(
             fail_reason=r["fail_reason"],
             pick_date=r["pick_date"].isoformat() if r["pick_date"] else None,
             pick_ticker=r["pick_ticker"],
+            source_run_id=r["source_run_id"],
+            source_policy_id=r["source_policy_id"],
+            source_payload_hash=r["source_payload_hash"],
+            reserved_notional=float(r["reserved_notional"] or 0.0),
+            fee_bps=float(r["fee_bps"] or 0.0),
+            transaction_cost=float(r["transaction_cost"] or 0.0),
+            cohort_id=int(r["cohort_id"] or 0),
         )
         for r in rows
     ]
@@ -392,20 +553,25 @@ async def cancel_order(
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
+    cohort_id = int(account["reset_count"] or 0)
 
     cancelled = await pool.fetchrow(
         "UPDATE sim_order SET status = 'cancelled' "
-        "WHERE id = $1 AND account_id = $2 AND status = 'pending' RETURNING id",
+        "WHERE id=$1 AND account_id=$2 AND cohort_id=$3 "
+        "AND status='pending' RETURNING id",
         order_id,
         account_id,
+        cohort_id,
     )
     if cancelled is not None:
         return Response(status_code=204)
 
     order = await pool.fetchrow(
-        "SELECT status FROM sim_order WHERE id = $1 AND account_id = $2",
+        "SELECT status FROM sim_order "
+        "WHERE id=$1 AND account_id=$2 AND cohort_id=$3",
         order_id,
         account_id,
+        cohort_id,
     )
     if order is None:
         raise HTTPException(status_code=404, detail="order not found")
@@ -422,11 +588,13 @@ async def equity_curve(
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
+    cohort_id = int(account["reset_count"] or 0)
 
     rows = await pool.fetch(
         "SELECT as_of_date, portfolio_value, benchmark_close FROM sim_equity_daily "
-        "WHERE account_id = $1 ORDER BY as_of_date ASC",
+        "WHERE account_id=$1 AND cohort_id=$2 ORDER BY as_of_date ASC",
         account_id,
+        cohort_id,
     )
     if not rows:
         return EquityCurveResponse(series=[], base_date=None)
@@ -452,26 +620,32 @@ async def reset_account(
     user_id: int = Depends(require_user),
 ) -> ResetResponse:
     pool = await get_db_pool()
-    account = await _get_or_create_account(pool, user_id)
-    account_id: int = account["id"]
-    initial_cash: float = account["initial_cash"]
-
-    # Mark all active positions qty=0, keep rows for audit
-    await pool.execute(
-        "UPDATE sim_position SET qty = 0, updated_at = now() WHERE account_id = $1 AND qty > 0",
-        account_id,
-    )
-    # Cancel all pending orders
-    await pool.execute(
-        "UPDATE sim_order SET status = 'cancelled' WHERE account_id = $1 AND status = 'pending'",
-        account_id,
-    )
-    # Restore cash and bump reset_count
-    new_reset_count = (account["reset_count"] or 0) + 1
-    await pool.execute(
-        "UPDATE sim_account SET cash = $1, reset_count = $2, reset_at = now() WHERE id = $3",
-        initial_cash, new_reset_count, account_id,
-    )
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            account = await _get_or_create_account(conn, user_id)
+            account_id = int(account["id"])
+            account = dict(await conn.fetchrow(
+                "SELECT * FROM sim_account WHERE id=$1 FOR UPDATE",
+                account_id,
+            ))
+            initial_cash = float(account["initial_cash"])
+            old_cohort = int(account["reset_count"] or 0)
+            await conn.execute(
+                "UPDATE sim_order SET status='cancelled' "
+                "WHERE account_id=$1 AND cohort_id=$2 AND status='pending'",
+                account_id,
+                old_cohort,
+            )
+            # Positions and equity stay attached to the old cohort for audit;
+            # the increment creates an empty current book without rewriting it.
+            new_reset_count = old_cohort + 1
+            await conn.execute(
+                "UPDATE sim_account SET cash=$1, reset_count=$2, reset_at=now() "
+                "WHERE id=$3",
+                initial_cash,
+                new_reset_count,
+                account_id,
+            )
     return ResetResponse(
         reset_count=new_reset_count,
         cash=initial_cash,
@@ -491,10 +665,13 @@ async def get_attribution(
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
+    cohort_id = int(account["reset_count"] or 0)
 
     positions = await pool.fetch(
-        "SELECT ticker, qty, avg_cost, realized_pnl FROM sim_position WHERE account_id = $1",
+        "SELECT ticker, qty, avg_cost, realized_pnl FROM sim_position "
+        "WHERE account_id=$1 AND cohort_id=$2",
         account_id,
+        cohort_id,
     )
     trade_counts = await pool.fetch(
         """
@@ -503,10 +680,11 @@ async def get_attribution(
                COUNT(*) FILTER (WHERE pick_date IS NULL) AS self_directed,
                MAX(pick_date) AS latest_pick_date
         FROM sim_order
-        WHERE account_id = $1 AND status = 'filled'
+        WHERE account_id=$1 AND cohort_id=$2 AND status='filled'
         GROUP BY ticker
         """,
         account_id,
+        cohort_id,
     )
 
     pos_by_ticker = {p["ticker"]: p for p in positions}

@@ -32,6 +32,14 @@ def _mock_pool(monkeypatch, fetchrow_val=None, fetch_val=None, fetchval_val=None
     pool.fetch = AsyncMock(return_value=fetch_val or [])
     pool.fetchval = AsyncMock(return_value=fetchval_val)
     pool.execute = AsyncMock()
+    transaction = MagicMock()
+    transaction.__aenter__ = AsyncMock(return_value=None)
+    transaction.__aexit__ = AsyncMock(return_value=None)
+    pool.transaction = MagicMock(return_value=transaction)
+    acquire = MagicMock()
+    acquire.__aenter__ = AsyncMock(return_value=pool)
+    acquire.__aexit__ = AsyncMock(return_value=None)
+    pool.acquire = MagicMock(return_value=acquire)
     monkeypatch.setattr("alpha_agent.api.routes.paper.get_db_pool", AsyncMock(return_value=pool))
     return pool
 
@@ -62,7 +70,12 @@ def test_place_market_order_returns_201(client, monkeypatch):
         "cash": 1000000.0, "reset_count": 0,
         "created_at": datetime.datetime.now(), "reset_at": None,
     }
-    pool = _mock_pool(monkeypatch, fetchrow_val=account_row, fetchval_val=42)
+    pool = _mock_pool(
+        monkeypatch,
+        fetchrow_val=account_row,
+        fetch_val=[{"ticker": "AAPL", "close": 100.0}],
+        fetchval_val=42,
+    )
     r = client.post(
         "/api/paper/order",
         headers=_auth(),

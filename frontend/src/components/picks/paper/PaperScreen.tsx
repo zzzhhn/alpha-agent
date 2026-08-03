@@ -15,11 +15,13 @@ import {
   fetchEquityCurve,
   fetchOrders,
   fetchPaperAccount,
+  fetchL2Summary,
   resetAccount,
   type AccountResponse,
   type EquityCurveResponse,
   type OrderOut,
   type TickerAttribution,
+  type L2Summary,
 } from "@/lib/api/paper";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmButton } from "@/components/tm/TmButton";
@@ -33,6 +35,7 @@ import PaperPositionsWithSource from "./PaperPositionsWithSource";
 import PaperCurvePane from "./PaperCurvePane";
 import PaperSourceSummary from "./PaperSourceSummary";
 import PaperOrdersPane from "./PaperOrdersPane";
+import PaperL2Evidence from "./PaperL2Evidence";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
@@ -42,6 +45,7 @@ export default function PaperScreen() {
   const [orders, setOrders] = useState<readonly OrderOut[]>([]);
   const [curve, setCurve] = useState<EquityCurveResponse | null>(null);
   const [attribution, setAttribution] = useState<readonly TickerAttribution[]>([]);
+  const [l2Summary, setL2Summary] = useState<L2Summary | null>(null);
   const [picks, setPicks] = useState<readonly RatingCard[]>([]);
   const [picksAsOf, setPicksAsOf] = useState<string | null>(null);
   const [picksServerStale, setPicksServerStale] = useState(false);
@@ -57,12 +61,13 @@ export default function PaperScreen() {
   const loadAll = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setPaperError(null);
-    const [picksResult, accountResult, ordersResult, curveResult, attributionResult] = await Promise.allSettled([
+    const [picksResult, accountResult, ordersResult, curveResult, attributionResult, l2Result] = await Promise.allSettled([
       fetchPicks(5),
       fetchPaperAccount(),
       fetchOrders({ limit: 20 }),
       fetchEquityCurve(),
       fetchAttribution(),
+      fetchL2Summary(),
     ]);
 
     if (picksResult.status === "fulfilled") {
@@ -84,6 +89,7 @@ export default function PaperScreen() {
     if (ordersResult.status === "fulfilled") setOrders(ordersResult.value.orders);
     if (curveResult.status === "fulfilled") setCurve(curveResult.value);
     if (attributionResult.status === "fulfilled") setAttribution(attributionResult.value.tickers);
+    if (l2Result.status === "fulfilled") setL2Summary(l2Result.value);
     setLoading(false);
   }, []);
 
@@ -194,11 +200,12 @@ export default function PaperScreen() {
                 fixedTicker={selectedPick.ticker}
                 locale={locale}
                 onPlaced={() => { void loadAll(false); }}
-                pickDate={selectedPick.as_of.slice(0, 10)}
+                pickDate={selectedPick.market_date ?? picksRun?.market_date}
                 pickTicker={selectedPick.ticker}
+                pickRunId={selectedPick.run_id ?? picksRun?.run_id}
                 latestPrice={selectedPick.latest_price}
                 priceDate={selectedPick.price_date}
-                availableCash={account.cash}
+                availableCash={account.available_cash}
                 initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
               />
             ) : paperError ? <PaperError detail={paperError} /> : <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "sim.workspace.no_picks")}</p>}
@@ -213,6 +220,7 @@ export default function PaperScreen() {
         <TmPane standalone title={t(locale, "sim.workspace.performance")}>
           <PaperCurvePane curve={curve} compact showDisclaimer={false} />
           <PaperSourceSummary rows={attribution} />
+          <PaperL2Evidence summary={l2Summary} />
         </TmPane>
       </div>
 

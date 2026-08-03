@@ -14,6 +14,8 @@ export interface PositionOut {
 export interface AccountResponse {
   readonly account_id: number;
   readonly cash: number;
+  readonly reserved_cash: number;
+  readonly available_cash: number;
   readonly initial_cash: number;
   readonly portfolio_value: number;
   readonly total_return_pct: number;
@@ -36,6 +38,7 @@ export interface PlaceOrderRequest {
   // placed from the /paper trade tab omit these — backend column is nullable.
   readonly pick_date?: string;
   readonly pick_ticker?: string;
+  readonly pick_run_id?: number;
 }
 
 export interface OrderResponse {
@@ -62,6 +65,13 @@ export interface OrderOut {
   readonly fail_reason?: string | null;
   readonly pick_date?: string | null;
   readonly pick_ticker?: string | null;
+  readonly source_run_id?: number | null;
+  readonly source_policy_id?: string | null;
+  readonly source_payload_hash?: string | null;
+  readonly reserved_notional?: number;
+  readonly fee_bps?: number;
+  readonly transaction_cost?: number;
+  readonly cohort_id?: number;
 }
 
 // Per-ticker attribution rollup (V038). Field names/shape confirmed against
@@ -100,6 +110,30 @@ export interface ResetResponse {
   readonly reset_count: number;
   readonly cash: number;
   readonly message: string;
+}
+
+export interface L2Summary {
+  readonly status: "empty" | "accumulating" | "ready";
+  readonly periods?: number;
+  readonly net_return?: number;
+  readonly spy_return?: number;
+  readonly rsp_return?: number;
+  readonly beta_spy?: number | null;
+  readonly max_drawdown?: number;
+  readonly mean_turnover?: number | null;
+  readonly latest_positions?: number;
+  readonly cost_sensitivity?: Readonly<Record<string, number>>;
+  readonly exceptions?: {
+    readonly unfilled: number;
+    readonly exited: number;
+    readonly stale_marks: number;
+    readonly missing_marks: number;
+  };
+  readonly sector_exposure: readonly {
+    readonly sector: string;
+    readonly weight: number;
+    readonly positions: number;
+  }[];
 }
 
 /** Fetch error that keeps the HTTP status: the UI must render a 401 as a
@@ -170,4 +204,8 @@ export async function resetAccount(): Promise<ResetResponse> {
 
 export async function fetchAttribution(): Promise<AttributionResponse> {
   return paperFetch<AttributionResponse>("/api/paper/attribution");
+}
+
+export async function fetchL2Summary(): Promise<L2Summary> {
+  return paperFetch<L2Summary>("/api/l2/summary");
 }

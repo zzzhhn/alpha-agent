@@ -11,6 +11,7 @@ does not prevent health-check from answering.  Spec §5.7.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -174,6 +175,20 @@ async def health_signals() -> HealthSignalsResponse:
       unknown            = mixed state not matching above (catch-all)
     """
     pool = await get_db_pool()
+    success_rows = await pool.fetch(
+        """
+        SELECT item->>'signal' AS signal_name, MAX(fetched_at) AS last_success
+        FROM daily_signals_fast
+        CROSS JOIN LATERAL jsonb_array_elements(
+            COALESCE(breakdown->'breakdown', '[]'::jsonb)
+        ) AS item
+        WHERE COALESCE(item->>'error', '') = ''
+        GROUP BY item->>'signal'
+        """
+    )
+    last_success_by_signal = {
+        row["signal_name"]: row["last_success"] for row in success_rows
+    }
     out: list[SignalStatus] = []
     for name in _SIGNAL_NAMES:
         comp = f"signals.{name}"
@@ -246,7 +261,11 @@ async def health_signals() -> HealthSignalsResponse:
         out.append(
             SignalStatus(
                 name=name,
-                last_success=None,  # not yet tracked; M3 backlog
+                last_success=(
+                    last_success_by_signal[name].isoformat()
+                    if last_success_by_signal.get(name)
+                    else None
+                ),
                 last_error=(last_err["err_message"] if last_err else None),
                 error_count_24h=count_24h,
                 live_ic_30d=ic_30d,
@@ -260,6 +279,125 @@ async def health_signals() -> HealthSignalsResponse:
             )
         )
     return HealthSignalsResponse(signals=out)
+
+
+_DAG_REQUIREMENTS = {
+    # A full daily price pull is eight shards; the immutable recommendation
+    # publish follows six full-signal shards. Counting the whole window avoids
+    # declaring the DAG healthy merely because the final shard happened to pass.
+    "daily_prices": {"cadence_hours": 30, "required_runs": 8},
+    "fast_intraday": {"cadence_hours": 30, "required_runs": 6},
+    "recommendation_publish": {"cadence_hours": 30, "required_runs": 1},
+    "l2_cycle": {"cadence_hours": 48, "required_runs": 1},
+    "paper_fill": {"cadence_hours": 48, "required_runs": 1},
+    "ic_backtest_monthly": {"cadence_hours": 24 * 35, "required_runs": 1},
+}
+
+
+@router.get("/dag")
+async def health_dag() -> dict[str, Any]:
+    """Critical decision DAG, evaluated from durable DB evidence.
+
+    One bounded query returns the latest successful or failed execution for
+    each scheduled node plus the latest immutable recommendation publication.
+    """
+    pool = await get_db_pool()
+    rows = await pool.fetch(
+        """
+        WITH requirements AS (
+            SELECT * FROM unnest($1::text[], $2::int[], $3::int[])
+                AS r(name, cadence_hours, required_runs)
+        ), cron_window AS (
+            SELECT r.name, MAX(cr.finished_at) AS observed_at,
+                   COALESCE(
+                       BOOL_AND(cr.ok) FILTER (
+                           WHERE cr.started_at >= now()
+                             - make_interval(hours => r.cadence_hours)
+                             AND cr.finished_at IS NOT NULL
+                       ), false
+                   ) AS ok,
+                   COALESCE(SUM(cr.error_count) FILTER (
+                       WHERE cr.started_at >= now()
+                         - make_interval(hours => r.cadence_hours)
+                   ), 0) AS error_count,
+                   COUNT(*) FILTER (
+                       WHERE cr.started_at >= now()
+                         - make_interval(hours => r.cadence_hours)
+                         AND cr.finished_at IS NOT NULL
+                   ) AS observed_runs,
+                   r.required_runs
+            FROM requirements r
+            LEFT JOIN cron_runs cr ON cr.cron_name=r.name
+            GROUP BY r.name, r.cadence_hours, r.required_runs
+        ), latest_publish AS (
+            SELECT 'recommendation_publish'::text AS name,
+                   finished_at AS observed_at,
+                   (status='complete') AS ok,
+                   CASE WHEN status='complete' THEN 0 ELSE 1 END AS error_count,
+                   1::bigint AS observed_runs, 1 AS required_runs
+            FROM research_run
+            ORDER BY finished_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        )
+        SELECT * FROM cron_window
+        UNION ALL
+        SELECT * FROM latest_publish
+        """,
+        [name for name in _DAG_REQUIREMENTS if name != "recommendation_publish"],
+        [
+            item["cadence_hours"]
+            for name, item in _DAG_REQUIREMENTS.items()
+            if name != "recommendation_publish"
+        ],
+        [
+            item["required_runs"]
+            for name, item in _DAG_REQUIREMENTS.items()
+            if name != "recommendation_publish"
+        ],
+    )
+    by_name = {row["name"]: row for row in rows}
+    now = datetime.now(UTC)
+    nodes: list[dict[str, Any]] = []
+    for name, requirement in _DAG_REQUIREMENTS.items():
+        cadence_hours = int(requirement["cadence_hours"])
+        required_runs = int(requirement["required_runs"])
+        row = by_name.get(name)
+        observed_at = row["observed_at"] if row else None
+        if observed_at is not None and observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=UTC)
+        age_hours = (
+            (now - observed_at).total_seconds() / 3600.0
+            if observed_at is not None
+            else None
+        )
+        status = (
+            "missing"
+            if row is None or observed_at is None
+            else "stale"
+            if age_hours is not None and age_hours > cadence_hours
+            else "failed"
+            if not row["ok"]
+            else "incomplete"
+            if int(row["observed_runs"] or 0) < required_runs
+            else "healthy"
+        )
+        nodes.append({
+            "name": name,
+            "status": status,
+            "last_observed_at": observed_at.isoformat() if observed_at else None,
+            "age_hours": round(age_hours, 2) if age_hours is not None else None,
+            "expected_within_hours": cadence_hours,
+            "error_count": int(row["error_count"] or 0) if row else None,
+            "observed_runs": int(row["observed_runs"] or 0) if row else 0,
+            "required_runs": required_runs,
+        })
+    return {
+        "overall": (
+            "healthy" if all(node["status"] == "healthy" for node in nodes)
+            else "degraded"
+        ),
+        "nodes": nodes,
+    }
 
 
 @router.get("/cron")

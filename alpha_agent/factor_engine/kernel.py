@@ -527,10 +527,18 @@ def run_kernel(
     daily_borrow = float(params.short_borrow_bps) / (10_000.0 * 252.0)
     dollar_volume = panel.close * panel.volume
     portfolio_value = float(_KERNEL_INITIAL_CAPITAL)
-    for t in range(1, T):
-        if np.isnan(daily_ret[t]):
+    # daily_ret[return_idx] is earned by weights chosen at the previous close.
+    # Charge the turnover that established those weights to that same period.
+    for return_idx in range(1, T):
+        if np.isnan(daily_ret[return_idx]):
             continue
-        delta = weights[t] - weights[t - 1]
+        decision_idx = return_idx - 1
+        previous_weights = (
+            weights[decision_idx - 1]
+            if decision_idx > 0
+            else np.zeros(N, dtype=np.float64)
+        )
+        delta = weights[decision_idx] - previous_weights
         l1_delta = float(np.abs(delta).sum())
 
         cost = l1_delta * flat_cost_per_unit if params.transaction_cost_bps > 0 else 0.0
@@ -539,8 +547,8 @@ def run_kernel(
             with np.errstate(divide="ignore", invalid="ignore"):
                 dollar_traded = np.abs(delta) * portfolio_value
                 participation_pct = np.where(
-                    dollar_volume[t] > 0,
-                    100.0 * dollar_traded / dollar_volume[t],
+                    dollar_volume[decision_idx] > 0,
+                    100.0 * dollar_traded / dollar_volume[decision_idx],
                     0.0,
                 )
             slip_bps = slip_k * np.sqrt(np.maximum(participation_pct, 0.0))
@@ -548,10 +556,12 @@ def run_kernel(
             cost += slip_cost
 
         if params.short_borrow_bps > 0:
-            prior_short = float(np.abs(np.minimum(weights[t - 1], 0.0)).sum())
+            prior_short = float(
+                np.abs(np.minimum(weights[decision_idx], 0.0)).sum()
+            )
             cost += prior_short * daily_borrow
 
-        daily_ret[t] -= cost
+        daily_ret[return_idx] -= cost
 
     daily_ret_clean = np.nan_to_num(daily_ret, nan=0.0)
     equity = _KERNEL_INITIAL_CAPITAL * np.cumprod(1.0 + daily_ret_clean)

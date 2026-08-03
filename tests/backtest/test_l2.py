@@ -62,7 +62,7 @@ def test_select_holdings_prefers_buy_ow_then_rank():
         {"ticker": "B", "tier": "BUY", "rank": 5, "eligible": True},
         {"ticker": "C", "tier": "OW", "rank": 3, "eligible": True},
     ]
-    held = l2.select_holdings(snaps, top_n=2)
+    held = l2.select_holdings(snaps, top_n=2, max_position=1.0)
     # BUY/OW preferred over a better-ranked HOLD; within preferred, by rank.
     assert [h["ticker"] for h in held] == ["C", "B"]
     assert all(h["target_weight"] == pytest.approx(0.5) for h in held)
@@ -75,6 +75,17 @@ def test_select_holdings_skips_ineligible():
     ]
     held = l2.select_holdings(snaps, top_n=50)
     assert [h["ticker"] for h in held] == ["B"]
+    assert held[0]["target_weight"] == pytest.approx(0.02)
+
+
+def test_select_holdings_never_exceeds_strategy_position_cap():
+    snaps = [
+        {"ticker": "A", "tier": "BUY", "rank": 1, "eligible": True},
+        {"ticker": "B", "tier": "BUY", "rank": 2, "eligible": True},
+    ]
+    held = l2.select_holdings(snaps, top_n=50, max_position=0.02)
+    assert [h["target_weight"] for h in held] == pytest.approx([0.02, 0.02])
+    assert sum(h["target_weight"] for h in held) == pytest.approx(0.04)
 
 
 # --- causal ordering ---
@@ -128,8 +139,9 @@ async def test_fill_then_mark_reproduces_equity(pool):
     assert filled["filled"] == 2
 
     eq = await l2.mark_equity(pool, strategy_id=sid, signal_date=date(2026, 6, 18), mark_date=mark_d)
-    # both names +10% equal-weight -> gross +0.10; SPY +2% benchmark.
-    assert eq["gross_return"] == pytest.approx(0.10)
+    # Two names are capped at 2% each; +10% names produce +0.4% portfolio
+    # return and the remaining 96% stays in cash.
+    assert eq["gross_return"] == pytest.approx(0.004)
     assert eq["benchmark_return"] == pytest.approx(0.02)
     assert eq["net_return"] < eq["gross_return"]  # costs drag
 

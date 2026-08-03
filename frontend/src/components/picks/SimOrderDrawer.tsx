@@ -17,16 +17,10 @@ interface Props {
   readonly onOrderPlaced: () => void;
 }
 
-// card.as_of is a full ISO timestamp (fetched_at.isoformat()); the date
-// portion is what the backend's pick_date column (DATE) expects.
-function pickDateFromAsOf(asOf: string): string | undefined {
-  return /^\d{4}-\d{2}-\d{2}/.test(asOf) ? asOf.slice(0, 10) : undefined;
-}
-
 export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }: Props) {
   const { locale } = useLocale();
   const drawerRef = useRef<HTMLDivElement>(null);
-  const pickDate = pickDateFromAsOf(card.as_of);
+  const pickDate = card.market_date ?? undefined;
 
   // Close on Escape
   useEffect(() => {
@@ -74,6 +68,7 @@ export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }:
             onPlaced={() => { onOrderPlaced(); onClose(); }}
             pickDate={pickDate}
             pickTicker={card.ticker}
+            pickRunId={card.run_id ?? undefined}
           />
           <div className="mt-3">
             <Disclaimer />

@@ -56,6 +56,8 @@ export interface RatingCard {
   agreement?: number | null;
   composite_score: number | null;
   as_of: string;
+  run_id?: number | null;
+  market_date?: string | null;
   breakdown: BreakdownEntry[];
   top_drivers: string[];
   top_drags: string[];

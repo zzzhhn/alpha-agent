@@ -167,6 +167,26 @@ def test_transaction_cost_reduces_total_return_on_active_strategy() -> None:
     ), "turnover should be cost-invariant"
 
 
+def test_transaction_cost_is_charged_to_the_return_period_it_finances() -> None:
+    panel = _synthetic_panel(T=80, N=10, embed_signal=False, with_sector=False)
+    spec = FactorSpec(
+        name="timing",
+        hypothesis="cost timing",
+        expression="rank(close)",
+        operators_used=["rank"],
+        lookback=5,
+        universe="SP500",
+        justification="regression",
+    )
+    free = run_kernel(panel, spec, KernelParams(transaction_cost_bps=0.0))
+    paid = run_kernel(panel, spec, KernelParams(transaction_cost_bps=10.0))
+
+    first_realized = int(np.flatnonzero(~np.isnan(free.daily_ret))[0])
+    assert first_realized == 1
+    assert paid.daily_ret[first_realized] < free.daily_ret[first_realized]
+    assert np.isnan(paid.daily_ret[0])
+
+
 def test_split_metrics_handles_empty_slice_gracefully() -> None:
     """A slice with < 2 valid (non-NaN) days returns the zero-default
     SplitMetrics rather than dividing by zero."""

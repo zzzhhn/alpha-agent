@@ -41,7 +41,7 @@ async def test_paper_fill_market_order_fills_at_t1(applied_db):
 
         # Cash should be reduced
         acct = await conn.fetchrow("SELECT cash FROM sim_account WHERE id = $1", acct_id)
-        assert acct["cash"] == pytest.approx(1000000.0 - 185.0 * 10)
+        assert acct["cash"] == pytest.approx(1000000.0 - 185.0 * 10 * 1.001)
 
         # Position should exist
         pos = await conn.fetchrow(
@@ -49,7 +49,7 @@ async def test_paper_fill_market_order_fills_at_t1(applied_db):
         )
         assert pos is not None
         assert pos["qty"] == 10
-        assert pos["avg_cost"] == pytest.approx(185.0)
+        assert pos["avg_cost"] == pytest.approx(185.0 * 1.001)
     finally:
         await conn.close()
 

@@ -797,3 +797,49 @@ paper fill 采用两层数据库一致性边界：
 生产首次构建曾因 secret 文件末尾换行被 Vercel 拒绝，错误发生在构建阶段，旧 Ready deployment 继续服务，没有切换用户流量。随后去除换行并同步轮换 Vercel 与 GitHub secret，重新部署和真实 Actions 调度均通过。这个事件进一步确认：header secret 必须验证字节边界，不能把“环境变量名存在”当作部署可用。
 
 因此，第 16.4 节的公开 cron、成交并发和完全平仓盈亏三个 P0 状态现为 closed。L2 单仓上限、回测时序、健康 DAG 覆盖等剩余发现仍按其原优先级保留，不因本节而被误报为已解决。
+
+## 十九、2026-08-03 P1 真实性与可审计性关闭
+
+本轮继续处理第 16.4 节中 P0 之后明确保留的问题，并同时关闭优先级表中的 Q10、Q11 与 Q13。实现仍以 Neon 小数据库、Vercel Serverless 和个人项目为约束，没有引入常驻 worker、消息队列、行情流或新的付费数据源。
+
+### 19.1 L2 单仓上限与回测时序
+
+L2 的声明参数 `max_position=0.02` 现在成为真实约束。可选股票不足 50 只时，每只仍不得超过 2%，未使用权重留在现金，不再把少数股票重新等权到满仓。SPY 之外新增 RSP 同期收益，用于区分市值权重和等权市场基准。
+
+回测 kernel 将换仓成本、滑点和空头借券费对齐到产生下一期持仓收益的同一次决策，不再晚扣一个交易期。参数选择也不再读取 test slice：GA 适应度使用 train metrics，两个 long-only 研究脚本先按 train PSR、Sharpe 与 IC 选择参数，再把留出集只用于最终报告。这样仍不能消除所有研究者自由度，但关闭了代码内可复现的测试集选择泄漏。
+
+### 19.2 推荐到订单的来源链与模拟仓记账
+
+推荐关联订单现在必须同时提交 `pick_date`、`pick_ticker` 和 `pick_run_id`。服务端从 immutable `rating_snapshot` 验证完整且 eligible 的来源，再自行写入 `source_run_id`、`source_policy_id` 和 canonical payload SHA-256，浏览器不能伪造 policy 或 payload hash。
+
+模拟仓新增以下会计边界：
+
+1. pending 买单按参考价加 10 bps 预留现金，账户同时返回 settled cash、reserved cash 和 available cash。
+2. pending 卖单预留股数，阻止多个未成交卖单合计超过当前持仓。
+3. 买卖成交均记录 transaction cost；买入成本进入 avg cost，卖出费用从 realized PnL 和现金流中扣除。
+4. reset 在同一事务中取消当前 pending 订单并递增 cohort。旧持仓、订单和净值继续保留在旧 cohort，不再通过改写历史行来制造一个“干净账户”。
+5. 成交任务只处理账户当前 cohort，旧 cohort 的 pending 订单无法在 reset 后迟到成交。
+
+这些字段通过一份 additive migration 加入，没有复制大表或回填历史 JSON。既有记录保留为 cohort 0，适合当前数据库规模。
+
+### 19.3 L2 最小风险证据面板
+
+`/api/l2/summary` 以只读轻量查询输出 base 100 NAV、SPY、RSP、成本后累计收益、beta、最大回撤、平均 turnover、5／10／20 bps 成本敏感性、异常订单数量、缺失价格数量和当前行业暴露。模拟仓工作区在既有绩效区下方展示这组证据，不增加新导航或第二个交易入口。
+
+UI 原则复查结果：数据不足时状态为 `accumulating`，不会伪装成可用绩效；中英文键同步；沿用现有 pane、字体和颜色约定；风险证据是辅助阅读区，不与下单主动作竞争。完整的新一轮导航、信息架构与视觉优化仍按用户指定留到旧报告问题关闭之后统一处理。
+
+### 19.4 关键 DAG 健康证据
+
+`/api/_health/signals` 不再把所有 `last_success` 固定返回 null，而是从已持久化 breakdown 计算各信号最后一次无错误产出时间。
+
+新的 `/api/_health/dag` 覆盖 daily prices、full fast signals、immutable recommendation publish、L2、paper fill 和 monthly IC。价格任务必须在窗口内观察到至少 8 个完成分片，full fast 必须观察到至少 6 个完成分片，并且窗口内所有分片都成功；因此“最后一个分片成功”不能掩盖同批其他分片失败。接口明确区分 missing、stale、failed、incomplete 和 healthy，并返回 observed／required run 数量。
+
+### 19.5 边界与后续项
+
+当前 L2 仍以每个 signal date 的独立目标组合计算一段前向收益，而不是持久化一个连续 share-level 系统账户。因此“按当前实际持仓产生 delta 订单”没有被假装成已完成，它需要单独的 L2 position ledger、现金状态和历史口径迁移，保留为后续架构项。
+
+Q12 的 tactical 与 strategic 两套独立冻结 policy 也没有通过复制现有权重来凑数。当前 long payload 可以独立重排，但在缺少足够 OOS 证据时，不应伪造一套看似独立的新模型。它继续遵守第十一节的晋级门槛。
+
+### 19.6 本轮验证
+
+本地门槛结果为：P1 聚焦后端与数据库、完整迁移链、L2 cron 与 OpenAPI 共 78 passed；生成的 TypeScript 契约已同步；Python lint 和 TypeScript 通过；63 个前端测试通过；Next.js production build 通过。production build 在隔离网络中预渲染 picks 时记录了既有后端 DNS 不可达日志，但构建完成且返回码为 0；生产部署仍需按真实域名、OpenAPI、数据库迁移和浏览器用户路径单独验收。

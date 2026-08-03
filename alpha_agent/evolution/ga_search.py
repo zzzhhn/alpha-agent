@@ -67,7 +67,9 @@ def make_kernel_fitness(
                 justification="ga cheap-fitness probe",
             )
             kr = run_kernel(panel, spec, params)
-            score = composite_fitness(kr.test_metrics)
+            # Evolution repeatedly adapts to this score. Keep the held-out
+            # slice untouched for the downstream purged walk-forward gate.
+            score = composite_fitness(kr.train_metrics)
         except Exception:  # noqa: BLE001 — invalid/unfit candidate => -inf, never blocks
             score = float("-inf")
         cache[expr] = score

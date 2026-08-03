@@ -144,6 +144,9 @@ def run_one(name: str, expr: str, ops: list[str], neutralize: str = "none", top_
             "name": name,
             "neutralize": neutralize,
             "top_pct": top_pct,
+            "train_sr": r.train_metrics.sharpe,
+            "train_ic": r.train_metrics.ic_spearman,
+            "train_psr": r.train_metrics.psr,
             "test_sr": r.test_metrics.sharpe,
             "ic": r.test_metrics.ic_spearman,
             "ic_p": r.test_metrics.ic_pvalue,
@@ -189,10 +192,12 @@ def main() -> int:
         if not variants:
             print(f"  {name}: ALL VARIANTS FAILED", file=sys.stderr)
             continue
-        # Pick max α-t variant — long_only on cap-weighted SPY can lose to
-        # mega-cap concentration; concentrated top10% + sector-neutral often
-        # restores the factor's stock-selection signal.
-        chosen = max(variants, key=lambda v: v["alpha_t"])
+        # Freeze neutralization and top_pct on the training slice. Selecting
+        # them on held-out alpha-t leaks the test set into the research choice.
+        chosen = max(
+            variants,
+            key=lambda v: (v["train_psr"], v["train_sr"], v["train_ic"]),
+        )
         chosen["family"] = fam
         chosen["thesis"] = thesis
         chosen["expression"] = expr
@@ -353,8 +358,8 @@ def main() -> int:
         out.append("")
         out.append(f"Expression: `{r['expression']}`")
         out.append("")
-        out.append(f"| Regime | N days | SR | α-t | α-p |")
-        out.append(f"|---|---:|---:|---:|---:|")
+        out.append("| Regime | N days | SR | α-t | α-p |")
+        out.append("|---|---:|---:|---:|---:|")
         for rg in r["regime_breakdown"]:
             out.append(f"| {rg['regime']} | {rg['n_days']} | {rg['sr']:+.2f} | {rg['alpha_t']:+.2f} | {rg['alpha_p']:.3f} |")
         out.append("")

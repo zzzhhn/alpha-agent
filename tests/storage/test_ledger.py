@@ -17,6 +17,7 @@ import pytest
 
 from alpha_agent.api.routes.picks import build_lean_view
 from alpha_agent.ledger import record_daily_close
+from alpha_agent.market_session import latest_completed_xnys_session
 from alpha_agent.run_health import MIN_ELIGIBLE
 from alpha_agent.storage.postgres import close_pool, get_pool
 from alpha_agent.storage.product_ledger import get_canonical_run, get_run_snapshots
@@ -32,7 +33,7 @@ async def pool(applied_db):
 async def _seed(pool, rows, *, benchmark=True):
     """Seed fast signal rows + a fresh close per ticker (so each passes the
     dead-feed guard and appears in the view) + optionally a fresh SPY close."""
-    today = date.today()
+    today = latest_completed_xnys_session()
     for tk, comp, rating in rows:
         await pool.execute(
             "INSERT INTO daily_signals_fast "
@@ -64,7 +65,8 @@ async def test_record_daily_close_golden_roundtrip(pool):
     )
     assert [c.ticker for c in cards] == ["AAA", "CCC", "BBB"]
 
-    run_id = await record_daily_close(pool, scheduled_for_date=date.today(), min_eligible=2)
+    market_date = latest_completed_xnys_session()
+    run_id = await record_daily_close(pool, scheduled_for_date=market_date, min_eligible=2)
     assert run_id is not None
 
     snaps = await get_run_snapshots(pool, run_id)
@@ -76,9 +78,11 @@ async def test_record_daily_close_golden_roundtrip(pool):
         assert snap["composite_z"] == pytest.approx(card.composite_score)
         assert snap["eligible"] is True
         # The crux: the persisted payload IS the card the user saw.
-        assert json.loads(snap["user_visible_payload_json"]) == card.model_dump()
+        payload = json.loads(snap["user_visible_payload_json"])
+        assert payload.pop("_mode_payloads")["long"]["ticker"] == card.ticker
+        assert payload == card.model_dump()
 
-    run = await get_canonical_run(pool, date.today())
+    run = await get_canonical_run(pool, market_date)
     assert run["id"] == run_id  # healthy -> complete -> canonical
     assert run["weight_policy_id"]
     assert run["data_asof"] is not None
@@ -87,8 +91,9 @@ async def test_record_daily_close_golden_roundtrip(pool):
 @pytest.mark.asyncio
 async def test_record_daily_close_is_idempotent_per_day(pool):
     await _seed(pool, [("AAA", 2.0, "BUY")])
-    first = await record_daily_close(pool, scheduled_for_date=date.today(), min_eligible=1)
-    second = await record_daily_close(pool, scheduled_for_date=date.today(), min_eligible=1)
+    market_date = latest_completed_xnys_session()
+    first = await record_daily_close(pool, scheduled_for_date=market_date, min_eligible=1)
+    second = await record_daily_close(pool, scheduled_for_date=market_date, min_eligible=1)
     assert first is not None
     assert second is None  # already a complete run today -> skip, not overwrite
     assert await pool.fetchval("SELECT count(*) FROM research_run") == 1
@@ -97,9 +102,10 @@ async def test_record_daily_close_is_idempotent_per_day(pool):
 @pytest.mark.asyncio
 async def test_healthy_run_is_complete_with_metrics(pool):
     await _seed(pool, _many(MIN_ELIGIBLE + 1))  # over the default eligible gate
-    run_id = await record_daily_close(pool, scheduled_for_date=date.today())  # default gate
+    market_date = latest_completed_xnys_session()
+    run_id = await record_daily_close(pool, scheduled_for_date=market_date)  # default gate
     assert run_id is not None
-    run = await get_canonical_run(pool, date.today())
+    run = await get_canonical_run(pool, market_date)
     assert run["id"] == run_id
     health = json.loads(run["health_json"])
     assert health["passed"] is True

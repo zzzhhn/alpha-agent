@@ -72,6 +72,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/_health/dag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Dag
+         * @description Critical decision DAG, evaluated from durable DB evidence.
+         *
+         *     One bounded query returns the latest successful or failed execution for
+         *     each scheduled node plus the latest immutable recommendation publication.
+         */
+        get: operations["health_dag_api__health_dag_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/_health/data_sources": {
         parameters: {
             query?: never;
@@ -1560,6 +1583,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/l2/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * L2 Summary
+         * @description Cost, benchmark, risk and exception evidence from the frozen L2 book.
+         */
+        get: operations["l2_summary_api_l2_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/macro_context": {
         parameters: {
             query?: never;
@@ -2896,6 +2939,8 @@ export interface components {
         AccountResponse: {
             /** Account Id */
             account_id: number;
+            /** Available Cash */
+            available_cash: number;
             /** Cash */
             cash: number;
             /** Initial Cash */
@@ -2908,6 +2953,8 @@ export interface components {
             positions: components["schemas"]["PositionOut"][];
             /** Realized Pnl */
             realized_pnl: number;
+            /** Reserved Cash */
+            reserved_cash: number;
             /** Reset Count */
             reset_count: number;
             /** Total Return Pct */
@@ -3871,8 +3918,18 @@ export interface components {
         };
         /** OrderOut */
         OrderOut: {
+            /**
+             * Cohort Id
+             * @default 0
+             */
+            cohort_id: number;
             /** Fail Reason */
             fail_reason?: string | null;
+            /**
+             * Fee Bps
+             * @default 0
+             */
+            fee_bps: number;
             /** Fill Date */
             fill_date: string | null;
             /** Fill Price */
@@ -3889,14 +3946,30 @@ export interface components {
             pick_ticker?: string | null;
             /** Qty */
             qty: number;
+            /**
+             * Reserved Notional
+             * @default 0
+             */
+            reserved_notional: number;
             /** Side */
             side: string;
             /** Signal Date */
             signal_date: string;
+            /** Source Payload Hash */
+            source_payload_hash?: string | null;
+            /** Source Policy Id */
+            source_policy_id?: string | null;
+            /** Source Run Id */
+            source_run_id?: number | null;
             /** Status */
             status: string;
             /** Ticker */
             ticker: string;
+            /**
+             * Transaction Cost
+             * @default 0
+             */
+            transaction_cost: number;
         };
         /** OrderResponse */
         OrderResponse: {
@@ -3968,6 +4041,8 @@ export interface components {
             order_type: string;
             /** Pick Date */
             pick_date?: string | null;
+            /** Pick Run Id */
+            pick_run_id?: number | null;
             /** Pick Ticker */
             pick_ticker?: string | null;
             /** Qty */
@@ -4731,6 +4806,28 @@ export interface operations {
         };
     };
     health_cron_api__health_cron_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    health_dag_api__health_dag_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -7185,6 +7282,28 @@ export interface operations {
         };
     };
     healthz_sandbox_api_healthz_sandbox_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    l2_summary_api_l2_summary_get: {
         parameters: {
             query?: never;
             header?: never;
