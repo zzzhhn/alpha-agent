@@ -58,6 +58,11 @@ export interface RatingCard {
   as_of: string;
   run_id?: number | null;
   market_date?: string | null;
+  sleeve?: "tactical" | "strategic";
+  horizon_days?: number;
+  policy_id?: string | null;
+  validation_status?: "production" | "forward_validation";
+  policy_rank?: number | null;
   breakdown: BreakdownEntry[];
   top_drivers: string[];
   top_drags: string[];
@@ -126,6 +131,27 @@ export interface RecommendationRunState {
   policy_id: string | null;
   coverage: number;
   health: Record<string, unknown>;
+  sleeve: "tactical" | "strategic";
+  horizon_days: number;
+  validation_status: "production" | "forward_validation";
+}
+
+export interface PickChange {
+  ticker: string;
+  prior_rank: number | null;
+  current_rank: number | null;
+  prior_tier: string | null;
+  current_tier: string | null;
+}
+
+export interface RecommendationChanges {
+  available: boolean;
+  prior_run_id: number | null;
+  turnover: number | null;
+  added: PickChange[];
+  removed: PickChange[];
+  tier_changes: PickChange[];
+  reason: string | null;
 }
 
 export interface PicksResponse {
@@ -136,6 +162,7 @@ export interface PicksResponse {
   ranked: boolean;
   tradable: boolean;
   run: RecommendationRunState | null;
+  changes: RecommendationChanges | null;
 }
 
 export const fetchPicks = (

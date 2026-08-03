@@ -856,3 +856,65 @@ GitHub production deployment records 将相同 commit 绑定到后端 deployment
 6. 真实 Chrome 的 `/paper` 显示 run 33、市场日 2026-07-31，以及四期系统 L2 证据：成本后收益 -1.60%、SPY +0.52%、RSP +1.50%、最大回撤 -1.72%、beta 0.75、5／10／20 bps 敏感性和当前行业暴露。
 
 第一次生产验收在 L2 cycle 恢复前发现，V039 之前的 RSP 空列被复合成 0%，页面误显示 `+0.00%`。补丁 `ffa98bb` 将全空 RSP 返回 null；随后重新运行既有 L2 计算，用生产 RSP 价格回写四个历史标记期，最终页面显示真实 `+1.50%`。这证明生产数据路径验收补充了本地 fixture 无法证明的口径正确性。
+
+## 二十、2026-08-03 新一轮信息架构、交互与后续架构项
+
+本轮处理第 16.2 节的 UI 调研结果，并关闭第 19.5 节明确保留的两个架构项。实现仍以个人项目、小型 Neon 数据库、Vercel Serverless 和日频免费行情为边界，没有引入常驻 worker、实时撮合、消息队列或历史大表重写。
+
+### 20.1 任务导向的信息架构
+
+侧栏从“研究工具优先”改为以下层级：
+
+1. 每日工作流：今日推荐、模拟仓、警报。
+2. 研究：Alpha、回测、选股、报告。
+3. 高级研究工具：因子库、演化监控、BRAIN，默认收起。
+4. 参考：数据、方法论、设置。
+
+所有导航链接改为 `prefetch={false}`。这避免一次进入工作台就为 13 个动态页面创建 RSC 预取请求，尤其适合当前小后端。移动端沿用相同任务层级。
+
+“今日推荐”新增明确的语义标题和三段决策顺序：确认快照与策略、理解候选及变化、进入组合工作台。页面不再把单票分数直接包装成仓位指令。相对上一份同政策快照，页面展示 Top 50 新增、移出、tier 变化和名单换手；没有两个同政策快照时明确显示不可比，战略政策不会与旧的伪长周期榜单拼接。
+
+390px 视口使用单份移动候选卡 DOM，不再同时保留完整桌面宽表。实测 `scrollWidth=390`，无需横向滚动即可进入组合决策；页面节点从审计时约 1,995 降到 1,430。桌面继续保留高密度研究表。
+
+### 20.2 交互诚实性与可恢复性
+
+1. Picks 与模拟仓均增加唯一 `h1`。搜索输入有可访问名称，tooltip 支持键盘 focus、Escape 与 `aria-describedby`。
+2. 下单 drawer 进入时获取焦点，Tab 保持在 modal 内，Escape 关闭，关闭后恢复触发控件焦点。
+3. 推荐下单不再默认 10 股。固定 ticker 的推荐单按组合净值 2% 与最新收盘价给出整数股建议，仍允许用户修改。
+4. 候选卡通过 `/paper?ticker=...` 保留用户选择。未登录时只在提交动作进入认证门槛，研究内容继续可读。
+5. 模拟仓对 account、orders、curve、attribution 和 L2 分别保留错误状态。某区块失败时显示“无法确认”和重试，不再把未知订单、来源或净值显示成零或空记录。
+6. SSR 时间文本使用固定 UTC 表达，避免浏览器 locale 引发 hydration 差异。
+
+### 20.3 独立战术与战略政策
+
+原先 long 模式只替换一个 factor z，再沿用同一套融合权重与 5 日校准。现在两套政策真实分离：
+
+| 袖套 | policy ID | 目标周期 | 状态 |
+|---|---|---:|---|
+| 战术 | `static_v2_technicals_guardrail` | 5 日 | 生产 |
+| 战略 | `strategic_v1_60d_frozen` | 60 日 | 独立前瞻验证 |
+
+战略策略只给原生周期至少 20 日的 factor、RSRS、分析师、财报、内部交易、宏观与供应链信号分配权重；新闻、技术面、期权和盘前权重为零。它有自己的核心覆盖集合、composite、tier、全市场 `policy_rank` 和 policy ID。缺少 `z_long` 时 factor 明确 dropped 并降低覆盖，不会回退到战术 z。既有 5 日命中率校准不适用于战略政策，因此战略 confidence 返回 null，UI 显示“待前瞻验证”。
+
+每日 immutable run 继续只写一行 ticker snapshot，但在 payload 内同时冻结两个独立政策的完整用户可见卡片，避免新增一倍 rating 大表。标量战术 rank 保持旧 L2 和消费者兼容，战略 rank 在嵌套政策快照中独立保存。
+
+### 20.4 连续份额级 L2 账本
+
+V040 在旧 L2 批次证据之外增加轻量连续账户：
+
+1. `l2_account` 持久化 initial cash、cash、NAV、前瞻起点与最后成交日。
+2. `l2_position` 持久化整数股 qty、avg cost、realized PnL 与最后可信价格。
+3. `l2_order` 增加 pre qty、target qty、delta qty、buy／sell／hold、成交额、交易成本、来源袖套与 policy ID。
+4. `l2_equity_daily` 增加真实 NAV、cash、market value 与累计收益。
+
+决策日只持久化目标权重，不读取未来成交价。下一交易日才按当时 NAV 与收盘价转换成整数目标股数，先卖后买，只用可用现金，并按 10 bps 收费。移出名单会产生 target weight 0 的显式卖出 delta；价格缺失会产生 unfilled reason，不会静默消失。
+
+连续账户第一次创建时将当时最新 complete run 记为 `start_after_run_id`，只接受之后产生的新推荐。这一边界故意不回填现有四期历史 L2，避免部署后用已经知道的价格制造“前瞻”曲线。战术与战略各有一个独立连续账户，战略账户只接受带 `strategic_v1_60d_frozen` policy snapshot 的新 run。旧 `canonical_top50` target-weight 曲线继续只读展示，作为历史兼容基线。
+
+`l2_cycle` 使用 PostgreSQL advisory lock 防止重试或重叠执行重复改变现金与持股。一次 rebalance 对订单、持仓、现金和净值曲线的写入位于同一数据库事务内，服务中断不会留下部分成交的组合状态。每周最多为两套袖套各写约 50 个 target row，远小于现有信号与价格表规模；读取路径使用现有 strategy／status 索引，没有引入逐 ticker 外部行情请求。
+
+### 20.5 本地验证与待部署门槛
+
+实现提交为 `0127fa2`。本地聚焦验证结果：39 个 migration、policy、Picks、L2 与 OpenAPI 测试通过；扩展到 API、backtest、cron 和 storage 后为 269 passed，只有 3 条既有 pytest 标记警告。最后的兼容性与事务边界补丁另有 17 个相关测试和 4 个连续账户／cron 测试通过。63 个前端测试、TypeScript 与变更文件 Ruff 通过，Next.js production build 通过。浏览器复核确认桌面新工作流、移动端无水平溢出、语义 `h1`、候选携带 ticker 进入模拟仓，以及未登录账户／订单／曲线／来源失败不会冒充有效数据。
+
+生产部署前仍需执行 V040 migration，再部署后端与前端。由于独立战略政策和连续账户都采用前瞻边界，部署当天正确状态应是 `awaiting_forward_run`，而不是立刻出现一条历史收益曲线。只有后续新 complete run 与下一交易日价格到达后，才应出现第一笔份额级 delta 和 NAV。

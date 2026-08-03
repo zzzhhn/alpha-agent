@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import date
 
 from alpha_agent.backtest import l2
+from alpha_agent.backtest import l2_continuous
 
 CANONICAL_STRATEGY = "canonical_top50"
 DEFAULT_REBALANCE_DAYS = 5
@@ -118,4 +119,79 @@ async def run_driver(
         "generated": generated,
         "filled": filled,
         "equity_points": equity_points,
+    }
+
+
+async def run_continuous_driver(
+    pool, *, strategy_id: int, rebalance_days: int = DEFAULT_REBALANCE_DAYS
+) -> dict:
+    """Advance the forward-only cash-and-shares book without legacy backfill."""
+    trading = await _trading_dates(pool)
+    account = await pool.fetchrow(
+        "SELECT start_after_run_id FROM l2_account WHERE strategy_id=$1",
+        strategy_id,
+    )
+    if account is None:
+        return {"generated": 0, "filled": 0, "unfilled": 0, "pending": 0}
+
+    # Fill only intents written by an earlier invocation.  The fill engine also
+    # enforces fill_date > generated wall date as a second causal guard.
+    pending_dates = await pool.fetch(
+        "SELECT DISTINCT signal_date FROM l2_order "
+        "WHERE strategy_id=$1 AND status='pending' ORDER BY signal_date",
+        strategy_id,
+    )
+    filled = unfilled = 0
+    for row in pending_dates:
+        fill_date = _next_price_date(trading, row["signal_date"])
+        if fill_date is None:
+            continue
+        # A rebalance mutates orders, positions, cash and the equity curve.  Keep
+        # those writes atomic so a server interruption cannot leave a partial
+        # portfolio transition behind.
+        async with pool.acquire() as fill_conn, fill_conn.transaction():
+            result = await l2_continuous.fill_target_intent(
+                fill_conn,
+                strategy_id=strategy_id,
+                signal_date=row["signal_date"],
+                fill_date=fill_date,
+            )
+        filled += int(result.get("filled", 0))
+        unfilled += int(result.get("unfilled", 0))
+
+    rows = await pool.fetch(
+        """
+        SELECT DISTINCT ON (scheduled_for_date) scheduled_for_date, id
+        FROM research_run
+        WHERE status='complete' AND run_type='daily_close' AND id>$1
+        ORDER BY scheduled_for_date, finished_at DESC NULLS LAST, id DESC
+        """,
+        int(account["start_after_run_id"]),
+    )
+    last_signal = await pool.fetchval(
+        "SELECT max(signal_date) FROM l2_order WHERE strategy_id=$1",
+        strategy_id,
+    )
+    generated = 0
+    for row in rows:
+        signal_date = row["scheduled_for_date"]
+        if last_signal is not None and _trading_days_between(
+            trading, last_signal, signal_date
+        ) < rebalance_days:
+            continue
+        created = await l2_continuous.generate_target_intent(
+            pool, strategy_id=strategy_id, run_id=int(row["id"])
+        )
+        if created:
+            generated += created
+            last_signal = signal_date
+    pending = int(await pool.fetchval(
+        "SELECT count(*) FROM l2_order WHERE strategy_id=$1 AND status='pending'",
+        strategy_id,
+    ) or 0)
+    return {
+        "generated": generated,
+        "filled": filled,
+        "unfilled": unfilled,
+        "pending": pending,
     }

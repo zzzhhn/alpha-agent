@@ -1878,8 +1878,15 @@
             "type": "number"
           },
           "confidence": {
-            "title": "Confidence",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
           },
           "consistency": {
             "additionalProperties": {
@@ -1946,6 +1953,11 @@
             "title": "Dimension Grades",
             "type": "object"
           },
+          "horizon_days": {
+            "default": 5,
+            "title": "Horizon Days",
+            "type": "integer"
+          },
           "latest_price": {
             "anyOf": [
               {
@@ -1973,6 +1985,28 @@
             "title": "Partial",
             "type": "boolean"
           },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "policy_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Rank"
+          },
           "price_date": {
             "anyOf": [
               {
@@ -1999,6 +2033,11 @@
             ],
             "title": "Run Id"
           },
+          "sleeve": {
+            "default": "tactical",
+            "title": "Sleeve",
+            "type": "string"
+          },
           "ticker": {
             "title": "Ticker",
             "type": "string"
@@ -2021,6 +2060,11 @@
             },
             "title": "Top Drivers",
             "type": "array"
+          },
+          "validation_status": {
+            "default": "production",
+            "title": "Validation Status",
+            "type": "string"
           }
         },
         "required": [
@@ -2740,6 +2784,63 @@
         "title": "PersonaExplainResponse",
         "type": "object"
       },
+      "PickChange": {
+        "properties": {
+          "current_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Rank"
+          },
+          "current_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Tier"
+          },
+          "prior_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Rank"
+          },
+          "prior_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Tier"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "title": "PickChange",
+        "type": "object"
+      },
       "PicksResponse": {
         "properties": {
           "as_of": {
@@ -2758,6 +2859,16 @@
             "default": false,
             "title": "Canonical",
             "type": "boolean"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationChanges"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "picks": {
             "items": {
@@ -2977,6 +3088,76 @@
         "title": "Recommendation",
         "type": "object"
       },
+      "RecommendationChanges": {
+        "properties": {
+          "added": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PickChange"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "prior_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Run Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "removed": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PickChange"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "tier_changes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PickChange"
+            },
+            "title": "Tier Changes",
+            "type": "array"
+          },
+          "turnover": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turnover"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "RecommendationChanges",
+        "type": "object"
+      },
       "RecommendationRunState": {
         "properties": {
           "coverage": {
@@ -3012,6 +3193,11 @@
             "title": "Health",
             "type": "object"
           },
+          "horizon_days": {
+            "default": 5,
+            "title": "Horizon Days",
+            "type": "integer"
+          },
           "market_date": {
             "title": "Market Date",
             "type": "string"
@@ -3030,6 +3216,16 @@
           "run_id": {
             "title": "Run Id",
             "type": "integer"
+          },
+          "sleeve": {
+            "default": "tactical",
+            "title": "Sleeve",
+            "type": "string"
+          },
+          "validation_status": {
+            "default": "production",
+            "title": "Validation Status",
+            "type": "string"
           }
         },
         "required": [

@@ -3710,7 +3710,7 @@ export interface components {
             /** Composite Score */
             composite_score: number;
             /** Confidence */
-            confidence: number;
+            confidence: number | null;
             /**
              * Consistency
              * @default {}
@@ -3748,6 +3748,11 @@ export interface components {
             dimension_grades: {
                 [key: string]: string;
             };
+            /**
+             * Horizon Days
+             * @default 5
+             */
+            horizon_days: number;
             /** Latest Price */
             latest_price?: number | null;
             /** Market Date */
@@ -3757,12 +3762,21 @@ export interface components {
              * @default false
              */
             partial: boolean;
+            /** Policy Id */
+            policy_id?: string | null;
+            /** Policy Rank */
+            policy_rank?: number | null;
             /** Price Date */
             price_date?: string | null;
             /** Rating */
             rating: string;
             /** Run Id */
             run_id?: number | null;
+            /**
+             * Sleeve
+             * @default tactical
+             */
+            sleeve: string;
             /** Ticker */
             ticker: string;
             /**
@@ -3774,6 +3788,11 @@ export interface components {
             top_drags: string[];
             /** Top Drivers */
             top_drivers: string[];
+            /**
+             * Validation Status
+             * @default production
+             */
+            validation_status: string;
         };
         /** MacroContextItem */
         MacroContextItem: {
@@ -4008,6 +4027,19 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** PickChange */
+        PickChange: {
+            /** Current Rank */
+            current_rank?: number | null;
+            /** Current Tier */
+            current_tier?: string | null;
+            /** Prior Rank */
+            prior_rank?: number | null;
+            /** Prior Tier */
+            prior_tier?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
         /** PicksResponse */
         PicksResponse: {
             /** As Of */
@@ -4017,6 +4049,7 @@ export interface components {
              * @default false
              */
             canonical: boolean;
+            changes?: components["schemas"]["RecommendationChanges"] | null;
             /** Picks */
             picks: components["schemas"]["LeanCard"][];
             /**
@@ -4082,6 +4115,32 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** RecommendationChanges */
+        RecommendationChanges: {
+            /**
+             * Added
+             * @default []
+             */
+            added: components["schemas"]["PickChange"][];
+            /** Available */
+            available: boolean;
+            /** Prior Run Id */
+            prior_run_id?: number | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Removed
+             * @default []
+             */
+            removed: components["schemas"]["PickChange"][];
+            /**
+             * Tier Changes
+             * @default []
+             */
+            tier_changes: components["schemas"]["PickChange"][];
+            /** Turnover */
+            turnover?: number | null;
+        };
         /** RecommendationRunState */
         RecommendationRunState: {
             /** Coverage */
@@ -4094,12 +4153,27 @@ export interface components {
             health: {
                 [key: string]: unknown;
             };
+            /**
+             * Horizon Days
+             * @default 5
+             */
+            horizon_days: number;
             /** Market Date */
             market_date: string;
             /** Policy Id */
             policy_id: string | null;
             /** Run Id */
             run_id: number;
+            /**
+             * Sleeve
+             * @default tactical
+             */
+            sleeve: string;
+            /**
+             * Validation Status
+             * @default production
+             */
+            validation_status: string;
         };
         /** RefreshRequest */
         RefreshRequest: {

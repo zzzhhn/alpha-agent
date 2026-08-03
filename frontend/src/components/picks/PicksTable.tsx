@@ -4,9 +4,11 @@ import type { RatingCard } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { HoverTip } from "@/components/ui/HoverTip";
 import PickRow from "./PickRow";
 import { GradeStripHeader, computeHiddenDims } from "./GradeStrip";
+import PicksCards from "./PicksCards";
 
 const TH = "px-3 py-2.5 font-tm-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-tm-fg-2 select-none";
 
@@ -28,6 +30,14 @@ export default function PicksTable({
   ordersDisabled?: boolean;
 }) {
   const { locale } = useLocale();
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 767px)");
+    const sync = () => setCompact(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
   // Drop dimension columns that are dead across every visible pick.
   const hiddenDims = useMemo(() => computeHiddenDims(picks), [picks]);
   // Freshest as_of in the list, so each row can flag if its own data lags it.
@@ -48,8 +58,13 @@ export default function PicksTable({
     );
   }
 
+  if (compact) {
+    return <PicksCards picks={picks} ranked={ranked} ordersDisabled={ordersDisabled} />;
+  }
+
   return (
-    <table className="w-full border-collapse">
+    <div className="overflow-x-auto">
+    <table className="min-w-[1060px] w-full border-collapse">
       <thead className="border-b border-tm-rule bg-tm-bg-2">
         <tr>
           <th className={`${TH} text-left w-8`}>
@@ -112,5 +127,6 @@ export default function PicksTable({
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

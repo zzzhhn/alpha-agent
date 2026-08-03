@@ -107,6 +107,40 @@ STATIC_V2 = WeightPolicy(
     source="static_v1 + council #5 technicals guardrail (cap 0.20->0.10, reversible)",
 )
 
+# Strategic sleeve, frozen independently from the 5d tactical policy.  It is
+# deliberately slow-moving: only signals with a 20d+ native horizon receive
+# weight, while intraday/news/options inputs are retained in the breakdown for
+# auditability but contribute zero.  This is an architecture and forward-
+# validation policy, not a claim of established alpha.  It therefore never
+# consumes the tactical adaptive-weight table or its 5d calibration map.
+STRATEGIC_V1 = WeightPolicy(
+    policy_id="strategic_v1_60d_frozen",
+    mode="static",
+    horizon="60d",
+    weights={
+        "factor": 0.45,
+        "technicals": 0.00,
+        "rsrs": 0.10,
+        "analyst": 0.15,
+        "earnings": 0.10,
+        "news": 0.00,
+        "insider": 0.05,
+        "options": 0.00,
+        "premarket": 0.00,
+        "macro": 0.10,
+        "calendar": 0.00,
+        "political_impact": 0.00,
+        "geopolitical_impact": 0.00,
+        "supply_chain": 0.05,
+    },
+    core_signals=("factor", "analyst", "earnings", "macro"),
+    missing_policy="coverage_sqrt",
+    source=(
+        "frozen 60d forward-validation sleeve; 20d+ native signals only; "
+        "independent of tactical guarded adaptive weights"
+    ),
+)
+
 
 def get_active_policy() -> WeightPolicy:
     """Return the policy that governs live production ratings.
@@ -116,3 +150,17 @@ def get_active_policy() -> WeightPolicy:
     versioned, and swappable without touching cron code.
     """
     return STATIC_V2
+
+
+def get_policy(sleeve: str = "tactical") -> WeightPolicy:
+    """Return one explicitly frozen sleeve policy.
+
+    ``get_active_policy`` remains the backwards-compatible tactical accessor.
+    New call sites should name the sleeve so a UI toggle cannot silently mean
+    "same policy, one factor swapped" again.
+    """
+    if sleeve == "tactical":
+        return STATIC_V2
+    if sleeve == "strategic":
+        return STRATEGIC_V1
+    raise ValueError(f"unknown policy sleeve: {sleeve}")
