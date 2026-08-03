@@ -842,4 +842,17 @@ Q12 的 tactical 与 strategic 两套独立冻结 policy 也没有通过复制�
 
 ### 19.6 本轮验证
 
-本地门槛结果为：P1 聚焦后端与数据库、完整迁移链、L2 cron 与 OpenAPI 共 78 passed；生成的 TypeScript 契约已同步；Python lint 和 TypeScript 通过；63 个前端测试通过；Next.js production build 通过。production build 在隔离网络中预渲染 picks 时记录了既有后端 DNS 不可达日志，但构建完成且返回码为 0；生产部署仍需按真实域名、OpenAPI、数据库迁移和浏览器用户路径单独验收。
+本地门槛结果为：P1 聚焦后端与数据库、完整迁移链、L2 cron 与 OpenAPI 共 78 passed；生成的 TypeScript 契约已同步；Python lint 和 TypeScript 通过；63 个前端测试通过；Next.js production build 通过。production build 在隔离网络中预渲染 picks 时记录了既有后端 DNS 不可达日志，但构建完成且返回码为 0；这一结果本身不替代下述真实域名、OpenAPI、数据库迁移和浏览器用户路径验收。
+
+生产验收已于同日完成。主实现提交 `80b5826` 和 RSP 空值诚实性补丁 `ffa98bb` 均进入 GitHub `main`。Neon migration workflow `30797847114` 明确返回 `applied: ['V039__paper_p1_provenance_and_cohorts']`；最终 CI `30798310312` 在 `ffa98bb` 上成功。
+
+GitHub production deployment records 将相同 commit 绑定到后端 deployment `5723286451` 和前端 deployment `5723289187`。生产自定义域名验收结果：
+
+1. `/api/_health` 返回 HTTP 200、`application/json`，数据库状态为 ok。
+2. OpenAPI 同时包含 `/api/_health/dag`、`/api/l2/summary`、`pick_run_id`、reserved cash、来源 hash、交易成本和 cohort 字段。
+3. 前端 `/api/fe/version` 返回与本地源码一致的内容 hash `d46ef2ee192e6c20`。
+4. 恢复后的幂等 L2 workflow `30798709787` 返回 `rebalances=6`、`generated=50`、`filled=0`、`equity_points=4` 和 `error=null`。未成交是因为 2026-07-31 信号之后尚无下一交易日收盘价，不是任务失败。
+5. `/api/_health/dag` 的六个关键节点最终全部为 healthy。daily prices 观察到 8／8 个分片，full fast 观察到 12／6 个分片，其余节点均达到最低完整执行数。
+6. 真实 Chrome 的 `/paper` 显示 run 33、市场日 2026-07-31，以及四期系统 L2 证据：成本后收益 -1.60%、SPY +0.52%、RSP +1.50%、最大回撤 -1.72%、beta 0.75、5／10／20 bps 敏感性和当前行业暴露。
+
+第一次生产验收在 L2 cycle 恢复前发现，V039 之前的 RSP 空列被复合成 0%，页面误显示 `+0.00%`。补丁 `ffa98bb` 将全空 RSP 返回 null；随后重新运行既有 L2 计算，用生产 RSP 价格回写四个历史标记期，最终页面显示真实 `+1.50%`。这证明生产数据路径验收补充了本地 fixture 无法证明的口径正确性。
