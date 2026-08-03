@@ -11,18 +11,14 @@
 //
 // Same-tab coordination uses a CustomEvent (storage events only fire
 // cross-tab); cross-reload persistence uses localStorage.
-import type { RatingCard } from "@/lib/api/picks";
+import type { PicksResponse } from "@/lib/api/picks";
 
 export const DISPATCH_KEY = "alpha-agent:dispatch";
 export const SNAPSHOT_KEY = "alpha-agent:picks-snapshot";
 export const DISPATCH_EVENT = "alpha-agent:dispatch-start";
 
 export type Dispatch = { at: number; etaMin: number };
-export type PicksSnapshot = {
-  picks: RatingCard[];
-  as_of: string | null;
-  stale: boolean;
-};
+export type PicksSnapshot = PicksResponse;
 
 export function loadDispatch(): Dispatch | null {
   if (typeof window === "undefined") return null;

@@ -173,6 +173,27 @@ async def get_canonical_run(
     )
 
 
+async def get_latest_canonical_run(
+    pool: asyncpg.Pool,
+    run_type: str = "daily_close",
+) -> asyncpg.Record | None:
+    """Latest immutable complete run, regardless of server calendar date.
+
+    Freshness and tradability are evaluated by the read path against the
+    current XNYS session.  Keeping this reader date-agnostic lets the UI show a
+    frozen prior snapshot instead of silently falling back to mutable rows.
+    """
+    return await pool.fetchrow(
+        """
+        SELECT * FROM research_run
+        WHERE run_type = $1 AND status = 'complete'
+        ORDER BY finished_at DESC NULLS LAST, id DESC
+        LIMIT 1
+        """,
+        run_type,
+    )
+
+
 async def get_run_snapshots(
     pool: asyncpg.Pool, run_id: int
 ) -> list[asyncpg.Record]:

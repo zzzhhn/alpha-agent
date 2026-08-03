@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleHelp, X } from "lucide-react";
-import { fetchPicks, type RatingCard } from "@/lib/api/picks";
+import {
+  fetchPicks,
+  type RatingCard,
+  type RecommendationRunState,
+} from "@/lib/api/picks";
 import {
   PaperApiError,
   cancelOrder,
@@ -41,6 +45,8 @@ export default function PaperScreen() {
   const [picks, setPicks] = useState<readonly RatingCard[]>([]);
   const [picksAsOf, setPicksAsOf] = useState<string | null>(null);
   const [picksServerStale, setPicksServerStale] = useState(false);
+  const [picksTradable, setPicksTradable] = useState(false);
+  const [picksRun, setPicksRun] = useState<RecommendationRunState | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +69,8 @@ export default function PaperScreen() {
       setPicks(picksResult.value.picks);
       setPicksAsOf(picksResult.value.as_of);
       setPicksServerStale(picksResult.value.stale);
+      setPicksTradable(picksResult.value.tradable);
+      setPicksRun(picksResult.value.run);
     }
     if (accountResult.status === "fulfilled") {
       setAccount(accountResult.value);
@@ -88,23 +96,28 @@ export default function PaperScreen() {
     return () => clearInterval(id);
   }, []);
 
+  const picksFrozen =
+    picks.length > 0 &&
+    (!picksTradable || isPicksSnapshotStale(picksAsOf, picksServerStale, now));
+
   useEffect(() => {
     if (picks.length === 0) {
+      setSelectedTicker(null);
+      return;
+    }
+    if (picksFrozen) {
       setSelectedTicker(null);
       return;
     }
     if (!selectedTicker || !picks.some((pick) => pick.ticker === selectedTicker)) {
       setSelectedTicker(picks[0].ticker);
     }
-  }, [picks, selectedTicker]);
+  }, [picks, picksFrozen, selectedTicker]);
 
   const selectedPick = useMemo(
     () => picks.find((pick) => pick.ticker === selectedTicker) ?? null,
     [picks, selectedTicker],
   );
-  const picksFrozen =
-    picks.length > 0 && isPicksSnapshotStale(picksAsOf, picksServerStale, now);
-
   async function handleCancel(orderId: number) {
     await cancelOrder(orderId);
     await loadAll(false);
@@ -161,9 +174,17 @@ export default function PaperScreen() {
       </TmPane>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
-        <TmPane standalone title={t(locale, "sim.workspace.today_picks")} meta={picks[0]?.price_date ?? "—"}>
+        <TmPane
+          standalone
+          title={t(locale, "sim.workspace.today_picks")}
+          meta={
+            picksRun
+              ? `${picksRun.market_date} · RUN #${picksRun.run_id}`
+              : picks[0]?.price_date ?? "—"
+          }
+        >
           {picksFrozen ? <FrozenRecommendations /> : null}
-          {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
+          {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker} actionable={!picksFrozen} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
         </TmPane>
         <TmPane standalone title={selectedPick ? `${t(locale, "sim.workspace.order_title")} · ${selectedPick.ticker}` : t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelectedTicker(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
           <div className="px-3 py-3">

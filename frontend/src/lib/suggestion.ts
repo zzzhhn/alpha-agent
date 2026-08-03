@@ -6,8 +6,8 @@ type I18nKey = Parameters<typeof t>[1];
 export interface Suggestion {
   label: string;
   tone: "pos" | "neg" | "muted";
-  // True when the calibrated directional hit-rate is at/below coin-flip, so an
-  // actionable (buy/sell) call should be shown with a caution affordance. This
+  // True when the calibrated directional hit-rate is at/below coin-flip, so a
+  // directional model view should be shown with a caution affordance. This
   // is the honesty gate from the "今日推荐 meaningful?" discussion: short-horizon
   // single-name edge is structurally modest, and the UI must say so rather than
   // dress a ~50% call up as conviction.
@@ -22,8 +22,9 @@ const ACTION: Record<string, { key: I18nKey; tone: "pos" | "neg" | "muted" }> = 
   SELL: { key: "picks_table.sug_sell", tone: "neg" },
 };
 
-// Plain-language action for a rating tier, honesty-gated by the calibrated
-// hit-rate (card.confidence). HOLD is never cautioned (it is already "wait").
+// Plain-language model view for a rating tier.  It deliberately does not emit
+// a portfolio action: without current holdings, target weights, sector limits,
+// and a risk budget the engine has no basis for saying "buy" or "add".
 export function getSuggestion(
   rating: string,
   hitRate: number,

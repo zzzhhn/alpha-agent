@@ -11,11 +11,13 @@ storage/product_ledger.py; this module is the thin "assemble what the user saw
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 from datetime import UTC, date, datetime
 
 from alpha_agent.api.routes.picks import LeanCard, build_lean_view
+from alpha_agent.market_session import latest_completed_xnys_session
 from alpha_agent.storage.product_ledger import (
     LedgerConflict,
     RatingSnapshot,
@@ -47,23 +49,43 @@ def code_version() -> str | None:
         return None
 
 
-def _snapshot_from_card(card: LeanCard, rank: int) -> RatingSnapshot:
+def _snapshot_from_card(
+    card: LeanCard,
+    rank: int | None,
+    *,
+    market_date: date | None,
+    long_card: LeanCard | None,
+) -> RatingSnapshot:
     """Map an emitted LeanCard to its immutable ledger row. The full card is
     stored verbatim in user_visible_payload so the record is exactly what the
     user saw; the scalar columns (rank/tier/composite_z) are denormalized for
     cheap querying by the L2 / forward-IC consumers."""
+    eligible = bool(
+        not card.partial
+        and market_date is not None
+        and card.price_date == market_date.isoformat()
+    )
+    payload = card.model_dump()
+    if long_card is not None:
+        payload["_mode_payloads"] = {"long": long_card.model_dump()}
     return RatingSnapshot(
         ticker=card.ticker,
         composite_z=card.composite_score,
-        rank=rank,
+        rank=rank if eligible else None,
         tier=card.rating,
         in_universe=True,
-        eligible=True,
-        eligibility_reason=None,
-        user_visible_payload=card.model_dump(),
+        eligible=eligible,
+        eligibility_reason=(
+            None
+            if eligible
+            else "partial_signals"
+            if card.partial
+            else "price_not_on_market_date"
+        ),
+        user_visible_payload=payload,
         price_source=_PRICE_SOURCE,
         adjustment_mode=_ADJUSTMENT_MODE,
-        feed_status="fresh",
+        feed_status="fresh" if eligible else "incomplete",
     )
 
 
@@ -104,19 +126,50 @@ async def record_daily_close(
     from alpha_agent.run_health import MIN_ELIGIBLE, benchmark_is_fresh, evaluate_gates
 
     now = datetime.now(UTC)
-    for_date = scheduled_for_date or now.date()
+    expected_market_date = latest_completed_xnys_session(now)
     started = started_at or now
 
-    cards, as_of, _stale = await build_lean_view(
-        pool, limit=600, search=None, mode="short", side="long"
+    short_view, long_view = await asyncio.gather(
+        build_lean_view(pool, limit=600, search=None, mode="short", side="long"),
+        build_lean_view(pool, limit=600, search=None, mode="long", side="long"),
     )
-    snapshots = [_snapshot_from_card(c, i) for i, c in enumerate(cards, start=1)]
+    cards, as_of, _stale = short_view
+    long_cards, _long_as_of, _long_stale = long_view
+
+    # The market date is data-derived, never the server's UTC calendar date.
+    # A Saturday manual run therefore belongs to Friday, and a signal refresh
+    # on stale prices is recorded as partial rather than published as "today".
+    market_date = await pool.fetchval("SELECT max(date) FROM daily_prices")
+    for_date = scheduled_for_date or market_date or expected_market_date
+    long_by_ticker = {card.ticker: card for card in long_cards}
+    eligible_rank = 0
+    snapshots: list[RatingSnapshot] = []
+    for card in cards:
+        if (
+            not card.partial
+            and market_date is not None
+            and card.price_date == market_date.isoformat()
+        ):
+            eligible_rank += 1
+            rank: int | None = eligible_rank
+        else:
+            rank = None
+        snapshots.append(
+            _snapshot_from_card(
+                card,
+                rank,
+                market_date=market_date,
+                long_card=long_by_ticker.get(card.ticker),
+            )
+        )
 
     # Gate the run. The benchmark check is the only DB-dependent gate input.
-    bench_fresh = await benchmark_is_fresh(pool)
+    bench_fresh = await benchmark_is_fresh(pool, market_date=market_date)
     gate = evaluate_gates(
         snapshots,
         benchmark_fresh=bench_fresh,
+        market_date=market_date,
+        expected_market_date=expected_market_date,
         min_eligible=min_eligible if min_eligible is not None else MIN_ELIGIBLE,
     )
     # 'complete' default => the gates decide; an explicit terminal status wins.

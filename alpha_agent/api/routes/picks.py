@@ -13,7 +13,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime, timedelta
+import uuid
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
@@ -24,6 +25,7 @@ from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import grade_dimensions
 from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.fusion.rating import compute_confidence, map_to_tier
+from alpha_agent.market_session import latest_completed_xnys_session
 
 logger = logging.getLogger(__name__)
 
@@ -91,12 +93,132 @@ class LeanCard(BaseModel):
     # ever non-None; y1/hist are structurally unavailable (see that module).
     consistency_hold: dict[str, float | None] = {}
     consistency_hold_n: dict[str, int] = {}
+    # Immutable recommendation provenance.  Null on exploratory live/search
+    # rows; populated for every card read from one canonical product-ledger run.
+    run_id: int | None = None
+    market_date: str | None = None
+
+
+class RecommendationRunState(BaseModel):
+    run_id: int
+    market_date: str
+    generated_at: datetime | None
+    data_cutoff: datetime | None
+    policy_id: str | None
+    coverage: float
+    health: dict
 
 
 class PicksResponse(BaseModel):
     picks: list[LeanCard]
     as_of: datetime | None
     stale: bool
+    canonical: bool = False
+    ranked: bool = False
+    tradable: bool = False
+    run: RecommendationRunState | None = None
+
+
+def _json_object(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+            return decoded if isinstance(decoded, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+async def _build_canonical_view(
+    pool,
+    *,
+    limit: int,
+    mode: str,
+    side: str,
+) -> PicksResponse | None:
+    """Read one immutable recommendation run, never a mixture of live rows."""
+    from alpha_agent.storage.product_ledger import (
+        get_latest_canonical_run,
+        get_run_snapshots,
+    )
+
+    run = await get_latest_canonical_run(pool)
+    if run is None:
+        return None
+    snapshots = await get_run_snapshots(pool, int(run["id"]))
+    eligible = [row for row in snapshots if row["eligible"] and row["rank"] is not None]
+    cards: list[LeanCard] = []
+    mode_supported = True
+    market_date: date = run["scheduled_for_date"]
+    for row in eligible:
+        payload = _json_object(row["user_visible_payload_json"])
+        if mode == "long":
+            long_payload = _json_object(payload.get("_mode_payloads")).get("long")
+            if not isinstance(long_payload, dict):
+                mode_supported = False
+                break
+            payload = long_payload
+        try:
+            card = LeanCard.model_validate(payload).model_copy(
+                update={"run_id": int(run["id"]), "market_date": market_date.isoformat()}
+            )
+        except Exception as exc:
+            logger.warning(
+                "invalid canonical snapshot run=%s ticker=%s: %s",
+                run["id"],
+                row["ticker"],
+                exc,
+            )
+            mode_supported = False
+            break
+        cards.append(card)
+
+    if not mode_supported:
+        return None
+
+    cards.sort(
+        key=lambda card: card.composite_score,
+        reverse=(side == "long"),
+    )
+    cards = cards[:limit]
+
+    generated_at = run["finished_at"] or run["data_asof"]
+    if generated_at is not None and generated_at.tzinfo is None:
+        generated_at = generated_at.replace(tzinfo=UTC)
+    expected_market_date = latest_completed_xnys_session()
+    health = _json_object(run["health_json"])
+    same_market_date = bool(cards) and all(
+        card.price_date == market_date.isoformat() for card in cards
+    )
+    age_stale = generated_at is None or (
+        datetime.now(UTC) - generated_at > timedelta(hours=_STALE_THRESHOLD_HOURS)
+    )
+    stale = bool(
+        age_stale
+        or market_date != expected_market_date
+        or not same_market_date
+        or not health.get("passed", False)
+    )
+    coverage = len(eligible) / len(snapshots) if snapshots else 0.0
+    return PicksResponse(
+        picks=cards,
+        as_of=generated_at,
+        stale=stale,
+        canonical=True,
+        ranked=True,
+        tradable=not stale,
+        run=RecommendationRunState(
+            run_id=int(run["id"]),
+            market_date=market_date.isoformat(),
+            generated_at=generated_at,
+            data_cutoff=run["input_data_cutoff"],
+            policy_id=run["weight_policy_id"],
+            coverage=coverage,
+            health=health,
+        ),
+    )
 
 
 class ScoreboardResponse(BaseModel):
@@ -557,9 +679,20 @@ async def picks_lean(
     the response limit is applied. Rows without z_long (legacy / partial) keep
     their original composite under either mode.
     """
-    import traceback
     try:
         pool = await get_db_pool()
+        # The default board is a published product, not a query over mutable
+        # ticker rows.  Search remains an explicitly exploratory live view so
+        # partial/dead-feed names are still discoverable without gaining a
+        # misleading daily rank or an order action.
+        if search is None:
+            canonical = await _build_canonical_view(
+                pool, limit=limit, mode=mode, side=side
+            )
+            if canonical is not None:
+                set_public_cache(response, s_maxage=45, swr=300)
+                return canonical
+
         cards, most_recent, stale = await build_lean_view(
             pool, limit=limit, search=search, mode=mode, side=side
         )
@@ -568,14 +701,27 @@ async def picks_lean(
         # build_lean_view run at most once per window instead of on every open —
         # this is the surface that queues worst behind cron writes.
         set_public_cache(response, s_maxage=45, swr=300)
-        return PicksResponse(picks=cards, as_of=most_recent, stale=stale)
+        return PicksResponse(
+            picks=cards,
+            as_of=most_recent,
+            stale=stale,
+            canonical=False,
+            ranked=False,
+            tradable=False,
+        )
     except Exception as e:
-        # Surface the real exception so we can diagnose instead of seeing
-        # a generic 500. Stable shape: 500 with detail = type:msg.
         from fastapi import HTTPException
+
+        request_id = uuid.uuid4().hex[:12]
+        logger.exception("picks_lean failed request_id=%s", request_id)
         raise HTTPException(
             status_code=500,
-            detail=f"picks_lean failed: {type(e).__name__}: {e}\n{traceback.format_exc()[:1500]}",
+            detail={
+                "code": "PICKS_UNAVAILABLE",
+                "message": "Recommendation data is temporarily unavailable",
+                "request_id": request_id,
+                "retryable": True,
+            },
         ) from e
 
 

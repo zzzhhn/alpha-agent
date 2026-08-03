@@ -1947,6 +1947,17 @@
             ],
             "title": "Latest Price"
           },
+          "market_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Date"
+          },
           "partial": {
             "default": false,
             "title": "Partial",
@@ -1966,6 +1977,17 @@
           "rating": {
             "title": "Rating",
             "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
           },
           "ticker": {
             "title": "Ticker",
@@ -2669,6 +2691,11 @@
             ],
             "title": "As Of"
           },
+          "canonical": {
+            "default": false,
+            "title": "Canonical",
+            "type": "boolean"
+          },
           "picks": {
             "items": {
               "$ref": "#/components/schemas/LeanCard"
@@ -2676,8 +2703,28 @@
             "title": "Picks",
             "type": "array"
           },
+          "ranked": {
+            "default": false,
+            "title": "Ranked",
+            "type": "boolean"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationRunState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "stale": {
             "title": "Stale",
+            "type": "boolean"
+          },
+          "tradable": {
+            "default": false,
+            "title": "Tradable",
             "type": "boolean"
           }
         },
@@ -2853,6 +2900,73 @@
           "per_factor_scores"
         ],
         "title": "Recommendation",
+        "type": "object"
+      },
+      "RecommendationRunState": {
+        "properties": {
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "data_cutoff": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Cutoff"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "health": {
+            "additionalProperties": true,
+            "title": "Health",
+            "type": "object"
+          },
+          "market_date": {
+            "title": "Market Date",
+            "type": "string"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "market_date",
+          "generated_at",
+          "data_cutoff",
+          "policy_id",
+          "coverage",
+          "health"
+        ],
+        "title": "RecommendationRunState",
         "type": "object"
       },
       "RefreshRequest": {
@@ -5960,6 +6074,23 @@
               "title": "Tier",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "run_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Key"
+            }
           }
         ],
         "responses": {
@@ -6040,6 +6171,23 @@
               "pattern": "^(full|tech|mid|slow)$",
               "title": "Tier",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Key"
             }
           }
         ],
@@ -6527,6 +6675,52 @@
           }
         },
         "summary": "Cron Paper Fill",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/publish_recommendation": {
+      "get": {
+        "description": "Publish one immutable recommendation only after every shard finished.",
+        "operationId": "publish_recommendation_api_cron_publish_recommendation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Publish Recommendation Api Cron Publish Recommendation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Publish Recommendation",
+        "tags": [
+          "cron"
+        ]
+      },
+      "post": {
+        "description": "Publish one immutable recommendation only after every shard finished.",
+        "operationId": "publish_recommendation_api_cron_publish_recommendation_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Publish Recommendation Api Cron Publish Recommendation Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Publish Recommendation",
         "tags": [
           "cron"
         ]

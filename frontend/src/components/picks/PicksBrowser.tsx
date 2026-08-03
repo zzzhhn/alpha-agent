@@ -9,8 +9,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchPicks,
   type FactorMode,
+  type PicksResponse,
   type PicksSide,
-  type RatingCard,
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
 import { fetchPaperAccount } from "@/lib/api/paper";
@@ -40,7 +40,7 @@ import {
   saveSnapshot,
 } from "@/lib/dispatch-state";
 
-type PicksData = { picks: RatingCard[]; as_of: string | null; stale: boolean };
+type PicksData = PicksResponse;
 
 export default function PicksBrowser({
   initialData,
@@ -166,7 +166,7 @@ export default function PicksBrowser({
     if (isInFlight(loadDispatch())) {
       const snap = loadSnapshot();
       if (snap) {
-        setData({ picks: snap.picks, as_of: snap.as_of, stale: snap.stale });
+        setData(snap);
       }
       wasInFlightRef.current = true;
     }
@@ -174,11 +174,7 @@ export default function PicksBrowser({
       // Snapshot the default board (no active search) for reload-freeze.
       const l = liveRef.current;
       if (!l.search.trim()) {
-        saveSnapshot({
-          picks: l.data.picks,
-          as_of: l.data.as_of,
-          stale: l.data.stale,
-        });
+        saveSnapshot(l.data);
       }
       wasInFlightRef.current = true;
       setNow(Date.now());
@@ -226,6 +222,9 @@ export default function PicksBrowser({
           picks: "选股",
           signals: searching ? `${count} 条匹配` : `${count} 条信号`,
           asOf: "数据时间",
+          marketDate: "市场日",
+          run: "快照",
+          coverage: "覆盖率",
           stale: "数据超过 24 小时",
           placeholder: "搜索 ticker（如 NVDA）",
           paneTitle: "今日选股",
@@ -253,6 +252,9 @@ export default function PicksBrowser({
           picks: "PICKS",
           signals: searching ? `${count} matches` : `${count} signals`,
           asOf: "AS OF",
+          marketDate: "MARKET DATE",
+          run: "RUN",
+          coverage: "COVERAGE",
           stale: "DATA > 24h OLD",
           placeholder: "Search ticker (e.g. NVDA)",
           paneTitle: "TODAY'S PICKS",
@@ -283,6 +285,19 @@ export default function PicksBrowser({
         <TmSubbarKV label={copy.picks} value={copy.signals} />
         <TmSubbarSep />
         <TmSubbarKV label={copy.asOf} value={asOf} />
+        {data.run ? (
+          <>
+            <TmSubbarSep />
+            <TmSubbarKV label={copy.marketDate} value={data.run.market_date} />
+            <TmSubbarSep />
+            <TmSubbarKV label={copy.run} value={`#${data.run.run_id}`} />
+            <TmSubbarSep />
+            <TmSubbarKV
+              label={copy.coverage}
+              value={`${Math.round(data.run.coverage * 100)}%`}
+            />
+          </>
+        ) : null}
         <TmSubbarSep />
         <button
           type="button"
@@ -389,7 +404,8 @@ export default function PicksBrowser({
                 simPositions={simPositions}
                 cash={paperCash}
                 onOrderPlaced={loadSimPositions}
-                ordersDisabled={snapshotStale}
+                ranked={data.ranked && !searching}
+                ordersDisabled={snapshotStale || !data.tradable || searching}
               />
             )}
           </TmPane>

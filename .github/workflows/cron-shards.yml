@@ -18,38 +18,26 @@ on:
   schedule:
     # Daily SP500 slow refresh — 13:30 UTC = 09:30 ET pre-open (weekdays).
     - cron: '30 13 * * 1-5'
-    # Redundant slow-sweep backstop: GitHub Actions skips/delays scheduled
-    # triggers under load (the 13:30 sweep was skipped 2026-06-01, freezing the
-    # long-tail universe). A second daily trigger guarantees the full 557-ticker
-    # sweep runs even when one is dropped. Idempotent, so a double-run is safe.
-    - cron: '0 14 * * 1-5'
-    # Periodic full-10-signal bootstrap for top-240 — every 2h during market.
-    # Tier jobs (tech/mid/slow) cover the full 557 universe at higher
-    # cadence for their respective signal subsets; this run rebuilds
-    # the cached signals from scratch so any race-lost tier update is
-    # corrected within 2h.
-    - cron: '0 14,16,18,20 * * 1-5'
-    # Tier: technicals only, all 557 + watchlist, every 15min during market.
-    - cron: '*/15 14-20 * * 1-5'
-    # Tier: options + analyst + premarket, all 557, hourly at :05 (stagger).
-    - cron: '5 14-20 * * 1-5'
-    # Tier: news + insider, all 557, every 4h at :10 (stagger).
-    - cron: '10 14,18 * * 1-5'
-    # News: per-ticker hourly during market (Finnhub primary + FMP failover + RSS)
-    - cron: '0 14-20 * * 1-5'
+    # One complete Top-240 signal run after settled daily prices.  Its final
+    # step publishes the immutable recommendation snapshot atomically.
+    - cron: '0 23 * * 1-5'
+    # Intraday is deliberately narrow: watchlist + top names, twice per day.
+    - cron: '30 15,19 * * 1-5'
+    # Headline ingest is independent from ranking and runs twice per day.
+    - cron: '0 15,19 * * 1-5'
     # News: macro (Truth/Fed/OFAC). Was '*/5 * * * *' 24/7 = 288 triggers/day,
     # 82% of this workflow's entire schedule — it exhausted the Neon free-tier
     # DATA TRANSFER quota on 2026-07-24 and took every DB-touching workflow down
     # with it. The system trades on daily close-to-close signals, so 5-min macro
     # granularity at 03:00 has no decision value. Market-adjacent weekdays only
     # (12-21 UTC = 08:00-17:00 ET covers pre-market through post-close).
-    - cron: '*/15 12-21 * * 1-5'
+    - cron: '0 12,16,20 * * 1-5'
     # News: Fed + OFAC hourly, 24/7
     # Off-hours backstop: Fed/OFAC headlines do land overnight and on weekends,
     # so keep a sparse 24/7 sweep rather than going fully dark. 4/day, not 24.
-    - cron: '0 */6 * * *'
-    # Minute bars puller for event-study CAR, every 4h during market hours
-    - cron: '15 14,18 * * 1-5'
+    - cron: '0 2 * * *'
+    # Minute bars are an event-study aid, not a full-market critical feed.
+    - cron: '15 18 * * 1-5'
     # IC backtest monthly, 1st of month 04:00 UTC
     - cron: '0 4 1 * *'
     # Self-loop daily: append today's daily_prices (forward-return source)
@@ -62,14 +50,10 @@ on:
     # NOTE: news_llm_enrich cron removed 2026-05-17. BYOK architecture
     # means cron has no user-context to source an LLM key. Enrichment
     # moved to read-time path triggered by user with their own key.
-    # Phase 2a methodology proposer: runs 30 min after daily_prices_puller
-    # so IC history and forward returns are already updated before proposer
-    # enumerates candidates. Weekdays only.
-    - cron: '30 22 * * 1-5'
-    # L2 paper-book daily step: 45 min after the self-loop (daily_prices + IC
-    # backtest at 22:00) so the day's complete ledger run + settled prices are
-    # available. Generates/fills/marks any due rebalance. Idempotent, weekdays.
-    - cron: '45 22 * * 1-5'
+    # Research proposal generation is non-critical and weekly, not daily.
+    - cron: '30 22 * * 1'
+    # L2 runs only after the 23:00 complete signal run and atomic publish.
+    - cron: '45 23 * * 1-5'
   workflow_dispatch:
     inputs:
       job:
@@ -101,7 +85,7 @@ jobs:
   # refresh tail. Each is independent at the data layer.
   fast_intraday:
     if: |
-      github.event.schedule == '0 14,16,18,20 * * 1-5' ||
+      github.event.schedule == '0 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.job == 'fast_intraday' || inputs.job == 'both'))
     runs-on: ubuntu-latest
@@ -117,8 +101,8 @@ jobs:
           for offset in 0 40 80 120 160 200; do
             echo "::group::fast shot offset=$offset limit=40"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
-              "$BACKEND_BASE/api/cron/fast_intraday?limit=40&offset=$offset")
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/fast_intraday?limit=40&offset=$offset&run_key=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
             cat /tmp/shot.json | head -c 800
@@ -137,29 +121,32 @@ jobs:
           echo "## fast_intraday summary" >> $GITHUB_STEP_SUMMARY
           echo "- rows_written total: $TOTAL_WRITTEN" >> $GITHUB_STEP_SUMMARY
           echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+      - name: Publish one immutable recommendation snapshot
+        run: |
+          HTTP=$(curl -s --max-time 290 -o /tmp/publish.json -w "%{http_code}" \
+            "$BACKEND_BASE/api/cron/publish_recommendation")
+          cat /tmp/publish.json | head -c 800; echo
+          [ "$HTTP" = "200" ] || exit 1
+          python3 -c "import json,sys; sys.exit(0 if json.load(open('/tmp/publish.json')).get('ok') else 1)"
 
   # ─── Tier: technicals only, every 15min, all 557 + watchlist ───────────
   fast_tech:
     if: |
-      github.event.schedule == '*/15 14-20 * * 1-5' ||
+      github.event.schedule == '30 15,19 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_tech')
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
-      - name: Tech-only refresh (8 shots × limit=75)
-        # 1 module/ticker × ~0.6s observed → 75 tickers ≈ 45s + cold start.
-        # 8 shots × (60s + 10s sleep) ≈ 9min wall, covers offset 0..600.
-        # Shorter sleep than full-fetch because fewer requests = less risk
-        # of triggering Yahoo IP rate-limit.
+      - name: Tech-only refresh for watchlist + top 40
         run: |
           set -e
           TOTAL_WRITTEN=0
           TOTAL_ERRORS=0
-          for offset in 0 75 150 225 300 375 450 525; do
-            echo "::group::tech shot offset=$offset limit=75"
+          for offset in 0; do
+            echo "::group::tech shot offset=$offset limit=40"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
-              "$BACKEND_BASE/api/cron/fast_intraday?tier=tech&limit=75&offset=$offset")
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              "$BACKEND_BASE/api/cron/fast_intraday?tier=tech&limit=40&offset=$offset&run_key=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
             cat /tmp/shot.json | head -c 800
@@ -182,7 +169,6 @@ jobs:
   # ─── Tier: options + analyst + premarket, hourly at :05 ─────────────────
   fast_mid:
     if: |
-      github.event.schedule == '5 14-20 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_mid')
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -197,7 +183,7 @@ jobs:
           for offset in 0 40 80 120 160 200 240 280 320 360 400 440 480 520 560; do
             echo "::group::mid shot offset=$offset limit=40"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=mid&limit=40&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -221,7 +207,6 @@ jobs:
   # ─── Tier: news + insider, every 4h at :10 ──────────────────────────────
   fast_slow:
     if: |
-      github.event.schedule == '10 14,18 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_slow')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -236,7 +221,7 @@ jobs:
           for offset in 0 60 120 180 240 300 360 420 480 540; do
             echo "::group::slow-tier shot offset=$offset limit=60"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=slow&limit=60&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -265,7 +250,6 @@ jobs:
     if: |
       always() && (
         github.event.schedule == '30 13 * * 1-5' ||
-        github.event.schedule == '0 14 * * 1-5' ||
         (github.event_name == 'workflow_dispatch' &&
          (inputs.job == 'slow_daily' || inputs.job == 'both'))
       )
@@ -282,7 +266,7 @@ jobs:
           for offset in 0 80 160 240 320 400 480; do
             echo "::group::slow shot offset=$offset limit=80"
             T0=$(date +%s)
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/slow_daily?limit=80&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -308,7 +292,7 @@ jobs:
         # signal refresh. Non-fatal: the annotation overlay is a nice-to-have,
         # so a hiccup here must not fail the whole slow_daily job (no email).
         run: |
-          HTTP=$(curl -s --max-time 120 --retry 2 --retry-delay 5 --retry-all-errors \
+          HTTP=$(curl -s --max-time 120 \
             -o /tmp/ann.json -w "%{http_code}" \
             "$BACKEND_BASE/api/cron/compute_ic_annotations?window_days=30" || echo "000")
           echo "HTTP=$HTTP"; head -c 400 /tmp/ann.json; echo
@@ -318,16 +302,16 @@ jobs:
 
   news_per_ticker:
     if: |
-      github.event.schedule == '0 14-20 * * 1-5' ||
+      github.event.schedule == '0 15,19 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'news_per_ticker')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: news per-ticker, 8 shots x limit=75
+      - name: news per-ticker, top 150 in two shots
         run: |
           set -e
-          for offset in 0 75 150 225 300 375 450 525; do
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
+          for offset in 0 75; do
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/news_per_ticker?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 400; echo
@@ -337,8 +321,8 @@ jobs:
 
   news_macro:
     if: |
-      github.event.schedule == '*/15 12-21 * * 1-5' ||
-      github.event.schedule == '0 */6 * * *' ||
+      github.event.schedule == '0 12,16,20 * * 1-5' ||
+      github.event.schedule == '0 2 * * *' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'news_macro')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -352,14 +336,14 @@ jobs:
 
   l2_cycle:
     if: |
-      github.event.schedule == '45 22 * * 1-5' ||
+      github.event.schedule == '45 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'l2_cycle')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: advance L2 paper book one step
         run: |
-          HTTP=$(curl -s --max-time 120 --retry 2 --retry-delay 5 --retry-all-errors \
+          HTTP=$(curl -s --max-time 120 \
             -o /tmp/shot.json -w "%{http_code}" \
             "$BACKEND_BASE/api/cron/l2_cycle")
           cat /tmp/shot.json | head -c 400; echo
@@ -367,16 +351,16 @@ jobs:
 
   minute_bars_puller:
     if: |
-      github.event.schedule == '15 14,18 * * 1-5' ||
+      github.event.schedule == '15 18 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'minute_bars_puller')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: pull SP500 minute bars (8 shots x limit=75)
+      - name: pull minute bars for event candidates (top 75)
         run: |
           set -e
-          for offset in 0 75 150 225 300 375 450 525; do
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
+          for offset in 0; do
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/minute_bars?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 200; echo
@@ -418,7 +402,7 @@ jobs:
           TOTAL_ERRORS=0
           for offset in 0 75 150 225 300 375 450 525; do
             echo "::group::daily_prices shot offset=$offset limit=75"
-            HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
+            HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
               "$BACKEND_BASE/api/cron/daily_prices?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 600; echo
@@ -442,14 +426,14 @@ jobs:
 
   methodology_proposer:
     if: |
-      github.event.schedule == '30 22 * * 1-5' ||
+      github.event.schedule == '30 22 * * 1' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'methodology_proposer')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: run Phase 2a methodology proposer (single shot)
         run: |
-          HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors -o /tmp/shot.json -w "%{http_code}" \
+          HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
             -X POST "$BACKEND_BASE/api/cron/methodology_proposer")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1

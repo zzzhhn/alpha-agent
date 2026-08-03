@@ -40,8 +40,8 @@ export default function ConvictionBand({
 
   const copy =
     locale === "zh"
-      ? { title: "高确信", agreement: "一致性", drivers: "驱动" }
-      : { title: "HIGHEST CONVICTION", agreement: "agreement", drivers: "drivers" };
+      ? { title: "模型领先", agreement: "信号一致度", drivers: "驱动" }
+      : { title: "MODEL LEADERS", agreement: "signal agreement", drivers: "drivers" };
 
   return (
     <div className="px-4 pt-3">

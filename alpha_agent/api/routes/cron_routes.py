@@ -47,6 +47,7 @@ async def fast_intraday(
     limit: int | None = Query(None, ge=1, le=600),
     offset: int | None = Query(None, ge=0, le=600),
     tier: str = Query("full", pattern="^(full|tech|mid|slow)$"),
+    run_key: str | None = Query(None, max_length=120),
 ) -> dict[str, Any]:
     """Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).
     `offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables
@@ -58,7 +59,43 @@ async def fast_intraday(
     api/cron/fast_intraday.py docstring for the schedule design).
     """
     from api.cron.fast_intraday import handler
-    return await handler(limit=limit, offset=offset, tier=tier)
+    return await handler(limit=limit, offset=offset, tier=tier, run_key=run_key)
+
+
+@router.post("/publish_recommendation")
+@router.get("/publish_recommendation")
+async def publish_recommendation() -> dict[str, Any]:
+    """Publish one immutable recommendation only after every shard finished."""
+    from alpha_agent.ledger import record_daily_close
+
+    pool = await get_pool(os.environ["DATABASE_URL"])
+    started_at = datetime.now(UTC)
+    run_id = await record_daily_close(pool, started_at=started_at)
+    if run_id is None:
+        return {
+            "ok": True,
+            "run_id": None,
+            "skipped": True,
+            "reason": "complete_run_already_exists",
+        }
+    run = await pool.fetchrow(
+        "SELECT status, scheduled_for_date, health_json FROM research_run WHERE id=$1",
+        run_id,
+    )
+    published = bool(run and run["status"] == "complete")
+    return {
+        "ok": published,
+        "run_id": run_id,
+        "status": run["status"] if run else "missing",
+        "market_date": run["scheduled_for_date"].isoformat() if run else None,
+        "health": (
+            json.loads(run["health_json"])
+            if run and isinstance(run["health_json"], str)
+            else (run["health_json"] if run else {})
+        ),
+        "skipped": False,
+        "reason": None if published else "run_health_gate_failed",
+    }
 
 
 @router.post("/alert_dispatcher")

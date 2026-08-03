@@ -35,7 +35,7 @@ export default function PickRow({
   onOrderPlaced,
   ordersDisabled = false,
 }: {
-  rank: number;
+  rank: number | null;
   card: RatingCard;
   watched?: boolean;
   locale?: Locale;
@@ -146,7 +146,7 @@ export default function PickRow({
   return (
     <tr className="border-b border-tm-rule hover:bg-tm-bg-2 transition-colors">
       <td className="px-3 py-2.5 font-tm-mono text-xs text-tm-muted tabular-nums">
-        {rank}
+        {rank ?? "—"}
       </td>
       <td className="px-3 py-2.5 font-tm-mono text-[13px] font-semibold">
         {watched ? (

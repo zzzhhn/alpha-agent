@@ -839,6 +839,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/publish_recommendation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Publish Recommendation
+         * @description Publish one immutable recommendation only after every shard finished.
+         */
+        get: operations["publish_recommendation_api_cron_publish_recommendation_get"];
+        put?: never;
+        /**
+         * Publish Recommendation
+         * @description Publish one immutable recommendation only after every shard finished.
+         */
+        post: operations["publish_recommendation_api_cron_publish_recommendation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/run_propose_jobs": {
         parameters: {
             query?: never;
@@ -3659,6 +3683,8 @@ export interface components {
             };
             /** Latest Price */
             latest_price?: number | null;
+            /** Market Date */
+            market_date?: string | null;
             /**
              * Partial
              * @default false
@@ -3668,6 +3694,8 @@ export interface components {
             price_date?: string | null;
             /** Rating */
             rating: string;
+            /** Run Id */
+            run_id?: number | null;
             /** Ticker */
             ticker: string;
             /**
@@ -3891,10 +3919,26 @@ export interface components {
         PicksResponse: {
             /** As Of */
             as_of: string | null;
+            /**
+             * Canonical
+             * @default false
+             */
+            canonical: boolean;
             /** Picks */
             picks: components["schemas"]["LeanCard"][];
+            /**
+             * Ranked
+             * @default false
+             */
+            ranked: boolean;
+            run?: components["schemas"]["RecommendationRunState"] | null;
             /** Stale */
             stale: boolean;
+            /**
+             * Tradable
+             * @default false
+             */
+            tradable: boolean;
         };
         /** PlaceOrderRequest */
         PlaceOrderRequest: {
@@ -3942,6 +3986,25 @@ export interface components {
             sector?: string | null;
             /** Ticker */
             ticker: string;
+        };
+        /** RecommendationRunState */
+        RecommendationRunState: {
+            /** Coverage */
+            coverage: number;
+            /** Data Cutoff */
+            data_cutoff: string | null;
+            /** Generated At */
+            generated_at: string | null;
+            /** Health */
+            health: {
+                [key: string]: unknown;
+            };
+            /** Market Date */
+            market_date: string;
+            /** Policy Id */
+            policy_id: string | null;
+            /** Run Id */
+            run_id: number;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -5535,6 +5598,7 @@ export interface operations {
                 limit?: number | null;
                 offset?: number | null;
                 tier?: string;
+                run_key?: string | null;
             };
             header?: never;
             path?: never;
@@ -5570,6 +5634,7 @@ export interface operations {
                 limit?: number | null;
                 offset?: number | null;
                 tier?: string;
+                run_key?: string | null;
             };
             header?: never;
             path?: never;
@@ -5912,6 +5977,50 @@ export interface operations {
         };
     };
     cron_paper_fill_api_cron_paper_fill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    publish_recommendation_api_cron_publish_recommendation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    publish_recommendation_api_cron_publish_recommendation_post: {
         parameters: {
             query?: never;
             header?: never;

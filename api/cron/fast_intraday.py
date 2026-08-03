@@ -44,22 +44,7 @@ from alpha_agent.fusion.policy import get_active_policy
 _POLICY = get_active_policy()
 from alpha_agent.orchestrator.alert_detector import detect_alerts
 from alpha_agent.orchestrator.batch_runner import run_batched
-from alpha_agent.signals import (
-    analyst,
-    calendar as cal,
-    earnings,
-    factor,
-    geopolitical_impact,
-    insider,
-    macro,
-    news,
-    options,
-    political_impact,
-    premarket,
-    rsrs,
-    supply_chain,
-    technicals,
-)
+from alpha_agent.signals import earnings, insider, supply_chain
 from alpha_agent.signals.base import SignalScore
 from alpha_agent.config_store import refresh_config
 from alpha_agent.storage.postgres import get_pool
@@ -126,6 +111,45 @@ def _parse_breakdown(raw: Any) -> list[dict]:
 
 
 async def handler(
+    limit: int | None = None,
+    offset: int | None = None,
+    tier: str = "full",
+    run_key: str | None = None,
+) -> dict[str, Any]:
+    """Run one shard under a database-backed overlap guard.
+
+    GitHub's old ``curl --retry-all-errors`` could time out while the Vercel
+    function kept running, then launch the same shard again.  A PostgreSQL
+    advisory lock makes that retry a visible no-op across serverless instances.
+    The workflow supplies its run id; direct callers fall back to a 30-minute
+    bucket so accidental double-clicks are also bounded.
+    """
+    pool = await get_pool(os.environ["DATABASE_URL"])
+    now = datetime.now(UTC)
+    identity = run_key or f"{now.date()}:{int(now.timestamp()) // 1800}"
+    lock_name = f"fast_intraday:{tier}:{offset or 0}:{identity}"
+    async with pool.acquire() as lock_conn:
+        acquired = await lock_conn.fetchval(
+            "SELECT pg_try_advisory_lock(hashtext($1))", lock_name
+        )
+        if not acquired:
+            return {
+                "ok": True,
+                "tier": tier,
+                "skipped": True,
+                "reason": "duplicate_or_overlapping_shard",
+                "rows_written": 0,
+                "errors": [],
+            }
+        try:
+            return await _run_handler(limit=limit, offset=offset, tier=tier)
+        finally:
+            await lock_conn.execute(
+                "SELECT pg_advisory_unlock(hashtext($1))", lock_name
+            )
+
+
+async def _run_handler(
     limit: int | None = None,
     offset: int | None = None,
     tier: str = "full",
@@ -367,33 +391,6 @@ async def handler(
                 err_message=str(v) or repr(v),
             )
 
-    # Product ledger (council #1): after a FULL run, snapshot the canonical
-    # picks view into the append-only ledger so the engine keeps an immutable
-    # causal record of what the user saw. Idempotent per market date — the first
-    # full run of the day records it; later full runs see the existing complete
-    # run and skip (record_daily_close returns None). Only the "full" tier has
-    # all signals fresh, so partial tiers never write the ledger. Best-effort:
-    # a failure is surfaced (cron result + cron_runs details + log_error, never
-    # swallowed) but must not break the signal cron.
-    ledger_run_id: int | None = None
-    ledger_error: str | None = None
-    if tier == "full":
-        try:
-            from alpha_agent.ledger import record_daily_close
-            ledger_run_id = await record_daily_close(
-                pool, scheduled_for_date=now.date(), started_at=started_at,
-            )
-        except Exception as exc:  # noqa: BLE001 — never let the ledger break the cron
-            ledger_error = f"{type(exc).__name__}: {str(exc) or repr(exc)}"[:200]
-            await log_error(
-                pool,
-                layer="cron",
-                component=f"cron.fast_intraday[{tier}].ledger",
-                ticker="_LEDGER_",
-                err_type=type(exc).__name__,
-                err_message=str(exc) or repr(exc),
-            )
-
     # Distinct cron_name per tier so each tier has its own history in
     # cron_runs. tier="full" keeps the legacy "fast_intraday" name for
     # backward compat with /api/admin/last_refresh + the picks
@@ -407,11 +404,9 @@ async def handler(
         len(errors) == 0, len(errors),
         json.dumps({
             "rows_written": rows_written, "tier": tier,
-            "ledger_run_id": ledger_run_id, "ledger_error": ledger_error,
         }),
     )
     return {
         "ok": True, "tier": tier,
         "rows_written": rows_written, "errors": errors[:5],
-        "ledger_run_id": ledger_run_id, "ledger_error": ledger_error,
     }

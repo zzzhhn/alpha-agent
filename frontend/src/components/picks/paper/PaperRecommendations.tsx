@@ -23,10 +23,12 @@ function pct(value: number | null | undefined): string {
 export default function PaperRecommendations({
   picks,
   selectedTicker,
+  actionable,
   onSelect,
 }: {
   readonly picks: readonly RatingCard[];
   readonly selectedTicker: string | null;
+  readonly actionable: boolean;
   readonly onSelect: (pick: RatingCard) => void;
 }) {
   const { locale } = useLocale();
@@ -76,7 +78,7 @@ export default function PaperRecommendations({
                 {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
               </div>
               <div className="min-w-0 truncate text-[10px] text-tm-muted">{rationale || "—"}</div>
-              <TmButton variant="secondary" className="px-2 py-1" onClick={() => onSelect(pick)} aria-pressed={selected}>
+              <TmButton variant="secondary" className="px-2 py-1" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
                 {t(locale, "sim.workspace.follow")}
               </TmButton>
             </article>
@@ -134,7 +136,7 @@ export default function PaperRecommendations({
                 </td>
                 <td className="max-w-48 px-3 py-2.5 text-[11px] leading-4 text-tm-muted">{rationale || "—"}</td>
                 <td className="px-3 py-2.5 text-right">
-                  <TmButton variant="secondary" onClick={() => onSelect(pick)} aria-pressed={selected}>
+                  <TmButton variant="secondary" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
                     {t(locale, "sim.workspace.follow")}
                   </TmButton>
                 </td>

@@ -8,6 +8,8 @@ run's snapshots + a benchmark-availability bool: it returns the gated status
 readable reasons + metrics for forensics. No fabricated metrics — only what is
 actually computable from the recorded data is reported.
 """
+from datetime import date
+
 from alpha_agent.run_health import MIN_ELIGIBLE, evaluate_gates
 from alpha_agent.storage.product_ledger import RatingSnapshot
 
@@ -51,3 +53,40 @@ def test_multiple_failures_reported_together():
     assert res.passed is False
     assert any(r.startswith("insufficient_eligible") for r in res.reasons)
     assert "no_benchmark" in res.reasons
+
+
+def test_stale_absolute_market_date_is_partial_even_with_benchmark():
+    res = evaluate_gates(
+        _snaps(MIN_ELIGIBLE),
+        benchmark_fresh=True,
+        market_date=date(2026, 7, 23),
+        expected_market_date=date(2026, 7, 31),
+    )
+    assert res.passed is False
+    assert "stale_market_date:2026-07-23!=2026-07-31" in res.reasons
+    assert res.metrics["expected_market_date"] == "2026-07-31"
+
+
+def test_price_coverage_gate_rejects_partially_updated_universe():
+    snaps = _snaps(19)
+    snaps.append(
+        RatingSnapshot(
+            ticker="STALE",
+            eligible=False,
+            eligibility_reason="price_not_on_market_date",
+        )
+    )
+    res = evaluate_gates(snaps, benchmark_fresh=True)
+    assert res.passed is False
+    assert "insufficient_price_coverage:0.950<0.950" not in res.reasons
+    assert res.metrics["price_coverage"] == 0.95
+
+    snaps.append(
+        RatingSnapshot(
+            ticker="STALE2",
+            eligible=False,
+            eligibility_reason="price_not_on_market_date",
+        )
+    )
+    res = evaluate_gates(snaps, benchmark_fresh=True)
+    assert any(r.startswith("insufficient_price_coverage") for r in res.reasons)

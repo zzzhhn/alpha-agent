@@ -116,6 +116,26 @@ export type FactorMode = "short" | "long";
 // "short" = bottom-N by composite (most bearish UW/SELL names).
 export type PicksSide = "long" | "short";
 
+export interface RecommendationRunState {
+  run_id: number;
+  market_date: string;
+  generated_at: string | null;
+  data_cutoff: string | null;
+  policy_id: string | null;
+  coverage: number;
+  health: Record<string, unknown>;
+}
+
+export interface PicksResponse {
+  picks: RatingCard[];
+  as_of: string | null;
+  stale: boolean;
+  canonical: boolean;
+  ranked: boolean;
+  tradable: boolean;
+  run: RecommendationRunState | null;
+}
+
 export const fetchPicks = (
   limit = 50,
   search?: string,
@@ -126,7 +146,7 @@ export const fetchPicks = (
   const params = new URLSearchParams({ limit: String(limit), mode, side });
   const q = search?.trim();
   if (q) params.set("search", q);
-  return apiGet<{ picks: RatingCard[]; as_of: string | null; stale: boolean }>(
+  return apiGet<PicksResponse>(
     `/api/picks/lean?${params.toString()}`,
     opts,
   );

@@ -100,9 +100,8 @@ async def test_fast_intraday_writes_full_card(applied_db, monkeypatch):
         await conn.close()
 
 
-async def test_fast_intraday_full_run_records_product_ledger(applied_db, monkeypatch):
-    """A full-signal run snapshots the canonical picks view into the append-only
-    ledger (council #1). Best-effort + once per market date."""
+async def test_fast_intraday_shard_does_not_publish_product_ledger(applied_db, monkeypatch):
+    """A shard may update signals but cannot publish a half-finished board."""
     from alpha_agent.storage import postgres as pg_module
 
     pg_module._pool = None
@@ -125,23 +124,9 @@ async def test_fast_intraday_full_run_records_product_ledger(applied_db, monkeyp
             p.stop()
 
     assert result["ok"] is True
-    assert result.get("ledger_run_id") is not None
-
     conn = await asyncpg.connect(applied_db)
     try:
-        run = await conn.fetchrow(
-            "SELECT * FROM research_run ORDER BY finished_at DESC LIMIT 1"
-        )
-        assert run is not None
-        assert run["run_type"] == "daily_close"
-        # Only 2 mocked names + no benchmark seeded -> gated non-tradable
-        # (proves the run-health gate runs end-to-end inside the cron).
-        assert run["status"] == "partial"
-        snaps = await conn.fetch(
-            "SELECT ticker FROM rating_snapshot WHERE run_id=$1 ORDER BY ticker",
-            run["id"],
-        )
-        assert {s["ticker"] for s in snaps} == {"AAPL", "MSFT"}
+        assert await conn.fetchval("SELECT count(*) FROM research_run") == 0
     finally:
         await conn.close()
 

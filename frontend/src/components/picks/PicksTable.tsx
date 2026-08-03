@@ -16,6 +16,7 @@ export default function PicksTable({
   simPositions,
   cash,
   onOrderPlaced,
+  ranked = true,
   ordersDisabled = false,
 }: {
   picks: RatingCard[];
@@ -23,6 +24,7 @@ export default function PicksTable({
   simPositions?: ReadonlyMap<string, number>;
   cash?: number;
   onOrderPlaced?: () => void;
+  ranked?: boolean;
   ordersDisabled?: boolean;
 }) {
   const { locale } = useLocale();
@@ -96,7 +98,7 @@ export default function PicksTable({
         {picks.map((card, i) => (
           <PickRow
             key={card.ticker}
-            rank={i + 1}
+            rank={ranked ? i + 1 : null}
             card={card}
             watched={isWatched?.(card.ticker) ?? false}
             locale={locale}
