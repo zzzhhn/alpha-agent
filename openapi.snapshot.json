@@ -72,6 +72,408 @@
         "title": "AccountResponse",
         "type": "object"
       },
+      "Alert": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dedup_bucket": {
+            "title": "Dedup Bucket",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "type",
+          "payload",
+          "dedup_bucket",
+          "created_at"
+        ],
+        "title": "Alert",
+        "type": "object"
+      },
+      "AlertContext": {
+        "properties": {
+          "in_position": {
+            "title": "In Position",
+            "type": "boolean"
+          },
+          "in_recommendation": {
+            "title": "In Recommendation",
+            "type": "boolean"
+          },
+          "in_watchlist": {
+            "title": "In Watchlist",
+            "type": "boolean"
+          },
+          "recommendation_market_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Market Date"
+          },
+          "recommendation_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Rank"
+          },
+          "recommendation_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Run Id"
+          }
+        },
+        "required": [
+          "in_position",
+          "in_recommendation",
+          "in_watchlist"
+        ],
+        "title": "AlertContext",
+        "type": "object"
+      },
+      "AlertInboxCounts": {
+        "properties": {
+          "needs_action": {
+            "title": "Needs Action",
+            "type": "integer"
+          },
+          "record": {
+            "title": "Record",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "integer"
+          },
+          "watch": {
+            "title": "Watch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "needs_action",
+          "watch",
+          "record",
+          "resolved"
+        ],
+        "title": "AlertInboxCounts",
+        "type": "object"
+      },
+      "AlertInboxItem": {
+        "properties": {
+          "confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "confidence_score": {
+            "title": "Confidence Score",
+            "type": "integer"
+          },
+          "context": {
+            "$ref": "#/components/schemas/AlertContext"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dedup_bucket": {
+            "title": "Dedup Bucket",
+            "type": "integer"
+          },
+          "freshness_score": {
+            "title": "Freshness Score",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "relevance": {
+            "enum": [
+              "position",
+              "recommendation",
+              "market",
+              "watchlist",
+              "record"
+            ],
+            "title": "Relevance",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "warning",
+              "info"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_count": {
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AlertTriageState"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "triage_score": {
+            "title": "Triage Score",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "type",
+          "payload",
+          "dedup_bucket",
+          "created_at",
+          "severity",
+          "relevance",
+          "triage_score",
+          "freshness_score",
+          "confidence_score",
+          "confidence",
+          "source_count",
+          "stale",
+          "context",
+          "state"
+        ],
+        "title": "AlertInboxItem",
+        "type": "object"
+      },
+      "AlertInboxResponse": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertInboxItem"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AlertInboxCounts"
+          },
+          "source_status": {
+            "enum": [
+              "fresh",
+              "stale",
+              "empty"
+            ],
+            "title": "Source Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alerts",
+          "counts",
+          "as_of",
+          "source_status"
+        ],
+        "title": "AlertInboxResponse",
+        "type": "object"
+      },
+      "AlertStateRequest": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snooze Until"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "snoozed",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AlertStateRequest",
+        "type": "object"
+      },
+      "AlertTriageState": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snooze Until"
+          },
+          "status": {
+            "default": "open",
+            "enum": [
+              "open",
+              "snoozed",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "title": "AlertTriageState",
+        "type": "object"
+      },
+      "AlertsResponse": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "alerts"
+        ],
+        "title": "AlertsResponse",
+        "type": "object"
+      },
       "AttributionResponse": {
         "properties": {
           "tickers": {
@@ -5162,6 +5564,201 @@
         "summary": "Trigger Refresh",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/alerts/inbox": {
+      "get": {
+        "description": "Decision-ranked alert inbox for the authenticated user.",
+        "operationId": "alerts_inbox_api_alerts_inbox_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertInboxResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alerts Inbox",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/alerts/recent": {
+      "get": {
+        "description": "Latest `limit` alerts, newest first. `ticker` optionally narrows\nto a single symbol (uppercased server-side).",
+        "operationId": "alerts_recent_api_alerts_recent_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ticker",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ticker"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alerts Recent",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/alerts/{alert_id}/state": {
+      "post": {
+        "description": "Persist a reversible per-user triage decision.",
+        "operationId": "set_alert_state_api_alerts__alert_id__state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertTriageState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Alert State",
+        "tags": [
+          "alerts"
         ]
       }
     },

@@ -13,6 +13,7 @@ async def test_apply_migrations_creates_all_tables(applied_db):
         names = {r["tablename"] for r in rows}
         assert names >= {
             "alert_queue",
+            "alert_triage_state",
             "cron_runs",
             "daily_signals_fast",
             "daily_signals_slow",

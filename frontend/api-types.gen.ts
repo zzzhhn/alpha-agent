@@ -284,6 +284,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/alerts/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alerts Inbox
+         * @description Decision-ranked alert inbox for the authenticated user.
+         */
+        get: operations["alerts_inbox_api_alerts_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alerts Recent
+         * @description Latest `limit` alerts, newest first. `ticker` optionally narrows
+         *     to a single symbol (uppercased server-side).
+         */
+        get: operations["alerts_recent_api_alerts_recent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts/{alert_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Alert State
+         * @description Persist a reversible per-user triage decision.
+         */
+        post: operations["set_alert_state_api_alerts__alert_id__state_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/brain/alphas": {
         parameters: {
             query?: never;
@@ -2962,6 +3023,140 @@ export interface components {
             /** Unrealized Pnl */
             unrealized_pnl: number;
         };
+        /** Alert */
+        Alert: {
+            /** Created At */
+            created_at: string;
+            /** Dedup Bucket */
+            dedup_bucket: number;
+            /** Id */
+            id: number;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            } | unknown[] | null;
+            /** Ticker */
+            ticker: string;
+            /** Type */
+            type: string;
+        };
+        /** AlertContext */
+        AlertContext: {
+            /** In Position */
+            in_position: boolean;
+            /** In Recommendation */
+            in_recommendation: boolean;
+            /** In Watchlist */
+            in_watchlist: boolean;
+            /** Recommendation Market Date */
+            recommendation_market_date?: string | null;
+            /** Recommendation Rank */
+            recommendation_rank?: number | null;
+            /** Recommendation Run Id */
+            recommendation_run_id?: number | null;
+        };
+        /** AlertInboxCounts */
+        AlertInboxCounts: {
+            /** Needs Action */
+            needs_action: number;
+            /** Record */
+            record: number;
+            /** Resolved */
+            resolved: number;
+            /** Watch */
+            watch: number;
+        };
+        /** AlertInboxItem */
+        AlertInboxItem: {
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low";
+            /** Confidence Score */
+            confidence_score: number;
+            context: components["schemas"]["AlertContext"];
+            /** Created At */
+            created_at: string;
+            /** Dedup Bucket */
+            dedup_bucket: number;
+            /** Freshness Score */
+            freshness_score: number;
+            /** Id */
+            id: number;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            } | unknown[] | null;
+            /**
+             * Relevance
+             * @enum {string}
+             */
+            relevance: "position" | "recommendation" | "market" | "watchlist" | "record";
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "critical" | "warning" | "info";
+            /** Source Count */
+            source_count: number;
+            /** Stale */
+            stale: boolean;
+            state: components["schemas"]["AlertTriageState"];
+            /** Ticker */
+            ticker: string;
+            /** Triage Score */
+            triage_score: number;
+            /** Type */
+            type: string;
+        };
+        /** AlertInboxResponse */
+        AlertInboxResponse: {
+            /** Alerts */
+            alerts: components["schemas"]["AlertInboxItem"][];
+            /** As Of */
+            as_of: string;
+            counts: components["schemas"]["AlertInboxCounts"];
+            /**
+             * Source Status
+             * @enum {string}
+             */
+            source_status: "fresh" | "stale" | "empty";
+        };
+        /** AlertStateRequest */
+        AlertStateRequest: {
+            /** Note */
+            note?: string | null;
+            /** Snooze Until */
+            snooze_until?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "snoozed" | "resolved";
+        };
+        /** AlertTriageState */
+        AlertTriageState: {
+            /** Note */
+            note?: string | null;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Snooze Until */
+            snooze_until?: string | null;
+            /**
+             * Status
+             * @default open
+             * @enum {string}
+             */
+            status: "open" | "snoozed" | "resolved";
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** AlertsResponse */
+        AlertsResponse: {
+            /** Alerts */
+            alerts: components["schemas"]["Alert"][];
+        };
         /** AttributionResponse */
         AttributionResponse: {
             /** Tickers */
@@ -5145,6 +5340,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefreshResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_inbox_api_alerts_inbox_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertInboxResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_recent_api_alerts_recent_get: {
+        parameters: {
+            query?: {
+                ticker?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_alert_state_api_alerts__alert_id__state_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                alert_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertStateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertTriageState"];
                 };
             };
             /** @description Validation Error */
