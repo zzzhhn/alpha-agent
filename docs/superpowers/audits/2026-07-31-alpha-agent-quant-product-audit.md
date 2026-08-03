@@ -712,3 +712,23 @@ Alpha Agent 现在不需要再证明它能做更多事情，而需要证明它�
 * Python lint、前端 TypeScript、前端单测和 production build。
 * 部署后验证 OpenAPI 新路由和响应字段、生产实际市场日、冻结 UI、工作流 schedule 与 GitHub enabled 状态。
 * 只有恢复当天价格并成功发布一个健康 run 后，`tradable` 才能变回 true。
+
+### 17.5 生产部署与验收结果
+
+P1 主提交为 `1d4ce86`，生产浏览器验收后的冻结态补丁为 `9f02552`。两者均已进入 GitHub `main`。
+
+部署证据：
+
+* 后端 production deployment `dpl_LkNf9yZCKL9MEcgtpHCNDdnCoRUh` 为 Ready，别名包含 `alpha-api.bobbyzhong.com`。
+* 最终前端 production deployment `dpl_98XVmP8Kgv3g5PzEsyRLZLbGZoj4` 为 Ready，别名包含 `alpha.bobbyzhong.com`。
+* 生产 OpenAPI 已包含 `/api/cron/publish_recommendation`、`run_key`、`RecommendationRunState` 和扩展后的 `PicksResponse`。
+* `/api/_health` 返回 JSON，`db=ok`。
+* 默认 short 榜读取 immutable run 31，返回 `canonical=true`、`ranked=true`、`tradable=false`、`stale=true`。
+* 该旧 run 的错误市场日仍是 2026-08-01，卡片价格日仍为 2026-07-23。新代码没有篡改历史账本，而是在读取时把它冻结。
+* ticker 搜索和旧 run 不支持的 long 模式均返回 `canonical=false`、`ranked=false`、`tradable=false`。
+* 生产浏览器 `/picks` 显示冻结横幅，不显示“模型领先”，50 个模拟按钮全部 disabled。
+* 生产浏览器 `/paper` 显示冻结横幅和 `RUN #31`，桌面与移动两套 DOM 中的跟单按钮均 disabled。
+
+第一次浏览器验收曾发现：非 tradable 的 long 探索视图虽然禁用了订单，却仍显示“模型领先”。补丁 `9f02552` 将任何 `tradable=false` 的视图统一纳入冻结状态。修复后复验通过。
+
+当前未完成的不是 P1 代码，而是数据恢复后的首个健康发布。`daily_prices` 将按新 schedule 在 22:00 UTC 更新，完整信号在 23:00 UTC 运行并原子发布。只有当实际市场日等于最近完成的 XNYS session、SPY 存在、完整股票价格覆盖率至少 95% 且最小 eligible 门槛通过时，生产推荐才会自动解除冻结。冻结期间系统的正确行为就是不提供可交易的“今日推荐”。
