@@ -34,6 +34,7 @@ interface IcTrendChartProps {
   readonly annotations?: IcAnnotation[];
   // Weight-change events to mark as vertical lines on the date axis.
   readonly events?: WeightChangeEvent[];
+  readonly height?: number;
 }
 
 // One color per signal, cycling through tm vars then fallback hex values.
@@ -183,7 +184,7 @@ function IcTooltip(props: {
   );
 }
 
-export function IcTrendChart({ series, locale, annotations, events }: IcTrendChartProps) {
+export function IcTrendChart({ series, locale, annotations, events, height = 320 }: IcTrendChartProps) {
   const hasData = series.length > 0 && series.some((s) => s.points.length > 0);
 
   const merged = useMemo(() => mergeIcSeries(series), [series]);
@@ -231,7 +232,7 @@ export function IcTrendChart({ series, locale, annotations, events }: IcTrendCha
   }
 
   return (
-    <div className="w-full px-1 pb-2 pt-2" style={{ height: 320 }}>
+    <div className="w-full px-1 pb-2 pt-2" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={merged} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />

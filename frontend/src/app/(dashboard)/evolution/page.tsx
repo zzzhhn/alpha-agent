@@ -21,7 +21,6 @@ import {
   type MiningBriefing,
 } from "@/lib/api/factor-lab";
 import { TmScreen } from "@/components/tm/TmPane";
-import EvolutionHealthStrip from "@/components/evolution/EvolutionHealthStrip";
 import EvolutionObservatory from "@/components/evolution/EvolutionObservatory";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
 // Methodology-proposals UI, merged in from the former /factor-lab page (the two
@@ -116,38 +115,40 @@ export default async function EvolutionPage() {
 
   return (
     <TmScreen>
-      <EvolutionHealthStrip health={health} locale={locale} />
       <EvolutionObservatory
         locale={locale}
+        health={health}
         icTrend={icTrend}
         annotations={icAnnotations}
         weights={weights?.weights ?? []}
         calibration={calibration}
         changes={changes?.changes ?? []}
         pendingCount={pendingCount}
-      />
-
-      {/* ── Section 5: Methodology Proposals (merged from /factor-lab) ──
+      >
+        {/* ── Decision ledger: proposals before on-demand telemetry detail ──
           The decision card + actionable pending list + collapsed history,
           richer than the prior read-only table. `proposals` (fetchProposals)
           still feeds the health strip above. */}
-      <div id="evolution-review">
-        <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
-      </div>
+        <div id="evolution-review" className="grid grid-cols-[minmax(420px,0.85fr)_minmax(640px,1.15fr)] gap-4 border-b border-tm-rule px-6 py-4">
+          <div className="min-w-0">
+            <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
+          </div>
+          <div className="min-w-0">
+            <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
+            <HistoryCollapsedSection history={history} />
+          </div>
+        </div>
+      </EvolutionObservatory>
 
-      {/* Phase D: compressed 3-bucket briefing — the miner's output squeezed to
-          validated / flagged / repeated-failure directions. Sits right under the
-          decision card so the headline read is above the raw pending list. */}
-      <BriefingPane briefing={briefing} locale={locale} />
-
-      <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
-
-      {/* ── Section 6: Mining Journal (Phase A memory + Phase B rejects) ──
-          What the self-evolving miner has learned: one KEEP/WEAK/AVOID lesson
-          per evaluated candidate. The proposer reads these back each round. */}
-      <MiningJournalPane lessons={lessons} locale={locale} />
-
-      <HistoryCollapsedSection history={history} />
+      <details className="border-b border-tm-rule px-6 py-3">
+        <summary className="cursor-pointer font-tm-mono text-[11px] text-tm-muted hover:text-tm-fg">
+          {locale === "zh" ? "展开挖掘简报与学习日志" : "Expand mining briefing and learning journal"}
+        </summary>
+        <div className="mt-3 grid grid-cols-2 gap-4">
+          <BriefingPane briefing={briefing} locale={locale} />
+          <MiningJournalPane lessons={lessons} locale={locale} />
+        </div>
+      </details>
     </TmScreen>
   );
 }

@@ -31,6 +31,8 @@ import { BacktestEvidenceGrid } from "@/components/backtest/BacktestEvidenceGrid
 import { BacktestAnalyticsGroups } from "@/components/backtest/BacktestAnalyticsGroups";
 import { RecentRunsTable } from "@/components/backtest/RecentRunsTable";
 import { BacktestEmptyState } from "@/components/backtest/BacktestEmptyState";
+import { BacktestContextHeader } from "@/components/backtest/BacktestContextHeader";
+import { BacktestComparisonTray } from "@/components/backtest/BacktestComparisonTray";
 import { parseFactorError } from "@/lib/factor-errors";
 import { addToZoo, removeFromZoo } from "@/lib/factor-zoo";
 import type { BacktestParams, Run } from "@/components/backtest/types";
@@ -274,14 +276,19 @@ export default function BacktestPage() {
   }, [session]);
 
   return (
-    <main className="flex flex-col">
+    <main className="flex min-h-[calc(100vh-36px)] flex-col bg-tm-bg">
+      <BacktestContextHeader
+        params={session.params}
+        runState={session.runState}
+        currentRun={session.currentRun}
+      />
       <BacktestFormSticky
         params={session.params}
         setParams={session.setParams}
         isRunning={session.isRunning}
         onRun={session.runOnce}
       />
-      <div className="flex flex-col gap-4 p-4">
+      <div className="flex flex-col">
         <BacktestVerdictBar
           runState={session.runState}
           currentRun={session.currentRun}
@@ -295,23 +302,35 @@ export default function BacktestPage() {
         />
         {session.currentRun ? (
           <>
-            <BacktestEvidenceGrid
-              runState={session.runState}
-              currentRun={session.currentRun}
-              thresholds={session.thresholds}
-            />
-            <BacktestAnalyticsGroups currentRun={session.currentRun} />
+            <div className="border-b border-tm-rule px-6 py-4">
+              <BacktestEvidenceGrid
+                runState={session.runState}
+                currentRun={session.currentRun}
+                thresholds={session.thresholds}
+              />
+              <BacktestComparisonTray
+                current={session.currentRun}
+                baseline={session.baselineRun}
+                previous={session.recentRuns[1] ?? null}
+                baselinePinned={session.baselineRunId !== null}
+              />
+            </div>
+            <div className="border-b border-tm-rule px-6 py-4">
+              <BacktestAnalyticsGroups currentRun={session.currentRun} />
+            </div>
           </>
         ) : (
           <BacktestEmptyState running={session.isRunning} />
         )}
-        <RecentRunsTable
-          runs={session.recentRuns}
-          baselineRunId={session.baselineRunId}
-          onRefill={session.refillFromRun}
-          onTogglePin={session.togglePin}
-          onSaveToZoo={handleSaveToZoo}
-        />
+        <div className="px-6 py-4">
+          <RecentRunsTable
+            runs={session.recentRuns}
+            baselineRunId={session.baselineRunId}
+            onRefill={session.refillFromRun}
+            onTogglePin={session.togglePin}
+            onSaveToZoo={handleSaveToZoo}
+          />
+        </div>
       </div>
     </main>
   );

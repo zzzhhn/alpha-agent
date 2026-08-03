@@ -5,6 +5,7 @@ import {
   changeSummary,
   evidenceRows,
   queueFor,
+  relevanceLabel,
 } from "../alertPresentation";
 
 function alert(overrides: Partial<AlertInboxItem> = {}): AlertInboxItem {
@@ -58,5 +59,10 @@ describe("alert presentation", () => {
 
   it("only exposes scalar evidence rows", () => {
     expect(evidenceRows(alert())).toEqual([["delta", "0.45"]]);
+  });
+
+  it("labels the unlinked record-only relevance filter", () => {
+    expect(relevanceLabel("record", "zh")).toBe("仅记录");
+    expect(relevanceLabel("record", "en")).toBe("Record only");
   });
 });

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { runFactorBacktest, translateHypothesis } from "@/lib/api";
-import type { FactorUniverse } from "@/lib/types";
+import type { BacktestDirection, FactorUniverse } from "@/lib/types";
 import { addToHistory } from "@/lib/hypothesis-history";
 import type {
   ChainPaneStates,
@@ -18,6 +18,14 @@ const SHARPE_OK = 1.0;
 const SHARPE_WARN = 0.5;
 const MAXDD_OK = -0.15;
 const MAXDD_BAD = -0.25;
+
+export interface AlphaValidationParams {
+  readonly direction: BacktestDirection;
+  readonly topPct: number;
+  readonly transactionCostBps: number;
+  readonly neutralize: "none" | "sector";
+  readonly benchmarkTicker: "SPY" | "RSP";
+}
 
 function evalThresholds(m: VerdictMetrics): ThresholdEval {
   return {
@@ -65,8 +73,14 @@ function deriveMetrics(s: ChainState): VerdictMetrics {
 
 export function useAlphaChain() {
   const [state, setState] = useState<ChainState>({ kind: "idle" });
+  const lastValidation = useRef<AlphaValidationParams | null>(null);
 
-  const start = useCallback(async (text: string, universe: FactorUniverse) => {
+  const start = useCallback(async (
+    text: string,
+    universe: FactorUniverse,
+    validation: AlphaValidationParams,
+  ) => {
+    lastValidation.current = validation;
     setState({ kind: "translating" });
 
     let translate;
@@ -105,7 +119,15 @@ export function useAlphaChain() {
       // runFactorBacktest takes { spec: FactorSpec, direction?, ... }.
       // Passing spec directly (which already contains universe + expression)
       // matches the existing page.tsx onBacktest pattern.
-      const resp = await runFactorBacktest({ spec: translate.spec, direction: "long_short" });
+      const resp = await runFactorBacktest({
+        spec: translate.spec,
+        direction: validation.direction,
+        top_pct: validation.topPct / 100,
+        bottom_pct: validation.topPct / 100,
+        transaction_cost_bps: validation.transactionCostBps,
+        neutralize: validation.neutralize,
+        benchmark_ticker: validation.benchmarkTicker,
+      });
       if (resp.error || !resp.data) {
         setState({
           kind: "backtest_error",
@@ -127,11 +149,21 @@ export function useAlphaChain() {
   const retryBacktest = useCallback(async () => {
     if (state.kind !== "backtest_error" && state.kind !== "done") return;
     const translate = state.translate;
+    const validation = lastValidation.current;
+    if (!validation) return;
 
     setState({ kind: "backtesting", translate });
 
     try {
-      const resp = await runFactorBacktest({ spec: translate.spec, direction: "long_short" });
+      const resp = await runFactorBacktest({
+        spec: translate.spec,
+        direction: validation.direction,
+        top_pct: validation.topPct / 100,
+        bottom_pct: validation.topPct / 100,
+        transaction_cost_bps: validation.transactionCostBps,
+        neutralize: validation.neutralize,
+        benchmark_ticker: validation.benchmarkTicker,
+      });
       if (resp.error || !resp.data) {
         setState({
           kind: "backtest_error",

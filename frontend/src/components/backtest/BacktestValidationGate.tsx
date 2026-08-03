@@ -35,11 +35,11 @@ export function BacktestValidationGate({
 
   return (
     <section className="h-full border border-tm-rule bg-tm-bg">
-      <div className="flex h-9 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-3">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-tm-accent">
+      <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4">
+        <span className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">
           {zh ? "验证门槛" : "Validation gates"}
         </span>
-        <span className={`text-[9px] ${failed > 0 ? "text-tm-neg" : gates.length > 0 ? "text-tm-pos" : "text-tm-muted"}`}>
+        <span className={`text-[10px] ${failed > 0 ? "text-tm-neg" : gates.length > 0 ? "text-tm-pos" : "text-tm-muted"}`}>
           {gates.length === 0 ? (zh ? "等待运行" : "Waiting") : failed > 0 ? (zh ? `${failed} 项反证` : `${failed} counter-evidence`) : (zh ? "全部通过" : "All pass")}
         </span>
       </div>
@@ -55,10 +55,15 @@ export function BacktestValidationGate({
             const tone = gate.status === "pass" ? "text-tm-pos" : gate.status === "fail" ? "text-tm-neg" : "text-tm-muted";
             const comparator = gate.lowerIsBetter ? "≤" : "≥";
             return (
-              <div key={gate.key} className="grid grid-cols-[18px_minmax(120px,1fr)_72px_82px] items-center gap-2 px-3 py-2 text-[9.5px]">
-                <Icon className={`h-3.5 w-3.5 ${tone}`} />
-                <span>{zh ? label.zh : label.en}</span>
-                <span className="text-right font-mono text-tm-fg">{format(gate.key, gate.value)}</span>
+              <div key={gate.key} className="grid min-h-[58px] grid-cols-[28px_minmax(140px,1fr)_80px_92px] items-center gap-3 px-4 py-2 text-[10.5px]">
+                <span className={`flex h-6 w-6 items-center justify-center border ${gate.status === "pass" ? "border-tm-pos/50" : gate.status === "fail" ? "border-tm-neg/50" : "border-tm-rule"}`}>
+                  <Icon className={`h-3.5 w-3.5 ${tone}`} />
+                </span>
+                <div>
+                  <p className="text-tm-fg">{zh ? label.zh : label.en}</p>
+                  <p className="mt-1 text-[9px] text-tm-muted">{gate.lowerIsBetter ? (zh ? "越低越好" : "Lower is better") : (zh ? "越高越好" : "Higher is better")}</p>
+                </div>
+                <span className={`text-right font-mono text-[12px] ${tone}`}>{format(gate.key, gate.value)}</span>
                 <span className="text-right font-mono text-tm-muted">{comparator} {format(gate.key, gate.threshold)}</span>
               </div>
             );

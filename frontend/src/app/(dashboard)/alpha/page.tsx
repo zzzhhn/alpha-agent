@@ -10,6 +10,7 @@ import { EvidencePaneGrid } from "@/components/alpha/EvidencePaneGrid";
 import { HypothesisInputCard } from "@/components/alpha/HypothesisInputCard";
 import type { InputCardHistoryEntry } from "@/components/alpha/HypothesisInputCard";
 import { useAlphaChain } from "@/components/alpha/useAlphaChain";
+import type { AlphaValidationParams } from "@/components/alpha/useAlphaChain";
 import { VerdictBar } from "@/components/alpha/VerdictBar";
 import { AlphaResearchContext } from "@/components/alpha/AlphaResearchContext";
 import { AlphaExperimentLedger } from "@/components/alpha/AlphaExperimentLedger";
@@ -22,6 +23,13 @@ export default function AlphaPage() {
   const { locale } = useLocale();
   const [text, setText] = useState("");
   const [universe, setUniverse] = useState<FactorUniverse>("SP500");
+  const [validation, setValidation] = useState<AlphaValidationParams>({
+    direction: "long_short",
+    topPct: 30,
+    transactionCostBps: 10,
+    neutralize: "none",
+    benchmarkTicker: "SPY",
+  });
   const [history, setHistory] = useState<readonly HypothesisHistoryEntry[]>([]);
   const chain = useAlphaChain();
   const { toast } = useToast();
@@ -48,14 +56,22 @@ export default function AlphaPage() {
   const handleExampleSelect = useCallback(
     (ex: FactorExample) => {
       setText(locale === "zh" ? ex.hypothesisZh : ex.hypothesisEn);
+      setValidation((current) => ({
+        ...current,
+        direction: ex.direction ?? current.direction,
+        topPct: ex.topPct != null ? ex.topPct * 100 : current.topPct,
+        transactionCostBps: ex.transactionCostBps ?? current.transactionCostBps,
+        neutralize: ex.neutralize ?? current.neutralize,
+        benchmarkTicker: ex.benchmarkTicker ?? current.benchmarkTicker,
+      }));
     },
     [locale],
   );
 
   const handleSubmit = useCallback(() => {
     if (text.trim().length === 0) return;
-    chain.start(text.trim(), universe);
-  }, [text, universe, chain]);
+    chain.start(text.trim(), universe, validation);
+  }, [text, universe, validation, chain]);
 
   const handleHistorySelect = useCallback(
     (entry: InputCardHistoryEntry) => {
@@ -68,8 +84,8 @@ export default function AlphaPage() {
   const handleReTranslate = useCallback(() => {
     chain.reset();
     // Yield one React tick so the idle state renders before re-submitting.
-    setTimeout(() => chain.start(text.trim(), universe), 0);
-  }, [chain, text, universe]);
+    setTimeout(() => chain.start(text.trim(), universe, validation), 0);
+  }, [chain, text, universe, validation]);
 
   // translate is available whenever the chain has passed the translate stage.
   const translate =
@@ -90,16 +106,16 @@ export default function AlphaPage() {
       operators_used: translate.spec.operators_used,
       lookback: translate.spec.lookback,
       hypothesis: translate.spec.hypothesis,
-      direction: "long_short",
-      neutralize: "none",
-      benchmarkTicker: "SPY",
+      direction: validation.direction,
+      neutralize: validation.neutralize,
+      benchmarkTicker: validation.benchmarkTicker,
       mode: "static",
-      topPct: 0.3,
-      bottomPct: 0.3,
-      transactionCostBps: 10,
+      topPct: validation.topPct / 100,
+      bottomPct: validation.topPct / 100,
+      transactionCostBps: validation.transactionCostBps,
     }));
     window.location.assign("/backtest");
-  }, [translate]);
+  }, [translate, validation]);
 
   // Save-to-Zoo: localStorage via addToZoo (mirrors ZooSaveButton internals).
   // Payload mirrors old page's ZooSaveButton props (lines 276-297):
@@ -152,13 +168,15 @@ export default function AlphaPage() {
   }, [translate, chain.state, toast, locale]);
 
   return (
-    <main className="flex flex-col gap-4 p-4">
+    <main className="flex min-h-[calc(100vh-36px)] flex-col bg-tm-bg">
       <AlphaResearchContext state={chain.state} universe={universe} onOpenBacktest={handleOpenBacktest} />
       <HypothesisInputCard
         text={text}
         onTextChange={setText}
         universe={universe}
         onUniverseChange={setUniverse}
+        validation={validation}
+        onValidationChange={setValidation}
         onSubmit={handleSubmit}
         disabled={chain.isLoading}
         examples={FACTOR_EXAMPLES}
@@ -174,14 +192,24 @@ export default function AlphaPage() {
         onSave={handleSave}
         onReTranslate={handleReTranslate}
       />
-      <EvidencePaneGrid
-        state={chain.state}
-        panes={chain.panes}
-        onReTranslate={handleReTranslate}
-        onRetryBacktest={chain.retryBacktest}
-      />
-      <AnalyticsAccordion translate={translate} />
-      <AlphaExperimentLedger history={history} onOpen={handleHistorySelect} />
+      <section className="border-b border-tm-rule px-6 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-tm-mono text-[12px] font-semibold tracking-[0.08em] text-tm-fg">
+            <span className="mr-2 text-tm-accent">③</span>{locale === "zh" ? "表达式、证据与反证" : "Expression, evidence, and counter-evidence"}
+          </h2>
+          <span className="text-[9px] text-tm-muted">{locale === "zh" ? "详细诊断按需展开" : "Detailed diagnostics expand on demand"}</span>
+        </div>
+        <EvidencePaneGrid
+          state={chain.state}
+          panes={chain.panes}
+          onReTranslate={handleReTranslate}
+          onRetryBacktest={chain.retryBacktest}
+        />
+        <div className="mt-3"><AnalyticsAccordion translate={translate} /></div>
+      </section>
+      <div className="px-6 py-4">
+        <AlphaExperimentLedger history={history} onOpen={handleHistorySelect} />
+      </div>
     </main>
   );
 }
