@@ -168,6 +168,28 @@ async def test_sell_allowed_at_exact_position_qty(client_with_db, applied_db):
     assert r.status_code == 201
 
 
+async def test_account_includes_realized_pnl_from_fully_closed_positions(
+    client_with_db, applied_db
+):
+    user_id, account_id = await _seed_user_and_account(applied_db)
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute(
+            "INSERT INTO sim_position (account_id, ticker, qty, avg_cost, realized_pnl) "
+            "VALUES ($1, 'AAPL', 0, 150.0, 500.0), "
+            "       ($1, 'MSFT', 2, 300.0, 75.0)",
+            account_id,
+        )
+    finally:
+        await conn.close()
+
+    response = client_with_db.get("/api/paper/account", headers=_auth(user_id))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["realized_pnl"] == pytest.approx(575.0)
+    assert [position["ticker"] for position in body["positions"]] == ["MSFT"]
+
+
 # ── Pick attribution round-trip ──────────────────────────────────────────────
 
 def test_pick_attribution_round_trips_through_order_and_list(client_with_db, applied_db):

@@ -77,7 +77,9 @@ on:
           - l2_cycle
 
 env:
-  BACKEND_BASE: https://alpha.bobbyzhong.com
+  # Call FastAPI directly to avoid a needless Next.js invocation per shard.
+  BACKEND_BASE: https://alpha-api.bobbyzhong.com
+  CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
 jobs:
   # fast_intraday runs first when both are dispatched, so picks-page data
@@ -102,6 +104,7 @@ jobs:
             echo "::group::fast shot offset=$offset limit=40"
             T0=$(date +%s)
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/fast_intraday?limit=40&offset=$offset&run_key=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -124,6 +127,7 @@ jobs:
       - name: Publish one immutable recommendation snapshot
         run: |
           HTTP=$(curl -s --max-time 290 -o /tmp/publish.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             "$BACKEND_BASE/api/cron/publish_recommendation")
           cat /tmp/publish.json | head -c 800; echo
           [ "$HTTP" = "200" ] || exit 1
@@ -146,6 +150,7 @@ jobs:
             echo "::group::tech shot offset=$offset limit=40"
             T0=$(date +%s)
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=tech&limit=40&offset=$offset&run_key=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -184,6 +189,7 @@ jobs:
             echo "::group::mid shot offset=$offset limit=40"
             T0=$(date +%s)
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=mid&limit=40&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -222,6 +228,7 @@ jobs:
             echo "::group::slow-tier shot offset=$offset limit=60"
             T0=$(date +%s)
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/fast_intraday?tier=slow&limit=60&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -267,6 +274,7 @@ jobs:
             echo "::group::slow shot offset=$offset limit=80"
             T0=$(date +%s)
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/slow_daily?limit=80&offset=$offset")
             DUR=$(( $(date +%s) - T0 ))
             echo "HTTP=$HTTP duration=${DUR}s"
@@ -294,6 +302,7 @@ jobs:
         run: |
           HTTP=$(curl -s --max-time 120 \
             -o /tmp/ann.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             "$BACKEND_BASE/api/cron/compute_ic_annotations?window_days=30" || echo "000")
           echo "HTTP=$HTTP"; head -c 400 /tmp/ann.json; echo
           if [ "$HTTP" != "200" ]; then
@@ -312,6 +321,7 @@ jobs:
           set -e
           for offset in 0 75; do
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/news_per_ticker?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 400; echo
@@ -330,6 +340,7 @@ jobs:
       - name: news macro single shot
         run: |
           HTTP=$(curl -s --max-time 60 -o /tmp/shot.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             "$BACKEND_BASE/api/cron/news_macro")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
@@ -345,6 +356,7 @@ jobs:
         run: |
           HTTP=$(curl -s --max-time 120 \
             -o /tmp/shot.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             "$BACKEND_BASE/api/cron/l2_cycle")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
@@ -361,6 +373,7 @@ jobs:
           set -e
           for offset in 0; do
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/minute_bars?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 200; echo
@@ -378,6 +391,7 @@ jobs:
       - name: monthly walk-forward IC backtest
         run: |
           HTTP=$(curl -s --max-time 600 -o /tmp/shot.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -X POST "$BACKEND_BASE/api/cron/ic_backtest_monthly")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
@@ -403,6 +417,7 @@ jobs:
           for offset in 0 75 150 225 300 375 450 525; do
             echo "::group::daily_prices shot offset=$offset limit=75"
             HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+              -H "Authorization: Bearer $CRON_SECRET" \
               "$BACKEND_BASE/api/cron/daily_prices?limit=75&offset=$offset")
             echo "offset=$offset HTTP=$HTTP"
             cat /tmp/shot.json | head -c 600; echo
@@ -420,6 +435,7 @@ jobs:
       - name: run walk-forward IC backtest (populate IC history + weights)
         run: |
           HTTP=$(curl -s --max-time 600 -o /tmp/ic.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -X POST "$BACKEND_BASE/api/cron/ic_backtest_monthly")
           cat /tmp/ic.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1
@@ -434,6 +450,7 @@ jobs:
       - name: run Phase 2a methodology proposer (single shot)
         run: |
           HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -X POST "$BACKEND_BASE/api/cron/methodology_proposer")
           cat /tmp/shot.json | head -c 400; echo
           [ "$HTTP" = "200" ] || exit 1

@@ -7,11 +7,31 @@ never the token in the message).
 """
 from __future__ import annotations
 
+import hmac
 import os
 
 from fastapi import Header, HTTPException
 
 from alpha_agent.auth.jwt_verify import JwtError, verify_jwt
+
+
+async def require_cron(authorization: str | None = Header(default=None)) -> None:
+    """Authenticate server-to-server cron calls with one shared bearer secret.
+
+    Vercel Cron sends ``Authorization: Bearer $CRON_SECRET`` automatically.
+    GitHub Actions uses the same secret. Missing server configuration fails
+    closed so a deployment can never silently make write-capable jobs public.
+    """
+    secret = os.environ.get("CRON_SECRET")
+    if not secret:
+        raise HTTPException(
+            status_code=503,
+            detail="server cron auth not configured (CRON_SECRET missing)",
+        )
+
+    expected = f"Bearer {secret}"
+    if authorization is None or not hmac.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="invalid cron authorization")
 
 
 async def require_user(authorization: str | None = Header(default=None)) -> int:

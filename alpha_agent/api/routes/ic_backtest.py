@@ -6,22 +6,26 @@ and signal_weight_current. Auto-drops signals whose IC falls below
 0.02 by setting their weight = 0; combine.py then ignores them in
 composite computation until next month.
 
-No auth (cron-only endpoint; GHA Actions IP can be ratelimited at
-Vercel level later if needed).
+Authenticated with the same CRON_SECRET bearer as every other cron route.
 """
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.auth.dependencies import require_cron
 from alpha_agent.backtest.confidence_calibration import run_calibration
 from alpha_agent.backtest.ic_engine import run_monthly_ic_backtest
 from alpha_agent.config_store import refresh_config
 
-router = APIRouter(prefix="/api/cron", tags=["cron"])
+router = APIRouter(
+    prefix="/api/cron",
+    tags=["cron"],
+    dependencies=[Depends(require_cron)],
+)
 
 
 @router.post("/ic_backtest_monthly")

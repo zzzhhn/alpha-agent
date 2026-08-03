@@ -21,10 +21,12 @@ jobs:
     steps:
       - name: Run daily factor loop (GA + optional LLM)
         env:
-          BACKEND_BASE: https://alpha.bobbyzhong.com
+          BACKEND_BASE: https://alpha-api.bobbyzhong.com
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          HTTP=$(curl -s --max-time 290 --retry 1 --retry-delay 5 --retry-all-errors \
+          HTTP=$(curl -s --max-time 290 \
             -o /tmp/loop.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -X POST "$BACKEND_BASE/api/cron/daily_factor_loop")
           echo "HTTP=$HTTP"
           head -c 3000 /tmp/loop.json 2>/dev/null || true

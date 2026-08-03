@@ -20,11 +20,22 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from alpha_agent.auth.dependencies import require_cron
 from alpha_agent.storage.postgres import get_pool
 
-router = APIRouter(prefix="/api/cron", tags=["cron"])
+router = APIRouter(
+    prefix="/api/cron",
+    tags=["cron"],
+    dependencies=[Depends(require_cron)],
+)
+
+
+@router.get("/auth_check")
+async def cron_auth_check() -> dict[str, bool]:
+    """Cheap production smoke test for cron authentication; performs no I/O."""
+    return {"ok": True}
 
 
 @router.post("/slow_daily")
@@ -238,8 +249,90 @@ def _insufficient_cash_fail_reason(cost: float, cash: float | None) -> str:
     )
 
 
-async def _run_paper_fill(dsn: str) -> dict[str, Any]:
-    """Core fill logic — separated so tests can call it directly with a test DSN."""
+_PAPER_FILL_LOCK_NAME = "alpha_agent.paper_fill"
+_PAPER_FILL_BATCH_SIZE = 200
+
+
+async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
+    """Write every account snapshot with one aggregate read and one batch write.
+
+    This replaces the prior per-account N+1 query pattern. Closed positions are
+    intentionally included in realized PnL, while only live positions contribute
+    market value and unrealized PnL.
+    """
+    rows = await conn.fetch(
+        """
+        WITH active_tickers AS (
+            SELECT DISTINCT ticker FROM sim_position WHERE qty > 0
+        ),
+        latest_prices AS (
+            SELECT DISTINCT ON (dp.ticker) dp.ticker, dp.close
+            FROM daily_prices dp
+            JOIN active_tickers active ON active.ticker = dp.ticker
+            ORDER BY dp.ticker, dp.date DESC
+        ),
+        position_agg AS (
+            SELECT sp.account_id,
+                   COALESCE(SUM(
+                       CASE WHEN sp.qty > 0
+                            THEN COALESCE(lp.close, sp.avg_cost) * sp.qty
+                            ELSE 0 END
+                   ), 0) AS market_value,
+                   COALESCE(SUM(
+                       CASE WHEN sp.qty > 0
+                            THEN (COALESCE(lp.close, sp.avg_cost) - sp.avg_cost) * sp.qty
+                            ELSE 0 END
+                   ), 0) AS unrealized_pnl,
+                   COALESCE(SUM(sp.realized_pnl), 0) AS realized_pnl
+            FROM sim_position sp
+            LEFT JOIN latest_prices lp ON lp.ticker = sp.ticker
+            GROUP BY sp.account_id
+        ),
+        spy AS (
+            SELECT close FROM daily_prices
+            WHERE ticker = 'SPY' ORDER BY date DESC LIMIT 1
+        )
+        SELECT sa.id AS account_id,
+               sa.cash,
+               sa.cash + COALESCE(pa.market_value, 0) AS portfolio_value,
+               COALESCE(pa.unrealized_pnl, 0) AS unrealized_pnl,
+               COALESCE(pa.realized_pnl, 0) AS realized_pnl,
+               spy.close AS benchmark_close
+        FROM sim_account sa
+        LEFT JOIN position_agg pa ON pa.account_id = sa.id
+        LEFT JOIN spy ON TRUE
+        """
+    )
+    if not rows:
+        return
+
+    await conn.executemany(
+        """
+        INSERT INTO sim_equity_daily
+            (account_id, as_of_date, portfolio_value, cash, unrealized_pnl,
+             realized_pnl, benchmark_close)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (account_id, as_of_date) DO UPDATE
+        SET portfolio_value=$3, cash=$4, unrealized_pnl=$5,
+            realized_pnl=$6, benchmark_close=$7
+        """,
+        [
+            (
+                row["account_id"],
+                today,
+                row["portfolio_value"],
+                row["cash"],
+                row["unrealized_pnl"],
+                row["realized_pnl"],
+                row["benchmark_close"],
+            )
+            for row in rows
+        ],
+    )
+
+
+async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
+    """Process one bounded fill batch while the job advisory lock is held."""
     from alpha_agent.paper.fill_engine import (
         compute_limit_fill,
         compute_market_fill,
@@ -248,30 +341,47 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
         realized_pnl_delta,
     )
 
-    pool = await get_pool(dsn)
-    today = datetime.now(UTC).date()
     filled_count = 0
     expired_count = 0
     failed_count = 0
+    skipped_locked = 0
 
-    # Fetch all pending orders across all accounts
     async with pool.acquire() as conn:
         pending_orders = await conn.fetch(
-            "SELECT so.*, sa.cash, sa.user_id FROM sim_order so "
-            "JOIN sim_account sa ON sa.id = so.account_id "
-            "WHERE so.status = 'pending'"
+            "SELECT so.* FROM sim_order so "
+            "WHERE so.status = 'pending' AND EXISTS ("
+            "  SELECT 1 FROM daily_prices dp "
+            "  WHERE dp.ticker=so.ticker AND dp.date>so.signal_date"
+            ") "
+            "ORDER BY CASE WHEN so.order_type='market' THEN 0 ELSE 1 END, "
+            "so.created_at, so.id LIMIT $1",
+            _PAPER_FILL_BATCH_SIZE,
         )
 
-    # Group by ticker to batch price lookups
-    tickers = list({r["ticker"] for r in pending_orders})
-    if not tickers:
-        return {"ok": True, "filled": 0, "expired": 0, "failed": 0}
+    if not pending_orders:
+        async with pool.acquire() as conn:
+            remaining_pending = await conn.fetchval(
+                "SELECT COUNT(*) FROM sim_order WHERE status='pending'"
+            )
+        return {
+            "ok": True,
+            "filled": 0,
+            "expired": 0,
+            "failed": 0,
+            "skipped_locked": 0,
+            "remaining_pending": int(remaining_pending or 0),
+            "batch_limit": _PAPER_FILL_BATCH_SIZE,
+        }
 
+    tickers = list({r["ticker"] for r in pending_orders})
+    first_signal_date = min(r["signal_date"] for r in pending_orders)
     async with pool.acquire() as conn:
         price_rows = await conn.fetch(
             "SELECT ticker, date, close FROM daily_prices "
-            "WHERE ticker = ANY($1::text[]) ORDER BY ticker, date",
+            "WHERE ticker = ANY($1::text[]) AND date > $2 "
+            "ORDER BY ticker, date",
             tickers,
+            first_signal_date,
         )
 
     # Build prices dict: ticker -> {date: close}
@@ -300,30 +410,41 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
 
         async with pool.acquire() as conn:
             async with conn.transaction():
+                locked_order = await conn.fetchrow(
+                    "SELECT * FROM sim_order "
+                    "WHERE id=$1 AND status='pending' FOR UPDATE SKIP LOCKED",
+                    order["id"],
+                )
+                if locked_order is None:
+                    skipped_locked += 1
+                    continue
+
                 if result == "expired":
                     await conn.execute(
-                        "UPDATE sim_order SET status='expired' WHERE id=$1", order["id"]
+                        "UPDATE sim_order SET status='expired' WHERE id=$1",
+                        locked_order["id"],
                     )
                     expired_count += 1
                     continue
 
                 fill_date, fill_price = result
-                qty = order["qty"]
-                account_id = order["account_id"]
+                qty = locked_order["qty"]
+                account_id = locked_order["account_id"]
+                current_cash = await conn.fetchval(
+                    "SELECT cash FROM sim_account WHERE id=$1 FOR UPDATE",
+                    account_id,
+                )
 
-                if order["side"] == "buy":
+                if locked_order["side"] == "buy":
                     # Fill-time re-check: order-time validation only estimated
                     # against cash at submission; an earlier fill in this same
-                    # batch may have already spent it. FOR UPDATE serializes
-                    # concurrent fills against the same account.
-                    current_cash = await conn.fetchval(
-                        "SELECT cash FROM sim_account WHERE id=$1 FOR UPDATE", account_id
-                    )
+                    # batch may have already spent it. The account row lock also
+                    # serializes cash updates for buys and sells.
                     if current_cash is None or not has_sufficient_cash(current_cash, fill_price, qty):
                         await conn.execute(
                             "UPDATE sim_order SET status='failed', fail_reason=$1 WHERE id=$2",
                             _insufficient_cash_fail_reason(fill_price * qty, current_cash),
-                            order["id"],
+                            locked_order["id"],
                         )
                         failed_count += 1
                         continue
@@ -332,11 +453,12 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                     await conn.execute(
                         "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, filled_at=now() "
                         "WHERE id=$3",
-                        fill_date, fill_price, order["id"],
+                        fill_date, fill_price, locked_order["id"],
                     )
                     # Upsert position with new avg_cost
                     existing = await conn.fetchrow(
-                        "SELECT qty, avg_cost FROM sim_position WHERE account_id=$1 AND ticker=$2",
+                        "SELECT qty, avg_cost FROM sim_position "
+                        "WHERE account_id=$1 AND ticker=$2 FOR UPDATE",
                         account_id, ticker,
                     )
                     if existing and existing["qty"] > 0:
@@ -363,7 +485,7 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                 else:  # sell
                     existing = await conn.fetchrow(
                         "SELECT qty, avg_cost, realized_pnl FROM sim_position "
-                        "WHERE account_id=$1 AND ticker=$2",
+                        "WHERE account_id=$1 AND ticker=$2 FOR UPDATE",
                         account_id, ticker,
                     )
                     if existing is None or existing["qty"] < qty:
@@ -378,7 +500,7 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                     await conn.execute(
                         "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, filled_at=now() "
                         "WHERE id=$3",
-                        fill_date, fill_price, order["id"],
+                        fill_date, fill_price, locked_order["id"],
                     )
                     pnl_delta = realized_pnl_delta(existing["avg_cost"], fill_price, qty)
                     new_qty = existing["qty"] - qty
@@ -396,77 +518,48 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
 
                 filled_count += 1
 
-    # Write equity snapshots for all accounts that have activity
     async with pool.acquire() as conn:
-        accounts = await conn.fetch("SELECT id, cash FROM sim_account")
-    for acct in accounts:
-        account_id = acct["id"]
-        async with pool.acquire() as conn:
-            positions = await conn.fetch(
-                "SELECT ticker, qty FROM sim_position WHERE account_id=$1 AND qty > 0",
-                account_id,
-            )
-        pos_tickers = [p["ticker"] for p in positions]
-        closes = {}
-        if pos_tickers:
-            async with pool.acquire() as conn:
-                close_rows = await conn.fetch(
-                    "SELECT DISTINCT ON (ticker) ticker, close FROM daily_prices "
-                    "WHERE ticker = ANY($1::text[]) ORDER BY ticker, date DESC",
-                    pos_tickers,
-                )
-            closes = {r["ticker"]: r["close"] for r in close_rows}
-
-        mkt_value = sum(closes.get(p["ticker"], 0.0) * p["qty"] for p in positions)
-        cash = acct["cash"]
-        portfolio_value = cash + mkt_value
-
-        # Unrealized + realized aggregates
-        async with pool.acquire() as conn:
-            agg = await conn.fetchrow(
-                "SELECT COALESCE(SUM(realized_pnl),0) as total_realized FROM sim_position "
-                "WHERE account_id=$1",
-                account_id,
-            )
-        total_realized = agg["total_realized"] if agg else 0.0
-
-        # More accurate: fetch avg_cost per position
-        async with pool.acquire() as conn:
-            full_positions = await conn.fetch(
-                "SELECT ticker, qty, avg_cost FROM sim_position WHERE account_id=$1 AND qty>0",
-                account_id,
-            )
-        unrealized = sum(
-            (closes.get(p["ticker"], p["avg_cost"]) - p["avg_cost"]) * p["qty"]
-            for p in full_positions
+        await _write_paper_equity_snapshots(conn, today)
+        remaining_pending = await conn.fetchval(
+            "SELECT COUNT(*) FROM sim_order WHERE status='pending'"
         )
-
-        # SPY close for benchmark
-        async with pool.acquire() as conn:
-            spy_row = await conn.fetchrow(
-                "SELECT close FROM daily_prices WHERE ticker='SPY' ORDER BY date DESC LIMIT 1"
-            )
-        spy_close = spy_row["close"] if spy_row else None
-
-        async with pool.acquire() as conn:
-            await conn.execute(
-                """INSERT INTO sim_equity_daily
-                   (account_id, as_of_date, portfolio_value, cash, unrealized_pnl,
-                    realized_pnl, benchmark_close)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7)
-                   ON CONFLICT (account_id, as_of_date) DO UPDATE
-                   SET portfolio_value=$3, cash=$4, unrealized_pnl=$5,
-                       realized_pnl=$6, benchmark_close=$7""",
-                account_id, today, portfolio_value, cash,
-                unrealized, total_realized, spy_close,
-            )
 
     return {
         "ok": True,
         "filled": filled_count,
         "expired": expired_count,
         "failed": failed_count,
+        "skipped_locked": skipped_locked,
+        "remaining_pending": int(remaining_pending or 0),
+        "batch_limit": _PAPER_FILL_BATCH_SIZE,
     }
+
+
+async def _run_paper_fill(dsn: str) -> dict[str, Any]:
+    """Run one non-blocking, bounded fill batch with a database-owned lease."""
+    pool = await get_pool(dsn)
+    today = datetime.now(UTC).date()
+    async with pool.acquire() as lock_conn:
+        acquired = await lock_conn.fetchval(
+            "SELECT pg_try_advisory_lock(hashtext($1))",
+            _PAPER_FILL_LOCK_NAME,
+        )
+        if not acquired:
+            return {
+                "ok": True,
+                "skipped": True,
+                "reason": "already_running",
+                "filled": 0,
+                "expired": 0,
+                "failed": 0,
+            }
+        try:
+            return await _run_paper_fill_locked(pool, today)
+        finally:
+            await lock_conn.fetchval(
+                "SELECT pg_advisory_unlock(hashtext($1))",
+                _PAPER_FILL_LOCK_NAME,
+            )
 
 
 @router.post("/paper_fill")

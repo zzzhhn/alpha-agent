@@ -5680,6 +5680,24 @@
     "/api/cron/alert_dispatcher": {
       "get": {
         "operationId": "alert_dispatcher_api_cron_alert_dispatcher_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5692,6 +5710,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Alert Dispatcher",
@@ -5701,6 +5729,24 @@
       },
       "post": {
         "operationId": "alert_dispatcher_api_cron_alert_dispatcher_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5713,9 +5759,73 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Alert Dispatcher",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/auth_check": {
+      "get": {
+        "description": "Cheap production smoke test for cron authentication; performs no I/O.",
+        "operationId": "cron_auth_check_api_cron_auth_check_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Cron Auth Check Api Cron Auth Check Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron Auth Check",
         "tags": [
           "cron"
         ]
@@ -5736,6 +5846,22 @@
               "minimum": 1,
               "title": "Window Days",
               "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -5783,6 +5909,22 @@
               "title": "Window Days",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -5819,6 +5961,24 @@
       "get": {
         "description": "Phase D daily autonomous loop: read memory -> generate -> validate ->\njournal, all through the shared eval/gate/insert/journal core.\n\nThe GA arm ALWAYS runs \u2014 it needs no LLM key, so the miner keeps improving\nunattended (the key advantage of the non-LLM generator). The LLM arm runs\nonly when SYSTEM_USER_ID is configured, since an unattended cron has no\nper-user BYOK key (see feedback_byok_cron_architectural_tension). Records a\ncron_runs audit row so a silent failure stays visible.",
         "operationId": "cron_daily_factor_loop_api_cron_daily_factor_loop_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5831,6 +5991,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Daily Factor Loop",
@@ -5841,6 +6011,24 @@
       "post": {
         "description": "Phase D daily autonomous loop: read memory -> generate -> validate ->\njournal, all through the shared eval/gate/insert/journal core.\n\nThe GA arm ALWAYS runs \u2014 it needs no LLM key, so the miner keeps improving\nunattended (the key advantage of the non-LLM generator). The LLM arm runs\nonly when SYSTEM_USER_ID is configured, since an unattended cron has no\nper-user BYOK key (see feedback_byok_cron_architectural_tension). Records a\ncron_runs audit row so a silent failure stays visible.",
         "operationId": "cron_daily_factor_loop_api_cron_daily_factor_loop_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5853,6 +6041,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Daily Factor Loop",
@@ -5910,6 +6108,22 @@
               "default": "5d",
               "title": "Period",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -5990,6 +6204,22 @@
               "default": "5d",
               "title": "Period",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -6091,6 +6321,22 @@
               ],
               "title": "Run Key"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -6189,6 +6435,22 @@
               ],
               "title": "Run Key"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -6224,6 +6486,24 @@
     "/api/cron/ic_backtest_monthly": {
       "post": {
         "operationId": "ic_backtest_monthly_api_cron_ic_backtest_monthly_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6236,6 +6516,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Ic Backtest Monthly",
@@ -6248,6 +6538,24 @@
       "get": {
         "description": "Advance the L2 paper book one step over the product ledger (generate ->\nfill -> mark any due rebalance). Idempotent; schedule daily after the close\nso l2_equity_daily accumulates a forward curve.",
         "operationId": "l2_cycle_api_cron_l2_cycle_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6260,6 +6568,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "L2 Cycle",
@@ -6270,6 +6588,24 @@
       "post": {
         "description": "Advance the L2 paper book one step over the product ledger (generate ->\nfill -> mark any due rebalance). Idempotent; schedule daily after the close\nso l2_equity_daily accumulates a forward curve.",
         "operationId": "l2_cycle_api_cron_l2_cycle_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6282,6 +6618,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "L2 Cycle",
@@ -6294,6 +6640,24 @@
       "get": {
         "description": "Phase 2a: daily statistics-driven methodology proposer. Enumerates\nsingle-knob config candidates, validates each on purged walk-forward OOS\nfolds with trial-count deflation, and queues survivors as pending\nconfig_change_log rows for human approval (Phase 2b). Stays dormant\n(proposes nothing) until enough daily_prices history accrues to validate.\nNothing auto-applies.",
         "operationId": "cron_methodology_proposer_api_cron_methodology_proposer_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6306,6 +6670,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Methodology Proposer",
@@ -6316,6 +6690,24 @@
       "post": {
         "description": "Phase 2a: daily statistics-driven methodology proposer. Enumerates\nsingle-knob config candidates, validates each on purged walk-forward OOS\nfolds with trial-count deflation, and queues survivors as pending\nconfig_change_log rows for human approval (Phase 2b). Stays dormant\n(proposes nothing) until enough daily_prices history accrues to validate.\nNothing auto-applies.",
         "operationId": "cron_methodology_proposer_api_cron_methodology_proposer_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6328,6 +6720,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Methodology Proposer",
@@ -6359,6 +6761,22 @@
               "default": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -6414,6 +6832,22 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -6450,6 +6884,24 @@
       "get": {
         "description": "Parallel-poll Truth/Fed/OFAC, upsert macro_events.",
         "operationId": "cron_news_macro_api_cron_news_macro_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6462,6 +6914,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron News Macro",
@@ -6472,6 +6934,24 @@
       "post": {
         "description": "Parallel-poll Truth/Fed/OFAC, upsert macro_events.",
         "operationId": "cron_news_macro_api_cron_news_macro_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6484,6 +6964,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron News Macro",
@@ -6531,6 +7021,22 @@
                 }
               ],
               "title": "Offset"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -6602,6 +7108,22 @@
               ],
               "title": "Offset"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -6638,6 +7160,24 @@
       "get": {
         "description": "Daily post-close fill simulation for all pending sim_orders.\n\nRuns after daily_prices cron (at 01:00 UTC = ~21:00 ET).\nIdempotent: re-running on the same day is safe (ON CONFLICT DO UPDATE\non sim_equity_daily; already-filled orders are skipped by status='pending' filter).",
         "operationId": "cron_paper_fill_api_cron_paper_fill_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6650,6 +7190,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Paper Fill",
@@ -6660,6 +7210,24 @@
       "post": {
         "description": "Daily post-close fill simulation for all pending sim_orders.\n\nRuns after daily_prices cron (at 01:00 UTC = ~21:00 ET).\nIdempotent: re-running on the same day is safe (ON CONFLICT DO UPDATE\non sim_equity_daily; already-filled orders are skipped by status='pending' filter).",
         "operationId": "cron_paper_fill_api_cron_paper_fill_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6672,6 +7240,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Paper Fill",
@@ -6684,6 +7262,24 @@
       "get": {
         "description": "Publish one immutable recommendation only after every shard finished.",
         "operationId": "publish_recommendation_api_cron_publish_recommendation_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6696,6 +7292,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Publish Recommendation",
@@ -6706,6 +7312,24 @@
       "post": {
         "description": "Publish one immutable recommendation only after every shard finished.",
         "operationId": "publish_recommendation_api_cron_publish_recommendation_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6718,6 +7342,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Publish Recommendation",
@@ -6730,6 +7364,24 @@
       "get": {
         "description": "Reliable execution path for the LLM factor proposer (the /evolution\n'propose factors' button).\n\nPOST /api/factor-lab/propose only ENQUEUES a job. The old design ran the\nwork in a FastAPI BackgroundTask after the 202 response, but Vercel freezes\nthe function once the response is sent, so that task never completed and the\nbutton silently produced nothing after the 2026-05-26 async refactor. A\nGitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,\nplus a fallback schedule) calls this endpoint instead; here the work runs\nINSIDE the request (server-to-server, no browser long-hold, completes within\nthe function budget) so it always finishes and writes a terminal job state\nthe frontend poll can read.\n\nDrains queued jobs oldest-first until the queue empties or the budget is\nhit. Each job's failure is persisted onto its row, never swallowed.",
         "operationId": "cron_run_propose_jobs_api_cron_run_propose_jobs_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6742,6 +7394,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Run Propose Jobs",
@@ -6752,6 +7414,24 @@
       "post": {
         "description": "Reliable execution path for the LLM factor proposer (the /evolution\n'propose factors' button).\n\nPOST /api/factor-lab/propose only ENQUEUES a job. The old design ran the\nwork in a FastAPI BackgroundTask after the 202 response, but Vercel freezes\nthe function once the response is sent, so that task never completed and the\nbutton silently produced nothing after the 2026-05-26 async refactor. A\nGitHub Actions runner (triggered instantly on enqueue via workflow_dispatch,\nplus a fallback schedule) calls this endpoint instead; here the work runs\nINSIDE the request (server-to-server, no browser long-hold, completes within\nthe function budget) so it always finishes and writes a terminal job state\nthe frontend poll can read.\n\nDrains queued jobs oldest-first until the queue empties or the budget is\nhit. Each job's failure is persisted onto its row, never swallowed.",
         "operationId": "cron_run_propose_jobs_api_cron_run_propose_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6764,6 +7444,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Cron Run Propose Jobs",
@@ -6811,6 +7501,22 @@
                 }
               ],
               "title": "Offset"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -6881,6 +7587,22 @@
                 }
               ],
               "title": "Offset"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],

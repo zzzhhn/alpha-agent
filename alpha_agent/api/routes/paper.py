@@ -203,15 +203,18 @@ async def get_account(
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
 
-    positions = await pool.fetch(
-        "SELECT * FROM sim_position WHERE account_id = $1 AND qty > 0",
+    position_rows = await pool.fetch(
+        "SELECT * FROM sim_position WHERE account_id = $1",
         account_id,
     )
+    positions = [row for row in position_rows if row["qty"] > 0]
     tickers = [r["ticker"] for r in positions]
     closes = await _current_closes(pool, tickers)
 
     total_unrealized = 0.0
-    total_realized_pnl = 0.0
+    # Closed rows remain the durable realized-PnL ledger. Fetching all rows in
+    # the same indexed query avoids both a correctness hole and another DB trip.
+    total_realized_pnl = sum(row["realized_pnl"] or 0.0 for row in position_rows)
     pos_out: list[PositionOut] = []
     for p in positions:
         ticker = p["ticker"]
@@ -219,7 +222,6 @@ async def get_account(
         unr = ((current - p["avg_cost"]) * p["qty"]) if current is not None else 0.0
         unr_pct = ((current - p["avg_cost"]) / p["avg_cost"] * 100.0) if current and p["avg_cost"] else 0.0
         total_unrealized += unr
-        total_realized_pnl += p["realized_pnl"]
         pos_out.append(PositionOut(
             ticker=ticker,
             qty=p["qty"],
@@ -391,18 +393,26 @@ async def cancel_order(
     account = await _get_or_create_account(pool, user_id)
     account_id: int = account["id"]
 
-    order = await pool.fetchrow(
-        "SELECT id, account_id, status FROM sim_order WHERE id = $1", order_id
+    cancelled = await pool.fetchrow(
+        "UPDATE sim_order SET status = 'cancelled' "
+        "WHERE id = $1 AND account_id = $2 AND status = 'pending' RETURNING id",
+        order_id,
+        account_id,
     )
-    if order is None or order["account_id"] != account_id:
-        raise HTTPException(status_code=404, detail="order not found")
-    if order["status"] != "pending":
-        raise HTTPException(status_code=400, detail=f"cannot cancel order with status '{order['status']}'")
+    if cancelled is not None:
+        return Response(status_code=204)
 
-    await pool.execute(
-        "UPDATE sim_order SET status = 'cancelled' WHERE id = $1", order_id
+    order = await pool.fetchrow(
+        "SELECT status FROM sim_order WHERE id = $1 AND account_id = $2",
+        order_id,
+        account_id,
     )
-    return Response(status_code=204)
+    if order is None:
+        raise HTTPException(status_code=404, detail="order not found")
+    raise HTTPException(
+        status_code=400,
+        detail=f"cannot cancel order with status '{order['status']}'",
+    )
 
 
 @router.get("/equity-curve", response_model=EquityCurveResponse)

@@ -20,7 +20,7 @@ def app():
 
 
 @pytest.mark.asyncio
-async def test_ic_backtest_endpoint_returns_count(app):
+async def test_ic_backtest_endpoint_returns_count(app, monkeypatch):
     """POST /api/cron/ic_backtest_monthly should invoke the engine and return
     a JSON envelope with 'signals_updated' count."""
     async def fake_run(pool):
@@ -28,6 +28,7 @@ async def test_ic_backtest_endpoint_returns_count(app):
 
     fake_pool = AsyncMock()
     fake_pool.execute = AsyncMock(return_value=None)
+    monkeypatch.setenv("CRON_SECRET", "test-cron-secret")
 
     with patch(
         "alpha_agent.api.routes.ic_backtest.run_monthly_ic_backtest",
@@ -38,7 +39,10 @@ async def test_ic_backtest_endpoint_returns_count(app):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://t") as c:
-            r = await c.post("/api/cron/ic_backtest_monthly")
+            r = await c.post(
+                "/api/cron/ic_backtest_monthly",
+                headers={"Authorization": "Bearer test-cron-secret"},
+            )
 
     assert r.status_code == 200
     body = r.json()

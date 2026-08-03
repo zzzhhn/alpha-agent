@@ -33,12 +33,12 @@ jobs:
     steps:
       - name: Drain queued propose jobs
         env:
-          # /api/cron/* is rewritten to the alpha-agent backend (same host the
-          # existing cron-shards workflow uses).
-          BACKEND_BASE: https://alpha.bobbyzhong.com
+          BACKEND_BASE: https://alpha-api.bobbyzhong.com
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          HTTP=$(curl -s --max-time 290 --retry 2 --retry-delay 5 --retry-all-errors \
+          HTTP=$(curl -s --max-time 290 \
             -o /tmp/propose.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -X POST "$BACKEND_BASE/api/cron/run_propose_jobs")
           echo "HTTP=$HTTP"
           head -c 2000 /tmp/propose.json 2>/dev/null || true
