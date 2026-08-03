@@ -3,17 +3,23 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import httpx
 import pytest
 
 from alpha_agent.signals import finnhub_earnings as fe
 
 
 class _Resp:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self._p = payload
+        self.status_code = status_code
+        self.headers = {}
 
     def raise_for_status(self):
-        pass
+        if self.status_code >= 400:
+            request = httpx.Request("GET", "https://example.test")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError("provider error", request=request, response=response)
 
     def json(self):
         return self._p
@@ -29,6 +35,19 @@ class _Client:
             if key in url:
                 return _Resp(payload)
         raise AssertionError(f"no route for {url}")
+
+
+class _SequenceClient:
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = 0
+
+    def get(self, url, params=None, timeout=None):
+        self.calls += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
 
 
 @pytest.fixture(autouse=True)
@@ -82,3 +101,27 @@ def test_load_upcoming_map():
     assert out["AAPL"]["next_date"] == date(2026, 7, 30)
     assert out["AAPL"]["eps_estimate"] == 1.5
     assert out["NVDA"]["next_date"] == date(2026, 8, 25)
+
+
+def test_load_upcoming_map_retries_read_timeout():
+    request = httpx.Request("GET", "https://finnhub.io/api/v1/calendar/earnings")
+    client = _SequenceClient([
+        httpx.ReadTimeout("slow provider", request=request),
+        _Resp({"earningsCalendar": [
+            {"symbol": "AAPL", "date": "2026-08-25"},
+        ]}),
+    ])
+
+    out = fe.load_upcoming_map(client, "k", datetime(2026, 8, 1, tzinfo=UTC))
+
+    assert client.calls == 2
+    assert out["AAPL"]["next_date"] == date(2026, 8, 25)
+
+
+def test_fetch_surprise_does_not_retry_permanent_401():
+    client = _SequenceClient([_Resp({"error": "invalid token"}, status_code=401)])
+
+    with pytest.raises(httpx.HTTPStatusError):
+        fe.fetch_surprise(client, "bad", "AAPL")
+
+    assert client.calls == 1

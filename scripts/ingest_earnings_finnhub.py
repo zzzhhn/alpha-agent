@@ -45,11 +45,21 @@ async def main(limit: int) -> None:
     tickers = SP500_UNIVERSE[:limit] if limit else SP500_UNIVERSE
 
     written = with_surprise = failed = 0
+    upcoming_available = True
     try:
         # trust_env=False: avoid a misconfigured local system proxy (resets TLS
         # on macOS); GHA egress is direct so it's correct there too.
         with httpx.Client(trust_env=False) as client:
-            upcoming = load_upcoming_map(client, api_key, as_of)
+            try:
+                upcoming = load_upcoming_map(client, api_key, as_of)
+            except httpx.HTTPError as exc:
+                upcoming_available = False
+                upcoming = {}
+                print(
+                    "WARN upcoming calendar unavailable after bounded retries: "
+                    f"{type(exc).__name__}: {exc}. Continuing with surprise history.",
+                    file=sys.stderr,
+                )
             print(f"upcoming map: {len(upcoming)} symbols; processing {len(tickers)}.")
             for i, ticker in enumerate(tickers, 1):
                 try:
@@ -74,7 +84,15 @@ async def main(limit: int) -> None:
                     with_surprise += 1
                 if i % 50 == 0:
                     print(f"  ...{i}/{len(tickers)} ({with_surprise} with surprise)")
-        print(f"\nDone. written={written} with_surprise={with_surprise} failed={failed}")
+        print(
+            "\nDone. "
+            f"written={written} with_surprise={with_surprise} failed={failed} "
+            f"upcoming_available={str(upcoming_available).lower()}"
+        )
+        if written == 0 and (failed > 0 or not upcoming_available):
+            raise RuntimeError(
+                "Finnhub ingestion produced no rows; provider or network remained unavailable."
+            )
     finally:
         await pool.close()
 
