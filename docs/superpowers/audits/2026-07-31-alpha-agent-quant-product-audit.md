@@ -918,3 +918,20 @@ V040 在旧 L2 批次证据之外增加轻量连续账户：
 实现提交为 `0127fa2`。本地聚焦验证结果：39 个 migration、policy、Picks、L2 与 OpenAPI 测试通过；扩展到 API、backtest、cron 和 storage 后为 269 passed，只有 3 条既有 pytest 标记警告。最后的兼容性与事务边界补丁另有 17 个相关测试和 4 个连续账户／cron 测试通过。63 个前端测试、TypeScript 与变更文件 Ruff 通过，Next.js production build 通过。浏览器复核确认桌面新工作流、移动端无水平溢出、语义 `h1`、候选携带 ticker 进入模拟仓，以及未登录账户／订单／曲线／来源失败不会冒充有效数据。
 
 生产部署前仍需执行 V040 migration，再部署后端与前端。由于独立战略政策和连续账户都采用前瞻边界，部署当天正确状态应是 `awaiting_forward_run`，而不是立刻出现一条历史收益曲线。只有后续新 complete run 与下一交易日价格到达后，才应出现第一笔份额级 delta 和 NAV。
+
+### 20.6 生产部署与真实路径验收
+
+主实现与报告通过 PR #8 合并到 `main`，merge commit 为 `5aa6216`；生产路径验收发现 OpenAPI 只能从后端根路径生成，但前端自定义域名只代理 `/api/*`，因此 `/api/openapi.json` 返回 404。修复提交 `cb25970` 增加不进入 schema 自身的只读代理别名、认证白名单和真实路径测试，并通过 PR #9 合并，最终 `main` 为 `6b5b22f`。这次修复说明 Ready deployment 和本地 snapshot 都不能替代自定义域名的路由验收。
+
+最终发布证据如下：
+
+1. PR #8 严格 CI `30803621450` 与合并后 main CI `30803922035` 均成功；PR #9 CI `30804653705` 与最终 main CI `30804943097` 均成功。
+2. migration workflow `30803952092` 明确输出 `applied: ['V040__dual_policy_continuous_l2']`。
+3. 最终 commit `6b5b22f` 对应后端 production deployment `5724479615` 与前端 production deployment `5724485103`，两者状态均为 success。
+4. `https://alpha.bobbyzhong.com/api/_health` 返回 HTTP 200、`application/json` 与 `db=ok`；前端版本为 `90679cb15abf6c82`。
+5. 生产 `/api/openapi.json` 返回 HTTP 200、`application/json` 与 132 条 paths，同时包含 Picks、L2、`RecommendationChanges` 和 `LeanCard.policy_rank`。
+6. 幂等 L2 workflow `30804767872` 返回 legacy `rebalances=6`、`equity_points=4`，两套 continuous book 均为 `generated=0`、`filled=0`、`pending=0`、`error=null`。
+7. 生产 L2 摘要显示战术 strategy 27、战略 strategy 28，均以 run 33 为 `start_after_run_id`，NAV 与 cash 均为 1,000,000，状态均为 `awaiting_forward_run`；旧四期证据保持可读。
+8. 真实 Chromium 的 390px `/picks` 验收为 `scrollWidth=390`、唯一 `h1=今日组合决策`，首个候选链接为 `/paper?ticker=SLB`。生产 `/paper?ticker=SLB` 保留 SLB 选择，账户、订单与来源认证失败显示“无法确认”及重试，不显示伪零；同页连续账户面板显示 run 33 前瞻边界。
+
+当前 run 33 产生于新政策快照上线之前。因此战术榜单继续通过旧字段兼容读取；战略接口只返回 `canonical=false`、`ranked=false`、`tradable=false` 的探索结果，不会把旧 long payload 冒充 `strategic_v1_60d_frozen`。下一份完整推荐 run 会第一次冻结独立战略 policy ID 与 rank；再到下一交易日收盘后，连续账户才会出现第一笔真实 delta。这是设计中的前瞻等待边界，也是本轮唯一需要自然时间推进的验收项。
