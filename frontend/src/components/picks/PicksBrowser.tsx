@@ -209,7 +209,8 @@ export default function PicksBrowser({
   const searching = search.trim().length > 0;
   const count = data.picks.length;
   const snapshotStale =
-    count > 0 && isPicksSnapshotStale(data.as_of, data.stale, now);
+    count > 0 &&
+    (!data.tradable || isPicksSnapshotStale(data.as_of, data.stale, now));
   const asOf = data.as_of
     ? new Date(data.as_of).toLocaleString()
     : locale === "zh"
