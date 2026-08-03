@@ -267,12 +267,17 @@ function AuthPrompt({ hint, cta }: { readonly hint: string; readonly cta: string
 
 function PaperError({ detail }: { readonly detail: string }) {
   const { locale } = useLocale();
-  return <p className="font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "sim.load_error_hint")} <span className="text-tm-muted">({detail})</span></p>;
+  void detail;
+  return <p className="font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "sim.load_error_hint")}</p>;
 }
 
 function SectionError({ detail, onRetry }: { readonly detail: string; readonly onRetry: () => void }) {
   const { locale } = useLocale();
-  return <div role="alert" className="m-3 flex items-center justify-between gap-3 border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[10.5px] text-tm-neg"><span>{locale === "zh" ? "该区块暂时无法确认，未将其显示为零。" : "This section is unavailable; unknown data is not shown as zero."} <span className="text-tm-muted">({detail})</span></span><button type="button" onClick={onRetry} className="shrink-0 border border-current px-2 py-1">{locale === "zh" ? "重试" : "Retry"}</button></div>;
+  const authRequired = /authorization|authentication|unauthorized|\b401\b/i.test(detail);
+  const message = authRequired
+    ? (locale === "zh" ? "登录后可查看该区块，当前未将未知数据显示为空记录。" : "Sign in to view this section; unknown data is not shown as an empty record.")
+    : (locale === "zh" ? "该区块暂时无法确认，未将其显示为零。" : "This section is unavailable; unknown data is not shown as zero.");
+  return <div role={authRequired ? "status" : "alert"} className={`m-3 flex items-center justify-between gap-3 border px-3 py-2 font-tm-mono text-[10.5px] ${authRequired ? "border-tm-rule bg-tm-bg-2 text-tm-muted" : "border-tm-neg/40 bg-tm-neg/10 text-tm-neg"}`}><span>{message}</span><button type="button" onClick={onRetry} className="shrink-0 border border-current px-2 py-1">{locale === "zh" ? "重新检查" : "Check again"}</button></div>;
 }
 
 function FrozenRecommendations() {
