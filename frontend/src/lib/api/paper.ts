@@ -117,7 +117,7 @@ export interface L2Summary {
   readonly periods?: number;
   readonly net_return?: number;
   readonly spy_return?: number;
-  readonly rsp_return?: number;
+  readonly rsp_return?: number | null;
   readonly beta_spy?: number | null;
   readonly max_drawdown?: number;
   readonly mean_turnover?: number | null;

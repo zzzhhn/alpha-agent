@@ -103,15 +103,18 @@ async def l2_summary() -> dict[str, Any]:
     ]
     series: list[dict[str, Any]] = []
     nav = spy_nav = rsp_nav = 100.0
+    rsp_started = False
     for row in equity:
         nav *= 1.0 + float(row["net_return"] or 0.0)
         spy_nav *= 1.0 + float(row["benchmark_return"] or 0.0)
-        rsp_nav *= 1.0 + float(row["rsp_return"] or 0.0)
+        if row["rsp_return"] is not None:
+            rsp_nav *= 1.0 + float(row["rsp_return"])
+            rsp_started = True
         series.append({
             "date": row["as_of_date"].isoformat(),
             "nav": nav,
             "spy": spy_nav,
-            "rsp": rsp_nav,
+            "rsp": rsp_nav if rsp_started else None,
         })
 
     cost_sensitivity = {}
@@ -131,10 +134,14 @@ async def l2_summary() -> dict[str, Any]:
         "periods": len(equity),
         "net_return": _compound(net),
         "spy_return": _compound(spy),
-        "rsp_return": _compound([
-            float(row["rsp_return"]) if row["rsp_return"] is not None else None
-            for row in equity
-        ]),
+        "rsp_return": (
+            _compound([
+                float(row["rsp_return"])
+                for row in equity if row["rsp_return"] is not None
+            ])
+            if any(row["rsp_return"] is not None for row in equity)
+            else None
+        ),
         "beta_spy": _beta(
             [pair[0] for pair in beta_pairs],
             [pair[1] for pair in beta_pairs],

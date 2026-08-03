@@ -52,6 +52,30 @@ async def test_l2_summary_reports_risk_costs_and_sector(
     assert body["sector_exposure"][0]["sector"] == "Technology"
 
 
+async def test_l2_summary_does_not_report_missing_rsp_as_flat(
+    client_with_db, applied_db
+):
+    conn = await asyncpg.connect(applied_db)
+    try:
+        strategy_id = await conn.fetchval(
+            "INSERT INTO l2_strategy (name, version, params_json) "
+            "VALUES ('canonical_top50', 1, '{}'::jsonb) RETURNING id"
+        )
+        await conn.execute(
+            "INSERT INTO l2_equity_daily "
+            "(strategy_id, as_of_date, net_return, benchmark_return) "
+            "VALUES ($1, $2, 0.01, 0.005)",
+            strategy_id,
+            date(2026, 7, 8),
+        )
+    finally:
+        await conn.close()
+
+    body = client_with_db.get("/api/l2/summary").json()
+    assert body["rsp_return"] is None
+    assert body["series"][0]["rsp"] is None
+
+
 async def test_critical_dag_health_covers_each_required_node(
     client_with_db, applied_db
 ):
