@@ -746,3 +746,54 @@ P1 主提交为 `1d4ce86`，生产浏览器验收后的冻结态补丁为 `9f025
 本次浏览器验收还确认了 Next.js 60 秒 ISR 的一个边界：缓存过期后的首次访问可以先返回旧页面，并在后台重验证；下一次访问才获得 run 33。它没有改变 API 或订单门控的正确性，但可能让刚发布后的用户短暂看到冻结态。后续 P2 可以在原子发布后增加显式 tag invalidation，或让客户端对比最新 run id 后自刷新，以消除这一短暂不一致。
 
 run 33 首次健康发布的功能验收部署为：后端 `dpl_9qqTCHcwWpVJwzptKDTPrtb3sDV1`，前端 `dpl_BxX4HQqNKVxTf7aFnfkNuvrZSPhc`。报告与验收基线提交为 `c54b620`，本节记录的是其上线后恢复结果。部署 ID 会随报告类提交自动更新，因此当前生产别名与 Ready 状态应以每次交付时的生产路径复查为准。
+
+## 十八、2026-08-03 P0 完整性问题关闭
+
+第 16.4 节新增的三个 P0 已统一关闭，实施提交为 `ffafdd3`。修复没有引入新表、队列服务或常驻 worker，设计目标是适配 Neon 小数据库、Vercel Serverless 和个人项目的运维能力。
+
+### 18.1 cron 写接口统一鉴权
+
+所有 `/api/cron/*` 路由，包括原先位于独立 router 的 `ic_backtest_monthly`，现在统一要求 `Authorization: Bearer $CRON_SECRET`。服务端未配置 secret 时返回 503，缺失或错误 bearer 时返回 401，不会退化为公开接口。另增加无数据库读写的 `/api/cron/auth_check`，用于部署 smoke test。
+
+生产调用方同步调整：
+
+1. Vercel Cron 使用 Vercel 原生 `CRON_SECRET` bearer 约定。
+2. `cron-shards`、`daily-factor-loop` 和 `propose-job-runner` 使用同一 GitHub Actions secret。
+3. GitHub Actions 改为直连 `alpha-api.bobbyzhong.com`，不再为每个分片额外消耗一次 Next.js rewrite 调用。
+4. 两个长任务移除传输层整请求重试，避免网络错误后重复执行昂贵 POST。
+
+OpenAPI 生产核验覆盖 30 个 cron GET／POST operation，缺少 authorization header 的数量为 0。未授权 smoke 返回 401，授权 smoke 返回 200。GitHub Actions 运行 `30789509177` 在提交 `ffafdd3` 上通过相同链路获得 HTTP 200，队列为空时返回 `drained=0`，证明 secret、workflow 和生产后端契约一致。
+
+### 18.2 模拟成交并发与资源上限
+
+paper fill 采用两层数据库一致性边界：
+
+1. 每次任务先申请 PostgreSQL 非阻塞 advisory lock。已有实例运行时，第二个实例立即返回可观察的 `already_running`，不等待，也不重复读取全表。
+2. 每张订单在事务内用 `FOR UPDATE SKIP LOCKED` 重新确认仍为 pending。账户现金和持仓行也在修改前加锁，取消订单改为条件式原子状态转换。
+
+为了控制 Neon 连接数、内存与 Vercel 执行时间，单次最多处理 200 张已有后续价格的订单，market 订单优先。价格查询只读取候选订单最早 signal date 之后的数据。整个任务最多同时占用一个任务锁连接和一个工作连接，没有新增数据库迁移或外部队列。
+
+净值快照原先对每个账户反复查询持仓、最新价、已实现盈亏和 SPY，形成 N+1 模式。现在改为一个 PostgreSQL CTE 聚合读取和一个批量 upsert。它同时保留缺失最新价时按 avg cost 估值的保守口径。
+
+### 18.3 完全平仓后的已实现盈亏
+
+`/api/paper/account` 现在用一次带 account_id 索引条件的查询读取该账户全部 position，在内存中只把 `qty > 0` 的行作为当前持仓返回，但 realized PnL 对全部行求和。因此卖出最后一股后，历史已实现盈亏仍计入账户总额，且没有增加一次数据库往返。
+
+同一口径也进入新的净值快照聚合：当前市值和未实现盈亏只计算活动持仓，已实现盈亏包含完全平仓 ticker。
+
+### 18.4 验证与生产地面真相
+
+| 门槛 | 结果 |
+|---|---|
+| 后端 API／cron／paper | 146 passed，3 条既有 pytest 标记警告 |
+| 前端测试 | 63 passed |
+| TypeScript | `tsc --noEmit` 通过 |
+| Python lint | 变更文件 ruff 通过 |
+| OpenAPI | snapshot 与生成类型同步，生产 cron 鉴权覆盖完整 |
+| 后端 Production | `dpl_8D3Lq8HHzFjQuF5Y9AwqbbFHKxtm`，Ready，别名 `alpha-api.bobbyzhong.com` |
+| 前端 Production | `dpl_FAbcyFN8VQWpz3yT2e9PAcPkoJcr`，Ready，别名 `alpha.bobbyzhong.com` |
+| 推荐事实 | run 33，market date 2026-07-31，canonical／ranked／tradable 均为 true，price coverage 1.0 |
+
+生产首次构建曾因 secret 文件末尾换行被 Vercel 拒绝，错误发生在构建阶段，旧 Ready deployment 继续服务，没有切换用户流量。随后去除换行并同步轮换 Vercel 与 GitHub secret，重新部署和真实 Actions 调度均通过。这个事件进一步确认：header secret 必须验证字节边界，不能把“环境变量名存在”当作部署可用。
+
+因此，第 16.4 节的公开 cron、成交并发和完全平仓盈亏三个 P0 状态现为 closed。L2 单仓上限、回测时序、健康 DAG 覆盖等剩余发现仍按其原优先级保留，不因本节而被误报为已解决。
