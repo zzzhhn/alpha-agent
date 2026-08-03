@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
 
 def test_openapi_export_matches_disk():
     """Verify openapi.snapshot.json is up to date with the backend OpenAPI.
@@ -32,3 +34,15 @@ def test_openapi_export_matches_disk():
         raise AssertionError(
             "OpenAPI schema drift detected. Run `make openapi-export` to update."
         )
+
+
+def test_openapi_is_available_through_frontend_api_proxy_path():
+    from alpha_agent.api.app import create_app
+
+    response = TestClient(create_app()).get("/api/openapi.json")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    spec = response.json()
+    assert "/api/picks/lean" in spec["paths"]
+    assert "/api/l2/summary" in spec["paths"]

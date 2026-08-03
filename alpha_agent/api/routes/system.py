@@ -16,6 +16,12 @@ router = APIRouter(prefix="/api", tags=["system"])
 _START_TIME = time.monotonic()
 
 
+@router.get("/openapi.json", include_in_schema=False)
+async def proxied_openapi(request: Request) -> dict:
+    """Expose OpenAPI through the frontend's existing ``/api/*`` proxy."""
+    return request.app.openapi()
+
+
 @router.get("/system")
 async def system_health(request: Request) -> dict:
     """Return system health, service status, and model info."""
