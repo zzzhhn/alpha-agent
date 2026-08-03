@@ -40,6 +40,7 @@ interface NavItem {
 interface NavGroup {
   readonly titleKey: string;
   readonly items: ReadonlyArray<NavItem>;
+  readonly secondary?: boolean;
 }
 
 // P2-1: regrouped from a flat LIFECYCLE list into a value-prop information
@@ -48,27 +49,28 @@ interface NavGroup {
 // `id` is informational; the active marker is pathname === item.href.
 const NAV_GROUPS: ReadonlyArray<NavGroup> = [
   {
+    titleKey: "nav.group.workflow",
+    items: [
+      { id: "picks", href: "/picks", labelKey: "nav.picks" },
+      { id: "paper", href: "/paper", labelKey: "nav.paper" },
+      { id: "alerts", href: "/alerts", labelKey: "nav.alerts" },
+    ],
+  },
+  {
     titleKey: "nav.group.research",
     items: [
       { id: "alpha", href: "/alpha", labelKey: "lifecycle.alpha" },
       { id: "backtest", href: "/backtest", labelKey: "lifecycle.backtest" },
-      { id: "zoo", href: "/factors", labelKey: "lifecycle.zoo" },
-      // /signal merged into /report (report runs the same signal-today +
-      // exposure and now also the IC timeseries; /signal redirects here).
+      { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
       { id: "report", href: "/report", labelKey: "lifecycle.report" },
     ],
   },
   {
-    titleKey: "nav.group.decisions",
+    titleKey: "nav.group.advanced",
+    secondary: true,
     items: [
-      { id: "picks", href: "/picks", labelKey: "nav.picks" },
-      { id: "paper", href: "/paper", labelKey: "nav.paper" },
-      { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
-      { id: "alerts", href: "/alerts", labelKey: "nav.alerts" },
-      // Evolution now also hosts the methodology-proposals UI (the former
-      // /factor-lab page was merged in; /factor-lab redirects here).
+      { id: "zoo", href: "/factors", labelKey: "lifecycle.zoo" },
       { id: "evolution", href: "/evolution", labelKey: "nav.evolution" },
-      // Phase E: real WorldQuant BRAIN mining results + submit.
       { id: "brain", href: "/brain", labelKey: "nav.brain" },
     ],
   },
@@ -93,43 +95,49 @@ export function Sidebar() {
       aria-label="Lifecycle navigation"
     >
       <div className="border-b border-tm-rule p-3 space-y-3">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.titleKey}>
-            <div className="mb-1 px-1.5 text-[10px] font-semibold tracking-[0.12em] text-tm-muted">
-              {t(locale, group.titleKey as Parameters<typeof t>[1])}
+        {NAV_GROUPS.map((group) => {
+          const containsActive = group.items.some((item) => pathname === item.href);
+          const links = group.items.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                prefetch={false}
+                aria-current={isActive ? "page" : undefined}
+                className={clsx(
+                  "flex w-full items-center gap-2 px-1.5 py-1 text-[11.5px] transition-colors",
+                  isActive
+                    ? "bg-tm-accent-soft text-tm-accent"
+                    : "text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg",
+                )}
+              >
+                <span className={clsx("w-[10px] text-center", isActive ? "text-tm-accent" : "text-tm-muted")} aria-hidden="true">
+                  {isActive ? "▶" : "·"}
+                </span>
+                <span>{t(locale, item.labelKey as Parameters<typeof t>[1])}</span>
+              </Link>
+            );
+          });
+          if (group.secondary) {
+            return (
+              <details key={group.titleKey} open={containsActive}>
+                <summary className="cursor-pointer list-none px-1.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-tm-muted hover:text-tm-fg-2">
+                  {containsActive ? "▾" : "▸"} {t(locale, group.titleKey as Parameters<typeof t>[1])}
+                </summary>
+                <div className="mt-1">{links}</div>
+              </details>
+            );
+          }
+          return (
+            <div key={group.titleKey}>
+              <div className="mb-1 px-1.5 text-[10px] font-semibold tracking-[0.12em] text-tm-muted">
+                {t(locale, group.titleKey as Parameters<typeof t>[1])}
+              </div>
+              {links}
             </div>
-            {group.items.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  prefetch={true}
-                  aria-current={isActive ? "page" : undefined}
-                  className={clsx(
-                    "flex w-full items-center gap-2 px-1.5 py-1 text-[11.5px] transition-colors",
-                    isActive
-                      ? "bg-tm-accent-soft text-tm-accent"
-                      : "text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg",
-                  )}
-                >
-                  <span
-                    className={clsx(
-                      "w-[10px] text-center",
-                      isActive ? "text-tm-accent" : "text-tm-muted",
-                    )}
-                    aria-hidden="true"
-                  >
-                    {isActive ? "▶" : "·"}
-                  </span>
-                  <span>
-                    {t(locale, item.labelKey as Parameters<typeof t>[1])}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-auto flex items-center gap-1.5 border-t border-tm-rule px-3 py-2 text-[10px] text-tm-muted">
@@ -162,7 +170,7 @@ export function MobileNav() {
             {group.items.map((item) => {
               const active = pathname === item.href;
               return (
-                <Link key={item.id} href={item.href} className={clsx("block px-2 py-1.5 font-tm-mono text-[11px]", active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2")}>
+                <Link key={item.id} href={item.href} prefetch={false} className={clsx("block px-2 py-1.5 font-tm-mono text-[11px]", active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2")}>
                   {t(locale, item.labelKey as Parameters<typeof t>[1])}
                 </Link>
               );

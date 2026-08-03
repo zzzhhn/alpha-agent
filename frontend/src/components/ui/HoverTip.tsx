@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -31,6 +31,7 @@ export function HoverTip({
   className?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const tooltipId = useId();
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(
     null,
   );
@@ -68,16 +69,22 @@ export function HoverTip({
   return (
     <span
       ref={ref}
+      tabIndex={0}
+      aria-describedby={coords !== null ? tooltipId : undefined}
       className={`inline-flex items-center ${className}`}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") hide();
+      }}
     >
       {children}
       {coords !== null
         ? createPortal(
             <span
+              id={tooltipId}
               role="tooltip"
               style={{ position: "fixed", top: coords.top, left: coords.left, width }}
               className="pointer-events-none z-[1000] rounded border border-tm-rule bg-tm-bg-2 p-2 text-[11px] leading-snug text-tm-fg shadow-lg whitespace-pre-line"

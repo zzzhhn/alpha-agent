@@ -112,6 +112,20 @@ export interface ResetResponse {
   readonly message: string;
 }
 
+export interface ContinuousL2Account {
+  readonly status: "awaiting_forward_run" | "active";
+  readonly accounting: "continuous_share_delta";
+  readonly nav: number;
+  readonly cash: number;
+  readonly cumulative_return: number | null;
+  readonly positions: number;
+  readonly pending_orders: number;
+  readonly transaction_costs: number;
+  readonly latest_turnover: number | null;
+  readonly last_fill_date: string | null;
+  readonly start_after_run_id: number;
+}
+
 export interface L2Summary {
   readonly status: "empty" | "accumulating" | "ready";
   readonly periods?: number;
@@ -134,6 +148,8 @@ export interface L2Summary {
     readonly weight: number;
     readonly positions: number;
   }[];
+  readonly continuous_account?: ContinuousL2Account | null;
+  readonly strategic_continuous_account?: ContinuousL2Account | null;
 }
 
 /** Fetch error that keeps the HTTP status: the UI must render a 401 as a

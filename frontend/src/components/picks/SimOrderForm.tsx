@@ -36,6 +36,8 @@ interface Props {
   readonly latestPrice?: number | null;
   readonly priceDate?: string | null;
   readonly availableCash?: number | null;
+  readonly portfolioValue?: number | null;
+  readonly targetWeight?: number;
   readonly initialSide?: "buy" | "sell";
 }
 
@@ -89,12 +91,14 @@ export default function SimOrderForm({
   latestPrice,
   priceDate,
   availableCash,
+  portfolioValue,
+  targetWeight = 0.02,
   initialSide = "buy",
 }: Props) {
   const [ticker, setTicker] = useState(fixedTicker ?? "");
   const [side, setSide] = useState<"buy" | "sell">(initialSide);
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
-  const [qty, setQty] = useState<string>("10");
+  const [qty, setQty] = useState<string>("1");
   const [limitPrice, setLimitPrice] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +116,14 @@ export default function SimOrderForm({
       .catch(() => { /* non-fatal — cash display remains blank */ });
     return () => { cancelled = true; };
   }, [availableCash]);
+
+  useEffect(() => {
+    if (!fixedTicker || typeof latestPrice !== "number" || latestPrice <= 0) return;
+    const allocationBase = portfolioValue ?? availableCash;
+    if (typeof allocationBase !== "number" || allocationBase <= 0) return;
+    const suggested = Math.max(1, Math.floor((allocationBase * targetWeight) / latestPrice));
+    setQty(String(suggested));
+  }, [availableCash, fixedTicker, latestPrice, portfolioValue, targetWeight]);
 
   const qtyNum = parseInt(qty, 10);
   const limitNum = parseFloat(limitPrice);
@@ -208,6 +220,7 @@ export default function SimOrderForm({
             onChange={(e) => setQty(e.target.value)}
             className={clsx(INPUT, "w-24")}
           />
+          {fixedTicker ? <p className="mt-1 max-w-44 font-tm-mono text-[9px] leading-4 text-tm-muted">{locale === "zh" ? `默认按组合净值的 ${(targetWeight * 100).toFixed(0)}% 估算，可手动调整` : `Suggested at ${(targetWeight * 100).toFixed(0)}% of portfolio NAV; editable`}</p> : null}
         </div>
         {orderType === "limit" && (
           <div>

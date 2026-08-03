@@ -17,16 +17,40 @@ interface Props {
   readonly onOrderPlaced: () => void;
 }
 
-export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }: Props) {
+export default function SimOrderDrawer({ ticker, card, cash, onClose, onOrderPlaced }: Props) {
   const { locale } = useLocale();
   const drawerRef = useRef<HTMLDivElement>(null);
   const pickDate = card.market_date ?? undefined;
 
-  // Close on Escape
+  // Modal keyboard contract: focus enters the drawer, stays trapped while it
+  // is open, Escape closes it, and the initiating control regains focus.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () => Array.from(drawerRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])") ?? []);
+    focusable()[0]?.focus();
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      previous?.focus();
+    };
   }, [onClose]);
 
   return (
@@ -69,6 +93,9 @@ export default function SimOrderDrawer({ ticker, card, onClose, onOrderPlaced }:
             pickDate={pickDate}
             pickTicker={card.ticker}
             pickRunId={card.run_id ?? undefined}
+            latestPrice={card.latest_price}
+            priceDate={card.price_date}
+            availableCash={cash}
           />
           <div className="mt-3">
             <Disclaimer />

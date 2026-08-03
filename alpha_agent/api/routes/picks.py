@@ -25,6 +25,8 @@ from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import grade_dimensions
 from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.fusion.rating import compute_confidence, map_to_tier
+from alpha_agent.fusion.combine import combine
+from alpha_agent.fusion.policy import get_policy
 from alpha_agent.market_session import latest_completed_xnys_session
 
 logger = logging.getLogger(__name__)
@@ -61,7 +63,7 @@ class LeanCard(BaseModel):
     rating: str
     # Calibrated directional hit-rate (isotonic map over realized 5d outcomes).
     # Honest "edge", structurally modest (~50%); also feeds Kelly position sizing.
-    confidence: float
+    confidence: float | None
     # Raw signal-agreement = 1/(1+variance(z)). The conviction headline: how
     # aligned the underlying signals are on this name. NOT a hit-rate.
     agreement: float = 0.0
@@ -97,6 +99,14 @@ class LeanCard(BaseModel):
     # rows; populated for every card read from one canonical product-ledger run.
     run_id: int | None = None
     market_date: str | None = None
+    # The two recommendation views are independently frozen policies.  These
+    # fields make the selected sleeve explicit all the way to the browser and
+    # prevent a horizon toggle from masquerading as a cosmetic factor switch.
+    sleeve: str = "tactical"
+    horizon_days: int = 5
+    policy_id: str | None = None
+    validation_status: str = "production"
+    policy_rank: int | None = None
 
 
 class RecommendationRunState(BaseModel):
@@ -107,6 +117,27 @@ class RecommendationRunState(BaseModel):
     policy_id: str | None
     coverage: float
     health: dict
+    sleeve: str = "tactical"
+    horizon_days: int = 5
+    validation_status: str = "production"
+
+
+class PickChange(BaseModel):
+    ticker: str
+    prior_rank: int | None = None
+    current_rank: int | None = None
+    prior_tier: str | None = None
+    current_tier: str | None = None
+
+
+class RecommendationChanges(BaseModel):
+    available: bool
+    prior_run_id: int | None = None
+    turnover: float | None = None
+    added: list[PickChange] = []
+    removed: list[PickChange] = []
+    tier_changes: list[PickChange] = []
+    reason: str | None = None
 
 
 class PicksResponse(BaseModel):
@@ -117,6 +148,7 @@ class PicksResponse(BaseModel):
     ranked: bool = False
     tradable: bool = False
     run: RecommendationRunState | None = None
+    changes: RecommendationChanges | None = None
 
 
 def _json_object(value) -> dict:
@@ -129,6 +161,109 @@ def _json_object(value) -> dict:
         except json.JSONDecodeError:
             return {}
     return {}
+
+
+def _strategic_projection(raw_breakdown) -> dict:
+    """Re-fuse one stored signal set under the independent 60d policy.
+
+    The tactical row remains immutable.  We clone its auditable signal
+    observations, replace only the factor observation with the separately
+    evaluated 252d/126d value, and then run the full strategic weight and
+    coverage policy.  Missing long-factor data is an explicit dropped signal,
+    never a fallback to the tactical score.
+    """
+    envelope = _json_object(raw_breakdown)
+    entries = [dict(entry) for entry in envelope.get("breakdown", [])]
+    for entry in entries:
+        if entry.get("confidence") is None:
+            entry["confidence"] = (
+                1.0 if _safe_float(entry.get("weight_effective"), 0.0) > 0 else 0.0
+            )
+    for entry in entries:
+        if entry.get("signal") != "factor":
+            continue
+        raw = entry.get("raw")
+        if isinstance(raw, dict) and isinstance(raw.get("z_long"), (int, float)):
+            entry["z"] = float(raw["z_long"])
+        else:
+            entry["z"] = None
+            entry["confidence"] = 0.0
+            entry["error"] = "strategic_factor_unavailable"
+        break
+    policy = get_policy("strategic")
+    return combine(
+        entries,
+        policy.weights,
+        coverage_core=policy.core_set(),
+        caps=policy.caps_dict(),
+    )
+
+
+def _top_policy_rows(rows, *, mode: str, policy_id: str, top_n: int = 50) -> dict[str, dict]:
+    result: dict[str, dict] = {}
+    for row in rows:
+        if not row["eligible"]:
+            continue
+        payload = _json_object(row["user_visible_payload_json"])
+        if mode == "long":
+            payload = _json_object(_json_object(payload.get("_mode_payloads")).get("long"))
+            if payload.get("policy_id") != policy_id:
+                continue
+            rank = payload.get("policy_rank")
+        else:
+            rank = row["rank"]
+        if not isinstance(rank, int) or rank > top_n:
+            continue
+        result[row["ticker"]] = {
+            "rank": rank,
+            "tier": payload.get("rating") or row["tier"],
+        }
+    return result
+
+
+def _recommendation_changes(
+    current_rows,
+    previous_rows,
+    *,
+    mode: str,
+    policy_id: str,
+    prior_run_id: int | None,
+) -> RecommendationChanges:
+    current = _top_policy_rows(current_rows, mode=mode, policy_id=policy_id)
+    previous = _top_policy_rows(previous_rows, mode=mode, policy_id=policy_id)
+    if not previous:
+        return RecommendationChanges(
+            available=False,
+            prior_run_id=prior_run_id,
+            reason="no_prior_snapshot_for_same_policy",
+        )
+    added_names = sorted(set(current) - set(previous), key=lambda ticker: current[ticker]["rank"])
+    removed_names = sorted(set(previous) - set(current), key=lambda ticker: previous[ticker]["rank"])
+    tier_names = sorted(
+        (
+            ticker for ticker in set(current) & set(previous)
+            if current[ticker]["tier"] != previous[ticker]["tier"]
+        ),
+        key=lambda ticker: current[ticker]["rank"],
+    )
+    def change(ticker: str) -> PickChange:
+        before = previous.get(ticker, {})
+        after = current.get(ticker, {})
+        return PickChange(
+            ticker=ticker,
+            prior_rank=before.get("rank"),
+            current_rank=after.get("rank"),
+            prior_tier=before.get("tier"),
+            current_tier=after.get("tier"),
+        )
+    return RecommendationChanges(
+        available=True,
+        prior_run_id=prior_run_id,
+        turnover=len(added_names) / max(len(current), 1),
+        added=[change(ticker) for ticker in added_names[:10]],
+        removed=[change(ticker) for ticker in removed_names[:10]],
+        tier_changes=[change(ticker) for ticker in tier_names[:10]],
+    )
 
 
 async def _build_canonical_view(
@@ -147,16 +282,38 @@ async def _build_canonical_view(
     run = await get_latest_canonical_run(pool)
     if run is None:
         return None
-    snapshots = await get_run_snapshots(pool, int(run["id"]))
+    snapshots, previous_run = await asyncio.gather(
+        get_run_snapshots(pool, int(run["id"])),
+        pool.fetchrow(
+            """
+            SELECT * FROM research_run
+            WHERE run_type=$1 AND status='complete' AND id<>$2
+              AND scheduled_for_date < $3
+            ORDER BY scheduled_for_date DESC, finished_at DESC NULLS LAST, id DESC
+            LIMIT 1
+            """,
+            run["run_type"],
+            int(run["id"]),
+            run["scheduled_for_date"],
+        ),
+    )
+    previous_snapshots = (
+        await get_run_snapshots(pool, int(previous_run["id"]))
+        if previous_run is not None else []
+    )
     eligible = [row for row in snapshots if row["eligible"] and row["rank"] is not None]
     cards: list[LeanCard] = []
     mode_supported = True
     market_date: date = run["scheduled_for_date"]
+    selected_policy = get_policy("strategic" if mode == "long" else "tactical")
     for row in eligible:
         payload = _json_object(row["user_visible_payload_json"])
         if mode == "long":
             long_payload = _json_object(payload.get("_mode_payloads")).get("long")
-            if not isinstance(long_payload, dict):
+            if (
+                not isinstance(long_payload, dict)
+                or long_payload.get("policy_id") != selected_policy.policy_id
+            ):
                 mode_supported = False
                 break
             payload = long_payload
@@ -182,6 +339,11 @@ async def _build_canonical_view(
         key=lambda card: card.composite_score,
         reverse=(side == "long"),
     )
+    if side == "long":
+        cards = [
+            card.model_copy(update={"policy_rank": index})
+            for index, card in enumerate(cards, start=1)
+        ]
     cards = cards[:limit]
 
     generated_at = run["finished_at"] or run["data_asof"]
@@ -202,6 +364,13 @@ async def _build_canonical_view(
         or not health.get("passed", False)
     )
     coverage = len(eligible) / len(snapshots) if snapshots else 0.0
+    changes = _recommendation_changes(
+        snapshots,
+        previous_snapshots,
+        mode=mode,
+        policy_id=selected_policy.policy_id,
+        prior_run_id=int(previous_run["id"]) if previous_run is not None else None,
+    )
     return PicksResponse(
         picks=cards,
         as_of=generated_at,
@@ -214,10 +383,19 @@ async def _build_canonical_view(
             market_date=market_date.isoformat(),
             generated_at=generated_at,
             data_cutoff=run["input_data_cutoff"],
-            policy_id=run["weight_policy_id"],
+            policy_id=(
+                cards[0].policy_id if cards and cards[0].policy_id
+                else selected_policy.policy_id
+            ),
             coverage=coverage,
             health=health,
+            sleeve="strategic" if mode == "long" else "tactical",
+            horizon_days=60 if mode == "long" else 5,
+            validation_status=(
+                "forward_validation" if mode == "long" else "production"
+            ),
         ),
+        changes=changes,
     )
 
 
@@ -351,14 +529,9 @@ async def build_lean_view(
     A ticker present in fast is taken from fast (fresher and complete).
     `search` does a case-insensitive substring match on the ticker.
 
-    `mode` (Phase 2 dual-factor): "short" (default, 12d/60d momentum-vol,
-    aligned with the rest of the short-window composite) or "long"
-    (252d/126d academic Jegadeesh-Titman/Daniel-Moskowitz framework). When
-    "long", the full eligible universe is re-ranked in Python using
-    factor.raw.z_long (populated by fast_intraday's universe-wide eval)
-    instead of the stored short-mode composite, and only then sliced to the
-    requested limit. Rows without z_long (legacy / partial) keep their
-    original composite under either mode.
+    `mode` is kept as a backwards-compatible query name. "short" selects the
+    tactical 5d production policy. "long" selects the independently frozen
+    60d strategic policy, including its own weights, coverage core and rank.
     """
     from alpha_agent.backtest.confidence_calibration import (
         apply_calibration,
@@ -468,26 +641,12 @@ async def build_lean_view(
     if not rows:
         return [], None, False
 
+    strategic_by_ticker: dict[str, dict] = {}
     if mode == "long":
         def long_mode_score(row) -> float:
-            score = _safe_float(row["score"], 0.0)
-            if row["partial"]:
-                return score
-            try:
-                breakdown = json.loads(row["breakdown"]).get("breakdown", [])
-            except (AttributeError, TypeError, json.JSONDecodeError):
-                return score
-            for entry in breakdown:
-                if entry.get("signal") != "factor":
-                    continue
-                raw = entry.get("raw")
-                if isinstance(raw, dict) and "z_long" in raw:
-                    return score + _safe_float(entry.get("weight_effective"), 0.0) * (
-                        _safe_float(raw.get("z_long"), 0.0)
-                        - _safe_float(entry.get("z"), 0.0)
-                    )
-                break
-            return score
+            projection = _strategic_projection(row["breakdown"])
+            strategic_by_ticker[row["ticker"]] = projection
+            return _safe_float(projection.get("composite_score"), 0.0)
 
         if side == "short":
             rows = sorted(rows, key=lambda r: (r["partial"], long_mode_score(r)))[:limit]
@@ -571,33 +730,23 @@ async def build_lean_view(
             rating = r["rating"] or "HOLD"
             agreement = _safe_float(r["confidence"], 0.0)
             confidence = apply_calibration(agreement, cal_map)
-        # Phase 2 long-mode re-rank: when mode=="long", look up
-        # factor.raw.z_long and re-compute the composite contribution.
-        # Old factor contribution gets subtracted, new long-z contribution
-        # added. rating is re-derived from the new score. Rows missing
-        # z_long (legacy data before the dual-eval landed, or slow-only
-        # partial rows where fast_intraday hasn't run yet) keep their
-        # short-mode score unchanged so the UI never shows a "missing"
-        # state during the rollout window.
-        if mode == "long" and not is_partial:
-            for entry in breakdown_data:
-                if entry.get("signal") != "factor":
-                    continue
-                raw = entry.get("raw")
-                if not isinstance(raw, dict) or "z_long" not in raw:
-                    break
-                new_z = _safe_float(raw.get("z_long"), 0.0)
-                old_z = _safe_float(entry.get("z"), 0.0)
-                w_eff = _safe_float(entry.get("weight_effective"), 0.0)
-                # Score delta from swapping factor contribution
-                score = score + w_eff * (new_z - old_z)
-                # Update the breakdown entry in-place so top_drivers/
-                # top_drags reflect the long-mode ranking and the UI
-                # AttributionTable shows the active factor.z value.
-                entry["z"] = new_z
-                entry["contribution"] = w_eff * new_z
-                rating = map_to_tier(score)
-                break
+        if mode == "long":
+            projection = strategic_by_ticker.get(r["ticker"])
+            if projection is None:
+                projection = _strategic_projection(r["breakdown"])
+            score = _safe_float(projection.get("composite_score"), 0.0)
+            breakdown_data = projection.get("breakdown", [])
+            rating = map_to_tier(score)
+            z_values = [
+                float(entry["z"])
+                for entry in breakdown_data
+                if _safe_float(entry.get("weight_effective"), 0.0) > 0
+                and isinstance(entry.get("z"), (int, float))
+            ]
+            agreement = compute_confidence(z_values)
+            # The existing calibration map is trained on 5d outcomes.  Showing
+            # it as a strategic 60d hit rate would be false precision.
+            confidence = None
 
         cards.append(
             LeanCard(
@@ -624,6 +773,15 @@ async def build_lean_view(
                 },
                 consistency_hold=cons_hold_by_ticker.get(r["ticker"], {}),
                 consistency_hold_n=cons_hold_n_by_ticker.get(r["ticker"], {}),
+                sleeve="strategic" if mode == "long" else "tactical",
+                horizon_days=60 if mode == "long" else 5,
+                policy_id=get_policy(
+                    "strategic" if mode == "long" else "tactical"
+                ).policy_id,
+                validation_status=(
+                    "forward_validation" if mode == "long" else "production"
+                ),
+                policy_rank=len(cards) + 1 if side == "long" else None,
             )
         )
 

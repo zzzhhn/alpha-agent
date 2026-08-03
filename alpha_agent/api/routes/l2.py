@@ -11,6 +11,50 @@ from alpha_agent.api.dependencies import get_db_pool
 router = APIRouter(prefix="/api/l2", tags=["l2"])
 
 
+async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | None:
+    row = await pool.fetchrow(
+        """
+        SELECT s.id AS strategy_id, s.version, a.initial_cash, a.cash, a.nav,
+               a.start_after_run_id, a.last_fill_date,
+               (SELECT count(*) FROM l2_position p
+                WHERE p.strategy_id=s.id AND p.qty>0) AS positions,
+               (SELECT count(*) FROM l2_order o
+                WHERE o.strategy_id=s.id AND o.status='pending') AS pending,
+               (SELECT COALESCE(sum(o.transaction_cost),0) FROM l2_order o
+                WHERE o.strategy_id=s.id) AS costs,
+               (SELECT turnover FROM l2_equity_daily e
+                WHERE e.strategy_id=s.id ORDER BY as_of_date DESC LIMIT 1) AS latest_turnover
+        FROM l2_strategy s
+        JOIN l2_account a ON a.strategy_id=s.id
+        WHERE s.name=$1
+        ORDER BY s.version DESC LIMIT 1
+        """,
+        strategy_name,
+    )
+    if row is None:
+        return None
+    nav = float(row["nav"])
+    initial = float(row["initial_cash"])
+    return {
+        "status": "active" if row["last_fill_date"] else "awaiting_forward_run",
+        "strategy_id": int(row["strategy_id"]),
+        "strategy_version": int(row["version"]),
+        "accounting": "continuous_share_delta",
+        "initial_cash": initial,
+        "nav": nav,
+        "cash": float(row["cash"]),
+        "cumulative_return": nav / initial - 1.0 if initial else None,
+        "positions": int(row["positions"] or 0),
+        "pending_orders": int(row["pending"] or 0),
+        "transaction_costs": float(row["costs"] or 0.0),
+        "latest_turnover": (
+            float(row["latest_turnover"]) if row["latest_turnover"] is not None else None
+        ),
+        "last_fill_date": row["last_fill_date"].isoformat() if row["last_fill_date"] else None,
+        "start_after_run_id": int(row["start_after_run_id"]),
+    }
+
+
 def _compound(returns: list[float | None]) -> float:
     value = 1.0
     for ret in returns:
@@ -50,12 +94,24 @@ def _beta(strategy: list[float], benchmark: list[float]) -> float | None:
 async def l2_summary() -> dict[str, Any]:
     """Cost, benchmark, risk and exception evidence from the frozen L2 book."""
     pool = await get_db_pool()
+    continuous = await _continuous_account(
+        pool, strategy_name="canonical_top50_continuous"
+    )
+    strategic_continuous = await _continuous_account(
+        pool, strategy_name="canonical_top50_continuous_strategic"
+    )
     strategy = await pool.fetchrow(
         "SELECT id, name, version, params_json FROM l2_strategy "
         "WHERE name='canonical_top50' ORDER BY version DESC LIMIT 1"
     )
     if strategy is None:
-        return {"status": "empty", "series": [], "sector_exposure": []}
+        return {
+            "status": "empty",
+            "series": [],
+            "sector_exposure": [],
+            "continuous_account": continuous,
+            "strategic_continuous_account": strategic_continuous,
+        }
 
     strategy_id = int(strategy["id"])
     equity = await pool.fetch(
@@ -171,4 +227,6 @@ async def l2_summary() -> dict[str, Any]:
             }
             for row in sectors
         ],
+        "continuous_account": continuous,
+        "strategic_continuous_account": strategic_continuous,
     }

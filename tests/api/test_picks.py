@@ -162,6 +162,22 @@ async def test_picks_default_reads_one_canonical_run(client_with_db, applied_db)
     }
 
 
+async def test_legacy_long_payload_is_not_mislabeled_as_strategic(
+    client_with_db, applied_db
+):
+    from alpha_agent.market_session import latest_completed_xnys_session
+
+    await _seed_canonical_run(
+        applied_db, market_date=latest_completed_xnys_session()
+    )
+
+    body = client_with_db.get("/api/picks/lean?mode=long&limit=20").json()
+
+    assert body["canonical"] is False
+    assert body["ranked"] is False
+    assert body["tradable"] is False
+
+
 async def test_old_canonical_run_is_frozen_not_replaced_by_live_rows(
     client_with_db, applied_db
 ):

@@ -24,8 +24,31 @@ async def handler() -> dict[str, Any]:
     error: str | None = None
     summary: dict[str, Any] = {}
     try:
-        strategy_id = await l2_driver.ensure_strategy(pool)
-        summary = await l2_driver.run_driver(pool, strategy_id=strategy_id)
+        async with pool.acquire() as lock_conn:
+            acquired = await lock_conn.fetchval(
+                "SELECT pg_try_advisory_lock(hashtext('l2_cycle_continuous_v2'))"
+            )
+            if not acquired:
+                summary = {"skipped": True, "reason": "already_running"}
+            else:
+                try:
+                    strategy_id = await l2_driver.ensure_strategy(pool)
+                    legacy = await l2_driver.run_driver(pool, strategy_id=strategy_id)
+                    continuous: dict[str, Any] = {}
+                    for sleeve in ("tactical", "strategic"):
+                        continuous_id = await l2_driver.l2_continuous.ensure_book(
+                            pool, sleeve=sleeve
+                        )
+                        continuous[sleeve] = await l2_driver.run_continuous_driver(
+                            pool, strategy_id=continuous_id
+                        )
+                    # Keep the original top-level counters for cron consumers while the
+                    # two accounting generations remain separately inspectable.
+                    summary = {**legacy, "legacy": legacy, "continuous": continuous}
+                finally:
+                    await lock_conn.execute(
+                        "SELECT pg_advisory_unlock(hashtext('l2_cycle_continuous_v2'))"
+                    )
     except Exception as exc:  # noqa: BLE001 — never let the cron raise
         error = f"{type(exc).__name__}: {str(exc) or repr(exc)}"[:200]
 

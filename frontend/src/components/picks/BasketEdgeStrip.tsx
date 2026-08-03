@@ -47,7 +47,7 @@ function HorizonCell({ h }: { h: HorizonEdge }) {
   const { locale } = useLocale();
   const insufficientLabel = t(locale, "edge.insufficient");
   return (
-    <div className="flex min-w-[88px] flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col gap-0.5 sm:min-w-[88px]">
       <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
         {h.horizon}d
       </span>
@@ -254,8 +254,8 @@ export default function BasketEdgeStrip() {
   const spreadLabel = t(locale, "edge.spread_label");
 
   return (
-    <div className="mx-4 mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2">
-      <div className="flex items-center gap-1.5">
+    <div className="mx-3 mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 rounded border border-tm-rule bg-tm-bg-2 px-3 py-3 sm:mx-4 sm:items-center sm:py-2">
+      <div className="flex w-full items-center gap-1.5 sm:w-auto">
         <span className="font-tm-mono text-[12px] font-semibold uppercase tracking-wider text-tm-accent">
           {title}
         </span>
@@ -274,9 +274,9 @@ export default function BasketEdgeStrip() {
 
       {loading || !data ? (
         // Muted skeleton while the transpacific query resolves.
-        <div className="flex gap-6" aria-hidden="true">
+        <div className="grid w-full grid-cols-3 gap-3 sm:flex sm:w-auto sm:gap-6" aria-hidden="true">
           {[5, 20, 60].map((h) => (
-            <div key={h} className="flex min-w-[88px] flex-col gap-0.5">
+            <div key={h} className="flex min-w-0 flex-col gap-0.5 sm:min-w-[88px]">
               <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
                 {h}d
               </span>
@@ -287,19 +287,27 @@ export default function BasketEdgeStrip() {
           ))}
         </div>
       ) : (
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
+        <div className="grid w-full grid-cols-3 gap-3 sm:flex sm:w-auto sm:flex-wrap sm:gap-x-6 sm:gap-y-2">
           {data.horizons.map((h) => (
             <HorizonCell key={h.horizon} h={h} />
           ))}
         </div>
       )}
 
-      {sb ? <ScoreboardCells sb={sb} /> : null}
-      {sb && data ? (
-        <HonestMetricsBlock
-          sb={sb}
-          h5={data.horizons.find((h) => h.horizon === 5)}
-        />
+      <div className="hidden sm:contents">
+        {sb ? <ScoreboardCells sb={sb} /> : null}
+        {sb && data ? <HonestMetricsBlock sb={sb} h5={data.horizons.find((h) => h.horizon === 5)} /> : null}
+      </div>
+      {sb ? (
+        <details className="w-full border-t border-tm-rule pt-2 sm:hidden">
+          <summary className="cursor-pointer font-tm-mono text-[10px] uppercase tracking-wide text-tm-accent">
+            {locale === "zh" ? "查看已实现收益、成本与显著性" : "VIEW REALIZED RETURN, COST AND SIGNIFICANCE"}
+          </summary>
+          <div className="mt-3 space-y-3">
+            <ScoreboardCells sb={sb} />
+            {data ? <HonestMetricsBlock sb={sb} h5={data.horizons.find((h) => h.horizon === 5)} /> : null}
+          </div>
+        </details>
       ) : null}
 
       {/* Paper Trading entry — navigates to the standalone /paper route
@@ -307,7 +315,8 @@ export default function BasketEdgeStrip() {
           this is a navigation, not an action. */}
       <Link
         href="/paper"
-        className="ml-auto flex shrink-0 items-center gap-2 border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-[13px] font-semibold uppercase tracking-wide text-tm-bg transition-opacity hover:opacity-90"
+        prefetch={false}
+        className="flex w-full shrink-0 items-center justify-center gap-2 border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-[13px] font-semibold uppercase tracking-wide text-tm-bg transition-opacity hover:opacity-90 sm:ml-auto sm:w-auto"
       >
         <Wallet className="h-4 w-4" strokeWidth={1.75} />
         {t(locale, "sim.open_btn")}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleHelp, X } from "lucide-react";
 import {
@@ -41,6 +42,8 @@ const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 export default function PaperScreen() {
   const { locale } = useLocale();
+  const searchParams = useSearchParams();
+  const requestedTicker = searchParams.get("ticker")?.trim().toUpperCase() ?? null;
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [orders, setOrders] = useState<readonly OrderOut[]>([]);
   const [curve, setCurve] = useState<EquityCurveResponse | null>(null);
@@ -56,6 +59,7 @@ export default function PaperScreen() {
   const [loading, setLoading] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
   const [paperError, setPaperError] = useState<string | null>(null);
+  const [resourceErrors, setResourceErrors] = useState<Partial<Record<"picks" | "account" | "orders" | "curve" | "attribution" | "l2", string>>>({});
   const [guideOpen, setGuideOpen] = useState(false);
 
   const loadAll = useCallback(async (showLoading = true) => {
@@ -70,13 +74,16 @@ export default function PaperScreen() {
       fetchL2Summary(),
     ]);
 
+    const nextErrors: typeof resourceErrors = {};
+    const reason = (value: unknown) => value instanceof Error ? value.message : String(value);
+
     if (picksResult.status === "fulfilled") {
       setPicks(picksResult.value.picks);
       setPicksAsOf(picksResult.value.as_of);
       setPicksServerStale(picksResult.value.stale);
       setPicksTradable(picksResult.value.tradable);
       setPicksRun(picksResult.value.run);
-    }
+    } else nextErrors.picks = reason(picksResult.reason);
     if (accountResult.status === "fulfilled") {
       setAccount(accountResult.value);
       setAuthRequired(false);
@@ -84,12 +91,19 @@ export default function PaperScreen() {
       setAuthRequired(true);
       setAccount(null);
     } else {
-      setPaperError(accountResult.reason instanceof Error ? accountResult.reason.message : String(accountResult.reason));
+      const accountError = accountResult.reason instanceof Error ? accountResult.reason.message : String(accountResult.reason);
+      setPaperError(accountError);
+      nextErrors.account = accountError;
     }
     if (ordersResult.status === "fulfilled") setOrders(ordersResult.value.orders);
+    else nextErrors.orders = reason(ordersResult.reason);
     if (curveResult.status === "fulfilled") setCurve(curveResult.value);
+    else nextErrors.curve = reason(curveResult.reason);
     if (attributionResult.status === "fulfilled") setAttribution(attributionResult.value.tickers);
+    else nextErrors.attribution = reason(attributionResult.reason);
     if (l2Result.status === "fulfilled") setL2Summary(l2Result.value);
+    else nextErrors.l2 = reason(l2Result.reason);
+    setResourceErrors(nextErrors);
     setLoading(false);
   }, []);
 
@@ -116,9 +130,13 @@ export default function PaperScreen() {
       return;
     }
     if (!selectedTicker || !picks.some((pick) => pick.ticker === selectedTicker)) {
-      setSelectedTicker(picks[0].ticker);
+      setSelectedTicker(
+        requestedTicker && picks.some((pick) => pick.ticker === requestedTicker)
+          ? requestedTicker
+          : picks[0].ticker,
+      );
     }
-  }, [picks, picksFrozen, selectedTicker]);
+  }, [picks, picksFrozen, requestedTicker, selectedTicker]);
 
   const selectedPick = useMemo(
     () => picks.find((pick) => pick.ticker === selectedTicker) ?? null,
@@ -138,6 +156,7 @@ export default function PaperScreen() {
 
   return (
     <TmScreen className="overflow-y-auto">
+      <h1 className="sr-only">{t(locale, "sim.page_title")}</h1>
       <TmPane
         title={t(locale, "sim.page_title")}
         meta={
@@ -189,6 +208,7 @@ export default function PaperScreen() {
               : picks[0]?.price_date ?? "—"
           }
         >
+          {resourceErrors.picks ? <SectionError detail={resourceErrors.picks} onRetry={() => void loadAll(false)} /> : null}
           {picksFrozen ? <FrozenRecommendations /> : null}
           {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker} actionable={!picksFrozen} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
         </TmPane>
@@ -206,6 +226,8 @@ export default function PaperScreen() {
                 latestPrice={selectedPick.latest_price}
                 priceDate={selectedPick.price_date}
                 availableCash={account.available_cash}
+                portfolioValue={account.portfolio_value}
+                targetWeight={0.02}
                 initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
               />
             ) : paperError ? <PaperError detail={paperError} /> : <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "sim.workspace.no_picks")}</p>}
@@ -215,17 +237,20 @@ export default function PaperScreen() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
         <TmPane standalone title={t(locale, "sim.workspace.positions")}>
-          {authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : <PaperPositionsWithSource positions={account?.positions ?? []} attribution={attribution} />}
+          {resourceErrors.account ? <SectionError detail={resourceErrors.account} onRetry={() => void loadAll(false)} /> : resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : null}
+          {authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : !resourceErrors.account && !resourceErrors.attribution ? <PaperPositionsWithSource positions={account?.positions ?? []} attribution={attribution} /> : null}
         </TmPane>
         <TmPane standalone title={t(locale, "sim.workspace.performance")}>
-          <PaperCurvePane curve={curve} compact showDisclaimer={false} />
-          <PaperSourceSummary rows={attribution} />
-          <PaperL2Evidence summary={l2Summary} />
+          {resourceErrors.curve ? <SectionError detail={resourceErrors.curve} onRetry={() => void loadAll(false)} /> : null}
+          {!resourceErrors.curve ? <PaperCurvePane curve={curve} compact showDisclaimer={false} /> : null}
+          {resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : <PaperSourceSummary rows={attribution} />}
+          {resourceErrors.l2 ? <SectionError detail={resourceErrors.l2} onRetry={() => void loadAll(false)} /> : <PaperL2Evidence summary={l2Summary} />}
         </TmPane>
       </div>
 
       <TmPane title={t(locale, "sim.workspace.recent_orders")} meta={t(locale, "sim.workspace.disclosure")}>
-        <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus="ready" showAttribution={false} />
+        {resourceErrors.orders ? <SectionError detail={resourceErrors.orders} onRetry={() => void loadAll(false)} /> : null}
+        {!resourceErrors.orders ? <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus={resourceErrors.attribution ? "unavailable" : "ready"} showAttribution={false} /> : null}
       </TmPane>
     </TmScreen>
   );
@@ -243,6 +268,11 @@ function AuthPrompt({ hint, cta }: { readonly hint: string; readonly cta: string
 function PaperError({ detail }: { readonly detail: string }) {
   const { locale } = useLocale();
   return <p className="font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "sim.load_error_hint")} <span className="text-tm-muted">({detail})</span></p>;
+}
+
+function SectionError({ detail, onRetry }: { readonly detail: string; readonly onRetry: () => void }) {
+  const { locale } = useLocale();
+  return <div role="alert" className="m-3 flex items-center justify-between gap-3 border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[10.5px] text-tm-neg"><span>{locale === "zh" ? "该区块暂时无法确认，未将其显示为零。" : "This section is unavailable; unknown data is not shown as zero."} <span className="text-tm-muted">({detail})</span></span><button type="button" onClick={onRetry} className="shrink-0 border border-current px-2 py-1">{locale === "zh" ? "重试" : "Retry"}</button></div>;
 }
 
 function FrozenRecommendations() {
