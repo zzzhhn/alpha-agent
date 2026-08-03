@@ -187,6 +187,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     _SKIP_AUTH_PATHS = frozenset({
         "/api/health",
         "/api/v1/auth/token",
+        "/api/openapi.json",
         "/docs",
         "/openapi.json",
     })
