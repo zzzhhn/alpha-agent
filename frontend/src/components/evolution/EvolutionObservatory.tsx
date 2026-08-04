@@ -14,6 +14,7 @@ import type {
 import type { Locale } from "@/lib/i18n";
 import type { EvolutionHealth, HealthTone } from "@/lib/evolution-health";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import { formatUtc8DateTime } from "@/lib/format-datetime";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import { DecisionStrip } from "@/components/workbench/DecisionStrip";
 import { ChangeHistoryTable } from "./ChangeHistoryTable";
@@ -125,7 +126,7 @@ export default function EvolutionObservatory({
         title={zh ? "演化监控" : "Evolution monitor"}
         subtitle={zh ? "观察样本外变化，审查每一次模型调整" : "Observe out-of-sample change and review every model adjustment"}
         statuses={[
-          { label: zh ? "最后更新" : "Last update", value: latestUpdate ? new Date(latestUpdate).toLocaleString(zh ? "zh-CN" : "en-US", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—" },
+          { label: zh ? "最后更新" : "Last update", value: formatUtc8DateTime(latestUpdate) },
           { label: zh ? "评估健康" : "Evaluation", value: totalIc ? `${positiveIc ?? 0}/${totalIc} +IC` : (zh ? "无数据" : "NO DATA"), tone: healthTone(health.ic.tone) },
           { label: zh ? "计算预算" : "Compute budget", value: zh ? "60 秒缓存" : "60S CACHE", tone: "positive" },
           { label: zh ? "待审提议" : "Pending", value: String(pendingCount), tone: pendingCount > 0 ? "negative" : "positive" },
@@ -207,7 +208,7 @@ export default function EvolutionObservatory({
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "劣化窗口" : "Degrading windows"}</span><span>{live?.consecutive_bad_windows ?? shadow?.consecutive_bad_windows ?? 0}</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "晋升累计" : "Promotion streak"}</span><span>{shadow?.shadow_streak ?? 0}/5</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "最近同期事件" : "Latest co-occurring event"}</span><span className="max-w-[180px] truncate text-right" title={relatedChange?.source}>{relatedChange?.source ?? (zh ? "未记录" : "Not recorded")}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "事件时间" : "Event time"}</span><span>{relatedChange?.changed_at ? new Date(relatedChange.changed_at).toLocaleString(zh ? "zh-CN" : "en-US") : "—"}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "事件时间" : "Event time"}</span><span>{formatUtc8DateTime(relatedChange?.changed_at, { year: "numeric", seconds: true })}</span></div>
           </div>
           <p className="mt-4 border-l-2 border-tm-warn pl-3 text-[9.5px] leading-5 text-tm-muted">
             {zh ? "这里只展示真实共现记录和前后 IC，不把相关性写成因果。" : "Only recorded co-occurrence and before/after IC are shown; correlation is not described as causation."}
