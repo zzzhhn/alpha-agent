@@ -3,7 +3,7 @@
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { buildSmokeScorecard, type QcStatus } from "@/lib/factorQc";
-import type { SmokeReport } from "@/lib/types";
+import type { FactorBacktestResponse, SmokeReport } from "@/lib/types";
 import { PanePlaceholder } from "./PanePlaceholder";
 import type { PaneState } from "./types";
 
@@ -11,6 +11,7 @@ interface Props {
   state: PaneState;
   data: SmokeReport | null;
   errorMessage: string | null;
+  backtest?: FactorBacktestResponse | null;
   onRetry?: () => void;
 }
 
@@ -66,7 +67,7 @@ function DimRow({
   );
 }
 
-export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
+export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Props) {
   const { locale } = useLocale();
   const tk = (k: string) => t(locale, k as Parameters<typeof t>[1]);
   // Pure + total, so safe to compute before branching (no IIFE in JSX that could
@@ -74,8 +75,8 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
   const sc = data ? buildSmokeScorecard(data) : null;
 
   return (
-    <section className="flex flex-col gap-2 rounded border border-tm-rule bg-tm-bg-2 p-3">
-      <h3 className="font-tm-mono text-xs font-semibold uppercase text-tm-fg-2">
+    <section className="flex min-h-[260px] flex-col gap-3 border border-tm-rule bg-tm-bg-2 p-4">
+      <h3 className="font-tm-mono text-xs font-semibold uppercase tracking-[0.08em] text-tm-accent">
         {tk("alpha.pane.smoke")}
       </h3>
       {state === "waiting" ? (
@@ -170,8 +171,43 @@ export function SmokePane({ state, data, errorMessage, onRetry }: Props) {
             {" "}&bull;{" "}
             {tk("alpha.pane.runtime")}=<span className="font-mono">{data.runtime_ms}ms</span>
           </div>
+          {backtest ? <EvidenceCurve result={backtest} locale={locale} /> : null}
         </>
       ) : null}
     </section>
+  );
+}
+
+function EvidenceCurve({ result, locale }: { readonly result: FactorBacktestResponse; readonly locale: "zh" | "en" }) {
+  const factor = result.equity_curve;
+  const benchmark = result.benchmark_curve;
+  if (factor.length < 2) return null;
+  const values = [...factor.map((point) => point.value), ...benchmark.map((point) => point.value)];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 0.001);
+  const points = (series: readonly { date: string; value: number }[]) => series.map((point, index) => {
+    const x = 12 + (index / Math.max(series.length - 1, 1)) * 336;
+    const y = 100 - ((point.value - min) / range) * 78;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const splitX = 12 + (result.train_end_index / Math.max(factor.length - 1, 1)) * 336;
+
+  return (
+    <div className="mt-auto border-t border-tm-rule pt-3">
+      <div className="mb-2 flex items-center justify-between text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+        <span>{locale === "zh" ? "样本内／样本外证据" : "In-sample / out-of-sample evidence"}</span>
+        <span>{result.benchmark_ticker}</span>
+      </div>
+      <svg viewBox="0 0 360 118" className="h-[132px] w-full border border-tm-rule bg-tm-bg" role="img" aria-label={locale === "zh" ? "因子与基准收益路径" : "Factor and benchmark equity paths"}>
+        {[24, 50, 76, 102].map((y) => <line key={y} x1="12" x2="348" y1={y} y2={y} stroke="currentColor" className="text-tm-rule" strokeWidth="0.6" />)}
+        <line x1={splitX} x2={splitX} y1="14" y2="104" stroke="currentColor" className="text-tm-warn" strokeDasharray="3 3" strokeWidth="0.8" />
+        <polyline points={points(benchmark)} fill="none" stroke="currentColor" className="text-tm-muted" strokeWidth="1.5" />
+        <polyline points={points(factor)} fill="none" stroke="currentColor" className="text-tm-pos" strokeWidth="2" />
+        <text x="16" y="114" fill="currentColor" className="fill-tm-muted text-[8px]">TRAIN</text>
+        <text x={Math.min(splitX + 5, 310)} y="114" fill="currentColor" className="fill-tm-accent text-[8px]">OOS</text>
+      </svg>
+      <div className="mt-2 flex gap-4 text-[9px] text-tm-muted"><span className="text-tm-pos">{locale === "zh" ? "因子组合" : "Factor"}</span><span>{result.benchmark_ticker}</span><span className="ml-auto">{factor[0].date} → {factor.at(-1)?.date}</span></div>
+    </div>
   );
 }

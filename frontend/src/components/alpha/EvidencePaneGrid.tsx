@@ -55,6 +55,7 @@ export function EvidencePaneGrid({
       <SmokePane
         state={panes.smoke}
         data={translate !== null ? translate.smoke : null}
+        backtest={backtest}
         errorMessage={translateError}
       />
       <BacktestPane

@@ -274,6 +274,7 @@ type SortCol = "sharpe" | "return" | "ic" | "savedAt" | "name";
 type SortDir = "asc" | "desc";
 type DirFilter = "all" | "long_short" | "long_only" | "short_only";
 type StatusFilter = "all" | "decaying" | "stale" | "champion";
+const EMPTY_DECAY_ALERTS: readonly DecayAlert[] = [];
 
 export default function FactorsPage() {
   const { locale } = useLocale();
@@ -284,7 +285,7 @@ export default function FactorsPage() {
   // Decay alerts come from the (currently disabled) factors_db backend; with
   // that endpoint not enabled this is always empty. Kept as a typed constant so
   // decayIds + the row decay markers still resolve (to "none decaying").
-  const decay: readonly DecayAlert[] = [];
+  const decay = EMPTY_DECAY_ALERTS;
 
   async function refresh() {
     // Cold-start seed before the first Zoo read so a new user sees the

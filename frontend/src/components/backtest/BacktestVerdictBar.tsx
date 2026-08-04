@@ -2,9 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
   Bookmark,
   Loader2,
   Star,
@@ -13,6 +10,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { parseFactorError } from "@/lib/factor-errors";
 import { BacktestVerdictHeadline } from "./BacktestVerdictHeadline";
+import { DecisionStrip } from "@/components/workbench/DecisionStrip";
 import type {
   MetricDelta,
   Run,
@@ -50,6 +48,13 @@ interface BacktestVerdictBarProps {
 }
 
 type TrafficLight = "ok" | "warn" | "bad";
+
+function decisionTone(light: TrafficLight | null): "default" | "positive" | "warning" | "negative" {
+  if (light === "ok") return "positive";
+  if (light === "warn") return "warning";
+  if (light === "bad") return "negative";
+  return "default";
+}
 
 /* ---------- Threshold classifiers (per spec §8.2) ---------- */
 
@@ -129,78 +134,6 @@ function fmtDeltaPercentage0dp(diff: number): string {
 function fmtDeltaIC(diff: number): string {
   const sign = diff > 0 ? "+" : "";
   return `${sign}${diff.toFixed(4)}`;
-}
-
-/* ---------- Glyph + delta arrow renderers ---------- */
-
-const GLYPH: Record<TrafficLight, JSX.Element> = {
-  ok: <span className="ml-1 text-tm-pos">&#10003;</span>,
-  warn: <span className="ml-1 text-tm-warn">&#9888;</span>,
-  bad: <span className="ml-1 text-tm-neg">&#10007;</span>,
-};
-
-/**
- * Render a delta arrow. Direction (↑↓→) reflects raw signed comparison;
- * color is decoupled and driven by `betterThanBaseline` so e.g. turnover
- * going UP shows ↑ in red (worse), Sharpe going DOWN shows ↓ in red.
- */
-function DeltaArrow({
-  delta,
-  diffLabel,
-}: {
-  readonly delta: MetricDelta;
-  readonly diffLabel: string;
-}) {
-  const colorClass =
-    delta.arrow === "flat"
-      ? "text-tm-muted"
-      : delta.betterThanBaseline
-      ? "text-tm-pos"
-      : "text-tm-neg";
-  const Icon =
-    delta.arrow === "up"
-      ? ArrowUp
-      : delta.arrow === "down"
-      ? ArrowDown
-      : ArrowRight;
-  return (
-    <span
-      className={`ml-1 inline-flex items-center gap-0.5 text-xs ${colorClass}`}
-    >
-      <Icon className="h-3 w-3" strokeWidth={1.75} />
-      <span className="font-mono">{diffLabel}</span>
-    </span>
-  );
-}
-
-interface MetricCellProps {
-  readonly label: string;
-  readonly valueText: string;
-  readonly glyph: TrafficLight | null;
-  readonly thresholdTitle: string;
-  readonly delta: MetricDelta | null;
-  readonly diffLabel: string | null;
-}
-
-function MetricCell({
-  label,
-  valueText,
-  glyph,
-  thresholdTitle,
-  delta,
-  diffLabel,
-}: MetricCellProps) {
-  return (
-    <span
-      title={thresholdTitle}
-      className="cursor-help text-tm-fg inline-flex items-center"
-    >
-      <span className="text-tm-muted">{label}=</span>
-      <span className="font-mono ml-0.5">{valueText}</span>
-      {glyph && GLYPH[glyph]}
-      {delta && diffLabel && <DeltaArrow delta={delta} diffLabel={diffLabel} />}
-    </span>
-  );
 }
 
 /* ---------- Main component ---------- */
@@ -304,80 +237,29 @@ export function BacktestVerdictBar({
   const m = currentRun.metrics;
   const isPinned = currentRun.id === baselineRunId;
 
-  return (
-    <div className="flex flex-col gap-3">
-      {/* Decision-first verdict: real factor vs overfit, derived from stats */}
-      <BacktestVerdictHeadline raw={currentRun.raw} />
+  const deltaDetail = (delta: MetricDelta | null, formatter: (value: number) => string) =>
+    showDeltas && delta ? `${formatter(delta.diff)} ${t(locale, "backtest.runs.baselineMark")}` : undefined;
 
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-        <MetricCell
-          label={t(locale, "backtest.metric.sharpe")}
-          valueText={fmtSharpe(m.sharpe)}
-          glyph={m.sharpe === null ? null : classifySharpe(m.sharpe, thresholds)}
-          thresholdTitle={t(locale, "backtest.threshold.sharpe")}
-          delta={showDeltas ? deltas.sharpe : null}
-          diffLabel={
-            showDeltas && deltas.sharpe ? fmtDeltaSharpe(deltas.sharpe.diff) : null
-          }
-        />
-        <MetricCell
-          label={t(locale, "backtest.metric.maxDd")}
-          valueText={fmtMaxDD(m.maxDD)}
-          glyph={m.maxDD === null ? null : classifyMaxDD(m.maxDD, thresholds)}
-          thresholdTitle={t(locale, "backtest.threshold.maxDd")}
-          delta={showDeltas ? deltas.maxDD : null}
-          diffLabel={
-            showDeltas && deltas.maxDD
-              ? fmtDeltaPercentage1dp(deltas.maxDD.diff)
-              : null
-          }
-        />
-        <MetricCell
-          label={t(locale, "backtest.metric.ic")}
-          valueText={fmtIC(m.ic)}
-          glyph={m.ic === null ? null : classifyIC(m.ic, thresholds)}
-          thresholdTitle={t(locale, "backtest.threshold.ic")}
-          delta={showDeltas ? deltas.ic : null}
-          diffLabel={showDeltas && deltas.ic ? fmtDeltaIC(deltas.ic.diff) : null}
-        />
-        <MetricCell
-          label={t(locale, "backtest.metric.turnover")}
-          valueText={fmtTurnover(m.turnover)}
-          glyph={
-            m.turnover === null ? null : classifyTurnover(m.turnover, thresholds)
-          }
-          thresholdTitle={t(locale, "backtest.threshold.turnover")}
-          delta={showDeltas ? deltas.turnover : null}
-          diffLabel={
-            showDeltas && deltas.turnover
-              ? fmtDeltaPercentage0dp(deltas.turnover.diff)
-              : null
-          }
-        />
-        <MetricCell
-          label={t(locale, "backtest.metric.annReturn")}
-          valueText={fmtAnnReturn(m.annReturn)}
-          glyph={
-            m.annReturn === null
-              ? null
-              : classifyAnnReturn(m.annReturn, thresholds)
-          }
-          thresholdTitle={t(locale, "backtest.threshold.annReturn")}
-          delta={showDeltas ? deltas.annReturn : null}
-          diffLabel={
-            showDeltas && deltas.annReturn
-              ? fmtDeltaPercentage1dp(deltas.annReturn.diff)
-              : null
-          }
-        />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
+  return (
+    <DecisionStrip
+      headline={<BacktestVerdictHeadline raw={currentRun.raw} />}
+      description={baselineRunId
+        ? (locale === "zh" ? "当前运行与固定基线同屏比较，差值无需心算。" : "Current run is compared with the pinned baseline; deltas require no mental math.")
+        : (locale === "zh" ? "固定一项可信运行后，这里将持续显示基线差值。" : "Pin a credible run to keep baseline deltas visible here.")}
+      metrics={[
+        { label: t(locale, "backtest.metric.sharpe"), value: fmtSharpe(m.sharpe), detail: deltaDetail(deltas.sharpe, fmtDeltaSharpe), tone: decisionTone(m.sharpe === null ? null : classifySharpe(m.sharpe, thresholds)) },
+        { label: t(locale, "backtest.metric.maxDd"), value: fmtMaxDD(m.maxDD), detail: deltaDetail(deltas.maxDD, fmtDeltaPercentage1dp), tone: decisionTone(m.maxDD === null ? null : classifyMaxDD(m.maxDD, thresholds)) },
+        { label: t(locale, "backtest.metric.ic"), value: fmtIC(m.ic), detail: deltaDetail(deltas.ic, fmtDeltaIC), tone: decisionTone(m.ic === null ? null : classifyIC(m.ic, thresholds)) },
+        { label: t(locale, "backtest.metric.turnover"), value: fmtTurnover(m.turnover), detail: deltaDetail(deltas.turnover, fmtDeltaPercentage0dp), tone: decisionTone(m.turnover === null ? null : classifyTurnover(m.turnover, thresholds)) },
+        { label: t(locale, "backtest.metric.annReturn"), value: fmtAnnReturn(m.annReturn), detail: deltaDetail(deltas.annReturn, fmtDeltaPercentage1dp), tone: decisionTone(m.annReturn === null ? null : classifyAnnReturn(m.annReturn, thresholds)) },
+      ]}
+      action={(
+        <div className="grid gap-2">
         <button
           type="button"
           onClick={onSaveToZoo}
           aria-label={t(locale, "backtest.action.saveToZoo")}
-          className="inline-flex items-center gap-1 rounded border border-tm-rule bg-tm-bg px-3 py-1.5 font-tm-mono text-xs font-semibold text-tm-fg hover:bg-tm-bg-2"
+          className="inline-flex items-center justify-center gap-1 border border-tm-rule bg-tm-bg px-3 py-1.5 font-tm-mono text-[10px] font-semibold text-tm-fg hover:border-tm-accent"
         >
           <Bookmark className="h-3.5 w-3.5" strokeWidth={1.75} />
           {t(locale, "backtest.action.saveToZoo")}
@@ -391,7 +273,7 @@ export function BacktestVerdictBar({
               : t(locale, "backtest.action.pinAsBaseline")
           }
           aria-pressed={isPinned}
-          className="inline-flex items-center gap-1 rounded border border-tm-rule bg-tm-bg px-3 py-1.5 font-tm-mono text-xs font-semibold text-tm-fg hover:bg-tm-bg-2"
+          className="inline-flex items-center justify-center gap-1 border border-tm-rule bg-tm-bg px-3 py-1.5 font-tm-mono text-[10px] font-semibold text-tm-fg hover:border-tm-accent"
         >
           <Star
             className="h-3.5 w-3.5"
@@ -402,8 +284,8 @@ export function BacktestVerdictBar({
             ? t(locale, "backtest.action.unpin")
             : t(locale, "backtest.action.pinAsBaseline")}
         </button>
-      </div>
-      </section>
-    </div>
+        </div>
+      )}
+    />
   );
 }

@@ -151,9 +151,9 @@ export function RecentRunsTable({
   return (
     <TmPane title={title}>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[11px]">
+        <table className="w-full border-collapse text-[11.5px]">
           <thead>
-            <tr className="border-b border-tm-rule bg-tm-bg-2 font-tm-mono uppercase tracking-[0.04em] text-tm-muted">
+            <tr className="h-9 border-b border-tm-rule bg-tm-bg-2 font-tm-mono uppercase tracking-[0.04em] text-tm-muted">
               <th className="px-2 py-1 text-left font-semibold" style={{ width: "6ch" }}>
                 {t(locale, "backtest.runs.colRun")}
               </th>
@@ -199,7 +199,7 @@ export function RecentRunsTable({
               return (
                 <tr
                   key={run.id}
-                  className={`border-b border-tm-rule font-tm-mono text-tm-fg ${rowBgClass}`}
+                  className={`h-11 border-b border-tm-rule font-tm-mono text-tm-fg ${rowBgClass}`}
                 >
                   <td className="px-2 py-1 text-left font-mono text-tm-muted">
                     {runNum}

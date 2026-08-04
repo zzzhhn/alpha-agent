@@ -8,6 +8,7 @@ research mental model.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from typing import Literal
@@ -20,6 +21,14 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["interactive"])
+
+# A single small serverless instance cannot safely run multiple dataframe-heavy
+# backtests at once. This per-instance gate keeps the event loop responsive and
+# rejects excess work quickly instead of letting requests compete until all of
+# them time out. Vercel may have multiple instances, so this is a capacity
+# guard, not a distributed job queue.
+_BACKTEST_CAPACITY = asyncio.Semaphore(1)
+_BACKTEST_QUEUE_WAIT_SECONDS = 0.05
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -657,7 +666,20 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
         raise HTTPException(422, f"Expression AST invalid: {exc}") from exc
 
     try:
-        result = run_factor_backtest(
+        await asyncio.wait_for(
+            _BACKTEST_CAPACITY.acquire(),
+            timeout=_BACKTEST_QUEUE_WAIT_SECONDS,
+        )
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail="Backtest capacity is busy; retry after the active run finishes",
+            headers={"Retry-After": "5"},
+        ) from exc
+
+    try:
+        result = await asyncio.to_thread(
+            run_factor_backtest,
             body.spec,
             train_ratio=body.train_ratio,
             direction=body.direction,
@@ -694,6 +716,8 @@ async def factor_backtest(body: FactorBacktestRequest) -> FactorBacktestResponse
             422,
             f"Factor uses an operator without a vectorized impl: {exc}",
         ) from exc
+    finally:
+        _BACKTEST_CAPACITY.release()
 
     def _to_model(m) -> _SplitMetricsModel:
         return _SplitMetricsModel(

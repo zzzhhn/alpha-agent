@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 import { FactorExampleModal } from "@/components/alpha/FactorExampleModal";
 import type { FactorExample } from "@/components/alpha/FactorExamples";
 import type { FactorUniverse } from "@/lib/types";
+import type { AlphaValidationParams } from "@/components/alpha/useAlphaChain";
 
 // ---- Prop types ----
 
@@ -35,6 +36,8 @@ interface Props {
   readonly onTextChange: (s: string) => void;
   readonly universe: FactorUniverse;
   readonly onUniverseChange: (u: FactorUniverse) => void;
+  readonly validation: AlphaValidationParams;
+  readonly onValidationChange: (params: AlphaValidationParams) => void;
   readonly onSubmit: () => void;
   readonly disabled: boolean;
   readonly examples: ReadonlyArray<FactorExample>;
@@ -73,13 +76,21 @@ export function HypothesisInputCard(p: Props) {
   }, [historyOpen]);
 
   const empty = p.text.trim().length === 0;
+  const updateValidation = <K extends keyof AlphaValidationParams>(
+    key: K,
+    value: AlphaValidationParams[K],
+  ) => p.onValidationChange({ ...p.validation, [key]: value });
 
   return (
-    <section className="flex flex-col gap-3 rounded border border-tm-rule bg-tm-bg-2 p-4">
+    <section className="border-b border-tm-rule bg-tm-bg-2/35 px-6 py-4">
       {/* Header row: section title + History popover trigger */}
-      <header className="flex items-center justify-between">
-        <h2 className="font-tm-mono text-[11px] font-semibold tracking-widest text-tm-fg">
+      <header className="mb-3 flex items-center justify-between">
+        <h2 className="font-tm-mono text-[12px] font-semibold tracking-[0.08em] text-tm-fg">
+          <span className="mr-2 text-tm-accent">①</span>
           {t(locale, "alpha.input.title" as Parameters<typeof t>[1])}
+          <span className="ml-2 font-normal tracking-normal text-tm-muted">
+            {locale === "zh" ? "把研究判断写成一句可被反驳的话" : "Write one claim the data can refute"}
+          </span>
         </h2>
 
         {/* History popover */}
@@ -88,7 +99,7 @@ export function HypothesisInputCard(p: Props) {
             type="button"
             onClick={() => setHistoryOpen((o) => !o)}
             aria-label={t(locale, "alpha.input.historyBtn" as Parameters<typeof t>[1])}
-            className="inline-flex items-center gap-1 rounded border border-tm-rule px-2 py-1 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+            className="inline-flex items-center gap-1 border border-tm-rule px-2.5 py-1.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
           >
             <History className="h-3.5 w-3.5" strokeWidth={1.75} />
             <span>{t(locale, "alpha.input.historyBtn" as Parameters<typeof t>[1])}</span>
@@ -140,45 +151,70 @@ export function HypothesisInputCard(p: Props) {
         </div>
       </header>
 
-      {/* Main textarea */}
-      <textarea
-        value={p.text}
-        onChange={(e) => p.onTextChange(e.target.value)}
-        placeholder={t(locale, "alpha.placeholder" as Parameters<typeof t>[1])}
-        aria-label={t(locale, "alpha.input.title" as Parameters<typeof t>[1])}
-        className="min-h-[96px] resize-y rounded border border-tm-rule bg-tm-bg-3 p-3 font-tm-mono text-sm text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none disabled:opacity-50"
-        disabled={p.disabled}
-      />
+      <div className="grid grid-cols-[minmax(0,1fr)_176px] gap-3">
+        <textarea
+          value={p.text}
+          onChange={(e) => p.onTextChange(e.target.value)}
+          placeholder={t(locale, "alpha.placeholder" as Parameters<typeof t>[1])}
+          aria-label={t(locale, "alpha.input.title" as Parameters<typeof t>[1])}
+          className="min-h-[72px] resize-y border border-tm-rule bg-tm-bg px-4 py-3 font-tm-mono text-[15px] leading-6 text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none disabled:opacity-50"
+          disabled={p.disabled}
+        />
+        <button
+          type="button"
+          onClick={p.onSubmit}
+          disabled={p.disabled || empty}
+          className="flex min-h-[72px] items-center justify-center bg-tm-accent px-5 font-tm-mono text-[14px] font-semibold text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="mr-2 text-[18px]">▷</span>
+          {t(locale, "alpha.input.submitFull" as Parameters<typeof t>[1])}
+        </button>
+      </div>
 
-      {/* Footer row: char count + universe selector + primary action */}
-      <div className="flex items-center justify-between gap-3">
+      {/* Validation context is real request state, not decorative metadata. */}
+      <div className="mt-3 flex items-end justify-between gap-4">
         <div className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
           {p.text.length} {t(locale, "alpha.input.chars" as Parameters<typeof t>[1])}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid flex-1 grid-cols-3 items-end gap-2 xl:grid-cols-[minmax(120px,1fr)_repeat(5,minmax(105px,0.75fr))_auto]">
           {/* Universe selector */}
-          <select
-            value={p.universe}
-            onChange={(e) =>
-              p.onUniverseChange(e.target.value as FactorUniverse)
-            }
-            aria-label={t(locale, "alpha.universe" as Parameters<typeof t>[1])}
-            className="rounded border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-fg focus:border-tm-accent focus:outline-none"
-          >
-            {UNIVERSES.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
+          <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
+            {t(locale, "alpha.universe" as Parameters<typeof t>[1])}
+            <select
+              value={p.universe}
+              onChange={(e) => p.onUniverseChange(e.target.value as FactorUniverse)}
+              aria-label={t(locale, "alpha.universe" as Parameters<typeof t>[1])}
+              className="mt-1 block h-9 w-full border border-tm-rule bg-tm-bg px-2 font-tm-mono text-[11px] normal-case tracking-normal text-tm-fg focus:border-tm-accent focus:outline-none"
+            >
+              {UNIVERSES.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </label>
+
+          <ValidationSelect label={locale === "zh" ? "策略方向" : "Direction"} value={p.validation.direction} onChange={(value) => updateValidation("direction", value as AlphaValidationParams["direction"])} options={["long_short", "long_only", "short_only"]} />
+          <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
+            {locale === "zh" ? "分组比例" : "Bucket size"}
+            <div className="mt-1 flex h-9 items-center border border-tm-rule bg-tm-bg">
+              <input type="number" min={5} max={50} step={5} value={p.validation.topPct} onChange={(event) => updateValidation("topPct", Math.min(50, Math.max(5, Number(event.target.value))))} className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[11px] normal-case tracking-normal text-tm-fg outline-none" />
+              <span className="pr-2 text-[9px]">%</span>
+            </div>
+          </label>
+          <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
+            {locale === "zh" ? "成本模型" : "Round-trip cost"}
+            <div className="mt-1 flex h-9 items-center border border-tm-rule bg-tm-bg">
+              <input type="number" min={0} max={200} value={p.validation.transactionCostBps} onChange={(event) => updateValidation("transactionCostBps", Math.min(200, Math.max(0, Number(event.target.value))))} className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[11px] normal-case tracking-normal text-tm-fg outline-none" />
+              <span className="pr-2 text-[9px]">bps</span>
+            </div>
+          </label>
+          <ValidationSelect label={locale === "zh" ? "行业中性" : "Neutralize"} value={p.validation.neutralize} onChange={(value) => updateValidation("neutralize", value as AlphaValidationParams["neutralize"])} options={["none", "sector"]} />
+          <ValidationSelect label={locale === "zh" ? "基准" : "Benchmark"} value={p.validation.benchmarkTicker} onChange={(value) => updateValidation("benchmarkTicker", value as AlphaValidationParams["benchmarkTicker"])} options={["SPY", "RSP"]} />
 
           {/* Browse examples — opens the example library modal (left of submit) */}
           {p.examples.length > 0 && (
             <button
               type="button"
               onClick={() => setExamplesOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded border border-tm-rule px-3 py-2 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+              className="inline-flex h-9 items-center justify-center gap-1.5 border border-tm-rule px-3 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
             >
               <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.75} />
               <span>
@@ -187,15 +223,6 @@ export function HypothesisInputCard(p: Props) {
             </button>
           )}
 
-          {/* Primary action */}
-          <button
-            type="button"
-            onClick={p.onSubmit}
-            disabled={p.disabled || empty}
-            className="rounded bg-tm-accent px-4 py-2 font-tm-mono text-sm font-semibold text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {t(locale, "alpha.input.submitFull" as Parameters<typeof t>[1])}
-          </button>
         </div>
       </div>
 
@@ -211,5 +238,26 @@ export function HypothesisInputCard(p: Props) {
         onClose={() => setExamplesOpen(false)}
       />
     </section>
+  );
+}
+
+function ValidationSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly options: readonly string[];
+  readonly onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 block h-9 w-full border border-tm-rule bg-tm-bg px-2 font-tm-mono text-[11px] normal-case tracking-normal text-tm-fg focus:border-tm-accent focus:outline-none">
+        {options.map((option) => <option key={option} value={option}>{option.replace("_", " ")}</option>)}
+      </select>
+    </label>
   );
 }

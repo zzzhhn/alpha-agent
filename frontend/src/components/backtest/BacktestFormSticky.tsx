@@ -182,7 +182,7 @@ export function BacktestFormSticky({
       className="sticky top-0 z-30 border-b border-tm-rule bg-tm-bg-2/95 backdrop-blur supports-[backdrop-filter]:bg-tm-bg-2/80"
       aria-label={t(locale, "backtest.form.title")}
     >
-      <div className="flex flex-col gap-3 px-4 py-3">
+      <div className="flex flex-col gap-3 px-6 py-3">
         {/* Row 0 — load a saved factor + surface that the form auto-saves */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Load from Zoo: pull a saved factor straight into the expression */}
@@ -229,30 +229,34 @@ export function BacktestFormSticky({
           </div>
         </div>
 
-        {/* Row 1 — expression textarea */}
-        <textarea
+        <div className="grid items-end gap-3 xl:grid-cols-[minmax(320px,1.35fr)_minmax(720px,2.65fr)]">
+          <div>
+            <label className="mb-1 block font-tm-mono text-[9px] uppercase tracking-[0.1em] text-tm-muted">
+              {t(locale, "backtest.form.title")}
+            </label>
+            <textarea
           value={params.expression}
           onChange={(e) => updateExpression(e.target.value)}
           placeholder={t(locale, "backtest.form.exprPlaceholder")}
           spellCheck={false}
           rows={1}
           aria-label={t(locale, "backtest.form.title")}
-          className="min-h-[36px] w-full resize-y rounded border border-tm-rule bg-tm-bg-3 px-3 py-2 font-tm-mono text-[12px] leading-relaxed text-tm-fg outline-none transition-[min-height,border-color] placeholder:text-tm-muted focus:min-h-[96px] focus:border-tm-accent"
+          className="h-9 min-h-9 w-full resize-y border border-tm-rule bg-tm-bg px-3 py-2 font-tm-mono text-[12px] leading-relaxed text-tm-accent outline-none transition-[min-height,border-color] placeholder:text-tm-muted focus:min-h-[84px] focus:border-tm-accent"
           aria-invalid={hasValidationIssues || undefined}
           aria-describedby={
             hasValidationIssues ? "backtest-unknown-ops" : undefined
           }
-        />
+            />
 
         {/* Inline validation — unknown ops/operands before backend 4xx.
             Single panel listing both categories keeps visual noise low; each
             row carries its own "Unknown operator" vs "Unknown data field"
             label so users can disambiguate at a glance. */}
-        {hasValidationIssues && (
+            {hasValidationIssues && (
           <div
             id="backtest-unknown-ops"
             role="alert"
-            className="flex flex-col gap-1 rounded border border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-[11px] text-tm-warn"
+            className="mt-2 flex flex-col gap-1 border border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-[11px] text-tm-warn"
           >
             {unknownOps.map(({ op, suggestion }) => (
               <div key={`op-${op}`}>
@@ -287,14 +291,15 @@ export function BacktestFormSticky({
               </div>
             ))}
           </div>
-        )}
+            )}
+          </div>
 
         {/* Row 2 — quick params + RUN button (always visible). A single flex
             row: the three labelled fields grow equally (flex-1) so they fill
             the width with no dead gap, and the toggle + RUN action cluster sits
             flush at the trailing edge, bottom-aligned to the control baseline.
             Even, gap-free tiles instead of fixed-track bricks with a void. */}
-        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-end gap-3">
           <FieldShell
             label={t(locale, "backtest.form.direction")}
             className="min-w-[160px] flex-1"
@@ -354,7 +359,7 @@ export function BacktestFormSticky({
               type="button"
               onClick={() => setAdvancedOpen((o) => !o)}
               aria-expanded={advancedOpen}
-              className="inline-flex h-9 shrink-0 items-center gap-1 rounded border border-tm-rule px-2.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+              className="inline-flex h-9 shrink-0 items-center gap-1 border border-tm-rule px-2.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
             >
               {advancedOpen ? (
                 <ChevronUp className="h-3 w-3" strokeWidth={1.75} />
@@ -372,7 +377,7 @@ export function BacktestFormSticky({
               type="button"
               onClick={onRun}
               disabled={runDisabled}
-              className="inline-flex h-9 items-center gap-2 rounded bg-tm-accent px-4 font-tm-mono text-xs font-semibold uppercase tracking-wider text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 bg-tm-accent px-5 font-tm-mono text-xs font-semibold uppercase tracking-wider text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRunning ? (
                 <>
@@ -386,6 +391,7 @@ export function BacktestFormSticky({
                 </>
               )}
             </button>
+          </div>
           </div>
         </div>
 

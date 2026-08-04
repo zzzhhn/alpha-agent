@@ -2,6 +2,7 @@
 
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { DecisionStrip } from "@/components/workbench/DecisionStrip";
 import { t } from "@/lib/i18n";
 import type { ChainState, ThresholdEval, VerdictMetrics } from "./types";
 
@@ -14,26 +15,46 @@ interface Props {
   onReTranslate: () => void;
 }
 
-const MARK = {
-  ok: <span className="ml-1 text-tm-pos">&#10003;</span>,
-  warn: <span className="ml-1 text-tm-warn">&#9888;</span>,
-  bad: <span className="ml-1 text-tm-neg">&#10007;</span>,
-};
-
 export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTranslate }: Props) {
   const { locale } = useLocale();
+  const zh = locale === "zh";
+
+  const available = [metrics.ic, metrics.sharpe, metrics.maxDrawdown].filter((value) => value !== null).length;
+  const failed = [thresholds.ic, thresholds.sharpe, thresholds.maxDrawdown].filter((item) => item?.status === "bad").length;
+  const warning = [thresholds.ic, thresholds.sharpe, thresholds.maxDrawdown].filter((item) => item?.status === "warn").length;
+  const overallTone = failed > 0 ? "negative" : warning > 0 ? "warning" : available === 3 ? "positive" : "default";
+  const overall = state.kind === "idle"
+    ? (zh ? "等待验证" : "Awaiting validation")
+    : state.kind === "translating"
+      ? (zh ? "正在生成可检验表达式" : "Building a testable expression")
+      : state.kind === "backtesting"
+        ? (zh ? "正在寻找样本外反证" : "Searching for out-of-sample counter-evidence")
+        : failed > 0
+          ? (zh ? `${failed} 项门槛形成反证` : `${failed} gates provide counter-evidence`)
+          : warning > 0
+            ? (zh ? `${warning} 项门槛需要复核` : `${warning} gates need review`)
+            : available === 3
+              ? (zh ? "关键门槛通过，候选可进入比较" : "Key gates pass; candidate can enter comparison")
+              : (zh ? "部分证据可用" : "Partial evidence available");
 
   if (state.kind === "idle") {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm text-tm-muted">
-        {t(locale, "alpha.verdict.idle" as Parameters<typeof t>[1])}
-      </section>
+      <DecisionStrip
+        headline={<><span className="mr-2 text-tm-accent">②</span>{overall}</>}
+        description={t(locale, "alpha.verdict.idle" as Parameters<typeof t>[1])}
+        metrics={[
+          { label: "IC", value: "—", detail: zh ? "阈值在结果中显示" : "Threshold shown with result" },
+          { label: "Sharpe", value: "—", detail: zh ? "等待回测" : "Waiting for backtest" },
+          { label: "MaxDD", value: "—", detail: zh ? "等待回测" : "Waiting for backtest" },
+          { label: zh ? "证据完整度" : "Evidence", value: "0 / 3" },
+        ]}
+      />
     );
   }
 
   if (state.kind === "translate_error") {
     return (
-      <section className="flex items-center justify-between rounded border border-tm-neg/40 bg-tm-neg/10 px-4 py-3">
+      <section className="flex items-center justify-between border-b border-tm-neg/40 bg-tm-neg/10 px-6 py-4">
         <div className="flex items-center gap-2 font-tm-mono text-sm text-tm-neg">
           <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
           <span>
@@ -43,7 +64,7 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
         </div>
         <button
           onClick={onReTranslate}
-          className="rounded border border-tm-neg/60 px-3 py-1 font-tm-mono text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
+          className="border border-tm-neg/60 px-3 py-1.5 font-tm-mono text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
         >
           {t(locale, "alpha.verdict.retranslate" as Parameters<typeof t>[1])}
         </button>
@@ -51,67 +72,34 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
     );
   }
 
-  const loading = state.kind === "translating" || state.kind === "backtesting";
-  const stageText =
-    state.kind === "translating"
-      ? t(locale, "alpha.verdict.translating" as Parameters<typeof t>[1])
-      : state.kind === "backtesting"
-      ? t(locale, "alpha.verdict.backtesting" as Parameters<typeof t>[1])
-      : null;
-
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-        {loading && (
-          <span className="flex items-center gap-1.5 text-tm-fg-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-            {stageText}
-          </span>
-        )}
-        {metrics.ic !== null && (
-          <span
-            title={thresholds.ic?.threshold ?? t(locale, "alpha.verdict.icThreshold" as Parameters<typeof t>[1])}
-            className="cursor-help text-tm-fg"
-          >
-            IC={metrics.ic.toFixed(4)}
-            {thresholds.ic && MARK[thresholds.ic.status]}
-          </span>
-        )}
-        {metrics.sharpe !== null && (
-          <span
-            title={thresholds.sharpe?.threshold ?? t(locale, "alpha.verdict.sharpeThreshold" as Parameters<typeof t>[1])}
-            className="cursor-help text-tm-fg"
-          >
-            Sharpe={metrics.sharpe.toFixed(2)}
-            {thresholds.sharpe && MARK[thresholds.sharpe.status]}
-          </span>
-        )}
-        {metrics.maxDrawdown !== null && (
-          <span
-            title={thresholds.maxDrawdown?.threshold ?? t(locale, "alpha.verdict.maxDdThreshold" as Parameters<typeof t>[1])}
-            className="cursor-help text-tm-fg"
-          >
-            maxDD={(metrics.maxDrawdown * 100).toFixed(0)}%
-            {thresholds.maxDrawdown && MARK[thresholds.maxDrawdown.status]}
-          </span>
-        )}
-        {state.kind === "backtest_error" && (
-          <span className="text-tm-warn">
-            {t(locale, "alpha.backtest.errorPrefix" as Parameters<typeof t>[1])}
-            {state.message.slice(0, 80)}
-          </span>
-        )}
-      </div>
-      {canSave && (
+    <DecisionStrip
+      headline={(
+        <span className="inline-flex items-center gap-2">
+          <span className="text-tm-accent">②</span>
+          {(state.kind === "translating" || state.kind === "backtesting") ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {overall}
+        </span>
+      )}
+      description={state.kind === "backtest_error"
+        ? `${t(locale, "alpha.backtest.errorPrefix" as Parameters<typeof t>[1])}${state.message.slice(0, 100)}`
+        : (zh ? "原值与门槛并列，任何一项反证都不会被综合分掩盖。" : "Raw values sit beside thresholds; no composite score hides counter-evidence.")}
+      metrics={[
+        { label: "IC (20D)", value: metrics.ic === null ? "—" : `${metrics.ic >= 0 ? "+" : ""}${metrics.ic.toFixed(4)}`, detail: thresholds.ic?.threshold, tone: thresholds.ic?.status === "bad" ? "negative" : thresholds.ic?.status === "warn" ? "warning" : metrics.ic === null ? "default" : "positive" },
+        { label: "Sharpe", value: metrics.sharpe === null ? "—" : metrics.sharpe.toFixed(2), detail: thresholds.sharpe?.threshold, tone: thresholds.sharpe?.status === "bad" ? "negative" : thresholds.sharpe?.status === "warn" ? "warning" : metrics.sharpe === null ? "default" : "positive" },
+        { label: "MaxDD", value: metrics.maxDrawdown === null ? "—" : `${(metrics.maxDrawdown * 100).toFixed(1)}%`, detail: thresholds.maxDrawdown?.threshold, tone: thresholds.maxDrawdown?.status === "bad" ? "negative" : thresholds.maxDrawdown?.status === "warn" ? "warning" : metrics.maxDrawdown === null ? "default" : "positive" },
+        { label: zh ? "证据完整度" : "Evidence", value: `${available} / 3`, detail: zh ? "服务端结果" : "Server result", tone: overallTone },
+      ]}
+      action={canSave ? (
         <button
           onClick={onSave}
           aria-label={t(locale, "alpha.verdict.saveToZoo" as Parameters<typeof t>[1])}
-          className="inline-flex items-center gap-1 rounded bg-tm-accent px-3 py-1.5 font-tm-mono text-sm font-semibold text-tm-bg hover:opacity-90"
+          className="inline-flex items-center gap-1 border border-tm-accent px-3 py-2 font-tm-mono text-[11px] font-semibold text-tm-accent hover:bg-tm-accent hover:text-tm-bg"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
           {t(locale, "alpha.verdict.saveToZoo" as Parameters<typeof t>[1])}
         </button>
-      )}
-    </section>
+      ) : undefined}
+    />
   );
 }

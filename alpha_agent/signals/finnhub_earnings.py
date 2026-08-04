@@ -25,6 +25,57 @@ _BASE = "https://finnhub.io/api/v1"
 _THROTTLE_S = 1.05  # ~57/min, under the 60/min free-tier ceiling
 _SIGMA_FLOOR = 0.05
 _SIGMA_DEFAULT = 0.20  # Foster-Olsen-Shevlin fallback when < 4 quarters
+_MAX_ATTEMPTS = 4
+_BACKOFF_BASE_S = 1.0
+_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _get_json(
+    client: httpx.Client,
+    url: str,
+    *,
+    params: dict[str, Any],
+    max_attempts: int = _MAX_ATTEMPTS,
+) -> Any:
+    """GET JSON with bounded retry for transient provider failures.
+
+    Finnhub occasionally stalls long enough to hit the 30s read timeout. A
+    single timeout must not abort the whole daily universe ingestion, while
+    authentication and other permanent 4xx failures should still surface
+    immediately.
+    """
+    for attempt in range(1, max_attempts + 1):
+        response: httpx.Response | None = None
+        try:
+            response = client.get(url, params=params, timeout=_TIMEOUT)
+            if response.status_code not in _RETRYABLE_STATUS:
+                response.raise_for_status()
+                return response.json()
+            response.raise_for_status()
+        except (
+            httpx.ConnectError,
+            httpx.ConnectTimeout,
+            httpx.ReadError,
+            httpx.ReadTimeout,
+            httpx.RemoteProtocolError,
+        ):
+            if attempt >= max_attempts:
+                raise
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in _RETRYABLE_STATUS or attempt >= max_attempts:
+                raise
+
+        delay = _BACKOFF_BASE_S * (2 ** (attempt - 1))
+        retry_after = response.headers.get("retry-after") if response is not None else None
+        if retry_after:
+            try:
+                delay = max(delay, float(retry_after))
+            except ValueError:
+                pass
+        time.sleep(delay)
+
+    raise RuntimeError("unreachable retry state")
 
 
 def _parse_date(s: str | None):
@@ -42,13 +93,13 @@ def load_upcoming_map(
     """{TICKER: {next_date, eps_estimate, revenue_estimate}} for the window."""
     frm = as_of.date().isoformat()
     to = (as_of.date() + timedelta(days=horizon_days)).isoformat()
-    r = client.get(
+    payload = _get_json(
+        client,
         f"{_BASE}/calendar/earnings",
-        params={"from": frm, "to": to, "token": api_key}, timeout=30.0,
+        params={"from": frm, "to": to, "token": api_key},
     )
-    r.raise_for_status()
     out: dict[str, dict[str, Any]] = {}
-    for row in r.json().get("earningsCalendar", []):
+    for row in payload.get("earningsCalendar", []):
         sym = str(row.get("symbol", "")).upper()
         if not sym or sym in out:  # keep the earliest (list is date-descending)
             continue
@@ -66,12 +117,11 @@ def fetch_surprise(
     """{recent_surprise, sigma, report_date} from the last 4 reported quarters,
     or None when Finnhub has no usable earnings history for the ticker."""
     time.sleep(_THROTTLE_S)
-    r = client.get(
+    rows = _get_json(
+        client,
         f"{_BASE}/stock/earnings",
-        params={"symbol": ticker.upper(), "token": api_key}, timeout=30.0,
+        params={"symbol": ticker.upper(), "token": api_key},
     )
-    r.raise_for_status()
-    rows = r.json()
     if not isinstance(rows, list) or not rows:
         return None
     # Most-recent-first. Relative surprise = (actual - estimate) / |estimate|.
