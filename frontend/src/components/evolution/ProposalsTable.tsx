@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/evolution";
 import { useRouter } from "next/navigation";
 import { t, type Locale } from "@/lib/i18n";
+import { formatUtc8DateTime } from "@/lib/format-datetime";
 
 // Localized status label. Falls back to the raw enum for any unmapped status.
 function statusLabel(status: string, locale: Locale): string {
@@ -37,17 +38,7 @@ function formatNum(v: unknown, decimals = 4): string {
 }
 
 function formatChangedAt(raw: string): string {
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return raw;
-  return (
-    d.toLocaleDateString([], {
-      month: "2-digit",
-      day: "2-digit",
-      year: "2-digit",
-    }) +
-    " " +
-    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
+  return formatUtc8DateTime(raw, { year: "two-digit", fallback: raw });
 }
 
 // ── Status badge ───────────────────────────────────────────────────────────

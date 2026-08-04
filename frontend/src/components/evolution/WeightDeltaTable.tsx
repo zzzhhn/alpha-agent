@@ -5,6 +5,7 @@ import clsx from "clsx";
 import type { EvolutionWeight } from "@/lib/api/evolution";
 import { t, type Locale } from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import { formatUtc8DateTime } from "@/lib/format-datetime";
 
 export function WeightDeltaTable({
   weights,
@@ -176,11 +177,5 @@ export function WeightDeltaTable({
 }
 
 function formatTimestamp(raw: string | null | undefined): string {
-  if (!raw) return "—";
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return "—";
-  // Show date + time for weight updates (can span days)
-  return d.toLocaleDateString([], { month: "2-digit", day: "2-digit" }) +
-    " " +
-    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatUtc8DateTime(raw);
 }

@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import type { EvolutionChange } from "@/lib/api/evolution";
 import { t, type Locale } from "@/lib/i18n";
+import { formatUtc8DateTime } from "@/lib/format-datetime";
 
 // Source badge color mapping
 const SOURCE_BADGE: Record<
@@ -106,17 +107,7 @@ function parseBaselineIc(newValue: string): string {
 }
 
 function formatChangedAt(raw: string): string {
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return raw;
-  return (
-    d.toLocaleDateString([], {
-      month: "2-digit",
-      day: "2-digit",
-      year: "2-digit",
-    }) +
-    " " +
-    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
+  return formatUtc8DateTime(raw, { year: "two-digit", fallback: raw });
 }
 
 export function ChangeHistoryTable({
