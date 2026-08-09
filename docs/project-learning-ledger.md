@@ -15,3 +15,12 @@
 - Validation rows should represent distinct robustness questions. Five convenient KPIs are not equivalent to OOS performance, walk-forward stability, cost sensitivity, concentration, and point-in-time data risk.
 - Placeholder categories such as `Unknown` are data-quality states, not user-selectable business categories. Preserve them in results while removing them from filter controls.
 - Queue and ledger height must be bounded by design. Pagination and single-row expansion make backlog size independent of page length.
+
+## 2026-08-09: Refresh acceptance is not snapshot publication
+
+- A GitHub Actions dispatch acknowledgement, a completed signal shard, and an immutable recommendation publication are separate states. Never collapse them into one green success label.
+- ETA is presentation guidance only. When it elapses, the UI may enter a verification state, but success requires a correlated terminal publish record.
+- Carry one `request_id` from the in-app dispatch through the workflow and publish audit so concurrent or scheduled jobs cannot settle the wrong user action.
+- A same-market-date rerun is a valid compute outcome but an immutable-ledger no-op. Report it as `no_op_same_market_date`, including the retained run and market date.
+- Canonical daily-close freshness follows the latest completed XNYS session plus price-date and health gates. Do not expire a healthy Friday snapshot solely because 24 wall-clock hours pass during a weekend or holiday.
+- Keep the legacy live-row fallback's wall-clock guard. Canonical and non-canonical data have different freshness contracts and must be tested independently.

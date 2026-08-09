@@ -54,7 +54,6 @@ export default function PaperScreen() {
   const [picksServerStale, setPicksServerStale] = useState(false);
   const [picksTradable, setPicksTradable] = useState(false);
   const [picksRun, setPicksRun] = useState<RecommendationRunState | null>(null);
-  const [now, setNow] = useState(() => Date.now());
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
@@ -111,14 +110,9 @@ export default function PaperScreen() {
     void loadAll();
   }, [loadAll]);
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-
   const picksFrozen =
     picks.length > 0 &&
-    (!picksTradable || isPicksSnapshotStale(picksAsOf, picksServerStale, now));
+    (!picksTradable || isPicksSnapshotStale(picksAsOf, picksServerStale));
 
   useEffect(() => {
     if (picks.length === 0) {

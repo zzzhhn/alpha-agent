@@ -98,9 +98,12 @@ async def test_picks_lean_search_still_surfaces_dead_feed(client_with_db, applie
     assert searched == ["TDEAD"]
 
 
-async def _seed_canonical_run(applied_db, *, market_date: date) -> int:
+async def _seed_canonical_run(
+    applied_db, *, market_date: date, generated_at: datetime | None = None
+) -> int:
     conn = await asyncpg.connect(applied_db)
     try:
+        generated_at = generated_at or datetime.now(UTC)
         run_id = await conn.fetchval(
             """
             INSERT INTO research_run
@@ -111,7 +114,7 @@ async def _seed_canonical_run(applied_db, *, market_date: date) -> int:
             RETURNING id
             """,
             market_date,
-            datetime.now(UTC),
+            generated_at,
         )
         for rank, (ticker, score) in enumerate((("AAA", 2.0), ("BBB", 1.0)), 1):
             payload = {
@@ -160,6 +163,23 @@ async def test_picks_default_reads_one_canonical_run(client_with_db, applied_db)
     assert {card["market_date"] for card in body["picks"]} == {
         body["run"]["market_date"]
     }
+
+
+async def test_session_valid_snapshot_does_not_expire_by_wall_clock(
+    client_with_db, applied_db
+):
+    """A healthy latest-session snapshot remains valid over weekends/holidays."""
+    from alpha_agent.market_session import latest_completed_xnys_session
+
+    await _seed_canonical_run(
+        applied_db,
+        market_date=latest_completed_xnys_session(),
+        generated_at=datetime.now(UTC) - timedelta(days=3),
+    )
+
+    body = client_with_db.get("/api/picks/lean?limit=20").json()
+    assert body["stale"] is False
+    assert body["tradable"] is True
 
 
 async def test_legacy_long_payload_is_not_mislabeled_as_strategic(
