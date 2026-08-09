@@ -1,0 +1,25 @@
+# Alpha Workstation Guidebook
+
+## Factor Alpha
+
+Write one falsifiable hypothesis, confirm universe, direction, bucket size, cost, neutralization, and benchmark, then use “Translate and backtest.” Read the verdict strip before opening detailed evidence. A saved experiment can be reopened, but reopening does not automatically rerun it.
+
+## Backtest
+
+Load a saved factor or enter an expression, confirm the compact parameters, and run once. The first decision order is verdict, equity path, validation gates, baseline comparison, diagnostic summaries, then recent runs. Dashes mean evidence is unknown, not zero.
+
+## Alerts
+
+Start from “Needs action,” narrow by severity or related object, select the highest-ranked row, inspect evidence and exposure, then resolve or snooze. Research context is secondary to disposition. If the feed fails, retry inside the queue pane; the rest of the triage workspace remains usable.
+
+## Evolution Monitor
+
+Read the overall decision strip, inspect the three highest-risk signals, review the promotion funnel, then process pending proposals beside the visible change ledger. “All signals” opens weight and calibration detail. Co-occurring events are evidence links, not causal claims.
+
+## Shared state language
+
+- `—`: unavailable or not yet returned.
+- Green: healthy, validated, or the single primary action.
+- Amber: incomplete evidence or review required.
+- Red: failed, blocked, or explicit counter-evidence.
+- Loading and error states keep their pane geometry, so the page does not jump or erase unrelated context.

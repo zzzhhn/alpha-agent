@@ -42,7 +42,7 @@ export function AlphaResearchContext({
       statuses={[
         { label: zh ? "阶段" : "Stage", value: stage, tone: state.kind.includes("error") ? "negative" : state.kind === "done" ? "positive" : "default" },
         { label: zh ? "股票池" : "Universe", value: universe },
-        { label: zh ? "数据面板" : "Data panel", value: zh ? "服务端缓存" : "Server cache", tone: "positive" },
+        { label: zh ? "数据状态" : "Data state", value: result ? (zh ? "随运行返回" : "Returned with run") : (zh ? "等待运行" : "Awaiting run"), tone: result ? "positive" : "default" },
       ]}
       action={result ? (
           <button type="button" onClick={onOpenBacktest} className="inline-flex items-center gap-2 border border-tm-accent px-3 py-1.5 text-[10px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg">

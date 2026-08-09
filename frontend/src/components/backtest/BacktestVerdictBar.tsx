@@ -154,9 +154,17 @@ export function BacktestVerdictBar({
   // 1. idle
   if (runState.kind === "idle") {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm text-tm-muted">
-        {t(locale, "backtest.verdict.idle")}
-      </section>
+      <DecisionStrip
+        headline={locale === "zh" ? "等待验证" : "Awaiting validation"}
+        description={locale === "zh" ? "运行一次回测后，在同一条决策带比较收益、风险和可交易性。" : "Run once to compare return, risk, and tradability in one decision strip."}
+        metrics={[
+          { label: t(locale, "backtest.metric.sharpe"), value: "—", detail: locale === "zh" ? "样本外" : "Out of sample" },
+          { label: t(locale, "backtest.metric.maxDd"), value: "—", detail: locale === "zh" ? "等待路径" : "Awaiting path" },
+          { label: t(locale, "backtest.metric.ic"), value: "—", detail: locale === "zh" ? "等待检验" : "Awaiting test" },
+          { label: t(locale, "backtest.metric.turnover"), value: "—", detail: locale === "zh" ? "包含成本" : "Cost-aware" },
+          { label: t(locale, "backtest.metric.annReturn"), value: "—", detail: locale === "zh" ? "不做推测" : "Not estimated" },
+        ]}
+      />
     );
   }
 
@@ -164,10 +172,17 @@ export function BacktestVerdictBar({
   // replace metrics with the spinner regardless of stale currentRun.
   if (runState.kind === "running") {
     return (
-      <section className="flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm text-tm-fg-2">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-        <span>{t(locale, "backtest.verdict.running")}</span>
-      </section>
+      <DecisionStrip
+        headline={<span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-tm-accent" strokeWidth={1.75} />{t(locale, "backtest.verdict.running")}</span>}
+        description={locale === "zh" ? "服务端正在构建净值、回撤、Walk-forward 与验证门槛。" : "The service is building equity, drawdown, walk-forward, and validation evidence."}
+        metrics={[
+          { label: t(locale, "backtest.metric.sharpe"), value: "···" },
+          { label: t(locale, "backtest.metric.maxDd"), value: "···" },
+          { label: t(locale, "backtest.metric.ic"), value: "···" },
+          { label: t(locale, "backtest.metric.turnover"), value: "···" },
+          { label: t(locale, "backtest.metric.annReturn"), value: "···" },
+        ]}
+      />
     );
   }
 
@@ -192,34 +207,18 @@ export function BacktestVerdictBar({
       : parsed.summary;
     const showDetail = parsed.detail !== null && parsed.detail !== parsed.summary;
     return (
-      <section className="flex flex-col gap-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-2 font-tm-mono text-sm text-tm-neg">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
-            <span className="break-words">
-              {t(locale, "backtest.verdict.errorPrefix")}
-              {headline}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={onReRun}
-            className="rounded border border-tm-neg/60 px-3 py-1 font-tm-mono text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
-          >
-            {t(locale, "backtest.verdict.reRun")}
-          </button>
-        </div>
-        {showDetail ? (
-          <details className="font-tm-mono text-xs text-tm-muted">
-            <summary className="cursor-pointer select-none hover:text-tm-fg-2">
-              {t(locale, "backtest.verdict.errorDetails")}
-            </summary>
-            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-[11px] leading-snug">
-              {parsed.detail}
-            </pre>
-          </details>
-        ) : null}
-      </section>
+      <DecisionStrip
+        headline={<span className="inline-flex items-start gap-2 text-tm-neg"><AlertCircle className="mt-1 h-4 w-4 shrink-0" strokeWidth={1.75} /><span className="break-words">{t(locale, "backtest.verdict.errorPrefix")}{headline}</span></span>}
+        description={locale === "zh" ? "输入和工作台结构已保留，请修正后重试。" : "Inputs and workbench geometry are preserved; correct the issue and retry."}
+        metrics={[
+          { label: t(locale, "backtest.metric.sharpe"), value: "—", tone: "negative" },
+          { label: t(locale, "backtest.metric.maxDd"), value: "—", tone: "negative" },
+          { label: t(locale, "backtest.metric.ic"), value: "—", tone: "negative" },
+          { label: t(locale, "backtest.metric.turnover"), value: "—", tone: "negative" },
+          { label: t(locale, "backtest.metric.annReturn"), value: "—", tone: "negative" },
+        ]}
+        action={<div className="grid gap-2"><button type="button" onClick={onReRun} className="border border-tm-neg/60 px-3 py-1.5 font-tm-mono text-[10px] font-semibold text-tm-neg hover:bg-tm-neg/10">{t(locale, "backtest.verdict.reRun")}</button>{showDetail ? <details className="max-w-44 font-tm-mono text-[9px] text-tm-muted"><summary className="cursor-pointer hover:text-tm-fg-2">{t(locale, "backtest.verdict.errorDetails")}</summary><pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-all border border-tm-rule bg-tm-bg p-1.5 text-[9px] leading-snug">{parsed.detail}</pre></details> : null}</div>}
+      />
     );
   }
 
@@ -227,9 +226,7 @@ export function BacktestVerdictBar({
   // Defensive: if ok but somehow no currentRun, fall through to idle copy.
   if (!currentRun) {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 px-4 py-3 font-tm-mono text-sm text-tm-muted">
-        {t(locale, "backtest.verdict.idle")}
-      </section>
+      <DecisionStrip headline={t(locale, "backtest.verdict.idle")} metrics={[]} />
     );
   }
 

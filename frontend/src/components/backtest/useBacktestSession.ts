@@ -17,7 +17,7 @@ import type {
   RunState,
 } from "./types";
 
-const MAX_RECENT_RUNS = 10;
+const MAX_RECENT_RUNS = 5;
 
 // Thresholds (locked per spec §8.2)
 const TH_SHARPE_OK = 1.0;

@@ -22,6 +22,7 @@ import {
 } from "@/lib/api/factor-lab";
 import { TmScreen } from "@/components/tm/TmPane";
 import EvolutionObservatory from "@/components/evolution/EvolutionObservatory";
+import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
 // Methodology-proposals UI, merged in from the former /factor-lab page (the two
 // nav slots both surfaced proposals; consolidated into this one monitor).
@@ -40,6 +41,7 @@ async function fetchAllEvolution(): Promise<{
   calibration: EvolutionCalibration | null;
   changes: EvolutionChangesResponse | null;
   proposals: ProposalsResponse | null;
+  failures: string[];
 }> {
   const [icTrend, icAnnotations, weights, calibration, changes, proposals] =
     await Promise.allSettled([
@@ -54,6 +56,15 @@ async function fetchAllEvolution(): Promise<{
       fetchProposals({ revalidate: 0, tags: ["evolution-proposals"] }),
     ]);
 
+  const namedResults = [
+    ["IC trend", icTrend],
+    ["IC annotations", icAnnotations],
+    ["weights", weights],
+    ["calibration", calibration],
+    ["change ledger", changes],
+    ["proposals", proposals],
+  ] as const;
+
   return {
     icTrend: icTrend.status === "fulfilled" ? icTrend.value : null,
     icAnnotations:
@@ -65,6 +76,7 @@ async function fetchAllEvolution(): Promise<{
       calibration.status === "fulfilled" ? calibration.value : null,
     changes: changes.status === "fulfilled" ? changes.value : null,
     proposals: proposals.status === "fulfilled" ? proposals.value : null,
+    failures: namedResults.filter(([, result]) => result.status === "rejected").map(([name]) => name),
   };
 }
 
@@ -102,7 +114,7 @@ async function fetchFactorLab() {
 export default async function EvolutionPage() {
   const locale = await getServerLocale();
   const [
-    { icTrend, icAnnotations, weights, calibration, changes, proposals },
+    { icTrend, icAnnotations, weights, calibration, changes, proposals, failures },
     { diagnostic, pending, history, lessons, briefing },
   ] = await Promise.all([fetchAllEvolution(), fetchFactorLab()]);
   const liveExpression = diagnostic?.current_expression ?? "";
@@ -124,19 +136,27 @@ export default async function EvolutionPage() {
         calibration={calibration}
         changes={changes?.changes ?? []}
         pendingCount={pendingCount}
+        failures={failures}
       >
         {/* ── Decision ledger: proposals before on-demand telemetry detail ──
           The decision card + actionable pending list + collapsed history,
           richer than the prior read-only table. `proposals` (fetchProposals)
           still feeds the health strip above. */}
-        <div id="evolution-review" className="grid grid-cols-[minmax(420px,0.85fr)_minmax(640px,1.15fr)] gap-4 border-b border-tm-rule px-6 py-4">
-          <div className="min-w-0">
+        <div id="evolution-review" className="grid grid-cols-[minmax(420px,0.9fr)_minmax(640px,1.1fr)] gap-4 border-b border-tm-rule px-6 py-4">
+          <div className="min-w-0 space-y-3">
             <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
-          </div>
-          <div className="min-w-0">
             <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
-            <HistoryCollapsedSection history={history} />
           </div>
+          <section className="min-w-0 border border-tm-rule bg-tm-bg">
+            <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4">
+              <span className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{locale === "zh" ? "变更账本" : "Change ledger"}</span>
+              <span className="font-mono text-[9px] text-tm-muted">{changes?.changes.length ?? 0}</span>
+            </div>
+            <div className="px-3 py-2">
+              <ChangeHistoryTable changes={(changes?.changes ?? []).slice(0, 12)} locale={locale} />
+            </div>
+            <HistoryCollapsedSection history={history} />
+          </section>
         </div>
       </EvolutionObservatory>
 
