@@ -75,28 +75,101 @@ async def fast_intraday(
 
 @router.post("/publish_recommendation")
 @router.get("/publish_recommendation")
-async def publish_recommendation() -> dict[str, Any]:
+async def publish_recommendation(
+    request_id: str | None = Query(None, max_length=100),
+) -> dict[str, Any]:
     """Publish one immutable recommendation only after every shard finished."""
     from alpha_agent.ledger import record_daily_close
 
     pool = await get_pool(os.environ["DATABASE_URL"])
     started_at = datetime.now(UTC)
-    run_id = await record_daily_close(pool, started_at=started_at)
+    try:
+        run_id = await record_daily_close(pool, started_at=started_at)
+    except Exception as exc:
+        await pool.execute(
+            """
+            INSERT INTO cron_runs
+                (cron_name, started_at, finished_at, ok, error_count, details)
+            VALUES ('recommendation_publish', $1, now(), false, 1, $2::jsonb)
+            """,
+            started_at,
+            json.dumps(
+                {
+                    "publish_status": "failed",
+                    "reason": "publish_exception",
+                    "error_type": type(exc).__name__,
+                    "request_id": request_id,
+                }
+            ),
+        )
+        raise RuntimeError("recommendation snapshot publication failed") from exc
+
     if run_id is None:
+        canonical = await pool.fetchrow(
+            """
+            SELECT id, scheduled_for_date
+            FROM research_run
+            WHERE run_type = 'daily_close' AND status = 'complete'
+            ORDER BY scheduled_for_date DESC, id DESC
+            LIMIT 1
+            """
+        )
+        details = {
+            "publish_status": "no_op_same_market_date",
+            "run_id": int(canonical["id"]) if canonical else None,
+            "market_date": (
+                canonical["scheduled_for_date"].isoformat() if canonical else None
+            ),
+            "reason": "complete_run_already_exists",
+            "request_id": request_id,
+        }
+        await pool.execute(
+            """
+            INSERT INTO cron_runs
+                (cron_name, started_at, finished_at, ok, error_count, details)
+            VALUES ('recommendation_publish', $1, now(), true, 0, $2::jsonb)
+            """,
+            started_at,
+            json.dumps(details),
+        )
         return {
             "ok": True,
-            "run_id": None,
+            "run_id": details["run_id"],
+            "market_date": details["market_date"],
+            "publish_status": "no_op_same_market_date",
             "skipped": True,
-            "reason": "complete_run_already_exists",
+            "reason": "no_op_same_market_date",
+            "request_id": request_id,
         }
     run = await pool.fetchrow(
         "SELECT status, scheduled_for_date, health_json FROM research_run WHERE id=$1",
         run_id,
     )
     published = bool(run and run["status"] == "complete")
+    publish_status = "published" if published else "health_gate_failed"
+    details = {
+        "publish_status": publish_status,
+        "run_id": int(run_id),
+        "market_date": run["scheduled_for_date"].isoformat() if run else None,
+        "reason": None if published else "run_health_gate_failed",
+        "request_id": request_id,
+    }
+    await pool.execute(
+        """
+        INSERT INTO cron_runs
+            (cron_name, started_at, finished_at, ok, error_count, details)
+        VALUES ('recommendation_publish', $1, now(), $2, $3, $4::jsonb)
+        """,
+        started_at,
+        published,
+        0 if published else 1,
+        json.dumps(details),
+    )
     return {
         "ok": published,
         "run_id": run_id,
+        "publish_status": publish_status,
+        "request_id": request_id,
         "status": run["status"] if run else "missing",
         "market_date": run["scheduled_for_date"].isoformat() if run else None,
         "health": (

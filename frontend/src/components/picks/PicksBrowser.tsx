@@ -34,11 +34,12 @@ import { useFactorMode } from "@/hooks/useFactorMode";
 import { isPicksSnapshotStale } from "@/lib/picks-freshness";
 import {
   DISPATCH_EVENT,
-  clearDispatch,
   isInFlight,
   loadDispatch,
   loadSnapshot,
+  REFRESH_SETTLED_EVENT,
   saveSnapshot,
+  type RefreshSettledDetail,
 } from "@/lib/dispatch-state";
 
 type PicksData = PicksResponse;
@@ -149,16 +150,16 @@ export default function PicksBrowser({
   // time. PicksBrowser doesn't poll, so same-tab the list is frozen naturally;
   // the only thing that changes it mid-window is a page reload (SSR re-fetch).
   // So: on dispatch, snapshot the default board; on mount during the window,
-  // serve that snapshot instead of the half-updated SSR data; when the window
-  // ends, refetch once and flash an "updated" banner.
+  // serve that snapshot instead of the half-updated SSR data; only a terminal
+  // backend publish audit releases the freeze and chooses the result banner.
   const [now, setNow] = useState(() => Date.now());
-  const [justRefreshed, setJustRefreshed] = useState(false);
+  const [refreshResult, setRefreshResult] =
+    useState<RefreshSettledDetail | null>(null);
   // Gate localStorage-derived UI on mount so SSR and first client render agree
   // (loadDispatch returns null server-side but a value client-side -> mismatch).
   const [hydrated, setHydrated] = useState(false);
   const liveRef = useRef({ data, search, factorMode, side });
   liveRef.current = { data, search, factorMode, side };
-  const wasInFlightRef = useRef(false);
 
   useEffect(() => {
     setHydrated(true);
@@ -169,7 +170,6 @@ export default function PicksBrowser({
       if (snap) {
         setData(snap);
       }
-      wasInFlightRef.current = true;
     }
     const onDispatch = () => {
       // Snapshot the default board (no active search) for reload-freeze.
@@ -177,24 +177,25 @@ export default function PicksBrowser({
       if (!l.search.trim()) {
         saveSnapshot(l.data);
       }
-      wasInFlightRef.current = true;
+      setRefreshResult(null);
       setNow(Date.now());
     };
+    const onSettled = (event: Event) => {
+      const detail = (event as CustomEvent<RefreshSettledDetail>).detail;
+      const l = liveRef.current;
+      void runSearch(l.search, l.factorMode, l.side).finally(() => {
+        setRefreshResult(detail);
+        setTimeout(() => setRefreshResult(null), 12_000);
+      });
+    };
     window.addEventListener(DISPATCH_EVENT, onDispatch);
+    window.addEventListener(REFRESH_SETTLED_EVENT, onSettled);
     const id = setInterval(() => {
       setNow(Date.now());
-      if (wasInFlightRef.current && !isInFlight(loadDispatch())) {
-        // Window ended: drop the freeze, pull fresh once, flash a banner.
-        wasInFlightRef.current = false;
-        clearDispatch();
-        const l = liveRef.current;
-        runSearch(l.search, l.factorMode, l.side);
-        setJustRefreshed(true);
-        setTimeout(() => setJustRefreshed(false), 8000);
-      }
     }, 5000);
     return () => {
       window.removeEventListener(DISPATCH_EVENT, onDispatch);
+      window.removeEventListener(REFRESH_SETTLED_EVENT, onSettled);
       clearInterval(id);
     };
     // Mount-only: refs carry the latest values into the listener/interval.
@@ -211,7 +212,7 @@ export default function PicksBrowser({
   const count = data.picks.length;
   const snapshotStale =
     count > 0 &&
-    (!data.tradable || isPicksSnapshotStale(data.as_of, data.stale, now));
+    (!data.tradable || isPicksSnapshotStale(data.as_of, data.stale));
   const asOf = data.as_of
     ? data.as_of.replace("T", " ").replace(/:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/, "") + " UTC"
     : locale === "zh"
@@ -227,7 +228,7 @@ export default function PicksBrowser({
           marketDate: "市场日",
           run: "快照",
           coverage: "覆盖率",
-          stale: "数据超过 24 小时",
+          stale: "推荐快照不可交易",
           placeholder: "搜索 ticker（如 NVDA）",
           paneTitle: "候选明细",
           paneMeta: searching
@@ -257,7 +258,7 @@ export default function PicksBrowser({
           marketDate: "MARKET DATE",
           run: "RUN",
           coverage: "COVERAGE",
-          stale: "DATA > 24h OLD",
+          stale: "SNAPSHOT NOT TRADABLE",
           placeholder: "Search ticker (e.g. NVDA)",
           paneTitle: "CANDIDATE DETAIL",
           paneMeta: searching
@@ -404,14 +405,35 @@ export default function PicksBrowser({
           >
             {refreshing ? (
               <div className="mx-3 mt-2 rounded border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
-                {t(locale, "picks.freeze_banner").replace(
-                  "{min}",
-                  String(refreshRemainingMin),
+                {refreshRemainingMin > 0
+                  ? t(locale, "picks.freeze_banner").replace(
+                      "{min}",
+                      String(refreshRemainingMin),
+                    )
+                  : t(locale, "picks.verify_banner")}
+              </div>
+            ) : refreshResult?.status === "published" ? (
+              <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
+                {t(locale, "picks.published_banner").replace(
+                  "{run}",
+                  refreshResult.runId == null ? "—" : `#${refreshResult.runId}`,
                 )}
               </div>
-            ) : justRefreshed ? (
-              <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
-                {t(locale, "picks.refreshed_banner")}
+            ) : refreshResult?.status === "no_op_same_market_date" ? (
+              <div className="mx-3 mt-2 rounded border border-tm-warn/40 bg-tm-warn/10 px-3 py-1.5 font-tm-mono text-xs text-tm-warn">
+                {t(locale, "picks.noop_banner").replace(
+                  "{date}",
+                  refreshResult.marketDate ?? "—",
+                )}
+              </div>
+            ) : refreshResult ? (
+              <div className="mx-3 mt-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-1.5 font-tm-mono text-xs text-tm-neg">
+                {t(
+                  locale,
+                  refreshResult.status === "health_gate_failed"
+                    ? "picks.health_failed_banner"
+                    : "picks.publish_failed_banner",
+                )}
               </div>
             ) : snapshotStale ? (
               <div className="mx-3 mt-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">

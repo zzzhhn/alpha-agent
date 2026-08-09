@@ -18,6 +18,7 @@ import json
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,6 +46,7 @@ class RefreshRequest(BaseModel):
 
 class RefreshResponse(BaseModel):
     ok: bool
+    request_id: str | None = None
     dispatched_at: str | None = None
     eta_minutes: int | None = None
     reason: str | None = None
@@ -103,6 +105,8 @@ async def trigger_refresh(
         f"https://api.github.com/repos/{_GH_REPO}/actions/workflows/{_GH_WORKFLOW}/dispatches"
     )
     payload = {"ref": _GH_REF, "inputs": {"job": body.job}}
+    request_id = uuid4().hex
+    payload["inputs"]["request_id"] = request_id
     headers = {
         "Authorization": f"Bearer {gh_token}",
         "Accept": "application/vnd.github+json",
@@ -119,6 +123,7 @@ async def trigger_refresh(
 
     return RefreshResponse(
         ok=True,
+        request_id=request_id,
         dispatched_at=datetime.now(UTC).isoformat(),
         eta_minutes=eta,
         last_run_started_at=last.isoformat() if last else None,
@@ -127,24 +132,62 @@ async def trigger_refresh(
 
 @router.get("/last_refresh")
 async def last_refresh() -> dict:
-    """Lightweight GET so the frontend can show 'last refreshed N min ago'
-    without needing auth or write permission."""
+    """Expose compute and immutable-snapshot publication as separate clocks."""
     pool = await get_db_pool()
     rows = await pool.fetch(
         """
-        SELECT cron_name, MAX(started_at) AS last
+        SELECT DISTINCT ON (cron_name)
+            cron_name, started_at, finished_at
         FROM cron_runs
         WHERE cron_name IN ('fast_intraday', 'slow_daily')
-        GROUP BY cron_name
+        ORDER BY cron_name, started_at DESC
         """
     )
-    out: dict[str, str | None] = {"fast_intraday": None, "slow_daily": None}
+    out: dict[str, str | None] = {
+        "fast_intraday": None,
+        "fast_intraday_finished_at": None,
+        "slow_daily": None,
+        "slow_daily_finished_at": None,
+    }
     for r in rows:
-        ts = r["last"]
-        if ts is not None and ts.tzinfo is None:
-            ts = ts.replace(tzinfo=UTC)
-        out[r["cron_name"]] = ts.isoformat() if ts else None
-    return out
+        started = r["started_at"]
+        finished = r["finished_at"]
+        if started is not None and started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        if finished is not None and finished.tzinfo is None:
+            finished = finished.replace(tzinfo=UTC)
+        out[r["cron_name"]] = started.isoformat() if started else None
+        out[f"{r['cron_name']}_finished_at"] = (
+            finished.isoformat() if finished else None
+        )
+    publish = await pool.fetchrow(
+        """
+        SELECT started_at, finished_at, ok, details
+        FROM cron_runs
+        WHERE cron_name = 'recommendation_publish'
+        ORDER BY started_at DESC
+        LIMIT 1
+        """
+    )
+    publish_state = None
+    if publish is not None:
+        details = publish["details"]
+        if isinstance(details, str):
+            details = json.loads(details)
+        details = details if isinstance(details, dict) else {}
+        started = publish["started_at"]
+        finished = publish["finished_at"]
+        publish_state = {
+            "started_at": started.isoformat() if started else None,
+            "finished_at": finished.isoformat() if finished else None,
+            "ok": publish["ok"],
+            "status": details.get("publish_status", "failed"),
+            "run_id": details.get("run_id"),
+            "market_date": details.get("market_date"),
+            "reason": details.get("reason"),
+            "request_id": details.get("request_id"),
+        }
+    return {**out, "recommendation_publish": publish_state}
 
 
 class ConfigSetRequest(BaseModel):

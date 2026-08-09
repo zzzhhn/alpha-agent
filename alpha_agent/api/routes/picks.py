@@ -33,7 +33,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/picks", tags=["picks"])
 
+# Legacy live-row fallback still needs a bounded wall-clock freshness guard.
+# Canonical immutable runs use exchange-session freshness instead.
 _STALE_THRESHOLD_HOURS = 24
+
 
 # A ticker with no close in the last N trading sessions has a dead price feed
 # (delisting / ticker change / halt — e.g. HOLX/SEE return nothing on Yahoo,
@@ -354,11 +357,8 @@ async def _build_canonical_view(
     same_market_date = bool(cards) and all(
         card.price_date == market_date.isoformat() for card in cards
     )
-    age_stale = generated_at is None or (
-        datetime.now(UTC) - generated_at > timedelta(hours=_STALE_THRESHOLD_HOURS)
-    )
     stale = bool(
-        age_stale
+        generated_at is None
         or market_date != expected_market_date
         or not same_market_date
         or not health.get("passed", False)

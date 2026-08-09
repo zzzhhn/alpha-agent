@@ -75,6 +75,10 @@ on:
           - daily_prices_puller
           - methodology_proposer
           - l2_cycle
+      request_id:
+        description: 'Correlation id supplied by the in-app refresh dispatcher'
+        required: false
+        type: string
 
 env:
   # Call FastAPI directly to avoid a needless Next.js invocation per shard.
@@ -126,9 +130,10 @@ jobs:
           echo "- errors total: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
       - name: Publish one immutable recommendation snapshot
         run: |
+          PUBLISH_REQUEST_ID="${{ inputs.request_id || github.run_id }}"
           HTTP=$(curl -s --max-time 290 -o /tmp/publish.json -w "%{http_code}" \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "$BACKEND_BASE/api/cron/publish_recommendation")
+            "$BACKEND_BASE/api/cron/publish_recommendation?request_id=$PUBLISH_REQUEST_ID")
           cat /tmp/publish.json | head -c 800; echo
           [ "$HTTP" = "200" ] || exit 1
           python3 -c "import json,sys; sys.exit(0 if json.load(open('/tmp/publish.json')).get('ok') else 1)"

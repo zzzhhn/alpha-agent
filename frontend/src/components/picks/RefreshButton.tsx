@@ -12,9 +12,12 @@ import { triggerRefresh, fetchLastRefresh } from "@/lib/api/admin";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import {
+  clearDispatch,
   DISPATCH_EVENT,
   loadDispatch,
+  REFRESH_SETTLED_EVENT,
   saveDispatch,
+  type RefreshSettledDetail,
 } from "@/lib/dispatch-state";
 
 function formatAge(iso: string | null, locale: "zh" | "en"): string {
@@ -38,8 +41,8 @@ type ToastState =
   | { kind: "failed"; reason: string };
 
 // ETA countdown bar shown after a successful dispatch. pct is clamped 0..1;
-// `done` means the estimated window has elapsed (fresh data should be in,
-// reload to see it).
+// `done` means only that the ETA elapsed. It never claims publication success;
+// that requires a terminal recommendation_publish record from the backend.
 function DispatchProgress({
   pct,
   remainingMin,
@@ -53,8 +56,8 @@ function DispatchProgress({
 }) {
   const label = done
     ? locale === "zh"
-      ? "数据已更新"
-      : "data updated"
+      ? "预计时间已到，正在确认快照发布结果"
+      : "ETA elapsed; verifying snapshot publication"
     : locale === "zh"
       ? `预计还需 ${remainingMin} 分钟`
       : `about ${remainingMin} min remaining`;
@@ -62,11 +65,11 @@ function DispatchProgress({
     <div className="flex w-56 flex-col gap-1">
       <div className="h-1.5 w-full overflow-hidden rounded bg-tm-bg-3">
         <div
-          className={`h-full transition-[width] duration-1000 ease-linear ${done ? "bg-tm-pos" : "bg-tm-accent"}`}
+          className={`h-full transition-[width] duration-1000 ease-linear ${done ? "bg-tm-warn" : "bg-tm-accent"}`}
           style={{ width: `${Math.round(pct * 100)}%` }}
         />
       </div>
-      <span className={`text-[11px] ${done ? "text-tm-pos" : "text-tm-muted"}`}>
+      <span className={`text-[11px] ${done ? "text-tm-warn" : "text-tm-muted"}`}>
         {label}
       </span>
     </div>
@@ -105,7 +108,9 @@ export default function RefreshButton() {
     const fetchAge = async () => {
       try {
         const r = await fetchLastRefresh();
-        if (!cancelled) setLastRun(r.fast_intraday);
+        if (!cancelled) {
+          setLastRun(r.fast_intraday_finished_at ?? r.fast_intraday);
+        }
       } catch {
         // Silent: the badge just won't update, not worth surfacing.
       }
@@ -122,19 +127,87 @@ export default function RefreshButton() {
     };
   }, []);
 
-  // Tick `now` every second while a dispatch ETA is in flight; stop ticking
-  // once the estimated window has elapsed (the bar is full from then on).
+  // Tick through the bounded verification grace period. ETA completion is not
+  // a success signal, so the button remains locked until publish settles.
   useEffect(() => {
     if (dispatchedAt == null) return;
-    const totalMs = etaMin * 60_000;
+    const maxMs = (etaMin + 30) * 60_000;
     setNow(Date.now());
     const id = setInterval(() => {
       const tNow = Date.now();
       setNow(tNow);
-      if (tNow - dispatchedAt >= totalMs) clearInterval(id);
+      if (tNow - dispatchedAt >= maxMs) clearInterval(id);
     }, 1000);
     return () => clearInterval(id);
   }, [dispatchedAt, etaMin]);
+
+  // Poll the backend's terminal publish audit. This is the only path allowed
+  // to announce completion; cron start time and elapsed ETA are not evidence
+  // that an immutable recommendation snapshot changed.
+  useEffect(() => {
+    if (dispatchedAt == null) return;
+    let cancelled = false;
+
+    const pollPublish = async () => {
+      const dispatch = loadDispatch();
+      if (!dispatch) {
+        if (!cancelled) {
+          const detail: RefreshSettledDetail = {
+            status: "failed",
+            runId: null,
+            marketDate: null,
+          };
+          window.dispatchEvent(
+            new CustomEvent(REFRESH_SETTLED_EVENT, { detail }),
+          );
+          setDispatchedAt(null);
+        }
+        return;
+      }
+      try {
+        const response = await fetchLastRefresh();
+        if (cancelled) return;
+        setLastRun(
+          response.fast_intraday_finished_at ?? response.fast_intraday,
+        );
+        const published = response.recommendation_publish;
+        if (!published?.finished_at) return;
+        if (
+          dispatch.requestId != null &&
+          published.request_id !== dispatch.requestId
+        ) {
+          return;
+        }
+        const dispatchMs = Date.parse(
+          dispatch.serverDispatchedAt ?? new Date(dispatch.at).toISOString(),
+        );
+        const publishMs = Date.parse(published.finished_at);
+        if (!Number.isFinite(publishMs) || publishMs < dispatchMs) return;
+
+        const detail: RefreshSettledDetail = {
+          status: published.status,
+          runId: published.run_id,
+          marketDate: published.market_date,
+        };
+        window.dispatchEvent(
+          new CustomEvent(REFRESH_SETTLED_EVENT, { detail }),
+        );
+        clearDispatch();
+        setDispatchedAt(null);
+        setToast({ kind: "idle" });
+      } catch {
+        // Keep waiting within the bounded grace period. The existing snapshot
+        // remains visible and no success state is fabricated.
+      }
+    };
+
+    void pollPublish();
+    const id = setInterval(() => void pollPublish(), 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [dispatchedAt]);
 
   const onClick = useCallback(async () => {
     setToast({ kind: "pending" });
@@ -145,10 +218,9 @@ export default function RefreshButton() {
         const eta = r.eta_minutes ?? 18;
         const at = Date.now();
         setToast({ kind: "ok", min: eta });
-        if (r.dispatched_at) setLastRun(r.dispatched_at);
         setEtaMin(eta);
         setDispatchedAt(at);
-        saveDispatch(at, eta);
+        saveDispatch(at, eta, r.dispatched_at, r.request_id);
         // Tell PicksBrowser (same tab) to snapshot + freeze the board now.
         window.dispatchEvent(new CustomEvent(DISPATCH_EVENT));
         dispatched = true;
@@ -187,7 +259,7 @@ export default function RefreshButton() {
   // Lock the button for the WHOLE estimated window, not just the brief
   // dispatch HTTP call — re-clicking mid-window used to fire a second cron
   // dispatch (the user's complaint), not a page refresh.
-  const inFlight = progress != null && !progress.done;
+  const inFlight = progress != null;
   const btnPct = inFlight && progress ? Math.round(progress.pct * 100) : 0;
 
   // The "ok" state is represented by the progress bar, so only non-ok
