@@ -53,14 +53,9 @@ import type {
   ScreenerResponse,
 } from "@/lib/types";
 import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
-import {
-  TmSubbar,
-  TmSubbarKV,
-  TmSubbarSep,
-  TmSubbarSpacer,
-  TmStatusPill,
-  TmChip,
-} from "@/components/tm/TmSubbar";
+import { TmChip } from "@/components/tm/TmSubbar";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
+import { DecisionStrip } from "@/components/workbench/DecisionStrip";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
@@ -138,7 +133,12 @@ export default function ScreenerPage() {
     // (sector chip strip + N_UNIVERSE KPI). Failures are non-fatal.
     void (async () => {
       const [s, u] = await Promise.all([fetchSectors(), fetchUniverses()]);
-      if (s.data) setAvailableSectors(s.data.sectors);
+      if (s.data) {
+        setAvailableSectors(s.data.sectors.filter((sector) => {
+          const normalized = sector.trim().toLowerCase();
+          return normalized.length > 0 && !["unknown", "unclassified", "n/a", "na", "未知", "未分类"].includes(normalized);
+        }));
+      }
       if (u.data && u.data.universes.length > 0) {
         setUniverseSize(u.data.universes[0].ticker_count);
       }
@@ -276,52 +276,28 @@ export default function ScreenerPage() {
 
   return (
     <TmScreen>
-      <TmSubbar>
-        <span className="text-tm-muted">SCREENER</span>
-        <TmSubbarSep />
-        <TmSubbarKV label="ZOO" value={zoo.length.toString()} />
-        <TmSubbarSep />
-        <TmSubbarKV label="SELECTED" value={selections.length.toString()} />
-        <TmSubbarSep />
-        <TmSubbarKV label="TOP_N" value={topN.toString()} />
-        {result && (
-          <>
-            <TmSubbarSep />
-            <TmSubbarKV label="AS_OF" value={result.metadata.as_of_date} />
-            <TmSubbarSep />
-            <TmSubbarKV
-              label="ELIGIBLE"
-              value={result.metadata.n_eligible_tickers.toString()}
-            />
-          </>
-        )}
-        <TmSubbarSpacer />
-        {concentrationWarn && aggregates && (
-          <TmStatusPill tone="warn">
-            {`SECTOR CONCENTRATION · ${aggregates.maxSectorLabel} ${(aggregates.maxSectorShare * 100).toFixed(0)}%`}
-          </TmStatusPill>
-        )}
-        {result && (
-          <TmStatusPill tone={survivorshipCorrected ? "ok" : "warn"}>
-            {survivorshipCorrected
-              ? `SP500-AS-OF · ${survivorshipAsOf ?? "—"}`
-              : "LEGACY"}
-          </TmStatusPill>
-        )}
-        {result?.metadata.neutralize === "sector" && (
-          <TmStatusPill tone="ok">SECTOR-NEUTRAL</TmStatusPill>
-        )}
-        {running && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
-        {error && <TmStatusPill tone="err">ERROR</TmStatusPill>}
-        <TmButton
-          variant="primary"
-          onClick={run}
-          disabled={running || selections.length === 0}
-          className="-my-1 px-3"
-        >
-          {running ? t(locale, "screener.running") : t(locale, "screener.run")}
-        </TmButton>
-      </TmSubbar>
+      <WorkbenchHeader
+        eyebrow={locale === "zh" ? "研究 · 组合构建" : "Research · portfolio construction"}
+        title={locale === "zh" ? "选股 Screener" : "Stock Screener"}
+        subtitle={locale === "zh" ? "先选择可解释的因子，再审查股票池、集中度与可交易性" : "Select interpretable factors, then review universe, concentration, and tradability"}
+        statuses={[
+          { label: locale === "zh" ? "因子库" : "Zoo", value: String(zoo.length) },
+          { label: locale === "zh" ? "已选择" : "Selected", value: String(selections.length), tone: selections.length ? "positive" : "warning" },
+          { label: locale === "zh" ? "数据日期" : "As of", value: result?.metadata.as_of_date ?? "—" },
+          { label: locale === "zh" ? "校正模式" : "Membership", value: result ? (survivorshipCorrected ? `PIT ${survivorshipAsOf ?? ""}` : "LEGACY") : "—", tone: result ? (survivorshipCorrected ? "positive" : "warning") : "default" },
+        ]}
+      />
+      <DecisionStrip
+        headline={error ? (locale === "zh" ? "本次选股失败，请检查参数后重试" : "Screening failed; review parameters and retry") : result ? (locale === "zh" ? `已形成 ${result.recommendations.length} 只候选股的可审查清单` : `${result.recommendations.length} candidates are ready for review`) : (locale === "zh" ? "选择因子并定义股票池，生成候选清单" : "Choose factors and define the universe to generate candidates")}
+        description={concentrationWarn && aggregates ? (locale === "zh" ? `${aggregates.maxSectorLabel} 占 ${(aggregates.maxSectorShare * 100).toFixed(0)}%，需要审查行业集中风险。` : `${aggregates.maxSectorLabel} is ${(aggregates.maxSectorShare * 100).toFixed(0)}% of the basket; review sector concentration.`) : (locale === "zh" ? "系统不会把未分类行业作为可选筛选条件，缺失分类仍会在结果中如实标记。" : "Unclassified sectors are not selectable filters and remain explicit in results.")}
+        metrics={[
+          { label: locale === "zh" ? "已选因子" : "Selected", value: selections.length, detail: locale === "zh" ? `共 ${zoo.length} 个可用` : `${zoo.length} available`, tone: selections.length ? "positive" : "warning" },
+          { label: "TOP N", value: topN, detail: locale === "zh" ? "目标候选数" : "target candidates" },
+          { label: locale === "zh" ? "合格股票" : "Eligible", value: result?.metadata.n_eligible_tickers ?? "—", detail: locale === "zh" ? "过滤后股票池" : "post-filter universe" },
+          { label: locale === "zh" ? "最大行业占比" : "Max sector", value: aggregates ? `${(aggregates.maxSectorShare * 100).toFixed(0)}%` : "—", detail: aggregates?.maxSectorLabel, tone: concentrationWarn ? "warning" : "default" },
+        ]}
+        action={<TmButton variant="primary" onClick={run} disabled={running || selections.length === 0} className="h-11 px-5">{running ? t(locale, "screener.running") : t(locale, "screener.run")}</TmButton>}
+      />
 
       {error && (
         <TmPane title="ERROR" meta="screener run failed">
@@ -331,15 +307,9 @@ export default function ScreenerPage() {
         </TmPane>
       )}
 
-      <FactorPickerPane
-        zoo={zoo}
-        selectedById={selectedById}
-        onToggle={toggleFactor}
-        onUpdate={updateSelection}
-        showWeights={combineMethod === "user_weighted"}
-      />
-
-      <TmCols2>
+      <div className="grid grid-cols-[minmax(0,1.45fr)_minmax(380px,0.8fr)] gap-px bg-tm-rule">
+        <FactorPickerPane zoo={zoo} selectedById={selectedById} onToggle={toggleFactor} onUpdate={updateSelection} showWeights={combineMethod === "user_weighted"} />
+        <div className="grid min-w-0 gap-px bg-tm-rule">
         <UniverseFilterPane
           availableSectors={availableSectors}
           selectedSectors={selectedSectors}
@@ -364,7 +334,8 @@ export default function ScreenerPage() {
           neutralize={neutralize}
           onNeutralize={setNeutralize}
         />
-      </TmCols2>
+        </div>
+      </div>
 
       {result && aggregates && (
         <ResultsPane
@@ -406,7 +377,7 @@ export default function ScreenerPage() {
       )}
 
       {!result && !running && (
-        <TmPane title="USAGE" meta="hint">
+        <TmPane title={locale === "zh" ? "开始选股" : "GET STARTED"} meta={locale === "zh" ? "操作提示" : "HINT"}>
           <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
             {t(locale, "screener.subtitle")}
           </p>
@@ -553,7 +524,7 @@ function FactorPickerPane({
 
   if (zoo.length === 0) {
     return (
-      <TmPane title="SCREENER.FACTORS" meta="ZOO EMPTY">
+      <TmPane title={locale === "zh" ? "因子选择" : "SCREENER.FACTORS"} meta={locale === "zh" ? "因子库为空" : "ZOO EMPTY"}>
         <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
           {t(locale, "screener.factors.empty")}
         </p>
@@ -563,8 +534,8 @@ function FactorPickerPane({
 
   return (
     <TmPane
-      title="SCREENER.FACTORS"
-      meta={`${selectedCount} / ${zoo.length} SELECTED`}
+      title={locale === "zh" ? "因子选择" : "SCREENER.FACTORS"}
+      meta={locale === "zh" ? `已选 ${selectedCount} / ${zoo.length}` : `${selectedCount} / ${zoo.length} SELECTED`}
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
         {t(locale, "screener.factors.subtitle")}
@@ -786,7 +757,7 @@ function UniverseFilterPane({
   }
 
   return (
-    <TmPane title="UNIVERSE.FILTER" meta={sectorMeta}>
+    <TmPane title={zh ? "股票池筛选" : "UNIVERSE.FILTER"} meta={sectorMeta}>
       <div className="flex flex-col gap-4 px-3.5 py-3.5">
         {/* Sectors — add via dropdown, selected shown as accent tags */}
         <div>
@@ -999,7 +970,7 @@ function CombineParamsPane({
   const topNPresets = [10, 20, 50, 100];
 
   return (
-    <TmPane title="COMBINE.PARAMS" meta="4 KNOBS">
+    <TmPane title={locale === "zh" ? "组合参数" : "COMBINE.PARAMS"} meta={locale === "zh" ? "4 个控制项" : "4 KNOBS"}>
       <div className="flex flex-col gap-3 px-3 py-3">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <SliderWithPresets
@@ -1200,44 +1171,44 @@ function ResultsPane({
 
   return (
     <TmPane
-      title="SCREENER.RESULTS"
-      meta={`${recs.length} TOP · ${result.metadata.method}`}
+      title={locale === "zh" ? "选股结果" : "SCREENER.RESULTS"}
+      meta={locale === "zh" ? `${recs.length} 只候选 · ${result.metadata.method}` : `${recs.length} TOP · ${result.metadata.method}`}
     >
       <TmKpiGrid>
         <TmKpi
-          label="N_UNIVERSE"
+          label={<GlossaryTip term="N_UNIVERSE">{locale === "zh" ? "股票池总数" : "N_UNIVERSE"}</GlossaryTip>}
           value={universeSize != null ? universeSize.toString() : "—"}
-          sub="full SP500 panel"
+          sub={locale === "zh" ? "完整 SP500 面板" : "full SP500 panel"}
         />
         <TmKpi
-          label="N_ELIGIBLE"
+          label={<GlossaryTip term="N_ELIGIBLE">{locale === "zh" ? "合格股票" : "N_ELIGIBLE"}</GlossaryTip>}
           value={eligible.toString()}
-          sub="post-filter universe"
+          sub={locale === "zh" ? "筛选后股票池" : "post-filter universe"}
         />
         <TmKpi
-          label="ELIG_RATE"
+          label={<GlossaryTip term="ELIG_RATE">{locale === "zh" ? "合格率" : "ELIG_RATE"}</GlossaryTip>}
           value={eligRate != null ? `${eligRate.toFixed(1)}%` : "—"}
           tone={
             eligRate == null ? "default" : eligRate > 50 ? "pos" : "warn"
           }
-          sub="elig / universe"
+          sub={locale === "zh" ? "合格数 / 总数" : "elig / universe"}
         />
         <TmKpi
-          label="TOP_SCORE"
+          label={<GlossaryTip term="TOP_SCORE">{locale === "zh" ? "最高综合分" : "TOP_SCORE"}</GlossaryTip>}
           value={topScore.toFixed(3)}
           tone={topScore > 0 ? "pos" : "neg"}
-          sub="rank #1"
+          sub={locale === "zh" ? "排名第 1" : "rank #1"}
         />
         <TmKpi
-          label="AVG_SCORE"
+          label={<GlossaryTip term="AVG_SCORE">{locale === "zh" ? "平均综合分" : "AVG_SCORE"}</GlossaryTip>}
           value={meanComposite.toFixed(3)}
           tone={meanComposite > 0 ? "pos" : "neg"}
-          sub={`${recs.length} basket`}
+          sub={locale === "zh" ? `${recs.length} 只候选` : `${recs.length} basket`}
         />
         <TmKpi
-          label="METHOD"
+          label={locale === "zh" ? "组合方法" : "METHOD"}
           value={result.metadata.method.toUpperCase()}
-          sub="combine"
+          sub={locale === "zh" ? "因子合成方式" : "combine"}
         />
       </TmKpiGrid>
 
@@ -1442,8 +1413,8 @@ function RecsSectorsPane({
   const { locale } = useLocale();
   return (
     <TmPane
-      title="RECS.SECTORS"
-      meta={`${breakdown.length} GROUPS · ${totalRecs} TOP-N`}
+      title={locale === "zh" ? "候选股行业分布" : "RECS.SECTORS"}
+      meta={locale === "zh" ? `${breakdown.length} 个行业 · ${totalRecs} 只候选` : `${breakdown.length} GROUPS · ${totalRecs} TOP-N`}
     >
       {breakdown.length === 0 ? (
         <p className="px-3 py-3 font-tm-mono text-[11px] text-tm-muted">
@@ -1512,7 +1483,7 @@ function RecsCapMixPane({
 
   if (allUnknown) {
     return (
-      <TmPane title="RECS.CAPMIX" meta="NO CAP DATA">
+      <TmPane title={locale === "zh" ? "候选股市值结构" : "RECS.CAPMIX"} meta={locale === "zh" ? "无市值数据" : "NO CAP DATA"}>
         <div className="flex flex-col gap-1.5 px-3 py-3 font-tm-mono text-[11px]">
           <p className="text-tm-warn">
             {t(locale, "screener.capmix.warn").replace("{n}", String(totalRecs))}
@@ -1532,11 +1503,11 @@ function RecsCapMixPane({
   }
 
   const unknownShare = totalRecs > 0 ? unknownCount / totalRecs : 0;
-  const meta = unknownCount
-    ? `5 BUCKETS · ${totalRecs} TOP-N · ${unknownCount} UNKNOWN`
-    : `5 BUCKETS · ${totalRecs} TOP-N`;
+  const meta = locale === "zh"
+    ? `5 档 · ${totalRecs} 只候选${unknownCount ? ` · ${unknownCount} 只缺失` : ""}`
+    : unknownCount ? `5 BUCKETS · ${totalRecs} TOP-N · ${unknownCount} UNKNOWN` : `5 BUCKETS · ${totalRecs} TOP-N`;
   return (
-    <TmPane title="RECS.CAPMIX" meta={meta}>
+    <TmPane title={locale === "zh" ? "候选股市值结构" : "RECS.CAPMIX"} meta={meta}>
       <ul className="flex flex-col">
         {breakdown.map((b) => (
           <li
@@ -1605,8 +1576,8 @@ function AggregateContributionPane({
   const maxAbs = rows[0]?.absSum ?? 1;
   return (
     <TmPane
-      title="AGGREGATE.CONTRIBUTION"
-      meta={`${rows.length} FACTORS · sum |contribution| across top-N`}
+      title={locale === "zh" ? "组合因子贡献" : "AGGREGATE.CONTRIBUTION"}
+      meta={locale === "zh" ? `${rows.length} 个因子 · 候选组合绝对贡献合计` : `${rows.length} FACTORS · sum |contribution| across top-N`}
     >
       <ul className="flex flex-col">
         {rows.map((r) => {
@@ -1674,8 +1645,8 @@ function DiagnosticsPane({
   const denom = universeSize && universeSize > 0 ? universeSize : null;
   return (
     <TmPane
-      title="SCREENER.DIAGNOSTICS"
-      meta={`${diagnostics.length} FACTORS`}
+      title={locale === "zh" ? "因子诊断" : "SCREENER.DIAGNOSTICS"}
+      meta={locale === "zh" ? `${diagnostics.length} 个因子` : `${diagnostics.length} FACTORS`}
     >
       <div className="overflow-x-auto">
         <div

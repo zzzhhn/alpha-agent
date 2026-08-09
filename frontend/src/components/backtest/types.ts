@@ -43,6 +43,7 @@ export interface BacktestParams {
   neutralize: boolean;
   transactionCostBps: number;
   mode: BacktestMode;
+  includeBreakdown: boolean;
 }
 
 export interface RunMetrics {

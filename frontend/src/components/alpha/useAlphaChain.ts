@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { runFactorBacktest, translateHypothesis } from "@/lib/api";
 import type { BacktestDirection, FactorUniverse } from "@/lib/types";
 import { addToHistory } from "@/lib/hypothesis-history";
@@ -73,14 +73,41 @@ function deriveMetrics(s: ChainState): VerdictMetrics {
 
 export function useAlphaChain() {
   const [state, setState] = useState<ChainState>({ kind: "idle" });
-  const lastValidation = useRef<AlphaValidationParams | null>(null);
+
+  const runTranslatedBacktest = useCallback(async (
+    translate: Extract<ChainState, { kind: "backtesting" }>["translate"],
+    validation: AlphaValidationParams,
+  ) => {
+    setState({ kind: "backtesting", translate });
+    try {
+      const resp = await runFactorBacktest({
+        spec: translate.spec,
+        direction: validation.direction,
+        top_pct: validation.topPct / 100,
+        bottom_pct: validation.topPct / 100,
+        transaction_cost_bps: validation.transactionCostBps,
+        neutralize: validation.neutralize,
+        benchmark_ticker: validation.benchmarkTicker,
+      });
+      if (resp.error || !resp.data) {
+        setState({ kind: "backtest_error", translate, message: resp.error ?? "Unknown error" });
+        return;
+      }
+      setState({ kind: "done", translate, backtest: resp.data });
+    } catch (e) {
+      setState({
+        kind: "backtest_error",
+        translate,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }, []);
 
   const start = useCallback(async (
     text: string,
     universe: FactorUniverse,
     validation: AlphaValidationParams,
   ) => {
-    lastValidation.current = validation;
     setState({ kind: "translating" });
 
     let translate;
@@ -113,74 +140,13 @@ export function useAlphaChain() {
       return;
     }
 
-    setState({ kind: "backtesting", translate });
+    await runTranslatedBacktest(translate, validation);
+  }, [runTranslatedBacktest]);
 
-    try {
-      // runFactorBacktest takes { spec: FactorSpec, direction?, ... }.
-      // Passing spec directly (which already contains universe + expression)
-      // matches the existing page.tsx onBacktest pattern.
-      const resp = await runFactorBacktest({
-        spec: translate.spec,
-        direction: validation.direction,
-        top_pct: validation.topPct / 100,
-        bottom_pct: validation.topPct / 100,
-        transaction_cost_bps: validation.transactionCostBps,
-        neutralize: validation.neutralize,
-        benchmark_ticker: validation.benchmarkTicker,
-      });
-      if (resp.error || !resp.data) {
-        setState({
-          kind: "backtest_error",
-          translate,
-          message: resp.error ?? "Unknown error",
-        });
-        return;
-      }
-      setState({ kind: "done", translate, backtest: resp.data });
-    } catch (e) {
-      setState({
-        kind: "backtest_error",
-        translate,
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }, []);
-
-  const retryBacktest = useCallback(async () => {
+  const retryBacktest = useCallback(async (validation: AlphaValidationParams) => {
     if (state.kind !== "backtest_error" && state.kind !== "done") return;
-    const translate = state.translate;
-    const validation = lastValidation.current;
-    if (!validation) return;
-
-    setState({ kind: "backtesting", translate });
-
-    try {
-      const resp = await runFactorBacktest({
-        spec: translate.spec,
-        direction: validation.direction,
-        top_pct: validation.topPct / 100,
-        bottom_pct: validation.topPct / 100,
-        transaction_cost_bps: validation.transactionCostBps,
-        neutralize: validation.neutralize,
-        benchmark_ticker: validation.benchmarkTicker,
-      });
-      if (resp.error || !resp.data) {
-        setState({
-          kind: "backtest_error",
-          translate,
-          message: resp.error ?? "Unknown error",
-        });
-        return;
-      }
-      setState({ kind: "done", translate, backtest: resp.data });
-    } catch (e) {
-      setState({
-        kind: "backtest_error",
-        translate,
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }, [state]);
+    await runTranslatedBacktest(state.translate, validation);
+  }, [state, runTranslatedBacktest]);
 
   const reset = useCallback(() => setState({ kind: "idle" }), []);
 

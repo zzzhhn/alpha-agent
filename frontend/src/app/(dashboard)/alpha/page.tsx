@@ -178,6 +178,8 @@ export default function AlphaPage() {
         validation={validation}
         onValidationChange={setValidation}
         onSubmit={handleSubmit}
+        canRerun={translate !== null}
+        onRerun={() => chain.retryBacktest(validation)}
         disabled={chain.isLoading}
         examples={FACTOR_EXAMPLES}
         onExampleSelect={handleExampleSelect}
@@ -203,7 +205,7 @@ export default function AlphaPage() {
           state={chain.state}
           panes={chain.panes}
           onReTranslate={handleReTranslate}
-          onRetryBacktest={chain.retryBacktest}
+          onRetryBacktest={() => chain.retryBacktest(validation)}
         />
         <div className="mt-3"><AnalyticsAccordion translate={translate} /></div>
       </section>

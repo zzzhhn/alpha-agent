@@ -115,10 +115,10 @@ export function WorstDrawdownsPane({ currentRun }: Props) {
       </p>
       <div className="overflow-x-auto">
         <div
-          className="grid min-w-[760px] gap-px bg-tm-rule"
+          className="grid w-full min-w-[760px] gap-px bg-tm-rule"
           style={{
             gridTemplateColumns:
-              "32px minmax(120px,140px) minmax(120px,140px) minmax(120px,140px) 80px 80px 80px",
+              "32px minmax(120px,1fr) minmax(120px,1fr) minmax(120px,1fr) 80px 80px 80px",
           }}
         >
           <RHeader>#</RHeader>

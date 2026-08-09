@@ -51,10 +51,10 @@ export function RegimeBreakdownPane({ currentRun }: Props) {
       </p>
       <div className="overflow-x-auto">
         <div
-          className="grid min-w-[700px] gap-px bg-tm-rule"
+          className="grid w-full min-w-[700px] gap-px bg-tm-rule"
           style={{
             gridTemplateColumns:
-              "minmax(120px,140px) 60px 60px 80px 70px 80px 60px 60px",
+              "minmax(140px,1fr) repeat(2,minmax(60px,0.45fr)) minmax(80px,0.6fr) minmax(70px,0.55fr) minmax(80px,0.6fr) repeat(2,minmax(60px,0.45fr))",
           }}
         >
           <RHeader>{t(locale, "backtest.regime.label")}</RHeader>

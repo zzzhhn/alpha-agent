@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, History, LayoutGrid } from "lucide-react";
+import { ChevronDown, History, LayoutGrid, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
@@ -39,6 +39,8 @@ interface Props {
   readonly validation: AlphaValidationParams;
   readonly onValidationChange: (params: AlphaValidationParams) => void;
   readonly onSubmit: () => void;
+  readonly canRerun: boolean;
+  readonly onRerun: () => void;
   readonly disabled: boolean;
   readonly examples: ReadonlyArray<FactorExample>;
   // Selecting a row from the grouped example list (alpha flow loads the
@@ -160,15 +162,27 @@ export function HypothesisInputCard(p: Props) {
           className="min-h-[72px] resize-y border border-tm-rule bg-tm-bg px-4 py-3 font-tm-mono text-[15px] leading-6 text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none disabled:opacity-50"
           disabled={p.disabled}
         />
-        <button
-          type="button"
-          onClick={p.onSubmit}
-          disabled={p.disabled || empty}
-          className="flex min-h-[72px] items-center justify-center bg-tm-accent px-5 font-tm-mono text-[14px] font-semibold text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span className="mr-2 text-[18px]">▷</span>
-          {t(locale, "alpha.input.submitFull" as Parameters<typeof t>[1])}
-        </button>
+        <div className="grid min-h-[72px] grid-rows-[1fr_auto] gap-2">
+          <button
+            type="button"
+            onClick={p.onSubmit}
+            disabled={p.disabled || empty}
+            className="flex items-center justify-center bg-tm-accent px-5 font-tm-mono text-[13px] font-semibold text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="mr-2 text-[18px]">▷</span>
+            {t(locale, "alpha.input.submitFull" as Parameters<typeof t>[1])}
+          </button>
+          <button
+            type="button"
+            onClick={p.onRerun}
+            disabled={p.disabled || !p.canRerun}
+            title={locale === "zh" ? "保留当前表达式，使用下方最新参数重新回测" : "Keep the translated expression and rerun with the latest parameters"}
+            className="inline-flex h-8 items-center justify-center gap-1.5 border border-tm-rule font-tm-mono text-[10px] text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {locale === "zh" ? "按当前参数重测" : "Rerun current expression"}
+          </button>
+        </div>
       </div>
 
       {/* Validation context is real request state, not decorative metadata. */}
