@@ -92,6 +92,7 @@ def select_by_logic(
     *,
     min_score: float = DEFAULT_MIN_SCORE,
     keep_at_least: int = 3,
+    target_n: int | None = None,
 ) -> list[str]:
     """Keep candidates scoring >= min_score, preserving order. Unscored
     expressions (LLM unavailable / didn't return them) pass through — the screen
@@ -99,7 +100,29 @@ def select_by_logic(
     Guarantees at least `keep_at_least` (the best-scored) so a harsh LLM round
     never starves the sim step."""
     if not scores:
-        return expressions
+        return expressions[:target_n] if target_n is not None else expressions
+    if target_n is not None:
+        # A screen should rank the pool, not silently shrink the requested
+        # simulation budget.  Keep all candidates above the bar first, then
+        # backfill from the highest-scored below-bar candidates until target_n
+        # is reached.  Python's stable sort preserves generator order for ties.
+        target = min(max(int(target_n), 0), len(expressions))
+        ranked = sorted(
+            enumerate(expressions),
+            key=lambda item: scores.get(item[1], min_score),
+            reverse=True,
+        )
+        preferred = [
+            item for item in ranked if scores.get(item[1], min_score) >= min_score
+        ]
+        selected = preferred[:target]
+        if len(selected) < target:
+            selected_ids = {idx for idx, _ in selected}
+            selected.extend(
+                item for item in ranked
+                if item[0] not in selected_ids
+            )
+        return [expr for _, expr in selected[:target]]
     kept = [e for e in expressions if scores.get(e, min_score) >= min_score]
     if len(kept) >= keep_at_least:
         return kept

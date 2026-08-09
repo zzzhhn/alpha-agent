@@ -24,3 +24,10 @@
 - A same-market-date rerun is a valid compute outcome but an immutable-ledger no-op. Report it as `no_op_same_market_date`, including the retained run and market date.
 - Canonical daily-close freshness follows the latest completed XNYS session plus price-date and health gates. Do not expire a healthy Friday snapshot solely because 24 wall-clock hours pass during a weekend or holiday.
 - Keep the legacy live-row fallback's wall-clock guard. Canonical and non-canonical data have different freshness contracts and must be tested independently.
+
+## 2026-08-09: Paginating rows must not fragment a research run
+
+- A manual BRAIN run requesting 20 candidates did not lose eight rows. A later scheduled run inserted eight newer rows, so a global 20-row page displayed eight new rows plus only twelve from the manual run.
+- Time dividers do not create ownership. If users reason about results by run, the database, API, selection state, and pagination must all use a durable run identifier.
+- Long-running research funnels need distinct counts for requested, generated, screened, simulated, persisted, and accepted candidates. Reusing one number across stages makes normal filtering look like data loss.
+- Optional LLM screening must report bypass and parse failure honestly. Falling back to all candidates preserves availability but is not a successful screen.

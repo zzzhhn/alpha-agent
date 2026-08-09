@@ -111,7 +111,7 @@ async def _existing_active_returns(client: BrainClient) -> dict[str, np.ndarray]
     return out
 
 
-async def run_mining_round(
+async def _run_mining_round_impl(
     client: BrainClient,
     pool,
     user_id: int,
@@ -124,6 +124,8 @@ async def run_mining_round(
     logic_llm=None,
     max_retries: int = 12,
     family_caps: Optional[dict] = None,
+    run_id: int | None = None,
+    family_focus_override: str | None = None,
 ) -> dict:
     """Execute one round and return a bucket summary. Every candidate's outcome
     is persisted to brain_alphas regardless of pass/fail so the UI + the next
@@ -173,7 +175,7 @@ async def run_mining_round(
     # n_candidates worth of economically-sensible ones.
     gen_n = n_candidates * 2 if logic_llm is not None else n_candidates
     import os
-    family_focus = os.environ.get("BRAIN_FAMILY_FOCUS") or None
+    family_focus = family_focus_override or os.environ.get("BRAIN_FAMILY_FOCUS") or None
     if family_focus:
         print(f"[focus] family-constrained round: {family_focus}", flush=True)
     # History steering for catalog families: pin each field's winning sign and
@@ -211,20 +213,78 @@ async def run_mining_round(
         )
 
     # LLM financial-logic pre-screen (AlphaEval 'Financial Logic'): score the
-    # candidates' economic sense in one batched call and simulate only the
-    # sensible ones — BRAIN sims are the bottleneck, so not wasting them on
-    # nonsense raises hit-rate. No-op without an LLM client.
+    # generated pool in one batched call.  The generated pool and the simulation
+    # budget are intentionally separate counters.  A partial/strict screen must
+    # still backfill from its ranked below-bar candidates whenever the pool can
+    # satisfy the requested simulation budget.
+    generated_pool = list(candidates)
+    generated_n = len(generated_pool)
+    screen_status = "bypassed"
+    screen_detail = "no logic-screen LLM configured"
     if logic_llm is not None:
-        scores = await score_economic_logic(logic_llm, candidates)
-        candidates = select_by_logic(candidates, scores)[:n_candidates]
-        print(f"[logic] screened to {len(candidates)} sensible candidates", flush=True)
+        scores = await score_economic_logic(logic_llm, generated_pool)
+        if scores:
+            candidates = select_by_logic(
+                generated_pool, scores, target_n=n_candidates
+            )
+            screen_status = (
+                "completed" if len(scores) >= generated_n else "partial"
+            )
+            screen_detail = (
+                f"scored {len(scores)}/{generated_n}; selected {len(candidates)}"
+            )
+        else:
+            # A failed or malformed LLM response is not a successful screen.  The
+            # safest useful fallback is a truthful bypass of the screen while
+            # retaining the requested budget.
+            candidates = generated_pool[:n_candidates]
+            screen_status = "failed"
+            screen_detail = "logic screen returned no usable scores; bypassed"
+        print(
+            f"[logic] {screen_status}: generated={generated_n} "
+            f"screened={len(candidates)}",
+            flush=True,
+        )
+    else:
+        candidates = generated_pool[:n_candidates]
+
+    if run_id is not None:
+        await store.set_brain_run_progress(
+            pool,
+            run_id,
+            generated_n=generated_n,
+            screened_n=len(candidates),
+            screen_status=screen_status,
+            screen_detail=screen_detail,
+        )
     summary = {
-        "generated": len(candidates),
+        "generated": generated_n,
         "passed": 0,
         "flagged": 0,
         "rejected": 0,
         "sim_error": 0,
     }
+    if run_id is not None:
+        summary.update({
+            "requested": int(n_candidates),
+            "screened": len(candidates),
+            "simulated": 0,
+            "persisted": 0,
+            "screen_status": screen_status,
+            "screen_detail": screen_detail,
+        })
+
+    async def _persist_brain_alpha(_pool, **kwargs) -> int:
+        """Persist one candidate and atomically advance its run counters."""
+        row_id = await store.record_brain_alpha(_pool, **kwargs)
+        if run_id is not None:
+            outcome = kwargs.get("outcome")
+            increments = {"persisted": 1}
+            if outcome in {"passed", "flagged", "rejected", "sim_error"}:
+                increments[outcome] = 1
+            await store.increment_brain_run_counts(_pool, run_id, **increments)
+            summary["persisted"] += 1
+        return row_id
 
     # The diverse set a new PASS must stay decorrelated from: the user's ACTIVE
     # alphas + their recent PASSED-but-unsubmitted mined alphas + this round's own
@@ -261,6 +321,14 @@ async def run_mining_round(
         batch_started_at = await pool.fetchval("SELECT now()")
     except Exception:  # noqa: BLE001 — batch tagging is cosmetic, never abort a round
         batch_started_at = None
+    if run_id is not None:
+        await store.set_brain_run_progress(
+            pool,
+            run_id,
+            batch_started_at=batch_started_at,
+            seed=rng_seed,
+            family_focus=family_focus,
+        )
 
     from collections import Counter
     from alpha_agent.brain.evolution import family_of
@@ -276,6 +344,9 @@ async def run_mining_round(
 
     retry_budget = max_retries
     for expr in candidates:
+        if run_id is not None:
+            await store.increment_brain_run_counts(pool, run_id, simulated=1)
+            summary["simulated"] += 1
         # Family-adaptive BASE settings (fast/technical signals get more decay).
         # Base config + per-candidate settings exploration (unproven mechanisms
         # only; deterministic per expr so reruns are reproducible).
@@ -303,10 +374,10 @@ async def run_mining_round(
             # detail is the fastest way to see which.
             logger.warning("sim_error for %r: %s", expr[:60], detail)
             print(f"[sim_error] {expr[:60]!r}: {detail}", flush=True)
-            await store.record_brain_alpha(
+            await _persist_brain_alpha(
                 pool, user_id=user_id, expression=expr, settings=settings,
                 outcome="sim_error", detail=detail,
-                batch_started_at=batch_started_at,
+                batch_started_at=batch_started_at, run_id=run_id,
                 blend_parents=_blend_parents_of_expr,
             )
             summary["sim_error"] += 1
@@ -340,11 +411,12 @@ async def run_mining_round(
             turnover=metrics.turnover, drawdown=metrics.drawdown,
             returns=metrics.returns, margin=metrics.margin, grade=metrics.grade,
             retried=did_retry, batch_started_at=batch_started_at,
+            run_id=run_id,
             blend_parents=_blend_parents_of_expr,
         )
 
         if not metrics.passes_gates():
-            await store.record_brain_alpha(
+            await _persist_brain_alpha(
                 pool, **common, outcome="rejected",
                 fail_checks=",".join(metrics.failing_checks()) or None,
                 detail="below in-sample gates (BRAIN submission bars)",
@@ -483,7 +555,7 @@ async def run_mining_round(
                 f"({'corr' if too_correlated else 'redundant'})",
                 flush=True,
             )
-            await store.record_brain_alpha(
+            await _persist_brain_alpha(
                 pool, **common, **corr_kw, outcome="flagged", detail=reason,
             )
             summary["flagged"] += 1
@@ -498,7 +570,7 @@ async def run_mining_round(
         if family_counts[fam] - _fam_parents >= caps.get(fam, 2):
             print(f"[flag] {expr[:44]!r} family-saturated: {fam} "
                   f"({family_counts[fam]})", flush=True)
-            await store.record_brain_alpha(
+            await _persist_brain_alpha(
                 pool, **common, **corr_kw, outcome="flagged",
                 detail=f"family '{fam}' saturated ({family_counts[fam]} rep(s))",
             )
@@ -512,7 +584,7 @@ async def run_mining_round(
             accepted_returns[alpha_id] = cand_rets
             our_passed[alpha_id] = cand_rets
         _warns = metrics.warning_checks()
-        await store.record_brain_alpha(
+        await _persist_brain_alpha(
             pool, **common, **corr_kw, outcome="passed",
             detail=("warnings: " + ",".join(_warns)) if _warns else None,
         )
@@ -534,4 +606,73 @@ async def run_mining_round(
         except Exception:  # noqa: BLE001 — reconciliation is best-effort
             pass
 
+    return summary
+
+
+async def run_mining_round(
+    client: BrainClient,
+    pool,
+    user_id: int,
+    *,
+    n_candidates: int = 8,
+    seed_exprs: Optional[list[str]] = None,
+    rng_seed: int = 1234,
+    sim_timeout_s: float = 420.0,
+    seed_from_user_alphas: bool = True,
+    logic_llm=None,
+    max_retries: int = 12,
+    family_caps: Optional[dict] = None,
+    run_id: int | None = None,
+    family_focus: str | None = None,
+) -> dict:
+    """Run one round and, when supplied, own the run-ledger lifecycle.
+
+    ``run_id`` is optional for compatibility with older callers and unit tests.
+    A ledger-backed invocation is queued by the API/runner, marked running here,
+    and completed or failed with the final funnel counters.
+    """
+    if run_id is not None:
+        started = await store.mark_brain_run_running(pool, run_id)
+        if started is None:
+            raise ValueError(f"BRAIN run {run_id} does not exist")
+    try:
+        summary = await _run_mining_round_impl(
+            client,
+            pool,
+            user_id,
+            n_candidates=n_candidates,
+            seed_exprs=seed_exprs,
+            rng_seed=rng_seed,
+            sim_timeout_s=sim_timeout_s,
+            seed_from_user_alphas=seed_from_user_alphas,
+            logic_llm=logic_llm,
+            max_retries=max_retries,
+            family_caps=family_caps,
+            run_id=run_id,
+            family_focus_override=family_focus,
+        )
+    except Exception as exc:
+        if run_id is not None:
+            try:
+                await store.fail_brain_run(
+                    pool, run_id,
+                    error_detail=f"{type(exc).__name__}: {exc}",
+                )
+            except Exception:  # noqa: BLE001 — preserve the original failure
+                logger.exception("failed to mark BRAIN run %s failed", run_id)
+        raise
+
+    if run_id is not None:
+        await store.complete_brain_run(
+            pool,
+            run_id,
+            generated_n=summary.get("generated", 0),
+            screened_n=summary.get("screened", summary.get("generated", 0)),
+            simulated_n=summary.get("simulated", 0),
+            persisted_n=summary.get("persisted", 0),
+            passed_n=summary.get("passed", 0),
+            flagged_n=summary.get("flagged", 0),
+            rejected_n=summary.get("rejected", 0),
+            sim_error_n=summary.get("sim_error", 0),
+        )
     return summary

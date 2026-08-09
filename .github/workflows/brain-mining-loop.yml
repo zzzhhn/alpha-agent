@@ -21,6 +21,12 @@ on:
       family_focus:
         description: "restrict generation to one family (e.g. options); blank = normal"
         default: ""
+      brain_run_id:
+        description: "run-ledger id created by the API"
+        default: ""
+      seed:
+        description: "deterministic generator seed"
+        default: "1234"
   schedule:
     - cron: "0 8 * * *" # daily 08:00 UTC
 
@@ -52,6 +58,8 @@ jobs:
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
           BRAIN_N_CANDIDATES: ${{ github.event.inputs.n_candidates || '8' }}
           BRAIN_FAMILY_FOCUS: ${{ github.event.inputs.family_focus || '' }}
+          BRAIN_RUN_ID: ${{ github.event.inputs.brain_run_id || '' }}
+          BRAIN_SEED: ${{ github.event.inputs.seed || '1234' }}
           # Optional: enables the LLM financial-logic pre-screen. Unset → skipped.
           MINING_LLM_KEY: ${{ secrets.MINING_LLM_KEY }}
           MINING_LLM_MODEL: ${{ secrets.MINING_LLM_MODEL }}

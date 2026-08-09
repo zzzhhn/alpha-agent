@@ -17,6 +17,7 @@ import { BrainPnLChart, type ChartKind } from "@/components/brain/BrainPnLChart"
 import { Play } from "lucide-react";
 import {
   fetchBrainAlphas,
+  fetchBrainRuns,
   fetchAlphaPnl,
   fetchAlphaYearly,
   fetchMineStatus,
@@ -24,6 +25,7 @@ import {
   triggerMining,
   type BrainAlpha,
   type BrainAlphaQuery,
+  type BrainMiningRun,
   type BrainOutcome,
   type PnlPoint,
   type YearlyRow,
@@ -45,7 +47,13 @@ function fmtUtc8(iso: string | null | undefined): string {
 }
 
 // ── in-flight mining tracker (survives refresh / navigation) ─────────────────
-type ActiveJob = { startedAt: string; n: number; dispatchedAt: number };
+type ActiveJob = {
+  startedAt: string;
+  n: number;
+  dispatchedAt: number;
+  /** Optional so jobs saved by the pre-run-ledger UI still resume safely. */
+  runId?: number | null;
+};
 const LS_ACTIVE_MINING = "brain.activeMining.v1";
 const POLL_MS = 25_000;
 // Before this grace window we don't trust running=false (the GH run may not have
@@ -58,7 +66,21 @@ function loadActiveJob(): ActiveJob | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(LS_ACTIVE_MINING);
-    return raw ? (JSON.parse(raw) as ActiveJob) : null;
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<ActiveJob>;
+    if (
+      typeof value.startedAt !== "string" ||
+      typeof value.n !== "number" ||
+      typeof value.dispatchedAt !== "number"
+    ) {
+      return null;
+    }
+    return {
+      startedAt: value.startedAt,
+      n: value.n,
+      dispatchedAt: value.dispatchedAt,
+      runId: typeof value.runId === "number" ? value.runId : undefined,
+    };
   } catch {
     return null;
   }
@@ -660,7 +682,13 @@ function ProgressSegments({ filled, total }: { filled: number; total: number }) 
 }
 
 // ── manual mining trigger + live tracker (dispatches the GitHub Actions round) ─
-function MineButton({ onComplete }: { onComplete: () => void }) {
+function MineButton({
+  onStarted,
+  onComplete,
+}: {
+  onStarted?: (runId: number | null) => void;
+  onComplete?: (runId: number | null) => void;
+}) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [n, setN] = useState("12");
@@ -681,14 +709,41 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
     saveActiveJob(job);
   }, [job]);
 
-  const finish = useCallback(() => {
-    setJob(null);
-    setStatus(null);
-    setDoneMsg(
-      zh ? "本轮挖矿完成,结果已刷新" : "mining round complete, results refreshed",
-    );
-    onComplete();
-  }, [onComplete, zh]);
+  const finish = useCallback(
+    (
+      completedJob?: ActiveJob | null,
+      result: "completed" | "failed" | "stopped" = "completed",
+      detail?: string | null,
+    ) => {
+      const runId = completedJob?.runId ?? null;
+      setJob(null);
+      setStatus(null);
+      if (result === "failed") {
+        setState("error");
+        setDoneMsg(null);
+        setErrMsg(
+          detail ||
+            (zh
+              ? "本轮挖矿失败，请在运行账本查看原因"
+              : "mining run failed; inspect the run ledger"),
+        );
+      } else if (result === "stopped") {
+        setState("idle");
+        setDoneMsg(
+          zh
+            ? "已停止本页跟踪，后台任务不受影响"
+            : "page tracking stopped; the remote run continues",
+        );
+      } else {
+        setState("idle");
+        setDoneMsg(
+          zh ? "本轮挖矿完成，结果已刷新" : "mining round complete, results refreshed",
+        );
+      }
+      onComplete?.(runId);
+    },
+    [onComplete, zh],
+  );
 
   // Poll the round's progress while a job is active.
   useEffect(() => {
@@ -698,25 +753,33 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
 
     async function tick(current: ActiveJob) {
       try {
-        const s = await fetchMineStatus(current.startedAt);
+        const s = await fetchMineStatus(current.startedAt, current.runId);
         if (!alive) return;
         setStatus({ running: s.running });
         setMined(s.mined);
+        if (s.run?.status === "failed") {
+          finish(current, "failed", s.run.error_detail);
+          return;
+        }
         const elapsed = Date.now() - current.dispatchedAt;
         const done =
           // GH says nothing is queued/running (past the startup grace) → done.
           (s.running === false && elapsed > GRACE_MS) ||
           // GH unavailable → fall back to the raw count reaching the target.
           (s.running === null && s.mined >= current.n) ||
-          // Safety: never lock the control forever on a stuck/failed run.
-          elapsed > MAX_TRACK_MS;
+          // The ledger is authoritative when this UI has a run id.
+          s.run?.status === "completed";
         if (done) {
-          finish();
+          finish(current);
+          return;
+        }
+        if (elapsed > MAX_TRACK_MS) {
+          finish(current, "stopped");
           return;
         }
       } catch {
         if (alive && Date.now() - current.dispatchedAt > MAX_TRACK_MS) {
-          finish();
+          finish(current, "stopped");
           return;
         }
       }
@@ -739,7 +802,14 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
       const r = await triggerMining(nc, family);
       setMined(0);
       setStatus(null);
-      setJob({ startedAt: r.started_at, n: r.n_candidates, dispatchedAt: Date.now() });
+      const runId = typeof r.run_id === "number" ? r.run_id : null;
+      setJob({
+        startedAt: r.started_at,
+        n: r.n_candidates,
+        dispatchedAt: Date.now(),
+        runId,
+      });
+      onStarted?.(runId);
       setState("idle");
     } catch (e) {
       setState("error");
@@ -774,7 +844,7 @@ function MineButton({ onComplete }: { onComplete: () => void }) {
           </span>
           <button
             type="button"
-            onClick={finish}
+            onClick={() => finish(job, "stopped")}
             title={
               zh
                 ? "仅停止本页跟踪,不会取消已在运行的挖矿任务"
@@ -1087,6 +1157,262 @@ function FamilySelect({
   );
 }
 
+const RECENT_RUN_LIMIT = 8;
+type RunCountKey =
+  | "requested_n"
+  | "generated_n"
+  | "screened_n"
+  | "simulated_n"
+  | "persisted_n"
+  | "passed_n"
+  | "flagged_n"
+  | "rejected_n"
+  | "sim_error_n";
+
+function runTime(run: BrainMiningRun): number {
+  const value = run.created_at ?? run.started_at ?? run.finished_at;
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function sortRecentRuns(runs: BrainMiningRun[]): BrainMiningRun[] {
+  return [...runs].sort((a, b) => runTime(b) - runTime(a) || b.id - a.id);
+}
+
+function isManualRun(run: BrainMiningRun): boolean {
+  return (run.source ?? "").toLowerCase().includes("manual");
+}
+
+function runSourceLabel(run: BrainMiningRun, zh: boolean): string {
+  const source = (run.source ?? "").toLowerCase();
+  if (source.includes("manual")) return zh ? "手动" : "manual";
+  if (source.includes("sched") || source.includes("cron") || source.includes("daily")) {
+    return zh ? "定时" : "scheduled";
+  }
+  return run.source || (zh ? "历史" : "legacy");
+}
+
+function runStatusLabel(run: BrainMiningRun, zh: boolean): string {
+  const raw = (run.status ?? run.screen_status ?? "").toLowerCase();
+  const labels: Record<string, [string, string]> = {
+    queued: ["排队中", "queued"],
+    running: ["运行中", "running"],
+    started: ["运行中", "started"],
+    screening: ["筛选中", "screening"],
+    completed: ["已完成", "completed"],
+    complete: ["已完成", "complete"],
+    failed: ["失败", "failed"],
+    error: ["错误", "error"],
+  };
+  const label = labels[raw];
+  return label ? (zh ? label[0] : label[1]) : run.status || run.screen_status || (zh ? "未知" : "unknown");
+}
+
+function runStatusClass(run: BrainMiningRun): string {
+  const raw = `${run.status ?? ""} ${run.screen_status ?? ""}`.toLowerCase();
+  if (raw.includes("fail") || raw.includes("error")) return "text-tm-neg";
+  if (raw.includes("run") || raw.includes("queue") || raw.includes("screen")) return "text-tm-accent";
+  if (raw.includes("complete") || raw.includes("pass")) return "text-tm-pos";
+  return "text-tm-muted";
+}
+
+function runCount(run: BrainMiningRun | null, key: RunCountKey): string {
+  const value = run?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
+}
+
+function RunSelector({
+  runs,
+  selectedRunId,
+  onChange,
+  zh,
+}: {
+  runs: BrainMiningRun[];
+  selectedRunId: number | null;
+  onChange: (id: number | null) => void;
+  zh: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = runs.find((run) => run.id === selectedRunId) ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const buttonLabel = selected
+    ? `RUN #${selected.id}`
+    : selectedRunId != null
+      ? `RUN #${selectedRunId}`
+      : zh
+        ? "全部结果"
+        : "all results";
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex h-7 min-w-[150px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
+      >
+        <span className="truncate text-left">
+          {buttonLabel}
+          {selected ? ` · ${runSourceLabel(selected, zh)}` : ""}
+        </span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-1 max-h-72 min-w-[250px] overflow-y-auto border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
+        >
+          <li>
+            <button
+              type="button"
+              role="option"
+              aria-selected={selectedRunId === null}
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center justify-between gap-3 border-b border-tm-rule px-2 py-1.5 text-left font-tm-mono text-[10.5px] hover:bg-tm-bg-3 ${selectedRunId === null ? "text-tm-accent" : "text-tm-fg"}`}
+            >
+              <span>{zh ? "历史兼容视图 · 全部结果" : "legacy view · all results"}</span>
+              <span className="text-[9px] text-tm-muted">ALL</span>
+            </button>
+          </li>
+          {runs.map((run) => (
+            <li key={run.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={run.id === selectedRunId}
+                onClick={() => {
+                  onChange(run.id);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center justify-between gap-3 px-2 py-1.5 text-left font-tm-mono text-[10.5px] hover:bg-tm-bg-3 ${run.id === selectedRunId ? "text-tm-accent" : "text-tm-fg"}`}
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">RUN #{run.id} · {runSourceLabel(run, zh)}</span>
+                  <span className="text-[9px] text-tm-muted">
+                    {run.family_focus || (zh ? "混合家族" : "mixed family")} · {fmtUtc8(run.created_at ?? run.started_at)}
+                  </span>
+                </span>
+                <span className={runStatusClass(run)}>{runStatusLabel(run, zh)}</span>
+              </button>
+            </li>
+          ))}
+          {runs.length === 0 ? (
+            <li className="px-2 py-1.5 font-tm-mono text-[10.5px] text-tm-muted">
+              {zh ? "暂无运行记录" : "no run records"}
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function RunLedger({
+  run,
+  selectedRunId,
+  runsError,
+  runsTotal,
+  zh,
+}: {
+  run: BrainMiningRun | null;
+  selectedRunId: number | null;
+  runsError: string | null;
+  runsTotal: number;
+  zh: boolean;
+}) {
+  if (!run) {
+    return (
+      <div className="border-b border-tm-rule px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-[10.5px] text-tm-muted">
+          <span className="uppercase tracking-wider text-tm-accent">{zh ? "运行账本" : "run ledger"}</span>
+          {selectedRunId != null ? (
+            <span>{zh ? `RUN #${selectedRunId} 等待账本记录` : `RUN #${selectedRunId} awaiting ledger record`}</span>
+          ) : runsError ? (
+            <span>{zh ? "运行选择器暂不可用，显示兼容的全部结果" : "run selector unavailable; showing legacy all-results mode"}</span>
+          ) : runsTotal > 0 ? (
+            <span>{zh ? "历史兼容视图，结果可能跨多个运行" : "legacy all-results view; rows may span runs"}</span>
+          ) : (
+            <span>{zh ? "暂无运行记录" : "no mining runs yet"}</span>
+          )}
+        </div>
+        {runsError ? (
+          <p className="mt-1 font-tm-mono text-[10px] text-tm-warn">
+            {zh ? `运行账本读取失败：${runsError}` : `run ledger unavailable: ${runsError}`}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  const funnel: Array<[RunCountKey, string, string]> = [
+    ["requested_n", zh ? "请求" : "requested", "--"],
+    ["generated_n", zh ? "生成" : "generated", "--"],
+    ["screened_n", zh ? "筛选" : "screened", "--"],
+    ["simulated_n", zh ? "仿真" : "simulated", "--"],
+    ["persisted_n", zh ? "入库" : "persisted", "--"],
+  ];
+  const outcome = [
+    [zh ? "通过" : "passed", runCount(run, "passed_n"), "text-tm-pos"],
+    [zh ? "存疑" : "flagged", runCount(run, "flagged_n"), "text-tm-warn"],
+    [zh ? "淘汰" : "rejected", runCount(run, "rejected_n"), "text-tm-muted"],
+    [zh ? "仿真错误" : "sim errors", runCount(run, "sim_error_n"), "text-tm-neg"],
+  ] as const;
+
+  return (
+    <div className="border-b border-tm-rule px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-[10.5px]">
+        <span className="uppercase tracking-wider text-tm-accent">RUN #{run.id}</span>
+        <span className="text-tm-fg-2">{runSourceLabel(run, zh)}</span>
+        <span className="text-tm-muted">{run.family_focus || (zh ? "混合家族" : "mixed family")}</span>
+        <span className={runStatusClass(run)}>{runStatusLabel(run, zh)}</span>
+        <span className="text-tm-muted">{fmtUtc8(run.created_at ?? run.started_at)} UTC+8</span>
+        {runsTotal > 0 ? <span className="ml-auto text-tm-muted">{runsTotal} {zh ? "轮" : "runs"}</span> : null}
+      </div>
+      <div className="mt-2 grid grid-cols-5 gap-2 border-t border-tm-rule/60 pt-1.5">
+        {funnel.map(([key, label]) => (
+          <div key={key} className="flex min-w-0 flex-col font-tm-mono">
+            <span className="truncate text-[9px] uppercase tracking-wider text-tm-muted">{label}</span>
+            <span className="tabular-nums text-[12px] text-tm-fg">{runCount(run, key)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-[10px]">
+        {outcome.map(([label, count, className]) => (
+          <span key={label} className={className}>{label} {count}</span>
+        ))}
+        {run.screen_status ? <span className="text-tm-muted">{zh ? "筛选" : "screen"}: {run.screen_status}</span> : null}
+      </div>
+      {run.screen_detail || run.error_detail ? (
+        <p className="mt-1 break-words font-tm-mono text-[10px] leading-relaxed text-tm-warn">
+          {run.error_detail || run.screen_detail}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 
 export function BrainMiningPanel() {
   const { locale } = useLocale();
@@ -1103,11 +1429,46 @@ export function BrainMiningPanel() {
 
   const [data, setData] = useState<{ alphas: BrainAlpha[]; total: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [runs, setRuns] = useState<BrainMiningRun[] | null>(null);
+  const [runsTotal, setRunsTotal] = useState(0);
+  const [runsError, setRunsError] = useState<string | null>(null);
+  const [runsLoading, setRunsLoading] = useState(true);
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(
+    () => loadActiveJob()?.runId ?? null,
+  );
+  // A run chosen by the user or by a just-dispatched manual job must not be
+  // replaced by a later refresh's default selection.
+  const selectionTouched = useRef(selectedRunId != null);
+
+  const loadRuns = useCallback(async (preferRunId?: number | null) => {
+    setRunsLoading(true);
+    try {
+      const res = await fetchBrainRuns(RECENT_RUN_LIMIT);
+      const recent = sortRecentRuns(Array.isArray(res.runs) ? res.runs : []).slice(0, RECENT_RUN_LIMIT);
+      setRuns(recent);
+      setRunsTotal(typeof res.total === "number" ? res.total : recent.length);
+      setRunsError(null);
+      if (preferRunId != null) {
+        selectionTouched.current = true;
+        setSelectedRunId(preferRunId);
+      } else if (!selectionTouched.current) {
+        const preferred = recent.find(isManualRun) ?? recent[0] ?? null;
+        setSelectedRunId(preferred?.id ?? null);
+      }
+    } catch (e) {
+      // The ledger is a rollout-era enhancement. Keep the legacy all-results
+      // query usable when this endpoint is missing or temporarily unavailable.
+      setRunsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunsLoading(false);
+    }
+  }, []);
 
   const query = useMemo<BrainAlphaQuery>(
     () => ({
       limit: pageSize,
       offset: page * pageSize,
+      run_id: selectedRunId ?? undefined,
       outcome: outcome || undefined,
       q: q.trim() || undefined,
       sharpe_min: sharpeMin ? Number(sharpeMin) : undefined,
@@ -1115,15 +1476,19 @@ export function BrainMiningPanel() {
       sort,
       descending,
     }),
-    [page, pageSize, outcome, q, sharpeMin, familyFilter, sort, descending],
+    [page, pageSize, selectedRunId, outcome, q, sharpeMin, familyFilter, sort, descending],
   );
 
+  const loadSequence = useRef(0);
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     try {
       const res = await fetchBrainAlphas(query);
+      if (sequence !== loadSequence.current) return;
       setData(res);
       setLoadError(null);
     } catch (e) {
+      if (sequence !== loadSequence.current) return;
       setLoadError(e instanceof Error ? e.message : String(e));
       setData({ alphas: [], total: 0 });
     }
@@ -1133,10 +1498,65 @@ export function BrainMiningPanel() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    void loadRuns();
+  }, [loadRuns]);
+
+  // Do not leave the previous run's rows painted while a newly selected run is
+  // loading. This keeps the run label and candidate evidence in lockstep.
+  useEffect(() => {
+    setData(null);
+    setLoadError(null);
+  }, [selectedRunId]);
+
+  const handleRunSelection = useCallback((runId: number | null) => {
+    selectionTouched.current = true;
+    setSelectedRunId(runId);
+    setData(null);
+    setLoadError(null);
+    setPage(0);
+    setExpanded(new Set());
+  }, []);
+
+  const handleMiningStarted = useCallback(
+    (runId: number | null) => {
+      if (runId == null) return;
+      selectionTouched.current = true;
+      setSelectedRunId(runId);
+      setData(null);
+      setLoadError(null);
+      setPage(0);
+      setExpanded(new Set());
+      void loadRuns(runId);
+    },
+    [loadRuns],
+  );
+
+  const handleMiningComplete = useCallback(
+    (runId: number | null) => {
+      if (runId != null) {
+        selectionTouched.current = true;
+        setSelectedRunId(runId);
+        setData(null);
+        setLoadError(null);
+        setPage(0);
+        setExpanded(new Set());
+        void loadRuns(runId);
+      } else {
+        // Legacy POST responses do not identify a run. Refresh the current
+        // compatibility query without changing the user's selected run.
+        void load();
+        void loadRuns();
+      }
+    },
+    [load, loadRuns],
+  );
+
   // reset to page 0 whenever a filter or the page size changes
   useEffect(() => {
     setPage(0);
-  }, [outcome, q, sharpeMin, familyFilter, sort, descending, pageSize]);
+    setExpanded(new Set());
+  }, [selectedRunId, outcome, q, sharpeMin, familyFilter, sort, descending, pageSize]);
 
   function toggle(id: number) {
     setExpanded((prev) => {
@@ -1158,6 +1578,8 @@ export function BrainMiningPanel() {
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const meta = `${total} ${zh ? "个 alpha" : "alphas"}`;
+  const selectedRun = runs?.find((run) => run.id === selectedRunId) ?? null;
+  const recentRuns = runs ?? [];
 
   const INPUT =
     "h-6 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11px] text-tm-fg outline-none focus:border-tm-accent placeholder:text-tm-muted";
@@ -1165,7 +1587,7 @@ export function BrainMiningPanel() {
   return (
     <TmScreen>
       <TmPane title={zh ? "挖矿控制" : "MINING.CONTROL"}>
-        <MineButton onComplete={load} />
+        <MineButton onStarted={handleMiningStarted} onComplete={handleMiningComplete} />
       </TmPane>
 
       <TmPane
@@ -1182,6 +1604,29 @@ export function BrainMiningPanel() {
           </button>
         }
       >
+        <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
+          <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+            {zh ? "查看运行" : "view run"}
+          </span>
+          <RunSelector
+            runs={recentRuns}
+            selectedRunId={selectedRunId}
+            onChange={handleRunSelection}
+            zh={zh}
+          />
+          {runsLoading ? (
+            <span className="font-tm-mono text-[10px] text-tm-muted">{zh ? "读取账本…" : "loading ledger…"}</span>
+          ) : runsError ? (
+            <span className="font-tm-mono text-[10px] text-tm-warn">{zh ? "兼容模式" : "legacy mode"}</span>
+          ) : null}
+        </div>
+        <RunLedger
+          run={selectedRun}
+          selectedRunId={selectedRunId}
+          runsError={runsError}
+          runsTotal={runsTotal}
+          zh={zh}
+        />
         {/* filter bar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
           <OutcomeSelect value={outcome} onChange={setOutcome} zh={zh} />
