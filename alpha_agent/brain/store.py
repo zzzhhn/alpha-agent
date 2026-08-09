@@ -390,14 +390,16 @@ async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:
 # ── First-class mining runs ──────────────────────────────────────────────
 
 _RUN_COLS = (
-    "id, user_id, source, family_focus, requested_n, generated_n, screened_n, "
+    "id, user_id, source, family_focus, requested_n, generation_target_n, "
+    "parent_run_id, generated_n, screened_n, "
     "simulated_n, persisted_n, passed_n, flagged_n, rejected_n, sim_error_n, "
     "status, screen_status, screen_detail, seed, created_at, queued_at, "
     "started_at, completed_at, updated_at, error_detail, github_run_id, "
     "batch_started_at, legacy_batch_started_at"
 )
 _RUN_MUTABLE_COLS = {
-    "family_focus", "requested_n", "generated_n", "screened_n", "simulated_n",
+    "family_focus", "requested_n", "generation_target_n", "parent_run_id",
+    "generated_n", "screened_n", "simulated_n",
     "persisted_n", "passed_n", "flagged_n", "rejected_n", "sim_error_n",
     "status", "screen_status", "screen_detail", "seed", "started_at",
     "completed_at", "error_detail", "github_run_id", "batch_started_at",
@@ -432,6 +434,8 @@ async def create_brain_run(
     user_id: int,
     source: str,
     requested_n: int,
+    generation_target_n: int | None = None,
+    parent_run_id: int | None = None,
     family_focus: str | None = None,
     seed: int | None = None,
     screen_status: str = "pending",
@@ -446,13 +450,19 @@ async def create_brain_run(
     if source not in _RUN_SOURCES:
         raise ValueError(f"invalid BRAIN run source: {source!r}")
     requested = max(0, int(requested_n))
+    generation_target = max(
+        requested,
+        int(generation_target_n) if generation_target_n is not None else requested,
+    )
     row = await pool.fetchrow(
         "INSERT INTO brain_runs "
-        "(user_id, source, family_focus, requested_n, seed, screen_status, "
-        " screen_detail, github_run_id) "
-        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING " + _RUN_COLS,
-        int(user_id), source, family_focus, requested, seed, screen_status,
-        screen_detail, str(github_run_id) if github_run_id is not None else None,
+        "(user_id, source, family_focus, requested_n, generation_target_n, "
+        " parent_run_id, seed, screen_status, screen_detail, github_run_id) "
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING " + _RUN_COLS,
+        int(user_id), source, family_focus, requested, generation_target,
+        int(parent_run_id) if parent_run_id is not None else None,
+        seed, screen_status, screen_detail,
+        str(github_run_id) if github_run_id is not None else None,
     )
     return _decode_run(row)
 
@@ -592,7 +602,8 @@ async def set_brain_run_progress(pool, run_id: int, **fields) -> dict | None:
     """Set generated/screened counters and screen truth during a run."""
     allowed = {
         "generated_n", "screened_n", "screen_status", "screen_detail",
-        "requested_n", "seed", "family_focus", "batch_started_at",
+        "requested_n", "generation_target_n", "seed", "family_focus",
+        "batch_started_at",
     }
     unknown = set(fields) - allowed
     if unknown:

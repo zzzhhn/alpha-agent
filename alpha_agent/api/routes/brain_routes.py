@@ -102,9 +102,18 @@ async def trigger_mining(
     avoids serverless-vs-Neon skew undercounting early candidates."""
     n = body.get("n_candidates")
     try:
-        n = str(max(1, min(int(n), 30))) if n is not None else "12"
+        simulation_budget = max(1, min(int(n), 30)) if n is not None else 12
     except (TypeError, ValueError):
-        n = "12"
+        simulation_budget = 12
+
+    generation_target = body.get("generation_target_n")
+    try:
+        generation_target = max(
+            simulation_budget,
+            min(int(generation_target), 60),
+        ) if generation_target is not None else min(simulation_budget * 2, 60)
+    except (TypeError, ValueError):
+        generation_target = min(simulation_budget * 2, 60)
 
     fam = body.get("family_focus")
     fam = str(fam) if fam in _VALID_FAMILY_FOCUS else ""
@@ -119,11 +128,22 @@ async def trigger_mining(
         seed = int(seed)
     except (TypeError, ValueError):
         seed = 1234
+    parent_run_id = body.get("parent_run_id")
+    if parent_run_id is not None:
+        try:
+            parent_run_id = int(parent_run_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "invalid parent_run_id") from None
+        if await store.get_brain_run(pool, parent_run_id, user_id) is None:
+            raise HTTPException(404, "parent BRAIN run not found")
+
     run = await store.create_brain_run(
         pool,
         user_id=user_id,
         source="manual",
-        requested_n=int(n),
+        requested_n=simulation_budget,
+        generation_target_n=generation_target,
+        parent_run_id=parent_run_id,
         family_focus=fam or None,
         seed=seed,
     )
@@ -149,7 +169,8 @@ async def trigger_mining(
                 json={
                     "ref": _GH_REF,
                     "inputs": {
-                        "n_candidates": n,
+                        "n_candidates": str(simulation_budget),
+                        "generation_target_n": str(generation_target),
                         "family_focus": fam,
                         "brain_run_id": str(run_id),
                         "seed": str(seed),
@@ -176,8 +197,10 @@ async def trigger_mining(
         "ok": True,
         "run_id": run_id,
         "status": "queued",
-        "n_candidates": int(n),
-        "eta_minutes": 40,
+        "n_candidates": simulation_budget,
+        "generation_target_n": generation_target,
+        "parent_run_id": parent_run_id,
+        "eta_minutes": max(8, simulation_budget * 3),
         "started_at": started_at,
     }
 
