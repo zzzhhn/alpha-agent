@@ -49,24 +49,25 @@ export function AnalyticsAccordion({ translate }: Props) {
   }
 
   return (
-    <section className="flex flex-col gap-2">
+    <section className="border border-tm-rule bg-tm-bg">
       {flags.degenerate && <DegenerateWarningPane translate={translate} />}
 
       <button
         onClick={() => setShowAll((s) => !s)}
         aria-label={accordionLabel()}
-        className="inline-flex w-fit items-center gap-1 font-tm-mono text-xs text-tm-fg-2 hover:text-tm-fg"
+        className="flex h-10 w-full items-center justify-between border-b border-tm-rule bg-tm-bg-2/35 px-3 font-tm-mono text-[10px] uppercase tracking-[0.08em] text-tm-fg-2 hover:text-tm-fg"
       >
-        {showAll ? (
-          <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
-        ) : (
-          <ChevronRight className="h-3 w-3" strokeWidth={1.75} />
-        )}
-        {accordionLabel()}
+        <span className="flex items-center gap-2">
+          {showAll ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {accordionLabel()}
+        </span>
+        <span className="normal-case tracking-normal text-tm-muted">
+          {locale === "zh" ? "Smoke · LLM 用量 · 操作符" : "Smoke · LLM usage · operators"}
+        </span>
       </button>
 
       {showAll && (
-        <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-3 divide-x divide-tm-rule">
           <SmokeDetailPane translate={translate} />
           <LlmProvenancePane translate={translate} />
           <OperatorUsagePane translate={translate} />
@@ -85,7 +86,7 @@ function DegenerateWarningPane({
 }) {
   const { locale } = useLocale();
   return (
-    <div className="rounded border border-tm-warn/40 bg-tm-warn/10 p-3 text-xs text-tm-warn">
+    <div className="border-b border-tm-warn/40 bg-tm-warn/10 p-3 text-xs text-tm-warn">
       <div className="font-tm-mono font-semibold uppercase tracking-wide">
         {t(locale, "alpha.analytics.degenerateTitle" as Parameters<typeof t>[1])}
       </div>
@@ -115,7 +116,7 @@ function SmokeDetailPane({
   const s = translate.smoke;
   if (!s) return null;
   return (
-    <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 text-xs text-tm-fg-2">
+    <div className="min-w-0 bg-tm-bg p-3 text-xs text-tm-fg-2">
       <div className="mb-2 font-tm-mono font-semibold uppercase tracking-wide text-tm-fg">
         {t(locale, "alpha.analytics.smokeDetail" as Parameters<typeof t>[1])}
       </div>
@@ -170,7 +171,7 @@ function LlmProvenancePane({
   const { prompt, completion } = translate.llm_tokens;
   const total = prompt + completion;
   return (
-    <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 text-xs text-tm-fg-2">
+    <div className="min-w-0 bg-tm-bg p-3 text-xs text-tm-fg-2">
       <div className="mb-2 font-tm-mono font-semibold uppercase tracking-wide text-tm-fg">
         {t(locale, "alpha.analytics.llmProvenance" as Parameters<typeof t>[1])}
       </div>
@@ -204,7 +205,7 @@ function OperatorUsagePane({
   const { locale } = useLocale();
   const ops = translate.spec.operators_used;
   return (
-    <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 text-xs text-tm-fg-2">
+    <div className="min-w-0 bg-tm-bg p-3 text-xs text-tm-fg-2">
       <div className="mb-2 font-tm-mono font-semibold uppercase tracking-wide text-tm-fg">
         {t(locale, "alpha.analytics.operatorUsage" as Parameters<typeof t>[1])}
       </div>
@@ -217,7 +218,7 @@ function OperatorUsagePane({
           {ops.map((op) => (
             <span
               key={op}
-              className="rounded-full border border-tm-rule px-2 py-0.5 font-mono text-[11px] text-tm-fg"
+              className="border border-tm-rule px-2 py-0.5 font-mono text-[11px] text-tm-fg"
             >
               {op}
             </span>

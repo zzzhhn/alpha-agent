@@ -57,6 +57,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   neutralize: false,
   transactionCostBps: 10,
   mode: "static",
+  includeBreakdown: false,
 };
 
 // Hoisted (rerender-memo-with-default-value): stable identity across renders
@@ -120,6 +121,7 @@ function buildRequest(
     mode: params.mode,
     neutralize: params.neutralize ? "sector" : "none",
     benchmark_ticker: params.benchmark,
+    include_breakdown: params.includeBreakdown,
   };
 }
 

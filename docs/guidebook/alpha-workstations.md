@@ -2,11 +2,15 @@
 
 ## Factor Alpha
 
-Write one falsifiable hypothesis, confirm universe, direction, bucket size, cost, neutralization, and benchmark, then use “Translate and backtest.” Read the verdict strip before opening detailed evidence. A saved experiment can be reopened, but reopening does not automatically rerun it.
+Write one falsifiable hypothesis, confirm universe, direction, bucket size, cost, neutralization, and benchmark, then use “Translate and backtest.” After translation, “Rerun current expression” keeps the expression and uses the latest visible parameters. Read the verdict strip before opening detailed evidence. The example library is a starting-point catalogue, not proof that an example remains valid.
 
 ## Backtest
 
-Load a saved factor or enter an expression, confirm the compact parameters, and run once. The first decision order is verdict, equity path, validation gates, baseline comparison, diagnostic summaries, then recent runs. Dashes mean evidence is unknown, not zero.
+Load a saved factor or enter an expression, confirm the compact parameters, and run once. The first decision order is verdict, equity path, validation gates, baseline comparison, diagnostic summaries, then recent runs. Daily holdings and operational detail are disabled by default to reduce payload size; enable “Return daily breakdown” under Advanced and rerun when those panes are needed. Dashes mean evidence is unknown, not zero.
+
+## Screener
+
+Select interpretable factors first, then define sector, market-cap, combination, and as-of parameters. The decision strip summarizes selection count, target count, eligible universe, and concentration before the results table. Missing or unclassified sectors remain visible in results but cannot be selected as a filter. Hover dotted quant terms for their Chinese or English definitions.
 
 ## Alerts
 
@@ -14,7 +18,7 @@ Start from “Needs action,” narrow by severity or related object, select the 
 
 ## Evolution Monitor
 
-Read the overall decision strip, inspect the three highest-risk signals, review the promotion funnel, then process pending proposals beside the visible change ledger. “All signals” opens weight and calibration detail. Co-occurring events are evidence links, not causal claims.
+Read the overall decision strip, inspect the three highest-risk signals, review the promotion funnel, then process pending proposals beside the visible change ledger. Pending proposals show five per page and only one expands at a time. “All signals” opens weight and calibration detail. Co-occurring events are evidence links, not causal claims.
 
 ## Shared state language
 

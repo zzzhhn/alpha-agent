@@ -113,6 +113,24 @@ Reference: `proposed-evolution-native.png`.
 - “Review changes” remains the primary action. With zero proposals it may be disabled or explain that nothing awaits review, but it does not transform into an unrelated action.
 - Partial endpoint failures identify the affected pane and preserve successfully loaded evidence.
 
+### 6.5 Screener, `/screener`
+
+The repository does not contain a canonical generated Screener reference image. Until one is approved, this route follows the decision-first structure shared by Today Recommendations and Paper Trading.
+
+- Header exposes factor-library size, selection count, data date, and point-in-time membership status.
+- Decision strip is the only home of the filled primary Run action. It summarizes selected factors, target count, eligible universe, and sector concentration.
+- Setup uses a desktop workbench grid: factor selection on the left, universe and combination controls on the right.
+- Backend placeholder sectors such as `Unknown`, `Unclassified`, or blank values are not selectable filter options. Missing classification remains explicit in results.
+- Chinese locale translates interface chrome and explanatory text. Conventional quant abbreviations may remain in English only when a hover and keyboard-focus definition is available.
+- Results distinguish source-universe size, eligible count, eligibility rate, rank score, basket mean, and combination method. A score is never described as expected return.
+
+### 6.6 Round-two recovery and density rules
+
+- Alpha keeps the translated expression available for a parameter-only rerun. That action always uses the latest visible validation parameters.
+- Backtest daily holdings are an explicit opt-in because they add roughly 200 KB to a response. Empty Holdings and Operations panes explain whether data was not requested or requested but unavailable, and state how to recover.
+- Validation gates are decision questions, not five unrelated KPI thresholds: OOS performance, walk-forward stability, cost robustness, concentration, and point-in-time data risk.
+- Pending proposal queues paginate at five rows and allow only one expanded proposal. Change-ledger previews remain bounded so the page does not grow in proportion to backlog size.
+
 ## 7. Interaction and accessibility
 
 - Keyboard focus must be visible on every control.

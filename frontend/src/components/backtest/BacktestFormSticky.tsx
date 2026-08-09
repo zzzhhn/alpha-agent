@@ -509,6 +509,25 @@ export function BacktestFormSticky({
                 ))}
               </select>
             </FieldShell>
+
+            <FieldShell
+              label={t(locale, "backtest.form.includeBreakdown")}
+              className="min-w-[220px] flex-[1.4]"
+            >
+              <label className={`${CONTROL_BOX} cursor-pointer gap-2`} title={t(locale, "backtest.form.includeBreakdownHint")}>
+                <input
+                  type="checkbox"
+                  checked={params.includeBreakdown}
+                  onChange={(e) => updateField("includeBreakdown", e.target.checked)}
+                  className="shrink-0 cursor-pointer accent-[var(--tm-accent)]"
+                />
+                <span className="truncate">
+                  {params.includeBreakdown
+                    ? (locale === "zh" ? "已开启，约 +200 KB" : "Enabled, about +200 KB")
+                    : (locale === "zh" ? "关闭，减少响应体积" : "Off, smaller response")}
+                </span>
+              </label>
+            </FieldShell>
           </div>
         </div>
       </div>

@@ -17,6 +17,7 @@ import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { formatUtc8DateTime } from "@/lib/format-datetime";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import { DecisionStrip } from "@/components/workbench/DecisionStrip";
+import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 import { IcTrendChart } from "./IcTrendChart";
 import { ReliabilityChart } from "./ReliabilityChart";
 import { WeightDeltaTable } from "./WeightDeltaTable";
@@ -142,8 +143,8 @@ export default function EvolutionObservatory({
             : (zh ? "整体可用，当前没有待审变化" : "System available; no change awaits review")}
         description={zh ? "只突出三条决策相关信号，所有事件仅作同期相关性线索。" : "Only three decision-relevant signals are emphasized; events remain contemporaneous evidence."}
         metrics={[
-          { label: zh ? "校准" : "Calibration", value: brier === null ? "—" : brier.toFixed(3), detail: "Brier", tone: healthTone(health.calibration.tone) },
-          { label: "IC (20D)", value: selectedIc === null ? "—" : `${selectedIc >= 0 ? "+" : ""}${selectedIc.toFixed(3)}`, detail: selected ? getSignalDisplayLabel(selected, locale) : undefined, tone: selectedIc === null ? "default" : selectedIc >= 0 ? "positive" : "negative" },
+          { label: zh ? "校准" : "Calibration", value: brier === null ? "—" : brier.toFixed(3), detail: zh ? "Brier 分数，悬停术语查看定义" : "Brier score; hover terms for definitions", tone: healthTone(health.calibration.tone) },
+          { label: zh ? "样本外 IC（20日）" : "OOS IC (20D)", value: selectedIc === null ? "—" : `${selectedIc >= 0 ? "+" : ""}${selectedIc.toFixed(3)}`, detail: selected ? getSignalDisplayLabel(selected, locale) : undefined, tone: selectedIc === null ? "default" : selectedIc >= 0 ? "positive" : "negative" },
           { label: zh ? "权重自调节" : "Adaptive weights", value: degrading ?? "—", detail: zh ? "劣化信号" : "degrading signals", tone: healthTone(health.weights.tone) },
           { label: zh ? "提议状态" : "Proposals", value: pendingCount, detail: zh ? "等待人工审查" : "awaiting review", tone: pendingCount > 0 ? "negative" : "positive" },
         ]}
@@ -190,9 +191,9 @@ export default function EvolutionObservatory({
           <h2 className="mt-4 text-[20px] font-semibold">{selected ? getSignalDisplayLabel(selected, locale) : (zh ? "没有可选信号" : "No signal selected")}</h2>
           <div className="mt-3 grid grid-cols-3 gap-px border border-tm-rule bg-tm-rule text-center text-[9px]">
             {[
-              [zh ? "LIVE" : "LIVE", live?.weight],
-              [zh ? "SHADOW" : "SHADOW", shadow?.weight],
-              [zh ? "GUARDED" : "GUARDED", guarded?.weight],
+              [zh ? "线上 LIVE" : "LIVE", live?.weight],
+              [zh ? "影子 SHADOW" : "SHADOW", shadow?.weight],
+              [zh ? "保护 GUARDED" : "GUARDED", guarded?.weight],
             ].map(([label, value]) => (
               <div key={String(label)} className="bg-tm-bg px-1 py-3">
                 <p className="text-tm-muted">{label}</p>
@@ -207,7 +208,7 @@ export default function EvolutionObservatory({
             />
           ) : null}
           <div className="mt-4 space-y-3 border-t border-tm-rule pt-4 text-[10.5px] leading-5">
-            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "校准（Brier）" : "Calibration (Brier)"}</span><span>{brier == null ? "—" : brier.toFixed(3)}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-tm-muted"><GlossaryTip term="BRIER">{zh ? "校准（Brier）" : "Calibration (Brier)"}</GlossaryTip></span><span>{brier == null ? "—" : brier.toFixed(3)}</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "证据窗口" : "Evidence window"}</span><span>{selectedSeries?.points.length ?? 0} {zh ? "个观测" : "observations"}</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "劣化窗口" : "Degrading windows"}</span><span>{live?.consecutive_bad_windows ?? shadow?.consecutive_bad_windows ?? 0}</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "晋升累计" : "Promotion streak"}</span><span>{shadow?.shadow_streak ?? 0}/5</span></div>
@@ -224,9 +225,9 @@ export default function EvolutionObservatory({
         <p className="mb-3 text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{zh ? "晋升漏斗（当前批次）" : "Promotion funnel (current cohort)"}</p>
         <div className="grid grid-cols-5 gap-3 text-[10px]">
         {[
-          ["LIVE", liveCount],
-          ["SHADOW", shadowCount],
-          ["GUARDED", guardedCount],
+          [zh ? "线上 LIVE" : "LIVE", liveCount],
+          [zh ? "影子 SHADOW" : "SHADOW", shadowCount],
+          [zh ? "保护 GUARDED" : "GUARDED", guardedCount],
           [zh ? "已晋升" : "PROMOTED", promotedCount],
           [zh ? "已回滚" : "ROLLED BACK", rolledBackCount],
         ].map(([label, count], index) => (

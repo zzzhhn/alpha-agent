@@ -72,6 +72,50 @@ export const ZOO_GLOSSARY: Record<string, GlossaryDef> = {
     en: "Decaying — the factor's IC has dropped by ≥50% from its peak; the edge may be fading.",
     zh: "衰减（decaying）：该因子 IC 较峰值下降 ≥50%，其预测边际可能正在消失。",
   },
+  DS: {
+    en: "Deflated Sharpe ratio — Sharpe adjusted for multiple testing and selection bias.",
+    zh: "折减夏普比率（Deflated Sharpe）：对多重检验和择优偏差进行修正后的 Sharpe。",
+  },
+  "IC OOS": {
+    en: "Out-of-sample Information Coefficient — factor-score correlation measured only on held-out data.",
+    zh: "样本外信息系数：只在未参与拟合的留出数据上测量因子得分与未来收益的相关性。",
+  },
+  FOLDS: {
+    en: "Validation folds — independent time splits used to test whether the signal persists across periods.",
+    zh: "验证折数：用于检验信号能否跨时期保持有效的独立时间切片数量。",
+  },
+  TRIALS: {
+    en: "Trials — the number of candidate variants explored; more trials increase selection-bias risk.",
+    zh: "尝试次数：曾探索的候选变体数量，次数越多，择优偏差风险越高。",
+  },
+  "SELF-CORR": {
+    en: "Self-correlation — similarity to an existing or prior factor. High values imply duplicated exposure.",
+    zh: "自相关：与既有或历史因子的相似度，过高通常意味着暴露重复。",
+  },
+  BRIER: {
+    en: "Brier score — mean squared error of probability forecasts. Lower is better calibrated.",
+    zh: "Brier 分数：概率预测的均方误差，越低表示概率校准越好。",
+  },
+  N_UNIVERSE: {
+    en: "Total number of securities in the source universe before filters are applied.",
+    zh: "筛选前，源股票池中的证券总数。",
+  },
+  N_ELIGIBLE: {
+    en: "Number of securities with sufficient data that remain after all universe filters.",
+    zh: "通过全部股票池筛选且具有足够数据的证券数量。",
+  },
+  ELIG_RATE: {
+    en: "Eligibility rate — eligible securities divided by the source-universe count.",
+    zh: "合格率：合格证券数除以源股票池总数。",
+  },
+  TOP_SCORE: {
+    en: "Highest composite factor score among the current candidates; it is a rank signal, not an expected return.",
+    zh: "当前候选股中的最高综合因子分数，它是排序信号，不等同于预期收益率。",
+  },
+  AVG_SCORE: {
+    en: "Mean composite factor score across the displayed candidate basket.",
+    zh: "当前展示候选组合的综合因子分数均值。",
+  },
 };
 
 /** Locale-resolved definition text for a term (falls back to the term itself). */

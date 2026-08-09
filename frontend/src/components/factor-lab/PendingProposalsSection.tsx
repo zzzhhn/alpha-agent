@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useToast } from "@/components/ui/toast";
 import { t } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
+import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 import {
   approveFactorProposal,
   rejectFactorProposal,
@@ -60,18 +61,19 @@ export function PendingProposalsSection({
   const { locale } = useLocale();
   const { toast } = useToast();
   const router = useRouter();
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [page, setPage] = useState(0);
   const [actionState, setActionState] = useState<Map<number, RowActionState>>(
     new Map(),
   );
 
+  const pageSize = 5;
+  const pageCount = Math.max(1, Math.ceil(proposals.length / pageSize));
+  useEffect(() => setPage((value) => Math.min(value, pageCount - 1)), [pageCount]);
+  const visible = proposals.slice(page * pageSize, (page + 1) * pageSize);
+
   function toggleExpand(id: number) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setExpandedId((current) => current === id ? null : id);
   }
 
   function setRowState(id: number, s: RowActionState) {
@@ -162,8 +164,8 @@ export function PendingProposalsSection({
   return (
     <TmPane title={title} meta={`${proposals.length}`}>
       <div className="divide-y divide-tm-rule">
-        {proposals.map((p) => {
-          const isOpen = expanded.has(p.id);
+        {visible.map((p) => {
+          const isOpen = expandedId === p.id;
           const state = actionState.get(p.id) ?? "idle";
           // FactorProposal has `evidence` (not `metrics`); no hypothesis/justification.
           const ev = p.evidence;
@@ -200,7 +202,7 @@ export function PendingProposalsSection({
                   </span>
                 ) : null}
                 <span className="shrink-0 font-mono text-[11px] text-tm-fg-2">
-                  {t(locale, "factorLab.pending.colDS")} {fmtNum(ds, 2)}
+                  <GlossaryTip term="DS">{t(locale, "factorLab.pending.colDS")}</GlossaryTip> {fmtNum(ds, 2)}
                 </span>
                 <button
                   type="button"
@@ -263,16 +265,16 @@ export function PendingProposalsSection({
                         <span>
                           dSharpe {fmtNum(ev.deflated_sharpe, 2)}
                         </span>
-                        <span>IC OOS {fmtNum(ev.ic_oos, 4)}</span>
+                        <span><GlossaryTip term="IC OOS">IC OOS</GlossaryTip> {fmtNum(ev.ic_oos, 4)}</span>
                         <span>Sharpe {fmtNum(sharpeMean, 2)}</span>
                         <span>
                           Baseline {fmtNum(ev.baseline_sharpe, 2)}
                         </span>
                         <span>
-                          Folds {ev.n_folds ?? "—"}
+                          <GlossaryTip term="FOLDS">Folds</GlossaryTip> {ev.n_folds ?? "—"}
                         </span>
                         <span>
-                          Trials {ev.n_trials ?? "—"}
+                          <GlossaryTip term="TRIALS">Trials</GlossaryTip> {ev.n_trials ?? "—"}
                         </span>
                         {typeof ev.self_correlation === "number" ? (
                           <span
@@ -282,7 +284,7 @@ export function PendingProposalsSection({
                                 : undefined
                             }
                           >
-                            Self-corr {fmtNum(ev.self_correlation, 2)}
+                            <GlossaryTip term="SELF-CORR">Self-corr</GlossaryTip> {fmtNum(ev.self_correlation, 2)}
                           </span>
                         ) : null}
                       </div>
@@ -334,6 +336,14 @@ export function PendingProposalsSection({
             </div>
           );
         })}
+      </div>
+      <div className="flex h-10 items-center justify-between border-t border-tm-rule px-3 font-tm-mono text-[10px] text-tm-muted">
+        <span>{locale === "zh" ? `每页 ${pageSize} 条，只允许展开一条` : `${pageSize} per page, one expanded row`}</span>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => { setPage((value) => Math.max(0, value - 1)); setExpandedId(null); }} disabled={page === 0} className="border border-tm-rule px-2 py-1 disabled:opacity-30 hover:text-tm-accent">{locale === "zh" ? "上一页" : "Prev"}</button>
+          <span>{page + 1}/{pageCount}</span>
+          <button type="button" onClick={() => { setPage((value) => Math.min(pageCount - 1, value + 1)); setExpandedId(null); }} disabled={page >= pageCount - 1} className="border border-tm-rule px-2 py-1 disabled:opacity-30 hover:text-tm-accent">{locale === "zh" ? "下一页" : "Next"}</button>
+        </div>
       </div>
     </TmPane>
   );

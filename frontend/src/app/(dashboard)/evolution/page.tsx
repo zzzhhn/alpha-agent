@@ -142,7 +142,7 @@ export default async function EvolutionPage() {
           The decision card + actionable pending list + collapsed history,
           richer than the prior read-only table. `proposals` (fetchProposals)
           still feeds the health strip above. */}
-        <div id="evolution-review" className="grid grid-cols-[minmax(420px,0.9fr)_minmax(640px,1.1fr)] gap-4 border-b border-tm-rule px-6 py-4">
+        <div id="evolution-review" className="grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-4 border-b border-tm-rule px-6 py-4">
           <div className="min-w-0 space-y-3">
             <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
             <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
@@ -153,7 +153,7 @@ export default async function EvolutionPage() {
               <span className="font-mono text-[9px] text-tm-muted">{changes?.changes.length ?? 0}</span>
             </div>
             <div className="px-3 py-2">
-              <ChangeHistoryTable changes={(changes?.changes ?? []).slice(0, 12)} locale={locale} />
+              <ChangeHistoryTable changes={(changes?.changes ?? []).slice(0, 8)} locale={locale} />
             </div>
             <HistoryCollapsedSection history={history} />
           </section>
