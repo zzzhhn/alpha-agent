@@ -17,11 +17,9 @@
  * T8 will mount this under the evidence grid on /backtest.
  */
 
-import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { SegmentedTabs, type SegmentedTabItem } from "@/components/ui/SegmentedTabs";
-import { type GroupBadge } from "./GroupAccordion";
+import { GroupAccordion, type GroupBadge } from "./GroupAccordion";
 import { RiskAttributionPane } from "./RiskAttributionPane";
 import { WorstDrawdownsPane } from "./WorstDrawdownsPane";
 import { WinLossDistributionPane } from "./WinLossDistributionPane";
@@ -84,85 +82,49 @@ export function BacktestAnalyticsGroups({ currentRun }: Props) {
     return null;
   })();
 
-  // ALPHACORE design (backtest block lines 284-321): the four analytics groups
-  // are a TAB bar — one row of tabs, only the active tab's panes shown — not a
-  // stack of folding accordions. Same four categories + same panes; the design
-  // leads with risk attribution and demotes the rest behind tabs.
-  const [activeTab, setActiveTab] = useState<
-    "risk" | "regime" | "holdings" | "ops"
-  >("risk");
-
-  const badgeNode = (badge: GroupBadge | null) =>
-    badge ? (
-      <span
-        className={
-          badge.severity === "alert" ? "text-tm-neg" : "text-tm-warn"
-        }
-        title={badge.reason}
-      >
-        ⚠
-      </span>
-    ) : undefined;
-
-  const tabs: ReadonlyArray<SegmentedTabItem<"risk" | "regime" | "holdings" | "ops">> = [
-    {
-      key: "risk",
-      label: t(locale, "backtest.group.riskDetail" as Parameters<typeof t>[1]),
-      badge: badgeNode(riskBadge),
-    },
-    {
-      key: "regime",
-      label: t(
-        locale,
-        "backtest.group.regimeBreakdown" as Parameters<typeof t>[1],
-      ),
-    },
-    {
-      key: "holdings",
-      label: t(locale, "backtest.group.holdings" as Parameters<typeof t>[1]),
-    },
-    {
-      key: "ops",
-      label: t(locale, "backtest.group.operations" as Parameters<typeof t>[1]),
-      badge: badgeNode(opsBadge),
-    },
-  ];
-
   return (
-    <section className="border border-tm-rule bg-tm-bg">
-      <SegmentedTabs
-        items={tabs}
-        active={activeTab}
-        onChange={setActiveTab}
-        ariaLabel={t(locale, "backtest.group.riskDetail" as Parameters<typeof t>[1])}
-      />
-      <div className="flex flex-col gap-3 p-3">
-        {activeTab === "risk" ? (
+    <section className="grid gap-2" aria-label={t(locale, "backtest.group.riskDetail" as Parameters<typeof t>[1])}>
+      <GroupAccordion
+        title={t(locale, "backtest.group.riskDetail" as Parameters<typeof t>[1])}
+        count={3}
+        badge={riskBadge}
+        defaultOpen={riskBadge !== null}
+      >
           <>
             <RiskAttributionPane currentRun={currentRun} />
             <WorstDrawdownsPane currentRun={currentRun} />
             <WinLossDistributionPane currentRun={currentRun} />
           </>
-        ) : null}
-        {activeTab === "regime" ? (
+      </GroupAccordion>
+      <GroupAccordion
+        title={t(locale, "backtest.group.regimeBreakdown" as Parameters<typeof t>[1])}
+        count={2}
+      >
           <>
             <TrainTestSplitPane currentRun={currentRun} />
             <RegimeBreakdownPane currentRun={currentRun} />
           </>
-        ) : null}
-        {activeTab === "holdings" ? (
+      </GroupAccordion>
+      <GroupAccordion
+        title={t(locale, "backtest.group.holdings" as Parameters<typeof t>[1])}
+        count={2}
+      >
           <>
             <PortfolioTodayPane currentRun={currentRun} />
             <PositionContributionPane currentRun={currentRun} />
           </>
-        ) : null}
-        {activeTab === "ops" ? (
+      </GroupAccordion>
+      <GroupAccordion
+        title={t(locale, "backtest.group.operations" as Parameters<typeof t>[1])}
+        count={2}
+        badge={opsBadge}
+        defaultOpen={riskBadge === null && opsBadge !== null}
+      >
           <>
             <TurnoverProfilePane currentRun={currentRun} />
             <DailyBreakdownPane currentRun={currentRun} />
           </>
-        ) : null}
-      </div>
+      </GroupAccordion>
     </section>
   );
 }

@@ -24,15 +24,23 @@ export function AlphaExperimentLedger({
       {history.length === 0 ? (
         <p className="px-4 py-8 text-center text-[11px] text-tm-muted">{zh ? "完成一次表达式生成后，研究记录会出现在这里。" : "A research record appears here after expression generation."}</p>
       ) : (
-        <div className="divide-y divide-tm-rule">
+        <div>
+          <div className="grid min-h-8 grid-cols-[170px_minmax(260px,1.2fr)_minmax(260px,1fr)_110px] items-center gap-4 border-b border-tm-rule bg-tm-bg-2/30 px-4 text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+            <span>{zh ? "时间" : "Time"}</span>
+            <span>{zh ? "研究假设" : "Hypothesis"}</span>
+            <span>{zh ? "表达式" : "Expression"}</span>
+            <span className="text-right">{zh ? "操作" : "Action"}</span>
+          </div>
+          <div className="divide-y divide-tm-rule">
           {history.slice(0, 5).map((entry) => (
             <button key={entry.id} type="button" onClick={() => onOpen(entry)} className="grid min-h-11 w-full grid-cols-[170px_minmax(260px,1.2fr)_minmax(260px,1fr)_110px] items-center gap-4 px-4 py-2 text-left text-[10.5px] hover:bg-tm-bg-2">
               <span className="flex items-center gap-1 text-tm-muted"><Clock3 className="h-3 w-3" /> {new Date(entry.timestamp).toLocaleString(zh ? "zh-CN" : "en-US")}</span>
               <span className="truncate text-tm-fg" title={entry.request.text}>{entry.request.text}</span>
               <code className="truncate text-tm-fg-2" title={entry.result.spec.expression}>{entry.result.spec.expression}</code>
-              <span className="text-right text-tm-muted">{entry.isFavorite ? <Star className="ml-auto h-3 w-3 fill-tm-warn text-tm-warn" /> : entry.request.universe}</span>
+              <span className="flex items-center justify-end gap-2 text-right text-tm-muted">{entry.isFavorite ? <Star className="h-3 w-3 fill-tm-warn text-tm-warn" /> : entry.request.universe}<span className="border border-tm-rule px-2 py-0.5 text-[9px] text-tm-fg-2">{zh ? "重开" : "Reopen"}</span></span>
             </button>
           ))}
+          </div>
         </div>
       )}
       <p className="border-t border-tm-rule px-3 py-2 text-[9px] text-tm-muted">{zh ? "历史文本保存在当前浏览器；回测指标仍以服务端真实结果为准。" : "History text is browser-local; backtest metrics remain authoritative from the server result."}</p>

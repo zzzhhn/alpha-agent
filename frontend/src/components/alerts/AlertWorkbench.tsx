@@ -108,6 +108,7 @@ export default function AlertWorkbench() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
+  const [auditExpanded, setAuditExpanded] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -157,12 +158,15 @@ export default function AlertWorkbench() {
     ) ?? [],
     [data, queue, severityFilter, relevanceFilter],
   );
-  const auditItems = useMemo(
+  const auditCandidates = useMemo(
     () => (data?.alerts ?? [])
       .filter((item) => item.state.updated_at)
-      .sort((a, b) => (b.state.updated_at ?? "").localeCompare(a.state.updated_at ?? ""))
-      .slice(0, 3),
+      .sort((a, b) => (b.state.updated_at ?? "").localeCompare(a.state.updated_at ?? "")),
     [data],
+  );
+  const auditItems = useMemo(
+    () => auditExpanded ? auditCandidates : auditCandidates.slice(0, 3),
+    [auditCandidates, auditExpanded],
   );
   const selected = data?.alerts.find((item) => item.id === selectedId) ?? visible[0] ?? null;
 
@@ -282,37 +286,8 @@ export default function AlertWorkbench() {
         action={<Link href="/methodology#alerts" className="border border-tm-rule px-3 py-2 text-[10px] text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent">{zh ? "规则与阈值" : "Rules & thresholds"}</Link>}
       />
 
-      {authRequired ? (
-        <div className="m-6 flex min-h-[260px] items-center justify-center border border-tm-rule bg-tm-bg-2">
-          <div className="max-w-md text-center">
-            <ShieldAlert className="mx-auto h-7 w-7 text-tm-muted" />
-            <h2 className="mt-3 text-sm">{zh ? "登录后启用决策分诊" : "Sign in for decision triage"}</h2>
-            <p className="mt-2 text-[11px] leading-5 text-tm-muted">
-              {zh ? "持仓、今日候选、关注列表与处理状态都属于你的账户上下文。" : "Positions, picks, watchlists, and triage state belong to your account context."}
-            </p>
-            <Link href="/login" className="mt-4 inline-block border border-tm-accent px-3 py-1.5 text-[11px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg">
-              {zh ? "前往登录" : "Sign in"}
-            </Link>
-          </div>
-        </div>
-      ) : error ? (
-        <div role="alert" className="m-6 flex min-h-[260px] items-center justify-center border border-tm-neg/50 bg-tm-neg/5 p-5 text-center">
-          <div>
-            <p className="text-sm text-tm-neg">{zh ? "警报队列加载失败" : "Alert queue failed to load"}</p>
-            <p className="mt-2 max-w-xl text-[10px] text-tm-muted">{error}</p>
-            <button type="button" onClick={() => void load()} className="mt-4 border border-tm-neg px-3 py-1.5 text-[10px] text-tm-neg">
-              {zh ? "重试" : "Retry"}
-            </button>
-          </div>
-        </div>
-      ) : !data ? (
-        <div className="m-6 flex min-h-[260px] items-center justify-center border border-tm-rule bg-tm-bg-2 text-[11px] text-tm-muted">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          {zh ? "正在建立决策上下文…" : "Building decision context…"}
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col">
-        <div className="mx-6 mt-4 grid min-h-[620px] grid-cols-[220px_minmax(0,1fr)] overflow-hidden border border-tm-rule min-[1680px]:grid-cols-[240px_minmax(680px,2.4fr)_430px]">
+      <div className="flex flex-1 flex-col">
+        <div className="mx-6 mt-4 grid min-h-[600px] grid-cols-1 overflow-hidden border border-tm-rule min-[1280px]:grid-cols-[0.9fr_2.2fr_1.25fr]">
           <aside className="border-r border-tm-rule bg-tm-bg-2/50 p-3">
             <p className="px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-tm-muted">
               {zh ? "队列导航" : "Queue navigation"}
@@ -370,21 +345,61 @@ export default function AlertWorkbench() {
             </div>
           </aside>
 
-          <main className="min-w-0 min-[1680px]:border-r min-[1680px]:border-tm-rule">
+          <main className="min-w-0 border-r border-tm-rule">
             <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4 text-[11px]">
               <span className="text-tm-fg-2">{queueLabel(queue, zh)} · {visible.length}</span>
               <span className="text-tm-muted">
                 {zh ? "按决策优先级排序" : "Ranked by decision priority"}
               </span>
             </div>
-            <div className="grid h-9 grid-cols-[92px_110px_minmax(220px,1.15fr)_minmax(210px,1fr)_110px] items-center gap-3 border-b border-tm-rule bg-tm-bg px-4 text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+            <div className="grid h-9 grid-cols-[68px_88px_minmax(150px,1.2fr)_minmax(130px,1fr)_84px] items-center gap-2 border-b border-tm-rule bg-tm-bg px-4 text-[9px] uppercase tracking-[0.08em] text-tm-muted">
               <span>{zh ? "严重性／时间" : "Severity / time"}</span>
               <span>{zh ? "标的／来源" : "Ticker / source"}</span>
-              <span>{zh ? "变化摘要" : "Change summary"}</span>
-              <span>{zh ? "为何重要" : "Why it matters"}</span>
-              <span className="text-right">{zh ? "置信度／来源" : "Score / sources"}</span>
+              <span>{zh ? "变化／证据" : "Change / evidence"}</span>
+              <span>{zh ? "影响暴露" : "Affected exposure"}</span>
+              <span className="text-right">{zh ? "处置" : "Disposition"}</span>
             </div>
-            {visible.length === 0 ? (
+            {error && data ? (
+              <div role="alert" className="flex items-center justify-between gap-3 border-b border-tm-neg/50 bg-tm-neg/5 px-4 py-2 text-[10px]">
+                <span className="text-tm-neg">{zh ? "刷新失败，显示上次可用队列。" : "Refresh failed; showing the last available queue."}</span>
+                <button type="button" onClick={() => void load()} className="shrink-0 border border-tm-neg px-2 py-1 text-[9px] text-tm-neg hover:bg-tm-neg/10">
+                  {zh ? "重试" : "Retry"}
+                </button>
+              </div>
+            ) : null}
+            {authRequired ? (
+              <div className="flex min-h-[360px] items-center justify-center border-b border-tm-rule bg-tm-bg-2/30 p-6 text-center">
+                <div className="max-w-md">
+                  <ShieldAlert className="mx-auto h-7 w-7 text-tm-muted" />
+                  <h2 className="mt-3 text-sm">{zh ? "登录后启用决策分诊" : "Sign in for decision triage"}</h2>
+                  <p className="mt-2 text-[11px] leading-5 text-tm-muted">
+                    {zh ? "持仓、今日候选、关注列表与处理状态都属于你的账户上下文。" : "Positions, picks, watchlists, and triage state belong to your account context."}
+                  </p>
+                  <Link href="/login" className="mt-4 inline-block border border-tm-accent px-3 py-1.5 text-[11px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg">
+                    {zh ? "前往登录" : "Sign in"}
+                  </Link>
+                </div>
+              </div>
+            ) : !data ? (
+              <div role={error ? "alert" : undefined} className={`flex min-h-[360px] items-center justify-center p-6 text-center ${error ? "border-b border-tm-neg/50 bg-tm-neg/5" : "bg-tm-bg-2/20"}`}>
+                <div>
+                  <p className={`text-sm ${error ? "text-tm-neg" : "text-tm-muted"}`}>
+                    {error ? (zh ? "警报队列加载失败" : "Alert queue failed to load") : (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {zh ? "正在建立决策上下文…" : "Building decision context…"}
+                      </span>
+                    )}
+                  </p>
+                  {error ? <p className="mt-2 max-w-xl text-[10px] text-tm-muted">{error}</p> : null}
+                  {error ? (
+                    <button type="button" onClick={() => void load()} className="mt-4 border border-tm-neg px-3 py-1.5 text-[10px] text-tm-neg hover:bg-tm-neg/10">
+                      {zh ? "重试" : "Retry"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : visible.length === 0 ? (
               <div className="flex h-full min-h-80 items-center justify-center text-center text-[11px] text-tm-muted">
                 <div>
                   <CheckCircle2 className="mx-auto mb-2 h-5 w-5 text-tm-pos" />
@@ -402,7 +417,7 @@ export default function AlertWorkbench() {
                       key={item.id}
                       type="button"
                       onClick={() => setSelectedId(item.id)}
-                      className={`grid min-h-[126px] w-full grid-cols-[92px_110px_minmax(220px,1.15fr)_minmax(210px,1fr)_110px] items-start gap-3 border-l-2 px-4 py-4 text-left transition-colors ${active ? "border-tm-accent bg-tm-accent/5 ring-1 ring-inset ring-tm-accent/30" : item.severity === "critical" ? "border-tm-neg hover:bg-tm-bg-2" : item.severity === "warning" ? "border-tm-warn hover:bg-tm-bg-2" : "border-sky-500/60 hover:bg-tm-bg-2"}`}
+                      className={`grid min-h-[126px] w-full grid-cols-[68px_88px_minmax(150px,1.2fr)_minmax(130px,1fr)_84px] items-start gap-2 border-l-2 px-4 py-4 text-left transition-colors ${active ? "border-tm-accent bg-tm-accent/5 ring-1 ring-inset ring-tm-accent/30" : item.severity === "critical" ? "border-tm-neg hover:bg-tm-bg-2" : item.severity === "warning" ? "border-tm-warn hover:bg-tm-bg-2" : "border-sky-500/60 hover:bg-tm-bg-2"}`}
                     >
                       <div>
                         <span className={`inline-block border px-2 py-1 text-[10px] ${SEVERITY_CLASS[item.severity]}`}>
@@ -414,20 +429,28 @@ export default function AlertWorkbench() {
                         ) : null}
                       </div>
                       <div>
-                        <p className="font-mono text-[22px] font-semibold">{item.ticker}</p>
+                        <p className="font-mono text-[20px] font-semibold">{item.ticker}</p>
                         <p className="mt-2 text-[10px] text-tm-muted">{alertTypeLabel(item, locale)}</p>
+                        <p className="mt-1 text-[9px] text-tm-muted">{item.source_count} {zh ? "个来源" : "source(s)"}</p>
                       </div>
                       <div>
                         <p className="text-[12px] leading-5 text-tm-fg">{changeSummary(item, locale)}</p>
-                        <p className="mt-3 text-[10px] text-tm-accent">{zh ? "查看变化详情 →" : "View change details →"}</p>
+                        <p className="mt-2 text-[10px] text-tm-fg-2">
+                          {zh ? "证据强度" : "Evidence"}: <span className="text-tm-accent">{item.confidence}</span>
+                          <span className="ml-2 text-tm-muted">{item.confidence_score}/100</span>
+                        </p>
+                        <p className="mt-1 text-[9px] text-tm-accent">{zh ? "查看变化详情 →" : "View change details →"}</p>
                       </div>
                       <div>
                         <p className="text-[11px] leading-5 text-tm-fg-2">{impactSummary(item, locale)}</p>
+                        <p className="mt-2 text-[10px] text-tm-muted">{relevanceLabel(item.relevance, locale)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-mono text-[19px] text-tm-fg">{item.triage_score}</p>
-                        <p className="mt-1 text-[10px] text-tm-muted">{relevanceLabel(item.relevance, locale)}</p>
-                        <p className="mt-2 text-[10px] text-tm-muted">{item.source_count} {zh ? "个来源" : "source(s)"}</p>
+                        <p className="text-[10px] text-tm-fg-2">
+                          {item.state.status === "resolved" ? (zh ? "已处理" : "Resolved") : item.state.status === "snoozed" ? (zh ? "已暂缓" : "Snoozed") : (zh ? "待处理" : "Open")}
+                        </p>
+                        <p className="mt-2 font-mono text-[17px] text-tm-fg">{item.triage_score}</p>
+                        <p className="mt-1 text-[9px] text-tm-muted">{zh ? "分诊分数" : "Triage"}</p>
                       </div>
                     </button>
                   );
@@ -436,14 +459,14 @@ export default function AlertWorkbench() {
             )}
           </main>
 
-          <aside className="col-span-2 min-w-0 border-t border-tm-rule bg-tm-bg-2/20 min-[1680px]:col-span-1 min-[1680px]:border-t-0">
+          <aside className="min-w-0 bg-tm-bg-2/20">
             {!selected ? (
               <div className="flex h-full items-center justify-center p-6 text-center text-[10px] text-tm-muted">
                 {zh ? "选择一条警报查看证据和关联对象。" : "Select an alert to inspect its evidence and linked objects."}
               </div>
             ) : (
-              <div className="grid h-full grid-cols-3 overflow-y-auto min-[1680px]:block">
-                <div className="col-span-3 flex h-11 items-center justify-between border-b border-tm-rule px-4 text-[11px]">
+              <div className="h-full overflow-y-auto">
+                <div className="flex h-11 items-center justify-between border-b border-tm-rule px-4 text-[11px]">
                   <span>{zh ? "所选警报" : "Selected alert"} · {selected.ticker}</span>
                   <span className={SEVERITY_CLASS[selected.severity].split(" ")[1]}>
                     {severityLabel(selected.severity, locale)}
@@ -461,7 +484,7 @@ export default function AlertWorkbench() {
                       {[
                         [zh ? "事件产生" : "Event", selected.created_at],
                         [zh ? "完成分诊" : "Triaged", selected.state.updated_at ?? selected.created_at],
-                        [zh ? "数据截止" : "As of", data.as_of],
+                        [zh ? "数据截止" : "As of", data?.as_of],
                       ].map(([label, stamp], index) => (
                         <div key={`${label}-${index}`} className="relative z-10 w-1/3 text-center">
                           <span className={`mx-auto block h-3 w-3 rounded-full border ${index === 0 ? "border-tm-warn bg-tm-warn" : index === 2 ? "border-tm-accent bg-tm-accent" : "border-tm-rule bg-tm-bg"}`} />
@@ -536,13 +559,17 @@ export default function AlertWorkbench() {
                   <p className="mt-2 text-[9.5px] leading-4 text-tm-muted">
                     {zh ? "先查看标的上下文，再决定是否关闭该事项。系统不会自动交易。" : "Review the ticker context before resolving. The system never trades automatically."}
                   </p>
-                  <Link
-                    href={`/stock/${selected.ticker}#news`}
-                    className="mt-4 flex h-11 w-full items-center justify-center gap-2 bg-tm-accent px-3 text-[12px] font-semibold text-tm-bg hover:brightness-110"
+                  <button
+                    type="button"
+                    disabled={busyId === selected.id}
+                    onClick={() => void persistState(selected, selected.state.status === "resolved" ? "open" : "resolved")}
+                    className="mt-4 flex h-11 w-full items-center justify-center gap-2 bg-tm-accent px-3 text-[12px] font-semibold text-tm-bg hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
                   >
-                    {zh ? "审查并处理" : "Review and process"}
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Link>
+                    {busyId === selected.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    {selected.state.status === "resolved"
+                      ? (zh ? "重新打开" : "Reopen alert")
+                      : (zh ? "标记已处理" : "Mark resolved")}
+                  </button>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -552,15 +579,12 @@ export default function AlertWorkbench() {
                     >
                       <Clock3 className="h-3 w-3" /> {zh ? "4 小时后提醒" : "Snooze 4h"}
                     </button>
-                    <button
-                      type="button"
-                      disabled={busyId === selected.id || selected.state.status === "resolved"}
-                      onClick={() => void persistState(selected, "resolved")}
-                      className="flex items-center justify-center gap-1.5 border border-tm-rule px-2 py-1.5 text-[10px] text-tm-fg-2 hover:border-tm-pos hover:text-tm-pos disabled:opacity-50"
+                    <Link
+                      href={`/stock/${selected.ticker}#news`}
+                      className="flex items-center justify-center gap-1.5 border border-tm-rule px-2 py-1.5 text-[10px] text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent"
                     >
-                      {busyId === selected.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                      {zh ? "标记已处理" : "Mark resolved"}
-                    </button>
+                      <ExternalLink className="h-3 w-3" /> {zh ? "打开研究" : "Open research"}
+                    </Link>
                   </div>
                   <div className="mt-4 border-t border-tm-rule pt-3 text-[9px] leading-5 text-tm-muted">
                     <p>{zh ? "当前状态" : "Current state"}: <span className="text-tm-fg-2">{selected.state.status}</span></p>
@@ -573,6 +597,21 @@ export default function AlertWorkbench() {
           </aside>
         </div>
         <section className="mx-6 mb-4 border-x border-b border-tm-rule">
+          <div className="flex min-h-8 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4 text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+            <span>{zh ? "审计轨迹" : "Audit trail"}</span>
+            {auditCandidates.length > 3 ? (
+              <button
+                type="button"
+                aria-expanded={auditExpanded}
+                onClick={() => setAuditExpanded((expanded) => !expanded)}
+                className="text-tm-accent hover:underline"
+              >
+                {auditExpanded
+                  ? (zh ? "收起" : "Show latest 3")
+                  : (zh ? `查看全部（${auditCandidates.length}）` : `View all (${auditCandidates.length})`)}
+              </button>
+            ) : null}
+          </div>
           <div className="grid h-9 grid-cols-[190px_100px_120px_minmax(0,1fr)_120px] items-center gap-3 border-b border-tm-rule bg-tm-bg-2/40 px-4 text-[9px] uppercase tracking-[0.08em] text-tm-muted">
             <span>{zh ? "处理时间" : "Action time"}</span>
             <span>{zh ? "标的" : "Ticker"}</span>
@@ -595,7 +634,6 @@ export default function AlertWorkbench() {
           )}
         </section>
         </div>
-      )}
 
       <footer className="flex min-h-7 items-center justify-between border-t border-tm-rule px-3 text-[9px] text-tm-muted">
         <span>{zh ? "数据仅供研究参考，不构成投资建议，也不代表系统可执行任何交易。" : "Research only. Not investment advice and not an automated trading instruction."}</span>
