@@ -31,3 +31,11 @@
 - Time dividers do not create ownership. If users reason about results by run, the database, API, selection state, and pagination must all use a durable run identifier.
 - Long-running research funnels need distinct counts for requested, generated, screened, simulated, persisted, and accepted candidates. Reusing one number across stages makes normal filtering look like data loss.
 - Optional LLM screening must report bypass and parse failure honestly. Falling back to all candidates preserves availability but is not a successful screen.
+
+## 2026-08-10: Separate cheap search breadth from expensive simulation depth
+
+- Expression generation and real BRAIN simulation consume different resources. A useful composer exposes both budgets instead of labelling both as “candidate count.”
+- Oversampling only creates value when the run records generated, selected, simulated, and persisted counts separately. Otherwise a logic screen can look efficient while silently shrinking the requested research budget.
+- Reusing a configuration must create a child run, not mutate history. This preserves comparison and makes parameter changes auditable.
+- Historical PnL retrieval is independent I/O, so a small concurrency cap can reduce mining warm-up without parallelizing the stateful simulation and diversity-gating loop.
+- Workflow advice should be derived from visible run counts. It may recommend recovery, broader generation, family rotation, or human review, but it must not auto-submit candidates.

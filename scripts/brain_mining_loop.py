@@ -4,7 +4,8 @@ Neon pool, runs one round, and prints a JSON summary.
 
 Runs on GitHub Actions (not Vercel) because BRAIN simulations poll for minutes.
 Env: DATABASE_URL, BYOK_MASTER_KEY, BRAIN_MINING_USER_ID, BRAIN_N_CANDIDATES,
-BRAIN_RUN_ID (manual dispatch), BRAIN_FAMILY_FOCUS, BRAIN_SEED."""
+BRAIN_GENERATION_TARGET, BRAIN_RUN_ID (manual dispatch), BRAIN_FAMILY_FOCUS,
+BRAIN_SEED."""
 import asyncio
 import json
 import os
@@ -22,6 +23,13 @@ async def _main() -> int:
         n = max(1, min(int(os.environ.get("BRAIN_N_CANDIDATES", "8")), 30))
     except (TypeError, ValueError):
         n = 8
+    try:
+        generation_target = max(
+            n,
+            min(int(os.environ.get("BRAIN_GENERATION_TARGET", str(n * 2))), 60),
+        )
+    except (TypeError, ValueError):
+        generation_target = min(n * 2, 60)
     family_focus = os.environ.get("BRAIN_FAMILY_FOCUS") or None
     try:
         seed = int(os.environ.get("BRAIN_SEED", "1234"))
@@ -88,6 +96,7 @@ async def _main() -> int:
                 user_id=user_id,
                 source="schedule",
                 requested_n=n,
+                generation_target_n=generation_target,
                 family_focus=family_focus,
                 seed=seed,
                 github_run_id=github_run_id,
@@ -164,6 +173,7 @@ async def _main() -> int:
                 pool,
                 user_id,
                 n_candidates=n,
+                generation_target_n=generation_target,
                 logic_llm=logic_llm,
                 run_id=run_id,
                 rng_seed=seed,

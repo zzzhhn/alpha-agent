@@ -11,6 +11,7 @@ serverless budget), talking to Neon directly. The loop itself is client- and
 pool-injected so it unit-tests against a fake BrainClient with no network."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import zlib
@@ -94,21 +95,39 @@ def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
     return daily
 
 
+async def _return_series_by_id(
+    client: BrainClient,
+    alpha_ids: list[str],
+    *,
+    max_concurrency: int = 4,
+) -> dict[str, np.ndarray]:
+    """Load PnL-derived returns with a small concurrency cap.
+
+    This removes the long serial warm-up for an established BRAIN account while
+    deliberately staying far below a fan-out that could stress the upstream API.
+    One unavailable series remains a local miss instead of failing the round.
+    """
+    semaphore = asyncio.Semaphore(max(1, max_concurrency))
+
+    async def load(alpha_id: str) -> tuple[str, np.ndarray | None]:
+        async with semaphore:
+            try:
+                return alpha_id, pnl_to_daily_returns(await client.get_pnl(alpha_id))
+            except Exception:  # noqa: BLE001 — one alpha must not abort the round
+                return alpha_id, None
+
+    pairs = await asyncio.gather(*(load(alpha_id) for alpha_id in dict.fromkeys(alpha_ids)))
+    return {alpha_id: returns for alpha_id, returns in pairs if returns is not None}
+
+
 async def _existing_active_returns(client: BrainClient) -> dict[str, np.ndarray]:
-    """Daily returns of every ACTIVE alpha, keyed by id — the set a new
-    candidate must not correlate with. Best-effort per alpha."""
-    out: dict[str, np.ndarray] = {}
-    for alpha in await client.list_active_alphas():
-        aid = alpha.get("id")
-        if not aid:
-            continue
-        try:
-            rets = pnl_to_daily_returns(await client.get_pnl(aid))
-        except Exception:  # noqa: BLE001 — one bad alpha must not abort the round
-            continue
-        if rets is not None:
-            out[aid] = rets
-    return out
+    """Daily returns of every ACTIVE alpha, keyed by id."""
+    alpha_ids = [
+        str(alpha["id"])
+        for alpha in await client.list_active_alphas()
+        if alpha.get("id")
+    ]
+    return await _return_series_by_id(client, alpha_ids)
 
 
 async def _run_mining_round_impl(
@@ -126,6 +145,7 @@ async def _run_mining_round_impl(
     family_caps: Optional[dict] = None,
     run_id: int | None = None,
     family_focus_override: str | None = None,
+    generation_target_n: int | None = None,
 ) -> dict:
     """Execute one round and return a bucket summary. Every candidate's outcome
     is persisted to brain_alphas regardless of pass/fail so the UI + the next
@@ -173,7 +193,14 @@ async def _run_mining_round_impl(
 
     # Over-generate so the logic screen has candidates to prune down to
     # n_candidates worth of economically-sensible ones.
-    gen_n = n_candidates * 2 if logic_llm is not None else n_candidates
+    planned_gen_n = max(
+        n_candidates,
+        min(int(generation_target_n or n_candidates * 2), 60),
+    )
+    # Without a logic ranker an oversized pool only burns local CPU before
+    # taking the same first N expressions. Preserve the planned target in the
+    # ledger, but generate the simulation budget directly in bypass mode.
+    gen_n = planned_gen_n if logic_llm is not None else n_candidates
     import os
     family_focus = family_focus_override or os.environ.get("BRAIN_FAMILY_FOCUS") or None
     if family_focus:
@@ -198,7 +225,7 @@ async def _run_mining_round_impl(
         import random as _random
         from alpha_agent.brain.evolution import family_of as _fam
         _passed, _near = await store.blend_source_expressions(pool, user_id)
-        blends = blend_expressions(_passed, _near, _random.Random(rng_seed), n_candidates)
+        blends = blend_expressions(_passed, _near, _random.Random(rng_seed), gen_n)
         candidates = [e for e, _ in blends]
         blend_parents = {e: p for e, p in blends}
         parent_family = {aid: _fam(px) for px, aid, _ in (_passed + _near) if aid}
@@ -254,6 +281,7 @@ async def _run_mining_round_impl(
             run_id,
             generated_n=generated_n,
             screened_n=len(candidates),
+            generation_target_n=planned_gen_n,
             screen_status=screen_status,
             screen_detail=screen_detail,
         )
@@ -302,14 +330,9 @@ async def _run_mining_round_impl(
         prior = await store.recent_passed_unsubmitted_alpha_ids(pool, user_id, limit=40)
     except Exception:  # noqa: BLE001 — empty/absent history is fine
         prior = []
-    for aid in prior:
-        try:
-            r = pnl_to_daily_returns(await client.get_pnl(aid))
-        except Exception:  # noqa: BLE001 — one bad alpha must not abort the round
-            continue
-        if r is not None:
-            accepted_returns[aid] = r
-            our_passed[aid] = r
+    for aid, returns in (await _return_series_by_id(client, prior)).items():
+        accepted_returns[aid] = returns
+        our_passed[aid] = returns
     if prior:
         print(f"[diversity] {len(accepted_returns)} reference series (active + prior passed)", flush=True)
 
@@ -624,6 +647,7 @@ async def run_mining_round(
     family_caps: Optional[dict] = None,
     run_id: int | None = None,
     family_focus: str | None = None,
+    generation_target_n: int | None = None,
 ) -> dict:
     """Run one round and, when supplied, own the run-ledger lifecycle.
 
@@ -650,6 +674,7 @@ async def run_mining_round(
             family_caps=family_caps,
             run_id=run_id,
             family_focus_override=family_focus,
+            generation_target_n=generation_target_n,
         )
     except Exception as exc:
         if run_id is not None:

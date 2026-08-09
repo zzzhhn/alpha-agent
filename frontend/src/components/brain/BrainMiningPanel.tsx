@@ -50,6 +50,7 @@ function fmtUtc8(iso: string | null | undefined): string {
 type ActiveJob = {
   startedAt: string;
   n: number;
+  generationTarget?: number;
   dispatchedAt: number;
   /** Optional so jobs saved by the pre-run-ledger UI still resume safely. */
   runId?: number | null;
@@ -78,6 +79,8 @@ function loadActiveJob(): ActiveJob | null {
     return {
       startedAt: value.startedAt,
       n: value.n,
+      generationTarget:
+        typeof value.generationTarget === "number" ? value.generationTarget : undefined,
       dispatchedAt: value.dispatchedAt,
       runId: typeof value.runId === "number" ? value.runId : undefined,
     };
@@ -685,14 +688,18 @@ function ProgressSegments({ filled, total }: { filled: number; total: number }) 
 function MineButton({
   onStarted,
   onComplete,
+  selectedRun,
 }: {
   onStarted?: (runId: number | null) => void;
   onComplete?: (runId: number | null) => void;
+  selectedRun?: BrainMiningRun | null;
 }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [n, setN] = useState("12");
+  const [generationTarget, setGenerationTarget] = useState("24");
   const [family, setFamily] = useState("options");
+  const [parentRunId, setParentRunId] = useState<number | null>(null);
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
@@ -799,13 +806,23 @@ function MineButton({
     setDoneMsg(null);
     try {
       const nc = Math.max(1, Math.min(30, Number(n) || 12));
-      const r = await triggerMining(nc, family);
+      const poolSize = Math.max(
+        nc,
+        Math.min(60, Number(generationTarget) || nc * 2),
+      );
+      const r = await triggerMining({
+        nCandidates: nc,
+        generationTarget: poolSize,
+        familyFocus: family,
+        parentRunId,
+      });
       setMined(0);
       setStatus(null);
       const runId = typeof r.run_id === "number" ? r.run_id : null;
       setJob({
         startedAt: r.started_at,
         n: r.n_candidates,
+        generationTarget: r.generation_target_n ?? poolSize,
         dispatchedAt: Date.now(),
         runId,
       });
@@ -815,6 +832,22 @@ function MineButton({
       setState("error");
       setErrMsg(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  function reuseSelectedRun() {
+    if (!selectedRun) return;
+    const budget = Math.max(1, Number(selectedRun.requested_n) || 12);
+    setN(String(budget));
+    setGenerationTarget(
+      String(Math.max(budget, Number(selectedRun.generation_target_n) || budget * 2)),
+    );
+    setFamily(selectedRun.family_focus || "");
+    setParentRunId(selectedRun.id);
+    setDoneMsg(
+      zh
+        ? `已载入 RUN #${selectedRun.id}，确认后可发起独立重跑`
+        : `RUN #${selectedRun.id} loaded; review before starting a new run`,
+    );
   }
 
   // Active round: show the live segmented progress + a guard against re-dispatch.
@@ -858,8 +891,8 @@ function MineButton({
         <ProgressSegments filled={filled} total={job.n} />
         <span className="font-tm-mono text-[10px] text-tm-muted">
           {zh
-            ? "在 GitHub Actions 上真实仿真,每完成一个候选亮一格 · 可离开本页,回来会继续跟踪"
-            : "real sims on GitHub Actions; one cell per candidate · safe to leave, tracking resumes"}
+            ? `生成池 ${job.generationTarget ?? job.n} 个表达式，最多执行 ${job.n} 次真实仿真 · 可离开本页，回来会继续跟踪`
+            : `${job.generationTarget ?? job.n} generated expressions, at most ${job.n} real simulations · safe to leave`}
         </span>
       </div>
     );
@@ -867,16 +900,51 @@ function MineButton({
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-      <span className="font-tm-mono text-[11px] text-tm-fg-2">
-        {zh ? "候选数" : "candidates"}
+      <span
+        className="cursor-help font-tm-mono text-[11px] text-tm-fg-2"
+        title={
+          zh
+            ? "真正提交到 WorldQuant BRAIN 的仿真上限，直接决定耗时和上游配额"
+            : "Maximum real WorldQuant BRAIN simulations; this drives runtime and quota"
+        }
+      >
+        {zh ? "仿真预算" : "simulation budget"}
       </span>
       <input
         value={n}
         onChange={(e) => setN(e.target.value)}
         inputMode="numeric"
+        aria-label={zh ? "真实仿真预算" : "real simulation budget"}
+        className="h-7 w-16 border border-tm-rule bg-tm-bg-2 px-2 text-center font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent"
+      />
+      <span className="font-tm-mono text-[10px] text-tm-muted">←</span>
+      <span
+        className="cursor-help font-tm-mono text-[11px] text-tm-fg-2"
+        title={
+          zh
+            ? "先在本地低成本生成更多表达式，再由 logic screen 排名并缩减到仿真预算"
+            : "Cheap local pool ranked by the logic screen before consuming simulations"
+        }
+      >
+        {zh ? "生成池" : "generation pool"}
+      </span>
+      <input
+        value={generationTarget}
+        onChange={(e) => setGenerationTarget(e.target.value)}
+        inputMode="numeric"
+        aria-label={zh ? "候选表达式生成池" : "generated expression pool"}
         className="h-7 w-16 border border-tm-rule bg-tm-bg-2 px-2 text-center font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent"
       />
       <FamilySelect value={family} onChange={setFamily} zh={zh} />
+      {selectedRun ? (
+        <button
+          type="button"
+          onClick={reuseSelectedRun}
+          className="h-7 border border-tm-rule px-2 font-tm-mono text-[10.5px] text-tm-muted hover:border-tm-accent/60 hover:text-tm-fg"
+        >
+          {zh ? `复用 RUN #${selectedRun.id}` : `reuse RUN #${selectedRun.id}`}
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={go}
@@ -900,8 +968,12 @@ function MineButton({
       ) : (
         <span className="font-tm-mono text-[10.5px] text-tm-muted">
           {zh
-            ? "在 GitHub Actions 上真实仿真,不占用页面"
-            : "runs on GitHub Actions, no page hold"}
+            ? parentRunId != null
+              ? `将作为 RUN #${parentRunId} 的独立衍生轮次，原结果不会被覆盖`
+              : "先筛选生成池，再在 GitHub Actions 上执行真实仿真"
+            : parentRunId != null
+              ? `new child of RUN #${parentRunId}; original results stay unchanged`
+              : "rank the generated pool, then run real simulations on GitHub Actions"}
         </span>
       )}
     </div>
@@ -1222,6 +1294,49 @@ function runCount(run: BrainMiningRun | null, key: RunCountKey): string {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
 }
 
+function runRate(numerator: number | null | undefined, denominator: number | null | undefined): string {
+  if (typeof numerator !== "number" || typeof denominator !== "number" || denominator <= 0) {
+    return "—";
+  }
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function runNextStep(run: BrainMiningRun, zh: boolean): string {
+  const simulated = run.simulated_n ?? 0;
+  const passed = run.passed_n ?? 0;
+  const flagged = run.flagged_n ?? 0;
+  const rejected = run.rejected_n ?? 0;
+  const simErrors = run.sim_error_n ?? 0;
+  const generated = run.generated_n ?? 0;
+  const requested = run.requested_n ?? 0;
+
+  if (run.status === "failed") {
+    return zh ? "先按错误信息恢复配置，再复用本轮参数重跑。" : "Recover the reported failure, then reuse this run.";
+  }
+  if (simulated > 0 && simErrors / simulated >= 0.2) {
+    return zh ? "仿真错误偏高，先检查 BRAIN 会话、表达式格式或上游限流。" : "Simulation errors are elevated; inspect auth, expressions, or upstream throttling.";
+  }
+  if (run.screen_status === "failed") {
+    return zh ? "Logic screen 本轮失败并已旁路，先检查模型配置，再决定是否复用本轮。" : "The logic screen failed and was bypassed; inspect model configuration before reuse.";
+  }
+  if (run.screen_status === "bypassed") {
+    return zh ? "Logic screen 未配置，系统直接使用仿真预算；扩大生成池暂不会提高筛选质量。" : "No logic screen was configured; widening generation will not improve ranking yet.";
+  }
+  if (generated <= requested) {
+    return zh ? "生成池没有形成候选冗余，下一轮可扩大到仿真预算的约 2 倍。" : "The pool had no ranking headroom; try roughly 2× the simulation budget.";
+  }
+  if (passed === 0 && rejected > 0) {
+    return zh ? "主要损失发生在硬门槛，优先换家族或扩大生成池，不要盲目增加仿真数。" : "Hard gates dominate; change family or widen generation before buying more simulations.";
+  }
+  if (flagged > passed) {
+    return zh ? "相关性或家族饱和较重，下一轮优先换正交家族；已有 passer 时可尝试 blend。" : "Correlation or family saturation dominates; rotate family, or try blend with passers.";
+  }
+  if (passed > 0) {
+    return zh ? "先审阅通过项的 PnL、自相关与年度稳定性，再人工提交；不要自动晋级。" : "Review PnL, self-correlation, and yearly stability before manual submission.";
+  }
+  return zh ? "等待本轮完成后再判断瓶颈。" : "Wait for completion before diagnosing the bottleneck.";
+}
+
 function RunSelector({
   runs,
   selectedRunId,
@@ -1366,12 +1481,15 @@ function RunLedger({
     );
   }
 
-  const funnel: Array<[RunCountKey, string, string]> = [
-    ["requested_n", zh ? "请求" : "requested", "--"],
-    ["generated_n", zh ? "生成" : "generated", "--"],
-    ["screened_n", zh ? "筛选" : "screened", "--"],
-    ["simulated_n", zh ? "仿真" : "simulated", "--"],
-    ["persisted_n", zh ? "入库" : "persisted", "--"],
+  const funnel: Array<[string, string]> = [
+    [zh ? "仿真预算" : "sim budget", runCount(run, "requested_n")],
+    [
+      zh ? "生成" : "generated",
+      `${runCount(run, "generated_n")} / ${run.generation_target_n ?? "—"}`,
+    ],
+    [zh ? "入选仿真" : "selected", runCount(run, "screened_n")],
+    [zh ? "已仿真" : "simulated", runCount(run, "simulated_n")],
+    [zh ? "已入库" : "persisted", runCount(run, "persisted_n")],
   ];
   const outcome = [
     [zh ? "通过" : "passed", runCount(run, "passed_n"), "text-tm-pos"],
@@ -1386,15 +1504,18 @@ function RunLedger({
         <span className="uppercase tracking-wider text-tm-accent">RUN #{run.id}</span>
         <span className="text-tm-fg-2">{runSourceLabel(run, zh)}</span>
         <span className="text-tm-muted">{run.family_focus || (zh ? "混合家族" : "mixed family")}</span>
+        {run.parent_run_id != null ? (
+          <span className="text-tm-info">{zh ? `源 RUN #${run.parent_run_id}` : `from RUN #${run.parent_run_id}`}</span>
+        ) : null}
         <span className={runStatusClass(run)}>{runStatusLabel(run, zh)}</span>
         <span className="text-tm-muted">{fmtUtc8(run.created_at ?? run.started_at)} UTC+8</span>
         {runsTotal > 0 ? <span className="ml-auto text-tm-muted">{runsTotal} {zh ? "轮" : "runs"}</span> : null}
       </div>
       <div className="mt-2 grid grid-cols-5 gap-2 border-t border-tm-rule/60 pt-1.5">
-        {funnel.map(([key, label]) => (
-          <div key={key} className="flex min-w-0 flex-col font-tm-mono">
+        {funnel.map(([label, value]) => (
+          <div key={label} className="flex min-w-0 flex-col font-tm-mono">
             <span className="truncate text-[9px] uppercase tracking-wider text-tm-muted">{label}</span>
-            <span className="tabular-nums text-[12px] text-tm-fg">{runCount(run, key)}</span>
+            <span className="tabular-nums text-[12px] text-tm-fg">{value}</span>
           </div>
         ))}
       </div>
@@ -1409,6 +1530,26 @@ function RunLedger({
           {run.error_detail || run.screen_detail}
         </p>
       ) : null}
+      <div className="mt-2 grid gap-px border border-tm-rule bg-tm-rule md:grid-cols-[0.7fr_0.7fr_0.7fr_2fr]">
+        {[
+          [zh ? "筛选利用" : "screen use", runRate(run.screened_n, run.generated_n)],
+          [zh ? "通过率" : "pass yield", runRate(run.passed_n, run.simulated_n)],
+          [zh ? "仿真错误" : "sim errors", runRate(run.sim_error_n, run.simulated_n)],
+        ].map(([label, value]) => (
+          <div key={label} className="bg-tm-bg px-2 py-1.5 font-tm-mono">
+            <div className="text-[9px] uppercase tracking-wider text-tm-muted">{label}</div>
+            <div className="mt-0.5 text-[11px] tabular-nums text-tm-fg">{value}</div>
+          </div>
+        ))}
+        <div className="bg-tm-bg px-2 py-1.5 font-tm-mono">
+          <div className="text-[9px] uppercase tracking-wider text-tm-accent">
+            {zh ? "下一步" : "next action"}
+          </div>
+          <div className="mt-0.5 text-[10px] leading-relaxed text-tm-fg-2">
+            {runNextStep(run, zh)}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1587,7 +1728,11 @@ export function BrainMiningPanel() {
   return (
     <TmScreen>
       <TmPane title={zh ? "挖矿控制" : "MINING.CONTROL"}>
-        <MineButton onStarted={handleMiningStarted} onComplete={handleMiningComplete} />
+        <MineButton
+          selectedRun={selectedRun}
+          onStarted={handleMiningStarted}
+          onComplete={handleMiningComplete}
+        />
       </TmPane>
 
       <TmPane

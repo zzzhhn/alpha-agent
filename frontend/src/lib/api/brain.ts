@@ -113,6 +113,8 @@ export interface BrainMiningRun {
   source?: string | null;
   family_focus?: string | null;
   requested_n?: number | null;
+  generation_target_n?: number | null;
+  parent_run_id?: number | null;
   generated_n?: number | null;
   screened_n?: number | null;
   simulated_n?: number | null;
@@ -161,6 +163,8 @@ export const submitBrainAlpha = (rowId: number) =>
 export interface MineTriggerResult {
   ok: boolean;
   n_candidates: number;
+  generation_target_n?: number | null;
+  parent_run_id?: number | null;
   eta_minutes: number;
   // DB-clock anchor; the progress poller counts rows created after this.
   started_at: string;
@@ -168,10 +172,39 @@ export interface MineTriggerResult {
   run_id?: number | null;
 }
 
-export const triggerMining = (nCandidates: number, familyFocus = "") =>
-  apiPost<MineTriggerResult, { n_candidates: number; family_focus: string }>(
+export interface MineTriggerRequest {
+  nCandidates: number;
+  generationTarget: number;
+  familyFocus?: string;
+  parentRunId?: number | null;
+  seed?: number;
+}
+
+export const triggerMining = ({
+  nCandidates,
+  generationTarget,
+  familyFocus = "",
+  parentRunId,
+  seed,
+}: MineTriggerRequest) =>
+  apiPost<
+    MineTriggerResult,
+    {
+      n_candidates: number;
+      generation_target_n: number;
+      family_focus: string;
+      parent_run_id?: number;
+      seed?: number;
+    }
+  >(
     "/api/brain/mine",
-    { n_candidates: nCandidates, family_focus: familyFocus },
+    {
+      n_candidates: nCandidates,
+      generation_target_n: generationTarget,
+      family_focus: familyFocus,
+      ...(parentRunId != null ? { parent_run_id: parentRunId } : {}),
+      ...(seed != null ? { seed } : {}),
+    },
   );
 
 // Progress poll for an in-flight manual round. `mined` = candidates recorded since

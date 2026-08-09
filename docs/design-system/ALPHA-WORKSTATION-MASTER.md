@@ -135,11 +135,13 @@ The repository does not contain a canonical generated Screener reference image. 
 
 - A mining run is the primary navigation object. Candidate rows belong to one run and pagination must never split one run merely because newer runs inserted rows ahead of it.
 - The run composer distinguishes simulation budget from generated candidates. The single filled primary action starts mining; refresh, stop tracking, and configuration recovery remain secondary.
+- Reusing a run loads its family and budget into the composer but always creates a new child run. Historical evidence is never overwritten.
 - Long-running status reports the real funnel separately: requested, generated, screened, simulated, persisted, and final outcome counts. A bypassed or partially parsed LLM screen is never labelled as a successful screen.
 - Recent runs use a bounded selector and preserve manual, scheduled, and legacy provenance. Returning to the page restores the active or selected run without changing its candidate count.
 - The selected-run workbench shows a compact outcome summary before the dense candidate table. Filters and pagination apply within the selected run only.
 - Candidate detail keeps BRAIN-official metrics separate from Alpha Agent diagnostics, including adjusted self-correlation, lineage, retry history, and local screening evidence when available.
 - Empty and failed runs explain the failing stage and recovery action. A completed run with fewer persisted candidates than requested exposes the stage where the count changed.
+- Completed runs expose screen utilization, pass yield, simulation-error rate, and one evidence-based next action. Recommendations remain advisory and never auto-submit an alpha.
 
 ## 7. Interaction and accessibility
 

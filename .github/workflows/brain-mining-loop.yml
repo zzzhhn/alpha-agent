@@ -16,8 +16,11 @@ on:
   workflow_dispatch:
     inputs:
       n_candidates:
-        description: "candidates to generate this round"
+        description: "real BRAIN simulation budget for this round"
         default: "8"
+      generation_target_n:
+        description: "cheap expression pool generated before logic ranking"
+        default: "16"
       family_focus:
         description: "restrict generation to one family (e.g. options); blank = normal"
         default: ""
@@ -57,6 +60,7 @@ jobs:
           BYOK_MASTER_KEY: ${{ secrets.BYOK_MASTER_KEY }}
           BRAIN_MINING_USER_ID: ${{ secrets.BRAIN_MINING_USER_ID }}
           BRAIN_N_CANDIDATES: ${{ github.event.inputs.n_candidates || '8' }}
+          BRAIN_GENERATION_TARGET: ${{ github.event.inputs.generation_target_n || '16' }}
           BRAIN_FAMILY_FOCUS: ${{ github.event.inputs.family_focus || '' }}
           BRAIN_RUN_ID: ${{ github.event.inputs.brain_run_id || '' }}
           BRAIN_SEED: ${{ github.event.inputs.seed || '1234' }}
