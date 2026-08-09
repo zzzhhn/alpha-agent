@@ -30,6 +30,7 @@ async def record_brain_alpha(
     fail_checks: str | None = None,
     retried: bool = False,
     batch_started_at=None,
+    run_id: int | None = None,
     blend_parents: list[str] | None = None,
 ) -> int:
     """Insert one mining outcome. Returns the new row id.
@@ -46,14 +47,14 @@ async def record_brain_alpha(
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
         " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade, "
-        " fail_checks, retried, batch_started_at, blend_parents) "
+        " fail_checks, retried, batch_started_at, run_id, blend_parents) "
         "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,"
-        " $18,$19,$20,$21::jsonb) RETURNING id",
+        " $18,$19,$20,$21,$22::jsonb) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with,
         self_correlation_adj, self_correlation_adj_with, outcome, detail, grade,
-        fail_checks, retried, batch_started_at,
+        fail_checks, retried, batch_started_at, run_id,
         json.dumps(blend_parents) if blend_parents is not None else None,
     )
     return row["id"]
@@ -85,7 +86,7 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
 
 
 _ROW_COLS = (
-    "id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
+    "id, run_id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
     "returns, margin, self_correlation, self_correlation_with, "
     "self_correlation_adj, self_correlation_adj_with, outcome, detail, "
     "grade, fail_checks, retried, batch_started_at, created_at, submitted_at, "
@@ -130,6 +131,7 @@ async def query_brain_alphas(
     turnover_max: float | None = None,
     submitted: bool | None = None,
     family: str | None = None,
+    run_id: int | None = None,
     sort: str = "created_at",
     descending: bool = True,
 ) -> dict:
@@ -138,6 +140,10 @@ async def query_brain_alphas(
     (for page controls). All filters are optional and combine with AND."""
     where = ["user_id = $1"]
     params: list = [user_id]
+
+    if run_id is not None:
+        params.append(int(run_id))
+        where.append("run_id = $2")
 
     def add(clause: str, value) -> None:
         params.append(value)
@@ -379,3 +385,243 @@ async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:
         "UPDATE brain_alphas SET submitted_at=now(), brain_status=$2 WHERE id=$1",
         alpha_row_id, brain_status,
     )
+
+
+# ── First-class mining runs ──────────────────────────────────────────────
+
+_RUN_COLS = (
+    "id, user_id, source, family_focus, requested_n, generated_n, screened_n, "
+    "simulated_n, persisted_n, passed_n, flagged_n, rejected_n, sim_error_n, "
+    "status, screen_status, screen_detail, seed, created_at, queued_at, "
+    "started_at, completed_at, updated_at, error_detail, github_run_id, "
+    "batch_started_at, legacy_batch_started_at"
+)
+_RUN_MUTABLE_COLS = {
+    "family_focus", "requested_n", "generated_n", "screened_n", "simulated_n",
+    "persisted_n", "passed_n", "flagged_n", "rejected_n", "sim_error_n",
+    "status", "screen_status", "screen_detail", "seed", "started_at",
+    "completed_at", "error_detail", "github_run_id", "batch_started_at",
+}
+_RUN_SOURCES = {"manual", "schedule", "legacy"}
+
+
+def _decode_run(row) -> dict:
+    """Decode an asyncpg run row into the JSON-safe API shape."""
+    d = dict(row)
+    for key in (
+        "created_at", "queued_at", "started_at", "completed_at", "updated_at",
+        "batch_started_at", "legacy_batch_started_at",
+    ):
+        if d.get(key) is not None:
+            d[key] = d[key].isoformat()
+    # The UI historically called the terminal timestamp ``finished_at``;
+    # retain that response alias while the database uses completed_at.
+    d["finished_at"] = d.get("completed_at")
+    d["outcomes"] = {
+        "passed": int(d.get("passed_n") or 0),
+        "flagged": int(d.get("flagged_n") or 0),
+        "rejected": int(d.get("rejected_n") or 0),
+        "sim_error": int(d.get("sim_error_n") or 0),
+    }
+    return d
+
+
+async def create_brain_run(
+    pool,
+    *,
+    user_id: int,
+    source: str,
+    requested_n: int,
+    family_focus: str | None = None,
+    seed: int | None = None,
+    screen_status: str = "pending",
+    screen_detail: str | None = None,
+    github_run_id: str | int | None = None,
+) -> dict:
+    """Create a queued BRAIN run and return its decoded row.
+
+    The insert is intentionally separate from GitHub dispatch: callers can
+    always retain a failed/manual request as an auditable run object.
+    """
+    if source not in _RUN_SOURCES:
+        raise ValueError(f"invalid BRAIN run source: {source!r}")
+    requested = max(0, int(requested_n))
+    row = await pool.fetchrow(
+        "INSERT INTO brain_runs "
+        "(user_id, source, family_focus, requested_n, seed, screen_status, "
+        " screen_detail, github_run_id) "
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING " + _RUN_COLS,
+        int(user_id), source, family_focus, requested, seed, screen_status,
+        screen_detail, str(github_run_id) if github_run_id is not None else None,
+    )
+    return _decode_run(row)
+
+
+async def get_brain_run(
+    pool, run_id: int, user_id: int | None = None
+) -> dict | None:
+    """Return one run, optionally constrained to its owner."""
+    if user_id is None:
+        row = await pool.fetchrow(
+            f"SELECT {_RUN_COLS} FROM brain_runs WHERE id=$1", int(run_id)
+        )
+    else:
+        row = await pool.fetchrow(
+            f"SELECT {_RUN_COLS} FROM brain_runs WHERE id=$1 AND user_id=$2",
+            int(run_id), int(user_id),
+        )
+    return _decode_run(row) if row is not None else None
+
+
+async def list_brain_runs(
+    pool,
+    user_id: int,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    status: str | None = None,
+) -> dict:
+    """List a user's run objects newest first with an accurate total."""
+    lim = min(max(int(limit), 1), 100)
+    off = max(int(offset), 0)
+    where = ["user_id=$1"]
+    params: list = [int(user_id)]
+    if status:
+        params.append(status)
+        where.append(f"status=${len(params)}")
+    where_sql = " AND ".join(where)
+    total = await pool.fetchval(
+        f"SELECT count(*) FROM brain_runs WHERE {where_sql}", *params
+    )
+    rows = await pool.fetch(
+        f"SELECT {_RUN_COLS} FROM brain_runs WHERE {where_sql} "
+        f"ORDER BY created_at DESC, id DESC LIMIT ${len(params)+1} "
+        f"OFFSET ${len(params)+2}",
+        *params, lim, off,
+    )
+    return {"runs": [_decode_run(row) for row in rows], "total": int(total or 0)}
+
+
+async def update_brain_run(pool, run_id: int, **fields) -> dict | None:
+    """Update whitelisted run metadata and return the new row.
+
+    Counters should normally use :func:`increment_brain_run_counts` so parallel
+    runner writes remain additive.  This helper is for lifecycle and screen
+    metadata where last-write-wins is intentional.
+    """
+    unknown = set(fields) - _RUN_MUTABLE_COLS
+    if unknown:
+        raise ValueError(f"unknown BRAIN run fields: {sorted(unknown)}")
+    if not fields:
+        return await get_brain_run(pool, run_id)
+    assignments: list[str] = []
+    params: list = [int(run_id)]
+    for column, value in fields.items():
+        params.append(value)
+        assignments.append(f"{column}=${len(params)}")
+    assignments.append("updated_at=now()")
+    row = await pool.fetchrow(
+        f"UPDATE brain_runs SET {', '.join(assignments)} WHERE id=$1 "
+        f"RETURNING {_RUN_COLS}",
+        *params,
+    )
+    return _decode_run(row) if row is not None else None
+
+
+async def mark_brain_run_running(
+    pool, run_id: int, *, github_run_id: str | int | None = None
+) -> dict | None:
+    # Let PostgreSQL supply the first start timestamp while keeping retries from
+    # moving the original lifecycle boundary.
+    assignments = ["status='running'", "started_at=COALESCE(started_at, now())",
+                   "error_detail=NULL", "updated_at=now()"]
+    params: list = [int(run_id)]
+    if github_run_id is not None:
+        params.append(str(github_run_id))
+        assignments.append(f"github_run_id=${len(params)}")
+    row = await pool.fetchrow(
+        f"UPDATE brain_runs SET {', '.join(assignments)} WHERE id=$1 "
+        f"RETURNING {_RUN_COLS}",
+        *params,
+    )
+    return _decode_run(row) if row is not None else None
+
+
+async def complete_brain_run(pool, run_id: int, **counts) -> dict | None:
+    """Mark a run completed and optionally set final counter values."""
+    fields = {k: v for k, v in counts.items() if k in _RUN_MUTABLE_COLS}
+    unknown = set(counts) - set(fields)
+    if unknown:
+        raise ValueError(f"unknown BRAIN run fields: {sorted(unknown)}")
+    assignments = ["status='completed'", "completed_at=now()", "updated_at=now()"]
+    params: list = [int(run_id)]
+    for column, value in fields.items():
+        params.append(value)
+        assignments.append(f"{column}=${len(params)}")
+    row = await pool.fetchrow(
+        f"UPDATE brain_runs SET {', '.join(assignments)} WHERE id=$1 "
+        f"RETURNING {_RUN_COLS}",
+        *params,
+    )
+    return _decode_run(row) if row is not None else None
+
+
+async def fail_brain_run(
+    pool, run_id: int, *, error_detail: str, **counts
+) -> dict | None:
+    """Mark a run failed while preserving any counters collected so far."""
+    fields = {k: v for k, v in counts.items() if k in _RUN_MUTABLE_COLS}
+    unknown = set(counts) - set(fields)
+    if unknown:
+        raise ValueError(f"unknown BRAIN run fields: {sorted(unknown)}")
+    assignments = ["status='failed'", "completed_at=now()", "error_detail=$2",
+                   "updated_at=now()"]
+    params: list = [int(run_id), str(error_detail)]
+    for column, value in fields.items():
+        params.append(value)
+        assignments.append(f"{column}=${len(params)}")
+    row = await pool.fetchrow(
+        f"UPDATE brain_runs SET {', '.join(assignments)} WHERE id=$1 "
+        f"RETURNING {_RUN_COLS}",
+        *params,
+    )
+    return _decode_run(row) if row is not None else None
+
+
+async def set_brain_run_progress(pool, run_id: int, **fields) -> dict | None:
+    """Set generated/screened counters and screen truth during a run."""
+    allowed = {
+        "generated_n", "screened_n", "screen_status", "screen_detail",
+        "requested_n", "seed", "family_focus", "batch_started_at",
+    }
+    unknown = set(fields) - allowed
+    if unknown:
+        raise ValueError(f"unknown BRAIN progress fields: {sorted(unknown)}")
+    return await update_brain_run(pool, run_id, **fields)
+
+
+async def increment_brain_run_counts(
+    pool,
+    run_id: int,
+    *,
+    simulated: int = 0,
+    persisted: int = 0,
+    passed: int = 0,
+    flagged: int = 0,
+    rejected: int = 0,
+    sim_error: int = 0,
+) -> dict | None:
+    """Atomically add per-candidate progress/outcome counts to a run."""
+    values = [simulated, persisted, passed, flagged, rejected, sim_error]
+    if any(int(v) < 0 for v in values):
+        raise ValueError("BRAIN run increments must be non-negative")
+    row = await pool.fetchrow(
+        "UPDATE brain_runs SET "
+        "simulated_n=simulated_n+$2, persisted_n=persisted_n+$3, "
+        "passed_n=passed_n+$4, flagged_n=flagged_n+$5, "
+        "rejected_n=rejected_n+$6, sim_error_n=sim_error_n+$7, "
+        "updated_at=now() WHERE id=$1 RETURNING " + _RUN_COLS,
+        int(run_id), int(simulated), int(persisted), int(passed), int(flagged),
+        int(rejected), int(sim_error),
+    )
+    return _decode_run(row) if row is not None else None

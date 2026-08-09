@@ -109,12 +109,34 @@ async def trigger_mining(
     fam = body.get("family_focus")
     fam = str(fam) if fam in _VALID_FAMILY_FOCUS else ""
 
+    # Every request gets a durable queued run before GitHub dispatch.  This also
+    # gives the UI a truthful failed object when credentials/network dispatch is
+    # unavailable instead of losing the user's request entirely.
+    from alpha_agent.brain import store
+
+    seed = body.get("seed", 1234)
+    try:
+        seed = int(seed)
+    except (TypeError, ValueError):
+        seed = 1234
+    run = await store.create_brain_run(
+        pool,
+        user_id=user_id,
+        source="manual",
+        requested_n=int(n),
+        family_focus=fam or None,
+        seed=seed,
+    )
+    run_id = int(run["id"])
+    # Anchor BEFORE dispatch so no candidate row can land before the anchor.
+    started_at = run.get("created_at") or run.get("queued_at")
+
     gh_token = os.environ.get("GH_PAT")
     if not gh_token:
+        await store.fail_brain_run(
+            pool, run_id, error_detail="GH_PAT not configured; cannot dispatch mining"
+        )
         raise HTTPException(500, "GH_PAT not configured; cannot dispatch mining")
-
-    # Anchor BEFORE dispatch so no candidate row can land before the anchor.
-    started_at = await pool.fetchval("SELECT now()")
 
     url = (
         f"https://api.github.com/repos/{_GH_REPO}/actions/"
@@ -124,7 +146,15 @@ async def trigger_mining(
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
                 url,
-                json={"ref": _GH_REF, "inputs": {"n_candidates": n, "family_focus": fam}},
+                json={
+                    "ref": _GH_REF,
+                    "inputs": {
+                        "n_candidates": n,
+                        "family_focus": fam,
+                        "brain_run_id": str(run_id),
+                        "seed": str(seed),
+                    },
+                },
                 headers={
                     "Authorization": f"Bearer {gh_token}",
                     "Accept": "application/vnd.github+json",
@@ -132,20 +162,50 @@ async def trigger_mining(
                 },
             )
     except Exception as e:  # noqa: BLE001 — surface network failure cleanly
+        await store.fail_brain_run(
+            pool, run_id, error_detail=f"dispatch failed: {type(e).__name__}: {e}"
+        )
         raise HTTPException(502, f"dispatch failed: {type(e).__name__}") from e
     if resp.status_code != 204:
+        await store.fail_brain_run(
+            pool, run_id,
+            error_detail=f"GitHub API {resp.status_code}: {resp.text[:150]}",
+        )
         raise HTTPException(502, f"GitHub API {resp.status_code}: {resp.text[:150]}")
     return {
         "ok": True,
+        "run_id": run_id,
+        "status": "queued",
         "n_candidates": int(n),
         "eta_minutes": 40,
-        "started_at": started_at.isoformat(),
+        "started_at": started_at,
     }
+
+
+@router.get("/runs")
+async def list_runs(
+    limit: int = 20,
+    offset: int = 0,
+    status: str | None = None,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """List the authenticated user's BRAIN mining runs."""
+    from alpha_agent.brain import store
+
+    try:
+        return await store.list_brain_runs(
+            pool, user_id, limit=limit, offset=offset, status=status
+        )
+    except Exception as e:  # noqa: BLE001 — keep old deployments readable
+        logger.warning("list_brain_runs failed (migration missing?): %s", e)
+        return {"runs": [], "total": 0}
 
 
 @router.get("/mine/status")
 async def mining_status(
     since: str | None = None,
+    run_id: int | None = None,
     user_id: int = Depends(require_user),
     pool=Depends(get_db_pool),
 ) -> dict:
@@ -163,7 +223,16 @@ async def mining_status(
     from alpha_agent.brain import store
 
     mined = 0
-    if since:
+    run = None
+    if run_id is not None:
+        try:
+            run = await store.get_brain_run(pool, run_id, user_id)
+        except Exception as e:  # noqa: BLE001 — status polling must degrade
+            logger.warning("get_brain_run failed: %s", e)
+        if run is not None:
+            mined = int(run.get("persisted_n") or 0)
+
+    if since and run is None:
         try:
             since_dt = datetime.fromisoformat(since)
             mined = await store.count_brain_alphas_since(pool, user_id, since=since_dt)
@@ -173,8 +242,16 @@ async def mining_status(
     running: bool | None = None
     latest_status: str | None = None
     latest_conclusion: str | None = None
+    if run is not None:
+        latest_status = run.get("status")
+        running = latest_status in {"queued", "running"}
+        if latest_status == "completed":
+            latest_conclusion = "success"
+        elif latest_status == "failed":
+            latest_conclusion = "failure"
+
     gh_token = os.environ.get("GH_PAT")
-    if gh_token:
+    if run is None and gh_token:
         runs_url = (
             f"https://api.github.com/repos/{_GH_REPO}/actions/"
             f"workflows/{_MINING_WORKFLOW}/runs?per_page=5"
@@ -204,6 +281,7 @@ async def mining_status(
         "latest_status": latest_status,
         "latest_conclusion": latest_conclusion,
         "mined": mined,
+        "run": run,
     }
 
 
@@ -218,6 +296,7 @@ async def list_alphas(
     turnover_max: float | None = None,
     submitted: bool | None = None,
     family: str | None = None,
+    run_id: int | None = None,
     sort: str = "created_at",
     descending: bool = True,
     user_id: int = Depends(require_user),
@@ -235,6 +314,7 @@ async def list_alphas(
             pool, user_id, limit=limit, offset=offset, outcome=outcome, q=q,
             sharpe_min=sharpe_min, fitness_min=fitness_min,
             turnover_max=turnover_max, submitted=submitted, family=family,
+            run_id=run_id,
             sort=sort, descending=descending,
         )
     except Exception as e:  # noqa: BLE001 - table may not exist yet

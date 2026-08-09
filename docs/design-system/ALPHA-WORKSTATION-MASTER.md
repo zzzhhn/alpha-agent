@@ -131,6 +131,16 @@ The repository does not contain a canonical generated Screener reference image. 
 - Validation gates are decision questions, not five unrelated KPI thresholds: OOS performance, walk-forward stability, cost robustness, concentration, and point-in-time data risk.
 - Pending proposal queues paginate at five rows and allow only one expanded proposal. Change-ledger previews remain bounded so the page does not grow in proportion to backlog size.
 
+### 6.7 BRAIN Factor Mining, `/brain`
+
+- A mining run is the primary navigation object. Candidate rows belong to one run and pagination must never split one run merely because newer runs inserted rows ahead of it.
+- The run composer distinguishes simulation budget from generated candidates. The single filled primary action starts mining; refresh, stop tracking, and configuration recovery remain secondary.
+- Long-running status reports the real funnel separately: requested, generated, screened, simulated, persisted, and final outcome counts. A bypassed or partially parsed LLM screen is never labelled as a successful screen.
+- Recent runs use a bounded selector and preserve manual, scheduled, and legacy provenance. Returning to the page restores the active or selected run without changing its candidate count.
+- The selected-run workbench shows a compact outcome summary before the dense candidate table. Filters and pagination apply within the selected run only.
+- Candidate detail keeps BRAIN-official metrics separate from Alpha Agent diagnostics, including adjusted self-correlation, lineage, retry history, and local screening evidence when available.
+- Empty and failed runs explain the failing stage and recovery action. A completed run with fewer persisted candidates than requested exposes the stage where the count changed.
+
 ## 7. Interaction and accessibility
 
 - Keyboard focus must be visible on every control.

@@ -79,6 +79,8 @@ export interface BrainSubmitResult {
 export interface BrainAlphaQuery {
   limit?: number;
   offset?: number;
+  /** Restrict the result page to one mining run. Omitted for legacy/all-runs mode. */
+  run_id?: number | null;
   outcome?: BrainOutcome | "";
   q?: string;
   sharpe_min?: number | null;
@@ -102,6 +104,40 @@ export const fetchBrainAlphas = (query: BrainAlphaQuery = {}, opts?: ApiGetOptio
   }
   return apiGet<BrainAlphaPage>(`/api/brain/alphas?${p.toString()}`, opts);
 };
+
+// A mining run is the navigation/provenance boundary for candidate rows. The
+// fields are optional on the client because older deployments may omit one or
+// more of the funnel/status fields while the runs endpoint rolls out.
+export interface BrainMiningRun {
+  id: number;
+  source?: string | null;
+  family_focus?: string | null;
+  requested_n?: number | null;
+  generated_n?: number | null;
+  screened_n?: number | null;
+  simulated_n?: number | null;
+  persisted_n?: number | null;
+  passed_n?: number | null;
+  flagged_n?: number | null;
+  rejected_n?: number | null;
+  sim_error_n?: number | null;
+  status?: string | null;
+  screen_status?: string | null;
+  screen_detail?: string | null;
+  seed?: number | string | null;
+  created_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error_detail?: string | null;
+}
+
+export interface BrainRunsPage {
+  runs: BrainMiningRun[];
+  total: number;
+}
+
+export const fetchBrainRuns = (limit = 12, opts?: ApiGetOptions) =>
+  apiGet<BrainRunsPage>(`/api/brain/runs?limit=${encodeURIComponent(String(limit))}`, opts);
 
 export interface PnlPoint {
   date: string;
@@ -128,6 +164,8 @@ export interface MineTriggerResult {
   eta_minutes: number;
   // DB-clock anchor; the progress poller counts rows created after this.
   started_at: string;
+  /** New run identity. Older backends may omit it, so callers must tolerate null. */
+  run_id?: number | null;
 }
 
 export const triggerMining = (nCandidates: number, familyFocus = "") =>
@@ -145,10 +183,18 @@ export interface MineStatus {
   latest_status: string | null;
   latest_conclusion: string | null;
   mined: number;
+  run?: BrainMiningRun | null;
 }
 
-export const fetchMineStatus = (since: string, opts?: ApiGetOptions) =>
-  apiGet<MineStatus>(
-    `/api/brain/mine/status?since=${encodeURIComponent(since)}`,
+export const fetchMineStatus = (
+  since: string,
+  runId?: number | null,
+  opts?: ApiGetOptions,
+) => {
+  const params = new URLSearchParams({ since });
+  if (runId != null) params.set("run_id", String(runId));
+  return apiGet<MineStatus>(
+    `/api/brain/mine/status?${params.toString()}`,
     opts,
   );
+};

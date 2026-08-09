@@ -20,6 +20,10 @@ Start from “Needs action,” narrow by severity or related object, select the 
 
 Read the overall decision strip, inspect the three highest-risk signals, review the promotion funnel, then process pending proposals beside the visible change ledger. Pending proposals show five per page and only one expands at a time. “All signals” opens weight and calibration detail. Co-occurring events are evidence links, not causal claims.
 
+## BRAIN Mining
+
+Treat one manual or scheduled mining invocation as one run. Select a recent run before reviewing candidates; filters and pagination then stay inside that run instead of mixing adjacent batches. Read the funnel as requested, generated, screened, simulated, and persisted. These counts may differ, and the screen status explains whether the optional LLM screen completed, was partial, failed and bypassed, or was not configured. A failed run remains in the ledger with its last durable counts and error reason. Historical rows created before the run ledger remain available through the compatibility view.
+
 ## Shared state language
 
 - `—`: unavailable or not yet returned.
