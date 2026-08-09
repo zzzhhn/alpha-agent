@@ -255,8 +255,7 @@ export interface paths {
         };
         /**
          * Last Refresh
-         * @description Lightweight GET so the frontend can show 'last refreshed N min ago'
-         *     without needing auth or write permission.
+         * @description Expose compute and immutable-snapshot publication as separate clocks.
          */
         get: operations["last_refresh_api_admin_last_refresh_get"];
         put?: never;
@@ -529,6 +528,26 @@ export interface paths {
          *     gracefully (the bar still fills from `mined` even if the GH read fails).
          */
         get: operations["mining_status_api_brain_mine_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/brain/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Runs
+         * @description List the authenticated user's BRAIN mining runs.
+         */
+        get: operations["list_runs_api_brain_runs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4391,6 +4410,8 @@ export interface components {
             ok: boolean;
             /** Reason */
             reason?: string | null;
+            /** Request Id */
+            request_id?: string | null;
         };
         /** ResetResponse */
         ResetResponse: {
@@ -5467,6 +5488,7 @@ export interface operations {
                 turnover_max?: number | null;
                 submitted?: boolean | null;
                 family?: string | null;
+                run_id?: number | null;
                 sort?: string;
                 descending?: boolean;
             };
@@ -5753,6 +5775,44 @@ export interface operations {
         parameters: {
             query?: {
                 since?: string | null;
+                run_id?: number | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_brain_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -6684,7 +6744,9 @@ export interface operations {
     };
     publish_recommendation_api_cron_publish_recommendation_get: {
         parameters: {
-            query?: never;
+            query?: {
+                request_id?: string | null;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -6717,7 +6779,9 @@ export interface operations {
     };
     publish_recommendation_api_cron_publish_recommendation_post: {
         parameters: {
-            query?: never;
+            query?: {
+                request_id?: string | null;
+            };
             header?: {
                 authorization?: string | null;
             };
