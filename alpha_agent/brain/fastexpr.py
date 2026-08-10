@@ -1118,6 +1118,13 @@ def generate_brain_candidates(
     rng.shuffle(_frontier_order)
     _frontier_i = 0
     seen_sigs: set[tuple] = set()  # structural fingerprints for pool diversity
+    # Explicit family runs are user-directed exploration.  Cross-round memory is
+    # useful steering, but it must not turn a saturated finite family (notably the
+    # options template) into an empty run.  Keep novel candidates first, then use
+    # distinct historical variants only to fill an otherwise undersized pool.
+    revisit: list[tuple[str, dict, tuple, tuple]] = []
+    revisit_seen: set[str] = set()
+    revisit_sigs: set[tuple] = set()
     family_counts: Counter = Counter()  # G2: cap near-duplicates per factor family
     out: list[str] = []
     guard = 0
@@ -1225,11 +1232,6 @@ def generate_brain_candidates(
         expr = _valid_brain_tree(tree)
         if expr is None or expr in seen:
             continue
-        # Cross-round self-evolution: skip a candidate whose string-signature was
-        # already mined (avoids re-proposing near-duplicates of past alphas that
-        # would just fail SELF_CORRELATION).
-        if expr_signature(expr) in avoid:
-            continue
         # Diversity gate: skip candidates whose structure+fields duplicate an
         # already-accepted one (differing only by window/param) — don't burn the
         # slow BRAIN sim budget on near-identical alphas.
@@ -1244,6 +1246,19 @@ def generate_brain_candidates(
         # be re-enabled once the vocabulary carries more than a couple strong
         # families. 0 disables it.
         fam_sig = _family_signature(tree)
+        # Cross-round self-evolution: normally skip a structure already mined.
+        # For an explicit family focus, retain one distinct fallback copy so a
+        # fully explored family still honours the user's simulation request.
+        if expr_signature(expr) in avoid:
+            if (
+                family_focus
+                and expr not in revisit_seen
+                and sig not in revisit_sigs
+            ):
+                revisit.append((expr, tree, sig, fam_sig))
+                revisit_seen.add(expr)
+                revisit_sigs.add(sig)
+            continue
         if family_cap > 0 and family_counts[fam_sig] >= family_cap:
             continue
         seen.add(expr)
@@ -1251,4 +1266,18 @@ def generate_brain_candidates(
         family_counts[fam_sig] += 1
         out.append(expr)
         pool.append(tree)  # feed back so the GA explores around good structures
+
+    if family_focus and len(out) < n:
+        for expr, tree, sig, fam_sig in revisit:
+            if len(out) >= n:
+                break
+            if sig in seen_sigs:
+                continue
+            if family_cap > 0 and family_counts[fam_sig] >= family_cap:
+                continue
+            seen.add(expr)
+            seen_sigs.add(sig)
+            family_counts[fam_sig] += 1
+            out.append(expr)
+            pool.append(tree)
     return out

@@ -248,6 +248,24 @@ async def _run_mining_round_impl(
     generated_n = len(generated_pool)
     screen_status = "bypassed"
     screen_detail = "no logic-screen LLM configured"
+    if generated_n == 0:
+        screen_status = "failed"
+        family_label = family_focus or "mixed"
+        screen_detail = (
+            f"candidate generation produced no usable expressions for "
+            f"family={family_label}; no BRAIN simulations were submitted"
+        )
+        if run_id is not None:
+            await store.set_brain_run_progress(
+                pool,
+                run_id,
+                generated_n=0,
+                screened_n=0,
+                generation_target_n=planned_gen_n,
+                screen_status=screen_status,
+                screen_detail=screen_detail,
+            )
+        raise RuntimeError(screen_detail)
     if logic_llm is not None:
         scores = await score_economic_logic(logic_llm, generated_pool)
         if scores:
