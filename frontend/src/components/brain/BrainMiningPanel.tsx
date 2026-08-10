@@ -1256,6 +1256,16 @@ function isManualRun(run: BrainMiningRun): boolean {
   return (run.source ?? "").toLowerCase().includes("manual");
 }
 
+function isEmptyCompletedRun(run: BrainMiningRun): boolean {
+  const status = (run.status ?? "").toLowerCase();
+  return (
+    (status === "completed" || status === "complete") &&
+    (run.requested_n ?? 0) > 0 &&
+    (run.generated_n ?? 0) === 0 &&
+    (run.persisted_n ?? 0) === 0
+  );
+}
+
 function runSourceLabel(run: BrainMiningRun, zh: boolean): string {
   const source = (run.source ?? "").toLowerCase();
   if (source.includes("manual")) return zh ? "手动" : "manual";
@@ -1266,6 +1276,7 @@ function runSourceLabel(run: BrainMiningRun, zh: boolean): string {
 }
 
 function runStatusLabel(run: BrainMiningRun, zh: boolean): string {
+  if (isEmptyCompletedRun(run)) return zh ? "失败" : "failed";
   const raw = (run.status ?? run.screen_status ?? "").toLowerCase();
   const labels: Record<string, [string, string]> = {
     queued: ["排队中", "queued"],
@@ -1282,6 +1293,7 @@ function runStatusLabel(run: BrainMiningRun, zh: boolean): string {
 }
 
 function runStatusClass(run: BrainMiningRun): string {
+  if (isEmptyCompletedRun(run)) return "text-tm-neg";
   const raw = `${run.status ?? ""} ${run.screen_status ?? ""}`.toLowerCase();
   if (raw.includes("fail") || raw.includes("error")) return "text-tm-neg";
   if (raw.includes("run") || raw.includes("queue") || raw.includes("screen")) return "text-tm-accent";
@@ -1310,7 +1322,7 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
   const generated = run.generated_n ?? 0;
   const requested = run.requested_n ?? 0;
 
-  if (run.status === "failed") {
+  if (run.status === "failed" || isEmptyCompletedRun(run)) {
     return zh ? "先按错误信息恢复配置，再复用本轮参数重跑。" : "Recover the reported failure, then reuse this run.";
   }
   if (simulated > 0 && simErrors / simulated >= 0.2) {
@@ -1721,6 +1733,14 @@ export function BrainMiningPanel() {
   const meta = `${total} ${zh ? "个 alpha" : "alphas"}`;
   const selectedRun = runs?.find((run) => run.id === selectedRunId) ?? null;
   const recentRuns = runs ?? [];
+  const selectedRunFailed = Boolean(
+    selectedRun &&
+      ((selectedRun.status ?? "").toLowerCase() === "failed" ||
+        (selectedRun.status ?? "").toLowerCase() === "error" ||
+        isEmptyCompletedRun(selectedRun)),
+  );
+  const selectedRunFailureDetail =
+    selectedRun?.error_detail || selectedRun?.screen_detail || null;
 
   const INPUT =
     "h-6 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11px] text-tm-fg outline-none focus:border-tm-accent placeholder:text-tm-muted";
@@ -1855,6 +1875,10 @@ export function BrainMiningPanel() {
           <p className="px-3 py-5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
             {loadError
               ? (zh ? `读取失败: ${loadError}` : `load failed: ${loadError}`)
+              : selectedRunFailed
+              ? zh
+                ? `本轮在候选生成或仿真阶段失败，没有产生可展示结果。${selectedRunFailureDetail ? ` 原因: ${selectedRunFailureDetail}` : ""}`
+                : `This run failed during candidate generation or simulation and produced no displayable results.${selectedRunFailureDetail ? ` Reason: ${selectedRunFailureDetail}` : ""}`
               : total === 0
               ? zh
                 ? "还没有挖矿结果。点上方「开始挖矿」跑一轮,或等每日 08:00 UTC 自动运行。前提:已在「设置」连接 BRAIN 账号。"

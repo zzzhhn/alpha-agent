@@ -39,3 +39,9 @@
 - Reusing a configuration must create a child run, not mutate history. This preserves comparison and makes parameter changes auditable.
 - Historical PnL retrieval is independent I/O, so a small concurrency cap can reduce mining warm-up without parallelizing the stateful simulation and diversity-gating loop.
 - Workflow advice should be derived from visible run counts. It may recommend recovery, broader generation, family rotation, or human review, but it must not auto-submit candidates.
+
+## 2026-08-10: Historical deduplication is steering, not a success condition
+
+- The options template has a finite set of structurally distinct variants. A generic signature that erases every digit can collapse economically different option tenors into the same historical structure and eventually filter an explicit options run to zero candidates.
+- Cross-run deduplication should prefer novelty, but an explicit family request may backfill distinct historical variants when novelty is exhausted. Intra-run uniqueness and the real simulation budget still apply.
+- A requested run that generates zero candidates is failed, not completed. Persist the zero funnel and the generation reason, submit no BRAIN simulations, and show a recovery message instead of a generic empty table.

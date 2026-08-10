@@ -241,6 +241,27 @@ def test_score_focus_generation_skips_dead_fields():
     assert any("add(" in e for e in exprs)  # composites present
 
 
+def test_options_focus_reuses_distinct_variants_when_history_is_saturated():
+    """An explicit options request must not collapse to an empty run merely
+    because the generic cross-round signature has seen this finite family."""
+    from alpha_agent.brain.evolution import expr_signature
+
+    history = fe.generate_brain_candidates(
+        24, family_focus="options", rng_seed=1234,
+    )
+    avoid = frozenset(expr_signature(expr) for expr in history)
+    repeated = fe.generate_brain_candidates(
+        24,
+        family_focus="options",
+        rng_seed=1234,
+        avoid_signatures=avoid,
+    )
+
+    assert len(repeated) >= 5
+    assert len(repeated) == len(set(repeated))
+    assert all("implied_volatility" in expr for expr in repeated)
+
+
 _FRONTIER_EXPECTED_FAMILY = {
     "pv_corr": "microstructure", "pv_deep": "microstructure",
     "vol_shock": "microstructure", "rsv_corr": "microstructure",

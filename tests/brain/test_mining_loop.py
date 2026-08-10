@@ -117,6 +117,48 @@ async def test_run_mining_round_buckets_and_persists(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_empty_candidate_pool_marks_ledger_run_failed(applied_db, monkeypatch):
+    """A zero-candidate generator result is a failed run, never a successful
+    completion with an empty results table."""
+    import alpha_agent.brain.mining_loop as mining_loop
+
+    client = _FakeBrain([])
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        run = await store.create_brain_run(
+            pool,
+            user_id=1,
+            source="manual",
+            requested_n=5,
+            generation_target_n=24,
+            family_focus="options",
+            seed=1234,
+        )
+        monkeypatch.setattr(
+            mining_loop, "generate_brain_candidates", lambda *args, **kwargs: [],
+        )
+
+        with pytest.raises(RuntimeError, match="no usable expressions"):
+            await run_mining_round(
+                client,
+                pool,
+                user_id=1,
+                n_candidates=5,
+                generation_target_n=24,
+                family_focus="options",
+                run_id=run["id"],
+                seed_from_user_alphas=False,
+            )
+
+        stored = await store.get_brain_run(pool, run["id"], user_id=1)
+        assert stored["status"] == "failed"
+        assert stored["generated_n"] == 0
+        assert "no usable expressions" in stored["error_detail"]
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
 async def test_brain_authoritative_self_corr_flags(applied_db):
     """When BRAIN reports its OWN self-correlation (via /correlations/self here),
     that value gates — a near-duplicate of the user's own alphas (the seeding
