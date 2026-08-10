@@ -100,12 +100,20 @@ def family_of(expr: str) -> str:
     e = expr or ""
     # Frontier mechanisms FIRST — their field mixes would otherwise be swallowed
     # by the broader options/value/momentum regexes below.
+    if "breakeven" in e and "forward_price" in e:
+        return "option_breakeven"
+    if "pcr_oi" in e and ("ts_delta(" in e or "ts_zscore(" in e):
+        return "pcr_dynamics"
+    if "ts_delta(subtract(implied_volatility" in e:
+        return "iv_skew_dynamics"
+    if re.search(r"ts_delta\(implied_volatility", e):
+        return "iv_momentum"
     if re.search(r"implied_volatility_\w+_(?:60|120)\b[\s\S]*implied_volatility_\w+_(?:180|270|1080)", e):
         return "iv_term"  # two-tenor slope: tenor dimension, not strike skew
+    if "historical_volatility" in e and "implied_volatility" in e:
+        return "vrp"
     if re.search(r"ts_std_dev\(returns", e) and "implied_volatility" in e:
         return "vrp"  # realized-vs-implied spread
-    if re.search(r"ts_delta\(implied_volatility", e):
-        return "iv_term"  # IV momentum: surface dynamics, not skew level
     if "gross_profit" in e:
         return "quality"  # GP/A (would match the value regex via "assets")
     if re.search(r"ts_delay\([^()]*\(?[\s\S]*?, (?:231|483|735)\)", e):
@@ -141,3 +149,18 @@ def family_of(expr: str) -> str:
     if re.search(r"returns|ts_delta\(close|ts_arg_m|vwap", e):
         return "momentum"
     return "other"
+
+
+def options_mechanism_of(expr: str) -> str:
+    """Fine options mechanism used for generation quotas and UI diagnosis."""
+    family = family_of(expr)
+    if family in {
+        "option_breakeven", "pcr_dynamics", "iv_skew_dynamics",
+        "iv_momentum", "iv_term", "vrp",
+    }:
+        return family
+    if "implied_volatility" in (expr or "") and "pcr_oi" in (expr or ""):
+        return "iv_skew_level"
+    if re.search(r"implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price", expr or ""):
+        return "options_other"
+    return family

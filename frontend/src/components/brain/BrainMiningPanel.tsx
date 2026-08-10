@@ -116,6 +116,49 @@ function outcomeLabel(o: BrainOutcome, zh: boolean): string {
     : { passed: "PASS", flagged: "FLAG", rejected: "OUT", sim_error: "ERR" }[o];
 }
 
+type CandidateVerdict = {
+  labelZh: string;
+  labelEn: string;
+  detailZh: string;
+  detailEn: string;
+  cls: string;
+};
+
+function candidateVerdict(alpha: BrainAlpha): CandidateVerdict {
+  const corr = Math.max(
+    alpha.self_correlation ?? 0,
+    alpha.self_correlation_adj ?? 0,
+  );
+  const highQuality =
+    ["EXCELLENT", "SPECTACULAR"].includes(alpha.grade ?? "") ||
+    ((alpha.sharpe ?? 0) >= 1.25 && (alpha.fitness ?? 0) >= 1);
+  if (alpha.outcome === "flagged" && corr >= 0.65 && highQuality) {
+    return {
+      labelZh: "高质·冗余",
+      labelEn: "STRONG·REDUNDANT",
+      detailZh: "绩效门槛已通过，但收益路径与现有因子高度重合。下一轮应切换经济机制或数据子集，而不是只改窗口。",
+      detailEn: "Performance gates passed, but the return path overlaps the existing book. Switch mechanism or data, not only windows.",
+      cls: "border-tm-warn text-tm-warn",
+    };
+  }
+  if (alpha.outcome === "flagged" && alpha.detail?.includes("family") && alpha.detail?.includes("saturated")) {
+    return {
+      labelZh: "家族饱和",
+      labelEn: "SATURATED",
+      detailZh: "同一经济家族的代表数已达上限。保留本结果作证据，但不视为新的组合贡献。",
+      detailEn: "This economic family has reached its representative cap; keep as evidence, not new portfolio contribution.",
+      cls: "border-tm-warn text-tm-warn",
+    };
+  }
+  return {
+    labelZh: outcomeLabel(alpha.outcome, true),
+    labelEn: outcomeLabel(alpha.outcome, false),
+    detailZh: alpha.detail || "暂无额外诊断。",
+    detailEn: alpha.detail || "No additional diagnosis.",
+    cls: OUTCOME_CLS[alpha.outcome],
+  };
+}
+
 // ── submit control (two-step confirm, matches the app's forgiveness pattern) ──
 type SubmitState = "idle" | "confirm" | "sending" | "done" | "error";
 
@@ -311,6 +354,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
   const [pnl, setPnl] = useState<PnlPoint[] | null>(null);
   const [pnlErr, setPnlErr] = useState<string | null>(null);
   const [chartKind, setChartKind] = useState<ChartKind>("pnl");
+  const verdict = candidateVerdict(alpha);
 
   useEffect(() => {
     let alive = true;
@@ -388,6 +432,17 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
 
       {/* why rejected (failing checks) + retried tag */}
       <OutcomeTags alpha={alpha} />
+
+      <div className="grid border border-tm-rule sm:grid-cols-[150px_1fr]">
+        <div className="flex items-center border-b border-tm-rule px-3 py-2 sm:border-b-0 sm:border-r">
+          <span className={`border px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase ${verdict.cls}`}>
+            {zh ? verdict.labelZh : verdict.labelEn}
+          </span>
+        </div>
+        <div className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+          {zh ? verdict.detailZh : verdict.detailEn}
+        </div>
+      </div>
 
       {/* full IS metric set (6) + self-corr + BRAIN id */}
       <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2 sm:grid-cols-4 lg:grid-cols-8">
@@ -510,9 +565,13 @@ const FAMILY_LABEL: Record<string, string> = {
   seasonality: "seasonal",
   overnight: "overnight",
   iv_term: "iv-term",
+  iv_skew_dynamics: "skew-dynamics",
+  iv_momentum: "iv-momentum",
+  pcr_dynamics: "pcr-dynamics",
+  option_breakeven: "breakeven",
   vrp: "vrp",
   quality: "quality",
-  options: "options",
+  options: "iv-skew",
   lowvol: "low-vol",
   sentiment: "sentiment",
   momentum: "momentum",
@@ -1064,7 +1123,7 @@ function OutcomeSelect({
 // the mining round's family). Includes 'value'/'other' (not mining options) and
 // an all-families default. Custom button/span dropdown (native <select> invisible
 // on Safari, see OutcomeSelect).
-const FAMILY_FILTER_KEYS = ["", "value", "options", "lowvol", "sentiment", "momentum", "score", "revision", "dispersion", "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality", "other"];
+const FAMILY_FILTER_KEYS = ["", "value", "options", "iv_skew_dynamics", "iv_momentum", "iv_term", "vrp", "pcr_dynamics", "option_breakeven", "lowvol", "sentiment", "momentum", "score", "revision", "dispersion", "microstructure", "seasonality", "overnight", "quality", "other"];
 function FamilyFilterSelect({
   value,
   onChange,
@@ -1137,7 +1196,7 @@ function FamilyFilterSelect({
 
 const FAMILIES: Array<[string, string, string]> = [
   ["", "普通(混合)", "normal"],
-  ["options", "options", "options"],
+  ["options", "期权多机制", "options multi-mechanism"],
   ["lowvol", "low-vol", "low-vol"],
   ["sentiment", "sentiment", "sentiment"],
   ["momentum", "momentum", "momentum"],
@@ -1192,8 +1251,8 @@ function FamilySelect({
         aria-expanded={open}
         title={
           zh
-            ? "挖矿家族。普通=混合（value 已饱和）；options=期权偏度（最高夏普正交源）；low-vol、momentum、sentiment、factor-score=新正交源（待验证）；revision=分析师修正（偏弱）"
-            : "mining family. normal=mixed (value saturated); options=IV-skew; low-vol/momentum/sentiment/factor-score=new orthogonal sources (unvalidated); revision=analyst revisions (weak)"
+            ? "挖矿家族。期权多机制会在 IV 偏度、偏度变化、期限结构、IV 动量、VRP、PCR 动态和 breakeven-forward 之间分配预算，不再只改同一模板的窗口。"
+            : "Mining family. Options multi-mechanism allocates budget across IV skew, skew change, term structure, IV momentum, VRP, PCR dynamics, and breakeven-forward instead of window variants of one template."
         }
         className="flex h-7 min-w-[104px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
       >
@@ -1862,7 +1921,7 @@ export function BrainMiningPanel() {
           </span>
           <span className="w-24 text-right">{zh ? "编码" : "code"}</span>
           <span className="w-14 text-right">{zh ? "评级" : "grade"}</span>
-          <span className="w-12 text-right">{zh ? "状态" : "status"}</span>
+          <span className="w-20 text-right">{zh ? "结论" : "verdict"}</span>
         </div>
 
         {/* rows */}
@@ -1891,6 +1950,7 @@ export function BrainMiningPanel() {
           <ul className="flex flex-col">
             {data.alphas.flatMap((a, i) => {
               const open = expanded.has(a.id);
+              const verdict = candidateVerdict(a);
               const prev = i > 0 ? data.alphas[i - 1] : null;
               // Batch divider: only under the default time sort are rows from the
               // same mining round contiguous. Any metric sort interleaves batches,
@@ -1951,9 +2011,12 @@ export function BrainMiningPanel() {
                     <span className="flex w-14 justify-end">
                       <GradeBadge grade={a.grade} />
                     </span>
-                    <span className="flex w-12 justify-end">
-                      <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${OUTCOME_CLS[a.outcome]}`}>
-                        {outcomeLabel(a.outcome, zh)}
+                    <span className="flex w-20 justify-end">
+                      <span
+                        title={zh ? verdict.detailZh : verdict.detailEn}
+                        className={`whitespace-nowrap border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${verdict.cls}`}
+                      >
+                        {zh ? verdict.labelZh : verdict.labelEn}
                       </span>
                     </span>
                   </button>

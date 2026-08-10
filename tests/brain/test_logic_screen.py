@@ -7,6 +7,7 @@ from alpha_agent.brain.logic_screen import (
     DEFAULT_MIN_SCORE,
     score_economic_logic,
     select_by_logic,
+    select_diverse_by_group,
 )
 from alpha_agent.llm.base import LLMResponse
 
@@ -49,6 +50,16 @@ def test_select_keep_at_least_floor():
     assert len(kept) == 2  # never starves the sim step
 
 
+def test_select_diverse_by_group_uses_mechanisms_before_repeats():
+    exprs = ["skew-a", "skew-b", "vrp-a", "term-a", "term-b"]
+    scores = {"skew-a": 10, "skew-b": 9, "vrp-a": 7, "term-a": 6, "term-b": 5}
+    groups = {"skew-a": "skew", "skew-b": "skew", "vrp-a": "vrp",
+              "term-a": "term", "term-b": "term"}
+    selected = select_diverse_by_group(
+        exprs, scores, target_n=3, group_of=groups.__getitem__)
+    assert selected == ["skew-a", "vrp-a", "term-a"]
+
+
 # ── score_economic_logic (LLM I/O) ────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_score_no_client_is_noop():
@@ -60,6 +71,12 @@ async def test_score_parses_json_array():
     llm = _FakeLLM('[{"i":0,"score":8,"why":"value"},{"i":1,"score":3,"why":"noise"}]')
     scores = await score_economic_logic(llm, ["group_rank(x,sub)", "divide(a,a)"])
     assert scores == {"group_rank(x,sub)": 8.0, "divide(a,a)": 3.0}
+
+
+@pytest.mark.asyncio
+async def test_score_parses_wrapped_json_after_model_prose():
+    llm = _FakeLLM('Analysis complete. {"scores":[{"i":0,"score":8}]}')
+    assert await score_economic_logic(llm, ["rank(x)"]) == {"rank(x)": 8.0}
 
 
 @pytest.mark.asyncio

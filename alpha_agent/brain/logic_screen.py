@@ -50,6 +50,24 @@ Expressions:
 """
 
 
+def _json_payload(content: str):
+    """Parse strict JSON, fenced JSON, or a JSON value after brief model prose."""
+    cleaned = _strip_md_fence(content or "").strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        for idx, char in enumerate(cleaned):
+            if char not in "[{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(cleaned[idx:])
+                return value
+            except json.JSONDecodeError:
+                continue
+    raise ValueError("logic screen response contains no JSON payload")
+
+
 async def score_economic_logic(
     llm_client: Optional[LLMClient], expressions: list[str]
 ) -> dict[str, float]:
@@ -69,11 +87,13 @@ async def score_economic_logic(
             ),
             timeout=_WALL_CLOCK_S,
         )
-        data = json.loads(_strip_md_fence(resp.content or ""))
+        data = _json_payload(resp.content or "")
     except Exception as e:  # noqa: BLE001 — screen is best-effort, never blocks
         logger.warning("logic screen failed; simulating all candidates: %s", e)
         return {}
 
+    if isinstance(data, dict):
+        data = data.get("scores") or data.get("results") or data.get("candidates") or []
     out: dict[str, float] = {}
     for item in data if isinstance(data, list) else []:
         try:
@@ -84,6 +104,40 @@ async def score_economic_logic(
         if 0 <= idx < len(expressions):
             out[expressions[idx]] = score
     return out
+
+
+def select_diverse_by_group(
+    expressions: list[str],
+    scores: dict[str, float],
+    *,
+    target_n: int,
+    group_of,
+) -> list[str]:
+    """Rank by logic, then take one candidate per mechanism before repeats.
+
+    This is a cheap pre-simulation novelty gate. It preserves the simulation
+    budget while preventing one high-scoring template family from consuming all
+    slots. Within each mechanism, the LLM score still determines priority.
+    """
+    target = min(max(int(target_n), 0), len(expressions))
+    ranked = select_by_logic(expressions, scores, target_n=len(expressions))
+    buckets: dict[str, list[str]] = {}
+    for expr in ranked:
+        buckets.setdefault(str(group_of(expr)), []).append(expr)
+    selected: list[str] = []
+    depth = 0
+    while len(selected) < target:
+        added = False
+        for bucket in buckets.values():
+            if depth < len(bucket):
+                selected.append(bucket[depth])
+                added = True
+                if len(selected) >= target:
+                    break
+        if not added:
+            break
+        depth += 1
+    return selected
 
 
 def select_by_logic(

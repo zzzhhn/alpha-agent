@@ -45,6 +45,18 @@ def test_empty_history_is_empty_state():
     assert st.avoid_signatures == frozenset() and st.prefer_industry is False
 
 
+def test_options_mechanisms_are_not_collapsed_to_one_family():
+    cases = {
+        "ts_delta(subtract(implied_volatility_call_150, implied_volatility_put_150), 20)": "iv_skew_dynamics",
+        "ts_zscore(pcr_oi_120, 60)": "pcr_dynamics",
+        "divide(call_breakeven_60, forward_price_60)": "option_breakeven",
+        "subtract(implied_volatility_call_60, implied_volatility_call_270)": "iv_term",
+        "subtract(ts_std_dev(returns, 120), implied_volatility_mean_120)": "vrp",
+    }
+    for expr, expected in cases.items():
+        assert ev.options_mechanism_of(expr) == expected
+
+
 # ── generator honours the evolution hints ──────────────────────────────────
 def test_generator_skips_avoided_signatures():
     # First, learn the signatures of a normal round.

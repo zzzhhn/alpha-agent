@@ -43,5 +43,12 @@
 ## 2026-08-10: Historical deduplication is steering, not a success condition
 
 - The options template has a finite set of structurally distinct variants. A generic signature that erases every digit can collapse economically different option tenors into the same historical structure and eventually filter an explicit options run to zero candidates.
-- Cross-run deduplication should prefer novelty, but an explicit family request may backfill distinct historical variants when novelty is exhausted. Intra-run uniqueness and the real simulation budget still apply.
+- The earlier availability fix allowed an explicit family request to backfill historical variants. RUN #64 showed the cost: five excellent options-skew variants all failed self-correlation, with adjusted correlation around 0.91 to 0.98. Discovery must now stop at exhaustion; historical replay belongs only in an explicit robustness/retest mode.
 - A requested run that generates zero candidates is failed, not completed. Persist the zero funnel and the generation reason, submit no BRAIN simulations, and show a recovery message instead of a generic empty table.
+
+## 2026-08-10: Performance quality is not signal novelty
+
+- A high BRAIN grade, Sharpe, and Fitness can coexist with near-zero marginal portfolio contribution. Product verdicts must show performance quality and novelty separately.
+- A user-facing family name must match the generator's real search space. “Options” cannot route only to one PCR-gated call-put IV-skew template when the catalogue and code already support term structure, IV dynamics, variance risk premium, PCR dynamics, and breakeven-forward mechanisms.
+- Dataset ordering is part of search correctness. A global field limit exhausted before option8 and option9, so an options run must query those catalogues first rather than claim broad exploration from a static six-field vocabulary.
+- Logic ranking alone does not guarantee diversity. Before expensive simulations, select one candidate per economic mechanism before taking a second candidate from any mechanism.

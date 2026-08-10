@@ -84,7 +84,9 @@ def _failed(metrics, name: str) -> bool:
 # Sharpe 2.5 alpha is the cautionary tale: explore on NEW mechanisms, never
 # re-pin proven ones).
 _EXPLORE_FAMILIES = frozenset({
-    "microstructure", "seasonality", "overnight", "iv_term", "vrp", "quality",
+    "microstructure", "seasonality", "overnight", "iv_term",
+    "iv_skew_dynamics", "iv_momentum", "pcr_dynamics",
+    "option_breakeven", "vrp", "quality",
     "score", "sentiment", "lowvol", "momentum", "revision",
 })
 # Fast signals decay hardest by t+1 — only THOSE families are worth a delay-0
@@ -96,7 +98,9 @@ _EXPLORE_FAMILIES = frozenset({
 # still pay its tighter submission bars. Probe rate stays 15%: scope expanded,
 # prior unchanged, until post-Aug-1 rounds provide evidence either way.
 _DELAY0_FAMILIES = frozenset(
-    {"microstructure", "overnight", "sentiment", "iv_term", "vrp"}
+    {"microstructure", "overnight", "sentiment", "iv_term",
+     "iv_skew_dynamics", "iv_momentum", "pcr_dynamics",
+     "option_breakeven", "vrp"}
 )
 
 

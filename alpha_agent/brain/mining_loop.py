@@ -28,7 +28,11 @@ from alpha_agent.brain.fastexpr import (
     build_field_hints,
     generate_brain_candidates,
 )
-from alpha_agent.brain.logic_screen import score_economic_logic, select_by_logic
+from alpha_agent.brain.logic_screen import (
+    score_economic_logic,
+    select_by_logic,
+    select_diverse_by_group,
+)
 from alpha_agent.brain.tuning import (
     base_settings_for,
     diagnose,
@@ -74,7 +78,10 @@ _FAMILY_CAP = {"value": 1, "options": 2, "revision": 2, "momentum": 2,
                "lowvol": 2, "sentiment": 2, "score": 3,
                # Frontier mechanisms (2026-07-11 research sweep)
                "microstructure": 3, "seasonality": 2, "overnight": 2,
-               "iv_term": 2, "vrp": 2, "quality": 2, "dispersion": 2}
+               "iv_term": 2, "iv_skew_dynamics": 2, "iv_momentum": 2,
+               "pcr_dynamics": 2,
+               "option_breakeven": 2, "vrp": 2, "quality": 2,
+               "dispersion": 2}
 
 
 def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
@@ -159,6 +166,11 @@ async def _run_mining_round_impl(
     near-duplicates."""
     await client.authenticate()
     existing = await _existing_active_returns(client)
+    import os
+
+    family_focus = family_focus_override or os.environ.get("BRAIN_FAMILY_FOCUS") or None
+    if family_focus:
+        print(f"[focus] family-constrained round: {family_focus}", flush=True)
 
     if seed_exprs is None and seed_from_user_alphas:
         try:
@@ -172,7 +184,14 @@ async def _run_mining_round_impl(
     # Fitness bars — not just OHLCV. Falls back to base price fields on failure.
     real_fields: Optional[list[str]] = None
     try:
-        real_fields = await client.fetch_data_fields(limit=500)
+        # A global 500-field cap is exhausted by the datasets preceding option8
+        # and option9.  Options research must query its own surface catalogue
+        # first, otherwise the UI promises broad options search while the engine
+        # only sees the six static legacy fields.
+        field_kwargs = {"limit": 500}
+        if family_focus == "options":
+            field_kwargs["datasets"] = ("option8", "option9", "pv1")
+        real_fields = await client.fetch_data_fields(**field_kwargs)
         print(f"[fields] {len(real_fields or [])} real BRAIN data-fields", flush=True)
     except Exception:  # noqa: BLE001 — best-effort; base fields still work
         real_fields = None
@@ -201,10 +220,6 @@ async def _run_mining_round_impl(
     # taking the same first N expressions. Preserve the planned target in the
     # ledger, but generate the simulation budget directly in bypass mode.
     gen_n = planned_gen_n if logic_llm is not None else n_candidates
-    import os
-    family_focus = family_focus_override or os.environ.get("BRAIN_FAMILY_FOCUS") or None
-    if family_focus:
-        print(f"[focus] family-constrained round: {family_focus}", flush=True)
     # History steering for catalog families: pin each field's winning sign and
     # skip proven-dead fields, so the round spends sims on NEW information
     # instead of re-testing directions the DB already scored.
@@ -269,20 +284,41 @@ async def _run_mining_round_impl(
     if logic_llm is not None:
         scores = await score_economic_logic(logic_llm, generated_pool)
         if scores:
-            candidates = select_by_logic(
-                generated_pool, scores, target_n=n_candidates
-            )
+            if family_focus == "options":
+                from alpha_agent.brain.evolution import options_mechanism_of
+
+                candidates = select_diverse_by_group(
+                    generated_pool,
+                    scores,
+                    target_n=n_candidates,
+                    group_of=options_mechanism_of,
+                )
+            else:
+                candidates = select_by_logic(
+                    generated_pool, scores, target_n=n_candidates
+                )
             screen_status = (
                 "completed" if len(scores) >= generated_n else "partial"
             )
             screen_detail = (
                 f"scored {len(scores)}/{generated_n}; selected {len(candidates)}"
+                + (" across options mechanisms" if family_focus == "options" else "")
             )
         else:
             # A failed or malformed LLM response is not a successful screen.  The
             # safest useful fallback is a truthful bypass of the screen while
             # retaining the requested budget.
-            candidates = generated_pool[:n_candidates]
+            if family_focus == "options":
+                from alpha_agent.brain.evolution import options_mechanism_of
+
+                candidates = select_diverse_by_group(
+                    generated_pool,
+                    {},
+                    target_n=n_candidates,
+                    group_of=options_mechanism_of,
+                )
+            else:
+                candidates = generated_pool[:n_candidates]
             screen_status = "failed"
             screen_detail = "logic screen returned no usable scores; bypassed"
         print(
@@ -586,10 +622,13 @@ async def _run_mining_round_impl(
 
         if too_correlated or too_redundant:
             reason = (
-                f"self-corr official={official} adj={adj:.2f} vs {adj_with}"
+                f"high-quality-but-redundant; mechanism={fam}; "
+                f"self-corr official={official} adj={adj:.2f} vs {adj_with}; "
+                f"marginal={marginal:.2f} vs {marginal_with}"
                 if too_correlated
-                else f"low marginal contribution {marginal:.2f} "
-                f"(<{_MARGINAL_MIN}) — spanned by basket ({marginal_with})"
+                else f"high-quality-but-redundant; mechanism={fam}; "
+                f"low marginal contribution {marginal:.2f} "
+                f"(<{_MARGINAL_MIN}); spanned by basket ({marginal_with})"
             )
             print(
                 f"[flag] {expr[:44]!r} corr={adj:.2f} marginal={marginal:.2f} "

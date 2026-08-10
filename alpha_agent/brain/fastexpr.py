@@ -25,12 +25,29 @@ _BASE_FIELDS = (
     "operating_income", "cap", "adv20", "liabilities",
 )
 
-# Options fields from the user's ACTIVE options-skew alphas (the SPECTACULAR/
-# EXCELLENT ones). Used only by the options-skew template.
+# Options fields verified against the user's live option8/option9 catalogue.
+# Keep mechanism-specific groups explicit: the options focus is a portfolio of
+# hypotheses, not a single call-put-skew template with swapped tenors.
 _OPTION_FIELDS = {
     "pcr_oi": ("pcr_oi_270", "pcr_oi_120"),
     "iv_call": ("implied_volatility_call_150", "implied_volatility_call_180"),
     "iv_put": ("implied_volatility_put_150", "implied_volatility_put_180"),
+    "iv_mean": (
+        "implied_volatility_mean_10", "implied_volatility_mean_60",
+        "implied_volatility_mean_120", "implied_volatility_mean_180",
+    ),
+    "historical_vol": (
+        "historical_volatility_20", "historical_volatility_60",
+        "historical_volatility_120", "historical_volatility_180",
+    ),
+    "call_breakeven": (
+        "call_breakeven_30", "call_breakeven_60",
+        "call_breakeven_120", "call_breakeven_180",
+    ),
+    "forward_price": (
+        "forward_price_30", "forward_price_60",
+        "forward_price_120", "forward_price_180",
+    ),
 }
 
 # Economically MEANINGFUL fundamental ratios (numerator, denominator), grouped by
@@ -607,13 +624,83 @@ def _m_iv_mom(rng: random.Random) -> dict:
 def _m_vrp(rng: random.Random) -> dict:
     """Stock-level variance risk premium (Bali & Hovakimian 2009), rank-space
     form (unit-free): short names whose realized vol runs hot vs implied."""
-    w, iv = rng.choice(((120, "implied_volatility_mean_120"),
-                        (21, "implied_volatility_mean_10")))
-    spread = _op("subtract",
-                 _op("rank", _op("ts_std_dev", _fld("returns"), _lit(w))),
-                 _op("rank", _fld(iv)))
+    if rng.random() < 0.7:
+        historical, implied = rng.choice((
+            ("historical_volatility_20", "implied_volatility_mean_10"),
+            ("historical_volatility_60", "implied_volatility_mean_60"),
+            ("historical_volatility_120", "implied_volatility_mean_120"),
+            ("historical_volatility_180", "implied_volatility_mean_180"),
+        ))
+        spread = _op(
+            "subtract", _op("rank", _fld(historical)),
+            _op("rank", _fld(implied)),
+        )
+    else:
+        w, implied = rng.choice(((120, "implied_volatility_mean_120"),
+                                 (21, "implied_volatility_mean_10")))
+        spread = _op(
+            "subtract",
+            _op("rank", _op("ts_std_dev", _fld("returns"), _lit(w))),
+            _op("rank", _fld(implied)),
+        )
     leg = _op("reverse", spread) if rng.random() < 0.85 else spread
     return _op("group_neutralize", leg, _fld("subindustry"))
+
+
+def _m_iv_skew_dynamics(rng: random.Random) -> dict:
+    """Change in call-put IV skew, rather than its saturated absolute level.
+
+    A cross-sectional shock to the surface carries different information from
+    repeatedly holding the same low-PCR skew book.  The level and change
+    hypotheses therefore receive separate mechanism identities and quotas.
+    """
+    i = rng.randint(0, 1)
+    skew = _op(
+        "subtract",
+        _fld(_OPTION_FIELDS["iv_call"][i]),
+        _fld(_OPTION_FIELDS["iv_put"][i]),
+    )
+    delta = _op("ts_delta", skew, _lit(rng.choice((10, 20, 30))))
+    leg = _op("rank", _op("ts_zscore", delta, _lit(60)))
+    return _op(
+        "group_neutralize", leg,
+        _fld(rng.choice(("sector", "industry", "subindustry"))),
+    )
+
+
+def _m_pcr_dynamics(rng: random.Random) -> dict:
+    """Put-call open-interest regime change, not the fixed PCR<1.1 gate."""
+    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
+    if rng.random() < 0.5:
+        signal = _op("ts_delta", pcr, _lit(rng.choice((10, 20, 30))))
+    else:
+        signal = _op("ts_zscore", pcr, _lit(rng.choice((60, 120))))
+    # Falling put-call OI is the continuation of the proven low-PCR direction;
+    # retain a small sign probe rather than silently declaring it universal.
+    leg = _op("rank", signal)
+    if rng.random() < 0.85:
+        leg = _op("reverse", leg)
+    return _op("group_neutralize", leg, _fld(rng.choice(("sector", "subindustry"))))
+
+
+def _m_breakeven_forward(rng: random.Random) -> dict:
+    """Option-implied breakeven relative to the same-tenor forward price."""
+    i = rng.randrange(len(_OPTION_FIELDS["call_breakeven"]))
+    relative = _op(
+        "subtract",
+        _op(
+            "divide",
+            _fld(_OPTION_FIELDS["call_breakeven"][i]),
+            _fld(_OPTION_FIELDS["forward_price"][i]),
+        ),
+        _lit(1),
+    )
+    signal = _op("ts_zscore", relative, _lit(rng.choice((60, 120))))
+    leg = _op("rank", _op("reverse", signal) if rng.random() < 0.5 else signal)
+    return _op(
+        "group_neutralize", leg,
+        _fld(rng.choice(("industry", "subindustry"))),
+    )
 
 
 def _m_quality(rng: random.Random) -> dict:
@@ -868,6 +955,21 @@ def _options_leg(rng: random.Random) -> dict:
     ))
     return _op("trade_when", vol_cond, neut, _lit(-1))
 
+
+# Explicit options mining covers distinct economic mechanisms.  Cycling this
+# registry prevents a five-simulation budget from being consumed by five tenor
+# variants of the same skew-level book.  `iv_skew_level` stays as an exploitation
+# control; the other mechanisms are discovery candidates.
+_OPTIONS_MOTIFS: tuple = (
+    ("iv_skew_level", _options_leg),
+    ("iv_skew_dynamics", _m_iv_skew_dynamics),
+    ("iv_term", _m_iv_term),
+    ("iv_momentum", _m_iv_mom),
+    ("vrp", _m_vrp),
+    ("pcr_dynamics", _m_pcr_dynamics),
+    ("breakeven_forward", _m_breakeven_forward),
+)
+
 def _reshape(rng: random.Random, leg: dict) -> dict:
     """RARELY reshape the final signal with a batch-A arithmetic op — signed_power
     compresses tails, power emphasizes extremes. Kept to a few percent: these alter
@@ -1081,6 +1183,7 @@ def generate_brain_candidates(
     family_cap: int = 0,
     family_focus: Optional[str] = None,
     field_hints: Optional[dict] = None,
+    allow_historical_replay: bool = False,
 ) -> list[str]:
     """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
 
@@ -1117,11 +1220,14 @@ def generate_brain_candidates(
     _frontier_order = list(_FRONTIER_MOTIFS)
     rng.shuffle(_frontier_order)
     _frontier_i = 0
+    _options_order = list(_OPTIONS_MOTIFS)
+    if family_focus == "options":
+        rng.shuffle(_options_order)
+    _options_i = 0
     seen_sigs: set[tuple] = set()  # structural fingerprints for pool diversity
-    # Explicit family runs are user-directed exploration.  Cross-round memory is
-    # useful steering, but it must not turn a saturated finite family (notably the
-    # options template) into an empty run.  Keep novel candidates first, then use
-    # distinct historical variants only to fill an otherwise undersized pool.
+    # Discovery never silently replays historical structures.  A caller may opt
+    # into replay for a deliberate robustness/retest job, but the default mining
+    # path must report exhaustion rather than spend BRAIN calls on known clones.
     revisit: list[tuple[str, dict, tuple, tuple]] = []
     revisit_seen: set[str] = set()
     revisit_sigs: set[tuple] = set()
@@ -1148,9 +1254,13 @@ def generate_brain_candidates(
                 tree = _fn(rng)
             curated = True
         elif family_focus == "options":
-            # Family-constrained round: mine ONLY the options-IV family (highest
-            # Sharpe, orthogonal to value); base_settings_for runs it on TOP500.
-            tree = _options_leg(rng)
+            # Broad options research, not the old IV-skew-only template.  Cycle
+            # mechanisms before repeating one so even a small simulation budget
+            # spans surface level, dynamics, term, VRP, PCR and breakeven signals.
+            _name, _fn = _options_order[_options_i % len(_options_order)]
+            _options_i += 1
+            tree = _fn(rng)
+            curated = True
         elif family_focus == "revision":
             # Family-constrained round: analyst estimate-revision momentum
             # (value-orthogonal); base_settings_for runs anl4 on TOP1000.
@@ -1251,7 +1361,8 @@ def generate_brain_candidates(
         # fully explored family still honours the user's simulation request.
         if expr_signature(expr) in avoid:
             if (
-                family_focus
+                allow_historical_replay
+                and family_focus
                 and expr not in revisit_seen
                 and sig not in revisit_sigs
             ):
@@ -1267,7 +1378,7 @@ def generate_brain_candidates(
         out.append(expr)
         pool.append(tree)  # feed back so the GA explores around good structures
 
-    if family_focus and len(out) < n:
+    if allow_historical_replay and family_focus and len(out) < n:
         for expr, tree, sig, fam_sig in revisit:
             if len(out) >= n:
                 break

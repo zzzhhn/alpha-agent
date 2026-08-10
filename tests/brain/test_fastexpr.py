@@ -241,32 +241,31 @@ def test_score_focus_generation_skips_dead_fields():
     assert any("add(" in e for e in exprs)  # composites present
 
 
-def test_options_focus_reuses_distinct_variants_when_history_is_saturated():
-    """An explicit options request must not collapse to an empty run merely
-    because the generic cross-round signature has seen this finite family."""
-    from alpha_agent.brain.evolution import expr_signature
+def test_options_focus_covers_mechanisms_and_does_not_replay_history():
+    """Options discovery spends its pool across mechanisms and stays novel."""
+    from alpha_agent.brain.evolution import expr_signature, options_mechanism_of
 
     history = fe.generate_brain_candidates(
         24, family_focus="options", rng_seed=1234,
     )
+    assert len({options_mechanism_of(expr) for expr in history}) >= 6
     avoid = frozenset(expr_signature(expr) for expr in history)
-    repeated = fe.generate_brain_candidates(
+    next_round = fe.generate_brain_candidates(
         24,
         family_focus="options",
         rng_seed=1234,
         avoid_signatures=avoid,
     )
 
-    assert len(repeated) >= 5
-    assert len(repeated) == len(set(repeated))
-    assert all("implied_volatility" in expr for expr in repeated)
+    assert all(expr_signature(expr) not in avoid for expr in next_round)
+    assert len(next_round) == len(set(next_round))
 
 
 _FRONTIER_EXPECTED_FAMILY = {
     "pv_corr": "microstructure", "pv_deep": "microstructure",
     "vol_shock": "microstructure", "rsv_corr": "microstructure",
     "resid_mom": "momentum", "seasonality": "seasonality",
-    "overnight": "overnight", "iv_term": "iv_term", "iv_mom": "iv_term",
+    "overnight": "overnight", "iv_term": "iv_term", "iv_mom": "iv_momentum",
     "vrp": "vrp", "quality": "quality",
 }
 
