@@ -66,4 +66,10 @@
 - A valid GitHub token can still fail before reaching GitHub when CLI stdin adds transport whitespace and the backend copies it directly into `Authorization`.
 - Normalize secret-backed header values at the point of use, not only in the deployment command.
 - Protocol exceptions may echo the rejected header value. Durable run ledgers and user-visible diagnostics must retain the exception class while discarding the raw message.
+
+## 2026-08-13: Missing self-correlation is a workflow state, not a neutral value
+
+- RUN #72 produced two GOOD alphas whose official self-correlation cells appeared as pending. Both had already failed `CONCENTRATED_WEIGHT` and `LOW_SUB_UNIVERSE_SHARPE`, so the main workflow intentionally stopped before the self-correlation request.
+- Grade and submission eligibility are different axes. Preserve high-grade rejected candidates as research evidence and perform a small, sequential post-run self-correlation enrichment instead of spending this API budget on every failed simulation.
+- BRAIN's official hard threshold is `0.70`. An internal `0.65` level is useful as a crowding warning, but using it as a rejection threshold silently discards officially eligible candidates without changing their standalone Sharpe or Fitness.
 - Environment-variable metadata, a Ready deployment, an active workflow, and a successful authenticated dispatch are separate checks. The first three cannot replace the final user-path retry.

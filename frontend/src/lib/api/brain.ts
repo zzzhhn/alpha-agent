@@ -49,6 +49,12 @@ export interface BrainAlpha {
   margin: number | null;
   self_correlation: number | null;
   self_correlation_with: string | null;
+  self_correlation_status?:
+    | "pending"
+    | "ready"
+    | "skipped_prerequisite"
+    | "unavailable"
+    | null;
   self_correlation_adj: number | null;
   self_correlation_adj_with: string | null;
   grade: string | null;

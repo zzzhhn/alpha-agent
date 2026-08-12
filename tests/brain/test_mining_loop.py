@@ -186,6 +186,26 @@ async def test_brain_authoritative_self_corr_flags(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_self_corr_warning_band_does_not_reject(applied_db):
+    """0.65–0.70 is advisory only; BRAIN's official 0.70 limit is the gate."""
+    client = _FakeBrain([
+        {"metrics": _PASS, "pnl": {"records": []}, "brain_corr": 0.68},
+    ])
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        summary = await run_mining_round(
+            client, pool, user_id=1, n_candidates=1, rng_seed=1,
+            max_retries=0, family_caps={},
+        )
+        assert summary["passed"] == 1 and summary["flagged"] == 0
+        row = (await store.list_brain_alphas(pool, 1))[0]
+        assert row["self_correlation"] == 0.68
+        assert "near official limit" in row["detail"]
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
 async def test_intra_batch_diversity_flags_near_duplicate(applied_db):
     """Diversification fix: two candidates in the SAME round with ~identical daily
     returns — the first passes, the second is flagged as a near-duplicate even

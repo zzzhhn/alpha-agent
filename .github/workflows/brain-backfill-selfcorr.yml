@@ -18,6 +18,9 @@ on:
       max_wait:
         description: "seconds to wait per alpha (BRAIN computes self-corr lazily; cold alphas need >30s)"
         default: "120"
+      run_id:
+        description: "optional BRAIN run id; backfill only its review-worthy rows"
+        default: ""
       diag:
         description: "evidence mode: comma-separated alpha_ids to raw-poll (dumps status/headers/body); skips the batch"
         default: ""
@@ -48,5 +51,6 @@ jobs:
           # and the scheduled default stays far under the ~45-request throttle.
           BACKFILL_LIMIT: ${{ github.event.inputs.limit || '30' }}
           BACKFILL_MAX_WAIT: ${{ github.event.inputs.max_wait || '120' }}
+          BACKFILL_RUN_ID: ${{ github.event.inputs.run_id || '' }}
           BACKFILL_DIAG: ${{ github.event.inputs.diag || '' }}
         run: python scripts/brain_backfill_selfcorr.py

@@ -140,6 +140,8 @@ The repository does not contain a canonical generated Screener reference image. 
 - Recent runs use a bounded selector and preserve manual, scheduled, and legacy provenance. Returning to the page restores the active or selected run without changing its candidate count.
 - The selected-run workbench shows a compact outcome summary before the dense candidate table. Filters and pagination apply within the selected run only.
 - Candidate detail keeps BRAIN-official metrics separate from Alpha Agent diagnostics, including adjusted self-correlation, lineage, retry history, and local screening evidence when available.
+- Official self-correlation uses BRAIN's `0.70` hard limit. `0.65–0.70` is an internal warning band only: it may prompt a marginal-contribution review but must not reject an otherwise eligible alpha.
+- A missing official self-correlation exposes its real state: pending computation, skipped because an earlier prerequisite failed, or temporarily unavailable after a bounded poll. GOOD-or-better rejected rows receive bounded post-run enrichment so useful research evidence is not silently discarded.
 - Performance quality and novelty are separate verdict axes. A candidate may be high quality but redundant; the UI names both states and recommends switching mechanism or data rather than implying that a good grade guarantees submission eligibility.
 - Options mining means multiple economic mechanisms, not one IV-skew template. The selected pool exposes mechanism labels and uses a bounded diversity quota before real simulations.
 - Empty and failed runs explain the failing stage and recovery action. A completed run with fewer persisted candidates than requested exposes the stage where the count changed.

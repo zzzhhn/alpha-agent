@@ -132,12 +132,21 @@ function candidateVerdict(alpha: BrainAlpha): CandidateVerdict {
   const highQuality =
     ["EXCELLENT", "SPECTACULAR"].includes(alpha.grade ?? "") ||
     ((alpha.sharpe ?? 0) >= 1.25 && (alpha.fitness ?? 0) >= 1);
-  if (alpha.outcome === "flagged" && corr >= 0.65 && highQuality) {
+  if (alpha.outcome === "flagged" && corr >= 0.70 && highQuality) {
     return {
       labelZh: "高质·冗余",
       labelEn: "STRONG·REDUNDANT",
       detailZh: "绩效门槛已通过，但收益路径与现有因子高度重合。下一轮应切换经济机制或数据子集，而不是只改窗口。",
       detailEn: "Performance gates passed, but the return path overlaps the existing book. Switch mechanism or data, not only windows.",
+      cls: "border-tm-warn text-tm-warn",
+    };
+  }
+  if (alpha.outcome === "passed" && corr >= 0.65 && corr < 0.70) {
+    return {
+      labelZh: "通过·近门槛",
+      labelEn: "PASS·WATCH",
+      detailZh: "该因子仍低于 BRAIN 官方 0.70 自相关硬门槛，因此保留通过；但已进入 0.65–0.70 预警带，组合纳入时应优先检查它是否提供足够的边际贡献。",
+      detailEn: "This factor remains below BRAIN's official 0.70 hard limit and passes, but sits in the 0.65–0.70 warning band. Review its marginal portfolio contribution before promotion.",
       cls: "border-tm-warn text-tm-warn",
     };
   }
@@ -460,10 +469,14 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
             <OfficialSCorrCell alpha={alpha} zh={zh} />
           </span>
         </div>
-        <Metric
-          label={zh ? "自相关·调整" : "S-corr⁺ (adj)"}
-          value={fmt(alpha.self_correlation_adj)}
-        />
+        <div className="flex flex-col">
+          <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+            {zh ? "自相关·调整" : "S-corr⁺ (adj)"}
+          </span>
+          <span className="tabular-nums">
+            <SCorrValue value={alpha.self_correlation_adj} />
+          </span>
+        </div>
       </div>
 
       <SettingsRow settings={alpha.settings} />
@@ -529,29 +542,67 @@ const GRADE_STYLE: Record<string, { cls: string; short: string }> = {
   POOR: { cls: "border-tm-neg text-tm-neg", short: "POOR" },
 };
 
-// Official BRAIN self-correlation. BRAIN computes it only AFTER submit (pre-submit
-// the IS SELF_CORRELATION check is PENDING and /correlations/self is empty), so an
-// unsubmitted alpha shows a "pending" marker — not a bare dash that reads as a bug.
-// Use the adjusted S-corr⁺ for pre-submit diversity gating.
+function SCorrValue({ value }: { value: number | null }) {
+  if (typeof value !== "number") return <>—</>;
+  const cls = value >= 0.70
+    ? "text-tm-neg"
+    : value >= 0.65
+      ? "text-tm-warn"
+      : "text-tm-fg";
+  return <span className={cls}>{fmt(value)}</span>;
+}
+
+// Official BRAIN self-correlation. The API computes this lazily, so a missing
+// value must retain its actual pipeline state rather than collapsing to “pending”.
 function OfficialSCorrCell({ alpha, zh }: { alpha: BrainAlpha; zh: boolean }) {
   if (typeof alpha.self_correlation === "number") {
-    return <>{fmt(alpha.self_correlation)}</>;
+    return <SCorrValue value={alpha.self_correlation} />;
   }
-  if (!alpha.submitted_at) {
+  const status = alpha.self_correlation_status ?? (
+    alpha.outcome === "rejected" && alpha.fail_checks
+      ? "skipped_prerequisite"
+      : "pending"
+  );
+  if (status === "skipped_prerequisite") {
     return (
       <span
         className="cursor-help text-tm-muted"
         title={
           zh
-            ? "官方自相关由 BRAIN 惰性计算,通常提交前即可获得;本行显示待定表示挖矿/回填时尚未算完或未拉取。右侧「调整后 S-corr⁺」在官方值基础上还计入本地未提交的通过因子,是其超集,据此把关更严格。"
-            : "The official self-corr is computed lazily by BRAIN and is usually available pre-submit; 待定 here means it wasn't ready/fetched at mine or backfill time. The adjusted S-corr⁺ on the right is a superset (official plus your local not-yet-submitted passers), so gating on it is stricter."
+            ? "该因子先未通过 BRAIN 的持仓集中度、子股票池 Sharpe 等提交前置检查，因此主流程未执行自相关请求。GOOD 及以上结果会在轮次末尾进入限量补查。"
+            : "This factor failed an earlier BRAIN submission prerequisite, so the main path skipped the self-correlation request. GOOD-or-better rows enter a bounded post-run enrichment pass."
         }
       >
-        {zh ? "待定" : "pend"}
+        {zh ? "未执行" : "skipped"}
       </span>
     );
   }
-  return <>—</>;
+  if (status === "unavailable") {
+    return (
+      <span
+        className="cursor-help text-tm-warn"
+        title={
+          zh
+            ? "已请求 BRAIN 官方自相关，但在本轮限时轮询内尚未返回。后台回填任务会继续重试。"
+            : "Official self-correlation was requested but did not settle within the bounded poll. The scheduled backfill will retry."
+        }
+      >
+        {zh ? "暂不可用" : "unavail"}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="cursor-help text-tm-muted"
+      title={
+        zh
+          ? "BRAIN 官方自相关正在等待计算或尚未进入补查队列。0.70 是官方硬门槛，0.65–0.70 仅作预警。"
+          : "Official BRAIN self-correlation is waiting to compute or has not entered enrichment yet. 0.70 is the hard limit; 0.65–0.70 is warning-only."
+      }
+    >
+      {zh ? "待计算" : "pending"}
+    </span>
+  );
 }
 
 // Economic family of the alpha (from evolution.family_of, server-side). Labels
@@ -651,6 +702,7 @@ const CHECK_LABELS: Record<string, { zh: string; en: string }> = {
   LOW_TURNOVER: { zh: "换手过低", en: "low turnover" },
   HIGH_DRAWDOWN: { zh: "回撤过大", en: "high drawdown" },
   CONCENTRATED_WEIGHT: { zh: "持仓过于集中", en: "concentrated" },
+  LOW_SUB_UNIVERSE_SHARPE: { zh: "子股票池 Sharpe 偏低", en: "low sub-universe Sharpe" },
 };
 
 function checkLabel(c: string, zh: boolean): string {
@@ -1903,8 +1955,8 @@ export function BrainMiningPanel() {
             className="w-12 cursor-help text-right"
             title={
               zh
-                ? "BRAIN 官方自相关性:与你已提交(ACTIVE)因子的最大相关性"
-                : "BRAIN official: max self-correlation vs your ACTIVE (submitted) alphas"
+                ? "BRAIN 官方自相关性:与已提交(ACTIVE)因子的最大相关性。0.70 为官方硬门槛,0.65–0.70 仅预警。"
+                : "BRAIN official maximum correlation vs ACTIVE alphas. 0.70 is the hard limit; 0.65–0.70 is warning-only."
             }
           >
             S-corr
@@ -1913,8 +1965,8 @@ export function BrainMiningPanel() {
             className="w-14 cursor-help text-right text-tm-info"
             title={
               zh
-                ? "调整后自相关性:额外计入已挖出但暂未提交的通过因子后,重新计算的最大相关性"
-                : "Adjusted: recomputed to also count your passed-but-unsubmitted mined factors"
+                ? "调整后自相关性:额外计入已挖出但暂未提交的通过因子。仍以 0.70 为硬门槛,0.65–0.70 只提示组合拥挤风险。"
+                : "Adjusted correlation also counts passed-but-unsubmitted factors. The hard limit remains 0.70; 0.65–0.70 only warns about crowding."
             }
           >
             S-corr⁺
@@ -2000,7 +2052,7 @@ export function BrainMiningPanel() {
                     <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.drawdown)}</span>
                     <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.margin, 4)}</span>
                     <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2"><OfficialSCorrCell alpha={a} zh={zh} /></span>
-                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-info">{fmt(a.self_correlation_adj)}</span>
+                    <span className="w-14 text-right font-mono text-[11px] tabular-nums"><SCorrValue value={a.self_correlation_adj} /></span>
                     <span className="flex w-24 justify-end">
                       {a.alpha_id ? (
                         <AlphaIdChip alphaId={a.alpha_id} />

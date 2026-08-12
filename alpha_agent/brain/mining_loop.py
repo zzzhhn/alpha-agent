@@ -55,9 +55,11 @@ async def _simulate_one(client: BrainClient, expr: str, settings: dict, timeout_
         raise BrainSimulationError("completed sim carried no alpha id")
     return alpha_id, await client.get_alpha_metrics(alpha_id)
 
-# WorldQuant's SELF_CORRELATION bar: a new alpha correlating this much with an
-# existing ACTIVE one (on daily returns) is a re-discovery, not new alpha.
-_SELF_CORR_THRESHOLD = 0.65
+# WorldQuant's official SELF_CORRELATION bar.  Keep the hard outcome gate aligned
+# with the platform; a lower internal cutoff silently discards submit-eligible
+# candidates.  The 0.65-0.70 interval is a warning band, not a rejection band.
+_SELF_CORR_THRESHOLD = 0.70
+_SELF_CORR_WARNING = 0.65
 # G1: a passer must add at least this fraction of NOVEL variance (1 - R^2) on top
 # of its nearest accepted-basket neighbours. Deliberately low (0.15) so it flags
 # only the clearly-spanned (the pairwise gate missed collective low-rank), NOT
@@ -82,6 +84,49 @@ _FAMILY_CAP = {"value": 1, "options": 2, "revision": 2, "momentum": 2,
                "pcr_dynamics": 2,
                "option_breakeven": 2, "vrp": 2, "quality": 2,
                "dispersion": 2}
+
+
+async def _enrich_priority_official_self_corr(
+    client: BrainClient,
+    pool,
+    user_id: int,
+    run_id: int,
+    *,
+    limit: int = 5,
+    max_wait_s: float = 120.0,
+) -> tuple[int, int]:
+    """Enrich review-worthy rows after the expensive simulation loop.
+
+    This is sequential and bounded to avoid recreating the BRAIN endpoint
+    throttling incident.  It includes GOOD-or-better rejected rows because their
+    official correlation remains useful research evidence even when another
+    submission prerequisite failed.
+    """
+    alpha_ids = await store.priority_alpha_ids_missing_official_for_run(
+        pool, user_id, run_id, limit=limit
+    )
+    ready = unavailable = 0
+    for alpha_id in alpha_ids:
+        value = await client.get_self_correlation(
+            alpha_id, max_wait_s=max_wait_s
+        )
+        if value is None:
+            unavailable += 1
+            await store.mark_official_self_correlation_unavailable(
+                pool, user_id, alpha_id
+            )
+            continue
+        ready += 1
+        await store.update_official_self_correlation(
+            pool, user_id, alpha_id, value=value
+        )
+    if alpha_ids:
+        print(
+            f"[self-corr] post-run enrichment ready={ready} "
+            f"unavailable={unavailable} target={len(alpha_ids)}",
+            flush=True,
+        )
+    return ready, unavailable
 
 
 def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
@@ -499,8 +544,15 @@ async def _run_mining_round_impl(
         )
 
         if not metrics.passes_gates():
+            # Some BRAIN responses already include the authoritative
+            # SELF_CORRELATION check even when another submission prerequisite
+            # failed. Preserve that evidence instead of unnecessarily polling it
+            # again in the enrichment phase.
+            _reported_corr = metrics.brain_self_correlation()
             await _persist_brain_alpha(
                 pool, **common, outcome="rejected",
+                self_correlation=_reported_corr,
+                self_correlation_with="BRAIN" if _reported_corr is not None else None,
                 fail_checks=",".join(metrics.failing_checks()) or None,
                 detail="below in-sample gates (BRAIN submission bars)",
             )
@@ -670,9 +722,19 @@ async def _run_mining_round_impl(
             accepted_returns[alpha_id] = cand_rets
             our_passed[alpha_id] = cand_rets
         _warns = metrics.warning_checks()
+        _max_corr = max(official or 0.0, adj)
+        _near_corr = _SELF_CORR_WARNING <= _max_corr < _SELF_CORR_THRESHOLD
+        _detail_parts = []
+        if _warns:
+            _detail_parts.append("warnings: " + ",".join(_warns))
+        if _near_corr:
+            _detail_parts.append(
+                f"self-correlation near official limit: {_max_corr:.4f} "
+                f"(warning {_SELF_CORR_WARNING:.2f}, hard {_SELF_CORR_THRESHOLD:.2f})"
+            )
         await _persist_brain_alpha(
             pool, **common, **corr_kw, outcome="passed",
-            detail=("warnings: " + ",".join(_warns)) if _warns else None,
+            detail="; ".join(_detail_parts) or None,
         )
         summary["passed"] += 1
 
@@ -751,6 +813,20 @@ async def run_mining_round(
         raise
 
     if run_id is not None:
+        try:
+            enriched, unavailable = await _enrich_priority_official_self_corr(
+                client, pool, user_id, run_id
+            )
+            summary["self_corr_enriched"] = enriched
+            summary["self_corr_unavailable"] = unavailable
+        except Exception as exc:  # noqa: BLE001 — enrichment never invalidates sims
+            logger.warning(
+                "post-run self-correlation enrichment failed for run %s: %s",
+                run_id,
+                type(exc).__name__,
+            )
+            summary["self_corr_enriched"] = 0
+            summary["self_corr_unavailable"] = 0
         await store.complete_brain_run(
             pool,
             run_id,

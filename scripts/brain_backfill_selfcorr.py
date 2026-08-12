@@ -7,7 +7,7 @@ and write it to brain_alphas.self_correlation. Bounded per-call wait so a whole
 batch stays inside the Action's timeout. No simulation work.
 
 Env: DATABASE_URL (+ BYOK_MASTER_KEY) or BRAIN_USERNAME/BRAIN_PASSWORD;
-optional BRAIN_MINING_USER_ID, BACKFILL_LIMIT.
+optional BRAIN_MINING_USER_ID, BACKFILL_LIMIT, BACKFILL_RUN_ID.
 """
 import asyncio
 import os
@@ -50,9 +50,23 @@ async def _main() -> int:
         return 1
     limit = int(os.environ.get("BACKFILL_LIMIT", "120"))
     max_wait = float(os.environ.get("BACKFILL_MAX_WAIT", "120"))
-    ids = await store.unsubmitted_alpha_ids_missing_official(pool, user_id, limit=limit)
-    print(f"backfill target: {len(ids)} unsubmitted alphas missing official self-corr",
-          flush=True)
+    run_id_raw = os.environ.get("BACKFILL_RUN_ID", "").strip()
+    if run_id_raw:
+        run_id = int(run_id_raw)
+        ids = await store.priority_alpha_ids_missing_official_for_run(
+            pool, user_id, run_id, limit=limit
+        )
+        scope = f"run={run_id} priority"
+    else:
+        ids = await store.unsubmitted_alpha_ids_missing_official(
+            pool, user_id, limit=limit
+        )
+        scope = "all unsubmitted"
+    print(
+        f"backfill target: {len(ids)} alphas missing official self-corr "
+        f"({scope})",
+        flush=True,
+    )
 
     client = BrainClient(creds[0], creds[1])
     updated = miss = 0
@@ -100,6 +114,9 @@ async def _main() -> int:
             v = await client.get_self_correlation(aid, max_wait_s=max_wait)
             if v is None:
                 miss += 1
+                await store.mark_official_self_correlation_unavailable(
+                    pool, user_id, aid
+                )
                 print(f"[{i}/{len(ids)}] {aid} → still None", flush=True)
                 continue
             await store.update_official_self_correlation(pool, user_id, aid, value=v)

@@ -25,6 +25,7 @@ async def record_brain_alpha(
     self_correlation_with: str | None = None,
     self_correlation_adj: float | None = None,
     self_correlation_adj_with: str | None = None,
+    self_correlation_status: str | None = None,
     detail: str | None = None,
     grade: str | None = None,
     fail_checks: str | None = None,
@@ -42,20 +43,31 @@ async def record_brain_alpha(
     `blend_parents` is the list of parent expressions when this candidate was
     stitched by a blend round (family_focus == "blend"); None for every other
     candidate. NULL, not the string "null", is written when absent."""
+    if self_correlation_status is None:
+        if self_correlation is not None:
+            self_correlation_status = "ready"
+        elif alpha_id is None:
+            self_correlation_status = "unavailable"
+        elif outcome == "rejected" and fail_checks:
+            self_correlation_status = "skipped_prerequisite"
+        else:
+            self_correlation_status = "pending"
     row = await pool.fetchrow(
         "INSERT INTO brain_alphas "
         "(user_id, expression, settings, alpha_id, sharpe, fitness, turnover, "
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
         " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade, "
-        " fail_checks, retried, batch_started_at, run_id, blend_parents) "
+        " fail_checks, retried, batch_started_at, run_id, blend_parents, "
+        " self_correlation_status) "
         "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,"
-        " $18,$19,$20,$21,$22::jsonb) RETURNING id",
+        " $18,$19,$20,$21,$22::jsonb,$23) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with,
         self_correlation_adj, self_correlation_adj_with, outcome, detail, grade,
         fail_checks, retried, batch_started_at, run_id,
         json.dumps(blend_parents) if blend_parents is not None else None,
+        self_correlation_status,
     )
     return row["id"]
 
@@ -88,7 +100,8 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
 _ROW_COLS = (
     "id, run_id, expression, settings, alpha_id, sharpe, fitness, turnover, drawdown, "
     "returns, margin, self_correlation, self_correlation_with, "
-    "self_correlation_adj, self_correlation_adj_with, outcome, detail, "
+    "self_correlation_adj, self_correlation_adj_with, self_correlation_status, "
+    "outcome, detail, "
     "grade, fail_checks, retried, batch_started_at, created_at, submitted_at, "
     "brain_status, blend_parents"
 )
@@ -288,10 +301,50 @@ async def update_official_self_correlation(
     the official value came back None and the UI showed 待定."""
     await pool.execute(
         "UPDATE brain_alphas "
-        "SET self_correlation=$3, self_correlation_with=$4 "
+        "SET self_correlation=$3, self_correlation_with=$4, "
+        "self_correlation_status='ready' "
         "WHERE user_id=$1 AND alpha_id=$2 AND submitted_at IS NULL",
         user_id, alpha_id, value, corr_with,
     )
+
+
+async def mark_official_self_correlation_unavailable(
+    pool, user_id: int, alpha_id: str
+) -> None:
+    """Record that a bounded official-correlation poll did not become ready.
+
+    Scheduled backfill still retries these rows because the numeric value remains
+    NULL; this status only prevents the UI from calling a completed poll pending.
+    """
+    await pool.execute(
+        "UPDATE brain_alphas SET self_correlation_status='unavailable' "
+        "WHERE user_id=$1 AND alpha_id=$2 AND self_correlation IS NULL "
+        "AND submitted_at IS NULL",
+        user_id, alpha_id,
+    )
+
+
+async def priority_alpha_ids_missing_official_for_run(
+    pool, user_id: int, run_id: int, *, limit: int = 5
+) -> list[str]:
+    """High-value rows worth enriching after the simulation loop.
+
+    Passed/flagged rows come first, followed by GOOD-or-better rejected rows.
+    This keeps the extra BRAIN traffic bounded while retaining research evidence.
+    """
+    rows = await pool.fetch(
+        "SELECT alpha_id FROM brain_alphas "
+        "WHERE user_id=$1 AND run_id=$2 AND alpha_id IS NOT NULL "
+        "AND submitted_at IS NULL AND self_correlation IS NULL "
+        "AND (outcome IN ('passed','flagged') "
+        "     OR upper(coalesce(grade,'')) IN ('GOOD','EXCELLENT','SPECTACULAR')) "
+        "ORDER BY (outcome IN ('passed','flagged')) DESC, "
+        "CASE upper(coalesce(grade,'')) WHEN 'SPECTACULAR' THEN 3 "
+        "WHEN 'EXCELLENT' THEN 2 WHEN 'GOOD' THEN 1 ELSE 0 END DESC, id DESC "
+        "LIMIT $3",
+        user_id, run_id, min(max(int(limit), 1), 10),
+    )
+    return [r["alpha_id"] for r in rows]
 
 
 async def unsubmitted_alpha_ids_missing_official(
@@ -304,7 +357,10 @@ async def unsubmitted_alpha_ids_missing_official(
         "SELECT alpha_id FROM brain_alphas "
         "WHERE user_id=$1 AND alpha_id IS NOT NULL AND submitted_at IS NULL "
         "AND self_correlation IS NULL "
-        "ORDER BY (outcome IN ('passed','flagged')) DESC, created_at DESC "
+        "ORDER BY (outcome IN ('passed','flagged')) DESC, "
+        "CASE upper(coalesce(grade,'')) WHEN 'SPECTACULAR' THEN 3 "
+        "WHEN 'EXCELLENT' THEN 2 WHEN 'GOOD' THEN 1 ELSE 0 END DESC, "
+        "created_at DESC "
         "LIMIT $2",
         user_id, min(max(int(limit), 1), 400),
     )
