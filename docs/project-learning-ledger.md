@@ -60,3 +60,10 @@
 - Do not randomize expression sign, liquidity gate, universe, delay, neutralization, and decay in the same first-pass simulation. That confounds mechanism quality with settings quality and prevents the run history from teaching the generator.
 - Preserve the economic magnitude before cross-sectional ranking. `rank(HV)-rank(IV)` can collapse into a static book; normalize `IV-HV` first and rank the resulting spread.
 - Option channels have different money signs. Call-IV increases, put-IV increases, call-put skew, PCR changes, and IV term slope must be encoded as distinct hypotheses rather than pooled fields with random reversal.
+
+## 2026-08-12: Secret transport whitespace is part of the dispatch contract
+
+- A valid GitHub token can still fail before reaching GitHub when CLI stdin adds transport whitespace and the backend copies it directly into `Authorization`.
+- Normalize secret-backed header values at the point of use, not only in the deployment command.
+- Protocol exceptions may echo the rejected header value. Durable run ledgers and user-visible diagnostics must retain the exception class while discarding the raw message.
+- Environment-variable metadata, a Ready deployment, an active workflow, and a successful authenticated dispatch are separate checks. The first three cannot replace the final user-path retry.
