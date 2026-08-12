@@ -52,3 +52,11 @@
 - A user-facing family name must match the generator's real search space. “Options” cannot route only to one PCR-gated call-put IV-skew template when the catalogue and code already support term structure, IV dynamics, variance risk premium, PCR dynamics, and breakeven-forward mechanisms.
 - Dataset ordering is part of search correctness. A global field limit exhausted before option8 and option9, so an options run must query those catalogues first rather than claim broad exploration from a static six-field vocabulary.
 - Logic ranking alone does not guarantee diversity. Before expensive simulations, select one candidate per economic mechanism before taking a second candidate from any mechanism.
+
+## 2026-08-12: Novelty without an alpha anchor is weak diversification
+
+- RUN #66 solved the duplicate-skew problem but rejected all five independent mechanisms before self-correlation. Diversity is a constraint on a viable signal, not a substitute for signal strength.
+- A five-simulation options budget cannot treat every hypothesis as equally mature. Allocate first to a proven anchor plus orthogonal residuals, then to measured near-misses, and leave speculative fields for larger research rounds.
+- Do not randomize expression sign, liquidity gate, universe, delay, neutralization, and decay in the same first-pass simulation. That confounds mechanism quality with settings quality and prevents the run history from teaching the generator.
+- Preserve the economic magnitude before cross-sectional ranking. `rank(HV)-rank(IV)` can collapse into a static book; normalize `IV-HV` first and rank the resulting spread.
+- Option channels have different money signs. Call-IV increases, put-IV increases, call-put skew, PCR changes, and IV term slope must be encoded as distinct hypotheses rather than pooled fields with random reversal.

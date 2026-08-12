@@ -31,7 +31,7 @@ from alpha_agent.brain.fastexpr import (
 from alpha_agent.brain.logic_screen import (
     score_economic_logic,
     select_by_logic,
-    select_diverse_by_group,
+    select_options_research_portfolio,
 )
 from alpha_agent.brain.tuning import (
     base_settings_for,
@@ -287,7 +287,7 @@ async def _run_mining_round_impl(
             if family_focus == "options":
                 from alpha_agent.brain.evolution import options_mechanism_of
 
-                candidates = select_diverse_by_group(
+                candidates = select_options_research_portfolio(
                     generated_pool,
                     scores,
                     target_n=n_candidates,
@@ -311,7 +311,7 @@ async def _run_mining_round_impl(
             if family_focus == "options":
                 from alpha_agent.brain.evolution import options_mechanism_of
 
-                candidates = select_diverse_by_group(
+                candidates = select_options_research_portfolio(
                     generated_pool,
                     {},
                     target_n=n_candidates,
@@ -429,7 +429,13 @@ async def _run_mining_round_impl(
         # only; deterministic per expr so reruns are reproducible).
         fam = family_of(expr)
         _srng = random.Random(zlib.crc32(expr.encode()) ^ (rng_seed or 0))
-        settings = vary_settings(base_settings_for(expr), fam, _srng)
+        base_settings = base_settings_for(expr)
+        # An options discovery slot must test one economic mechanism, not a
+        # mechanism plus a random universe/delay/neutralization lottery. Keep the
+        # proven TOP3000/D1/SUBINDUSTRY baseline in the first pass; the bounded
+        # near-miss retry below remains the place for targeted settings changes.
+        settings = (base_settings if family_focus == "options"
+                    else vary_settings(base_settings, fam, _srng))
         if family_focus == "composite":
             # Fitness round: F = S*sqrt(ret/max(T,0.125)) — force heavy smoothing
             # so turnover approaches the 0.125 floor.

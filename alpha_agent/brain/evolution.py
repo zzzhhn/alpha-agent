@@ -100,6 +100,9 @@ def family_of(expr: str) -> str:
     e = expr or ""
     # Frontier mechanisms FIRST — their field mixes would otherwise be swallowed
     # by the broader options/value/momentum regexes below.
+    if ("pcr_oi" in e and "add(" in e
+            and "implied_volatility_call" in e and "implied_volatility_put" in e):
+        return "options_composite"
     if "breakeven" in e and "forward_price" in e:
         return "option_breakeven"
     if "pcr_oi" in e and ("ts_delta(" in e or "ts_zscore(" in e):
@@ -153,6 +156,13 @@ def family_of(expr: str) -> str:
 
 def options_mechanism_of(expr: str) -> str:
     """Fine options mechanism used for generation quotas and UI diagnosis."""
+    e = expr or ""
+    if family_of(e) == "options_composite":
+        if "ts_delta(implied_volatility_call" in e:
+            return "skew_call_innovation_blend"
+        if re.search(r"divide\(implied_volatility_call_\d+, implied_volatility_call_\d+\)", e):
+            return "skew_term_blend"
+        return "options_composite"
     family = family_of(expr)
     if family in {
         "option_breakeven", "pcr_dynamics", "iv_skew_dynamics",

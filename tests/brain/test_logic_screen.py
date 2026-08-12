@@ -8,6 +8,7 @@ from alpha_agent.brain.logic_screen import (
     score_economic_logic,
     select_by_logic,
     select_diverse_by_group,
+    select_options_research_portfolio,
 )
 from alpha_agent.llm.base import LLMResponse
 
@@ -58,6 +59,19 @@ def test_select_diverse_by_group_uses_mechanisms_before_repeats():
     selected = select_diverse_by_group(
         exprs, scores, target_n=3, group_of=groups.__getitem__)
     assert selected == ["skew-a", "vrp-a", "term-a"]
+
+
+def test_options_small_budget_prefers_anchors_and_near_miss_mechanisms():
+    exprs = ["pcr", "term", "skew-term", "vrp", "skew-mom", "breakeven"]
+    groups = {
+        "pcr": "pcr_dynamics", "term": "iv_term",
+        "skew-term": "skew_term_blend", "vrp": "vrp",
+        "skew-mom": "skew_call_innovation_blend",
+        "breakeven": "option_breakeven",
+    }
+    selected = select_options_research_portfolio(
+        exprs, {}, target_n=5, group_of=groups.__getitem__)
+    assert selected == ["skew-term", "skew-mom", "term", "vrp", "pcr"]
 
 
 # ── score_economic_logic (LLM I/O) ────────────────────────────────────────

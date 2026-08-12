@@ -21,12 +21,12 @@ from alpha_agent.llm.base import LLMClient, Message
 
 logger = logging.getLogger(__name__)
 
-_WALL_CLOCK_S = 90
+_WALL_CLOCK_S = 180
 # Generous cap: Kimi-for-coding (k2.6) is a reasoning model that spends output
 # tokens on internal thinking before the JSON — too small a cap returns empty
-# content (the screen then degrades to a harmless no-op). 4000 leaves room for
+# content (the screen then degrades to a harmless no-op). 8000 leaves room for
 # the reasoning plus a scored array for a full batch.
-_OUTPUT_TOKEN_CAP = 4000
+_OUTPUT_TOKEN_CAP = 8000
 # Keep candidates scoring at least this (0-10) — 5 = "plausible economic logic".
 DEFAULT_MIN_SCORE = 5.0
 
@@ -129,6 +129,60 @@ def select_diverse_by_group(
     while len(selected) < target:
         added = False
         for bucket in buckets.values():
+            if depth < len(bucket):
+                selected.append(bucket[depth])
+                added = True
+                if len(selected) >= target:
+                    break
+        if not added:
+            break
+        depth += 1
+    return selected
+
+
+_OPTIONS_RESEARCH_PRIORITY = (
+    "skew_term_blend",
+    "skew_call_innovation_blend",
+    "iv_term",
+    "iv_momentum",
+    "vrp",
+    "pcr_dynamics",
+    "iv_skew_level",
+    "iv_skew_dynamics",
+    "option_breakeven",
+)
+
+
+def select_options_research_portfolio(
+    expressions: list[str],
+    scores: dict[str, float],
+    *,
+    target_n: int,
+    group_of,
+) -> list[str]:
+    """Allocate a small options budget by evidence, not shuffled bucket order.
+
+    Two anchor-plus-residual candidates receive the first slots, followed by the
+    strongest independent mechanisms from the latest BRAIN evidence.  This keeps
+    one representative per mechanism before repeats, but no longer gives an
+    unvalidated breakeven construction the same chance as a near-miss IV-term
+    signal. LLM scores rank variants *within* a mechanism only.
+    """
+    target = min(max(int(target_n), 0), len(expressions))
+    buckets: dict[str, list[str]] = {}
+    for expr in expressions:
+        buckets.setdefault(str(group_of(expr)), []).append(expr)
+    for bucket in buckets.values():
+        bucket.sort(key=lambda expr: scores.get(expr, 5.0), reverse=True)
+
+    ordered_groups = [g for g in _OPTIONS_RESEARCH_PRIORITY if g in buckets]
+    ordered_groups.extend(g for g in buckets if g not in ordered_groups)
+    selected: list[str] = []
+    depth = 0
+    while len(selected) < target:
+        added = False
+        for group in ordered_groups:
+            bucket = buckets[group]
             if depth < len(bucket):
                 selected.append(bucket[depth])
                 added = True

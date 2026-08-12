@@ -29,7 +29,10 @@ _BASE_FIELDS = (
 # Keep mechanism-specific groups explicit: the options focus is a portfolio of
 # hypotheses, not a single call-put-skew template with swapped tenors.
 _OPTION_FIELDS = {
-    "pcr_oi": ("pcr_oi_270", "pcr_oi_120"),
+    # Short PCR carries the recent OI change documented in the option-market
+    # literature. Keep slower tenors as regime controls, but do not make every
+    # candidate a 120/270-day level bet.
+    "pcr_oi": ("pcr_oi_10", "pcr_oi_120", "pcr_oi_150", "pcr_oi_270"),
     "iv_call": ("implied_volatility_call_150", "implied_volatility_call_180"),
     "iv_put": ("implied_volatility_put_150", "implied_volatility_put_180"),
     "iv_mean": (
@@ -601,49 +604,47 @@ def _m_iv_term(rng: random.Random) -> dict:
     surface — mechanically distinct from the saturated call-put SKEW (strike
     dimension). Slope innovations via ts_zscore."""
     short, long_ = rng.choice(_IV_TENOR_PAIRS)
-    slope = _op("subtract", _fld(short), _fld(long_))
-    # ts_decay_linear: the raw slope churned at 0.81 turnover (cap 0.35)
+    # Relative slope is comparable across low- and high-volatility stocks.  The
+    # former raw difference mixed the term signal with each stock's volatility
+    # level and plateaued below the Sharpe bar.
+    slope = _op("subtract", _op("divide", _fld(short), _fld(long_)), _lit(1))
     leg = _op("ts_decay_linear", _op("rank", _op("ts_zscore", slope, _lit(60))),
-              _lit(15))
-    if rng.random() < 0.15:
-        leg = _op("reverse", leg)  # 2026-07-11: reversed scored -1.24 => plain wins
+              _lit(12))
+    # Direction is pinned. Historical BRAIN runs found the reversed slope
+    # strongly negative; random sign probes only spend scarce simulations on a
+    # known losing side.
     return _op("group_neutralize", leg, _fld(rng.choice(("sector", "subindustry"))))
 
 
 def _m_iv_mom(rng: random.Random) -> dict:
-    """IV momentum (community-documented alternative to skew level):
-    decay-smoothed change in implied vol."""
-    f = rng.choice(_IV_MOM_FIELDS)
+    """Call-IV innovation: rising call IV predicts positive stock returns.
+
+    Call and put innovations have opposite signs in An et al. (2014), so a
+    pooled call/mean field followed by a random reverse is not a coherent bet.
+    Use call IV only and keep the empirically/literature-supported sign.
+    """
+    f = rng.choice(("implied_volatility_call_60", "implied_volatility_call_120"))
     leg = _op("rank", _op("ts_decay_linear",
-                          _op("ts_delta", _fld(f), _lit(25)), _lit(20)))
-    if rng.random() < 0.15:
-        leg = _op("reverse", leg)  # 2026-07-11: reversed scored -1.20 => plain wins
+                          _op("ts_delta", _fld(f), _lit(20)), _lit(12)))
     return _op("group_neutralize", leg, _fld("subindustry"))
 
 
 def _m_vrp(rng: random.Random) -> dict:
-    """Stock-level variance risk premium (Bali & Hovakimian 2009), rank-space
-    form (unit-free): short names whose realized vol runs hot vs implied."""
-    if rng.random() < 0.7:
-        historical, implied = rng.choice((
-            ("historical_volatility_20", "implied_volatility_mean_10"),
-            ("historical_volatility_60", "implied_volatility_mean_60"),
-            ("historical_volatility_120", "implied_volatility_mean_120"),
-            ("historical_volatility_180", "implied_volatility_mean_180"),
-        ))
-        spread = _op(
-            "subtract", _op("rank", _fld(historical)),
-            _op("rank", _fld(implied)),
-        )
-    else:
-        w, implied = rng.choice(((120, "implied_volatility_mean_120"),
-                                 (21, "implied_volatility_mean_10")))
-        spread = _op(
-            "subtract",
-            _op("rank", _op("ts_std_dev", _fld("returns"), _lit(w))),
-            _op("rank", _fld(implied)),
-        )
-    leg = _op("reverse", spread) if rng.random() < 0.85 else spread
+    """Stock-level variance risk premium, IV minus matched-tenor historical vol.
+
+    Ranking both legs separately erased magnitude and produced nearly static,
+    zero-return books.  Normalize the economically meaningful spread first,
+    then rank it cross-sectionally.  Bali & Hovakimian's negative coefficient
+    on HV-IV implies this positive IV-HV orientation.
+    """
+    historical, implied = rng.choice((
+        ("historical_volatility_60", "implied_volatility_mean_60"),
+        ("historical_volatility_120", "implied_volatility_mean_120"),
+        ("historical_volatility_180", "implied_volatility_mean_180"),
+    ))
+    spread = _op("divide", _op("subtract", _fld(implied), _fld(historical)),
+                 _op("abs", _fld(historical)))
+    leg = _op("rank", _op("ts_zscore", spread, _lit(60)))
     return _op("group_neutralize", leg, _fld("subindustry"))
 
 
@@ -670,16 +671,10 @@ def _m_iv_skew_dynamics(rng: random.Random) -> dict:
 
 def _m_pcr_dynamics(rng: random.Random) -> dict:
     """Put-call open-interest regime change, not the fixed PCR<1.1 gate."""
-    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
-    if rng.random() < 0.5:
-        signal = _op("ts_delta", pcr, _lit(rng.choice((10, 20, 30))))
-    else:
-        signal = _op("ts_zscore", pcr, _lit(rng.choice((60, 120))))
-    # Falling put-call OI is the continuation of the proven low-PCR direction;
-    # retain a small sign probe rather than silently declaring it universal.
-    leg = _op("rank", signal)
-    if rng.random() < 0.85:
-        leg = _op("reverse", leg)
+    pcr = _fld(rng.choice(("pcr_oi_10", "pcr_oi_120", "pcr_oi_150")))
+    signal = _op("ts_delta", pcr, _lit(rng.choice((5, 10, 20))))
+    # Falling put-call OI is the continuation of the proven low-PCR direction.
+    leg = _op("reverse", _op("rank", signal))
     return _op("group_neutralize", leg, _fld(rng.choice(("sector", "subindustry"))))
 
 
@@ -701,6 +696,54 @@ def _m_breakeven_forward(rng: random.Random) -> dict:
         "group_neutralize", leg,
         _fld(rng.choice(("industry", "subindustry"))),
     )
+
+
+def _m_skew_term_blend(rng: random.Random) -> dict:
+    """Proven call-put skew anchor plus an orthogonal IV-term residual.
+
+    Pure new mechanisms were independent but too weak, while the old skew book
+    was strong but self-correlated.  A scale-controlled second leg preserves the
+    anchor's signal strength and changes the return path enough to earn a real
+    correlation test instead of replacing it with a weak standalone anomaly.
+    """
+    i = rng.randint(0, 1)
+    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
+    raw_skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
+                   _fld(_OPTION_FIELDS["iv_put"][i]))
+    skew = _op("trade_when", _op("less", pcr, {"type": "literal", "value": 1.1}),
+               raw_skew, _lit(-1))
+    short, long_ = rng.choice(_IV_TENOR_PAIRS)
+    relative_slope = _op("subtract", _op("divide", _fld(short), _fld(long_)), _lit(1))
+    term = _op("ts_zscore", relative_slope, _lit(60))
+    # Put the standardized residual back into the raw skew's units. This avoids
+    # both failure modes: an unscaled rank swallowing the anchor, or a tiny fixed
+    # coefficient that never changes its return path.
+    residual = _op("multiply", term, _op("ts_std_dev", raw_skew, _lit(60)))
+    blend = _op("add", skew,
+                _op("multiply", residual, {"type": "literal", "value": 0.5}))
+    return _op("group_neutralize", blend,
+               _fld(rng.choice(("industry", "subindustry"))))
+
+
+def _m_skew_call_innovation_blend(rng: random.Random) -> dict:
+    """Proven skew anchor plus call-IV innovation from An et al. (2014)."""
+    i = rng.randint(0, 1)
+    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
+    raw_skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
+                   _fld(_OPTION_FIELDS["iv_put"][i]))
+    skew = _op("trade_when", _op("less", pcr, {"type": "literal", "value": 1.1}),
+               raw_skew, _lit(-1))
+    call = _fld(rng.choice(("implied_volatility_call_60",
+                            "implied_volatility_call_120")))
+    innovation = _op("ts_zscore", _op("ts_decay_linear",
+                                       _op("ts_delta", call, _lit(20)), _lit(12)),
+                     _lit(60))
+    residual = _op("multiply", innovation,
+                   _op("ts_std_dev", raw_skew, _lit(60)))
+    blend = _op("add", skew,
+                _op("multiply", residual, {"type": "literal", "value": 0.5}))
+    return _op("group_neutralize", blend,
+               _fld(rng.choice(("industry", "subindustry"))))
 
 
 def _m_quality(rng: random.Random) -> dict:
@@ -961,6 +1004,8 @@ def _options_leg(rng: random.Random) -> dict:
 # variants of the same skew-level book.  `iv_skew_level` stays as an exploitation
 # control; the other mechanisms are discovery candidates.
 _OPTIONS_MOTIFS: tuple = (
+    ("skew_term_blend", _m_skew_term_blend),
+    ("skew_call_innovation_blend", _m_skew_call_innovation_blend),
     ("iv_skew_level", _options_leg),
     ("iv_skew_dynamics", _m_iv_skew_dynamics),
     ("iv_term", _m_iv_term),
@@ -1337,7 +1382,13 @@ def generate_brain_candidates(
         # Dominant ACTIVE pattern: gate the signal by a liquidity condition
         # (trade_when(volume>adv20, alpha, -1)). Applied after the depth check so the
         # 2-level wrap doesn't blow the budget; skip if already a trade_when.
-        if tree.get("name") != "trade_when" and rng.random() < 0.35:
+        # Options motifs are already complete, mechanism-specific hypotheses.
+        # A generic volume gate improved one historical skew family, but applying
+        # it randomly to term/VRP/PCR candidates confounds the hypothesis test
+        # and removed breadth in run #66. Only the proven skew motif keeps its
+        # deliberate liquidity gate.
+        if (family_focus != "options" and tree.get("name") != "trade_when"
+                and rng.random() < 0.35):
             tree = _trade_when_wrap(rng, tree)
         expr = _valid_brain_tree(tree)
         if expr is None or expr in seen:
