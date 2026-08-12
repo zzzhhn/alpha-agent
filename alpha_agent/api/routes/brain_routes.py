@@ -151,7 +151,9 @@ async def trigger_mining(
     # Anchor BEFORE dispatch so no candidate row can land before the anchor.
     started_at = run.get("created_at") or run.get("queued_at")
 
-    gh_token = os.environ.get("GH_PAT")
+    # Vercel CLI accepts the value through stdin.  Strip transport whitespace
+    # so a trailing newline cannot become an illegal Authorization header.
+    gh_token = (os.environ.get("GH_PAT") or "").strip()
     if not gh_token:
         await store.fail_brain_run(
             pool, run_id, error_detail="GH_PAT not configured; cannot dispatch mining"
@@ -183,8 +185,11 @@ async def trigger_mining(
                 },
             )
     except Exception as e:  # noqa: BLE001 — surface network failure cleanly
+        # Some HTTP protocol errors include the rejected header value in their
+        # message. Persist only the exception class so credentials can never be
+        # copied into the run ledger or returned by the UI.
         await store.fail_brain_run(
-            pool, run_id, error_detail=f"dispatch failed: {type(e).__name__}: {e}"
+            pool, run_id, error_detail=f"dispatch failed: {type(e).__name__}"
         )
         raise HTTPException(502, f"dispatch failed: {type(e).__name__}") from e
     if resp.status_code != 204:
@@ -273,7 +278,7 @@ async def mining_status(
         elif latest_status == "failed":
             latest_conclusion = "failure"
 
-    gh_token = os.environ.get("GH_PAT")
+    gh_token = (os.environ.get("GH_PAT") or "").strip()
     if run is None and gh_token:
         runs_url = (
             f"https://api.github.com/repos/{_GH_REPO}/actions/"
