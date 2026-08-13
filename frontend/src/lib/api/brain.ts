@@ -74,6 +74,31 @@ export interface BrainAlpha {
   // so it can never disagree with the parent list.
   blend_parents?: string[] | null;
   is_blend?: boolean;
+  research_evidence?: {
+    context_key?: string;
+    hypothesis?: {
+      id?: string;
+      title?: string;
+      source_url?: string | null;
+      target?: string;
+      confidence?: string;
+      falsification?: string;
+    };
+    field_mapping?: {
+      field_ids?: string[];
+      dataset_ids?: string[];
+      coverage?: number;
+      mapped_ratio?: number;
+    };
+    screen?: Record<string, string | number>;
+    proxy?: {
+      active?: boolean;
+      sample_n?: number;
+      reason?: string;
+      validated_targets?: string[];
+      prediction?: Record<string, number>;
+    };
+  } | null;
 }
 
 export interface BrainSubmitResult {

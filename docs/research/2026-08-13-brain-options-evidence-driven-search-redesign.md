@@ -2,7 +2,7 @@
 
 日期：2026-08-13
 
-实现状态：P0 主路径与轻量 P1 已落地。options 运行会读取官方字段 metadata 和既有运行结果，使用多目标证据筛选，把仿真预算视为上限；旧 anchor blend 已替换为 `ts_regression` 残差候选。重型 surrogate、MCTS 与 RL 仍保留在后续阶段。
+实现状态：P0、P1 与适合个人项目算力边界的 P2 已落地。options 运行会读取官方字段 metadata 和既有运行结果，使用多目标证据筛选，把仿真预算视为上限；旧 anchor blend 已替换为 `ts_regression` 残差候选。P1 已加入可审计 hypothesis registry、`mechanism × dataset × settings` 分层后验与失败模式定向修复。P2 使用 NumPy 轻量逻辑回归和岭回归，并且只有在最近 20% 时间留出集优于常数基线时才参与预筛。MCTS、RL 与重型模型不进入当前个人项目主路径。
 
 ## 1. 结论先行
 
@@ -123,7 +123,8 @@ flowchart LR
     E --> F[仿真预算分配]
     F --> G[官方 BRAIN 仿真与门槛]
     G --> H[机制后验与实验账本]
-    H --> C
+    H --> I[时间留出验证的轻量代理]
+    I --> C
 ```
 
 ### 6.1 P0：先修搜索正确性
@@ -155,6 +156,16 @@ flowchart LR
 - 对因子组合的边际贡献。
 
 这里不建议一开始上大模型或 RL。个人项目应先用可解释的分层统计、逻辑回归或 gradient boosting，在累计足够样本后再考虑 bandit、MCTS 或 RL。
+
+### 6.4 已实现的 P1、P2 安全边界
+
+- 历史后验以 `mechanism × dataset × universe × neutralization × delay × decay bucket × truncation bucket` 为上下文。精确上下文不足三次时退回机制层后验，避免一两个样本支配下一轮预算。
+- `CONCENTRATED_WEIGHT` 达到历史失败阈值时收紧 truncation，`HIGH_TURNOVER` 提高 decay；`LOW_SUB_UNIVERSE_SHARPE` 只记录稳定性失败，不自动缩小 universe。
+- 每条候选保存论文来源、原始构造、目标收益类型、官方字段映射、coverage、替代解释、证伪条件、上下文后验和代理预测。展开结果行即可审阅，LLM 不能静默改写这份注册表。
+- 轻量代理至少需要 48 条历史记录，二分类目标还要求正负样本各至少 8 条。验证采用按时间排序的最近 20% 留出集；逻辑回归必须改善 Brier score，岭回归必须改善 MSE，否则该目标停用。
+- 代理只有在 GOOD 目标和至少一个风险目标通过留出验证后才启用，最多占 pre-screen 总分的 15%。样本不足、分布漂移或验证失败时自动退回分层后验，不阻塞挖掘。
+- 所谓“边际贡献”目前明确实现为 `1 − adjusted_self_corr²` 的分散化代理，并非真实组合增量收益回归。它只能帮助排序，不能作为提交或淘汰因子的独立门槛。
+- 当前字段 coverage 使用本轮官方 catalog 快照，不声称是历史 point-in-time coverage。若以后保存逐日 catalog，才可升级为严格的时间点特征。
 
 ## 7. 下一轮最小实验设计
 

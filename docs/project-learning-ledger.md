@@ -81,3 +81,11 @@
 - The implemented P0 path now treats the BRAIN simulation budget as a ceiling, ranks options candidates with official field coverage plus measured mechanism outcomes, and refuses to backfill low-evidence candidates merely to fill the requested count.
 - A catalogue outage and a field missing from a successfully loaded catalogue are different states. The former retains a neutral prior and marks the screen partial; the latter receives no fabricated coverage credit.
 - Environment-variable metadata, a Ready deployment, an active workflow, and a successful authenticated dispatch are separate checks. The first three cannot replace the final user-path retry.
+
+## 2026-08-13: A small proxy must earn the right to steer expensive simulations
+
+- Options history is imbalanced by mechanism and simulation settings, so an in-sample fit can mostly rediscover the dominant configuration rather than generalize to a new hypothesis. Split chronologically and compare against a constant baseline before exposing a prediction.
+- A personal project does not need RL or MCTS to learn from 100 to 200 observations. A regularized NumPy model plus hierarchical context posterior is cheaper, auditable, and safe to deactivate when the evidence is weak.
+- Separate failure feedback by cause. Tight truncation can address repeated concentration and extra decay can address turnover, while low sub-universe Sharpe is a stability warning and does not justify shrinking the universe automatically.
+- Persist the research contract with every simulated candidate. Paper source, target outcome, field mapping, current coverage, settings context, alternative explanations, and falsification rules must survive page refreshes and future code changes.
+- `1 − adjusted self-correlation²` is only a diversification proxy. Naming it marginal contribution would overstate the evidence unless a real portfolio-level incremental-return regression is available.

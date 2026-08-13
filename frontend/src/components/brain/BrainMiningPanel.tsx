@@ -281,6 +281,112 @@ function SettingsRow({ settings }: { settings: Record<string, unknown> }) {
   );
 }
 
+function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const evidence = alpha.research_evidence;
+  if (!evidence) return null;
+  const hypothesis = evidence.hypothesis;
+  const mapping = evidence.field_mapping;
+  const screen = evidence.screen;
+  const proxy = evidence.proxy;
+  const pct = (value: number | undefined) =>
+    typeof value === "number" ? `${Math.round(value * 100)}%` : "—";
+  const prediction = proxy?.prediction || {};
+  return (
+    <div className="border border-tm-rule bg-tm-bg px-3 py-2.5">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-accent">
+          {zh ? "研究证据" : "Research evidence"}
+        </span>
+        <span className="font-tm-mono text-[9.5px] text-tm-muted">
+          {proxy?.active
+            ? `${zh ? "代理已验证" : "proxy validated"} · n=${proxy.sample_n ?? "—"}`
+            : zh
+              ? "代理未启用，使用分层后验"
+              : "proxy inactive; hierarchical posterior used"}
+        </span>
+      </div>
+      <div className="grid gap-3 text-[10.5px] lg:grid-cols-4">
+        <div>
+          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+            {zh ? "假设" : "Hypothesis"}
+          </div>
+          {hypothesis?.source_url ? (
+            <a
+              href={hypothesis.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-tm-fg hover:text-tm-accent"
+            >
+              {hypothesis.title || hypothesis.id}
+            </a>
+          ) : (
+            <div className="text-tm-fg">{hypothesis?.title || hypothesis?.id || "—"}</div>
+          )}
+          <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+            {hypothesis?.confidence || "—"} · {hypothesis?.target || "—"}
+          </div>
+        </div>
+        <div>
+          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+            {zh ? "字段可测量性" : "Field measurability"}
+          </div>
+          <div className="font-tm-mono text-tm-fg">
+            {mapping?.dataset_ids?.join(" + ") || "unmapped"}
+          </div>
+          <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+            coverage {pct(mapping?.coverage)} · mapped {pct(mapping?.mapped_ratio)}
+          </div>
+        </div>
+        <div>
+          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+            {zh ? "筛选证据" : "Screen evidence"}
+          </div>
+          <div className="font-tm-mono text-tm-fg">
+            score {typeof screen?.score === "number" ? screen.score.toFixed(2) : "—"}
+          </div>
+          <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+            history {typeof screen?.history === "number" ? screen.history.toFixed(2) : "—"} · context n={screen?.context_n ?? 0}
+          </div>
+        </div>
+        <div>
+          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+            {zh ? "代理预测" : "Proxy prediction"}
+          </div>
+          {proxy?.active ? (
+            <>
+              <div className="font-tm-mono text-tm-fg">
+                GOOD {pct(prediction.good)} · {zh ? "集中风险" : "concentration"} {pct(prediction.concentration)}
+              </div>
+              <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+                {zh ? "官方自相关估计" : "official self-corr estimate"} {pct(prediction.self_corr)} · {zh ? "分散化代理" : "diversification proxy"} {pct(prediction.marginal_proxy)}
+              </div>
+              <div
+                className="mt-1 font-tm-mono text-[9px] text-tm-muted"
+                title={zh
+                  ? "分散化代理为 1 − 调整后自相关²，并非真实组合边际收益回归。"
+                  : "Diversification proxy is 1 minus adjusted self-correlation squared, not a portfolio-level incremental-return regression."}
+              >
+                {zh ? "近 20% 时间留出集验证，仅以 15% 权重参与预筛" : "validated on the latest 20% holdout; 15% screen weight"}
+              </div>
+            </>
+          ) : (
+            <div className="text-tm-muted" title={proxy?.reason}>
+              {zh ? "未通过样本或留出验证门槛" : "sample or holdout gate not met"}
+            </div>
+          )}
+        </div>
+      </div>
+      {hypothesis?.falsification ? (
+        <div className="mt-2 border-t border-tm-rule pt-2 font-tm-mono text-[9.5px] text-tm-muted">
+          {zh ? "证伪条件" : "Falsification"}: {hypothesis.falsification}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // per-year IS Summary table (fetched from BRAIN on demand).
 const YEARLY_COLS = [
   "year", "sharpe", "turnover", "fitness", "returns", "drawdown", "margin",
@@ -480,6 +586,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
       </div>
 
       <SettingsRow settings={alpha.settings} />
+      <ResearchEvidencePanel alpha={alpha} />
 
       <div>
         <div className="mb-1 flex items-center justify-between">
