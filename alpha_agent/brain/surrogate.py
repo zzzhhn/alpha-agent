@@ -10,8 +10,6 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Any
-
 import numpy as np
 
 from alpha_agent.brain.evolution import options_mechanism_of
