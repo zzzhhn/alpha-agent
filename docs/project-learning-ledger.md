@@ -71,5 +71,21 @@
 
 - RUN #72 produced two GOOD alphas whose official self-correlation cells appeared as pending. Both had already failed `CONCENTRATED_WEIGHT` and `LOW_SUB_UNIVERSE_SHARPE`, so the main workflow intentionally stopped before the self-correlation request.
 - Grade and submission eligibility are different axes. Preserve high-grade rejected candidates as research evidence and perform a small, sequential post-run self-correlation enrichment instead of spending this API budget on every failed simulation.
+
+## 2026-08-13: Mechanism labels are not behavioral diversity
+
+- RUN #73 spent three of five simulations on syntactically independent options mechanisms that were too weak, while both strong anchor-plus-residual formulas remained dominated by the same PCR-gated call-minus-put IV core and reached official self-correlation of 0.76 and 0.85.
+- A simulation budget is a ceiling, not a quota. Do not backfill low-confidence candidates merely to consume it. Rank by field coverage, concentration risk, outcome alignment, historical mechanism posterior, and behavioral novelty before making expensive BRAIN calls.
+- Scaling a second leg into the anchor's units is not residualization. Behavioral novelty must be measured from signal or return paths, not inferred from different operators, tenors, or mechanism labels.
 - BRAIN's official hard threshold is `0.70`. An internal `0.65` level is useful as a crowding warning, but using it as a rejection threshold silently discards officially eligible candidates without changing their standalone Sharpe or Fitness.
+- The implemented P0 path now treats the BRAIN simulation budget as a ceiling, ranks options candidates with official field coverage plus measured mechanism outcomes, and refuses to backfill low-evidence candidates merely to fill the requested count.
+- A catalogue outage and a field missing from a successfully loaded catalogue are different states. The former retains a neutral prior and marks the screen partial; the latter receives no fabricated coverage credit.
 - Environment-variable metadata, a Ready deployment, an active workflow, and a successful authenticated dispatch are separate checks. The first three cannot replace the final user-path retry.
+
+## 2026-08-13: A small proxy must earn the right to steer expensive simulations
+
+- Options history is imbalanced by mechanism and simulation settings, so an in-sample fit can mostly rediscover the dominant configuration rather than generalize to a new hypothesis. Split chronologically and compare against a constant baseline before exposing a prediction.
+- A personal project does not need RL or MCTS to learn from 100 to 200 observations. A regularized NumPy model plus hierarchical context posterior is cheaper, auditable, and safe to deactivate when the evidence is weak.
+- Separate failure feedback by cause. Tight truncation can address repeated concentration and extra decay can address turnover, while low sub-universe Sharpe is a stability warning and does not justify shrinking the universe automatically.
+- Persist the research contract with every simulated candidate. Paper source, target outcome, field mapping, current coverage, settings context, alternative explanations, and falsification rules must survive page refreshes and future code changes.
+- `1 − adjusted self-correlation²` is only a diversification proxy. Naming it marginal contribution would overstate the evidence unless a real portfolio-level incremental-return regression is available.

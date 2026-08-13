@@ -14,10 +14,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional
 
 from alpha_agent.evolution.llm_factor_proposer import _strip_md_fence
 from alpha_agent.llm.base import LLMClient, Message
+from alpha_agent.brain.hypotheses import (
+    hypothesis_for,
+    map_expression_fields,
+    research_context_key,
+)
+from alpha_agent.brain.surrogate import proxy_composite
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +36,7 @@ _WALL_CLOCK_S = 180
 _OUTPUT_TOKEN_CAP = 8000
 # Keep candidates scoring at least this (0-10) — 5 = "plausible economic logic".
 DEFAULT_MIN_SCORE = 5.0
+OPTIONS_MIN_EVIDENCE_SCORE = 5.75
 
 _PROMPT = """You are a quantitative equity researcher screening candidate alpha \
 factors before an expensive backtest. For EACH expression below, judge its \
@@ -141,16 +149,162 @@ def select_diverse_by_group(
 
 
 _OPTIONS_RESEARCH_PRIORITY = (
+    "skew_call_innovation_residual",
+    "skew_term_residual",
+    # Historical names remain readable in old ledgers and compatibility callers.
     "skew_term_blend",
     "skew_call_innovation_blend",
-    "iv_term",
+    "iv_skew_level",
     "iv_momentum",
+    "iv_term",
     "vrp",
     "pcr_dynamics",
     "iv_skew_level",
     "iv_skew_dynamics",
     "option_breakeven",
 )
+
+_OPTIONS_OUTCOME_ALIGNMENT = {
+    "skew_call_innovation_residual": 8.5,
+    "iv_momentum": 8.0,
+    "iv_skew_level": 8.0,
+    "iv_skew_dynamics": 6.0,
+    "skew_term_residual": 5.0,
+    "pcr_dynamics": 3.5,
+    "iv_term": 3.0,
+    "vrp": 2.5,
+    "option_breakeven": 3.0,
+}
+
+
+def _behavior_cluster(expr: str, mechanism: str) -> str:
+    """Cheap behavioral cluster used before PnL exists.
+
+    It deliberately collapses the dominant PCR-gated call-minus-put anchor even
+    when a second leg or tenor makes the syntax look different.
+    """
+    e = expr or ""
+    if "trade_when" in e and "pcr_oi_" in e and "implied_volatility_call" in e \
+            and "implied_volatility_put" in e:
+        return "pcr_skew_anchor"
+    return mechanism
+
+
+def options_candidate_evidence(
+    expr: str,
+    *,
+    logic_score: float,
+    mechanism: str,
+    field_metadata: list[dict],
+    mechanism_evidence: dict,
+    candidate_settings: dict | None = None,
+    surrogate_prediction: dict[str, float] | None = None,
+) -> dict[str, float | str]:
+    """Score one options candidate before an expensive BRAIN simulation."""
+    settings = candidate_settings or {}
+    mapping = map_expression_fields(expr, field_metadata)
+    coverage = float(mapping["coverage"])
+    mapped_ratio = float(mapping["mapped_ratio"])
+    coverage_score = max(
+        0.0,
+        min(10.0, coverage * 10.0 * (0.5 + 0.5 * mapped_ratio)),
+    )
+
+    mechanisms = mechanism_evidence.get("mechanisms", mechanism_evidence)
+    contexts = mechanism_evidence.get("contexts", {})
+    hist = mechanisms.get(mechanism, {})
+
+    def posterior_score(item: dict) -> float:
+        attempts = int(item.get("attempts", 0) or 0)
+        good = int(item.get("good", 0) or 0)
+        gates = int(item.get("gates_passed", item.get("passed", 0)) or 0)
+        passed = int(item.get("passed", 0) or 0)
+        concentrated = int(item.get("concentrated", 0) or 0)
+        low_sub = int(item.get("low_sub_universe", 0) or 0)
+        high_turnover = int(item.get("high_turnover", 0) or 0)
+        score = 10.0 * (
+            0.55 * (good + 1.5) / (attempts + 3.0)
+            + 0.25 * (gates + 1.0) / (attempts + 4.0)
+            + 0.20 * (passed + 0.5) / (attempts + 5.0)
+        )
+        if attempts:
+            score -= 1.5 * concentrated / attempts
+            score -= 1.0 * low_sub / attempts
+            score -= 0.5 * high_turnover / attempts
+        return max(0.0, min(10.0, score))
+
+    history_score = posterior_score(hist)
+    context_key = research_context_key(mechanism, expr, field_metadata, settings)
+    context_hist = contexts.get(context_key, {})
+    context_n = int(context_hist.get("attempts", 0) or 0)
+    if context_n >= 3:
+        context_weight = min(context_n / 12.0, 0.70)
+        history_score = (
+            (1.0 - context_weight) * history_score
+            + context_weight * posterior_score(context_hist)
+        )
+
+    op_count = len(re.findall(r"[a-zA-Z_]\w*\(", expr or ""))
+    complexity_score = max(2.0, 10.0 - 0.45 * max(op_count - 3, 0))
+    concentration_score = 5.0
+    concentration_score += 1.5 if "rank(" in (expr or "") else 0.0
+    concentration_score += 1.0 if "group_neutralize(" in (expr or "") else 0.0
+    concentration_score -= 2.0 if "trade_when(" in (expr or "") else 0.0
+    concentration_score = max(0.0, min(10.0, concentration_score))
+    cluster = _behavior_cluster(expr, mechanism)
+    novelty_score = 3.0 if cluster == "pcr_skew_anchor" else 7.5
+    alignment_score = _OPTIONS_OUTCOME_ALIGNMENT.get(mechanism, 4.5)
+    attempts = int(hist.get("attempts", 0) or 0)
+    failure_n = int(hist.get("concentrated", 0) or 0) + int(
+        hist.get("low_sub_universe", 0) or 0
+    )
+    if mechanism in {"skew_call_innovation_residual", "skew_term_residual"}:
+        lane = "orthogonal"
+    elif attempts >= 4 and failure_n / attempts >= 0.30:
+        lane = "repair"
+    elif hypothesis_for(mechanism).confidence == "low":
+        lane = "explore"
+    else:
+        lane = "orthogonal"
+
+    proxy_score = proxy_composite(surrogate_prediction or {})
+    if proxy_score is None:
+        total = (
+            0.20 * max(0.0, min(10.0, logic_score))
+            + 0.20 * coverage_score
+            + 0.20 * history_score
+            + 0.15 * alignment_score
+            + 0.10 * concentration_score
+            + 0.10 * novelty_score
+            + 0.05 * complexity_score
+        )
+    else:
+        total = (
+            0.15 * max(0.0, min(10.0, logic_score))
+            + 0.20 * coverage_score
+            + 0.15 * history_score
+            + 0.10 * alignment_score
+            + 0.10 * concentration_score
+            + 0.10 * novelty_score
+            + 0.05 * complexity_score
+            + 0.15 * proxy_score
+        )
+    return {
+        "score": round(total, 4),
+        "coverage": round(coverage, 4),
+        "mapped_ratio": round(mapped_ratio, 4),
+        "datasets": "+".join(mapping["dataset_ids"]) or "unmapped",
+        "history": round(history_score, 4),
+        "context_n": context_n,
+        "alignment": alignment_score,
+        "concentration": round(concentration_score, 4),
+        "novelty": novelty_score,
+        "complexity": round(complexity_score, 4),
+        "mechanism": mechanism,
+        "cluster": cluster,
+        "lane": lane,
+        "proxy": round(proxy_score, 4) if proxy_score is not None else "inactive",
+    }
 
 
 def select_options_research_portfolio(
@@ -159,16 +313,81 @@ def select_options_research_portfolio(
     *,
     target_n: int,
     group_of,
+    field_metadata: list[dict] | None = None,
+    mechanism_evidence: dict | None = None,
+    settings_by_expr: dict[str, dict] | None = None,
+    surrogate_predictions: dict[str, dict[str, float]] | None = None,
+    min_evidence_score: float = OPTIONS_MIN_EVIDENCE_SCORE,
 ) -> list[str]:
-    """Allocate a small options budget by evidence, not shuffled bucket order.
+    """Allocate an options budget as a ceiling, not a spending quota.
 
-    Two anchor-plus-residual candidates receive the first slots, followed by the
-    strongest independent mechanisms from the latest BRAIN evidence.  This keeps
-    one representative per mechanism before repeats, but no longer gives an
-    unvalidated breakeven construction the same chance as a near-miss IV-term
-    signal. LLM scores rank variants *within* a mechanism only.
+    With field/history evidence, weak candidates are withheld and behaviorally
+    equivalent anchor variants share one slot.  The compatibility path without
+    evidence retains the old deterministic mechanism ordering for callers that
+    cannot yet expose metadata.
     """
     target = min(max(int(target_n), 0), len(expressions))
+    if field_metadata is not None or mechanism_evidence is not None:
+        metadata = field_metadata or []
+        history = mechanism_evidence or {}
+        ranked: list[tuple[float, int, str, dict[str, float | str]]] = []
+        for idx, expr in enumerate(expressions):
+            mechanism = str(group_of(expr))
+            evidence = options_candidate_evidence(
+                expr,
+                logic_score=scores.get(expr, DEFAULT_MIN_SCORE),
+                mechanism=mechanism,
+                field_metadata=metadata,
+                mechanism_evidence=history,
+                candidate_settings=(settings_by_expr or {}).get(expr, {}),
+                surrogate_prediction=(surrogate_predictions or {}).get(expr),
+            )
+            ranked.append((float(evidence["score"]), -idx, expr, evidence))
+        ranked.sort(reverse=True)
+        qualified = [item for item in ranked if item[0] >= min_evidence_score]
+        selected: list[str] = []
+        cluster_counts: dict[str, int] = {}
+        mechanism_counts: dict[str, int] = {}
+
+        def add_from_lane(lane: str, quota: int) -> None:
+            for _, _, expr, evidence in qualified:
+                if quota <= 0 or len(selected) >= target:
+                    break
+                if expr in selected or str(evidence["lane"]) != lane:
+                    continue
+                cluster = str(evidence["cluster"])
+                mechanism = str(evidence["mechanism"])
+                if cluster_counts.get(cluster, 0) >= 1:
+                    continue
+                if mechanism_counts.get(mechanism, 0) >= 2:
+                    continue
+                selected.append(expr)
+                cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+                mechanism_counts[mechanism] = mechanism_counts.get(mechanism, 0) + 1
+                quota -= 1
+
+        orthogonal_n = min(2, target)
+        repair_n = min(2, max(target - orthogonal_n, 0))
+        explore_n = min(1, max(target - orthogonal_n - repair_n, 0))
+        add_from_lane("orthogonal", orthogonal_n)
+        add_from_lane("repair", repair_n)
+        add_from_lane("explore", explore_n)
+        for _, _, expr, evidence in qualified:
+            if expr in selected:
+                continue
+            cluster = str(evidence["cluster"])
+            mechanism = str(evidence["mechanism"])
+            if cluster_counts.get(cluster, 0) >= 1:
+                continue
+            if mechanism_counts.get(mechanism, 0) >= 2:
+                continue
+            selected.append(expr)
+            cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+            mechanism_counts[mechanism] = mechanism_counts.get(mechanism, 0) + 1
+            if len(selected) >= target:
+                break
+        return selected
+
     buckets: dict[str, list[str]] = {}
     for expr in expressions:
         buckets.setdefault(str(group_of(expr)), []).append(expr)

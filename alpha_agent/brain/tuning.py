@@ -73,6 +73,29 @@ def base_settings_for(
     return settings
 
 
+def options_settings_for(expr: str, mechanism_evidence: dict | None = None) -> dict:
+    """Use measured options failure modes for one bounded first-pass repair.
+
+    Concentration receives tighter truncation and turnover receives more decay.
+    LOW_SUB_UNIVERSE_SHARPE deliberately does not shrink the universe: that is a
+    stability failure, not evidence that a smaller universe is the cure.
+    """
+    from alpha_agent.brain.evolution import options_mechanism_of
+
+    settings = base_settings_for(expr)
+    evidence = mechanism_evidence or {}
+    mechanisms = evidence.get("mechanisms", evidence)
+    hist = mechanisms.get(options_mechanism_of(expr), {})
+    attempts = int(hist.get("attempts", 0) or 0)
+    if attempts < 4:
+        return settings
+    if int(hist.get("concentrated", 0) or 0) / attempts >= 0.30:
+        settings["truncation"] = 0.04
+    if int(hist.get("high_turnover", 0) or 0) / attempts >= 0.30:
+        settings["decay"] = min(max(int(settings.get("decay", 0)), 12) + 8, 32)
+    return settings
+
+
 def _failed(metrics, name: str) -> bool:
     chk = (metrics.checks or {}).get(name) or {}
     return chk.get("result") == "FAIL"

@@ -29,13 +29,18 @@ from alpha_agent.brain.fastexpr import (
     generate_brain_candidates,
 )
 from alpha_agent.brain.logic_screen import (
+    OPTIONS_MIN_EVIDENCE_SCORE,
+    options_candidate_evidence,
     score_economic_logic,
     select_by_logic,
     select_options_research_portfolio,
 )
+from alpha_agent.brain.hypotheses import hypothesis_payload
+from alpha_agent.brain.surrogate import OptionsSurrogate, fit_options_surrogate
 from alpha_agent.brain.tuning import (
     base_settings_for,
     diagnose,
+    options_settings_for,
     retry_variant,
     vary_settings,
 )
@@ -228,6 +233,8 @@ async def _run_mining_round_impl(
     # generator's golden templates use fields that actually clear the Sharpe/
     # Fitness bars — not just OHLCV. Falls back to base price fields on failure.
     real_fields: Optional[list[str]] = None
+    field_metadata: list[dict] = []
+    field_audit_error: str | None = None
     try:
         # A global 500-field cap is exhausted by the datasets preceding option8
         # and option9.  Options research must query its own surface catalogue
@@ -236,10 +243,40 @@ async def _run_mining_round_impl(
         field_kwargs = {"limit": 500}
         if family_focus == "options":
             field_kwargs["datasets"] = ("option8", "option9", "pv1")
-        real_fields = await client.fetch_data_fields(**field_kwargs)
+            field_kwargs["per_dataset"] = 200
+        if family_focus == "options" and hasattr(client, "fetch_data_field_metadata"):
+            field_metadata = await client.fetch_data_field_metadata(**field_kwargs)
+            real_fields = [str(item["id"]) for item in field_metadata]
+        else:
+            real_fields = await client.fetch_data_fields(**field_kwargs)
         print(f"[fields] {len(real_fields or [])} real BRAIN data-fields", flush=True)
-    except Exception:  # noqa: BLE001 — best-effort; base fields still work
+    except Exception as exc:  # noqa: BLE001 — surfaced in the run screen detail
+        field_audit_error = f"field metadata unavailable: {type(exc).__name__}"
+        logger.warning("BRAIN field audit unavailable: %s", type(exc).__name__)
         real_fields = None
+
+    mechanism_evidence: dict = {}
+    mechanism_evidence_error: str | None = None
+    if family_focus == "options":
+        try:
+            mechanism_evidence = await store.options_mechanism_evidence(
+                pool, user_id, field_metadata=field_metadata
+            )
+        except Exception as exc:  # noqa: BLE001 — run remains possible, state is visible
+            mechanism_evidence_error = f"history evidence unavailable: {type(exc).__name__}"
+            logger.warning("options mechanism evidence unavailable: %s", type(exc).__name__)
+
+    surrogate = OptionsSurrogate(False, "not an options run", 0)
+    surrogate_error: str | None = None
+    if family_focus == "options":
+        try:
+            surrogate = fit_options_surrogate(
+                await store.options_surrogate_rows(pool, user_id), field_metadata
+            )
+        except Exception as exc:  # noqa: BLE001 — validated fallback remains P1
+            surrogate_error = f"proxy unavailable: {type(exc).__name__}"
+            surrogate = OptionsSurrogate(False, surrogate_error, 0)
+            logger.warning("options surrogate unavailable: %s", type(exc).__name__)
 
     # Phase F3 self-evolution: read the mining history and steer this round away
     # from homogenization — skip already-mined structures, prefer under-used
@@ -264,7 +301,7 @@ async def _run_mining_round_impl(
     # Without a logic ranker an oversized pool only burns local CPU before
     # taking the same first N expressions. Preserve the planned target in the
     # ledger, but generate the simulation budget directly in bypass mode.
-    gen_n = planned_gen_n if logic_llm is not None else n_candidates
+    gen_n = planned_gen_n if logic_llm is not None or family_focus == "options" else n_candidates
     # History steering for catalog families: pin each field's winning sign and
     # skip proven-dead fields, so the round spends sims on NEW information
     # instead of re-testing directions the DB already scored.
@@ -299,15 +336,22 @@ async def _run_mining_round_impl(
             field_hints=field_hints,
         )
 
-    # LLM financial-logic pre-screen (AlphaEval 'Financial Logic'): score the
-    # generated pool in one batched call.  The generated pool and the simulation
-    # budget are intentionally separate counters.  A partial/strict screen must
-    # still backfill from its ranked below-bar candidates whenever the pool can
-    # satisfy the requested simulation budget.
+    # The simulation budget is a ceiling, not a quota. Options candidates pass a
+    # deterministic evidence screen even when the optional LLM is absent; weak
+    # candidates are withheld rather than backfilled merely to spend BRAIN calls.
     generated_pool = list(candidates)
     generated_n = len(generated_pool)
+    candidate_settings = {
+        expr: options_settings_for(expr, mechanism_evidence)
+        for expr in generated_pool
+    } if family_focus == "options" else {}
+    surrogate_predictions = {
+        expr: surrogate.predict(expr, candidate_settings[expr], field_metadata)
+        for expr in generated_pool
+    } if family_focus == "options" and surrogate.active else {}
     screen_status = "bypassed"
     screen_detail = "no logic-screen LLM configured"
+    logic_scores: dict[str, float] = {}
     if generated_n == 0:
         screen_status = "failed"
         family_label = family_focus or "mixed"
@@ -328,6 +372,7 @@ async def _run_mining_round_impl(
         raise RuntimeError(screen_detail)
     if logic_llm is not None:
         scores = await score_economic_logic(logic_llm, generated_pool)
+        logic_scores = scores
         if scores:
             if family_focus == "options":
                 from alpha_agent.brain.evolution import options_mechanism_of
@@ -337,22 +382,28 @@ async def _run_mining_round_impl(
                     scores,
                     target_n=n_candidates,
                     group_of=options_mechanism_of,
+                    field_metadata=field_metadata,
+                    mechanism_evidence=mechanism_evidence,
+                    settings_by_expr=candidate_settings,
+                    surrogate_predictions=surrogate_predictions,
                 )
             else:
                 candidates = select_by_logic(
                     generated_pool, scores, target_n=n_candidates
                 )
-            screen_status = (
-                "completed" if len(scores) >= generated_n else "partial"
-            )
-            screen_detail = (
-                f"scored {len(scores)}/{generated_n}; selected {len(candidates)}"
-                + (" across options mechanisms" if family_focus == "options" else "")
-            )
+            screen_status = "completed" if len(scores) >= generated_n else "partial"
+            if family_focus == "options" and (
+                not field_metadata or field_audit_error or mechanism_evidence_error
+            ):
+                screen_status = "partial"
+            withheld = max(n_candidates - len(candidates), 0)
+            screen_detail = f"scored {len(scores)}/{generated_n}; selected {len(candidates)}"
+            if family_focus == "options":
+                screen_detail += (
+                    f"/{n_candidates} by multi-objective evidence; withheld {withheld}; "
+                    f"minimum evidence {OPTIONS_MIN_EVIDENCE_SCORE:.2f}"
+                )
         else:
-            # A failed or malformed LLM response is not a successful screen.  The
-            # safest useful fallback is a truthful bypass of the screen while
-            # retaining the requested budget.
             if family_focus == "options":
                 from alpha_agent.brain.evolution import options_mechanism_of
 
@@ -361,18 +412,121 @@ async def _run_mining_round_impl(
                     {},
                     target_n=n_candidates,
                     group_of=options_mechanism_of,
+                    field_metadata=field_metadata,
+                    mechanism_evidence=mechanism_evidence,
+                    settings_by_expr=candidate_settings,
+                    surrogate_predictions=surrogate_predictions,
+                )
+                screen_status = "partial"
+                screen_detail = (
+                    f"logic model unavailable; deterministic evidence screen selected "
+                    f"{len(candidates)}/{n_candidates}; withheld "
+                    f"{max(n_candidates - len(candidates), 0)}"
                 )
             else:
                 candidates = generated_pool[:n_candidates]
-            screen_status = "failed"
-            screen_detail = "logic screen returned no usable scores; bypassed"
+                screen_status = "failed"
+                screen_detail = "logic screen returned no usable scores; bypassed"
         print(
             f"[logic] {screen_status}: generated={generated_n} "
             f"screened={len(candidates)}",
             flush=True,
         )
+    elif family_focus == "options":
+        from alpha_agent.brain.evolution import options_mechanism_of
+
+        candidates = select_options_research_portfolio(
+            generated_pool,
+            {},
+            target_n=n_candidates,
+            group_of=options_mechanism_of,
+            field_metadata=field_metadata,
+            mechanism_evidence=mechanism_evidence,
+            settings_by_expr=candidate_settings,
+            surrogate_predictions=surrogate_predictions,
+        )
+        screen_status = "completed" if field_metadata and not mechanism_evidence_error else "partial"
+        screen_detail = (
+            f"deterministic evidence screen selected {len(candidates)}/{n_candidates}; "
+            f"withheld {max(n_candidates - len(candidates), 0)}; "
+            f"minimum evidence {OPTIONS_MIN_EVIDENCE_SCORE:.2f}"
+        )
     else:
         candidates = generated_pool[:n_candidates]
+
+    missing_evidence = [
+        part for part in (
+            field_audit_error, mechanism_evidence_error, surrogate_error
+        ) if part
+    ]
+    if missing_evidence and family_focus == "options":
+        screen_detail += "; " + "; ".join(missing_evidence)
+
+    if family_focus == "options" and candidates:
+        from alpha_agent.brain.evolution import options_mechanism_of
+
+        selected_evidence = [
+            options_candidate_evidence(
+                expr,
+                logic_score=logic_scores.get(expr, 5.0),
+                mechanism=options_mechanism_of(expr),
+                field_metadata=field_metadata,
+                mechanism_evidence=mechanism_evidence,
+                candidate_settings=candidate_settings.get(expr, {}),
+                surrogate_prediction=surrogate_predictions.get(expr),
+            )
+            for expr in candidates
+        ]
+        avg_coverage = (
+            sum(float(item["coverage"]) for item in selected_evidence)
+            / len(selected_evidence)
+        )
+        avg_mapped = (
+            sum(float(item["mapped_ratio"]) for item in selected_evidence)
+            / len(selected_evidence)
+        )
+        avg_history = (
+            sum(float(item["history"]) for item in selected_evidence)
+            / len(selected_evidence)
+        )
+        clusters = len({str(item["cluster"]) for item in selected_evidence})
+        lanes = ",".join(str(item["lane"])[0].upper() for item in selected_evidence)
+        proxy_label = (
+            f"active[{','.join(sorted(surrogate.models))}]"
+            if surrogate.active else f"inactive[{surrogate.reason}]"
+        )
+        screen_detail += (
+            f"; selected evidence coverage={avg_coverage:.0%}, "
+            f"field-map={avg_mapped:.0%}, history={avg_history:.2f}/10, "
+            f"behavior-clusters={clusters}; lanes={lanes}; proxy={proxy_label}"
+        )
+
+    candidate_research_evidence: dict[str, dict] = {}
+    if family_focus == "options":
+        from alpha_agent.brain.evolution import options_mechanism_of
+
+        for expr in candidates:
+            settings = candidate_settings.get(expr, base_settings_for(expr))
+            payload = hypothesis_payload(
+                options_mechanism_of(expr), expr, field_metadata, settings
+            )
+            payload["screen"] = options_candidate_evidence(
+                expr,
+                logic_score=logic_scores.get(expr, 5.0),
+                mechanism=options_mechanism_of(expr),
+                field_metadata=field_metadata,
+                mechanism_evidence=mechanism_evidence,
+                candidate_settings=settings,
+                surrogate_prediction=surrogate_predictions.get(expr),
+            )
+            payload["proxy"] = {
+                "active": surrogate.active,
+                "sample_n": surrogate.sample_n,
+                "reason": surrogate.reason,
+                "validated_targets": sorted(surrogate.models),
+                "prediction": surrogate_predictions.get(expr, {}),
+            }
+            candidate_research_evidence[expr] = payload
 
     if run_id is not None:
         await store.set_brain_run_progress(
@@ -403,6 +557,11 @@ async def _run_mining_round_impl(
 
     async def _persist_brain_alpha(_pool, **kwargs) -> int:
         """Persist one candidate and atomically advance its run counters."""
+        expression = str(kwargs.get("expression") or "")
+        if expression in candidate_research_evidence:
+            kwargs.setdefault(
+                "research_evidence", candidate_research_evidence[expression]
+            )
         row_id = await store.record_brain_alpha(_pool, **kwargs)
         if run_id is not None:
             outcome = kwargs.get("outcome")
@@ -479,7 +638,7 @@ async def _run_mining_round_impl(
         # mechanism plus a random universe/delay/neutralization lottery. Keep the
         # proven TOP3000/D1/SUBINDUSTRY baseline in the first pass; the bounded
         # near-miss retry below remains the place for targeted settings changes.
-        settings = (base_settings if family_focus == "options"
+        settings = (candidate_settings.get(expr, base_settings) if family_focus == "options"
                     else vary_settings(base_settings, fam, _srng))
         if family_focus == "composite":
             # Fitness round: F = S*sqrt(ret/max(T,0.125)) — force heavy smoothing

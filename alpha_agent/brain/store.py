@@ -33,6 +33,7 @@ async def record_brain_alpha(
     batch_started_at=None,
     run_id: int | None = None,
     blend_parents: list[str] | None = None,
+    research_evidence: dict | None = None,
 ) -> int:
     """Insert one mining outcome. Returns the new row id.
 
@@ -58,9 +59,9 @@ async def record_brain_alpha(
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
         " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade, "
         " fail_checks, retried, batch_started_at, run_id, blend_parents, "
-        " self_correlation_status) "
+        " self_correlation_status, research_evidence) "
         "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,"
-        " $18,$19,$20,$21,$22::jsonb,$23) RETURNING id",
+        " $18,$19,$20,$21,$22::jsonb,$23,$24::jsonb) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with,
@@ -68,6 +69,7 @@ async def record_brain_alpha(
         fail_checks, retried, batch_started_at, run_id,
         json.dumps(blend_parents) if blend_parents is not None else None,
         self_correlation_status,
+        json.dumps(research_evidence) if research_evidence is not None else None,
     )
     return row["id"]
 
@@ -93,6 +95,9 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
             bp = json.loads(bp)
         d["blend_parents"] = bp
         d["is_blend"] = bool(bp)
+        evidence = d.get("research_evidence")
+        if isinstance(evidence, str):
+            d["research_evidence"] = json.loads(evidence)
         out.append(d)
     return out
 
@@ -103,7 +108,7 @@ _ROW_COLS = (
     "self_correlation_adj, self_correlation_adj_with, self_correlation_status, "
     "outcome, detail, "
     "grade, fail_checks, retried, batch_started_at, created_at, submitted_at, "
-    "brain_status, blend_parents"
+    "brain_status, blend_parents, research_evidence"
 )
 
 # Whitelisted sort columns (never interpolate user input into SQL).
@@ -128,6 +133,9 @@ def _decode_row(r) -> dict:
         bp = json.loads(bp)
     d["blend_parents"] = bp
     d["is_blend"] = bool(bp)
+    evidence = d.get("research_evidence")
+    if isinstance(evidence, str):
+        d["research_evidence"] = json.loads(evidence)
     return d
 
 
@@ -273,6 +281,9 @@ async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
         bp = json.loads(bp)
     d["blend_parents"] = bp
     d["is_blend"] = bool(bp)
+    evidence = d.get("research_evidence")
+    if isinstance(evidence, str):
+        d["research_evidence"] = json.loads(evidence)
     return d
 
 
@@ -383,6 +394,85 @@ async def scored_expressions(
         user_id, min(max(int(limit), 1), 2000),
     )
     return [(r["expression"], float(r["sharpe"])) for r in rows]
+
+
+async def options_mechanism_evidence(
+    pool,
+    user_id: int,
+    *,
+    field_metadata: list[dict] | None = None,
+    limit: int = 1000,
+) -> dict:
+    """Aggregate options outcomes by mechanism and measured research context."""
+    from alpha_agent.brain.evolution import options_mechanism_of
+    from alpha_agent.brain.hypotheses import research_context_key
+
+    rows = await pool.fetch(
+        "SELECT expression, settings, outcome, grade, sharpe, fail_checks, "
+        "self_correlation, self_correlation_adj, created_at "
+        "FROM brain_alphas WHERE user_id=$1 "
+        "AND expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)' "
+        "ORDER BY created_at DESC LIMIT $2",
+        int(user_id), min(max(int(limit), 1), 2000),
+    )
+    mechanisms: dict[str, dict[str, float | int]] = {}
+    contexts: dict[str, dict[str, float | int]] = {}
+    good_grades = {"GOOD", "EXCELLENT", "SPECTACULAR"}
+
+    def update(item: dict[str, float | int], row) -> None:
+        item["attempts"] = int(item.get("attempts", 0)) + 1
+        if str(row["grade"] or "").upper() in good_grades:
+            item["good"] = int(item.get("good", 0)) + 1
+        if row["outcome"] in {"passed", "flagged"}:
+            item["gates_passed"] = int(item.get("gates_passed", 0)) + 1
+        if row["outcome"] == "passed":
+            item["passed"] = int(item.get("passed", 0)) + 1
+        failures = {part.strip() for part in str(row["fail_checks"] or "").split(",")}
+        for check, key in (
+            ("CONCENTRATED_WEIGHT", "concentrated"),
+            ("LOW_SUB_UNIVERSE_SHARPE", "low_sub_universe"),
+            ("HIGH_TURNOVER", "high_turnover"),
+        ):
+            if check in failures:
+                item[key] = int(item.get(key, 0)) + 1
+        if row["self_correlation"] is not None:
+            item["self_corr_checked"] = int(item.get("self_corr_checked", 0)) + 1
+            if float(row["self_correlation"]) < 0.70:
+                item["self_corr_passed"] = int(item.get("self_corr_passed", 0)) + 1
+        if row["sharpe"] is not None:
+            item["sharpe_sum"] = float(item.get("sharpe_sum", 0.0)) + float(row["sharpe"])
+            item["sharpe_n"] = int(item.get("sharpe_n", 0)) + 1
+
+    for row in rows:
+        mechanism = options_mechanism_of(row["expression"] or "")
+        settings = row["settings"] or {}
+        if isinstance(settings, str):
+            settings = json.loads(settings)
+        context = research_context_key(
+            mechanism, row["expression"] or "", field_metadata or [], settings
+        )
+        update(mechanisms.setdefault(mechanism, {}), row)
+        update(contexts.setdefault(context, {}), row)
+    return {"sample_n": len(rows), "mechanisms": mechanisms, "contexts": contexts}
+
+
+async def options_surrogate_rows(pool, user_id: int, *, limit: int = 1000) -> list[dict]:
+    """Chronological training surface for the bounded local options proxy."""
+    rows = await pool.fetch(
+        "SELECT expression, settings, outcome, grade, fail_checks, "
+        "self_correlation, self_correlation_adj, created_at "
+        "FROM brain_alphas WHERE user_id=$1 "
+        "AND expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)' "
+        "AND alpha_id IS NOT NULL ORDER BY created_at ASC LIMIT $2",
+        int(user_id), min(max(int(limit), 1), 3000),
+    )
+    out = []
+    for row in rows:
+        item = dict(row)
+        if isinstance(item.get("settings"), str):
+            item["settings"] = json.loads(item["settings"])
+        out.append(item)
+    return out
 
 
 async def passed_unsubmitted_expressions(

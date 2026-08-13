@@ -261,10 +261,11 @@ def test_options_focus_covers_mechanisms_and_does_not_replay_history():
     assert len(next_round) == len(set(next_round))
 
 
-def test_options_research_motifs_pin_direction_and_preserve_anchor_strength():
+def test_options_research_motifs_pin_direction_and_residualize_anchor():
     """Run #66 exposed three avoidable budget leaks: random IV-momentum sign,
     rank-space VRP cancellation, and weak standalone novelty. The replacement
-    motifs must encode the corrected hypotheses and include anchored blends."""
+    motifs must encode the corrected hypotheses without hiding the old anchor
+    inside a nominally different blend."""
     from alpha_agent.brain.evolution import options_mechanism_of
 
     mom = fe._valid_brain_tree(fe._m_iv_mom(random.Random(3)))
@@ -275,7 +276,10 @@ def test_options_research_motifs_pin_direction_and_preserve_anchor_strength():
 
     exprs = fe.generate_brain_candidates(20, family_focus="options", rng_seed=66)
     mechanisms = {options_mechanism_of(expr) for expr in exprs}
-    assert {"skew_term_blend", "skew_call_innovation_blend"} <= mechanisms
+    assert {"skew_term_residual", "skew_call_innovation_residual"} <= mechanisms
+    residuals = [expr for expr in exprs if "_residual" in options_mechanism_of(expr)]
+    assert residuals and all("ts_regression(" in expr for expr in residuals)
+    assert all("trade_when(" not in expr for expr in residuals)
     # Standalone options hypotheses are no longer randomly wrapped in the
     # volume gate; only the proven skew control contains that deliberate gate.
     standalone = [expr for expr in exprs if options_mechanism_of(expr) == "iv_term"]

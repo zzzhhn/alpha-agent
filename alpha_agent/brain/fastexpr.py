@@ -152,7 +152,7 @@ BRAIN_SAFE_OPS = frozenset({
     # param — but our serializer emits a positional 2nd arg, which BRAIN reads
     # as a 2nd input and rejects ("should be exactly 1 input").
     "ts_mean", "ts_std_dev", "ts_sum", "ts_delta", "ts_delay",
-    "ts_rank", "ts_zscore", "ts_decay_linear", "ts_corr",
+    "ts_rank", "ts_zscore", "ts_decay_linear", "ts_corr", "ts_regression",
     "group_rank", "group_zscore", "group_neutralize",
     # Widened coverage (all confirmed available via the /operators discovery, all
     # fit the op(x, int)/op(x, group) grammar so the positional serializer is safe):
@@ -698,51 +698,35 @@ def _m_breakeven_forward(rng: random.Random) -> dict:
     )
 
 
-def _m_skew_term_blend(rng: random.Random) -> dict:
-    """Proven call-put skew anchor plus an orthogonal IV-term residual.
-
-    Pure new mechanisms were independent but too weak, while the old skew book
-    was strong but self-correlated.  A scale-controlled second leg preserves the
-    anchor's signal strength and changes the return path enough to earn a real
-    correlation test instead of replacing it with a weak standalone anomaly.
-    """
+def _m_skew_term_residual(rng: random.Random) -> dict:
+    """IV-term signal residualized against the dominant call-put skew path."""
     i = rng.randint(0, 1)
-    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
     raw_skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
                    _fld(_OPTION_FIELDS["iv_put"][i]))
-    skew = _op("trade_when", _op("less", pcr, {"type": "literal", "value": 1.1}),
-               raw_skew, _lit(-1))
+    anchor = _op("rank", raw_skew)
     short, long_ = rng.choice(_IV_TENOR_PAIRS)
     relative_slope = _op("subtract", _op("divide", _fld(short), _fld(long_)), _lit(1))
-    term = _op("ts_zscore", relative_slope, _lit(60))
-    # Put the standardized residual back into the raw skew's units. This avoids
-    # both failure modes: an unscaled rank swallowing the anchor, or a tiny fixed
-    # coefficient that never changes its return path.
-    residual = _op("multiply", term, _op("ts_std_dev", raw_skew, _lit(60)))
-    blend = _op("add", skew,
-                _op("multiply", residual, {"type": "literal", "value": 0.5}))
-    return _op("group_neutralize", blend,
+    term = _op("rank", _op("ts_zscore", relative_slope, _lit(60)))
+    beta = _op("ts_regression", term, anchor, _lit(120))
+    residual = _op("subtract", term, _op("multiply", beta, anchor))
+    return _op("group_neutralize", _op("ts_decay_linear", residual, _lit(12)),
                _fld(rng.choice(("industry", "subindustry"))))
 
 
-def _m_skew_call_innovation_blend(rng: random.Random) -> dict:
-    """Proven skew anchor plus call-IV innovation from An et al. (2014)."""
+def _m_skew_call_innovation_residual(rng: random.Random) -> dict:
+    """Call-IV innovation residualized against the call-put skew anchor."""
     i = rng.randint(0, 1)
-    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
     raw_skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
                    _fld(_OPTION_FIELDS["iv_put"][i]))
-    skew = _op("trade_when", _op("less", pcr, {"type": "literal", "value": 1.1}),
-               raw_skew, _lit(-1))
+    anchor = _op("rank", raw_skew)
     call = _fld(rng.choice(("implied_volatility_call_60",
                             "implied_volatility_call_120")))
-    innovation = _op("ts_zscore", _op("ts_decay_linear",
-                                       _op("ts_delta", call, _lit(20)), _lit(12)),
-                     _lit(60))
-    residual = _op("multiply", innovation,
-                   _op("ts_std_dev", raw_skew, _lit(60)))
-    blend = _op("add", skew,
-                _op("multiply", residual, {"type": "literal", "value": 0.5}))
-    return _op("group_neutralize", blend,
+    innovation = _op("rank", _op("ts_zscore", _op("ts_decay_linear",
+                                                    _op("ts_delta", call, _lit(20)), _lit(12)),
+                                     _lit(60)))
+    beta = _op("ts_regression", innovation, anchor, _lit(120))
+    residual = _op("subtract", innovation, _op("multiply", beta, anchor))
+    return _op("group_neutralize", residual,
                _fld(rng.choice(("industry", "subindustry"))))
 
 
@@ -1004,8 +988,8 @@ def _options_leg(rng: random.Random) -> dict:
 # variants of the same skew-level book.  `iv_skew_level` stays as an exploitation
 # control; the other mechanisms are discovery candidates.
 _OPTIONS_MOTIFS: tuple = (
-    ("skew_term_blend", _m_skew_term_blend),
-    ("skew_call_innovation_blend", _m_skew_call_innovation_blend),
+    ("skew_term_residual", _m_skew_term_residual),
+    ("skew_call_innovation_residual", _m_skew_call_innovation_residual),
     ("iv_skew_level", _options_leg),
     ("iv_skew_dynamics", _m_iv_skew_dynamics),
     ("iv_term", _m_iv_term),

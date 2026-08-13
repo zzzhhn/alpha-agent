@@ -157,6 +157,12 @@ def family_of(expr: str) -> str:
 def options_mechanism_of(expr: str) -> str:
     """Fine options mechanism used for generation quotas and UI diagnosis."""
     e = expr or ""
+    if "ts_regression" in e and "ts_delta(implied_volatility_call" in e:
+        return "skew_call_innovation_residual"
+    if "ts_regression" in e and re.search(
+        r"divide\(implied_volatility_call_\d+, implied_volatility_call_\d+\)", e
+    ):
+        return "skew_term_residual"
     if family_of(e) == "options_composite":
         if "ts_delta(implied_volatility_call" in e:
             return "skew_call_innovation_blend"

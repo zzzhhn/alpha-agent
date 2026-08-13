@@ -431,7 +431,7 @@ class BrainClient:
         "option9", "news18", "socialmedia12",
     )
 
-    async def fetch_data_fields(
+    async def fetch_data_field_metadata(
         self,
         *,
         region: str = "USA",
@@ -443,11 +443,13 @@ class BrainClient:
         datasets: Optional[tuple[str, ...]] = None,
         min_coverage: float = 0.35,
         limit: Optional[int] = None,
-    ) -> list[str]:
-        """GET /data-fields per dataset → the field IDs usable in FASTEXPR for
-        this region/universe/delay, across fundamentals + analyst + alternative
-        data. Returns field `id` strings (deduped, capped at `limit` if given).
-        Best-effort per page/dataset.
+    ) -> list[dict]:
+        """Return usable BRAIN field records with provenance and coverage.
+
+        Candidate generation needs more than an operand ID: sparse option fields
+        can create concentrated portfolios, and a description is required before
+        mapping a paper hypothesis to a platform field.  Preserve the small,
+        JSON-safe subset needed by the evidence screen.
 
         MATRIX = a per-(date,instrument) numeric value usable as an operand.
         min_coverage skips ultra-sparse fields that mostly NaN out. The endpoint
@@ -457,7 +459,7 @@ class BrainClient:
 
         datasets = datasets or self._DEFAULT_DATASETS
         seen: set[str] = set()
-        out: list[str] = []
+        out: list[dict] = []
         for ds in datasets:
             offset = 0
             got = 0
@@ -492,11 +494,28 @@ class BrainClient:
                     except (TypeError, ValueError):
                         cov = 0.0
                     if isinstance(fid, str) and fid.strip() and fid not in seen and cov >= min_coverage:
-                        seen.add(fid.strip())
-                        out.append(fid.strip())
+                        fid = fid.strip()
+                        seen.add(fid)
+                        dataset = f.get("dataset")
+                        dataset_id = (
+                            dataset.get("id") if isinstance(dataset, dict) else dataset
+                        ) or ds
+                        out.append({
+                            "id": fid,
+                            "dataset": str(dataset_id),
+                            "coverage": cov,
+                            "type": str(f.get("type") or field_type),
+                            "name": str(f.get("name") or ""),
+                            "description": str(f.get("description") or ""),
+                        })
                         got += 1
                 offset += page_size
         return out[:limit] if limit else out
+
+    async def fetch_data_fields(self, **kwargs) -> list[str]:
+        """Compatibility wrapper returning only IDs for generic generators."""
+        records = await self.fetch_data_field_metadata(**kwargs)
+        return [str(record["id"]) for record in records]
 
     async def fetch_alpha_expressions(
         self, *, limit: int = 200, page_size: int = 50
