@@ -74,6 +74,40 @@ def test_options_small_budget_prefers_anchors_and_near_miss_mechanisms():
     assert selected == ["skew-term", "skew-mom", "term", "vrp", "pcr"]
 
 
+def test_options_evidence_screen_treats_budget_as_ceiling():
+    exprs = [
+        "rank(implied_volatility_call_60)",
+        "reverse(rank(ts_delta(pcr_oi_120, 20)))",
+        "group_neutralize(rank(ts_delta(implied_volatility_call_60, 20)), subindustry)",
+    ]
+    groups = {
+        exprs[0]: "iv_term",
+        exprs[1]: "pcr_dynamics",
+        exprs[2]: "iv_momentum",
+    }
+    metadata = [
+        {"id": "implied_volatility_call_60", "coverage": 0.92},
+        {"id": "pcr_oi_120", "coverage": 0.36},
+    ]
+    history = {
+        "iv_term": {"attempts": 8, "good": 0, "passed": 0,
+                    "concentrated": 4, "low_sub_universe": 4},
+        "pcr_dynamics": {"attempts": 8, "good": 0, "passed": 0,
+                         "concentrated": 5, "low_sub_universe": 1},
+        "iv_momentum": {"attempts": 2, "good": 1, "passed": 0,
+                        "concentrated": 0, "low_sub_universe": 0},
+    }
+    selected = select_options_research_portfolio(
+        exprs,
+        {expr: 7.0 for expr in exprs},
+        target_n=3,
+        group_of=groups.__getitem__,
+        field_metadata=metadata,
+        mechanism_evidence=history,
+    )
+    assert selected == [exprs[2]]
+
+
 # ── score_economic_logic (LLM I/O) ────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_score_no_client_is_noop():

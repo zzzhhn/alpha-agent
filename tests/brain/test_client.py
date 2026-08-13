@@ -256,6 +256,39 @@ async def test_fetch_alpha_expressions_paginates_and_extracts_code():
 
 
 @pytest.mark.asyncio
+async def test_fetch_data_field_metadata_preserves_coverage_and_provenance():
+    def h(req):
+        offset = int(dict(req.url.params).get("offset", "0"))
+        if offset:
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(200, json={"results": [
+            {
+                "id": "implied_volatility_call_60",
+                "coverage": 0.91,
+                "type": "MATRIX",
+                "name": "Call IV 60",
+                "description": "60-day call implied volatility",
+                "dataset": {"id": "option9"},
+            },
+            {"id": "too_sparse", "coverage": 0.10},
+        ]})
+
+    c = _client(h)
+    records = await c.fetch_data_field_metadata(
+        datasets=("option9",), per_dataset=2, page_size=50,
+    )
+    assert records == [{
+        "id": "implied_volatility_call_60",
+        "dataset": "option9",
+        "coverage": 0.91,
+        "type": "MATRIX",
+        "name": "Call IV 60",
+        "description": "60-day call implied volatility",
+    }]
+    await c.aclose()
+
+
+@pytest.mark.asyncio
 async def test_submit_true_on_201():
     c = _client(lambda req: httpx.Response(201))
     assert await c.submit("A1") is True

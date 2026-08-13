@@ -144,6 +144,8 @@ The repository does not contain a canonical generated Screener reference image. 
 - A missing official self-correlation exposes its real state: pending computation, skipped because an earlier prerequisite failed, or temporarily unavailable after a bounded poll. GOOD-or-better rejected rows receive bounded post-run enrichment so useful research evidence is not silently discarded.
 - Performance quality and novelty are separate verdict axes. A candidate may be high quality but redundant; the UI names both states and recommends switching mechanism or data rather than implying that a good grade guarantees submission eligibility.
 - Options mining means multiple economic mechanisms, not one IV-skew template. The selected pool exposes mechanism labels and uses a bounded diversity quota before real simulations.
+- The simulation budget is a ceiling. Options candidates are ranked by economic logic, official field coverage and mapping, historical mechanism outcomes, concentration risk, outcome alignment, structural complexity, and behavioral novelty. Weak candidates are withheld instead of backfilled merely to spend the budget.
+- A mechanism label is not proof of diversity. PCR-gated call-minus-put variants share one behavioral cluster, while new legs must be tested independently or residualized against the dominant anchor before they receive a discovery slot.
 - Empty and failed runs explain the failing stage and recovery action. A completed run with fewer persisted candidates than requested exposes the stage where the count changed.
 - Completed runs expose screen utilization, pass yield, simulation-error rate, and one evidence-based next action. Recommendations remain advisory and never auto-submit an alpha.
 

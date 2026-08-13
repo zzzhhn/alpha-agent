@@ -1,5 +1,10 @@
 # BRAIN options mining optimization, RUN #66
 
+> Status: superseded by the RUN #73 evidence review in
+> [2026-08-13-brain-options-evidence-driven-search-redesign.md](2026-08-13-brain-options-evidence-driven-search-redesign.md).
+> The fixed mechanism allocation below improved syntactic diversity but did not
+> produce behavioral novelty or reliable use of the simulation budget.
+
 ## Observed failure
 
 RUN #66 generated 20 expressions, selected and simulated five, and produced zero

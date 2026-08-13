@@ -1431,6 +1431,7 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
   const rejected = run.rejected_n ?? 0;
   const simErrors = run.sim_error_n ?? 0;
   const generated = run.generated_n ?? 0;
+  const screened = run.screened_n ?? 0;
   const requested = run.requested_n ?? 0;
 
   if (run.status === "failed" || isEmptyCompletedRun(run)) {
@@ -1444,6 +1445,11 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
   }
   if (run.screen_status === "bypassed") {
     return zh ? "Logic screen 未配置，系统直接使用仿真预算；扩大生成池暂不会提高筛选质量。" : "No logic screen was configured; widening generation will not improve ranking yet.";
+  }
+  if (run.status === "completed" && screened < requested && generated > 0) {
+    return zh
+      ? `证据筛选主动保留了 ${requested - screened} 个仿真名额，低可信候选没有被回填消耗预算。先检查字段覆盖率与候选证据，再决定是否扩大生成池。`
+      : `The evidence screen intentionally left ${requested - screened} simulation slots unused instead of backfilling weak candidates. Review field coverage and candidate evidence before widening generation.`;
   }
   if (generated <= requested) {
     return zh ? "生成池没有形成候选冗余，下一轮可扩大到仿真预算的约 2 倍。" : "The pool had no ranking headroom; try roughly 2× the simulation budget.";

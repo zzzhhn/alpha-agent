@@ -385,6 +385,51 @@ async def scored_expressions(
     return [(r["expression"], float(r["sharpe"])) for r in rows]
 
 
+async def options_mechanism_evidence(
+    pool,
+    user_id: int,
+    *,
+    limit: int = 500,
+) -> dict[str, dict[str, float | int]]:
+    """Aggregate measured options outcomes into mechanism-level evidence."""
+    from alpha_agent.brain.evolution import options_mechanism_of
+
+    rows = await pool.fetch(
+        "SELECT expression, outcome, grade, sharpe, fail_checks "
+        "FROM brain_alphas WHERE user_id=$1 "
+        "AND expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)' "
+        "ORDER BY created_at DESC LIMIT $2",
+        int(user_id), min(max(int(limit), 1), 2000),
+    )
+    stats: dict[str, dict[str, float | int]] = {}
+    good_grades = {"GOOD", "EXCELLENT", "SPECTACULAR"}
+    for row in rows:
+        mechanism = options_mechanism_of(row["expression"] or "")
+        item = stats.setdefault(mechanism, {
+            "attempts": 0,
+            "good": 0,
+            "passed": 0,
+            "concentrated": 0,
+            "low_sub_universe": 0,
+            "sharpe_sum": 0.0,
+            "sharpe_n": 0,
+        })
+        item["attempts"] = int(item["attempts"]) + 1
+        if str(row["grade"] or "").upper() in good_grades:
+            item["good"] = int(item["good"]) + 1
+        if row["outcome"] == "passed":
+            item["passed"] = int(item["passed"]) + 1
+        failures = {part.strip() for part in str(row["fail_checks"] or "").split(",")}
+        if "CONCENTRATED_WEIGHT" in failures:
+            item["concentrated"] = int(item["concentrated"]) + 1
+        if "LOW_SUB_UNIVERSE_SHARPE" in failures:
+            item["low_sub_universe"] = int(item["low_sub_universe"]) + 1
+        if row["sharpe"] is not None:
+            item["sharpe_sum"] = float(item["sharpe_sum"]) + float(row["sharpe"])
+            item["sharpe_n"] = int(item["sharpe_n"]) + 1
+    return stats
+
+
 async def passed_unsubmitted_expressions(
     pool, user_id: int, *, limit: int = 200
 ) -> list[str]:
