@@ -230,6 +230,46 @@ async def list_runs(
         return {"runs": [], "total": 0}
 
 
+@router.get("/runs/{run_id}/candidates")
+async def list_run_candidates(
+    run_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    selected: bool | None = None,
+    status: str | None = None,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Return the generated-candidate audit ledger for one owned run.
+
+    A foreign or unknown run is deliberately indistinguishable and returns 404.
+    This prevents candidate-count and expression leakage across authenticated
+    users while retaining stable pagination within the selected run.
+    """
+    from alpha_agent.brain import store
+
+    run = await store.get_brain_run(pool, run_id, user_id)
+    if run is None:
+        raise HTTPException(404, "BRAIN run not found")
+    try:
+        return await store.query_brain_run_candidates(
+            pool,
+            user_id,
+            run_id,
+            limit=limit,
+            offset=offset,
+            selected=selected,
+            status=status,
+        )
+    except Exception as exc:  # noqa: BLE001 — migration/runtime state is explicit
+        logger.warning(
+            "query_brain_run_candidates failed for run %s: %s",
+            run_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(503, "BRAIN candidate ledger unavailable") from exc
+
+
 @router.get("/mine/status")
 async def mining_status(
     since: str | None = None,

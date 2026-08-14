@@ -90,6 +90,30 @@ export interface BrainAlpha {
       coverage?: number;
       mapped_ratio?: number;
     };
+    semantic_audit?: {
+      status?: "matched" | "mismatch" | "unverified";
+      semantic_fidelity?: number;
+      metadata_available?: boolean;
+      required_semantics?: string[];
+      matched_required_semantics?: string[];
+      missing_required_semantics?: string[];
+      material_mismatch?: boolean;
+      high_confidence_mismatch?: boolean;
+      target_outcome_alignment?: {
+        target?: string;
+        status?: "aligned" | "exploratory_mismatch" | "unknown";
+        brain_default_target?: string;
+      };
+      field_details?: Array<{
+        field_id?: string;
+        name?: string;
+        description?: string;
+        dataset?: string;
+        side?: string | null;
+        measure_kind?: string;
+        tenor?: string[];
+      }>;
+    };
     screen?: Record<string, string | number>;
     proxy?: {
       active?: boolean;
@@ -171,6 +195,65 @@ export interface BrainRunsPage {
 
 export const fetchBrainRuns = (limit = 12, opts?: ApiGetOptions) =>
   apiGet<BrainRunsPage>(`/api/brain/runs?limit=${encodeURIComponent(String(limit))}`, opts);
+
+export interface BrainRunCandidate {
+  id: number;
+  run_id: number;
+  ordinal: number;
+  expression: string;
+  settings: Record<string, unknown>;
+  mechanism?: string | null;
+  evidence?: Record<string, unknown> | null;
+  evidence_score?: number | null;
+  llm_score?: number | null;
+  llm_status?: string | null;
+  selected: boolean;
+  stage: string;
+  status: string;
+  reason_code?: string | null;
+  reason_text?: string | null;
+  alpha_row_id?: number | null;
+  alpha_id?: string | null;
+  simulation_outcome?: string | null;
+  simulation_detail?: string | null;
+  created_at?: string | null;
+  screened_at?: string | null;
+  simulated_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface BrainRunCandidatePage {
+  run_id: number;
+  candidates: BrainRunCandidate[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BrainRunCandidateQuery {
+  limit?: number;
+  offset?: number;
+  selected?: boolean | null;
+  status?: string | null;
+}
+
+export const fetchBrainRunCandidates = (
+  runId: number,
+  query: BrainRunCandidateQuery = {},
+  opts?: ApiGetOptions,
+) => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return apiGet<BrainRunCandidatePage>(
+    `/api/brain/runs/${encodeURIComponent(String(runId))}/candidates${suffix}`,
+    opts,
+  );
+};
 
 export interface PnlPoint {
   date: string;

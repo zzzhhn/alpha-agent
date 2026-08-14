@@ -556,6 +556,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/brain/runs/{run_id}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Run Candidates
+         * @description Return the generated-candidate audit ledger for one owned run.
+         *
+         *     A foreign or unknown run is deliberately indistinguishable and returns 404.
+         *     This prevents candidate-count and expression leakage across authenticated
+         *     users while retaining stable pagination within the selected run.
+         */
+        get: operations["list_run_candidates_api_brain_runs__run_id__candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/brief/{ticker}": {
         parameters: {
             query?: never;
@@ -1967,10 +1991,10 @@ export interface paths {
          * Picks Scoreboard
          * @description Portfolio-level picks evaluation over the trailing window. Reconstructs
          *     each day's top/bottom-K basket from the signals as stored THAT day (no
-         *     lookahead) and scores realized next-day returns against the universe
-         *     average + the always-up base rate. Returns null (not an error) when there
-         *     is too little realized history to say anything. Changes ~once per trading
-         *     day -> cached aggressively at the edge.
+         *     lookahead) and reports realized next-day long, short, market, spread,
+         *     turnover, and cost-adjusted evidence. Returns null (not an error) when
+         *     there is too little realized history. Changes ~once per trading day ->
+         *     cached aggressively at the edge.
          */
         get: operations["picks_scoreboard_api_picks_scoreboard_get"];
         put?: never;
@@ -3803,6 +3827,8 @@ export interface components {
             ic_t_stat?: number | null;
             /** Insufficient */
             insufficient: boolean;
+            /** Long Mean Return */
+            long_mean_return: number | null;
             /** Long Short Spread */
             long_short_spread: number | null;
             /** Mean Ic */
@@ -3823,6 +3849,8 @@ export interface components {
              * @default 0
              */
             oos_n_days: number;
+            /** Short Mean Return */
+            short_mean_return: number | null;
         };
         /** HypothesisTranslateRequest */
         HypothesisTranslateRequest: {
@@ -4439,10 +4467,13 @@ export interface components {
         };
         /**
          * ScoreboardResponse
-         * @description Portfolio-level evaluation of the picks themselves (the honest headline):
-         *     the daily top-K basket's compounded forward return vs the universe average,
-         *     the long-minus-short spread, and the long basket's directional hit-rate vs
-         *     the always-guess-up base rate. None fields = not enough realized history.
+         * @description Portfolio-level next-day basket diagnostic for the picks.
+         *
+         *     The daily top-K and bottom-K baskets are compounded from archived rankings,
+         *     with long, short, market, spread, cost, turnover, and SPY evidence kept
+         *     separate. ``base_rate`` remains a backwards-compatible field for existing
+         *     clients, but is not rendered by the product UI. None fields mean there is
+         *     not enough realized history.
          *
          *     2026-07-12 additions (display-only — does not affect ranking/selection):
          *       - spy_cum: SPY compounded over the same dates.
@@ -4458,7 +4489,7 @@ export interface components {
             /** Alpha T */
             alpha_t?: number | null;
             /** Base Rate */
-            base_rate: number | null;
+            base_rate?: number | null;
             /** Beta */
             beta?: number | null;
             /** Breakeven Cost Bps */
@@ -4482,6 +4513,8 @@ export interface components {
             mean_daily_turnover?: number | null;
             /** Short Cum */
             short_cum: number;
+            /** Short Hit Rate */
+            short_hit_rate?: number | null;
             /** Spread Cum */
             spread_cum: number;
             /** Spy Cum */
@@ -5818,6 +5851,46 @@ export interface operations {
                 authorization?: string | null;
             };
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_run_candidates_api_brain_runs__run_id__candidates_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                selected?: boolean | null;
+                status?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;

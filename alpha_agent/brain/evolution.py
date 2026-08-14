@@ -98,20 +98,28 @@ def family_of(expr: str) -> str:
     cap. options/revision are the value-orthogonal new sources; everything built on
     fundamental ratios collapses into the co-moving 'value' cluster."""
     e = expr or ""
+    has_iv = bool(re.search(r"implied_volatility|(?:^|[_\W])iv(?:[_\W])", e))
+    has_pcr = bool(re.search(r"pcr|put[_-]?call", e))
     # Frontier mechanisms FIRST — their field mixes would otherwise be swallowed
     # by the broader options/value/momentum regexes below.
-    if ("pcr_oi" in e and "add(" in e
-            and "implied_volatility_call" in e and "implied_volatility_put" in e):
+    if (has_pcr and "add(" in e
+            and re.search(r"call", e) and re.search(r"put", e) and has_iv):
         return "options_composite"
     if "breakeven" in e and "forward_price" in e:
         return "option_breakeven"
-    if "pcr_oi" in e and ("ts_delta(" in e or "ts_zscore(" in e):
+    if has_pcr and ("ts_delta(" in e or "ts_zscore(" in e):
         return "pcr_dynamics"
     if "ts_delta(subtract(implied_volatility" in e:
         return "iv_skew_dynamics"
-    if re.search(r"ts_delta\(implied_volatility", e):
+    if re.search(r"ts_delta\([^)]*(?:implied_volatility|(?:^|[_\W])iv(?:[_\W]))", e):
         return "iv_momentum"
-    if re.search(r"implied_volatility_\w+_(?:60|120)\b[\s\S]*implied_volatility_\w+_(?:180|270|1080)", e):
+    iv_fields = [
+        token for token in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", e)
+        if "implied_volatility" in token
+        or re.search(r"(?:^|_)iv(?:_|$)", token)
+    ]
+    iv_tenors = {number for field in iv_fields for number in re.findall(r"\d+", field)}
+    if len(iv_tenors) >= 2 or re.search(r"implied_volatility_\w+_(?:60|120)\b[\s\S]*implied_volatility_\w+_(?:180|270|1080)", e):
         return "iv_term"  # two-tenor slope: tenor dimension, not strike skew
     if "historical_volatility" in e and "implied_volatility" in e:
         return "vrp"
@@ -125,7 +133,7 @@ def family_of(expr: str) -> str:
         return "overnight"  # overnight/intraday decomposition
     if re.search(r"ts_corr\([\s\S]*(?:volume|adv20)", e) or re.search(r"ts_rank\(divide\(volume, adv20", e):
         return "microstructure"  # price-volume co-movement family
-    if re.search(r"implied_volatility|pcr_oi|historical_volatility", e):
+    if has_iv or has_pcr or re.search(r"historical_volatility", e):
         return "options"
     if re.search(r"beta_last|systematic_risk|unsystematic_risk|correlation_last", e):
         return "lowvol"
@@ -157,10 +165,20 @@ def family_of(expr: str) -> str:
 def options_mechanism_of(expr: str) -> str:
     """Fine options mechanism used for generation quotas and UI diagnosis."""
     e = expr or ""
-    if "ts_regression" in e and "ts_delta(implied_volatility_call" in e:
+    has_iv = bool(re.search(r"implied_volatility|(?:^|[_\W])iv(?:[_\W])", e))
+    has_call = bool(re.search(r"call", e))
+    has_put = bool(re.search(r"put", e))
+    has_pcr = bool(re.search(r"pcr|put[_-]?call", e))
+    iv_fields = [
+        token for token in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", e)
+        if "implied_volatility" in token
+        or re.search(r"(?:^|_)iv(?:_|$)", token)
+    ]
+    if "ts_regression" in e and "ts_delta(" in e and has_call and has_iv:
         return "skew_call_innovation_residual"
-    if "ts_regression" in e and re.search(
-        r"divide\(implied_volatility_call_\d+, implied_volatility_call_\d+\)", e
+    if "ts_regression" in e and (
+        re.search(r"divide\(implied_volatility_call_\d+, implied_volatility_call_\d+\)", e)
+        or (len(iv_fields) >= 2 and "ts_delta(" not in e)
     ):
         return "skew_term_residual"
     if family_of(e) == "options_composite":
@@ -175,8 +193,8 @@ def options_mechanism_of(expr: str) -> str:
         "iv_momentum", "iv_term", "vrp",
     }:
         return family
-    if "implied_volatility" in (expr or "") and "pcr_oi" in (expr or ""):
+    if has_iv and has_pcr and has_call and has_put:
         return "iv_skew_level"
-    if re.search(r"implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price", expr or ""):
+    if has_iv or has_pcr or re.search(r"historical_volatility|breakeven|forward_price", expr or ""):
         return "options_other"
     return family

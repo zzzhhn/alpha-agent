@@ -118,13 +118,16 @@ options 运行会优先读取 `option8`、`option9` 与 `pv1`，并过滤低覆�
 flowchart LR
     A[官方字段审计] --> B[论文到字段的假设注册]
     B --> C[按机制生成候选]
-    C --> D[多目标低成本预筛]
+    C --> L[逐候选审计账本]
+    L --> D[多目标低成本预筛]
     D --> E[行为空间 QD 档案]
     E --> F[仿真预算分配]
     F --> G[官方 BRAIN 仿真与门槛]
     G --> H[机制后验与实验账本]
     H --> I[时间留出验证的轻量代理]
     I --> C
+    L --> U[候选审计 UI]
+    G --> R[仿真结果 UI]
 ```
 
 ### 6.1 P0：先修搜索正确性
@@ -166,6 +169,22 @@ flowchart LR
 - 代理只有在 GOOD 目标和至少一个风险目标通过留出验证后才启用，最多占 pre-screen 总分的 15%。样本不足、分布漂移或验证失败时自动退回分层后验，不阻塞挖掘。
 - 所谓“边际贡献”目前明确实现为 `1 − adjusted_self_corr²` 的分散化代理，并非真实组合增量收益回归。它只能帮助排序，不能作为提交或淘汰因子的独立门槛。
 - 当前字段 coverage 使用本轮官方 catalog 快照，不声称是历史 point-in-time coverage。若以后保存逐日 catalog，才可升级为严格的时间点特征。
+
+### 6.5 2026-08-14 P0 至 P2 语义闭环
+
+- P0 不再把“字段 ID 已找到”当作论文构造已复现。系统从官方字段 `name`、`description`、`type` 与 dataset metadata 审计 measure、call/put side、tenor、moneyness、liquidity 和 target alignment，并把 matched、missing 与 field details 持久化到候选证据。
+- 高置信论文假设若缺少必需语义会在昂贵仿真前被 withheld。`pcr_oi` 明确归类为 open interest，不会再满足 buyer-initiated opening flow；option-strategy return 与 aggregate-market return 假设只进入 exploratory lane。
+- 官方 catalog 字段会进入 options generator，但 call/put、breakeven/forward、IV/HV 只按共同 tenor 配对。若成对角色缺一侧，则整对回退到已审计静态字段，避免 live 与 fallback 混配。
+- P1 评分分开保存语法簇、预仿真行为簇和已实现 self-correlation novelty。历史 concentration 与 low-sub-universe 计数可能来自同一仿真，因此机制失败率不再把二者直接相加。
+- P2 代理仍以 15% 为评分上限，并增加 chronological drift、精确 context support 与特征范围 guard。未见过的 `mechanism × dataset × settings` 或分布外候选不返回预测。
+- BRAIN 候选展开面板新增语义匹配与目标对齐状态。用户可以区分 `coverage=100%`、`semantics matched` 和 `target aligned`，三者不再共用一个乐观标签。
+
+### 6.6 RUN #76 透明度闭环
+
+- RUN #76 实际生成了 20 条表达式，但 LLM 逻辑筛选在 180 秒边界超时；随后 deterministic evidence screen 未选择任何候选，因此没有进入 BRAIN `/simulations`，也没有发生 alpha submit。这个结果不是 BRAIN 回测失败。
+- 旧实现只在仿真后写 `brain_alphas`，所以 20 条生成表达式与逐条阻断原因没有被保存，无法从旧数据库或 GitHub artifact 恢复。新实现先写 run-scoped candidate ledger，再调用可选 LLM 和证据筛选。
+- 每条生成候选现在保留表达式、设置、机制、证据明细与分数、LLM 技术状态、是否入选、筛选原因，以及后续仿真行和 outcome 的关联。LLM timeout、provider error、未返回评分和低证据分不再被合并成一个含糊状态。
+- 页面把“仿真结果”与“候选审计”分开。零仿真的已完成轮次默认打开审计视图；历史轮次没有审计数据时明确说明不可追溯，不再显示空表或持续 loading。
 
 ## 7. 下一轮最小实验设计
 

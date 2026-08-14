@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from alpha_agent.brain.evolution import options_mechanism_of
-from alpha_agent.brain.hypotheses import map_expression_fields
+from alpha_agent.brain.hypotheses import map_expression_fields, research_context_key
 
 MIN_TRAIN_ROWS = 48
 MIN_CLASS_ROWS = 8
@@ -88,11 +88,36 @@ class OptionsSurrogate:
     sample_n: int
     models: dict[str, _LinearModel] = field(default_factory=dict)
     diagnostics: dict[str, dict[str, float | int | str]] = field(default_factory=dict)
+    support_min: np.ndarray | None = None
+    support_max: np.ndarray | None = None
+    support_contexts: frozenset[str] = frozenset()
+    drift_score: float = 0.0
+
+    def supports(
+        self, expression: str, settings: dict, field_metadata: list[dict]
+    ) -> bool:
+        """Return whether a candidate is inside observed training support."""
+        if self.support_min is None or self.support_max is None:
+            return False
+        context = research_context_key(
+            options_mechanism_of(expression), expression, field_metadata, settings
+        )
+        if self.support_contexts and context not in self.support_contexts:
+            return False
+        x = candidate_features(expression, settings, field_metadata)
+        span = np.maximum(self.support_max - self.support_min, 1e-6)
+        margin = np.maximum(span * 0.10, 0.05)
+        return bool(
+            np.all(x >= self.support_min - margin)
+            and np.all(x <= self.support_max + margin)
+        )
 
     def predict(
         self, expression: str, settings: dict, field_metadata: list[dict]
     ) -> dict[str, float]:
         if not self.active:
+            return {}
+        if not self.supports(expression, settings, field_metadata):
             return {}
         x = candidate_features(expression, settings, field_metadata)
         out = {name: model.predict(x) for name, model in self.models.items()}
@@ -134,13 +159,24 @@ def _chronological_split(n: int) -> int:
 
 
 def _fit_binary_target(
-    x: np.ndarray, y: np.ndarray, name: str
+    x: np.ndarray, y: np.ndarray, name: str, groups: np.ndarray | None = None
 ) -> tuple[_LinearModel | None, dict[str, float | int | str]]:
     if len(y) < MIN_TRAIN_ROWS or min(int(y.sum()), int(len(y) - y.sum())) < MIN_CLASS_ROWS:
         return None, {"status": "insufficient", "n": len(y), "positive_n": int(y.sum())}
     split = _chronological_split(len(y))
     train_x, test_x = x[:split], x[split:]
     train_y, test_y = y[:split], y[split:]
+    if groups is not None:
+        train_groups = set(groups[:split].tolist())
+        test_groups = set(groups[split:].tolist())
+        if not train_groups.intersection(test_groups):
+            return None, {
+                "status": "rejected_unseen_context_holdout",
+                "n": len(y),
+                "holdout_n": len(test_y),
+                "train_groups": len(train_groups),
+                "holdout_groups": len(test_groups),
+            }
     if min(int(train_y.sum()), int(len(train_y) - train_y.sum())) < MIN_CLASS_ROWS:
         return None, {"status": "insufficient_train_classes", "n": len(y)}
     model = _fit_logistic(train_x, train_y)
@@ -154,6 +190,9 @@ def _fit_binary_target(
         "holdout_n": len(test_y),
         "brier": round(brier, 5),
         "baseline_brier": round(baseline, 5),
+        "train_groups": len(set(groups[:split].tolist())) if groups is not None else 0,
+        "holdout_groups": len(set(groups[split:].tolist())) if groups is not None else 0,
+        "group_overlap": len(set(groups[:split].tolist()).intersection(set(groups[split:].tolist()))) if groups is not None else 0,
     }
     if diagnostics["status"] != "validated":
         return None, diagnostics
@@ -161,11 +200,22 @@ def _fit_binary_target(
 
 
 def _fit_regression_target(
-    x: np.ndarray, y: np.ndarray
+    x: np.ndarray, y: np.ndarray, groups: np.ndarray | None = None
 ) -> tuple[_LinearModel | None, dict[str, float | int | str]]:
     if len(y) < MIN_REGRESSION_ROWS or float(np.std(y)) < 1e-6:
         return None, {"status": "insufficient", "n": len(y)}
     split = _chronological_split(len(y))
+    if groups is not None:
+        train_groups = set(groups[:split].tolist())
+        test_groups = set(groups[split:].tolist())
+        if not train_groups.intersection(test_groups):
+            return None, {
+                "status": "rejected_unseen_context_holdout",
+                "n": len(y),
+                "holdout_n": len(y) - split,
+                "train_groups": len(train_groups),
+                "holdout_groups": len(test_groups),
+            }
     model = _fit_ridge(x[:split], y[:split])
     pred = np.asarray([model.predict(row) for row in x[split:]])
     baseline_value = float(y[:split].mean())
@@ -177,10 +227,24 @@ def _fit_regression_target(
         "holdout_n": len(y) - split,
         "mse": round(mse, 5),
         "baseline_mse": round(baseline, 5),
+        "train_groups": len(set(groups[:split].tolist())) if groups is not None else 0,
+        "holdout_groups": len(set(groups[split:].tolist())) if groups is not None else 0,
+        "group_overlap": len(set(groups[:split].tolist()).intersection(set(groups[split:].tolist()))) if groups is not None else 0,
     }
     if diagnostics["status"] != "validated":
         return None, diagnostics
     return _fit_ridge(x, y), diagnostics
+
+
+def _holdout_drift(x: np.ndarray) -> float:
+    """Measure chronological feature drift in standardized training units."""
+    split = _chronological_split(len(x))
+    if split <= 0 or split >= len(x):
+        return 0.0
+    train = x[:split]
+    holdout = x[split:]
+    scale = np.maximum(train.std(axis=0), 1e-6)
+    return float(np.mean(np.abs(holdout.mean(axis=0) - train.mean(axis=0)) / scale))
 
 
 def fit_options_surrogate(rows: list[dict], field_metadata: list[dict]) -> OptionsSurrogate:
@@ -193,6 +257,16 @@ def fit_options_surrogate(rows: list[dict], field_metadata: list[dict]) -> Optio
         candidate_features(row["expression"], row.get("settings") or {}, field_metadata)
         for row in usable
     ])
+    contexts = np.asarray([
+        research_context_key(
+            options_mechanism_of(row["expression"]),
+            row["expression"],
+            field_metadata,
+            row.get("settings") or {},
+        )
+        for row in usable
+    ], dtype=object)
+    drift_score = _holdout_drift(x_all)
     models: dict[str, _LinearModel] = {}
     diagnostics: dict[str, dict[str, float | int | str]] = {}
 
@@ -211,7 +285,7 @@ def fit_options_surrogate(rows: list[dict], field_metadata: list[dict]) -> Optio
         ], dtype=np.float64),
     }
     for name, target in binary_targets.items():
-        model, diag = _fit_binary_target(x_all, target, name)
+        model, diag = _fit_binary_target(x_all, target, name, contexts)
         diagnostics[name] = diag
         if model is not None:
             models[name] = model
@@ -229,18 +303,30 @@ def fit_options_surrogate(rows: list[dict], field_metadata: list[dict]) -> Optio
     ):
         indices = [i for i, row in enumerate(usable) if row.get(source) is not None]
         target = np.asarray([transform(usable[i][source]) for i in indices])
-        model, diag = _fit_regression_target(x_all[indices], target)
+        model, diag = _fit_regression_target(x_all[indices], target, contexts[indices])
         diagnostics[name] = diag
         if model is not None:
             models[name] = model
 
-    active = "good" in models and len(models) >= 2
+    active = "good" in models and len(models) >= 2 and drift_score <= 3.0
     reason = (
         f"validated targets: {','.join(sorted(models))}"
         if active
         else "holdout validation did not support a quality-plus-risk proxy"
     )
-    return OptionsSurrogate(active, reason, len(usable), models, diagnostics)
+    if drift_score > 3.0:
+        reason = f"chronological feature drift {drift_score:.2f} exceeds guard"
+    return OptionsSurrogate(
+        active,
+        reason,
+        len(usable),
+        models,
+        diagnostics,
+        support_min=x_all.min(axis=0),
+        support_max=x_all.max(axis=0),
+        support_contexts=frozenset(str(value) for value in contexts),
+        drift_score=round(drift_score, 4),
+    )
 
 
 def proxy_composite(prediction: dict[str, float]) -> float | None:

@@ -89,3 +89,23 @@
 - Separate failure feedback by cause. Tight truncation can address repeated concentration and extra decay can address turnover, while low sub-universe Sharpe is a stability warning and does not justify shrinking the universe automatically.
 - Persist the research contract with every simulated candidate. Paper source, target outcome, field mapping, current coverage, settings context, alternative explanations, and falsification rules must survive page refreshes and future code changes.
 - `1 − adjusted self-correlation²` is only a diversification proxy. Naming it marginal contribution would overstate the evidence unless a real portfolio-level incremental-return regression is available.
+
+## 2026-08-14: Field coverage is not economic-semantic coverage
+
+- A field ID found in option8 or option9 proves availability, not that it reproduces a paper's variable. Ordinary `pcr_oi` cannot stand in for buyer-initiated opening option volume, and single-stock IV minus HV cannot silently inherit aggregate model-free VRP evidence.
+- Pair call and put, breakeven and forward, or implied and realized volatility by shared tenor or moneyness. Positional list pairing can create a legal expression with the wrong economic construction.
+- Failure counters may overlap on one BRAIN simulation. Do not sum concentration and sub-universe failures as if they were independent attempts when deciding that a mechanism is historically exhausted.
+- Semantic audit, target alignment, and missing required fields belong in the persisted research evidence and the expanded-row UI. A `mapped=100%` badge alone is not decision evidence.
+
+## 2026-08-14: Recommendation metrics need an object and a horizon
+
+- Per-name 1-day direction agreement, 5-day calibrated confidence, and 5/20/60-day ranked-basket evidence answer different questions. A generic “hit rate” label makes them appear interchangeable when they are not.
+- Show long and short sleeves separately before the long-short spread. A positive spread can otherwise conceal market drift or a failing short leg.
+- Compare the fixed 5, 20, and 60-day horizons in parallel and keep sample counts visible. Do not choose the best-looking horizon after observing the data.
+- A long-short quintile spread is dollar-directional evidence, not automatically market-beta neutral. Use precise labels unless an explicit beta hedge is measured.
+
+## 2026-08-14: Persist generated candidates before optional screening
+
+- A run-level `generated=20, simulated=0` aggregate cannot explain which expressions were withheld or why. Persist every generated expression before an optional LLM or deterministic screen, then update the same row through selected, withheld, simulated, or simulation-error states.
+- LLM timeout, parse/provider failure, weak research evidence, and official BRAIN simulation failure are different events. Store a safe technical status and exact decision reason instead of letting one empty results table represent all four.
+- A successful Vercel deployment does not update a GitHub Actions worker when workflow dispatch checks out `main`. Merge worker code and migrations to the dispatched ref before claiming the new mining workflow is live.

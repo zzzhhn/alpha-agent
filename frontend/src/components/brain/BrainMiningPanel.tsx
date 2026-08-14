@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { BrainPnLChart, type ChartKind } from "@/components/brain/BrainPnLChart";
+import { BrainCandidateAudit } from "@/components/brain/BrainCandidateAudit";
 import { Play } from "lucide-react";
 import {
   fetchBrainAlphas,
@@ -32,6 +34,7 @@ import {
 } from "@/lib/api/brain";
 
 const DEFAULT_PAGE_SIZE = 20;
+type WorkbenchView = "results" | "audit";
 
 // Format an ISO timestamp as Beijing time (UTC+8), to the second.
 function fmtUtc8(iso: string | null | undefined): string {
@@ -288,11 +291,28 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
   if (!evidence) return null;
   const hypothesis = evidence.hypothesis;
   const mapping = evidence.field_mapping;
+  const semantic = evidence.semantic_audit;
   const screen = evidence.screen;
   const proxy = evidence.proxy;
   const pct = (value: number | undefined) =>
     typeof value === "number" ? `${Math.round(value * 100)}%` : "—";
   const prediction = proxy?.prediction || {};
+  const semanticTone = semantic?.status === "matched"
+    ? "text-tm-pos"
+    : semantic?.status === "mismatch"
+      ? "text-tm-neg"
+      : "text-tm-warn";
+  const semanticLabel = semantic?.status === "matched"
+    ? (zh ? "语义匹配" : "semantics matched")
+    : semantic?.status === "mismatch"
+      ? (zh ? "语义不匹配" : "semantic mismatch")
+      : (zh ? "语义待核验" : "semantics unverified");
+  const alignmentStatus = semantic?.target_outcome_alignment?.status;
+  const alignmentLabel = alignmentStatus === "aligned"
+    ? (zh ? "目标对齐" : "target aligned")
+    : alignmentStatus === "exploratory_mismatch"
+      ? (zh ? "仅探索，目标不一致" : "exploratory target mismatch")
+      : (zh ? "目标待核验" : "target unverified");
   return (
     <div className="border border-tm-rule bg-tm-bg px-3 py-2.5">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -327,6 +347,14 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
           <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
             {hypothesis?.confidence || "—"} · {hypothesis?.target || "—"}
           </div>
+          {semantic ? (
+            <div
+              className={`mt-1 font-tm-mono text-[9.5px] ${alignmentStatus === "aligned" ? "text-tm-pos" : "text-tm-warn"}`}
+              title={semantic.target_outcome_alignment?.target}
+            >
+              {alignmentLabel}
+            </div>
+          ) : null}
         </div>
         <div>
           <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
@@ -338,6 +366,21 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
           <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
             coverage {pct(mapping?.coverage)} · mapped {pct(mapping?.mapped_ratio)}
           </div>
+          {semantic ? (
+            <>
+              <div className={`mt-1 font-tm-mono text-[9.5px] ${semanticTone}`}>
+                {semanticLabel} · {semantic.matched_required_semantics?.length ?? 0}/{semantic.required_semantics?.length ?? 0}
+              </div>
+              {semantic.missing_required_semantics?.length ? (
+                <div
+                  className="mt-1 truncate font-tm-mono text-[9px] text-tm-neg"
+                  title={semantic.missing_required_semantics.join(" · ")}
+                >
+                  {zh ? "缺失" : "missing"}: {semantic.missing_required_semantics.join(", ")}
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
         <div>
           <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
@@ -1501,6 +1544,9 @@ function runStatusLabel(run: BrainMiningRun, zh: boolean): string {
     running: ["运行中", "running"],
     started: ["运行中", "started"],
     screening: ["筛选中", "screening"],
+    fallback: ["规则筛选", "deterministic screen"],
+    fallback_partial: ["规则筛选，证据不完整", "deterministic screen, partial evidence"],
+    timeout: ["筛选超时", "screen timeout"],
     completed: ["已完成", "completed"],
     complete: ["已完成", "complete"],
     failed: ["失败", "failed"],
@@ -1554,9 +1600,16 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
     return zh ? "Logic screen 未配置，系统直接使用仿真预算；扩大生成池暂不会提高筛选质量。" : "No logic screen was configured; widening generation will not improve ranking yet.";
   }
   if (run.status === "completed" && screened < requested && generated > 0) {
+    const technicalFallback = ["partial", "timeout", "error"].includes(run.screen_status ?? "") ||
+      /logic model unavailable|timed out|logic screen failed/i.test(run.screen_detail ?? "");
+    if (technicalFallback) {
+      return zh
+        ? "LLM 筛选没有完整完成，本轮改用 deterministic fallback。打开“候选审计”查看逐条证据与阻断原因；BRAIN 仿真尚未执行。"
+        : "The LLM screen did not complete, so this run used the deterministic fallback. Open Candidate Audit for evidence and blocking reasons; BRAIN simulation has not run.";
+    }
     return zh
-      ? `证据筛选主动保留了 ${requested - screened} 个仿真名额，低可信候选没有被回填消耗预算。先检查字段覆盖率与候选证据，再决定是否扩大生成池。`
-      : `The evidence screen intentionally left ${requested - screened} simulation slots unused instead of backfilling weak candidates. Review field coverage and candidate evidence before widening generation.`;
+      ? `证据筛选保留了 ${requested - screened} 个仿真名额，低可信候选没有被回填消耗预算。打开“候选审计”查看逐条字段覆盖与阻断原因。`
+      : `The evidence screen kept ${requested - screened} simulation slots unused instead of backfilling weak candidates. Open Candidate Audit for field coverage and blocking reasons.`;
   }
   if (generated <= requested) {
     return zh ? "生成池没有形成候选冗余，下一轮可扩大到仿真预算的约 2 倍。" : "The pool had no ranking headroom; try roughly 2× the simulation budget.";
@@ -1803,6 +1856,8 @@ export function BrainMiningPanel() {
   const [sort, setSort] = useState<string>("created_at");
   const [descending, setDescending] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [workbenchView, setWorkbenchView] = useState<WorkbenchView>("results");
+  const autoViewRun = useRef<number | null>(null);
 
   const [data, setData] = useState<{ alphas: BrainAlpha[]; total: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1966,6 +2021,14 @@ export function BrainMiningPanel() {
   const selectedRunFailureDetail =
     selectedRun?.error_detail || selectedRun?.screen_detail || null;
 
+  useEffect(() => {
+    if (!selectedRun || autoViewRun.current === selectedRun.id) return;
+    autoViewRun.current = selectedRun.id;
+    const generated = selectedRun.generated_n ?? 0;
+    const simulated = selectedRun.simulated_n ?? 0;
+    setWorkbenchView(generated > 0 && simulated === 0 ? "audit" : "results");
+  }, [selectedRun]);
+
   const INPUT =
     "h-6 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11px] text-tm-fg outline-none focus:border-tm-accent placeholder:text-tm-muted";
 
@@ -2016,6 +2079,31 @@ export function BrainMiningPanel() {
           runsTotal={runsTotal}
           zh={zh}
         />
+        <SegmentedTabs<WorkbenchView>
+          items={[
+            {
+              key: "results",
+              label: zh ? "仿真结果" : "simulation results",
+              badge: <span className="font-tm-mono text-[9px] tabular-nums">{selectedRun?.persisted_n ?? total}</span>,
+            },
+            {
+              key: "audit",
+              label: zh ? "候选审计" : "candidate audit",
+              badge: <span className="font-tm-mono text-[9px] tabular-nums">{selectedRun?.generated_n ?? 0}</span>,
+            },
+          ]}
+          active={workbenchView}
+          onChange={setWorkbenchView}
+          ariaLabel={zh ? "BRAIN 挖掘数据视图" : "BRAIN mining data views"}
+        />
+
+        {workbenchView === "audit" ? (
+          <BrainCandidateAudit
+            runId={selectedRunId}
+            generatedCount={selectedRun?.generated_n}
+          />
+        ) : (
+          <>
         {/* filter bar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
           <OutcomeSelect value={outcome} onChange={setOutcome} zh={zh} />
@@ -2103,6 +2191,10 @@ export function BrainMiningPanel() {
               ? zh
                 ? `本轮在候选生成或仿真阶段失败，没有产生可展示结果。${selectedRunFailureDetail ? ` 原因: ${selectedRunFailureDetail}` : ""}`
                 : `This run failed during candidate generation or simulation and produced no displayable results.${selectedRunFailureDetail ? ` Reason: ${selectedRunFailureDetail}` : ""}`
+              : selectedRun && (selectedRun.generated_n ?? 0) > 0 && (selectedRun.simulated_n ?? 0) === 0
+              ? zh
+                ? "本轮没有执行 BRAIN 仿真。请切换到“候选审计”，查看生成表达式、字段覆盖与逐条筛选原因。"
+                : "This run did not execute BRAIN simulations. Open Candidate Audit to inspect generated expressions, field coverage, and per-candidate decisions."
               : total === 0
               ? zh
                 ? "还没有挖矿结果。点上方「开始挖矿」跑一轮,或等每日 08:00 UTC 自动运行。前提:已在「设置」连接 BRAIN 账号。"
@@ -2259,6 +2351,8 @@ export function BrainMiningPanel() {
             </button>
           </div>
         ) : null}
+          </>
+        )}
       </TmPane>
     </TmScreen>
   );

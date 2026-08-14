@@ -240,7 +240,7 @@ export default function PicksBrowser({
           modeShort: "战术 5 日",
           modeLong: "战略 60 日",
           modeTip:
-            "战术策略使用冻结的 5 日生产政策与校准。战略策略是独立冻结的 60 日前瞻验证政策，只使用 20 日以上原生周期信号，不沿用 5 日命中率。",
+            "战术策略使用冻结的 5 日生产政策与校准。战略策略是独立冻结的 60 日前瞻验证政策，只使用 20 日以上原生周期信号，不沿用 5 日校准置信度。",
           sideLabel: "方向",
           sideLong: "做多榜",
           sideShort: "做空榜",
@@ -270,7 +270,7 @@ export default function PicksBrowser({
           modeShort: "Tactical 5d",
           modeLong: "Strategic 60d",
           modeTip:
-            "Tactical uses the frozen 5d production policy and calibration. Strategic is an independent frozen 60d forward-validation policy using only signals with 20d+ native horizons; it does not reuse the 5d hit-rate.",
+            "Tactical uses the frozen 5d production policy and calibration. Strategic is an independent frozen 60d forward-validation policy using only signals with 20d+ native horizons; it does not reuse the 5d calibrated confidence.",
           sideLabel: "SIDE",
           sideLong: "Longs",
           sideShort: "Shorts",
@@ -299,7 +299,7 @@ export default function PicksBrowser({
         </div>
         {factorMode === "long" ? (
           <p className="mt-3 rounded border border-tm-warn/40 bg-tm-warn/10 px-3 py-2 font-tm-mono text-[10.5px] leading-5 text-tm-warn">
-            {locale === "zh" ? "战略 60 日策略正在独立前瞻验证，未使用 5 日校准命中率，不应直接与战术榜单的命中率横向比较。" : "The strategic 60d policy is in independent forward validation. It does not use the 5d calibrated hit rate and should not be compared as if both confidence figures shared one basis."}
+            {locale === "zh" ? "战略 60 日策略正在独立前瞻验证，未使用 5 日校准置信度，不应直接与战术榜单的置信度横向比较。" : "The strategic 60d policy is in independent forward validation. It does not use the 5d calibrated confidence and should not be compared as if both figures shared one basis."}
           </p>
         ) : null}
       </section>

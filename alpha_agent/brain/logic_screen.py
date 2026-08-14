@@ -15,11 +15,12 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from alpha_agent.evolution.llm_factor_proposer import _strip_md_fence
 from alpha_agent.llm.base import LLMClient, Message
 from alpha_agent.brain.hypotheses import (
+    audit_expression_semantics,
     hypothesis_for,
     map_expression_fields,
     research_context_key,
@@ -37,6 +38,61 @@ _OUTPUT_TOKEN_CAP = 8000
 # Keep candidates scoring at least this (0-10) — 5 = "plausible economic logic".
 DEFAULT_MIN_SCORE = 5.0
 OPTIONS_MIN_EVIDENCE_SCORE = 5.75
+
+
+class LogicScreenResult(dict):
+    """Mapping-compatible score result with truthful screen lifecycle metadata.
+
+    Existing callers can continue to compare the return value with a plain
+    ``dict[str, float]``.  New callers should use ``status``, ``error_type`` and
+    ``detail`` to distinguish a completed screen from a bypass, timeout, or
+    parse/provider error without persisting exception text that may contain
+    credentials or request payloads.
+    """
+
+    def __init__(
+        self,
+        scores: dict[str, float] | None = None,
+        *,
+        status: str,
+        error_type: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        super().__init__(scores or {})
+        self.status = status
+        self.error_type = error_type
+        self.detail = detail
+
+    @property
+    def scores(self) -> dict[str, float]:
+        return dict(self)
+
+    def __getitem__(self, key):
+        # Expose status metadata through mapping-style access too, while keeping
+        # ordinary dict equality/iteration limited to expression scores.
+        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+            return self.metadata()[key]
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+            return self.metadata().get(key, default)
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+            return True
+        return super().__contains__(key)
+
+    def metadata(self) -> dict[str, Any]:
+        """JSON-safe status payload for a run/candidate audit record."""
+        return {
+            "scores": dict(self),
+            "status": self.status,
+            "error_type": self.error_type,
+            "detail": self.detail,
+            "scored_n": len(self),
+        }
 
 _PROMPT = """You are a quantitative equity researcher screening candidate alpha \
 factors before an expensive backtest. For EACH expression below, judge its \
@@ -78,12 +134,20 @@ def _json_payload(content: str):
 
 async def score_economic_logic(
     llm_client: Optional[LLMClient], expressions: list[str]
-) -> dict[str, float]:
+) -> LogicScreenResult:
     """Score each expression's economic logic 0-10 in one batched LLM call.
-    Returns {expression: score}. With no client, or on any failure, returns {}
-    (caller treats missing scores as passing — the screen never blocks mining)."""
-    if llm_client is None or not expressions:
-        return {}
+    The mapping contains ``{expression: score}`` and remains backward compatible
+    with plain-dict callers.  ``status``/``error_type``/``detail`` distinguish a
+    completed, partial, bypassed, timeout, or provider-error screen.  Missing
+    scores never block mining; the caller records the explicit status instead of
+    implying that every candidate was successfully screened."""
+    if llm_client is None:
+        return LogicScreenResult(
+            status="bypassed",
+            detail="no logic-screen LLM configured",
+        )
+    if not expressions:
+        return LogicScreenResult(status="bypassed", detail="no expressions")
     numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(expressions))
     try:
         import asyncio
@@ -96,9 +160,27 @@ async def score_economic_logic(
             timeout=_WALL_CLOCK_S,
         )
         data = _json_payload(resp.content or "")
-    except Exception as e:  # noqa: BLE001 — screen is best-effort, never blocks
-        logger.warning("logic screen failed; simulating all candidates: %s", e)
-        return {}
+    except asyncio.TimeoutError:
+        # Keep the durable diagnostic type-only.  Provider exception strings can
+        # include request headers, URLs, or model payloads.
+        logger.warning(
+            "logic screen unavailable: status=timeout error_type=TimeoutError"
+        )
+        return LogicScreenResult(
+            status="timeout",
+            error_type="TimeoutError",
+            detail=f"logic screen timed out after {_WALL_CLOCK_S}s",
+        )
+    except Exception as exc:  # noqa: BLE001 — screen is best-effort, never blocks
+        error_type = type(exc).__name__
+        logger.warning(
+            "logic screen unavailable: status=error error_type=%s", error_type
+        )
+        return LogicScreenResult(
+            status="error",
+            error_type=error_type,
+            detail=f"logic screen failed: {error_type}",
+        )
 
     if isinstance(data, dict):
         data = data.get("scores") or data.get("results") or data.get("candidates") or []
@@ -111,7 +193,9 @@ async def score_economic_logic(
             continue
         if 0 <= idx < len(expressions):
             out[expressions[idx]] = score
-    return out
+    status = "completed" if len(out) == len(expressions) else "partial"
+    detail = f"scored {len(out)}/{len(expressions)} expressions"
+    return LogicScreenResult(out, status=status, detail=detail)
 
 
 def select_diverse_by_group(
@@ -184,8 +268,9 @@ def _behavior_cluster(expr: str, mechanism: str) -> str:
     when a second leg or tenor makes the syntax look different.
     """
     e = expr or ""
-    if "trade_when" in e and "pcr_oi_" in e and "implied_volatility_call" in e \
-            and "implied_volatility_put" in e:
+    if "trade_when" in e and re.search(r"\bpcr\w*", e) and re.search(
+        r"(?:implied|iv)\w*call", e
+    ) and re.search(r"(?:implied|iv)\w*put", e):
         return "pcr_skew_anchor"
     return mechanism
 
@@ -199,16 +284,21 @@ def options_candidate_evidence(
     mechanism_evidence: dict,
     candidate_settings: dict | None = None,
     surrogate_prediction: dict[str, float] | None = None,
-) -> dict[str, float | str]:
+) -> dict[str, Any]:
     """Score one options candidate before an expensive BRAIN simulation."""
     settings = candidate_settings or {}
     mapping = map_expression_fields(expr, field_metadata)
+    semantic = audit_expression_semantics(mechanism, expr, field_metadata)
     coverage = float(mapping["coverage"])
     mapped_ratio = float(mapping["mapped_ratio"])
     coverage_score = max(
         0.0,
         min(10.0, coverage * 10.0 * (0.5 + 0.5 * mapped_ratio)),
     )
+    if semantic["status"] == "unverified":
+        semantic_score = 5.0
+    else:
+        semantic_score = 10.0 * float(semantic["semantic_fidelity"])
 
     mechanisms = mechanism_evidence.get("mechanisms", mechanism_evidence)
     contexts = mechanism_evidence.get("contexts", {})
@@ -251,16 +341,40 @@ def options_candidate_evidence(
     concentration_score += 1.0 if "group_neutralize(" in (expr or "") else 0.0
     concentration_score -= 2.0 if "trade_when(" in (expr or "") else 0.0
     concentration_score = max(0.0, min(10.0, concentration_score))
-    cluster = _behavior_cluster(expr, mechanism)
-    novelty_score = 3.0 if cluster == "pcr_skew_anchor" else 7.5
+    syntactic_cluster = re.sub(r"\d+", "N", expr or "").replace(" ", "")
+    behavioral_cluster = _behavior_cluster(expr, mechanism)
+    # Keep syntax, pre-PnL behavior, and realized history as separate signals.
+    cluster = behavioral_cluster
+    novelty_score = 3.0 if behavioral_cluster == "pcr_skew_anchor" else 7.5
+    selfcorr_checked = int(hist.get("selfcorr_checked", hist.get("self_corr_checked", 0)) or 0)
+    selfcorr_passed = int(hist.get("selfcorr_passed", hist.get("self_corr_passed", 0)) or 0)
+    if selfcorr_checked:
+        # This is realized-history evidence, distinct from the syntax cluster.
+        # A low pass rate means the mechanism has not demonstrated incremental
+        # novelty, so do not let a cosmetic structural variant score as novel.
+        realized_rate = selfcorr_passed / selfcorr_checked
+        novelty_score = min(novelty_score, 2.0 + 5.0 * realized_rate)
+        realized_novelty = "supported" if realized_rate >= 0.5 else "redundant"
+    else:
+        realized_rate = None
+        realized_novelty = "unknown"
     alignment_score = _OPTIONS_OUTCOME_ALIGNMENT.get(mechanism, 4.5)
     attempts = int(hist.get("attempts", 0) or 0)
-    failure_n = int(hist.get("concentrated", 0) or 0) + int(
-        hist.get("low_sub_universe", 0) or 0
+    # These counters can refer to the same failed simulation. Using their sum
+    # would double-count one row and could blacklist a mechanism prematurely.
+    failure_n = max(
+        int(hist.get("concentrated", 0) or 0),
+        int(hist.get("low_sub_universe", 0) or 0),
     )
-    if mechanism in {"skew_call_innovation_residual", "skew_term_residual"}:
+    failure_rate = failure_n / max(attempts, 1)
+    historically_failed = bool(
+        attempts >= 4 and failure_rate >= 0.50
+    )
+    if semantic["material_mismatch"] or semantic["target_outcome_alignment"]["status"] != "aligned":
+        lane = "explore"
+    elif mechanism in {"skew_call_innovation_residual", "skew_term_residual"}:
         lane = "orthogonal"
-    elif attempts >= 4 and failure_n / attempts >= 0.30:
+    elif attempts >= 4 and failure_rate >= 0.30:
         lane = "repair"
     elif hypothesis_for(mechanism).confidence == "low":
         lane = "explore"
@@ -270,8 +384,9 @@ def options_candidate_evidence(
     proxy_score = proxy_composite(surrogate_prediction or {})
     if proxy_score is None:
         total = (
-            0.20 * max(0.0, min(10.0, logic_score))
-            + 0.20 * coverage_score
+            0.15 * max(0.0, min(10.0, logic_score))
+            + 0.15 * coverage_score
+            + 0.20 * semantic_score
             + 0.20 * history_score
             + 0.15 * alignment_score
             + 0.10 * concentration_score
@@ -280,8 +395,9 @@ def options_candidate_evidence(
         )
     else:
         total = (
-            0.15 * max(0.0, min(10.0, logic_score))
-            + 0.20 * coverage_score
+            0.10 * max(0.0, min(10.0, logic_score))
+            + 0.15 * coverage_score
+            + 0.20 * semantic_score
             + 0.15 * history_score
             + 0.10 * alignment_score
             + 0.10 * concentration_score
@@ -292,16 +408,30 @@ def options_candidate_evidence(
     return {
         "score": round(total, 4),
         "coverage": round(coverage, 4),
+        "semantic_fidelity": round(float(semantic["semantic_fidelity"]), 4),
+        "semantic_score": round(semantic_score, 4),
+        "semantic_status": semantic["status"],
+        "semantic_mismatch": bool(semantic["material_mismatch"]),
+        "high_confidence_mismatch": bool(semantic["high_confidence_mismatch"]),
+        "matched_required_semantics": semantic["matched_required_semantics"],
+        "missing_required_semantics": semantic["missing_required_semantics"],
+        "target_outcome_alignment": semantic["target_outcome_alignment"],
+        "field_details": semantic["field_details"],
         "mapped_ratio": round(mapped_ratio, 4),
         "datasets": "+".join(mapping["dataset_ids"]) or "unmapped",
         "history": round(history_score, 4),
+        "historically_failed": historically_failed,
         "context_n": context_n,
         "alignment": alignment_score,
         "concentration": round(concentration_score, 4),
         "novelty": novelty_score,
+        "realized_novelty": realized_novelty,
+        "selfcorr_rate": round(realized_rate, 4) if realized_rate is not None else "unknown",
         "complexity": round(complexity_score, 4),
         "mechanism": mechanism,
         "cluster": cluster,
+        "syntactic_cluster": syntactic_cluster,
+        "behavioral_cluster": behavioral_cluster,
         "lane": lane,
         "proxy": round(proxy_score, 4) if proxy_score is not None else "inactive",
     }
@@ -344,7 +474,14 @@ def select_options_research_portfolio(
             )
             ranked.append((float(evidence["score"]), -idx, expr, evidence))
         ranked.sort(reverse=True)
-        qualified = [item for item in ranked if item[0] >= min_evidence_score]
+        qualified = [
+            item for item in ranked
+            if item[0] >= min_evidence_score
+            # A high-confidence paper claim with an unfulfilled official
+            # semantic requirement must not consume a high-confidence slot.
+            and not bool(item[3].get("high_confidence_mismatch"))
+            and not bool(item[3].get("historically_failed"))
+        ]
         selected: list[str] = []
         cluster_counts: dict[str, int] = {}
         mechanism_counts: dict[str, int] = {}
@@ -411,6 +548,106 @@ def select_options_research_portfolio(
             break
         depth += 1
     return selected
+
+
+def options_candidate_screen_records(
+    expressions: list[str],
+    scores: dict[str, float],
+    *,
+    target_n: int,
+    group_of,
+    field_metadata: list[dict] | None = None,
+    mechanism_evidence: dict | None = None,
+    settings_by_expr: dict[str, dict] | None = None,
+    surrogate_predictions: dict[str, dict[str, float]] | None = None,
+    min_evidence_score: float = OPTIONS_MIN_EVIDENCE_SCORE,
+    selected: list[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return durable evidence and an exact portfolio decision for each option.
+
+    The selector historically returned only expressions.  This companion keeps
+    that compatibility while exposing the same evidence gates as explicit reason
+    codes for the run-candidate ledger.
+    """
+    metadata = field_metadata or []
+    history = mechanism_evidence or {}
+    settings_map = settings_by_expr or {}
+    predictions = surrogate_predictions or {}
+    selected_exprs = selected
+    if selected_exprs is None:
+        selected_exprs = select_options_research_portfolio(
+            expressions,
+            scores,
+            target_n=target_n,
+            group_of=group_of,
+            field_metadata=field_metadata,
+            mechanism_evidence=mechanism_evidence,
+            settings_by_expr=settings_by_expr,
+            surrogate_predictions=surrogate_predictions,
+            min_evidence_score=min_evidence_score,
+        )
+    selected_set = set(selected_exprs)
+
+    records: dict[str, dict[str, Any]] = {}
+    for expr in expressions:
+        mechanism = str(group_of(expr))
+        evidence = options_candidate_evidence(
+            expr,
+            logic_score=scores.get(expr, DEFAULT_MIN_SCORE),
+            mechanism=mechanism,
+            field_metadata=metadata,
+            mechanism_evidence=history,
+            candidate_settings=settings_map.get(expr, {}),
+            surrogate_prediction=predictions.get(expr),
+        )
+        records[expr] = {
+            "evidence": evidence,
+            "evidence_score": float(evidence["score"]),
+            "llm_score": scores.get(expr),
+            "mechanism": mechanism,
+            "selected": expr in selected_set,
+        }
+
+    selected_evidence = [
+        records[expr]["evidence"] for expr in selected_exprs if expr in records
+    ]
+    selected_mechanisms: dict[str, int] = {}
+    selected_clusters: dict[str, int] = {}
+    for item in selected_evidence:
+        mechanism = str(item["mechanism"])
+        cluster = str(item["cluster"])
+        selected_mechanisms[mechanism] = selected_mechanisms.get(mechanism, 0) + 1
+        selected_clusters[cluster] = selected_clusters.get(cluster, 0) + 1
+
+    for expr, record in records.items():
+        evidence = record["evidence"]
+        if record["selected"]:
+            code = "selected"
+            text = "selected for simulation"
+        elif bool(evidence.get("high_confidence_mismatch")):
+            code = "high_confidence_semantic_mismatch"
+            text = "high-confidence hypothesis is missing required official semantics"
+        elif bool(evidence.get("historically_failed")):
+            code = "historically_failed"
+            text = "mechanism has repeated historical gate failures"
+        elif float(evidence["score"]) < min_evidence_score:
+            code = "below_evidence_threshold"
+            text = f"evidence score {float(evidence['score']):.2f} < {min_evidence_score:.2f}"
+        elif selected_clusters.get(str(evidence["cluster"]), 0) >= 1:
+            code = "cluster_cap"
+            text = f"behavior cluster '{evidence['cluster']}' already selected"
+        elif selected_mechanisms.get(str(evidence["mechanism"]), 0) >= 2:
+            code = "mechanism_cap"
+            text = f"mechanism '{evidence['mechanism']}' already has two selected candidates"
+        elif len(selected_exprs) >= min(max(int(target_n), 0), len(expressions)):
+            code = "portfolio_budget"
+            text = "portfolio budget reached"
+        else:
+            code = "withheld_by_portfolio"
+            text = "withheld by the options diversity portfolio"
+        record["reason_code"] = code
+        record["reason_text"] = text
+    return records
 
 
 def select_by_logic(

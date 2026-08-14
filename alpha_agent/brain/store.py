@@ -411,7 +411,7 @@ async def options_mechanism_evidence(
         "SELECT expression, settings, outcome, grade, sharpe, fail_checks, "
         "self_correlation, self_correlation_adj, created_at "
         "FROM brain_alphas WHERE user_id=$1 "
-        "AND expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)' "
+        "AND (research_evidence IS NOT NULL OR expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)') "
         "ORDER BY created_at DESC LIMIT $2",
         int(user_id), min(max(int(limit), 1), 2000),
     )
@@ -462,7 +462,7 @@ async def options_surrogate_rows(pool, user_id: int, *, limit: int = 1000) -> li
         "SELECT expression, settings, outcome, grade, fail_checks, "
         "self_correlation, self_correlation_adj, created_at "
         "FROM brain_alphas WHERE user_id=$1 "
-        "AND expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)' "
+        "AND (research_evidence IS NOT NULL OR expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)') "
         "AND alpha_id IS NOT NULL ORDER BY created_at ASC LIMIT $2",
         int(user_id), min(max(int(limit), 1), 3000),
     )
@@ -782,3 +782,192 @@ async def increment_brain_run_counts(
         int(rejected), int(sim_error),
     )
     return _decode_run(row) if row is not None else None
+
+
+# ── Generated-candidate audit ledger ─────────────────────────────────────
+
+_CANDIDATE_COLS = (
+    "id, run_id, ordinal, expression, settings, mechanism, evidence, "
+    "evidence_score, llm_score, llm_status, selected, stage, status, "
+    "reason_code, reason_text, alpha_row_id, alpha_id, simulation_outcome, "
+    "simulation_detail, created_at, screened_at, simulated_at, updated_at"
+)
+_CANDIDATE_MUTABLE_COLS = {
+    "ordinal", "settings", "mechanism", "evidence", "evidence_score",
+    "llm_score", "llm_status", "selected", "stage", "status",
+    "reason_code", "reason_text", "alpha_row_id", "alpha_id",
+    "simulation_outcome", "simulation_detail", "screened_at", "simulated_at",
+}
+
+
+def _decode_candidate(row) -> dict:
+    """Decode one generated-candidate row into the JSON-safe API shape."""
+    d = dict(row)
+    for key in ("settings", "evidence"):
+        if isinstance(d.get(key), str):
+            d[key] = json.loads(d[key])
+    for key in ("created_at", "screened_at", "simulated_at", "updated_at"):
+        if d.get(key) is not None:
+            d[key] = d[key].isoformat()
+    return d
+
+
+async def record_brain_run_candidate(
+    pool,
+    run_id: int,
+    *,
+    ordinal: int,
+    expression: str,
+    settings: dict | None = None,
+    mechanism: str | None = None,
+    evidence: dict | None = None,
+    evidence_score: float | None = None,
+    llm_score: float | None = None,
+    llm_status: str = "pending",
+) -> dict:
+    """Insert one generated expression before screening.
+
+    The unique ``(run_id, expression)`` key makes retries idempotent.  Existing
+    audit details are intentionally preserved on a duplicate; screening updates
+    those fields explicitly after the whole generation pool is durable.
+    """
+    row = await pool.fetchrow(
+        "INSERT INTO brain_run_candidates "
+        "(run_id, ordinal, expression, settings, mechanism, evidence, "
+        " evidence_score, llm_score, llm_status) "
+        "VALUES ($1,$2,$3,$4::jsonb,$5,$6::jsonb,$7,$8,$9) "
+        "ON CONFLICT (run_id, expression) DO UPDATE SET "
+        "ordinal=EXCLUDED.ordinal, settings=EXCLUDED.settings, "
+        "mechanism=COALESCE(EXCLUDED.mechanism, brain_run_candidates.mechanism), "
+        "updated_at=now() "
+        "RETURNING " + _CANDIDATE_COLS,
+        int(run_id), int(ordinal), str(expression), json.dumps(settings or {}),
+        mechanism, json.dumps(evidence) if evidence is not None else None,
+        evidence_score, llm_score, llm_status,
+    )
+    if row is None:
+        raise RuntimeError(f"BRAIN candidate insert returned no row for run {run_id}")
+    return _decode_candidate(row)
+
+
+async def record_brain_run_candidates(
+    pool,
+    run_id: int,
+    candidates: list[dict],
+) -> list[dict]:
+    """Persist a generated pool in ordinal order before any screen call."""
+    rows: list[dict] = []
+    for ordinal, candidate in enumerate(candidates):
+        rows.append(
+            await record_brain_run_candidate(
+                pool,
+                run_id,
+                ordinal=int(candidate.get("ordinal", ordinal)),
+                expression=str(candidate.get("expression") or ""),
+                settings=candidate.get("settings") or {},
+                mechanism=candidate.get("mechanism"),
+                evidence=candidate.get("evidence"),
+                evidence_score=candidate.get("evidence_score"),
+                llm_score=candidate.get("llm_score"),
+                llm_status=str(candidate.get("llm_status") or "pending"),
+            )
+        )
+    return rows
+
+
+async def update_brain_run_candidate(
+    pool,
+    candidate_id: int,
+    **fields,
+) -> dict | None:
+    """Update screening/simulation metadata for one audit-ledger row."""
+    unknown = set(fields) - _CANDIDATE_MUTABLE_COLS
+    if unknown:
+        raise ValueError(f"unknown BRAIN candidate fields: {sorted(unknown)}")
+    if not fields:
+        row = await pool.fetchrow(
+            f"SELECT {_CANDIDATE_COLS} FROM brain_run_candidates WHERE id=$1",
+            int(candidate_id),
+        )
+        return _decode_candidate(row) if row is not None else None
+    assignments: list[str] = []
+    params: list = [int(candidate_id)]
+    json_fields = {"settings", "evidence"}
+    for column, value in fields.items():
+        if column in json_fields:
+            value = json.dumps(value) if value is not None else None
+            cast = "::jsonb"
+        else:
+            cast = ""
+        params.append(value)
+        assignments.append(f"{column}=${len(params)}{cast}")
+    assignments.append("updated_at=now()")
+    row = await pool.fetchrow(
+        f"UPDATE brain_run_candidates SET {', '.join(assignments)} WHERE id=$1 "
+        f"RETURNING {_CANDIDATE_COLS}",
+        *params,
+    )
+    return _decode_candidate(row) if row is not None else None
+
+
+async def get_brain_run_candidate(
+    pool,
+    user_id: int,
+    candidate_id: int,
+) -> dict | None:
+    """Return one candidate only when its parent run belongs to ``user_id``."""
+    row = await pool.fetchrow(
+        f"SELECT c.{_CANDIDATE_COLS.replace(', ', ', c.')} "
+        "FROM brain_run_candidates AS c "
+        "JOIN brain_runs AS r ON r.id=c.run_id "
+        "WHERE c.id=$1 AND r.user_id=$2",
+        int(candidate_id), int(user_id),
+    )
+    return _decode_candidate(row) if row is not None else None
+
+
+async def query_brain_run_candidates(
+    pool,
+    user_id: int,
+    run_id: int,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    selected: bool | None = None,
+    status: str | None = None,
+) -> dict:
+    """List one user's generated candidates for one owned run.
+
+    Ownership is enforced in SQL through the parent ``brain_runs`` join, so a
+    caller cannot infer another user's candidate rows by changing a run id.
+    """
+    lim = min(max(int(limit), 1), 200)
+    off = max(int(offset), 0)
+    where = ["c.run_id=$1", "r.user_id=$2"]
+    params: list = [int(run_id), int(user_id)]
+    if selected is not None:
+        params.append(bool(selected))
+        where.append(f"c.selected=${len(params)}")
+    if status:
+        params.append(str(status))
+        where.append(f"c.status=${len(params)}")
+    where_sql = " AND ".join(where)
+    total = await pool.fetchval(
+        f"SELECT count(*) FROM brain_run_candidates AS c "
+        f"JOIN brain_runs AS r ON r.id=c.run_id WHERE {where_sql}",
+        *params,
+    )
+    rows = await pool.fetch(
+        f"SELECT c.{_CANDIDATE_COLS.replace(', ', ', c.')} "
+        f"FROM brain_run_candidates AS c JOIN brain_runs AS r ON r.id=c.run_id "
+        f"WHERE {where_sql} ORDER BY c.ordinal ASC, c.id ASC "
+        f"LIMIT ${len(params)+1} OFFSET ${len(params)+2}",
+        *params, lim, off,
+    )
+    return {
+        "run_id": int(run_id),
+        "candidates": [_decode_candidate(row) for row in rows],
+        "total": int(total or 0),
+        "limit": lim,
+        "offset": off,
+    }

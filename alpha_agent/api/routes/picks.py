@@ -64,8 +64,9 @@ class LeanCard(BaseModel):
     price_date: str | None = None
     daily_change_pct: float | None = None
     rating: str
-    # Calibrated directional hit-rate (isotonic map over realized 5d outcomes).
-    # Honest "edge", structurally modest (~50%); also feeds Kelly position sizing.
+    # Five-trading-day calibrated directional confidence (isotonic map over
+    # realized 5d outcomes). This calibration output is distinct from the
+    # descriptive next-day agreement shown in the picks table.
     confidence: float | None
     # Raw signal-agreement = 1/(1+variance(z)). The conviction headline: how
     # aligned the underlying signals are on this name. NOT a hit-rate.
@@ -82,10 +83,11 @@ class LeanCard(BaseModel):
     # B8 (2026-05-19): per-dimension letter grades from breakdown z's so
     # the picks table can show A+/A/B/.../F at-a-glance per row.
     dimension_grades: dict[str, str] = {}
-    # Per-ticker directional consistency = next-day hit-rate of the predicted
-    # tier over trailing windows {d5, m1, y1, hist}. Each value is a fraction in
-    # [0,1], or None when the window has too little realized history (UI shows a
-    # dash). See alpha_agent/backtest/consistency.py for the exact definition.
+    # Descriptive per-ticker 1-day direction agreement: predicted tier versus
+    # the next trading day's realized move over {d5, m1, y1, hist}. Each value
+    # is a fraction in [0,1], or None when the window has too little realized
+    # history. It is not a claim of predictive skill. See
+    # alpha_agent/backtest/consistency.py for the exact definition.
     consistency: dict[str, float | None] = {}
     # Evaluated sample count per window (how many realized directional
     # predictions back each rate). Lets the UI explain a dash ("n/N 样本不足")
@@ -400,10 +402,13 @@ async def _build_canonical_view(
 
 
 class ScoreboardResponse(BaseModel):
-    """Portfolio-level evaluation of the picks themselves (the honest headline):
-    the daily top-K basket's compounded forward return vs the universe average,
-    the long-minus-short spread, and the long basket's directional hit-rate vs
-    the always-guess-up base rate. None fields = not enough realized history.
+    """Portfolio-level next-day basket diagnostic for the picks.
+
+    The daily top-K and bottom-K baskets are compounded from archived rankings,
+    with long, short, market, spread, cost, turnover, and SPY evidence kept
+    separate. ``base_rate`` remains a backwards-compatible field for existing
+    clients, but is not rendered by the product UI. None fields mean there is
+    not enough realized history.
 
     2026-07-12 additions (display-only — does not affect ranking/selection):
       - spy_cum: SPY compounded over the same dates.
@@ -421,7 +426,9 @@ class ScoreboardResponse(BaseModel):
     market_cum: float
     spread_cum: float
     long_hit_rate: float | None
-    base_rate: float | None
+    short_hit_rate: float | None = None
+    # Compatibility field; intentionally not surfaced as a UI baseline.
+    base_rate: float | None = None
     # --- 2026-07-12 additions ---
     spy_cum: float | None = None
     mean_daily_turnover: float | None = None
@@ -656,8 +663,8 @@ async def build_lean_view(
     # dim_thresholds (universe-wide band breakpoints, so each dimension is graded
     # against its own cross-sectional distribution) was fetched in the gather above.
 
-    # Per-ticker directional consistency (5d/1m/1y/all-time next-day
-    # hit-rate) for the returned tickers, in one batched query. Mode/side
+    # Descriptive per-ticker 1-day direction agreement (5d/1m/1y/all-time
+    # next-day outcome) for the returned tickers, in one batched query. Mode/side
     # independent: it reads the stored historical predictions (fast∪slow),
     # not the current card's (possibly long-mode re-ranked) rating. Tallies
     # give both the rates and the evaluated sample counts (for the UI's
@@ -718,15 +725,15 @@ async def build_lean_view(
                 if isinstance((z := e.get("z")), (int, float))
             ]
             # agreement = raw signal-agreement (conviction headline);
-            # confidence = the same value passed through the calibration
-            # map (honest hit-rate). Both are surfaced separately.
+            # confidence = the same value passed through the calibration map
+            # (5d calibrated confidence). Both are surfaced separately.
             agreement = compute_confidence(z_values)
             confidence = apply_calibration(agreement, cal_map)
         else:
             # Fast row: the stored "confidence" column is a raw
             # compute_confidence value from write time -> that IS the
             # agreement. Pass it through the calibration map once to get
-            # the displayed hit-rate (single application, not double).
+            # the displayed 5d calibrated confidence (single application, not double).
             rating = r["rating"] or "HOLD"
             agreement = _safe_float(r["confidence"], 0.0)
             confidence = apply_calibration(agreement, cal_map)
@@ -744,8 +751,8 @@ async def build_lean_view(
                 and isinstance(entry.get("z"), (int, float))
             ]
             agreement = compute_confidence(z_values)
-            # The existing calibration map is trained on 5d outcomes.  Showing
-            # it as a strategic 60d hit rate would be false precision.
+            # The existing calibration map is trained on 5d outcomes. Showing
+            # it as strategic 60d calibrated confidence would be false precision.
             confidence = None
 
         cards.append(
@@ -891,10 +898,10 @@ async def picks_scoreboard(
 ) -> ScoreboardResponse | None:
     """Portfolio-level picks evaluation over the trailing window. Reconstructs
     each day's top/bottom-K basket from the signals as stored THAT day (no
-    lookahead) and scores realized next-day returns against the universe
-    average + the always-up base rate. Returns null (not an error) when there
-    is too little realized history to say anything. Changes ~once per trading
-    day -> cached aggressively at the edge."""
+    lookahead) and reports realized next-day long, short, market, spread,
+    turnover, and cost-adjusted evidence. Returns null (not an error) when
+    there is too little realized history. Changes ~once per trading day ->
+    cached aggressively at the edge."""
     from alpha_agent.backtest.scoreboard import compute_picks_scoreboard
 
     pool = await get_db_pool()
@@ -906,6 +913,7 @@ async def picks_scoreboard(
         days=sb.days, top_n=sb.top_n, long_cum=sb.long_cum,
         short_cum=sb.short_cum, market_cum=sb.market_cum,
         spread_cum=sb.spread_cum, long_hit_rate=sb.long_hit_rate,
+        short_hit_rate=sb.short_hit_rate,
         base_rate=sb.base_rate,
         spy_cum=sb.spy_cum,
         mean_daily_turnover=sb.mean_daily_turnover,

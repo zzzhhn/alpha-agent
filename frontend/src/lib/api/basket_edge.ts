@@ -13,8 +13,14 @@ export interface HorizonEdge {
   mean_ic: number | null;
   // mean_ic / std(per-date ICs); null when < 2 dates or zero dispersion.
   ic_ir: number | null;
+  // Mean per-date forward return of the top-20%-by-composite long sleeve.
+  long_mean_return: number | null;
+  // Mean per-date forward return of the bottom-20%-by-composite short sleeve.
+  // A negative value is favorable for the short sleeve.
+  short_mean_return: number | null;
   // Mean per-date long-short quintile spread, as a per-period return (e.g.
-  // 0.012 = +1.2%). Beta-neutral: top-20%-by-composite minus bottom-20%.
+  // 0.012 = +1.2%): long_mean_return - short_mean_return. This is not a
+  // claim of market-beta neutrality.
   long_short_spread: number | null;
   // Number of trailing dates the aggregation used.
   n_days: number;
@@ -42,9 +48,8 @@ export const fetchBasketEdge = (opts?: ApiGetOptions) =>
 
 // Portfolio-level realized scoreboard: each trailing day's top/bottom-K basket
 // (from the signals as stored THAT day, no lookahead) compounded forward, vs
-// the equal-weight universe average, plus the long basket's directional
-// hit-rate vs the always-guess-up base rate (the blind-guess baseline).
-// null = not enough realized history yet.
+// the equal-weight universe average. Long and short evidence are kept
+// separate; null = not enough realized history yet.
 export interface PicksScoreboard {
   days: number;
   top_n: number;
@@ -53,6 +58,8 @@ export interface PicksScoreboard {
   market_cum: number;
   spread_cum: number;
   long_hit_rate: number | null;
+  short_hit_rate?: number | null;
+  // Compatibility field retained for older API consumers; not rendered by UI.
   base_rate: number | null;
   // 2026-07-12: cost/turnover/SPY/significance (display-only, does not affect ranking)
   spy_cum: number | null;

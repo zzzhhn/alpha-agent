@@ -12,8 +12,9 @@ longer horizons (5 / 20 / 60 trading days).
 For each horizon h, over a trailing window of the most recent ~90 trading
 dates that have an observable forward return:
   - rank_IC   = Spearman rank correlation(composite, fwd_ret_h) per date.
-  - long_short_spread = mean(fwd_ret_h | top quintile by composite)
-                        - mean(fwd_ret_h | bottom quintile by composite).
+  - long_mean_return = mean(fwd_ret_h | top quintile by composite).
+  - short_mean_return = mean(fwd_ret_h | bottom quintile by composite).
+  - long_short_spread = long_mean_return - short_mean_return.
   - aggregate: mean_ic, ic_ir (= mean_ic / std(per-date ICs)), mean_spread.
 
 Honesty contract: if a horizon has fewer than ~10 usable dates (the
@@ -122,6 +123,12 @@ class HorizonEdge(BaseModel):
     horizon: int
     mean_ic: float | None
     ic_ir: float | None
+    # Mean forward return of the top composite quintile, averaged per date.
+    # This is the long sleeve itself, kept separate from the long-short spread.
+    long_mean_return: float | None
+    # Mean forward return of the bottom composite quintile, averaged per date.
+    # A negative value is favorable for the short sleeve.
+    short_mean_return: float | None
     long_short_spread: float | None
     n_days: int
     insufficient: bool
@@ -157,8 +164,12 @@ def _clean(v: float | None) -> float | None:
 
 
 def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
-    """Aggregate per-date rank-IC and long-short quintile spread for one
-    horizon. `rows` are (date, composite, fwd_ret) for that horizon only."""
+    """Aggregate per-date rank-IC and sleeve returns for one horizon.
+
+    ``rows`` are ``(date, composite, fwd_ret)`` for that horizon only. The
+    long and short means remain visible separately so a positive spread cannot
+    conceal a result driven only by market drift.
+    """
     by_date: dict[Any, list[tuple[float, float]]] = {}
     for r in rows:
         comp = _clean(r["composite"])
@@ -168,6 +179,8 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
         by_date.setdefault(r["date"], []).append((comp, ret))
 
     per_ic: list[float] = []
+    per_long: list[float] = []
+    per_short: list[float] = []
     per_spread: list[float] = []
     per_ic_oos: list[float] = []
     per_spread_oos: list[float] = []
@@ -185,10 +198,14 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
         k = max(1, int(len(ordered) * _QUINTILE_FRAC))
         bottom = ordered[:k]
         top = ordered[-k:]
-        spread = float(np.mean([p[1] for p in top]) - np.mean([p[1] for p in bottom]))
+        long_return = float(np.mean([p[1] for p in top]))
+        short_return = float(np.mean([p[1] for p in bottom]))
+        spread = long_return - short_return
         if math.isnan(spread) or math.isinf(spread):
             continue
         per_ic.append(float(ic))
+        per_long.append(long_return)
+        per_short.append(short_return)
         per_spread.append(spread)
         if d >= _OOS_CUTOFF:
             per_ic_oos.append(float(ic))
@@ -201,6 +218,8 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
             horizon=horizon,
             mean_ic=None,
             ic_ir=None,
+            long_mean_return=None,
+            short_mean_return=None,
             long_short_spread=None,
             n_days=n_days,
             insufficient=True,
@@ -224,6 +243,8 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
         if nw_se > 0:
             ic_t = mean_ic / nw_se
     mean_spread = float(np.mean(per_spread))
+    mean_long = float(np.mean(per_long))
+    mean_short = float(np.mean(per_short))
 
     oos_n = len(per_ic_oos)
     oos_ic = float(np.mean(per_ic_oos)) if oos_n else None
@@ -233,6 +254,8 @@ def _horizon_from_rows(horizon: int, rows: list[Any]) -> HorizonEdge:
         horizon=horizon,
         mean_ic=_clean(mean_ic),
         ic_ir=_clean(ic_ir),
+        long_mean_return=_clean(mean_long),
+        short_mean_return=_clean(mean_short),
         long_short_spread=_clean(mean_spread),
         n_days=n_days,
         insufficient=False,

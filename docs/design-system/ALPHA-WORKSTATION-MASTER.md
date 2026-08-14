@@ -138,7 +138,9 @@ The repository does not contain a canonical generated Screener reference image. 
 - Reusing a run loads its family and budget into the composer but always creates a new child run. Historical evidence is never overwritten.
 - Long-running status reports the real funnel separately: requested, generated, screened, simulated, persisted, and final outcome counts. A bypassed or partially parsed LLM screen is never labelled as a successful screen.
 - Recent runs use a bounded selector and preserve manual, scheduled, and legacy provenance. Returning to the page restores the active or selected run without changing its candidate count.
-- The selected-run workbench shows a compact outcome summary before the dense candidate table. Filters and pagination apply within the selected run only.
+- The selected-run workbench shows a compact outcome summary, then separates `Simulation Results` from `Candidate Audit`. Simulated rows and unsimulated generated candidates never share one ambiguous table.
+- Every generated expression is written to a durable run-scoped candidate ledger before optional LLM screening. The audit view exposes settings, mechanism, evidence, LLM technical state, selection decision, and exact withholding reason; `brain_alphas` remains the official-simulation outcome table.
+- Filters and pagination apply within the selected run only. A completed run with generated candidates but zero simulations opens the audit view by default and points users to the blocking evidence instead of showing an unexplained empty result table.
 - Candidate detail keeps BRAIN-official metrics separate from Alpha Agent diagnostics, including adjusted self-correlation, lineage, retry history, and local screening evidence when available.
 - Official self-correlation uses BRAIN's `0.70` hard limit. `0.65–0.70` is an internal warning band only: it may prompt a marginal-contribution review but must not reject an otherwise eligible alpha.
 - A missing official self-correlation exposes its real state: pending computation, skipped because an earlier prerequisite failed, or temporarily unavailable after a bounded poll. GOOD-or-better rejected rows receive bounded post-run enrichment so useful research evidence is not silently discarded.
@@ -147,9 +149,21 @@ The repository does not contain a canonical generated Screener reference image. 
 - The simulation budget is a ceiling. Options candidates are ranked by economic logic, official field coverage and mapping, historical mechanism outcomes, concentration risk, outcome alignment, structural complexity, and behavioral novelty. Weak candidates are withheld instead of backfilled merely to spend the budget.
 - A mechanism label is not proof of diversity. PCR-gated call-minus-put variants share one behavioral cluster, while new legs must be tested independently or residualized against the dominant anchor before they receive a discovery slot.
 - Expanded options rows expose a durable research-evidence card: source hypothesis, target outcome, official field mapping, coverage, context sample size, falsification rule, and any validated proxy estimates. A paper citation never substitutes for a faithful field mapping.
+- Field ID coverage and semantic fidelity are separate. Official name and description evidence must identify measure type, call/put side, tenor or moneyness, and target alignment; a high-confidence claim with missing required semantics is withheld rather than relabelled as validated.
+- Paired option legs use shared official tenor or moneyness when available. A live-catalog call leg is never silently paired with an unrelated static put fallback, and ordinary put-call open interest is never described as buyer-initiated opening flow.
 - A cheap proxy may affect at most 15% of pre-screen ranking and only after chronological holdout validation beats an intercept baseline. Insufficient or rejected models fall back to the hierarchical posterior. `1 − adjusted self-correlation²` is labelled a diversification proxy, never a measured portfolio marginal return.
+- A validated proxy predicts only inside observed feature and `mechanism × dataset × settings` support. Chronological drift or unseen contexts deactivate the prediction instead of extrapolating confidence.
 - Empty and failed runs explain the failing stage and recovery action. A completed run with fewer persisted candidates than requested exposes the stage where the count changed.
+- LLM timeout, provider failure, partial parsing, deterministic fallback, and low candidate evidence are distinct states. A technical screening failure must not be presented as poor BRAIN backtest quality, and old runs without candidate-ledger rows must say that their per-expression evidence is not recoverable.
 - Completed runs expose screen utilization, pass yield, simulation-error rate, and one evidence-based next action. Recommendations remain advisory and never auto-submit an alpha.
+
+### 6.8 Today Recommendations, `/picks`
+
+- Per-ticker “1-day direction agreement” is a descriptive next-trading-day outcome check. It is never labelled generic hit rate, confidence, or predictive skill, and every trailing window carries its realized sample count.
+- Tactical `confidence` is explicitly a 5-trading-day calibrated output. Strategic 60-day mode does not reuse that calibration and keeps confidence unavailable until its own forward evidence exists.
+- Medium-horizon evidence uses the fixed 5, 20, and 60 trading-day composite-ranked baskets. Every horizon shows long-sleeve return, short-sleeve return, long-short spread, rank-IC, and usable-date count in parallel; the UI does not select a flattering horizon after observing results.
+- The 1-day archived Top/Bottom basket check is secondary and keeps long, short, market, spread, cost, turnover, and SPY evidence separate. A long-short spread is not described as market-beta neutral without an explicit beta hedge.
+- The compatibility API may retain historical baseline fields, but the approved interface does not present an always-up baseline. Metric labels and tooltips must still make object, horizon, direction, and sample scope explicit.
 
 ## 7. Interaction and accessibility
 

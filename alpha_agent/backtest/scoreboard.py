@@ -11,8 +11,9 @@ baskets by the composite as stored THAT day (fast∪slow, no lookahead) and scor
 their next-day forward returns against two baselines:
 
   - market   = equal-weight universe-average return (beat the market, not zero);
-  - base_rate = fraction of positive stock-days (the "always guess up" hit rate —
-    a 52% long hit-rate is WORSE than blind if 54% of stock-days rose).
+  - base_rate = fraction of positive stock-days. It is retained in the
+    compatibility payload for existing consumers, but is not a product metric
+    rendered by the picks UI.
 
 2026-07-12 additions (display-only — does NOT change ranking/selection logic):
   - SPY benchmark: compound SPY over the same dates for a second reference line.
@@ -112,8 +113,9 @@ class Scoreboard:
     short_cum: float          # cumulative return of the daily bottom-K basket
     market_cum: float         # equal-weight universe average, same days
     spread_cum: float         # long minus short, compounded daily
-    long_hit_rate: float | None   # fraction of basket stock-days that rose
-    base_rate: float | None       # fraction of ALL stock-days that rose
+    long_hit_rate: float | None   # fraction of long-basket stock-days that rose
+    short_hit_rate: float | None  # fraction of short-basket stock-days that fell
+    base_rate: float | None       # compatibility field, fraction of all stock-days up
     # --- 2026-07-12 additions ---
     spy_cum: float | None         # SPY compounded over the same dates
     mean_daily_turnover: float | None  # mean one-sided daily name-overlap turnover
@@ -215,7 +217,7 @@ async def compute_picks_scoreboard(
             spy_ret[sr["date"]] = float(sr["next_close"]) / float(sr["close"]) - 1.0
 
     long_cum = short_cum = market_cum = spread_cum = spy_cum_prod = 1.0
-    long_up = long_total = all_up = all_total = 0
+    long_up = long_total = short_down = short_total = all_up = all_total = 0
     evaluated_days = 0
 
     # Turnover + cost tracking
@@ -244,6 +246,8 @@ async def compute_picks_scoreboard(
         spread_cum *= 1.0 + (lr - sr)
         long_up += sum(1 for x in b["long"] if x > 0)
         long_total += len(b["long"])
+        short_down += sum(1 for x in b["short"] if x < 0)
+        short_total += len(b["short"])
         all_up += sum(1 for x in b["all"] if x > 0)
         all_total += len(b["all"])
 
@@ -313,6 +317,7 @@ async def compute_picks_scoreboard(
         market_cum=market_cum - 1.0,
         spread_cum=spread_cum - 1.0,
         long_hit_rate=(long_up / long_total) if long_total else None,
+        short_hit_rate=(short_down / short_total) if short_total else None,
         base_rate=(all_up / all_total) if all_total else None,
         spy_cum=spy_cum_val,
         mean_daily_turnover=mean_turnover,

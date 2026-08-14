@@ -49,7 +49,7 @@ export default function PaperRecommendations({
           const company = locale === "zh"
             ? pick.company_name_zh ?? pick.company_name
             : pick.company_name;
-          const confidence = pick.agreement ?? pick.confidence;
+          const confidence = pick.confidence;
           const rationale = (pick.top_drivers ?? [])
             .slice(0, 2)
             .map((name) => getSignalDisplayLabel(name, locale))
@@ -74,7 +74,11 @@ export default function PaperRecommendations({
                 {typeof pick.latest_price === "number" ? `$${pick.latest_price.toFixed(2)}` : "—"}
                 <span className="ml-2 text-[9px] text-tm-muted">{pick.price_date ?? "—"}</span>
               </div>
-              <div className="font-tm-mono text-[10px] text-tm-muted">
+              <div
+                className="font-tm-mono text-[10px] text-tm-muted"
+                title={t(locale, "sim.workspace.confidence_5d")}
+                aria-label={t(locale, "sim.workspace.confidence_5d")}
+              >
                 {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
               </div>
               <div className="min-w-0 truncate text-[10px] text-tm-muted">{rationale || "—"}</div>
@@ -89,7 +93,7 @@ export default function PaperRecommendations({
       <table className="w-full min-w-[720px] border-collapse text-left">
         <thead className="bg-tm-bg-2">
           <tr className="border-b border-tm-rule">
-            {[t(locale, "sim.workspace.company_ticker"), t(locale, "sim.form.side_label"), t(locale, "sim.workspace.latest_close"), t(locale, "sim.workspace.day_change"), t(locale, "sim.workspace.confidence"), t(locale, "sim.workspace.rationale"), ""].map((label) => (
+            {[t(locale, "sim.workspace.company_ticker"), t(locale, "sim.form.side_label"), t(locale, "sim.workspace.latest_close"), t(locale, "sim.workspace.day_change"), t(locale, "sim.workspace.confidence_5d"), t(locale, "sim.workspace.rationale"), ""].map((label) => (
               <th
                 key={label || "action"}
                 className="px-3 py-2 font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted"
@@ -105,7 +109,7 @@ export default function PaperRecommendations({
             const company = locale === "zh"
               ? pick.company_name_zh ?? pick.company_name
               : pick.company_name;
-            const confidence = pick.agreement ?? pick.confidence;
+            const confidence = pick.confidence;
             const rationale = (pick.top_drivers ?? [])
               .slice(0, 2)
               .map((name) => getSignalDisplayLabel(name, locale))
