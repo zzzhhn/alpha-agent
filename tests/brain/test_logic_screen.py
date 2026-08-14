@@ -130,7 +130,34 @@ async def test_score_parses_wrapped_json_after_model_prose():
 @pytest.mark.asyncio
 async def test_score_bad_json_degrades_to_empty():
     llm = _FakeLLM("not json at all")
-    assert await score_economic_logic(llm, ["a"]) == {}
+    result = await score_economic_logic(llm, ["a"])
+    assert result == {}
+    assert result.status == "error"
+    assert result.error_type == "ValueError"
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_score_timeout_is_truthful_and_type_only(monkeypatch):
+    import asyncio
+
+    class _TimeoutLLM(_FakeLLM):
+        async def chat(self, messages, **kw):
+            await asyncio.sleep(0)
+            raise AssertionError("wait_for should be patched")
+
+    async def _timeout(awaitable, *, timeout):
+        close = getattr(awaitable, "close", None)
+        if close:
+            close()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(asyncio, "wait_for", _timeout)
+    result = await score_economic_logic(_TimeoutLLM(""), ["a"])
+    assert result == {}
+    assert result.status == "timeout"
+    assert result["error_type"] == "TimeoutError"
+    assert "secret" not in (result.detail or "")
 
 
 def test_default_min_score_is_plausible_bar():

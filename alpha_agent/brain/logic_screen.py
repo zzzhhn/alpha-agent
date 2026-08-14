@@ -39,6 +39,61 @@ _OUTPUT_TOKEN_CAP = 8000
 DEFAULT_MIN_SCORE = 5.0
 OPTIONS_MIN_EVIDENCE_SCORE = 5.75
 
+
+class LogicScreenResult(dict):
+    """Mapping-compatible score result with truthful screen lifecycle metadata.
+
+    Existing callers can continue to compare the return value with a plain
+    ``dict[str, float]``.  New callers should use ``status``, ``error_type`` and
+    ``detail`` to distinguish a completed screen from a bypass, timeout, or
+    parse/provider error without persisting exception text that may contain
+    credentials or request payloads.
+    """
+
+    def __init__(
+        self,
+        scores: dict[str, float] | None = None,
+        *,
+        status: str,
+        error_type: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        super().__init__(scores or {})
+        self.status = status
+        self.error_type = error_type
+        self.detail = detail
+
+    @property
+    def scores(self) -> dict[str, float]:
+        return dict(self)
+
+    def __getitem__(self, key):
+        # Expose status metadata through mapping-style access too, while keeping
+        # ordinary dict equality/iteration limited to expression scores.
+        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+            return self.metadata()[key]
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+            return self.metadata().get(key, default)
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+            return True
+        return super().__contains__(key)
+
+    def metadata(self) -> dict[str, Any]:
+        """JSON-safe status payload for a run/candidate audit record."""
+        return {
+            "scores": dict(self),
+            "status": self.status,
+            "error_type": self.error_type,
+            "detail": self.detail,
+            "scored_n": len(self),
+        }
+
 _PROMPT = """You are a quantitative equity researcher screening candidate alpha \
 factors before an expensive backtest. For EACH expression below, judge its \
 ECONOMIC LOGIC only (not its likely performance): does it encode a coherent, \
@@ -79,12 +134,20 @@ def _json_payload(content: str):
 
 async def score_economic_logic(
     llm_client: Optional[LLMClient], expressions: list[str]
-) -> dict[str, float]:
+) -> LogicScreenResult:
     """Score each expression's economic logic 0-10 in one batched LLM call.
-    Returns {expression: score}. With no client, or on any failure, returns {}
-    (caller treats missing scores as passing — the screen never blocks mining)."""
-    if llm_client is None or not expressions:
-        return {}
+    The mapping contains ``{expression: score}`` and remains backward compatible
+    with plain-dict callers.  ``status``/``error_type``/``detail`` distinguish a
+    completed, partial, bypassed, timeout, or provider-error screen.  Missing
+    scores never block mining; the caller records the explicit status instead of
+    implying that every candidate was successfully screened."""
+    if llm_client is None:
+        return LogicScreenResult(
+            status="bypassed",
+            detail="no logic-screen LLM configured",
+        )
+    if not expressions:
+        return LogicScreenResult(status="bypassed", detail="no expressions")
     numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(expressions))
     try:
         import asyncio
@@ -97,9 +160,27 @@ async def score_economic_logic(
             timeout=_WALL_CLOCK_S,
         )
         data = _json_payload(resp.content or "")
-    except Exception as e:  # noqa: BLE001 — screen is best-effort, never blocks
-        logger.warning("logic screen failed; simulating all candidates: %s", e)
-        return {}
+    except asyncio.TimeoutError:
+        # Keep the durable diagnostic type-only.  Provider exception strings can
+        # include request headers, URLs, or model payloads.
+        logger.warning(
+            "logic screen unavailable: status=timeout error_type=TimeoutError"
+        )
+        return LogicScreenResult(
+            status="timeout",
+            error_type="TimeoutError",
+            detail=f"logic screen timed out after {_WALL_CLOCK_S}s",
+        )
+    except Exception as exc:  # noqa: BLE001 — screen is best-effort, never blocks
+        error_type = type(exc).__name__
+        logger.warning(
+            "logic screen unavailable: status=error error_type=%s", error_type
+        )
+        return LogicScreenResult(
+            status="error",
+            error_type=error_type,
+            detail=f"logic screen failed: {error_type}",
+        )
 
     if isinstance(data, dict):
         data = data.get("scores") or data.get("results") or data.get("candidates") or []
@@ -112,7 +193,9 @@ async def score_economic_logic(
             continue
         if 0 <= idx < len(expressions):
             out[expressions[idx]] = score
-    return out
+    status = "completed" if len(out) == len(expressions) else "partial"
+    detail = f"scored {len(out)}/{len(expressions)} expressions"
+    return LogicScreenResult(out, status=status, detail=detail)
 
 
 def select_diverse_by_group(
@@ -465,6 +548,106 @@ def select_options_research_portfolio(
             break
         depth += 1
     return selected
+
+
+def options_candidate_screen_records(
+    expressions: list[str],
+    scores: dict[str, float],
+    *,
+    target_n: int,
+    group_of,
+    field_metadata: list[dict] | None = None,
+    mechanism_evidence: dict | None = None,
+    settings_by_expr: dict[str, dict] | None = None,
+    surrogate_predictions: dict[str, dict[str, float]] | None = None,
+    min_evidence_score: float = OPTIONS_MIN_EVIDENCE_SCORE,
+    selected: list[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return durable evidence and an exact portfolio decision for each option.
+
+    The selector historically returned only expressions.  This companion keeps
+    that compatibility while exposing the same evidence gates as explicit reason
+    codes for the run-candidate ledger.
+    """
+    metadata = field_metadata or []
+    history = mechanism_evidence or {}
+    settings_map = settings_by_expr or {}
+    predictions = surrogate_predictions or {}
+    selected_exprs = selected
+    if selected_exprs is None:
+        selected_exprs = select_options_research_portfolio(
+            expressions,
+            scores,
+            target_n=target_n,
+            group_of=group_of,
+            field_metadata=field_metadata,
+            mechanism_evidence=mechanism_evidence,
+            settings_by_expr=settings_by_expr,
+            surrogate_predictions=surrogate_predictions,
+            min_evidence_score=min_evidence_score,
+        )
+    selected_set = set(selected_exprs)
+
+    records: dict[str, dict[str, Any]] = {}
+    for expr in expressions:
+        mechanism = str(group_of(expr))
+        evidence = options_candidate_evidence(
+            expr,
+            logic_score=scores.get(expr, DEFAULT_MIN_SCORE),
+            mechanism=mechanism,
+            field_metadata=metadata,
+            mechanism_evidence=history,
+            candidate_settings=settings_map.get(expr, {}),
+            surrogate_prediction=predictions.get(expr),
+        )
+        records[expr] = {
+            "evidence": evidence,
+            "evidence_score": float(evidence["score"]),
+            "llm_score": scores.get(expr),
+            "mechanism": mechanism,
+            "selected": expr in selected_set,
+        }
+
+    selected_evidence = [
+        records[expr]["evidence"] for expr in selected_exprs if expr in records
+    ]
+    selected_mechanisms: dict[str, int] = {}
+    selected_clusters: dict[str, int] = {}
+    for item in selected_evidence:
+        mechanism = str(item["mechanism"])
+        cluster = str(item["cluster"])
+        selected_mechanisms[mechanism] = selected_mechanisms.get(mechanism, 0) + 1
+        selected_clusters[cluster] = selected_clusters.get(cluster, 0) + 1
+
+    for expr, record in records.items():
+        evidence = record["evidence"]
+        if record["selected"]:
+            code = "selected"
+            text = "selected for simulation"
+        elif bool(evidence.get("high_confidence_mismatch")):
+            code = "high_confidence_semantic_mismatch"
+            text = "high-confidence hypothesis is missing required official semantics"
+        elif bool(evidence.get("historically_failed")):
+            code = "historically_failed"
+            text = "mechanism has repeated historical gate failures"
+        elif float(evidence["score"]) < min_evidence_score:
+            code = "below_evidence_threshold"
+            text = f"evidence score {float(evidence['score']):.2f} < {min_evidence_score:.2f}"
+        elif selected_clusters.get(str(evidence["cluster"]), 0) >= 1:
+            code = "cluster_cap"
+            text = f"behavior cluster '{evidence['cluster']}' already selected"
+        elif selected_mechanisms.get(str(evidence["mechanism"]), 0) >= 2:
+            code = "mechanism_cap"
+            text = f"mechanism '{evidence['mechanism']}' already has two selected candidates"
+        elif len(selected_exprs) >= min(max(int(target_n), 0), len(expressions)):
+            code = "portfolio_budget"
+            text = "portfolio budget reached"
+        else:
+            code = "withheld_by_portfolio"
+            text = "withheld by the options diversity portfolio"
+        record["reason_code"] = code
+        record["reason_text"] = text
+    return records
 
 
 def select_by_logic(

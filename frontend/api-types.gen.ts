@@ -556,6 +556,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/brain/runs/{run_id}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Run Candidates
+         * @description Return the generated-candidate audit ledger for one owned run.
+         *
+         *     A foreign or unknown run is deliberately indistinguishable and returns 404.
+         *     This prevents candidate-count and expression leakage across authenticated
+         *     users while retaining stable pagination within the selected run.
+         */
+        get: operations["list_run_candidates_api_brain_runs__run_id__candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/brief/{ticker}": {
         parameters: {
             query?: never;
@@ -5827,6 +5851,46 @@ export interface operations {
                 authorization?: string | null;
             };
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_run_candidates_api_brain_runs__run_id__candidates_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                selected?: boolean | null;
+                status?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;

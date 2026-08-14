@@ -103,3 +103,9 @@
 - Show long and short sleeves separately before the long-short spread. A positive spread can otherwise conceal market drift or a failing short leg.
 - Compare the fixed 5, 20, and 60-day horizons in parallel and keep sample counts visible. Do not choose the best-looking horizon after observing the data.
 - A long-short quintile spread is dollar-directional evidence, not automatically market-beta neutral. Use precise labels unless an explicit beta hedge is measured.
+
+## 2026-08-14: Persist generated candidates before optional screening
+
+- A run-level `generated=20, simulated=0` aggregate cannot explain which expressions were withheld or why. Persist every generated expression before an optional LLM or deterministic screen, then update the same row through selected, withheld, simulated, or simulation-error states.
+- LLM timeout, parse/provider failure, weak research evidence, and official BRAIN simulation failure are different events. Store a safe technical status and exact decision reason instead of letting one empty results table represent all four.
+- A successful Vercel deployment does not update a GitHub Actions worker when workflow dispatch checks out `main`. Merge worker code and migrations to the dispatched ref before claiming the new mining workflow is live.

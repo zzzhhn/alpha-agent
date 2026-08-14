@@ -15,6 +15,7 @@ import asyncio
 import logging
 import random
 import zlib
+from datetime import UTC, datetime
 from typing import Optional
 
 import numpy as np
@@ -29,8 +30,10 @@ from alpha_agent.brain.fastexpr import (
     generate_brain_candidates,
 )
 from alpha_agent.brain.logic_screen import (
+    LogicScreenResult,
     OPTIONS_MIN_EVIDENCE_SCORE,
     options_candidate_evidence,
+    options_candidate_screen_records,
     score_economic_logic,
     select_by_logic,
     select_options_research_portfolio,
@@ -340,18 +343,36 @@ async def _run_mining_round_impl(
     # The simulation budget is a ceiling, not a quota. Options candidates pass a
     # deterministic evidence screen even when the optional LLM is absent; weak
     # candidates are withheld rather than backfilled merely to spend BRAIN calls.
-    generated_pool = list(candidates)
+    # The audit ledger has one durable row per expression.  De-duplicate a
+    # generator collision before assigning ordinals so the DB uniqueness rule is
+    # deterministic while preserving the first-seen generation order.
+    generated_pool = list(dict.fromkeys(str(expr) for expr in candidates))
     generated_n = len(generated_pool)
-    candidate_settings = {
-        expr: options_settings_for(expr, mechanism_evidence)
-        for expr in generated_pool
-    } if family_focus == "options" else {}
+    from alpha_agent.brain.evolution import family_of
+
+    # Compute the exact first-pass settings before screening.  This makes the
+    # generated-candidate ledger a faithful record of what would have been
+    # simulated, rather than a post-selection reconstruction.
+    candidate_settings: dict[str, dict] = {}
+    for expr in generated_pool:
+        if family_focus == "options":
+            settings = options_settings_for(expr, mechanism_evidence)
+        else:
+            fam = family_of(expr)
+            expr_rng = random.Random(zlib.crc32(expr.encode()) ^ (rng_seed or 0))
+            settings = vary_settings(base_settings_for(expr), fam, expr_rng)
+            if family_focus == "composite":
+                settings["decay"] = max(int(settings.get("decay", 0)), 16)
+        candidate_settings[expr] = settings
     surrogate_predictions = {
         expr: surrogate.predict(expr, candidate_settings[expr], field_metadata)
         for expr in generated_pool
     } if family_focus == "options" and surrogate.active else {}
-    screen_status = "bypassed"
-    screen_detail = "no logic-screen LLM configured"
+    logic_result = LogicScreenResult(
+        status="bypassed", detail="no logic-screen LLM configured"
+    )
+    screen_status = logic_result.status
+    screen_detail = logic_result.detail or logic_result.status
     logic_scores: dict[str, float] = {}
     if generated_n == 0:
         screen_status = "failed"
@@ -371,16 +392,43 @@ async def _run_mining_round_impl(
                 screen_detail=screen_detail,
             )
         raise RuntimeError(screen_detail)
+
+    # P0 invariant: all generated expressions are persisted before calling the
+    # optional LLM/evidence screen.  ``brain_alphas`` is intentionally untouched
+    # here; it remains the simulation-outcome table.
+    candidate_row_by_expr: dict[str, dict] = {}
+    if run_id is not None:
+        from alpha_agent.brain.evolution import options_mechanism_of
+
+        generated_records = []
+        for ordinal, expr in enumerate(generated_pool):
+            mechanism = (
+                options_mechanism_of(expr)
+                if family_focus == "options" else family_of(expr)
+            )
+            generated_records.append({
+                "ordinal": ordinal,
+                "expression": expr,
+                "settings": candidate_settings[expr],
+                "mechanism": mechanism,
+                "llm_status": "pending",
+            })
+        rows = await store.record_brain_run_candidates(
+            pool, run_id, generated_records
+        )
+        candidate_row_by_expr = {
+            str(row["expression"]): row for row in rows
+        }
     if logic_llm is not None:
-        scores = await score_economic_logic(logic_llm, generated_pool)
-        logic_scores = scores
-        if scores:
+        logic_result = await score_economic_logic(logic_llm, generated_pool)
+        logic_scores = logic_result.scores
+        if logic_scores:
             if family_focus == "options":
                 from alpha_agent.brain.evolution import options_mechanism_of
 
                 candidates = select_options_research_portfolio(
                     generated_pool,
-                    scores,
+                    logic_scores,
                     target_n=n_candidates,
                     group_of=options_mechanism_of,
                     field_metadata=field_metadata,
@@ -390,19 +438,22 @@ async def _run_mining_round_impl(
                 )
             else:
                 candidates = select_by_logic(
-                    generated_pool, scores, target_n=n_candidates
+                    generated_pool, logic_scores, target_n=n_candidates
                 )
-            screen_status = "completed" if len(scores) >= generated_n else "partial"
+            screen_status = logic_result.status
             if family_focus == "options" and (
                 not field_metadata or field_audit_error or mechanism_evidence_error
             ):
                 screen_status = "partial"
-            withheld = max(n_candidates - len(candidates), 0)
-            screen_detail = f"scored {len(scores)}/{generated_n}; selected {len(candidates)}"
+            withheld = max(generated_n - len(candidates), 0)
+            screen_detail = (
+                f"{logic_result.detail or logic_result.status}; selected "
+                f"{len(candidates)}/{generated_n}; withheld {withheld}"
+            )
             if family_focus == "options":
                 screen_detail += (
-                    f"/{n_candidates} by multi-objective evidence; withheld {withheld}; "
-                    f"minimum evidence {OPTIONS_MIN_EVIDENCE_SCORE:.2f}"
+                    f" by multi-objective evidence; minimum evidence "
+                    f"{OPTIONS_MIN_EVIDENCE_SCORE:.2f}"
                 )
         else:
             if family_focus == "options":
@@ -418,16 +469,19 @@ async def _run_mining_round_impl(
                     settings_by_expr=candidate_settings,
                     surrogate_predictions=surrogate_predictions,
                 )
-                screen_status = "partial"
+                screen_status = logic_result.status
                 screen_detail = (
-                    f"logic model unavailable; deterministic evidence screen selected "
-                    f"{len(candidates)}/{n_candidates}; withheld "
-                    f"{max(n_candidates - len(candidates), 0)}"
+                    f"{logic_result.detail or logic_result.status}; deterministic "
+                    f"evidence screen selected {len(candidates)}/{generated_n}; "
+                    f"withheld {max(generated_n - len(candidates), 0)}"
                 )
             else:
                 candidates = generated_pool[:n_candidates]
-                screen_status = "failed"
-                screen_detail = "logic screen returned no usable scores; bypassed"
+                screen_status = logic_result.status
+                screen_detail = (
+                    f"{logic_result.detail or logic_result.status}; no usable scores; "
+                    f"screen bypassed for {len(candidates)} candidates"
+                )
         print(
             f"[logic] {screen_status}: generated={generated_n} "
             f"screened={len(candidates)}",
@@ -446,10 +500,13 @@ async def _run_mining_round_impl(
             settings_by_expr=candidate_settings,
             surrogate_predictions=surrogate_predictions,
         )
-        screen_status = "completed" if field_metadata and not mechanism_evidence_error else "partial"
+        # No LLM is a truthful deterministic fallback, not a completed LLM
+        # screen.  The candidate rows retain ``llm_status='bypassed'`` while the
+        # run status records that evidence screening still happened locally.
+        screen_status = "fallback" if field_metadata and not mechanism_evidence_error else "fallback_partial"
         screen_detail = (
             f"deterministic evidence screen selected {len(candidates)}/{n_candidates}; "
-            f"withheld {max(n_candidates - len(candidates), 0)}; "
+            f"withheld {max(generated_n - len(candidates), 0)}; "
             f"minimum evidence {OPTIONS_MIN_EVIDENCE_SCORE:.2f}"
         )
     else:
@@ -463,19 +520,103 @@ async def _run_mining_round_impl(
     if missing_evidence and family_focus == "options":
         screen_detail += "; " + "; ".join(missing_evidence)
 
+    # Materialize the decision for every generated row, including candidates
+    # withheld by evidence, before the first expensive simulation starts.
+    candidate_screen_records: dict[str, dict] = {}
+    if family_focus == "options":
+        from alpha_agent.brain.evolution import options_mechanism_of
+
+        candidate_screen_records = options_candidate_screen_records(
+            generated_pool,
+            logic_scores,
+            target_n=n_candidates,
+            group_of=options_mechanism_of,
+            field_metadata=field_metadata,
+            mechanism_evidence=mechanism_evidence,
+            settings_by_expr=candidate_settings,
+            surrogate_predictions=surrogate_predictions,
+            selected=candidates,
+        )
+    else:
+        selected_set = set(candidates)
+        for expr in generated_pool:
+            score = logic_scores.get(expr)
+            if expr in selected_set:
+                reason_code = "selected"
+                reason_text = "selected for simulation"
+            elif logic_result.status == "timeout":
+                reason_code = "llm_timeout"
+                reason_text = "withheld because the logic screen timed out"
+            elif logic_result.status == "error":
+                reason_code = "llm_error"
+                reason_text = "withheld because the logic screen failed"
+            elif score is not None and score < 5.0:
+                reason_code = "below_logic_threshold"
+                reason_text = f"logic score {score:.2f} < 5.00"
+            elif score is None and logic_llm is not None:
+                reason_code = "llm_unscored"
+                reason_text = "LLM returned no score for this expression"
+            else:
+                reason_code = "portfolio_budget"
+                reason_text = "simulation budget reached"
+            candidate_screen_records[expr] = {
+                "evidence": {
+                    "logic_screen": logic_result.metadata(),
+                    "logic_score": score,
+                },
+                "evidence_score": score,
+                "llm_score": score,
+                "mechanism": family_of(expr),
+                "selected": expr in selected_set,
+                "reason_code": reason_code,
+                "reason_text": reason_text,
+            }
+
+    if run_id is not None:
+        screened_at = datetime.now(UTC)
+        llm_status = logic_result.status
+        for expr in generated_pool:
+            row = candidate_row_by_expr.get(expr)
+            record = candidate_screen_records.get(expr, {})
+            if row is None:
+                continue
+            score = record.get("llm_score")
+            if logic_result.status in {"completed", "partial"}:
+                row_llm_status = "scored" if score is not None else "unscored"
+            else:
+                row_llm_status = llm_status
+            evidence = record.get("evidence") or {}
+            if family_focus == "options":
+                evidence = dict(evidence)
+                evidence["logic_screen"] = logic_result.metadata()
+            try:
+                await store.update_brain_run_candidate(
+                    pool,
+                    int(row["id"]),
+                    mechanism=record.get("mechanism"),
+                    evidence=evidence,
+                    evidence_score=record.get("evidence_score"),
+                    llm_score=score,
+                    llm_status=row_llm_status,
+                    selected=bool(record.get("selected")),
+                    stage="screened",
+                    status="selected" if record.get("selected") else "withheld",
+                    reason_code=record.get("reason_code"),
+                    reason_text=record.get("reason_text"),
+                    screened_at=screened_at,
+                )
+            except Exception as exc:  # noqa: BLE001 — keep sim results durable
+                logger.warning(
+                    "BRAIN candidate screen audit update failed for run %s: %s",
+                    run_id,
+                    type(exc).__name__,
+                )
+
     if family_focus == "options" and candidates:
         from alpha_agent.brain.evolution import options_mechanism_of
 
         selected_evidence = [
-            options_candidate_evidence(
-                expr,
-                logic_score=logic_scores.get(expr, 5.0),
-                mechanism=options_mechanism_of(expr),
-                field_metadata=field_metadata,
-                mechanism_evidence=mechanism_evidence,
-                candidate_settings=candidate_settings.get(expr, {}),
-                surrogate_prediction=surrogate_predictions.get(expr),
-            )
+            candidate_screen_records[expr]["evidence"]
             for expr in candidates
         ]
         avg_coverage = (
@@ -571,6 +712,25 @@ async def _run_mining_round_impl(
                 increments[outcome] = 1
             await store.increment_brain_run_counts(_pool, run_id, **increments)
             summary["persisted"] += 1
+            candidate = candidate_row_by_expr.get(expression)
+            if candidate is not None:
+                try:
+                    await store.update_brain_run_candidate(
+                        _pool,
+                        int(candidate["id"]),
+                        stage="simulation",
+                        alpha_row_id=row_id,
+                        alpha_id=kwargs.get("alpha_id"),
+                        simulation_outcome=outcome,
+                        simulation_detail=kwargs.get("detail"),
+                        simulated_at=datetime.now(UTC),
+                    )
+                except Exception as exc:  # noqa: BLE001 — outcome already durable
+                    logger.warning(
+                        "BRAIN candidate simulation audit update failed for run %s: %s",
+                        run_id,
+                        type(exc).__name__,
+                    )
         return row_id
 
     # The diverse set a new PASS must stay decorrelated from: the user's ACTIVE
@@ -633,18 +793,12 @@ async def _run_mining_round_impl(
         # Base config + per-candidate settings exploration (unproven mechanisms
         # only; deterministic per expr so reruns are reproducible).
         fam = family_of(expr)
-        _srng = random.Random(zlib.crc32(expr.encode()) ^ (rng_seed or 0))
         base_settings = base_settings_for(expr)
         # An options discovery slot must test one economic mechanism, not a
         # mechanism plus a random universe/delay/neutralization lottery. Keep the
         # proven TOP3000/D1/SUBINDUSTRY baseline in the first pass; the bounded
         # near-miss retry below remains the place for targeted settings changes.
-        settings = (candidate_settings.get(expr, base_settings) if family_focus == "options"
-                    else vary_settings(base_settings, fam, _srng))
-        if family_focus == "composite":
-            # Fitness round: F = S*sqrt(ret/max(T,0.125)) — force heavy smoothing
-            # so turnover approaches the 0.125 floor.
-            settings["decay"] = max(int(settings.get("decay", 0)), 16)
+        settings = dict(candidate_settings.get(expr, base_settings))
         # This candidate's blend provenance (None for every non-blend round/expr) —
         # threaded into every record_brain_alpha call below so a blend that ends up
         # rejected/flagged is still tagged as a blend, not just the ones that pass.

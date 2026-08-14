@@ -196,6 +196,65 @@ export interface BrainRunsPage {
 export const fetchBrainRuns = (limit = 12, opts?: ApiGetOptions) =>
   apiGet<BrainRunsPage>(`/api/brain/runs?limit=${encodeURIComponent(String(limit))}`, opts);
 
+export interface BrainRunCandidate {
+  id: number;
+  run_id: number;
+  ordinal: number;
+  expression: string;
+  settings: Record<string, unknown>;
+  mechanism?: string | null;
+  evidence?: Record<string, unknown> | null;
+  evidence_score?: number | null;
+  llm_score?: number | null;
+  llm_status?: string | null;
+  selected: boolean;
+  stage: string;
+  status: string;
+  reason_code?: string | null;
+  reason_text?: string | null;
+  alpha_row_id?: number | null;
+  alpha_id?: string | null;
+  simulation_outcome?: string | null;
+  simulation_detail?: string | null;
+  created_at?: string | null;
+  screened_at?: string | null;
+  simulated_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface BrainRunCandidatePage {
+  run_id: number;
+  candidates: BrainRunCandidate[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BrainRunCandidateQuery {
+  limit?: number;
+  offset?: number;
+  selected?: boolean | null;
+  status?: string | null;
+}
+
+export const fetchBrainRunCandidates = (
+  runId: number,
+  query: BrainRunCandidateQuery = {},
+  opts?: ApiGetOptions,
+) => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return apiGet<BrainRunCandidatePage>(
+    `/api/brain/runs/${encodeURIComponent(String(runId))}/candidates${suffix}`,
+    opts,
+  );
+};
+
 export interface PnlPoint {
   date: string;
   pnl: number;
