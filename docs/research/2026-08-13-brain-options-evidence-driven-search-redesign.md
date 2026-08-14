@@ -189,12 +189,12 @@ flowchart LR
 - 每条生成候选现在保留表达式、设置、机制、证据明细与分数、LLM 技术状态、是否入选、筛选原因，以及后续仿真行和 outcome 的关联。LLM timeout、provider error、未返回评分和低证据分不再被合并成一个含糊状态。
 - 页面把“仿真结果”与“候选审计”分开。零仿真的已完成轮次默认打开审计视图；历史轮次没有审计数据时明确说明不可追溯，不再显示空表或持续 loading。
 
-### 6.7 RUN #77 LLM 预筛韧性闭环
+### 6.7 RUN #77 与 RUN #78 LLM 预筛调用策略校正
 
 - RUN #77 的单次 20 条 Kimi 逻辑预筛在 180 秒上限后超时，但 deterministic evidence screen 仍选出 5 条并完成了 5 次 BRAIN 仿真。该超时属于可选预筛的技术状态，不是 BRAIN 仿真失败。
-- 预筛改为有界小批量执行。某一批超时或发生瞬时传输错误时，已完成批次的评分继续参与排序，未评分候选仍进入共享的 deterministic evidence screen，而不是被直接丢弃。
-- 瞬时 timeout/transport 只允许有上限重试；401、403、429 与其他明确 provider HTTP 状态不做即时重放。轮次不会通过无限延长超时来掩盖 provider 尾延迟。
-- 候选证据仅持久化 provider、model、elapsed、timeout、批次数和安全错误类型。页面并列展示 LLM 已评分数、规则补位数、入选数与实际 BRAIN 仿真数，不再用一句“技术失败”覆盖整条链路。
+- RUN #78 暴露了小批量策略的新问题：第一批在 60 秒后立即重试，两次请求占用约 120 秒；第二批用尽剩余预算，第三、四批根本未向 Kimi 发起请求。页面中“4 批未完成”实际混合了超时与未尝试。
+- Kimi reasoning 调用因此恢复为单次 20 条整池预筛，给予 240 秒等待窗口，低于客户端 260 秒 read timeout。保留 `max_tokens=8000`，不切换 Kimi 入口或模型，不做同步重试。
+- 候选证据只持久化 provider、model、elapsed、call mode、pool size、scored count 和安全错误类型。页面对新轮次显示“单次全池调用”，同时保留对历史 batch telemetry 的读取兼容。
 
 ## 7. 下一轮最小实验设计
 

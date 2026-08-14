@@ -286,43 +286,68 @@ export function BrainCandidateAudit({
   const logicTelemetry = (data?.candidates ?? [])
     .map((candidate) => recordValue(evidenceOf(candidate).logic_screen))
     .find((value) => value != null) ?? null;
-  const batchTelemetry = recordValue(logicTelemetry?.telemetry) ?? logicTelemetry;
-  const timeoutSeconds = numberValue(batchTelemetry?.timeout_s);
-  const provider = textValue(batchTelemetry?.provider);
-  const timedOutBatches = numberValue(batchTelemetry?.timed_out_batches);
-  const errorBatches = numberValue(batchTelemetry?.error_batches);
-  const completedBatches = numberValue(batchTelemetry?.completed_batches);
-  const batchCount = numberValue(batchTelemetry?.batch_count);
-  const retryCount = numberValue(batchTelemetry?.retry_count);
-  const elapsedMs = numberValue(batchTelemetry?.elapsed_ms);
-  const failedBatchCount = (timedOutBatches ?? 0) + (errorBatches ?? 0);
+  const screenTelemetry = recordValue(logicTelemetry?.telemetry) ?? logicTelemetry;
   const totalCandidates = data?.total ?? generatedCount ?? 0;
+  const timeoutSeconds = numberValue(screenTelemetry?.timeout_s);
+  const provider = textValue(screenTelemetry?.provider);
+  const screenStatus = textValue(logicTelemetry?.status) ?? textValue(screenTelemetry?.status);
+  const mode = textValue(screenTelemetry?.mode);
+  const callCount = numberValue(screenTelemetry?.call_count);
+  const expressionCount = numberValue(screenTelemetry?.expression_n) ?? totalCandidates;
+  const scoredCount = numberValue(screenTelemetry?.scored_n) ?? llmScored;
+  const completedCalls = numberValue(screenTelemetry?.completed_calls);
+  const timedOutCalls = numberValue(screenTelemetry?.timed_out_calls);
+  const errorCalls = numberValue(screenTelemetry?.error_calls);
+  const elapsedMs = numberValue(screenTelemetry?.elapsed_ms);
+  const legacyBatchCount = numberValue(screenTelemetry?.batch_count);
+  const legacyTimedOutBatches = numberValue(screenTelemetry?.timed_out_batches);
+  const legacyErrorBatches = numberValue(screenTelemetry?.error_batches);
+  const legacyCompletedBatches = numberValue(screenTelemetry?.completed_batches);
+  const legacyRetryCount = numberValue(screenTelemetry?.retry_count);
+  const legacyFailedBatchCount = (legacyTimedOutBatches ?? 0) + (legacyErrorBatches ?? 0);
+  const fullPoolTelemetry = mode === "full_pool" || (mode == null && callCount === 1 && legacyBatchCount == null);
 
   const technicalStatusCopy = useMemo(() => {
     if (llmFallbacks <= 0) return null;
     const providerName = provider || "LLM";
-    const screenMode = batchCount != null
-      ? zh ? "分批逻辑预筛" : "batched logic screening"
-      : zh ? "逻辑预筛" : "logic screening";
-    const timeoutCopy = timeoutSeconds != null
-      ? zh ? `在 ${timeoutSeconds} 秒上限后超时` : `timed out at the ${timeoutSeconds}s limit`
-      : zh ? "未完整返回" : "did not return completely";
-    const batchCopy = batchCount != null
+    const stateCopy = screenStatus === "timeout"
+      ? timeoutSeconds != null
+        ? zh ? `在 ${timeoutSeconds} 秒上限后超时` : `timed out at the ${timeoutSeconds}s limit`
+        : zh ? "超时" : "timed out"
+      : screenStatus === "error"
+        ? zh ? "调用失败" : "call failed"
+        : screenStatus === "partial"
+          ? zh ? "返回部分评分" : "returned partial scores"
+          : screenStatus === "completed"
+            ? zh ? "调用完成" : "call completed"
+            : zh ? "未完整返回" : "did not return completely";
+    const callCopy = fullPoolTelemetry
       ? zh
-        ? `，共 ${batchCount} 批，${completedBatches ?? 0} 批完成，${failedBatchCount} 批未完成${retryCount ? `，重试 ${retryCount} 次` : ""}${elapsedMs != null ? `，耗时约 ${Math.round(elapsedMs / 1000)} 秒` : ""}`
-        : `; ${batchCount} batches, ${completedBatches ?? 0} completed, ${failedBatchCount} incomplete${retryCount ? `, ${retryCount} retries` : ""}${elapsedMs != null ? `, about ${Math.round(elapsedMs / 1000)}s elapsed` : ""}`
-      : failedBatchCount > 0
-        ? zh ? `，${failedBatchCount} 个批次未完成` : `; ${failedBatchCount} batches did not complete`
-        : "";
+        ? `单次全池调用，完成 ${completedCalls ?? 0} 次，超时 ${timedOutCalls ?? 0} 次，错误 ${errorCalls ?? 0} 次${elapsedMs != null ? `，耗时约 ${Math.round(elapsedMs / 1000)} 秒` : ""}`
+        : `one full-pool call, ${completedCalls ?? 0} completed, ${timedOutCalls ?? 0} timed out, ${errorCalls ?? 0} errored${elapsedMs != null ? `, about ${Math.round(elapsedMs / 1000)}s elapsed` : ""}`
+      : legacyBatchCount != null
+        ? zh
+          ? `共 ${legacyBatchCount} 批，${legacyCompletedBatches ?? 0} 批完成，${legacyFailedBatchCount} 批未完成${legacyRetryCount ? `，重试 ${legacyRetryCount} 次` : ""}${elapsedMs != null ? `，耗时约 ${Math.round(elapsedMs / 1000)} 秒` : ""}`
+          : `${legacyBatchCount} legacy batches, ${legacyCompletedBatches ?? 0} completed, ${legacyFailedBatchCount} incomplete${legacyRetryCount ? `, ${legacyRetryCount} retries` : ""}${elapsedMs != null ? `, about ${Math.round(elapsedMs / 1000)}s elapsed` : ""}`
+        : elapsedMs != null
+          ? zh ? `耗时约 ${Math.round(elapsedMs / 1000)} 秒` : `about ${Math.round(elapsedMs / 1000)}s elapsed`
+          : "";
     const simulationCopy = simulated > 0
       ? zh ? `规则证据筛选入选 ${selected}/${totalCandidates} 条，其中 ${simulated} 条已完成 BRAIN 仿真。`
         : `The evidence fallback selected ${selected}/${totalCandidates}; ${simulated} completed BRAIN simulation.`
-      : zh ? `规则证据筛选入选 ${selected}/${totalCandidates} 条，尚未执行 BRAIN 仿真。`
+        : zh ? `规则证据筛选入选 ${selected}/${totalCandidates} 条，尚未执行 BRAIN 仿真。`
         : `The evidence fallback selected ${selected}/${totalCandidates}; BRAIN simulation has not run.`;
+    const scoreCopy = scoredCount > 0
+      ? zh
+        ? `已取得 ${scoredCount}/${expressionCount} 条 LLM 评分；已返回评分继续有效，未评分候选仍进入 deterministic evidence screen。`
+        : `LLM scores were retained for ${scoredCount}/${expressionCount}; unscored candidates still entered the deterministic evidence screen.`
+      : zh
+        ? `本次取得 ${scoredCount}/${expressionCount} 条 LLM 评分；未评分候选进入 deterministic evidence screen。`
+        : `This call scored ${scoredCount}/${expressionCount}; unscored candidates entered the deterministic evidence screen.`;
     return zh
-      ? `${providerName} ${screenMode}${timeoutCopy}${batchCopy}。已取得 ${llmScored}/${totalCandidates} 条 LLM 评分；已返回评分继续有效，未评分候选仍进入 deterministic evidence screen。${simulationCopy}`
-      : `${providerName} ${screenMode} ${timeoutCopy}${batchCopy}. LLM scores were retained for ${llmScored}/${totalCandidates}; unscored candidates still entered the deterministic evidence screen. ${simulationCopy}`;
-  }, [batchCount, completedBatches, elapsedMs, failedBatchCount, llmFallbacks, llmScored, provider, retryCount, selected, simulated, timeoutSeconds, totalCandidates, zh]);
+      ? `${providerName} 逻辑预筛${stateCopy}，${callCopy}。${scoreCopy}${simulationCopy}`
+      : `${providerName} logic screening ${stateCopy}; ${callCopy}. ${scoreCopy} ${simulationCopy}`;
+  }, [callCount, completedCalls, elapsedMs, errorCalls, expressionCount, fullPoolTelemetry, legacyBatchCount, legacyCompletedBatches, legacyFailedBatchCount, legacyRetryCount, llmFallbacks, provider, screenStatus, scoredCount, selected, simulated, timedOutCalls, timeoutSeconds, totalCandidates, zh]);
 
   if (runId == null) {
     return (

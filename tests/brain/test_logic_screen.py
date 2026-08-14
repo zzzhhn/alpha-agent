@@ -32,9 +32,11 @@ class _SequenceLLM:
         self._provider = "test"
         self._model = "test-model"
         self.calls = 0
+        self.messages = []
 
     async def chat(self, messages, **kw):
         self.calls += 1
+        self.messages.append(messages)
         response = next(self._responses)
         if isinstance(response, BaseException):
             raise response
@@ -159,34 +161,46 @@ async def test_score_bad_json_degrades_to_empty():
 
 @pytest.mark.asyncio
 async def test_score_timeout_is_truthful_and_type_only(monkeypatch):
-    class _TimeoutLLM(_FakeLLM):
-        async def chat(self, messages, **kw):
-            await asyncio.sleep(0)
-            raise AssertionError("wait_for should be patched")
-
-    async def _timeout(awaitable, *, timeout):
-        close = getattr(awaitable, "close", None)
-        if close:
-            close()
-        raise asyncio.TimeoutError
-
-    monkeypatch.setattr(asyncio, "wait_for", _timeout)
-    result = await score_economic_logic(_TimeoutLLM(""), ["a"])
+    llm = _SequenceLLM([asyncio.TimeoutError()])
+    result = await score_economic_logic(llm, ["a"])
     assert result == {}
     assert result.status == "timeout"
     assert result["error_type"] == "TimeoutError"
     assert "secret" not in (result.detail or "")
-    assert result.telemetry["batch_count"] == 1
-    assert result.telemetry["timed_out_batches"] == 1
-    assert result.telemetry["retry_count"] == 1
+    assert llm.calls == 1
+    assert result.telemetry["mode"] == "full_pool"
+    assert result.telemetry["call_count"] == 1
+    assert result.telemetry["timeout_s"] == 240.0
+    assert result.telemetry["expression_n"] == 1
+    assert result.telemetry["scored_n"] == 0
+    assert result.telemetry["completed_calls"] == 0
+    assert result.telemetry["timed_out_calls"] == 1
+    assert result.telemetry["error_calls"] == 0
+    assert "retry_count" not in result.telemetry
 
 
 @pytest.mark.asyncio
-async def test_score_batches_and_keeps_all_batch_scores():
+async def test_score_uses_one_patient_outer_timeout(monkeypatch):
+    llm = _SequenceLLM(['[{"i":0,"score":8}]'])
+    observed = []
+
+    async def _capture_timeout(awaitable, *, timeout):
+        observed.append(timeout)
+        return await awaitable
+
+    monkeypatch.setattr(asyncio, "wait_for", _capture_timeout)
+    result = await score_economic_logic(llm, ["expr"])
+
+    assert result.status == "completed"
+    assert observed == [240.0]
+    assert llm.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_score_full_pool_uses_one_call_and_keeps_all_scores():
     llm = _SequenceLLM([
         '[{"i":0,"score":8},{"i":1,"score":7},{"i":2,"score":6},'
-        '{"i":3,"score":5},{"i":4,"score":4}]',
-        '[{"i":0,"score":3}]',
+        '{"i":3,"score":5},{"i":4,"score":4},{"i":5,"score":3}]',
     ])
     expressions = [f"expr-{i}" for i in range(6)]
     result = await score_economic_logic(llm, expressions)
@@ -200,32 +214,39 @@ async def test_score_batches_and_keeps_all_batch_scores():
         "expr-4": 4.0,
         "expr-5": 3.0,
     }
-    assert llm.calls == 2
-    assert result.telemetry["batch_count"] == 2
-    assert result.telemetry["completed_batches"] == 2
-    assert result.telemetry["timed_out_batches"] == 0
-    assert result.telemetry["error_batches"] == 0
+    assert llm.calls == 1
+    prompt = llm.messages[0][0].content
+    assert prompt.count("Expressions:") == 1
+    assert all(expression in prompt for expression in expressions)
+    assert result.telemetry["mode"] == "full_pool"
+    assert result.telemetry["call_count"] == 1
+    assert result.telemetry["expression_n"] == 6
+    assert result.telemetry["scored_n"] == 6
+    assert result.telemetry["completed_calls"] == 1
+    assert result.telemetry["timed_out_calls"] == 0
+    assert result.telemetry["error_calls"] == 0
+    assert result.telemetry["partial"] is False
     assert result.telemetry["provider"] == "test"
     assert result.telemetry["model"] == "test-model"
 
 
 @pytest.mark.asyncio
-async def test_score_timeout_preserves_other_batches_and_retries_once():
+async def test_score_partial_response_is_retained_without_retry():
     llm = _SequenceLLM([
-        asyncio.TimeoutError(),
-        asyncio.TimeoutError(),
-        '[{"i":0,"score":9}]',
+        '[{"i":0,"score":9},{"i":2,"score":7}]',
     ])
-    expressions = [f"expr-{i}" for i in range(6)]
+    expressions = [f"expr-{i}" for i in range(4)]
     result = await score_economic_logic(llm, expressions)
 
     assert result.status == "partial"
-    assert result == {"expr-5": 9.0}
-    assert llm.calls == 3
-    assert result.telemetry["completed_batches"] == 1
-    assert result.telemetry["timed_out_batches"] == 1
-    assert result.telemetry["error_batches"] == 0
-    assert result.telemetry["retry_count"] == 1
+    assert result == {"expr-0": 9.0, "expr-2": 7.0}
+    assert llm.calls == 1
+    assert result.telemetry["completed_calls"] == 1
+    assert result.telemetry["timed_out_calls"] == 0
+    assert result.telemetry["error_calls"] == 0
+    assert result.telemetry["partial"] is True
+    assert result.telemetry["scored_n"] == 2
+    assert "retry_count" not in result.telemetry
 
 
 @pytest.mark.asyncio
@@ -239,8 +260,10 @@ async def test_score_provider_http_error_is_not_retried():
     assert result.status == "error"
     assert result.error_type == "HTTPStatusError"
     assert llm.calls == 1
-    assert result.telemetry["retry_count"] == 0
-    assert result.telemetry["error_batches"] == 1
+    assert result.telemetry["call_count"] == 1
+    assert result.telemetry["completed_calls"] == 0
+    assert result.telemetry["timed_out_calls"] == 0
+    assert result.telemetry["error_calls"] == 1
     assert result.telemetry["error_types"] == {"HTTPStatusError": 1}
 
 
