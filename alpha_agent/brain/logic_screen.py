@@ -4,8 +4,8 @@ candidates with an LLM BEFORE the slow BRAIN simulation.
 BRAIN sims are the bottleneck (minutes each, serial). Not every generated
 expression makes economic sense — a ratio of two unrelated raw prices, a
 double-negation, a nonsense field pairing. An LLM that knows finance scores each
-candidate's economic logic in bounded sequential batches; we simulate only the ones that
-score above a bar. This cuts wasted sims and raises the quality of what surfaces.
+candidate's economic logic in one full-pool call; we simulate only the ones that score
+above a bar. This cuts wasted sims and raises the quality of what surfaces.
 
 Best-effort and OPTIONAL: with no LLM client the screen is a no-op (everything
 passes), so the miner still runs unattended without an LLM key.
@@ -30,15 +30,11 @@ from alpha_agent.brain.surrogate import proxy_composite
 
 logger = logging.getLogger(__name__)
 
-_WALL_CLOCK_S = 180
-# Kimi-for-coding is a reasoning model, so keep each request bounded while
-# leaving enough time for a small candidate group.  Requests stay sequential:
-# the existing client has no rate-limit coordination and concurrent batches
-# would turn one slow screen into a provider burst.
-_BATCH_SIZE = 5
-_BATCH_TIMEOUT_S = 60.0
-_MAX_BATCH_RETRIES = 1
-# 8000 leaves room for reasoning plus a scored array for one small batch.
+# Kimi-for-coding has a fixed reasoning startup cost. Pay it once for the
+# generated pool instead of serializing small requests that can starve later
+# candidates. This stays below the legacy client's 260s read timeout.
+_WALL_CLOCK_S = 240.0
+# 8000 leaves room for reasoning plus a scored array for the full pool.
 _OUTPUT_TOKEN_CAP = 8000
 # Keep candidates scoring at least this (0-10) — 5 = "plausible economic logic".
 DEFAULT_MIN_SCORE = 5.0
@@ -183,7 +179,7 @@ def _client_labels(llm_client: LLMClient) -> tuple[str | None, str | None]:
 
 
 def _failure_kind(exc: BaseException) -> str:
-    """Classify retryable failures without inspecting exception messages/bodies."""
+    """Classify failures without inspecting exception messages or response bodies."""
     import asyncio
 
     if isinstance(exc, asyncio.TimeoutError):
@@ -204,88 +200,34 @@ def _failure_kind(exc: BaseException) -> str:
     return "error"
 
 
-async def _score_batch(
-    llm_client: LLMClient,
-    expressions: list[str],
-    *,
-    deadline: float,
-) -> tuple[dict[str, float], str, str | None, int, bool]:
-    """Score one bounded batch, retrying only timeout/transport failures.
-
-    Returns scores, final state, sanitized error type, retry count, and whether
-    any attempt timed out. A provider HTTP response or parse failure is never
-    retried, even if it is otherwise transient-looking.
-    """
-    import asyncio
-
-    numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(expressions))
-    retries = 0
-    timed_out = False
-    last_kind = "error"
-    last_error_type: str | None = None
-    for attempt in range(_MAX_BATCH_RETRIES + 1):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return {}, "timeout", "TimeoutError", retries, True
-        timeout_s = min(_BATCH_TIMEOUT_S, remaining)
-        try:
-            response = await asyncio.wait_for(
-                llm_client.chat(
-                    messages=[Message(role="user", content=_PROMPT % numbered)],
-                    max_tokens=_OUTPUT_TOKEN_CAP,
-                ),
-                timeout=timeout_s,
-            )
-            data = _json_payload(response.content or "")
-            scores = _extract_scores(data, expressions)
-            if not scores:
-                return {}, "error", "NoUsableScores", retries, timed_out
-            return scores, "completed", None, retries, timed_out
-        except asyncio.TimeoutError as exc:
-            kind = "timeout"
-            error_type = type(exc).__name__ or "TimeoutError"
-            timed_out = True
-        except Exception as exc:  # noqa: BLE001 — persist only type/status
-            kind = _failure_kind(exc)
-            error_type = type(exc).__name__
-            last_kind = kind
-            last_error_type = error_type
-
-        last_kind = kind
-        last_error_type = error_type
-        if kind not in {"timeout", "transport"} or attempt >= _MAX_BATCH_RETRIES:
-            final_state = "timeout" if kind == "timeout" else "error"
-            return {}, final_state, last_error_type, retries, timed_out
-        if deadline - time.monotonic() <= 0.05:
-            return {}, "timeout" if kind == "timeout" else "error", last_error_type, retries, timed_out
-        retries += 1
-
-    return {}, "timeout" if last_kind == "timeout" else "error", last_error_type, retries, timed_out
-
-
 def _screen_telemetry(
     *,
     started_at: float,
-    batch_count: int,
-    completed: int = 0,
-    timed_out: int = 0,
-    errors: int = 0,
-    partial: int = 0,
-    retries: int = 0,
+    mode: str,
+    expression_n: int,
+    scored_n: int,
+    status: str,
     error_types: dict[str, int] | None = None,
     provider: str | None = None,
     model: str | None = None,
 ) -> dict[str, Any]:
-    """Build the JSON-safe batch telemetry persisted with each candidate."""
+    """Build JSON-safe telemetry for the single full-pool request."""
+    is_full_pool = mode == "full_pool"
+    call_completed = int(is_full_pool and status in {"completed", "partial"})
+    call_timed_out = int(is_full_pool and status == "timeout")
+    call_error = int(is_full_pool and status == "error")
     return {
         "elapsed_ms": max(0, round((time.monotonic() - started_at) * 1000)),
-        "timeout_s": _BATCH_TIMEOUT_S,
-        "batch_count": batch_count,
-        "completed_batches": completed,
-        "timed_out_batches": timed_out,
-        "error_batches": errors,
-        "partial_batches": partial,
-        "retry_count": retries,
+        "mode": mode,
+        "status": status,
+        "call_count": int(is_full_pool),
+        "timeout_s": _WALL_CLOCK_S,
+        "expression_n": expression_n,
+        "scored_n": scored_n,
+        "completed_calls": call_completed,
+        "timed_out_calls": call_timed_out,
+        "error_calls": call_error,
+        "partial": status == "partial",
         "error_types": dict(error_types or {}),
         "provider": provider,
         "model": model,
@@ -295,102 +237,107 @@ def _screen_telemetry(
 async def score_economic_logic(
     llm_client: Optional[LLMClient], expressions: list[str]
 ) -> LogicScreenResult:
-    """Score expressions in bounded sequential batches.
+    """Score the full generated pool with one bounded Kimi-compatible request.
 
-    A failed batch never discards scores from earlier batches. Unscored
-    expressions remain available to the caller's deterministic evidence screen.
+    A response with only some valid scores remains usable. Unscored expressions
+    remain available to the caller's deterministic evidence screen.
     The mapping contains ``{expression: score}`` and remains backward compatible
     with plain-dict callers.  ``status``/``error_type``/``detail`` distinguish a
     completed, partial, bypassed, timeout, or provider-error screen.  Missing
     scores never block mining; the caller records the explicit status instead of
     implying that every candidate was successfully screened."""
+    import asyncio
+
     started_at = time.monotonic()
     provider = model = None
+    expression_n = len(expressions)
     if llm_client is None:
         return LogicScreenResult(
             status="bypassed",
             detail="no logic-screen LLM configured",
             telemetry=_screen_telemetry(
                 started_at=started_at,
-                batch_count=0,
+                mode="bypassed",
+                expression_n=expression_n,
+                scored_n=0,
+                status="bypassed",
             ),
         )
     if not expressions:
         return LogicScreenResult(
             status="bypassed",
             detail="no expressions",
-            telemetry=_screen_telemetry(started_at=started_at, batch_count=0),
+            telemetry=_screen_telemetry(
+                started_at=started_at,
+                mode="bypassed",
+                expression_n=0,
+                scored_n=0,
+                status="bypassed",
+            ),
         )
     provider, model = _client_labels(llm_client)
-    batches = [
-        expressions[offset : offset + _BATCH_SIZE]
-        for offset in range(0, len(expressions), _BATCH_SIZE)
-    ]
-    deadline = started_at + _WALL_CLOCK_S
+    numbered = "\n".join(f"{i}. {expression}" for i, expression in enumerate(expressions))
     scores: dict[str, float] = {}
-    completed = timed_out = errors = partial = retries = 0
     error_types: dict[str, int] = {}
     first_error_type: str | None = None
 
-    for batch_index, batch in enumerate(batches):
-        batch_scores, state, error_type, batch_retries, saw_timeout = await _score_batch(
-            llm_client,
-            batch,
-            deadline=deadline,
+    status = "error"
+    try:
+        response = await asyncio.wait_for(
+            llm_client.chat(
+                messages=[Message(role="user", content=_PROMPT % numbered)],
+                max_tokens=_OUTPUT_TOKEN_CAP,
+            ),
+            timeout=_WALL_CLOCK_S,
         )
-        scores.update(batch_scores)
-        retries += batch_retries
-        if saw_timeout:
-            timed_out += 1
-        if state == "completed":
-            completed += 1
-            if len(batch_scores) < len(batch):
-                partial += 1
-        elif state == "timeout":
-            timed_out += 0 if saw_timeout else 1
+        data = _json_payload(response.content or "")
+        scores = _extract_scores(data, expressions)
+        if scores:
+            status = "completed" if len(scores) == len(expressions) else "partial"
         else:
-            errors += 1
-        if error_type:
-            first_error_type = first_error_type or error_type
-            error_types[error_type] = error_types.get(error_type, 0) + 1
-        if time.monotonic() >= deadline:
-            # Remaining batches had no request budget; record them as timed out
-            # without manufacturing an exception or leaking provider details.
-            timed_out += len(batches) - batch_index - 1
-            break
+            first_error_type = "NoUsableScores"
+            error_types[first_error_type] = 1
+    except asyncio.TimeoutError as exc:
+        status = "timeout"
+        first_error_type = _safe_label(type(exc).__name__) or "TimeoutError"
+        error_types[first_error_type] = 1
+    except Exception as exc:  # noqa: BLE001 — persist only type/status
+        kind = _failure_kind(exc)
+        status = "timeout" if kind == "timeout" else "error"
+        first_error_type = _safe_label(type(exc).__name__) or "UnknownError"
+        error_types[first_error_type] = 1
 
     telemetry = _screen_telemetry(
         started_at=started_at,
-        batch_count=len(batches),
-        completed=completed,
-        timed_out=timed_out,
-        errors=errors,
-        partial=partial,
-        retries=retries,
+        mode="full_pool",
+        expression_n=expression_n,
+        scored_n=len(scores),
+        status=status,
         error_types=error_types,
         provider=provider,
         model=model,
     )
-    if len(scores) == len(expressions):
-        status = "completed"
-    elif scores:
-        status = "partial"
-    elif timed_out and not errors:
-        status = "timeout"
+    if status == "completed":
+        detail = f"scored {len(scores)}/{expression_n} expressions in one full-pool call"
+    elif status == "partial":
+        detail = (
+            f"scored {len(scores)}/{expression_n} expressions in one full-pool call; "
+            "partial scores retained"
+        )
+    elif status == "timeout":
+        detail = (
+            f"full-pool logic screen timed out after {_WALL_CLOCK_S:g}s; "
+            f"scored {len(scores)}/{expression_n} expressions"
+        )
+        logger.warning(
+            "logic screen unavailable: status=timeout error_type=%s",
+            first_error_type or "TimeoutError",
+        )
     else:
-        status = "error"
-    detail = (
-        f"scored {len(scores)}/{len(expressions)} expressions across {len(batches)} batches"
-    )
-    if timed_out:
-        detail += f"; {timed_out} batch(es) timed out"
-    if errors:
-        detail += f"; {errors} batch(es) failed"
-    if retries:
-        detail += f"; retried {retries} batch(es)"
-    if status == "timeout":
-        logger.warning("logic screen unavailable: status=timeout error_type=TimeoutError")
-    elif status == "error":
+        detail = (
+            f"full-pool logic screen failed ({first_error_type or 'UnknownError'}); "
+            f"scored {len(scores)}/{expression_n} expressions"
+        )
         logger.warning(
             "logic screen unavailable: status=error error_type=%s",
             first_error_type or "UnknownError",

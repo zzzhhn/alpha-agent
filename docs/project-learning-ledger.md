@@ -110,9 +110,9 @@
 - LLM timeout, parse/provider failure, weak research evidence, and official BRAIN simulation failure are different events. Store a safe technical status and exact decision reason instead of letting one empty results table represent all four.
 - A successful Vercel deployment does not update a GitHub Actions worker when workflow dispatch checks out `main`. Merge worker code and migrations to the dispatched ref before claiming the new mining workflow is live.
 
-## 2026-08-14: Optional LLM screens must fail by batch, not by round
+## 2026-08-14: Reasoning-model screens need latency-aware call boundaries
 
-- One 20-candidate LLM request made tail latency an all-or-nothing event. A provider response that missed the 180-second wall clock erased every optional logic score even though candidate generation, evidence screening, and BRAIN simulation remained healthy.
-- Split optional scoring into bounded batches and retain completed batch results. Unscored candidates still enter the shared evidence screen; a technical timeout must never overwrite valid scores returned by other batches.
-- Retry only transient timeout or transport failures, with a strict attempt cap. Authentication, authorization, and rate-limit responses require recovery or backoff rather than immediate replay.
-- Persist sanitized provider, model, elapsed time, batch counts, and error class/status. Never persist raw headers, credentials, response bodies, or exception messages that may echo them.
+- A generic 60-second classification timeout was the wrong boundary for Kimi's reasoning call. Four serial batches repeated the model startup cost, and retrying the first batch consumed the global budget before later candidates were attempted.
+- Score the generated pool in one call when the provider's dominant cost is reasoning startup. Keep an evidence-based 240-second boundary below the client's read timeout, and do not synchronously replay a slow request.
+- A technical timeout still falls back to the shared deterministic evidence screen. Partial usable scores remain valid, and provider latency never becomes a BRAIN simulation failure.
+- Persist sanitized provider, model, elapsed time, call mode, pool size, scored count, and error class/status. Never persist raw headers, credentials, response bodies, or exception messages that may echo them.
