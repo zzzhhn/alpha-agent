@@ -15,11 +15,12 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from alpha_agent.evolution.llm_factor_proposer import _strip_md_fence
 from alpha_agent.llm.base import LLMClient, Message
 from alpha_agent.brain.hypotheses import (
+    audit_expression_semantics,
     hypothesis_for,
     map_expression_fields,
     research_context_key,
@@ -184,8 +185,9 @@ def _behavior_cluster(expr: str, mechanism: str) -> str:
     when a second leg or tenor makes the syntax look different.
     """
     e = expr or ""
-    if "trade_when" in e and "pcr_oi_" in e and "implied_volatility_call" in e \
-            and "implied_volatility_put" in e:
+    if "trade_when" in e and re.search(r"\bpcr\w*", e) and re.search(
+        r"(?:implied|iv)\w*call", e
+    ) and re.search(r"(?:implied|iv)\w*put", e):
         return "pcr_skew_anchor"
     return mechanism
 
@@ -199,16 +201,21 @@ def options_candidate_evidence(
     mechanism_evidence: dict,
     candidate_settings: dict | None = None,
     surrogate_prediction: dict[str, float] | None = None,
-) -> dict[str, float | str]:
+) -> dict[str, Any]:
     """Score one options candidate before an expensive BRAIN simulation."""
     settings = candidate_settings or {}
     mapping = map_expression_fields(expr, field_metadata)
+    semantic = audit_expression_semantics(mechanism, expr, field_metadata)
     coverage = float(mapping["coverage"])
     mapped_ratio = float(mapping["mapped_ratio"])
     coverage_score = max(
         0.0,
         min(10.0, coverage * 10.0 * (0.5 + 0.5 * mapped_ratio)),
     )
+    if semantic["status"] == "unverified":
+        semantic_score = 5.0
+    else:
+        semantic_score = 10.0 * float(semantic["semantic_fidelity"])
 
     mechanisms = mechanism_evidence.get("mechanisms", mechanism_evidence)
     contexts = mechanism_evidence.get("contexts", {})
@@ -251,16 +258,40 @@ def options_candidate_evidence(
     concentration_score += 1.0 if "group_neutralize(" in (expr or "") else 0.0
     concentration_score -= 2.0 if "trade_when(" in (expr or "") else 0.0
     concentration_score = max(0.0, min(10.0, concentration_score))
-    cluster = _behavior_cluster(expr, mechanism)
-    novelty_score = 3.0 if cluster == "pcr_skew_anchor" else 7.5
+    syntactic_cluster = re.sub(r"\d+", "N", expr or "").replace(" ", "")
+    behavioral_cluster = _behavior_cluster(expr, mechanism)
+    # Keep syntax, pre-PnL behavior, and realized history as separate signals.
+    cluster = behavioral_cluster
+    novelty_score = 3.0 if behavioral_cluster == "pcr_skew_anchor" else 7.5
+    selfcorr_checked = int(hist.get("selfcorr_checked", hist.get("self_corr_checked", 0)) or 0)
+    selfcorr_passed = int(hist.get("selfcorr_passed", hist.get("self_corr_passed", 0)) or 0)
+    if selfcorr_checked:
+        # This is realized-history evidence, distinct from the syntax cluster.
+        # A low pass rate means the mechanism has not demonstrated incremental
+        # novelty, so do not let a cosmetic structural variant score as novel.
+        realized_rate = selfcorr_passed / selfcorr_checked
+        novelty_score = min(novelty_score, 2.0 + 5.0 * realized_rate)
+        realized_novelty = "supported" if realized_rate >= 0.5 else "redundant"
+    else:
+        realized_rate = None
+        realized_novelty = "unknown"
     alignment_score = _OPTIONS_OUTCOME_ALIGNMENT.get(mechanism, 4.5)
     attempts = int(hist.get("attempts", 0) or 0)
-    failure_n = int(hist.get("concentrated", 0) or 0) + int(
-        hist.get("low_sub_universe", 0) or 0
+    # These counters can refer to the same failed simulation. Using their sum
+    # would double-count one row and could blacklist a mechanism prematurely.
+    failure_n = max(
+        int(hist.get("concentrated", 0) or 0),
+        int(hist.get("low_sub_universe", 0) or 0),
     )
-    if mechanism in {"skew_call_innovation_residual", "skew_term_residual"}:
+    failure_rate = failure_n / max(attempts, 1)
+    historically_failed = bool(
+        attempts >= 4 and failure_rate >= 0.50
+    )
+    if semantic["material_mismatch"] or semantic["target_outcome_alignment"]["status"] != "aligned":
+        lane = "explore"
+    elif mechanism in {"skew_call_innovation_residual", "skew_term_residual"}:
         lane = "orthogonal"
-    elif attempts >= 4 and failure_n / attempts >= 0.30:
+    elif attempts >= 4 and failure_rate >= 0.30:
         lane = "repair"
     elif hypothesis_for(mechanism).confidence == "low":
         lane = "explore"
@@ -270,8 +301,9 @@ def options_candidate_evidence(
     proxy_score = proxy_composite(surrogate_prediction or {})
     if proxy_score is None:
         total = (
-            0.20 * max(0.0, min(10.0, logic_score))
-            + 0.20 * coverage_score
+            0.15 * max(0.0, min(10.0, logic_score))
+            + 0.15 * coverage_score
+            + 0.20 * semantic_score
             + 0.20 * history_score
             + 0.15 * alignment_score
             + 0.10 * concentration_score
@@ -280,8 +312,9 @@ def options_candidate_evidence(
         )
     else:
         total = (
-            0.15 * max(0.0, min(10.0, logic_score))
-            + 0.20 * coverage_score
+            0.10 * max(0.0, min(10.0, logic_score))
+            + 0.15 * coverage_score
+            + 0.20 * semantic_score
             + 0.15 * history_score
             + 0.10 * alignment_score
             + 0.10 * concentration_score
@@ -292,16 +325,30 @@ def options_candidate_evidence(
     return {
         "score": round(total, 4),
         "coverage": round(coverage, 4),
+        "semantic_fidelity": round(float(semantic["semantic_fidelity"]), 4),
+        "semantic_score": round(semantic_score, 4),
+        "semantic_status": semantic["status"],
+        "semantic_mismatch": bool(semantic["material_mismatch"]),
+        "high_confidence_mismatch": bool(semantic["high_confidence_mismatch"]),
+        "matched_required_semantics": semantic["matched_required_semantics"],
+        "missing_required_semantics": semantic["missing_required_semantics"],
+        "target_outcome_alignment": semantic["target_outcome_alignment"],
+        "field_details": semantic["field_details"],
         "mapped_ratio": round(mapped_ratio, 4),
         "datasets": "+".join(mapping["dataset_ids"]) or "unmapped",
         "history": round(history_score, 4),
+        "historically_failed": historically_failed,
         "context_n": context_n,
         "alignment": alignment_score,
         "concentration": round(concentration_score, 4),
         "novelty": novelty_score,
+        "realized_novelty": realized_novelty,
+        "selfcorr_rate": round(realized_rate, 4) if realized_rate is not None else "unknown",
         "complexity": round(complexity_score, 4),
         "mechanism": mechanism,
         "cluster": cluster,
+        "syntactic_cluster": syntactic_cluster,
+        "behavioral_cluster": behavioral_cluster,
         "lane": lane,
         "proxy": round(proxy_score, 4) if proxy_score is not None else "inactive",
     }
@@ -344,7 +391,14 @@ def select_options_research_portfolio(
             )
             ranked.append((float(evidence["score"]), -idx, expr, evidence))
         ranked.sort(reverse=True)
-        qualified = [item for item in ranked if item[0] >= min_evidence_score]
+        qualified = [
+            item for item in ranked
+            if item[0] >= min_evidence_score
+            # A high-confidence paper claim with an unfulfilled official
+            # semantic requirement must not consume a high-confidence slot.
+            and not bool(item[3].get("high_confidence_mismatch"))
+            and not bool(item[3].get("historically_failed"))
+        ]
         selected: list[str] = []
         cluster_counts: dict[str, int] = {}
         mechanism_counts: dict[str, int] = {}

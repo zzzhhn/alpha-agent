@@ -935,3 +935,16 @@ V040 在旧 L2 批次证据之外增加轻量连续账户：
 8. 真实 Chromium 的 390px `/picks` 验收为 `scrollWidth=390`、唯一 `h1=今日组合决策`，首个候选链接为 `/paper?ticker=SLB`。生产 `/paper?ticker=SLB` 保留 SLB 选择，账户、订单与来源认证失败显示“无法确认”及重试，不显示伪零；同页连续账户面板显示 run 33 前瞻边界。
 
 当前 run 33 产生于新政策快照上线之前。因此战术榜单继续通过旧字段兼容读取；战略接口只返回 `canonical=false`、`ranked=false`、`tradable=false` 的探索结果，不会把旧 long payload 冒充 `strategic_v1_60d_frozen`。下一份完整推荐 run 会第一次冻结独立战略 policy ID 与 rank；再到下一交易日收盘后，连续账户才会出现第一笔真实 delta。这是设计中的前瞻等待边界，也是本轮唯一需要自然时间推进的验收项。
+
+## 二十一、2026-08-14 今日推荐指标口径收敛
+
+本轮对 immutable complete snapshots 与 `daily_prices` 做了只读多 horizon 实测。总体方向一致率从 1 日到 10 日没有形成随 horizon 延长而改善的证据，反而逐步走弱；Top 50 的 short 样本极少，不能把其表面 balanced accuracy 当作可靠结论。因此不修改引擎目标、不挑选表现最好的窗口，也不把“延长持有期”包装成提升命中率的修复。
+
+用户确认采用四项产品调整：保留并诚实命名 1 日单票方向一致度；把固定 5/20/60 日篮子证据作为中周期核心；分开呈现 long 与 short；统一 1 日一致度、5 日校准置信度和多 horizon basket evidence 的信息架构。用户未接受 always-up baseline 的界面呈现，因此该字段只为 API 兼容保留，不出现在 UI。
+
+实现后的口径如下：
+
+1. 单票 consistency 统一显示为“1 日方向一致度”，明确是描述性 next-trading-day outcome check，并显示各窗口样本量。
+2. 战术 confidence 统一显示为“5 日校准置信度”；战略 60 日模式继续返回 null，直到取得自身前瞻证据。
+3. `BASKET.EDGE` 在 5、20、60 个交易日上并列显示 top-20% long sleeve、bottom-20% short sleeve、long-short spread、rank-IC 与 usable-date n，不事后选择最优 horizon。
+4. 次日 Top/Bottom basket check 作为次级诊断，分开显示 long、short、market、spread、方向样本、成本、换手与 SPY。long-short spread 不再误称 beta-neutral。

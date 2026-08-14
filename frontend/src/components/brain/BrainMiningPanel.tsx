@@ -288,11 +288,28 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
   if (!evidence) return null;
   const hypothesis = evidence.hypothesis;
   const mapping = evidence.field_mapping;
+  const semantic = evidence.semantic_audit;
   const screen = evidence.screen;
   const proxy = evidence.proxy;
   const pct = (value: number | undefined) =>
     typeof value === "number" ? `${Math.round(value * 100)}%` : "—";
   const prediction = proxy?.prediction || {};
+  const semanticTone = semantic?.status === "matched"
+    ? "text-tm-pos"
+    : semantic?.status === "mismatch"
+      ? "text-tm-neg"
+      : "text-tm-warn";
+  const semanticLabel = semantic?.status === "matched"
+    ? (zh ? "语义匹配" : "semantics matched")
+    : semantic?.status === "mismatch"
+      ? (zh ? "语义不匹配" : "semantic mismatch")
+      : (zh ? "语义待核验" : "semantics unverified");
+  const alignmentStatus = semantic?.target_outcome_alignment?.status;
+  const alignmentLabel = alignmentStatus === "aligned"
+    ? (zh ? "目标对齐" : "target aligned")
+    : alignmentStatus === "exploratory_mismatch"
+      ? (zh ? "仅探索，目标不一致" : "exploratory target mismatch")
+      : (zh ? "目标待核验" : "target unverified");
   return (
     <div className="border border-tm-rule bg-tm-bg px-3 py-2.5">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -327,6 +344,14 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
           <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
             {hypothesis?.confidence || "—"} · {hypothesis?.target || "—"}
           </div>
+          {semantic ? (
+            <div
+              className={`mt-1 font-tm-mono text-[9.5px] ${alignmentStatus === "aligned" ? "text-tm-pos" : "text-tm-warn"}`}
+              title={semantic.target_outcome_alignment?.target}
+            >
+              {alignmentLabel}
+            </div>
+          ) : null}
         </div>
         <div>
           <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
@@ -338,6 +363,21 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
           <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
             coverage {pct(mapping?.coverage)} · mapped {pct(mapping?.mapped_ratio)}
           </div>
+          {semantic ? (
+            <>
+              <div className={`mt-1 font-tm-mono text-[9.5px] ${semanticTone}`}>
+                {semanticLabel} · {semantic.matched_required_semantics?.length ?? 0}/{semantic.required_semantics?.length ?? 0}
+              </div>
+              {semantic.missing_required_semantics?.length ? (
+                <div
+                  className="mt-1 truncate font-tm-mono text-[9px] text-tm-neg"
+                  title={semantic.missing_required_semantics.join(" · ")}
+                >
+                  {zh ? "缺失" : "missing"}: {semantic.missing_required_semantics.join(", ")}
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
         <div>
           <div className="font-tm-mono text-[9px] uppercase text-tm-muted">

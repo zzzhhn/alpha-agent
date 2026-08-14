@@ -334,6 +334,7 @@ async def _run_mining_round_impl(
             ratio_usage=evo.ratio_usage, prefer_industry=evo.prefer_industry,
             avoid_signatures=evo.avoid_signatures, family_focus=family_focus,
             field_hints=field_hints,
+            option_metadata=field_metadata if family_focus == "options" else None,
         )
 
     # The simulation budget is a ceiling, not a quota. Options candidates pass a

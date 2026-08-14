@@ -57,6 +57,7 @@ async def test_scoreboard_separates_top_from_bottom(pool):
     assert sb.market_cum == pytest.approx((1 + (0.01 * 3 - 0.01 * 3) / 12) ** 5 - 1, abs=1e-4)
     assert sb.spread_cum > 0.09          # ~ (1.02)^5 - 1
     assert sb.long_hit_rate == 1.0       # every long stock-day rose
+    assert sb.short_hit_rate == 1.0      # every short stock-day fell
     assert sb.base_rate == pytest.approx(15 / 60)
 
 

@@ -1,14 +1,14 @@
 "use client";
 
 // Compact "BASKET.EDGE" strip pinned above the picks table. The headline of
-// this whole product is "is 今日推荐 meaningful" — and the honest answer is that
-// the value is the RANKED long-short BASKET, not any single ticker's 5d
-// direction (which is ~coin-flip). This strip surfaces, per horizon, the
-// beta-neutral long-short quintile spread (the headline number) and the
-// rank-IC, fetched from GET /api/picks/edge.
+// this whole product is "is 今日推荐 meaningful" — and the honest answer is
+// the RANKED long-short BASKET, not any single ticker's 1d direction. This
+// strip surfaces, per 5/20/60 trading-day horizon, the long sleeve, short
+// sleeve, long-short spread, rank-IC, and the exact usable-date sample from
+// GET /api/picks/edge.
 //
-// Honesty: horizons whose forward window has no observable exits yet (the
-// fast-signal history is short) come back `insufficient`; we render a muted
+// Honesty: horizons whose forward window has no observable exits yet (or whose
+// usable-date count is below the backend floor) come back `insufficient`; we render a muted
 // "—" / "数据不足" rather than fabricating an edge.
 import { useEffect, useState } from "react";
 
@@ -43,39 +43,61 @@ function spreadToneClass(v: number | null): string {
   return "text-tm-fg";
 }
 
+function sleeveToneClass(v: number | null, side: "long" | "short"): string {
+  if (v === null) return "text-tm-muted";
+  const favorable = side === "long" ? v > 0 : v < 0;
+  if (favorable) return "text-tm-pos";
+  if (v !== 0) return "text-tm-neg";
+  return "text-tm-fg";
+}
+
 function HorizonCell({ h }: { h: HorizonEdge }) {
   const { locale } = useLocale();
   const insufficientLabel = t(locale, "edge.insufficient");
+  const tip = t(locale, "edge.horizon_tip")
+    .replace("{h}", String(h.horizon))
+    .replace("{n}", String(h.n_days));
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 sm:min-w-[88px]">
-      <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
-        {h.horizon}d
-      </span>
-      {h.insufficient ? (
-        <span className="font-tm-mono text-[11px] text-tm-muted">
-          {insufficientLabel}
+    <HoverTip content={tip} placement="bottom" width={286}>
+      <div className="flex min-w-0 cursor-help flex-col gap-0.5 sm:min-w-[104px]">
+        <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
+          {h.horizon}d · n={h.n_days}
         </span>
-      ) : (
-        <>
-          <span
-            className={`font-tm-mono text-[13px] font-semibold tabular-nums ${spreadToneClass(
-              h.long_short_spread,
-            )}`}
-          >
-            {fmtPct(h.long_short_spread)}
+        {h.insufficient ? (
+          <span className="font-tm-mono text-[11px] text-tm-muted">
+            {insufficientLabel}
           </span>
-          <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
-            {t(locale, "edge.ic_label")} {fmtIc(h.mean_ic)}
-          </span>
-        </>
-      )}
-    </div>
+        ) : (
+          <>
+            <span
+              className={`font-tm-mono text-[13px] font-semibold tabular-nums ${spreadToneClass(
+                h.long_short_spread,
+              )}`}
+            >
+              {t(locale, "edge.spread_label")} {fmtPct(h.long_short_spread)}
+            </span>
+            <span className="font-tm-mono text-[10px] tabular-nums">
+              <span className={sleeveToneClass(h.long_mean_return, "long")}>
+                {t(locale, "edge.long_label")} {fmtPct(h.long_mean_return)}
+              </span>
+              <span className="mx-1 text-tm-muted">·</span>
+              <span className={sleeveToneClass(h.short_mean_return, "short")}>
+                {t(locale, "edge.short_label")} {fmtPct(h.short_mean_return)}
+              </span>
+            </span>
+            <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+              {t(locale, "edge.ic_label")} {fmtIc(h.mean_ic)}
+            </span>
+          </>
+        )}
+      </div>
+    </HoverTip>
   );
 }
 
-// Realized portfolio scoreboard segment: "had you followed the daily top-K,
-// here is the compounded result vs the market average + the blind-guess base
-// rate". This is the honest headline the per-name next-day hit-rate can't be.
+// Secondary 1-day basket check: "had you followed the archived daily top and
+// bottom baskets, here is the compounded long/short result vs market". This is
+// distinct from the primary 5/20/60 basket evidence above.
 function ScoreboardCells({ sb }: { sb: PicksScoreboard }) {
   const { locale } = useLocale();
   const items: Array<{ label: string; value: string; tone: string }> = [
@@ -83,6 +105,11 @@ function ScoreboardCells({ sb }: { sb: PicksScoreboard }) {
       label: t(locale, "edge.sb_long").replace("{n}", String(sb.top_n)),
       value: fmtPct(sb.long_cum),
       tone: spreadToneClass(sb.long_cum),
+    },
+    {
+      label: t(locale, "edge.sb_short").replace("{n}", String(sb.top_n)),
+      value: fmtPct(sb.short_cum),
+      tone: sleeveToneClass(sb.short_cum, "short"),
     },
     {
       label: t(locale, "edge.sb_market"),
@@ -95,12 +122,12 @@ function ScoreboardCells({ sb }: { sb: PicksScoreboard }) {
       tone: spreadToneClass(sb.spread_cum),
     },
   ];
-  if (sb.long_hit_rate !== null && sb.base_rate !== null) {
-    const beats = sb.long_hit_rate > sb.base_rate;
+  const shortHitRate = sb.short_hit_rate ?? null;
+  if (sb.long_hit_rate !== null || shortHitRate !== null) {
     items.push({
-      label: t(locale, "edge.sb_hit"),
-      value: `${Math.round(sb.long_hit_rate * 100)}% (${t(locale, "edge.sb_base")} ${Math.round(sb.base_rate * 100)}%)`,
-      tone: beats ? "text-tm-pos" : "text-tm-neg",
+      label: `${t(locale, "edge.sb_long_hit")} / ${t(locale, "edge.sb_short_hit")}`,
+      value: `${sb.long_hit_rate === null ? "—" : `${Math.round(sb.long_hit_rate * 100)}%`} / ${shortHitRate === null ? "—" : `${Math.round(shortHitRate * 100)}%`}`,
+      tone: "text-tm-fg-2",
     });
   }
   return (
@@ -148,7 +175,7 @@ function HonestMetricsBlock({
       ? `${sb.breakeven_cost_bps.toFixed(0)} bps`
       : "—";
 
-  // IC significance from the 5d horizon edge
+  // IC significance from the primary 5d basket horizon.
   let icSigStr = "—";
   if (h5 && !h5.insufficient && h5.ic_t_stat !== null && h5.ic_ir !== null) {
     const hurdle =
@@ -170,10 +197,7 @@ function HonestMetricsBlock({
   }
 
   const isZh = locale === "zh";
-  const label =
-    isZh
-      ? t(locale, "edge.honest_title")
-      : t(locale, "edge.honest_title");
+  const label = t(locale, "edge.honest_title");
 
   return (
     <HoverTip
@@ -187,8 +211,8 @@ function HonestMetricsBlock({
         </span>
         <span className="font-tm-mono text-[11px] tabular-nums text-tm-fg-2">
           {isZh
-            ? `净收益(计成本) ${netPct} vs SPY ${spyPct}`
-            : `net(cost) ${netPct} vs SPY ${spyPct}`}
+            ? `次日净收益(计成本) ${netPct} vs SPY ${spyPct}`
+            : `1d net(cost) ${netPct} vs SPY ${spyPct}`}
         </span>
         <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
           {isZh ? `换手 ${toStr}/日` : `to ${toStr}/d`}
@@ -197,7 +221,7 @@ function HonestMetricsBlock({
           {isZh ? `盈亏平衡成本 ${beStr}` : `breakeven ${beStr}`}
         </span>
         <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
-          {isZh ? `IC t=${icSigStr}` : `IC ${icSigStr}`}
+          {isZh ? `5日 IC ${icSigStr}` : `5d IC ${icSigStr}`}
         </span>
         <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
           {isZh ? `修复后样本外 ${oosStr}` : `OOS(post-fix) ${oosStr}`}

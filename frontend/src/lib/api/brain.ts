@@ -90,6 +90,30 @@ export interface BrainAlpha {
       coverage?: number;
       mapped_ratio?: number;
     };
+    semantic_audit?: {
+      status?: "matched" | "mismatch" | "unverified";
+      semantic_fidelity?: number;
+      metadata_available?: boolean;
+      required_semantics?: string[];
+      matched_required_semantics?: string[];
+      missing_required_semantics?: string[];
+      material_mismatch?: boolean;
+      high_confidence_mismatch?: boolean;
+      target_outcome_alignment?: {
+        target?: string;
+        status?: "aligned" | "exploratory_mismatch" | "unknown";
+        brain_default_target?: string;
+      };
+      field_details?: Array<{
+        field_id?: string;
+        name?: string;
+        description?: string;
+        dataset?: string;
+        side?: string | null;
+        measure_kind?: string;
+        tenor?: string[];
+      }>;
+    };
     screen?: Record<string, string | number>;
     proxy?: {
       active?: boolean;

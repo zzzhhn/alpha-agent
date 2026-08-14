@@ -53,6 +53,101 @@ _OPTION_FIELDS = {
     ),
 }
 
+
+def _field_tenors(field_id: str) -> tuple[int, ...]:
+    """Extract tenor-like numeric suffixes for deterministic field pairing."""
+    return tuple(
+        int(value)
+        for value in re.findall(
+            r"(?:^|[_\-])(\d{1,4})(?:d|day|days)?(?=$|[_\-])",
+            field_id,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _sort_fields_by_tenor(fields: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(sorted(fields, key=lambda value: (_field_tenors(value) or (10_000,), value)))
+
+
+def _matched_tenor_pairs(
+    left: tuple[str, ...], right: tuple[str, ...]
+) -> tuple[tuple[str, str], ...]:
+    """Pair two official field roles only when they share a stated tenor.
+
+    If the API metadata does not expose tenor, fall back to deterministic index
+    pairing. The later semantic audit still marks that construction unverified.
+    """
+    matched = tuple(
+        (lhs, rhs)
+        for lhs in left
+        for rhs in right
+        if set(_field_tenors(lhs)) & set(_field_tenors(rhs))
+    )
+    if matched:
+        return matched
+    # Explicit, non-overlapping tenors are a semantic mismatch, not a licence
+    # to pair fields by position. Only metadata without tenor evidence may use
+    # the deterministic legacy fallback below.
+    if any(_field_tenors(value) for value in left) and any(
+        _field_tenors(value) for value in right
+    ):
+        return ()
+    return tuple(zip(left, right))
+
+
+def build_options_catalog(field_metadata: Optional[list[dict]] = None) -> dict[str, tuple[str, ...]]:
+    """Select semantically classifiable official option fields by role.
+
+    The checked-in catalogue is a safe fallback for an unavailable or sparse
+    API response.  Official fields replace a role only when their metadata
+    supports that role, so generation cannot silently turn an OI ratio into
+    buyer-initiated opening flow.
+    """
+    from alpha_agent.brain.hypotheses import classify_field_semantics
+
+    catalog: dict[str, list[str]] = {key: [] for key in _OPTION_FIELDS}
+    for raw in field_metadata or ():
+        field_id = str(raw.get("id") or "")
+        if not field_id:
+            continue
+        semantic = classify_field_semantics(raw)
+        measure = semantic["measure_kind"]
+        side = semantic["side"]
+        if measure == "open_interest" and "pcr" in field_id.lower():
+            catalog["pcr_oi"].append(field_id)
+        elif measure == "implied_volatility":
+            if side == "call":
+                catalog["iv_call"].append(field_id)
+            elif side == "put":
+                catalog["iv_put"].append(field_id)
+            else:
+                catalog["iv_mean"].append(field_id)
+        elif measure == "historical_volatility":
+            catalog["historical_vol"].append(field_id)
+        elif measure == "breakeven":
+            catalog["call_breakeven"].append(field_id)
+        elif measure == "forward_price":
+            catalog["forward_price"].append(field_id)
+    resolved = {
+        key: _sort_fields_by_tenor(values) if values else tuple(_OPTION_FIELDS[key])
+        for key, values in catalog.items()
+    }
+    # Paired roles must move together. Mixing one live-catalog leg with one
+    # static fallback leg would look mapped while silently changing tenor.
+    for left, right in (
+        ("iv_call", "iv_put"),
+        ("call_breakeven", "forward_price"),
+    ):
+        if (
+            not catalog[left]
+            or not catalog[right]
+            or not _matched_tenor_pairs(resolved[left], resolved[right])
+        ):
+            resolved[left] = tuple(_OPTION_FIELDS[left])
+            resolved[right] = tuple(_OPTION_FIELDS[right])
+    return resolved
+
 # Economically MEANINGFUL fundamental ratios (numerator, denominator), grouped by
 # FACTOR FAMILY. Different families are the real decorrelators: profitability and
 # value ratios co-move, but leverage, liquidity, investment and EV-multiple signals
@@ -599,11 +694,25 @@ def _m_overnight(rng: random.Random) -> dict:
     return _op("group_neutralize", _op("rank", sig), _fld("industry"))
 
 
-def _m_iv_term(rng: random.Random) -> dict:
+def _m_iv_term(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """IV term-structure slope (Vasquez JFQA 2017): tenor dimension of the
     surface — mechanically distinct from the saturated call-put SKEW (strike
     dimension). Slope innovations via ts_zscore."""
-    short, long_ = rng.choice(_IV_TENOR_PAIRS)
+    if option_fields is None:
+        pairs = _IV_TENOR_PAIRS
+    else:
+        fields = option_fields
+        pairs = tuple(
+            (short, long_)
+            for short in fields["iv_mean"]
+            for long_ in fields["iv_mean"]
+            if _field_tenors(short)
+            and _field_tenors(long_)
+            and min(_field_tenors(short)) < min(_field_tenors(long_))
+        ) or _IV_TENOR_PAIRS
+    short, long_ = rng.choice(pairs)
     # Relative slope is comparable across low- and high-volatility stocks.  The
     # former raw difference mixed the term signal with each stock's volatility
     # level and plateaued below the Sharpe bar.
@@ -616,20 +725,25 @@ def _m_iv_term(rng: random.Random) -> dict:
     return _op("group_neutralize", leg, _fld(rng.choice(("sector", "subindustry"))))
 
 
-def _m_iv_mom(rng: random.Random) -> dict:
+def _m_iv_mom(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """Call-IV innovation: rising call IV predicts positive stock returns.
 
     Call and put innovations have opposite signs in An et al. (2014), so a
     pooled call/mean field followed by a random reverse is not a coherent bet.
     Use call IV only and keep the empirically/literature-supported sign.
     """
-    f = rng.choice(("implied_volatility_call_60", "implied_volatility_call_120"))
+    fields = option_fields or _OPTION_FIELDS
+    f = rng.choice(fields["iv_call"])
     leg = _op("rank", _op("ts_decay_linear",
                           _op("ts_delta", _fld(f), _lit(20)), _lit(12)))
     return _op("group_neutralize", leg, _fld("subindustry"))
 
 
-def _m_vrp(rng: random.Random) -> dict:
+def _m_vrp(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """Stock-level variance risk premium, IV minus matched-tenor historical vol.
 
     Ranking both legs separately erased magnitude and produced nearly static,
@@ -637,29 +751,32 @@ def _m_vrp(rng: random.Random) -> dict:
     then rank it cross-sectionally.  Bali & Hovakimian's negative coefficient
     on HV-IV implies this positive IV-HV orientation.
     """
-    historical, implied = rng.choice((
+    fields = option_fields or _OPTION_FIELDS
+    pairs = _matched_tenor_pairs(fields["historical_vol"], fields["iv_mean"]) or (
         ("historical_volatility_60", "implied_volatility_mean_60"),
-        ("historical_volatility_120", "implied_volatility_mean_120"),
-        ("historical_volatility_180", "implied_volatility_mean_180"),
-    ))
+    )
+    historical, implied = rng.choice(pairs)
     spread = _op("divide", _op("subtract", _fld(implied), _fld(historical)),
                  _op("abs", _fld(historical)))
     leg = _op("rank", _op("ts_zscore", spread, _lit(60)))
     return _op("group_neutralize", leg, _fld("subindustry"))
 
 
-def _m_iv_skew_dynamics(rng: random.Random) -> dict:
+def _m_iv_skew_dynamics(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """Change in call-put IV skew, rather than its saturated absolute level.
 
     A cross-sectional shock to the surface carries different information from
     repeatedly holding the same low-PCR skew book.  The level and change
     hypotheses therefore receive separate mechanism identities and quotas.
     """
-    i = rng.randint(0, 1)
+    fields = option_fields or _OPTION_FIELDS
+    call, put = rng.choice(_matched_tenor_pairs(fields["iv_call"], fields["iv_put"]))
     skew = _op(
         "subtract",
-        _fld(_OPTION_FIELDS["iv_call"][i]),
-        _fld(_OPTION_FIELDS["iv_put"][i]),
+        _fld(call),
+        _fld(put),
     )
     delta = _op("ts_delta", skew, _lit(rng.choice((10, 20, 30))))
     leg = _op("rank", _op("ts_zscore", delta, _lit(60)))
@@ -669,24 +786,32 @@ def _m_iv_skew_dynamics(rng: random.Random) -> dict:
     )
 
 
-def _m_pcr_dynamics(rng: random.Random) -> dict:
+def _m_pcr_dynamics(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """Put-call open-interest regime change, not the fixed PCR<1.1 gate."""
-    pcr = _fld(rng.choice(("pcr_oi_10", "pcr_oi_120", "pcr_oi_150")))
+    fields = option_fields or _OPTION_FIELDS
+    pcr = _fld(rng.choice(fields["pcr_oi"]))
     signal = _op("ts_delta", pcr, _lit(rng.choice((5, 10, 20))))
     # Falling put-call OI is the continuation of the proven low-PCR direction.
     leg = _op("reverse", _op("rank", signal))
     return _op("group_neutralize", leg, _fld(rng.choice(("sector", "subindustry"))))
 
 
-def _m_breakeven_forward(rng: random.Random) -> dict:
+def _m_breakeven_forward(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """Option-implied breakeven relative to the same-tenor forward price."""
-    i = rng.randrange(len(_OPTION_FIELDS["call_breakeven"]))
+    fields = option_fields or _OPTION_FIELDS
+    breakeven, forward = rng.choice(
+        _matched_tenor_pairs(fields["call_breakeven"], fields["forward_price"])
+    )
     relative = _op(
         "subtract",
         _op(
             "divide",
-            _fld(_OPTION_FIELDS["call_breakeven"][i]),
-            _fld(_OPTION_FIELDS["forward_price"][i]),
+            _fld(breakeven),
+            _fld(forward),
         ),
         _lit(1),
     )
@@ -698,13 +823,27 @@ def _m_breakeven_forward(rng: random.Random) -> dict:
     )
 
 
-def _m_skew_term_residual(rng: random.Random) -> dict:
+def _m_skew_term_residual(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """IV-term signal residualized against the dominant call-put skew path."""
-    i = rng.randint(0, 1)
-    raw_skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
-                   _fld(_OPTION_FIELDS["iv_put"][i]))
+    fields = option_fields or _OPTION_FIELDS
+    call, put = rng.choice(_matched_tenor_pairs(fields["iv_call"], fields["iv_put"]))
+    raw_skew = _op("subtract", _fld(call), _fld(put))
     anchor = _op("rank", raw_skew)
-    short, long_ = rng.choice(_IV_TENOR_PAIRS)
+    if option_fields is None:
+        term_pairs = _IV_TENOR_PAIRS
+    else:
+        term_fields = option_fields.get("iv_mean", ())
+        term_pairs = tuple(
+            (short, long_)
+            for short in term_fields
+            for long_ in term_fields
+            if _field_tenors(short)
+            and _field_tenors(long_)
+            and min(_field_tenors(short)) < min(_field_tenors(long_))
+        ) or _IV_TENOR_PAIRS
+    short, long_ = rng.choice(term_pairs)
     relative_slope = _op("subtract", _op("divide", _fld(short), _fld(long_)), _lit(1))
     term = _op("rank", _op("ts_zscore", relative_slope, _lit(60)))
     beta = _op("ts_regression", term, anchor, _lit(120))
@@ -713,14 +852,17 @@ def _m_skew_term_residual(rng: random.Random) -> dict:
                _fld(rng.choice(("industry", "subindustry"))))
 
 
-def _m_skew_call_innovation_residual(rng: random.Random) -> dict:
+def _m_skew_call_innovation_residual(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """Call-IV innovation residualized against the call-put skew anchor."""
-    i = rng.randint(0, 1)
-    raw_skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
-                   _fld(_OPTION_FIELDS["iv_put"][i]))
+    fields = option_fields or _OPTION_FIELDS
+    anchor_call, anchor_put = rng.choice(
+        _matched_tenor_pairs(fields["iv_call"], fields["iv_put"])
+    )
+    raw_skew = _op("subtract", _fld(anchor_call), _fld(anchor_put))
     anchor = _op("rank", raw_skew)
-    call = _fld(rng.choice(("implied_volatility_call_60",
-                            "implied_volatility_call_120")))
+    call = _fld(rng.choice(fields["iv_call"]))
     innovation = _op("rank", _op("ts_zscore", _op("ts_decay_linear",
                                                     _op("ts_delta", call, _lit(20)), _lit(12)),
                                      _lit(60)))
@@ -958,7 +1100,9 @@ def _catalog_leg(
     return _op("group_neutralize", leg, _fld(rng.choice(("industry", "subindustry", "sector"))))
 
 
-def _options_leg(rng: random.Random) -> dict:
+def _options_leg(
+    rng: random.Random, option_fields: Optional[dict[str, tuple[str, ...]]] = None
+) -> dict:
     """The user's PROVEN options-skew alpha (S=1.6-2.5 on TOP3000/TOP1000, verified
     from mining history): when the put-call OI ratio is LOW, take the CALL-minus-PUT
     implied-vol skew — RAW (ranking it, flipping the sign to put-call, dropping the
@@ -968,10 +1112,10 @@ def _options_leg(rng: random.Random) -> dict:
     raw version is high-Sharpe but rejected on turnover). Variation only in tenor,
     PCR tenor, and neutralization group, so every candidate stays on the proven
     structure. Runs on the DEFAULT TOP3000 (see base_settings_for — no options pin)."""
-    i = rng.randint(0, 1)  # implied-vol tenor 150 vs 180
-    pcr = _fld(rng.choice(_OPTION_FIELDS["pcr_oi"]))
-    skew = _op("subtract", _fld(_OPTION_FIELDS["iv_call"][i]),
-               _fld(_OPTION_FIELDS["iv_put"][i]))  # CALL - PUT (proven sign)
+    fields = option_fields or _OPTION_FIELDS
+    call, put = rng.choice(_matched_tenor_pairs(fields["iv_call"], fields["iv_put"]))
+    pcr = _fld(rng.choice(fields["pcr_oi"]))
+    skew = _op("subtract", _fld(call), _fld(put))  # CALL - PUT (proven sign)
     inner = _op("trade_when",
                 _op("less", pcr, {"type": "literal", "value": 1.1}), skew, _lit(-1))
     neut = _op("group_neutralize", inner, _fld(rng.choice(("sector", "subindustry"))))
@@ -987,17 +1131,25 @@ def _options_leg(rng: random.Random) -> dict:
 # registry prevents a five-simulation budget from being consumed by five tenor
 # variants of the same skew-level book.  `iv_skew_level` stays as an exploitation
 # control; the other mechanisms are discovery candidates.
-_OPTIONS_MOTIFS: tuple = (
-    ("skew_term_residual", _m_skew_term_residual),
-    ("skew_call_innovation_residual", _m_skew_call_innovation_residual),
-    ("iv_skew_level", _options_leg),
-    ("iv_skew_dynamics", _m_iv_skew_dynamics),
-    ("iv_term", _m_iv_term),
-    ("iv_momentum", _m_iv_mom),
-    ("vrp", _m_vrp),
-    ("pcr_dynamics", _m_pcr_dynamics),
-    ("breakeven_forward", _m_breakeven_forward),
-)
+def _options_motifs(
+    option_fields: Optional[dict[str, tuple[str, ...]]] = None,
+) -> tuple:
+    fields = option_fields or _OPTION_FIELDS
+    return (
+        ("skew_term_residual", lambda rng: _m_skew_term_residual(rng, fields)),
+        ("skew_call_innovation_residual", lambda rng: _m_skew_call_innovation_residual(rng, fields)),
+        ("iv_skew_level", lambda rng: _options_leg(rng, fields)),
+        ("iv_skew_dynamics", lambda rng: _m_iv_skew_dynamics(rng, fields)),
+        ("iv_term", lambda rng: _m_iv_term(rng, fields)),
+        ("iv_momentum", lambda rng: _m_iv_mom(rng, fields)),
+        ("vrp", lambda rng: _m_vrp(rng, fields)),
+        ("pcr_dynamics", lambda rng: _m_pcr_dynamics(rng, fields)),
+        ("breakeven_forward", lambda rng: _m_breakeven_forward(rng, fields)),
+    )
+
+
+# Compatibility registry for callers that import the old constant.
+_OPTIONS_MOTIFS: tuple = _options_motifs()
 
 def _reshape(rng: random.Random, leg: dict) -> dict:
     """RARELY reshape the final signal with a batch-A arithmetic op — signed_power
@@ -1213,6 +1365,7 @@ def generate_brain_candidates(
     family_focus: Optional[str] = None,
     field_hints: Optional[dict] = None,
     allow_historical_replay: bool = False,
+    option_metadata: Optional[list[dict]] = None,
 ) -> list[str]:
     """Produce n distinct, BRAIN-valid FASTEXPR expressions to simulate.
 
@@ -1249,7 +1402,10 @@ def generate_brain_candidates(
     _frontier_order = list(_FRONTIER_MOTIFS)
     rng.shuffle(_frontier_order)
     _frontier_i = 0
-    _options_order = list(_OPTIONS_MOTIFS)
+    option_fields = build_options_catalog(option_metadata)
+    _options_order = list(
+        _options_motifs(option_fields) if option_metadata else _OPTIONS_MOTIFS
+    )
     if family_focus == "options":
         rng.shuffle(_options_order)
     _options_i = 0

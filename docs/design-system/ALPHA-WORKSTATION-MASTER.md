@@ -147,9 +147,20 @@ The repository does not contain a canonical generated Screener reference image. 
 - The simulation budget is a ceiling. Options candidates are ranked by economic logic, official field coverage and mapping, historical mechanism outcomes, concentration risk, outcome alignment, structural complexity, and behavioral novelty. Weak candidates are withheld instead of backfilled merely to spend the budget.
 - A mechanism label is not proof of diversity. PCR-gated call-minus-put variants share one behavioral cluster, while new legs must be tested independently or residualized against the dominant anchor before they receive a discovery slot.
 - Expanded options rows expose a durable research-evidence card: source hypothesis, target outcome, official field mapping, coverage, context sample size, falsification rule, and any validated proxy estimates. A paper citation never substitutes for a faithful field mapping.
+- Field ID coverage and semantic fidelity are separate. Official name and description evidence must identify measure type, call/put side, tenor or moneyness, and target alignment; a high-confidence claim with missing required semantics is withheld rather than relabelled as validated.
+- Paired option legs use shared official tenor or moneyness when available. A live-catalog call leg is never silently paired with an unrelated static put fallback, and ordinary put-call open interest is never described as buyer-initiated opening flow.
 - A cheap proxy may affect at most 15% of pre-screen ranking and only after chronological holdout validation beats an intercept baseline. Insufficient or rejected models fall back to the hierarchical posterior. `1 − adjusted self-correlation²` is labelled a diversification proxy, never a measured portfolio marginal return.
+- A validated proxy predicts only inside observed feature and `mechanism × dataset × settings` support. Chronological drift or unseen contexts deactivate the prediction instead of extrapolating confidence.
 - Empty and failed runs explain the failing stage and recovery action. A completed run with fewer persisted candidates than requested exposes the stage where the count changed.
 - Completed runs expose screen utilization, pass yield, simulation-error rate, and one evidence-based next action. Recommendations remain advisory and never auto-submit an alpha.
+
+### 6.8 Today Recommendations, `/picks`
+
+- Per-ticker “1-day direction agreement” is a descriptive next-trading-day outcome check. It is never labelled generic hit rate, confidence, or predictive skill, and every trailing window carries its realized sample count.
+- Tactical `confidence` is explicitly a 5-trading-day calibrated output. Strategic 60-day mode does not reuse that calibration and keeps confidence unavailable until its own forward evidence exists.
+- Medium-horizon evidence uses the fixed 5, 20, and 60 trading-day composite-ranked baskets. Every horizon shows long-sleeve return, short-sleeve return, long-short spread, rank-IC, and usable-date count in parallel; the UI does not select a flattering horizon after observing results.
+- The 1-day archived Top/Bottom basket check is secondary and keeps long, short, market, spread, cost, turnover, and SPY evidence separate. A long-short spread is not described as market-beta neutral without an explicit beta hedge.
+- The compatibility API may retain historical baseline fields, but the approved interface does not present an always-up baseline. Metric labels and tooltips must still make object, horizon, direction, and sample scope explicit.
 
 ## 7. Interaction and accessibility
 

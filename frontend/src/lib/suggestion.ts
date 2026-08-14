@@ -6,7 +6,7 @@ type I18nKey = Parameters<typeof t>[1];
 export interface Suggestion {
   label: string;
   tone: "pos" | "neg" | "muted";
-  // True when the calibrated directional hit-rate is at/below coin-flip, so a
+  // True when the 5d calibrated directional confidence is at/below coin-flip, so a
   // directional model view should be shown with a caution affordance. This
   // is the honesty gate from the "今日推荐 meaningful?" discussion: short-horizon
   // single-name edge is structurally modest, and the UI must say so rather than

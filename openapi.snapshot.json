@@ -1998,6 +1998,17 @@
             "title": "Insufficient",
             "type": "boolean"
           },
+          "long_mean_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Long Mean Return"
+          },
           "long_short_spread": {
             "anyOf": [
               {
@@ -2055,12 +2066,25 @@
             "default": 0,
             "title": "Oos N Days",
             "type": "integer"
+          },
+          "short_mean_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Mean Return"
           }
         },
         "required": [
           "horizon",
           "mean_ic",
           "ic_ir",
+          "long_mean_return",
+          "short_mean_return",
           "long_short_spread",
           "n_days",
           "insufficient"
@@ -3780,7 +3804,7 @@
         "type": "object"
       },
       "ScoreboardResponse": {
-        "description": "Portfolio-level evaluation of the picks themselves (the honest headline):\nthe daily top-K basket's compounded forward return vs the universe average,\nthe long-minus-short spread, and the long basket's directional hit-rate vs\nthe always-guess-up base rate. None fields = not enough realized history.\n\n2026-07-12 additions (display-only \u2014 does not affect ranking/selection):\n  - spy_cum: SPY compounded over the same dates.\n  - mean_daily_turnover: mean one-sided daily name-overlap turnover (long basket).\n  - long_net_cum: cost-adjusted net cumulative return (cost_bps default 10bps).\n  - cost_bps_used: the cost_bps parameter that produced long_net_cum.\n  - breakeven_cost_bps: cost at which net return equals SPY return.\n  - beta, alpha_ann, alpha_t: OLS regression of daily long returns on SPY.",
+        "description": "Portfolio-level next-day basket diagnostic for the picks.\n\nThe daily top-K and bottom-K baskets are compounded from archived rankings,\nwith long, short, market, spread, cost, turnover, and SPY evidence kept\nseparate. ``base_rate`` remains a backwards-compatible field for existing\nclients, but is not rendered by the product UI. None fields mean there is\nnot enough realized history.\n\n2026-07-12 additions (display-only \u2014 does not affect ranking/selection):\n  - spy_cum: SPY compounded over the same dates.\n  - mean_daily_turnover: mean one-sided daily name-overlap turnover (long basket).\n  - long_net_cum: cost-adjusted net cumulative return (cost_bps default 10bps).\n  - cost_bps_used: the cost_bps parameter that produced long_net_cum.\n  - breakeven_cost_bps: cost at which net return equals SPY return.\n  - beta, alpha_ann, alpha_t: OLS regression of daily long returns on SPY.",
         "properties": {
           "alpha_ann": {
             "anyOf": [
@@ -3891,6 +3915,17 @@
             "title": "Short Cum",
             "type": "number"
           },
+          "short_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Hit Rate"
+          },
           "spread_cum": {
             "title": "Spread Cum",
             "type": "number"
@@ -3918,8 +3953,7 @@
           "short_cum",
           "market_cum",
           "spread_cum",
-          "long_hit_rate",
-          "base_rate"
+          "long_hit_rate"
         ],
         "title": "ScoreboardResponse",
         "type": "object"
@@ -10589,7 +10623,7 @@
     },
     "/api/picks/scoreboard": {
       "get": {
-        "description": "Portfolio-level picks evaluation over the trailing window. Reconstructs\neach day's top/bottom-K basket from the signals as stored THAT day (no\nlookahead) and scores realized next-day returns against the universe\naverage + the always-up base rate. Returns null (not an error) when there\nis too little realized history to say anything. Changes ~once per trading\nday -> cached aggressively at the edge.",
+        "description": "Portfolio-level picks evaluation over the trailing window. Reconstructs\neach day's top/bottom-K basket from the signals as stored THAT day (no\nlookahead) and reports realized next-day long, short, market, spread,\nturnover, and cost-adjusted evidence. Returns null (not an error) when\nthere is too little realized history. Changes ~once per trading day ->\ncached aggressively at the edge.",
         "operationId": "picks_scoreboard_api_picks_scoreboard_get",
         "parameters": [
           {

@@ -411,7 +411,7 @@ async def options_mechanism_evidence(
         "SELECT expression, settings, outcome, grade, sharpe, fail_checks, "
         "self_correlation, self_correlation_adj, created_at "
         "FROM brain_alphas WHERE user_id=$1 "
-        "AND expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)' "
+        "AND (research_evidence IS NOT NULL OR expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)') "
         "ORDER BY created_at DESC LIMIT $2",
         int(user_id), min(max(int(limit), 1), 2000),
     )
@@ -462,7 +462,7 @@ async def options_surrogate_rows(pool, user_id: int, *, limit: int = 1000) -> li
         "SELECT expression, settings, outcome, grade, fail_checks, "
         "self_correlation, self_correlation_adj, created_at "
         "FROM brain_alphas WHERE user_id=$1 "
-        "AND expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)' "
+        "AND (research_evidence IS NOT NULL OR expression ~ '(implied_volatility|pcr_oi|historical_volatility|breakeven|forward_price)') "
         "AND alpha_id IS NOT NULL ORDER BY created_at ASC LIMIT $2",
         int(user_id), min(max(int(limit), 1), 3000),
     )

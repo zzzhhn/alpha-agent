@@ -77,16 +77,16 @@ export default function PickRow({
   const sign = composite >= 0 ? "+" : "";
 
   // agreement = 1/(1+variance) of the signal z's (fusion/rating.py): the
-  // conviction headline (how aligned the signals are). hit = calibrated
-  // historical 5d hit-rate. Both moved into the consistency cell's tooltip now
-  // that the column itself shows the multi-window directional hit-rate.
+  // conviction headline (how aligned the signals are). hit = 5d calibrated
+  // directional confidence. Both are secondary context in the 1d agreement
+  // cell's tooltip; the visible windows remain descriptive next-day evidence.
   const agrPct = Math.round(agr * 100);
   const hitPct = Math.round(hit * 100);
 
-  // Directional consistency: predicted tier vs next-day actual move, hit-rate
-  // over trailing windows. null -> "—" (insufficient realized history). Colour
-  // only clearly-off-coinflip values (>=55 / <=45 around the structural ~50%);
-  // the rest stay neutral so noisy near-50% reads do not over-claim an edge.
+  // Descriptive 1-day direction agreement: predicted tier vs next-day actual
+  // move over trailing windows. null -> "—" (insufficient realized history).
+  // Colour only clearly-off-coinflip values (>=55 / <=45 around the structural
+  // ~50%); the rest stay neutral so noisy values do not over-claim an edge.
   const CONS_WINDOWS = [
     { key: "d5", labelKey: "picks_table.cons_5d" },
     { key: "m1", labelKey: "picks_table.cons_1m" },
@@ -211,7 +211,7 @@ export default function PickRow({
                 : "text-tm-fg-2";
           // Caution: the action stands (the model's tier), but the modest
           // realized edge is disclosed rather than hidden — dimmed + a warn
-          // marker that explains the ~coin-flip hit-rate on hover.
+          // marker that explains the near-coin-flip 5d calibrated confidence on hover.
           return sug.caution ? (
             <HoverTip content={t(locale, "picks_table.sug_caution_tip")} placement="bottom">
               <span className={clsx("font-semibold opacity-60", tone)}>{sug.label}</span>
@@ -240,7 +240,7 @@ export default function PickRow({
             " " +
             agrPct +
             "% · " +
-            t(locale, "picks_table.hitrate_label") +
+            t(locale, "picks_table.confidence_5d_label") +
             " " +
             hitPct +
             "%" +

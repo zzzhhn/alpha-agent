@@ -167,6 +167,15 @@ flowchart LR
 - 所谓“边际贡献”目前明确实现为 `1 − adjusted_self_corr²` 的分散化代理，并非真实组合增量收益回归。它只能帮助排序，不能作为提交或淘汰因子的独立门槛。
 - 当前字段 coverage 使用本轮官方 catalog 快照，不声称是历史 point-in-time coverage。若以后保存逐日 catalog，才可升级为严格的时间点特征。
 
+### 6.5 2026-08-14 P0 至 P2 语义闭环
+
+- P0 不再把“字段 ID 已找到”当作论文构造已复现。系统从官方字段 `name`、`description`、`type` 与 dataset metadata 审计 measure、call/put side、tenor、moneyness、liquidity 和 target alignment，并把 matched、missing 与 field details 持久化到候选证据。
+- 高置信论文假设若缺少必需语义会在昂贵仿真前被 withheld。`pcr_oi` 明确归类为 open interest，不会再满足 buyer-initiated opening flow；option-strategy return 与 aggregate-market return 假设只进入 exploratory lane。
+- 官方 catalog 字段会进入 options generator，但 call/put、breakeven/forward、IV/HV 只按共同 tenor 配对。若成对角色缺一侧，则整对回退到已审计静态字段，避免 live 与 fallback 混配。
+- P1 评分分开保存语法簇、预仿真行为簇和已实现 self-correlation novelty。历史 concentration 与 low-sub-universe 计数可能来自同一仿真，因此机制失败率不再把二者直接相加。
+- P2 代理仍以 15% 为评分上限，并增加 chronological drift、精确 context support 与特征范围 guard。未见过的 `mechanism × dataset × settings` 或分布外候选不返回预测。
+- BRAIN 候选展开面板新增语义匹配与目标对齐状态。用户可以区分 `coverage=100%`、`semantics matched` 和 `target aligned`，三者不再共用一个乐观标签。
+
 ## 7. 下一轮最小实验设计
 
 在继续花 BRAIN 仿真预算前，先完成 option8/option9 字段审计。确认字段存在后，下一轮五次预算建议为：

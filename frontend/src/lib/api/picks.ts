@@ -48,8 +48,8 @@ export interface RatingCard {
   // Same nullable contract as BreakdownEntry — composite/confidence
   // may arrive as null when DB column held NaN before storage-side fix
   // landed (legacy rows). Components must coalesce.
-  // Calibrated directional hit-rate (isotonic over realized 5d outcomes): the
-  // honest "edge", structurally ~50%. Also feeds Kelly position sizing.
+  // Five-trading-day calibrated directional confidence (isotonic over realized
+  // 5d outcomes). Distinct from the descriptive 1d agreement windows below.
   confidence: number | null;
   // Raw signal-agreement = 1/(1+variance(z)): the conviction headline (how
   // aligned the signals are), NOT a hit-rate. May be absent on legacy rows.
@@ -84,9 +84,10 @@ export interface RatingCard {
   // Sentiment / Catalyst / Insider / Flow), each A+ to F derived from
   // breakdown z-scores. Empty dimensions render as "—".
   dimension_grades?: Record<string, string>;
-  // Per-ticker directional consistency: how often the predicted tier matched
-  // the next trading day's move, over trailing windows. Each value is a
-  // fraction in [0,1] or null = insufficient realized history (UI shows "—").
+  // Descriptive per-ticker 1-day direction agreement: whether the predicted
+  // tier matched the next trading day's move over trailing windows. Each value
+  // is a fraction in [0,1] or null = insufficient realized history (UI shows
+  // "—"); it is not predictive skill.
   consistency?: ConsistencyWindows | null;
   // Evaluated sample count per window backing each rate — lets the tooltip
   // explain a dash (n below the window's minimum) and qualify a rate (n=4 vs

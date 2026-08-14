@@ -119,13 +119,126 @@ _EXPLORATORY = {
 }
 
 _OPTION_FIELD_RE = re.compile(
-    r"\b(?:implied_volatility\w*|historical_volatility\w*|pcr_oi_\w+|"
-    r"call_breakeven_\w+|forward_price_\w+)\b"
+    r"\b(?:implied_volatility\w*|historical_volatility\w*|pcr_oi\w*|"
+    r"pcr\w*|call_breakeven\w*|forward_price\w*)\b"
+)
+_IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+_TENOR_RE = re.compile(
+    r"(?<![A-Za-z])(?P<n>\d{1,4})\s*(?P<u>d|day|days|w|wk|week|weeks|m|mo|month|months)?(?![A-Za-z])",
+    re.IGNORECASE,
 )
 
 
-def option_field_ids(expression: str) -> tuple[str, ...]:
-    return tuple(sorted(set(_OPTION_FIELD_RE.findall(expression or ""))))
+def option_field_ids(
+    expression: str, field_metadata: list[dict] | None = None
+) -> tuple[str, ...]:
+    """Return option operands, including IDs discovered from the official catalog.
+
+    The legacy regex remains a safe fallback.  When metadata is present, exact
+    catalog IDs are preferred so fields whose naming does not follow our old
+    hand-curated prefixes are still audited instead of silently treated as
+    unmapped.
+    """
+    found = set(_OPTION_FIELD_RE.findall(expression or ""))
+    if field_metadata:
+        catalog_ids = {
+            str(item.get("id")) for item in field_metadata if item.get("id")
+        }
+        found.update(
+            token for token in _IDENTIFIER_RE.findall(expression or "")
+            if token in catalog_ids
+        )
+    return tuple(sorted(found))
+
+
+def classify_field_semantics(field: dict) -> dict[str, Any]:
+    """Normalize auditable semantics from official field metadata.
+
+    This intentionally does not infer buyer-initiated flow from an ordinary
+    put-call open-interest ratio.  Descriptions are evidence, not decoration:
+    an unclassified field remains ``unknown`` and is never upgraded by name
+    alone to a stronger economic measure.
+    """
+    field_id = str(field.get("id") or "")
+    name = str(field.get("name") or "")
+    description = str(field.get("description") or "")
+    text = " ".join((field_id, name, description)).lower()
+    id_text = field_id.lower()
+    side = "call" if re.search(r"(?:^|[_\- ])call(?:$|[_\- ])", text) else None
+    if side is None and re.search(r"(?:^|[_\- ])put(?:$|[_\- ])", text):
+        side = "put"
+
+    opening = bool(re.search(r"opening|buyer[\s_-]*initiated|initiated[\s_-]*flow", text))
+    if "pcr_oi" in id_text or re.search(r"put[\s_-]*call.*open[\s_-]*interest", text):
+        measure_kind = "open_interest"
+        opening = False
+    elif opening and re.search(r"volume|flow|trade", text):
+        measure_kind = "opening_flow"
+    elif re.search(r"open[\s_-]*interest|\boi\b", text):
+        measure_kind = "open_interest"
+    elif re.search(r"implied[\s_-]*(?:vol|volatility)|\biv\b", text):
+        measure_kind = (
+            "implied_variance"
+            if re.search(r"model[\s_-]*free|variance", text)
+            else "implied_volatility"
+        )
+    elif re.search(r"historical[\s_-]*(?:vol|volatility)|realized[\s_-]*vol", text):
+        measure_kind = (
+            "realized_variance"
+            if re.search(r"realized|variance", text)
+            else "historical_volatility"
+        )
+    elif re.search(r"breakeven|break[\s_-]*even", text):
+        measure_kind = "breakeven"
+    elif re.search(r"forward[\s_-]*price|forward", text):
+        measure_kind = "forward_price"
+    elif re.search(r"volume|flow", text):
+        measure_kind = "volume"
+    else:
+        measure_kind = "unknown"
+
+    tenors: set[str] = set()
+    for match in _TENOR_RE.finditer(text):
+        number = int(match.group("n"))
+        unit = (match.group("u") or "d").lower()
+        if unit.startswith("w"):
+            number *= 5
+        elif unit.startswith("m"):
+            number *= 21
+        tenors.add(str(number))
+    # Bare suffixes such as ``_60`` are common in the official option catalog.
+    if not tenors:
+        for match in re.finditer(r"[_\-](\d{1,4})(?:$|[_\-])", field_id):
+            tenors.add(match.group(1))
+
+    moneyness = sorted(
+        set(re.findall(r"\b(?:atm|otm|itm|moneyness|delta|strike[_ -]?\d+)\b", text))
+    )
+    liquidity = sorted(
+        set(
+            re.findall(
+                r"\b(?:liquid(?:ity)?|open_interest|volume|adv\d*|dollar_volume|bid[_ -]?ask|spread|traded)\b",
+                text,
+            )
+        )
+    )
+    # MATRIX/VECTOR type alone does not identify call/put, tenor, or measure;
+    # require human-readable official metadata before declaring semantics absent.
+    semantic_available = bool(name or description)
+    return {
+        "field_id": field_id,
+        "name": name,
+        "description": description,
+        "type": field.get("type"),
+        "dataset": field.get("dataset"),
+        "side": side,
+        "measure_kind": measure_kind,
+        "opening_flow": measure_kind == "opening_flow",
+        "tenor": sorted(tenors, key=lambda value: int(value)),
+        "moneyness_delta": moneyness,
+        "liquidity": liquidity,
+        "semantic_available": semantic_available,
+    }
 
 
 def hypothesis_for(mechanism: str) -> OptionHypothesis:
@@ -149,7 +262,7 @@ def hypothesis_for(mechanism: str) -> OptionHypothesis:
 
 
 def map_expression_fields(expression: str, field_metadata: list[dict]) -> dict[str, Any]:
-    fields = option_field_ids(expression)
+    fields = option_field_ids(expression, field_metadata)
     metadata = {str(item.get("id")): item for item in field_metadata}
     matched = [metadata[field] for field in fields if field in metadata]
     datasets = sorted({str(item.get("dataset")) for item in matched if item.get("dataset")})
@@ -162,6 +275,135 @@ def map_expression_fields(expression: str, field_metadata: list[dict]) -> dict[s
         "dataset_ids": datasets,
         "coverage": coverage,
         "mapped_ratio": len(matched) / len(fields) if fields else 0.0,
+    }
+
+
+def _required_semantic_match(
+    required: str,
+    details: list[dict[str, Any]],
+    expression: str,
+) -> bool:
+    text = (expression or "").lower()
+    iv_calls = [
+        item for item in details
+        if item["side"] == "call" and item["measure_kind"] == "implied_volatility"
+    ]
+    iv_puts = [
+        item for item in details
+        if item["side"] == "put" and item["measure_kind"] == "implied_volatility"
+    ]
+    if required == "call IV":
+        return bool(iv_calls)
+    if required == "put IV":
+        return bool(iv_puts)
+    if required in {"call IV change", "put IV change"}:
+        side = "call" if required.startswith("call") else "put"
+        return bool(re.search(r"\bts_delta\s*\(", text) and any(
+            item["side"] == side and item["measure_kind"] == "implied_volatility"
+            for item in details
+        ))
+    if required == "matched tenor or moneyness":
+        for call in iv_calls:
+            for put in iv_puts:
+                if set(call["tenor"]) & set(put["tenor"]):
+                    return True
+                if set(call["moneyness_delta"]) & set(put["moneyness_delta"]):
+                    return True
+        return False
+    if required == "buyer initiated flow":
+        return any(item["measure_kind"] == "opening_flow" for item in details)
+    if required == "opening volume":
+        return any(item["measure_kind"] == "opening_flow" for item in details)
+    if required == "put-call ratio":
+        return bool(re.search(r"\bpcr\w*\b|put[\s_-]*call", text)) or any(
+            item["measure_kind"] == "open_interest" and "pcr" in item["field_id"].lower()
+            for item in details
+        )
+    if required in {"short tenor IV", "long tenor IV"}:
+        tenors = sorted({int(tenor) for item in details
+                          if item["measure_kind"] == "implied_volatility"
+                          for tenor in item["tenor"]})
+        return len(tenors) >= 2
+    if required == "model-free implied variance":
+        return any(item["measure_kind"] == "implied_variance" for item in details)
+    if required == "realized variance":
+        return any(item["measure_kind"] == "realized_variance" for item in details)
+    return False
+
+
+def audit_expression_semantics(
+    mechanism: str,
+    expression: str,
+    field_metadata: list[dict],
+) -> dict[str, Any]:
+    """Build a conservative, serializable semantic audit for one hypothesis.
+
+    A catalog row with only id/coverage is intentionally ``unverified`` rather
+    than falsely marked missing.  Once official name/description/type evidence
+    is available, missing required semantics become an explicit mismatch.
+    """
+    hypothesis = hypothesis_for(mechanism)
+    fields = option_field_ids(expression, field_metadata)
+    metadata_by_id = {str(item.get("id")): item for item in field_metadata}
+    details = [
+        classify_field_semantics(metadata_by_id[field])
+        for field in fields
+        if field in metadata_by_id
+    ]
+    metadata_available = bool(details) and any(
+        item["semantic_available"] for item in details
+    )
+    matched = [
+        required for required in hypothesis.required_semantics
+        if _required_semantic_match(required, details, expression)
+    ]
+    missing = [
+        required for required in hypothesis.required_semantics if required not in matched
+    ]
+    if not metadata_available:
+        status = "unverified"
+        fidelity = 0.5
+        material_mismatch = False
+    else:
+        status = "matched" if not missing else "mismatch"
+        fidelity = (
+            len(matched) / len(hypothesis.required_semantics)
+            if hypothesis.required_semantics else 1.0
+        )
+        material_mismatch = bool(missing)
+
+    target = hypothesis.target
+    if (
+        "cross-sectional stock returns" in target
+        and not target.startswith("exploratory")
+        and "not directly" not in target
+    ):
+        target_status = "aligned"
+    elif target in {"future option-strategy returns, not directly stock returns", "aggregate market returns"}:
+        target_status = "exploratory_mismatch"
+        # An outcome mismatch is material for a stock-return simulation, but
+        # remains explicitly exploratory rather than being relabeled as stock alpha.
+        fidelity = min(fidelity, 0.35)
+    else:
+        target_status = "unknown"
+
+    return {
+        "status": status,
+        "semantic_fidelity": round(float(fidelity), 4),
+        "metadata_available": metadata_available,
+        "required_semantics": list(hypothesis.required_semantics),
+        "matched_required_semantics": matched,
+        "missing_required_semantics": missing,
+        "material_mismatch": material_mismatch,
+        "high_confidence_mismatch": bool(
+            hypothesis.confidence == "high" and material_mismatch
+        ),
+        "target_outcome_alignment": {
+            "target": target,
+            "status": target_status,
+            "brain_default_target": "future cross-sectional stock returns",
+        },
+        "field_details": details,
     }
 
 
@@ -191,9 +433,13 @@ def hypothesis_payload(
     mechanism: str, expression: str, field_metadata: list[dict], settings: dict
 ) -> dict[str, Any]:
     hypothesis = hypothesis_for(mechanism)
+    semantic_audit = audit_expression_semantics(
+        mechanism, expression, field_metadata
+    )
     return {
         "hypothesis": asdict(hypothesis),
         "field_mapping": map_expression_fields(expression, field_metadata),
+        "semantic_audit": semantic_audit,
         "context_key": research_context_key(
             mechanism, expression, field_metadata, settings
         ),
