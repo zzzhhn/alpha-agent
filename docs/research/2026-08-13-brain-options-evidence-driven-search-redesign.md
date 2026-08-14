@@ -119,7 +119,10 @@ flowchart LR
     A[官方字段审计] --> B[论文到字段的假设注册]
     B --> C[按机制生成候选]
     C --> L[逐候选审计账本]
-    L --> D[多目标低成本预筛]
+    L --> P[有界分批 LLM 逻辑评分]
+    P -->|已评分批次| D[多目标低成本预筛]
+    P -->|未评分候选| Q[deterministic evidence fallback]
+    Q --> D
     D --> E[行为空间 QD 档案]
     E --> F[仿真预算分配]
     F --> G[官方 BRAIN 仿真与门槛]
@@ -185,6 +188,13 @@ flowchart LR
 - 旧实现只在仿真后写 `brain_alphas`，所以 20 条生成表达式与逐条阻断原因没有被保存，无法从旧数据库或 GitHub artifact 恢复。新实现先写 run-scoped candidate ledger，再调用可选 LLM 和证据筛选。
 - 每条生成候选现在保留表达式、设置、机制、证据明细与分数、LLM 技术状态、是否入选、筛选原因，以及后续仿真行和 outcome 的关联。LLM timeout、provider error、未返回评分和低证据分不再被合并成一个含糊状态。
 - 页面把“仿真结果”与“候选审计”分开。零仿真的已完成轮次默认打开审计视图；历史轮次没有审计数据时明确说明不可追溯，不再显示空表或持续 loading。
+
+### 6.7 RUN #77 LLM 预筛韧性闭环
+
+- RUN #77 的单次 20 条 Kimi 逻辑预筛在 180 秒上限后超时，但 deterministic evidence screen 仍选出 5 条并完成了 5 次 BRAIN 仿真。该超时属于可选预筛的技术状态，不是 BRAIN 仿真失败。
+- 预筛改为有界小批量执行。某一批超时或发生瞬时传输错误时，已完成批次的评分继续参与排序，未评分候选仍进入共享的 deterministic evidence screen，而不是被直接丢弃。
+- 瞬时 timeout/transport 只允许有上限重试；401、403、429 与其他明确 provider HTTP 状态不做即时重放。轮次不会通过无限延长超时来掩盖 provider 尾延迟。
+- 候选证据仅持久化 provider、model、elapsed、timeout、批次数和安全错误类型。页面并列展示 LLM 已评分数、规则补位数、入选数与实际 BRAIN 仿真数，不再用一句“技术失败”覆盖整条链路。
 
 ## 7. 下一轮最小实验设计
 

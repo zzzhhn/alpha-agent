@@ -4,7 +4,7 @@ candidates with an LLM BEFORE the slow BRAIN simulation.
 BRAIN sims are the bottleneck (minutes each, serial). Not every generated
 expression makes economic sense — a ratio of two unrelated raw prices, a
 double-negation, a nonsense field pairing. An LLM that knows finance scores each
-candidate's economic logic in ONE batched call; we simulate only the ones that
+candidate's economic logic in bounded sequential batches; we simulate only the ones that
 score above a bar. This cuts wasted sims and raises the quality of what surfaces.
 
 Best-effort and OPTIONAL: with no LLM client the screen is a no-op (everything
@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any, Optional
 
 from alpha_agent.evolution.llm_factor_proposer import _strip_md_fence
@@ -30,10 +31,14 @@ from alpha_agent.brain.surrogate import proxy_composite
 logger = logging.getLogger(__name__)
 
 _WALL_CLOCK_S = 180
-# Generous cap: Kimi-for-coding (k2.6) is a reasoning model that spends output
-# tokens on internal thinking before the JSON — too small a cap returns empty
-# content (the screen then degrades to a harmless no-op). 8000 leaves room for
-# the reasoning plus a scored array for a full batch.
+# Kimi-for-coding is a reasoning model, so keep each request bounded while
+# leaving enough time for a small candidate group.  Requests stay sequential:
+# the existing client has no rate-limit coordination and concurrent batches
+# would turn one slow screen into a provider burst.
+_BATCH_SIZE = 5
+_BATCH_TIMEOUT_S = 60.0
+_MAX_BATCH_RETRIES = 1
+# 8000 leaves room for reasoning plus a scored array for one small batch.
 _OUTPUT_TOKEN_CAP = 8000
 # Keep candidates scoring at least this (0-10) — 5 = "plausible economic logic".
 DEFAULT_MIN_SCORE = 5.0
@@ -57,11 +62,13 @@ class LogicScreenResult(dict):
         status: str,
         error_type: str | None = None,
         detail: str | None = None,
+        telemetry: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(scores or {})
         self.status = status
         self.error_type = error_type
         self.detail = detail
+        self.telemetry = dict(telemetry or {})
 
     @property
     def scores(self) -> dict[str, float]:
@@ -70,17 +77,17 @@ class LogicScreenResult(dict):
     def __getitem__(self, key):
         # Expose status metadata through mapping-style access too, while keeping
         # ordinary dict equality/iteration limited to expression scores.
-        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+        if key in {"scores", "status", "error_type", "detail", "scored_n", "telemetry"}:
             return self.metadata()[key]
         return super().__getitem__(key)
 
     def get(self, key, default=None):
-        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+        if key in {"scores", "status", "error_type", "detail", "scored_n", "telemetry"}:
             return self.metadata().get(key, default)
         return super().get(key, default)
 
     def __contains__(self, key):
-        if key in {"scores", "status", "error_type", "detail", "scored_n"}:
+        if key in {"scores", "status", "error_type", "detail", "scored_n", "telemetry"}:
             return True
         return super().__contains__(key)
 
@@ -92,6 +99,7 @@ class LogicScreenResult(dict):
             "error_type": self.error_type,
             "detail": self.detail,
             "scored_n": len(self),
+            "telemetry": dict(self.telemetry),
         }
 
 _PROMPT = """You are a quantitative equity researcher screening candidate alpha \
@@ -132,56 +140,8 @@ def _json_payload(content: str):
     raise ValueError("logic screen response contains no JSON payload")
 
 
-async def score_economic_logic(
-    llm_client: Optional[LLMClient], expressions: list[str]
-) -> LogicScreenResult:
-    """Score each expression's economic logic 0-10 in one batched LLM call.
-    The mapping contains ``{expression: score}`` and remains backward compatible
-    with plain-dict callers.  ``status``/``error_type``/``detail`` distinguish a
-    completed, partial, bypassed, timeout, or provider-error screen.  Missing
-    scores never block mining; the caller records the explicit status instead of
-    implying that every candidate was successfully screened."""
-    if llm_client is None:
-        return LogicScreenResult(
-            status="bypassed",
-            detail="no logic-screen LLM configured",
-        )
-    if not expressions:
-        return LogicScreenResult(status="bypassed", detail="no expressions")
-    numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(expressions))
-    try:
-        import asyncio
-
-        resp = await asyncio.wait_for(
-            llm_client.chat(
-                messages=[Message(role="user", content=_PROMPT % numbered)],
-                max_tokens=_OUTPUT_TOKEN_CAP,
-            ),
-            timeout=_WALL_CLOCK_S,
-        )
-        data = _json_payload(resp.content or "")
-    except asyncio.TimeoutError:
-        # Keep the durable diagnostic type-only.  Provider exception strings can
-        # include request headers, URLs, or model payloads.
-        logger.warning(
-            "logic screen unavailable: status=timeout error_type=TimeoutError"
-        )
-        return LogicScreenResult(
-            status="timeout",
-            error_type="TimeoutError",
-            detail=f"logic screen timed out after {_WALL_CLOCK_S}s",
-        )
-    except Exception as exc:  # noqa: BLE001 — screen is best-effort, never blocks
-        error_type = type(exc).__name__
-        logger.warning(
-            "logic screen unavailable: status=error error_type=%s", error_type
-        )
-        return LogicScreenResult(
-            status="error",
-            error_type=error_type,
-            detail=f"logic screen failed: {error_type}",
-        )
-
+def _extract_scores(data: Any, expressions: list[str]) -> dict[str, float]:
+    """Extract valid expression scores without retaining model prose."""
     if isinstance(data, dict):
         data = data.get("scores") or data.get("results") or data.get("candidates") or []
     out: dict[str, float] = {}
@@ -193,9 +153,255 @@ async def score_economic_logic(
             continue
         if 0 <= idx < len(expressions):
             out[expressions[idx]] = score
-    status = "completed" if len(out) == len(expressions) else "partial"
-    detail = f"scored {len(out)}/{len(expressions)} expressions"
-    return LogicScreenResult(out, status=status, detail=detail)
+    return out
+
+
+_SAFE_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,119}$")
+
+
+def _safe_label(value: Any) -> str | None:
+    """Return a bounded non-secret diagnostic label, never arbitrary text."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value if _SAFE_LABEL.fullmatch(value) else None
+
+
+def _client_labels(llm_client: LLMClient) -> tuple[str | None, str | None]:
+    """Read provider/model identifiers only when they are already exposed safely."""
+    provider = _safe_label(getattr(llm_client, "_provider", None))
+    if provider is None:
+        provider_by_class = {
+            "KimiClient": "kimi",
+            "LiteLLMClient": "litellm",
+            "OpenAIClient": "openai",
+            "OllamaClient": "ollama",
+        }
+        provider = provider_by_class.get(type(llm_client).__name__)
+    model = _safe_label(getattr(llm_client, "_model", None))
+    return provider, model
+
+
+def _failure_kind(exc: BaseException) -> str:
+    """Classify retryable failures without inspecting exception messages/bodies."""
+    import asyncio
+
+    if isinstance(exc, asyncio.TimeoutError):
+        return "timeout"
+    try:
+        import httpx
+
+        if isinstance(exc, httpx.HTTPStatusError):
+            return "provider_http"
+        if isinstance(exc, httpx.TimeoutException):
+            return "timeout"
+        if isinstance(exc, httpx.TransportError):
+            return "transport"
+    except ImportError:  # pragma: no cover - httpx is a core dependency
+        pass
+    if isinstance(exc, (ConnectionError, OSError)):
+        return "transport"
+    return "error"
+
+
+async def _score_batch(
+    llm_client: LLMClient,
+    expressions: list[str],
+    *,
+    deadline: float,
+) -> tuple[dict[str, float], str, str | None, int, bool]:
+    """Score one bounded batch, retrying only timeout/transport failures.
+
+    Returns scores, final state, sanitized error type, retry count, and whether
+    any attempt timed out. A provider HTTP response or parse failure is never
+    retried, even if it is otherwise transient-looking.
+    """
+    import asyncio
+
+    numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(expressions))
+    retries = 0
+    timed_out = False
+    last_kind = "error"
+    last_error_type: str | None = None
+    for attempt in range(_MAX_BATCH_RETRIES + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return {}, "timeout", "TimeoutError", retries, True
+        timeout_s = min(_BATCH_TIMEOUT_S, remaining)
+        try:
+            response = await asyncio.wait_for(
+                llm_client.chat(
+                    messages=[Message(role="user", content=_PROMPT % numbered)],
+                    max_tokens=_OUTPUT_TOKEN_CAP,
+                ),
+                timeout=timeout_s,
+            )
+            data = _json_payload(response.content or "")
+            scores = _extract_scores(data, expressions)
+            if not scores:
+                return {}, "error", "NoUsableScores", retries, timed_out
+            return scores, "completed", None, retries, timed_out
+        except asyncio.TimeoutError as exc:
+            kind = "timeout"
+            error_type = type(exc).__name__ or "TimeoutError"
+            timed_out = True
+        except Exception as exc:  # noqa: BLE001 — persist only type/status
+            kind = _failure_kind(exc)
+            error_type = type(exc).__name__
+            last_kind = kind
+            last_error_type = error_type
+
+        last_kind = kind
+        last_error_type = error_type
+        if kind not in {"timeout", "transport"} or attempt >= _MAX_BATCH_RETRIES:
+            final_state = "timeout" if kind == "timeout" else "error"
+            return {}, final_state, last_error_type, retries, timed_out
+        if deadline - time.monotonic() <= 0.05:
+            return {}, "timeout" if kind == "timeout" else "error", last_error_type, retries, timed_out
+        retries += 1
+
+    return {}, "timeout" if last_kind == "timeout" else "error", last_error_type, retries, timed_out
+
+
+def _screen_telemetry(
+    *,
+    started_at: float,
+    batch_count: int,
+    completed: int = 0,
+    timed_out: int = 0,
+    errors: int = 0,
+    partial: int = 0,
+    retries: int = 0,
+    error_types: dict[str, int] | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    """Build the JSON-safe batch telemetry persisted with each candidate."""
+    return {
+        "elapsed_ms": max(0, round((time.monotonic() - started_at) * 1000)),
+        "timeout_s": _BATCH_TIMEOUT_S,
+        "batch_count": batch_count,
+        "completed_batches": completed,
+        "timed_out_batches": timed_out,
+        "error_batches": errors,
+        "partial_batches": partial,
+        "retry_count": retries,
+        "error_types": dict(error_types or {}),
+        "provider": provider,
+        "model": model,
+    }
+
+
+async def score_economic_logic(
+    llm_client: Optional[LLMClient], expressions: list[str]
+) -> LogicScreenResult:
+    """Score expressions in bounded sequential batches.
+
+    A failed batch never discards scores from earlier batches. Unscored
+    expressions remain available to the caller's deterministic evidence screen.
+    The mapping contains ``{expression: score}`` and remains backward compatible
+    with plain-dict callers.  ``status``/``error_type``/``detail`` distinguish a
+    completed, partial, bypassed, timeout, or provider-error screen.  Missing
+    scores never block mining; the caller records the explicit status instead of
+    implying that every candidate was successfully screened."""
+    started_at = time.monotonic()
+    provider = model = None
+    if llm_client is None:
+        return LogicScreenResult(
+            status="bypassed",
+            detail="no logic-screen LLM configured",
+            telemetry=_screen_telemetry(
+                started_at=started_at,
+                batch_count=0,
+            ),
+        )
+    if not expressions:
+        return LogicScreenResult(
+            status="bypassed",
+            detail="no expressions",
+            telemetry=_screen_telemetry(started_at=started_at, batch_count=0),
+        )
+    provider, model = _client_labels(llm_client)
+    batches = [
+        expressions[offset : offset + _BATCH_SIZE]
+        for offset in range(0, len(expressions), _BATCH_SIZE)
+    ]
+    deadline = started_at + _WALL_CLOCK_S
+    scores: dict[str, float] = {}
+    completed = timed_out = errors = partial = retries = 0
+    error_types: dict[str, int] = {}
+    first_error_type: str | None = None
+
+    for batch_index, batch in enumerate(batches):
+        batch_scores, state, error_type, batch_retries, saw_timeout = await _score_batch(
+            llm_client,
+            batch,
+            deadline=deadline,
+        )
+        scores.update(batch_scores)
+        retries += batch_retries
+        if saw_timeout:
+            timed_out += 1
+        if state == "completed":
+            completed += 1
+            if len(batch_scores) < len(batch):
+                partial += 1
+        elif state == "timeout":
+            timed_out += 0 if saw_timeout else 1
+        else:
+            errors += 1
+        if error_type:
+            first_error_type = first_error_type or error_type
+            error_types[error_type] = error_types.get(error_type, 0) + 1
+        if time.monotonic() >= deadline:
+            # Remaining batches had no request budget; record them as timed out
+            # without manufacturing an exception or leaking provider details.
+            timed_out += len(batches) - batch_index - 1
+            break
+
+    telemetry = _screen_telemetry(
+        started_at=started_at,
+        batch_count=len(batches),
+        completed=completed,
+        timed_out=timed_out,
+        errors=errors,
+        partial=partial,
+        retries=retries,
+        error_types=error_types,
+        provider=provider,
+        model=model,
+    )
+    if len(scores) == len(expressions):
+        status = "completed"
+    elif scores:
+        status = "partial"
+    elif timed_out and not errors:
+        status = "timeout"
+    else:
+        status = "error"
+    detail = (
+        f"scored {len(scores)}/{len(expressions)} expressions across {len(batches)} batches"
+    )
+    if timed_out:
+        detail += f"; {timed_out} batch(es) timed out"
+    if errors:
+        detail += f"; {errors} batch(es) failed"
+    if retries:
+        detail += f"; retried {retries} batch(es)"
+    if status == "timeout":
+        logger.warning("logic screen unavailable: status=timeout error_type=TimeoutError")
+    elif status == "error":
+        logger.warning(
+            "logic screen unavailable: status=error error_type=%s",
+            first_error_type or "UnknownError",
+        )
+    return LogicScreenResult(
+        scores,
+        status=status,
+        error_type=("TimeoutError" if status == "timeout" else first_error_type),
+        detail=detail,
+        telemetry=telemetry,
+    )
 
 
 def select_diverse_by_group(

@@ -109,3 +109,10 @@
 - A run-level `generated=20, simulated=0` aggregate cannot explain which expressions were withheld or why. Persist every generated expression before an optional LLM or deterministic screen, then update the same row through selected, withheld, simulated, or simulation-error states.
 - LLM timeout, parse/provider failure, weak research evidence, and official BRAIN simulation failure are different events. Store a safe technical status and exact decision reason instead of letting one empty results table represent all four.
 - A successful Vercel deployment does not update a GitHub Actions worker when workflow dispatch checks out `main`. Merge worker code and migrations to the dispatched ref before claiming the new mining workflow is live.
+
+## 2026-08-14: Optional LLM screens must fail by batch, not by round
+
+- One 20-candidate LLM request made tail latency an all-or-nothing event. A provider response that missed the 180-second wall clock erased every optional logic score even though candidate generation, evidence screening, and BRAIN simulation remained healthy.
+- Split optional scoring into bounded batches and retain completed batch results. Unscored candidates still enter the shared evidence screen; a technical timeout must never overwrite valid scores returned by other batches.
+- Retry only transient timeout or transport failures, with a strict attempt cap. Authentication, authorization, and rate-limit responses require recovery or backoff rather than immediate replay.
+- Persist sanitized provider, model, elapsed time, batch counts, and error class/status. Never persist raw headers, credentials, response bodies, or exception messages that may echo them.

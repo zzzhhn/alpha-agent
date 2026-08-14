@@ -155,6 +155,7 @@ The repository does not contain a canonical generated Screener reference image. 
 - A validated proxy predicts only inside observed feature and `mechanism × dataset × settings` support. Chronological drift or unseen contexts deactivate the prediction instead of extrapolating confidence.
 - Empty and failed runs explain the failing stage and recovery action. A completed run with fewer persisted candidates than requested exposes the stage where the count changed.
 - LLM timeout, provider failure, partial parsing, deterministic fallback, and low candidate evidence are distinct states. A technical screening failure must not be presented as poor BRAIN backtest quality, and old runs without candidate-ledger rows must say that their per-expression evidence is not recoverable.
+- LLM screening is batch-resilient. Successful batch scores remain valid when another batch times out; unscored candidates still enter the shared deterministic evidence screen instead of being discarded. The UI reports scored, evidence-selected, and BRAIN-simulated counts separately, with sanitized provider latency/status instead of raw exception payloads.
 - Completed runs expose screen utilization, pass yield, simulation-error rate, and one evidence-based next action. Recommendations remain advisory and never auto-submit an alpha.
 
 ### 6.8 Today Recommendations, `/picks`

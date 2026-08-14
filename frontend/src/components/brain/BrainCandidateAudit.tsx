@@ -73,6 +73,12 @@ function evidenceOf(candidate: BrainRunCandidate): Record<string, unknown> {
     : {};
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
 function reasonLabel(candidate: BrainRunCandidate, zh: boolean): string {
   const key = candidate.reason_code ?? (candidate.selected ? "selected" : "pending_screen");
   const labels = REASON_LABELS[key];
@@ -268,9 +274,55 @@ export function BrainCandidateAudit({
   const withheld = (data?.candidates ?? []).filter(
     (candidate) => !candidate.selected && candidate.status !== "generated",
   ).length;
-  const llmFailures = (data?.candidates ?? []).filter((candidate) =>
-    ["timeout", "error"].includes(candidate.llm_status ?? ""),
+  const llmFallbacks = (data?.candidates ?? []).filter((candidate) =>
+    ["unscored", "partial", "timeout", "error"].includes(candidate.llm_status ?? ""),
   ).length;
+  const llmScored = (data?.candidates ?? []).filter((candidate) =>
+    candidate.llm_status === "scored" || candidate.llm_status === "completed",
+  ).length;
+  const simulated = (data?.candidates ?? []).filter((candidate) =>
+    candidate.stage === "simulation" || candidate.simulation_outcome != null,
+  ).length;
+  const logicTelemetry = (data?.candidates ?? [])
+    .map((candidate) => recordValue(evidenceOf(candidate).logic_screen))
+    .find((value) => value != null) ?? null;
+  const batchTelemetry = recordValue(logicTelemetry?.telemetry) ?? logicTelemetry;
+  const timeoutSeconds = numberValue(batchTelemetry?.timeout_s);
+  const provider = textValue(batchTelemetry?.provider);
+  const timedOutBatches = numberValue(batchTelemetry?.timed_out_batches);
+  const errorBatches = numberValue(batchTelemetry?.error_batches);
+  const completedBatches = numberValue(batchTelemetry?.completed_batches);
+  const batchCount = numberValue(batchTelemetry?.batch_count);
+  const retryCount = numberValue(batchTelemetry?.retry_count);
+  const elapsedMs = numberValue(batchTelemetry?.elapsed_ms);
+  const failedBatchCount = (timedOutBatches ?? 0) + (errorBatches ?? 0);
+  const totalCandidates = data?.total ?? generatedCount ?? 0;
+
+  const technicalStatusCopy = useMemo(() => {
+    if (llmFallbacks <= 0) return null;
+    const providerName = provider || "LLM";
+    const screenMode = batchCount != null
+      ? zh ? "分批逻辑预筛" : "batched logic screening"
+      : zh ? "逻辑预筛" : "logic screening";
+    const timeoutCopy = timeoutSeconds != null
+      ? zh ? `在 ${timeoutSeconds} 秒上限后超时` : `timed out at the ${timeoutSeconds}s limit`
+      : zh ? "未完整返回" : "did not return completely";
+    const batchCopy = batchCount != null
+      ? zh
+        ? `，共 ${batchCount} 批，${completedBatches ?? 0} 批完成，${failedBatchCount} 批未完成${retryCount ? `，重试 ${retryCount} 次` : ""}${elapsedMs != null ? `，耗时约 ${Math.round(elapsedMs / 1000)} 秒` : ""}`
+        : `; ${batchCount} batches, ${completedBatches ?? 0} completed, ${failedBatchCount} incomplete${retryCount ? `, ${retryCount} retries` : ""}${elapsedMs != null ? `, about ${Math.round(elapsedMs / 1000)}s elapsed` : ""}`
+      : failedBatchCount > 0
+        ? zh ? `，${failedBatchCount} 个批次未完成` : `; ${failedBatchCount} batches did not complete`
+        : "";
+    const simulationCopy = simulated > 0
+      ? zh ? `规则证据筛选入选 ${selected}/${totalCandidates} 条，其中 ${simulated} 条已完成 BRAIN 仿真。`
+        : `The evidence fallback selected ${selected}/${totalCandidates}; ${simulated} completed BRAIN simulation.`
+      : zh ? `规则证据筛选入选 ${selected}/${totalCandidates} 条，尚未执行 BRAIN 仿真。`
+        : `The evidence fallback selected ${selected}/${totalCandidates}; BRAIN simulation has not run.`;
+    return zh
+      ? `${providerName} ${screenMode}${timeoutCopy}${batchCopy}。已取得 ${llmScored}/${totalCandidates} 条 LLM 评分；已返回评分继续有效，未评分候选仍进入 deterministic evidence screen。${simulationCopy}`
+      : `${providerName} ${screenMode} ${timeoutCopy}${batchCopy}. LLM scores were retained for ${llmScored}/${totalCandidates}; unscored candidates still entered the deterministic evidence screen. ${simulationCopy}`;
+  }, [batchCount, completedBatches, elapsedMs, failedBatchCount, llmFallbacks, llmScored, provider, retryCount, selected, simulated, timeoutSeconds, totalCandidates, zh]);
 
   if (runId == null) {
     return (
@@ -298,10 +350,10 @@ export function BrainCandidateAudit({
         </button>
       </div>
 
-      {llmFailures > 0 ? (
+      {llmFallbacks > 0 ? (
         <div className="flex items-start gap-2 border-b border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-[10px] leading-relaxed text-tm-warn" role="status">
           <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{zh ? `本轮 LLM 筛选发生技术失败，${llmFailures} 条候选使用 deterministic fallback。证据不足不等于 BRAIN 回测失败。` : `The LLM screen failed technically; ${llmFailures} candidates used deterministic fallback. Weak evidence is not a BRAIN backtest failure.`}</span>
+          <span>{technicalStatusCopy}</span>
         </div>
       ) : null}
 

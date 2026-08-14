@@ -1,6 +1,9 @@
 """Phase E: the LLM financial-logic pre-screen (AlphaEval 'Financial Logic').
 Scores candidates' economic sense before the slow BRAIN sim; must be a safe
 no-op without an LLM and must never starve the sim step."""
+import asyncio
+
+import httpx
 import pytest
 
 from alpha_agent.brain.logic_screen import (
@@ -20,6 +23,23 @@ class _FakeLLM:
     async def chat(self, messages, **kw):
         return LLMResponse(
             content=self._content, model="fake", prompt_tokens=0, completion_tokens=0
+        )
+
+
+class _SequenceLLM:
+    def __init__(self, responses):
+        self._responses = iter(responses)
+        self._provider = "test"
+        self._model = "test-model"
+        self.calls = 0
+
+    async def chat(self, messages, **kw):
+        self.calls += 1
+        response = next(self._responses)
+        if isinstance(response, BaseException):
+            raise response
+        return LLMResponse(
+            content=response, model=self._model, prompt_tokens=0, completion_tokens=0
         )
 
 
@@ -139,8 +159,6 @@ async def test_score_bad_json_degrades_to_empty():
 
 @pytest.mark.asyncio
 async def test_score_timeout_is_truthful_and_type_only(monkeypatch):
-    import asyncio
-
     class _TimeoutLLM(_FakeLLM):
         async def chat(self, messages, **kw):
             await asyncio.sleep(0)
@@ -158,6 +176,72 @@ async def test_score_timeout_is_truthful_and_type_only(monkeypatch):
     assert result.status == "timeout"
     assert result["error_type"] == "TimeoutError"
     assert "secret" not in (result.detail or "")
+    assert result.telemetry["batch_count"] == 1
+    assert result.telemetry["timed_out_batches"] == 1
+    assert result.telemetry["retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_score_batches_and_keeps_all_batch_scores():
+    llm = _SequenceLLM([
+        '[{"i":0,"score":8},{"i":1,"score":7},{"i":2,"score":6},'
+        '{"i":3,"score":5},{"i":4,"score":4}]',
+        '[{"i":0,"score":3}]',
+    ])
+    expressions = [f"expr-{i}" for i in range(6)]
+    result = await score_economic_logic(llm, expressions)
+
+    assert result.status == "completed"
+    assert result == {
+        "expr-0": 8.0,
+        "expr-1": 7.0,
+        "expr-2": 6.0,
+        "expr-3": 5.0,
+        "expr-4": 4.0,
+        "expr-5": 3.0,
+    }
+    assert llm.calls == 2
+    assert result.telemetry["batch_count"] == 2
+    assert result.telemetry["completed_batches"] == 2
+    assert result.telemetry["timed_out_batches"] == 0
+    assert result.telemetry["error_batches"] == 0
+    assert result.telemetry["provider"] == "test"
+    assert result.telemetry["model"] == "test-model"
+
+
+@pytest.mark.asyncio
+async def test_score_timeout_preserves_other_batches_and_retries_once():
+    llm = _SequenceLLM([
+        asyncio.TimeoutError(),
+        asyncio.TimeoutError(),
+        '[{"i":0,"score":9}]',
+    ])
+    expressions = [f"expr-{i}" for i in range(6)]
+    result = await score_economic_logic(llm, expressions)
+
+    assert result.status == "partial"
+    assert result == {"expr-5": 9.0}
+    assert llm.calls == 3
+    assert result.telemetry["completed_batches"] == 1
+    assert result.telemetry["timed_out_batches"] == 1
+    assert result.telemetry["error_batches"] == 0
+    assert result.telemetry["retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_score_provider_http_error_is_not_retried():
+    response = httpx.Response(429, request=httpx.Request("POST", "https://example.test"))
+    error = httpx.HTTPStatusError("provider response", request=response.request, response=response)
+    llm = _SequenceLLM([error])
+
+    result = await score_economic_logic(llm, ["expr"])
+
+    assert result.status == "error"
+    assert result.error_type == "HTTPStatusError"
+    assert llm.calls == 1
+    assert result.telemetry["retry_count"] == 0
+    assert result.telemetry["error_batches"] == 1
+    assert result.telemetry["error_types"] == {"HTTPStatusError": 1}
 
 
 def test_default_min_score_is_plausible_bar():
