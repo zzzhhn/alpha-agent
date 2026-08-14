@@ -1565,6 +1565,22 @@ function runStatusClass(run: BrainMiningRun): string {
   return "text-tm-muted";
 }
 
+function screenStatusLabel(status: string | null | undefined, zh: boolean): string {
+  const raw = (status ?? "").toLowerCase();
+  const labels: Record<string, [string, string]> = {
+    completed: ["LLM 评分完成", "LLM screen complete"],
+    partial: ["LLM 部分评分，规则补位", "partial LLM screen with fallback"],
+    timeout: ["LLM 超时，规则补位", "LLM timeout with fallback"],
+    error: ["LLM 错误，规则补位", "LLM error with fallback"],
+    fallback: ["规则证据筛选", "deterministic evidence screen"],
+    fallback_partial: ["规则筛选，证据不完整", "deterministic screen, partial evidence"],
+    bypassed: ["LLM 未配置", "LLM not configured"],
+    failed: ["筛选失败", "screen failed"],
+  };
+  const label = labels[raw];
+  return label ? label[zh ? 0 : 1] : status || (zh ? "未知" : "unknown");
+}
+
 function runCount(run: BrainMiningRun | null, key: RunCountKey): string {
   const value = run?.[key];
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
@@ -1603,9 +1619,12 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
     const technicalFallback = ["partial", "timeout", "error"].includes(run.screen_status ?? "") ||
       /logic model unavailable|timed out|logic screen failed/i.test(run.screen_detail ?? "");
     if (technicalFallback) {
+      const simulationState = simulated > 0
+        ? zh ? `本轮已有 ${simulated} 条完成 BRAIN 仿真。` : `${simulated} candidates completed BRAIN simulation.`
+        : zh ? "本轮尚未执行 BRAIN 仿真。" : "BRAIN simulation has not run.";
       return zh
-        ? "LLM 筛选没有完整完成，本轮改用 deterministic fallback。打开“候选审计”查看逐条证据与阻断原因；BRAIN 仿真尚未执行。"
-        : "The LLM screen did not complete, so this run used the deterministic fallback. Open Candidate Audit for evidence and blocking reasons; BRAIN simulation has not run.";
+        ? `LLM 预筛没有完整完成；已返回评分继续有效，未评分候选仍进入规则证据筛选。${simulationState}打开“候选审计”查看逐条状态。`
+        : `The LLM screen did not fully complete; returned scores remain valid and unscored candidates still enter the evidence screen. ${simulationState} Open Candidate Audit for per-candidate state.`;
     }
     return zh
       ? `证据筛选保留了 ${requested - screened} 个仿真名额，低可信候选没有被回填消耗预算。打开“候选审计”查看逐条字段覆盖与阻断原因。`
@@ -1812,7 +1831,11 @@ function RunLedger({
         {outcome.map(([label, count, className]) => (
           <span key={label} className={className}>{label} {count}</span>
         ))}
-        {run.screen_status ? <span className="text-tm-muted">{zh ? "筛选" : "screen"}: {run.screen_status}</span> : null}
+        {run.screen_status ? (
+          <span className="text-tm-muted">
+            {zh ? "筛选" : "screen"}: {screenStatusLabel(run.screen_status, zh)}
+          </span>
+        ) : null}
       </div>
       {run.screen_detail || run.error_detail ? (
         <p className="mt-1 break-words font-tm-mono text-[10px] leading-relaxed text-tm-warn">
