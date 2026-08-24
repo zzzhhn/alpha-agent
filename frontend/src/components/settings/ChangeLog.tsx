@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { apiGet, apiPost } from "@/lib/api/client";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { TmButton } from "@/components/tm/TmButton";
 
 interface ChangeRow {
   id: number;
@@ -139,16 +140,16 @@ export default function ChangeLog() {
               </div>
             </div>
             {!isRolledBack && isRollbackSafe ? (
-              <button
-                type="button"
+              <TmButton
+                variant="secondary"
+                size="xs"
                 onClick={() => void onRollback(r.id)}
-                disabled={rolling === r.id}
-                className="rounded border border-tm-rule px-2 py-0.5 text-[10px] text-tm-fg hover:border-tm-warn hover:text-tm-warn disabled:opacity-50"
+                loading={rolling === r.id}
+                loadingLabel={locale === "zh" ? "回滚中…" : "rolling back…"}
+                className="rounded text-[10px] hover:border-tm-warn hover:text-tm-warn"
               >
-                {rolling === r.id
-                  ? locale === "zh" ? "回滚中…" : "rolling back…"
-                  : locale === "zh" ? "↶ 回滚" : "↶ rollback"}
-              </button>
+                {locale === "zh" ? "↶ 回滚" : "↶ rollback"}
+              </TmButton>
             ) : null}
           </li>
         );

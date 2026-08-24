@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 
 import { fetchProfile, type CompanyProfile as Profile } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { TmButton } from "@/components/tm/TmButton";
 
 type Status = "loading" | "done" | "error";
 
@@ -136,13 +137,14 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
         </p>
       ) : null}
       {isLong ? (
-        <button
-          type="button"
+        <TmButton
+          variant="ghost"
+          size="xs"
           onClick={() => setExpanded((e) => !e)}
-          className="text-[11px] text-tm-accent hover:underline"
+          className="h-auto p-0 text-[11px] text-tm-accent hover:underline"
         >
           {expanded ? copy.showLess : copy.showMore}
-        </button>
+        </TmButton>
       ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-tm-muted">
         {profile.employees ? (

@@ -20,10 +20,13 @@ const MIGRATIONS: ReadonlyArray<{
 }> = [
   { legacy: "ui/Button", canonical: "TmButton", status: "ALIASED", tone: "positive" },
   { legacy: "raw input/select/textarea", canonical: "TmField", status: "IN PROGRESS", tone: "warning" },
+  { legacy: "native range", canonical: "TmRange", status: "READY", tone: "positive" },
   { legacy: "local pagination", canonical: "TmPagination", status: "READY", tone: "positive" },
   { legacy: "page-local tables", canonical: "TmTable", status: "READY", tone: "positive" },
   { legacy: "local empty/error blocks", canonical: "TmStatePane", status: "READY", tone: "positive" },
   { legacy: "page-local dialogs", canonical: "TmDialog", status: "READY", tone: "positive" },
+  { legacy: "page-local drawers", canonical: "TmDrawer", status: "READY", tone: "positive" },
+  { legacy: "custom listbox dropdowns", canonical: "TmSelectMenu", status: "READY", tone: "positive" },
   { legacy: "ui/Card / glass-card", canonical: "TmPane", status: "PENDING", tone: "warning" },
   { legacy: "HoverTip + InfoTooltip", canonical: "TmTooltip", status: "ALIASED", tone: "positive" },
   { legacy: "component hex colors", canonical: "chartTokens", status: "READY", tone: "positive" },

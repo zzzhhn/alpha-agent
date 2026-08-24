@@ -25,6 +25,8 @@ import {
   TmSubbarSep,
   TmStatusPill,
 } from "@/components/tm/TmSubbar";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { useWatchlist } from "@/hooks/useWatchlist";
@@ -321,27 +323,29 @@ export default function PicksBrowser({
           </>
         ) : null}
         <TmSubbarSep />
-        <button
-          type="button"
+        <TmButton
+          variant="secondary"
+          size="xs"
           onClick={onModeToggle}
           title={copy.modeTip}
-          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-accent transition hover:bg-tm-accent/20 focus:outline-none focus:ring-1 focus:ring-tm-accent"
+          className="rounded-md border-tm-accent/40 bg-tm-accent/10 text-tm-accent hover:bg-tm-accent/20 focus:outline-none focus:ring-1 focus:ring-tm-accent"
           aria-label={copy.modeLabel}
         >
           <span className="opacity-70">{copy.modeLabel}</span>
           <span className="font-semibold">
             {factorMode === "short" ? copy.modeShort : copy.modeLong}
           </span>
-        </button>
+        </TmButton>
         <TmSubbarSep />
-        <button
-          type="button"
+        <TmButton
+          variant="secondary"
+          size="xs"
           onClick={onSideToggle}
           title={copy.sideTip}
           className={
             side === "short"
-              ? "inline-flex items-center gap-1.5 rounded-md border border-tm-neg/40 bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-neg transition hover:bg-tm-neg/20 focus:outline-none focus:ring-1 focus:ring-tm-neg"
-              : "inline-flex items-center gap-1.5 rounded-md border border-tm-pos/40 bg-tm-pos/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-pos transition hover:bg-tm-pos/20 focus:outline-none focus:ring-1 focus:ring-tm-pos"
+              ? "rounded-md border-tm-neg/40 bg-tm-neg/10 text-tm-neg hover:bg-tm-neg/20 focus:outline-none focus:ring-1 focus:ring-tm-neg"
+              : "rounded-md border-tm-pos/40 bg-tm-pos/10 text-tm-pos hover:bg-tm-pos/20 focus:outline-none focus:ring-1 focus:ring-tm-pos"
           }
           aria-label={copy.sideLabel}
         >
@@ -349,7 +353,7 @@ export default function PicksBrowser({
           <span className="font-semibold">
             {side === "short" ? copy.sideShort : copy.sideLong}
           </span>
-        </button>
+        </TmButton>
         {snapshotStale ? (
           <>
             <TmSubbarSep />
@@ -441,14 +445,15 @@ export default function PicksBrowser({
               </div>
             ) : null}
             <div className="flex items-center gap-2 px-3 py-2">
-              <input
-                type="text"
+              <TmInput
                 aria-label={copy.placeholder}
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={setSearch}
                 placeholder={copy.placeholder}
                 maxLength={12}
-                className="w-56 rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 font-tm-mono text-[11px] text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none"
+                fieldSize="sm"
+                className="w-56"
+                inputClassName="rounded"
               />
               {loading ? (
                 <span className="font-tm-mono text-[11px] text-tm-muted">

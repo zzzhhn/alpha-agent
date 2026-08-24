@@ -27,6 +27,7 @@ import { TmPane, TmCols2 } from "@/components/tm/TmPane";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { ExposureResponse } from "@/lib/types";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 
 interface TmExposureChartProps {
   readonly data: ExposureResponse | null;
@@ -45,18 +46,14 @@ export function TmExposureChart({
   if (loading && !data) {
     return (
       <TmPane title="EXPOSURE" meta="LOADING">
-        <p className="px-3 py-12 text-center font-tm-mono text-[11px] text-tm-muted">
-          …
-        </p>
+        <TmStatePane state="loading" title={t(locale, "common.loading")} className="min-h-[140px] rounded-none border-0" />
       </TmPane>
     );
   }
   if (!data) {
     return (
       <TmPane title="EXPOSURE">
-        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
-          {t(locale, "signal.today.empty")}
-        </p>
+        <TmStatePane state="empty" title={t(locale, "signal.today.empty")} className="min-h-[140px] rounded-none border-0" />
       </TmPane>
     );
   }

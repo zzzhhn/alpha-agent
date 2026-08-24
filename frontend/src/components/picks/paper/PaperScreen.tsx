@@ -25,7 +25,7 @@ import {
   type L2Summary,
 } from "@/lib/api/paper";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
-import { TmButton } from "@/components/tm/TmButton";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { isPicksSnapshotStale } from "@/lib/picks-freshness";
@@ -156,14 +156,13 @@ export default function PaperScreen() {
         meta={
           <span className="flex items-center gap-2">
             <span>{t(locale, "sim.workspace.disclosure")}</span>
-            <button
-              type="button"
-              aria-label={t(locale, "sim.workspace.guide_title")}
-              className="text-tm-muted hover:text-tm-fg"
+            <TmIconButton
+              label={t(locale, "sim.workspace.guide_title")}
+              size="xs"
+              className="h-auto w-auto p-0"
               onClick={() => setGuideOpen((open) => !open)}
-            >
-              <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </button>
+              icon={<CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />}
+            />
           </span>
         }
       >
@@ -187,7 +186,7 @@ export default function PaperScreen() {
         {guideOpen ? (
           <div className="relative border-t border-tm-rule bg-tm-bg-2 px-3 py-2 pr-10 font-tm-mono text-[10px] leading-5 text-tm-muted">
             {t(locale, "sim.tour.step2_desc")} {t(locale, "sim.workspace.source_note")}
-            <button type="button" aria-label={t(locale, "sim.close")} className="absolute right-3 top-2 text-tm-muted hover:text-tm-fg" onClick={() => setGuideOpen(false)}><X className="h-3.5 w-3.5" /></button>
+            <TmIconButton label={t(locale, "sim.close")} className="absolute right-2 top-1.5" onClick={() => setGuideOpen(false)} icon={<X className="h-3.5 w-3.5" />} />
           </div>
         ) : null}
       </TmPane>
@@ -271,7 +270,7 @@ function SectionError({ detail, onRetry }: { readonly detail: string; readonly o
   const message = authRequired
     ? (locale === "zh" ? "登录后可查看该区块，当前未将未知数据显示为空记录。" : "Sign in to view this section; unknown data is not shown as an empty record.")
     : (locale === "zh" ? "该区块暂时无法确认，未将其显示为零。" : "This section is unavailable; unknown data is not shown as zero.");
-  return <div role={authRequired ? "status" : "alert"} className={`m-3 flex items-center justify-between gap-3 border px-3 py-2 font-tm-mono text-[10.5px] ${authRequired ? "border-tm-rule bg-tm-bg-2 text-tm-muted" : "border-tm-neg/40 bg-tm-neg/10 text-tm-neg"}`}><span>{message}</span><button type="button" onClick={onRetry} className="shrink-0 border border-current px-2 py-1">{locale === "zh" ? "重新检查" : "Check again"}</button></div>;
+  return <div role={authRequired ? "status" : "alert"} className={`m-3 flex items-center justify-between gap-3 border px-3 py-2 font-tm-mono text-[10.5px] ${authRequired ? "border-tm-rule bg-tm-bg-2 text-tm-muted" : "border-tm-neg/40 bg-tm-neg/10 text-tm-neg"}`}><span>{message}</span><TmButton type="button" onClick={onRetry} variant={authRequired ? "secondary" : "danger"} size="xs">{locale === "zh" ? "重新检查" : "Check again"}</TmButton></div>;
 }
 
 function FrozenRecommendations() {

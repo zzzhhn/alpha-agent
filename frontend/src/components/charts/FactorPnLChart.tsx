@@ -14,6 +14,7 @@ import {
 import type { FactorBacktestResponse } from "@/lib/types";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TM_CHART_CSS } from "@/components/charts/chartTokens";
 
 interface FactorPnLChartProps {
   readonly data: FactorBacktestResponse;
@@ -109,26 +110,26 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
       >
         <CartesianGrid
           strokeDasharray="3 3"
-          stroke="var(--border)"
+          stroke={TM_CHART_CSS.grid}
           opacity={0.3}
         />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 10, fill: "var(--muted)" }}
+          tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: string) => v.slice(5)}
           interval="preserveStartEnd"
           minTickGap={32}
         />
         <YAxis
           yAxisId="left"
-          tick={{ fontSize: 10, fill: "var(--muted)" }}
+          tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: number) => `${sym}${(v / 1000).toFixed(0)}k`}
           domain={["auto", "auto"]}
           label={{
             value: `P&L (${data.currency})`,
             angle: -90,
             position: "insideLeft",
-            fill: "var(--muted)",
+            fill: TM_CHART_CSS.muted,
             fontSize: 11,
             dy: 40,
           }}
@@ -140,23 +141,23 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
         <YAxis
           yAxisId="right"
           orientation="right"
-          tick={{ fontSize: 10, fill: "var(--accent, #34d399)" }}
+          tick={{ fontSize: 10, fill: TM_CHART_CSS.positive }}
           tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`}
           domain={["auto", "auto"]}
           label={{
             value: t(locale, "backtest.equity.excessAxis"),
             angle: 90,
             position: "insideRight",
-            fill: "var(--accent, #34d399)",
+            fill: TM_CHART_CSS.positive,
             fontSize: 11,
             dy: -40,
           }}
         />
         <Tooltip
           contentStyle={{
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
+            background: TM_CHART_CSS.surface,
+            border: `1px solid ${TM_CHART_CSS.grid}`,
+            borderRadius: 0,
             fontSize: 12,
           }}
           formatter={(value, name) => {
@@ -186,12 +187,12 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
         {splitDate ? (
           <ReferenceLine
             x={splitDate}
-            stroke="var(--muted)"
+            stroke={TM_CHART_CSS.muted}
             strokeDasharray="4 3"
             label={{
               value: "Train | Test",
               position: "top",
-              fill: "var(--muted)",
+              fill: TM_CHART_CSS.muted,
               fontSize: 10,
             }}
           />
@@ -204,7 +205,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           label={{
             value: "Train",
             position: "insideBottom",
-            fill: "var(--muted)",
+            fill: TM_CHART_CSS.muted,
             fontSize: 11,
             dy: 18,
           }}
@@ -215,7 +216,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           label={{
             value: "Test",
             position: "insideBottom",
-            fill: "var(--muted)",
+            fill: TM_CHART_CSS.muted,
             fontSize: 11,
             dy: 18,
           }}
@@ -225,7 +226,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           type="monotone"
           dataKey="factor"
           name="factor"
-          stroke="var(--accent, #60a5fa)"
+          stroke={TM_CHART_CSS.information}
           strokeWidth={2}
           dot={false}
           isAnimationActive={false}
@@ -235,7 +236,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           type="monotone"
           dataKey="benchmark"
           name="benchmark"
-          stroke="var(--muted-strong, #94a3b8)"
+          stroke={TM_CHART_CSS.muted}
           strokeWidth={1.5}
           strokeDasharray="4 3"
           dot={false}
@@ -250,7 +251,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
           type="monotone"
           dataKey="excess"
           name="excess"
-          stroke="var(--green, #10b981)"
+          stroke={TM_CHART_CSS.positive}
           strokeWidth={1.5}
           dot={false}
           isAnimationActive={false}

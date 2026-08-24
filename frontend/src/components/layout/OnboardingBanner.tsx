@@ -16,6 +16,7 @@ import { X, Compass } from "lucide-react";
 
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useHasByok } from "@/hooks/useHasByok";
+import { TmIconButton } from "@/components/tm/TmButton";
 
 const DISMISS_KEY = "alphacore.onboarding.dismissed.v1";
 
@@ -99,15 +100,13 @@ export default function OnboardingBanner() {
             {copy.settings}
           </Link>
         </div>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label={copy.dismiss}
+        <TmIconButton
+          label={copy.dismiss}
           title={copy.dismiss}
-          className="shrink-0 text-tm-muted transition-colors hover:text-tm-fg"
-        >
-          <X className="h-4 w-4" strokeWidth={1.75} />
-        </button>
+          onClick={dismiss}
+          className="shrink-0"
+          icon={<X className="h-4 w-4" strokeWidth={1.75} />}
+        />
       </div>
     </div>
   );

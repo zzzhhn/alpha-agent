@@ -13,6 +13,8 @@ import { streamNewsDaySummary } from "@/lib/api/streamNewsDaySummary";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useHasByok } from "@/hooks/useHasByok";
+import { readTmChartPalette } from "@/components/charts";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 
 type AnalysisStatus =
   | "idle"
@@ -138,10 +140,11 @@ export default function IntradayDrawer({
 
     const { createChart, ColorType } = await import("lightweight-charts");
 
-    const isLight = document.documentElement.dataset.theme === "light";
-    const bg = isLight ? "#fafaf7" : "#0a0a0a";
-    const text = isLight ? "#27272a" : "#d4d4d8";
-    const grid = isLight ? "#e4e4e7" : "#27272a";
+    const palette = readTmChartPalette(el);
+    if (!palette) return;
+    const bg = palette.surface;
+    const text = palette.secondary;
+    const grid = palette.grid;
 
     const chart = createChart(el, {
       width: el.clientWidth,
@@ -164,12 +167,12 @@ export default function IntradayDrawer({
     );
 
     const candle = chart.addCandlestickSeries({
-      upColor: "#16a34a",
-      downColor: "#dc2626",
-      borderUpColor: "#16a34a",
-      borderDownColor: "#dc2626",
-      wickUpColor: "#16a34a",
-      wickDownColor: "#dc2626",
+      upColor: palette.positive,
+      downColor: palette.negative,
+      borderUpColor: palette.positive,
+      borderDownColor: palette.negative,
+      wickUpColor: palette.positive,
+      wickDownColor: palette.negative,
     });
     candle.setData(
       validBars.map((b) => ({
@@ -249,14 +252,11 @@ export default function IntradayDrawer({
         <h3 className="text-base font-semibold text-tm-fg">
           {ticker} {t(locale, "intraday.title")} · {date}
         </h3>
-        <button
-          type="button"
+        <TmIconButton
+          label={t(locale, "intraday.close")}
           onClick={onClose}
-          className="text-tm-muted transition-colors hover:text-tm-fg"
-          aria-label={t(locale, "intraday.close")}
-        >
-          <X size={18} />
-        </button>
+          icon={<X size={18} />}
+        />
       </div>
 
       {/* intraday minute chart */}
@@ -299,23 +299,25 @@ export default function IntradayDrawer({
               No button when there is no news to analyze. */}
           {news.length > 0 && !locked ? (
             analysisStatus === "streaming" ? (
-              <button
-                type="button"
+              <TmButton
+                variant="danger"
+                size="xs"
                 onClick={onAnalyzeAbort}
-                className="inline-flex shrink-0 items-center gap-1 rounded border border-tm-rule px-2 py-1 text-[11px] text-tm-fg hover:border-tm-neg"
+                className="rounded"
               >
                 <Square aria-hidden className="h-3 w-3" strokeWidth={1.75} />
                 {t(locale, "rich.stop_button")}
-              </button>
+              </TmButton>
             ) : (
-              <button
-                type="button"
+              <TmButton
+                variant="secondary"
+                size="xs"
                 onClick={() => void onAnalyze()}
-                className="inline-flex shrink-0 items-center gap-1 rounded border border-tm-rule bg-tm-bg px-2 py-1 text-[11px] text-tm-fg hover:border-tm-accent"
+                className="rounded"
               >
                 <Sparkles aria-hidden className="h-3 w-3 text-tm-accent" strokeWidth={1.75} />
                 {t(locale, "intraday.analyze_button")}
-              </button>
+              </TmButton>
             )
           ) : null}
         </div>
@@ -358,13 +360,14 @@ export default function IntradayDrawer({
           <div className="mb-2 flex items-center gap-2 text-xs text-tm-neg">
             <AlertTriangle aria-hidden className="h-3 w-3 shrink-0" strokeWidth={1.75} />
             <span>{analysisErr}</span>
-            <button
-              type="button"
+            <TmButton
+              variant="danger"
+              size="xs"
               onClick={() => void onAnalyze()}
-              className="rounded border border-tm-neg/40 px-1.5 py-0.5"
+              className="rounded"
             >
               {t(locale, "intraday.analyze_retry")}
-            </button>
+            </TmButton>
           </div>
         ) : null}
         {news.length === 0 ? (

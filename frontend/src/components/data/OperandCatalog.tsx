@@ -26,6 +26,8 @@ import type {
   OperandInfo,
   OperandCatalogResponse,
 } from "@/lib/types";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 
 interface OperandCatalogProps {
   readonly catalog: OperandCatalogResponse;
@@ -71,36 +73,24 @@ export function OperandCatalog({ catalog }: OperandCatalogProps) {
         </span>
       }
     >
-      {/* Tab strip — `.tm-tabs` pattern */}
-      <div className="flex border-b border-tm-rule bg-tm-bg-2">
-        <TabBtn
-          active={tab === "operators"}
-          onClick={() => setTab("operators")}
-          label={`${t(locale, "data.operands.operatorsTab")} · ${opsSummary.total}`}
+      <div className="flex items-center gap-3 border-b border-tm-rule bg-tm-bg-2 px-2 py-1.5">
+        <SegmentedTabs
+          idBase="operator-catalog-kind"
+          ariaLabel={locale === "zh" ? "目录类型" : "Catalog kind"}
+          items={[
+            { key: "operators", label: `${t(locale, "data.operands.operatorsTab")} · ${opsSummary.total}` },
+            { key: "operands", label: `${t(locale, "data.operands.operandsTab")} · ${fieldsSummary.total}` },
+          ]}
+          active={tab}
+          onChange={setTab}
         />
-        <TabBtn
-          active={tab === "operands"}
-          onClick={() => setTab("operands")}
-          label={`${t(locale, "data.operands.operandsTab")} · ${fieldsSummary.total}`}
-        />
-        {/* Tier filter — pushed right via flex-1 spacer */}
         <span className="flex-1" />
-        <div className="flex items-center gap-px py-1.5 pr-2">
-          {(["all", "available", "T1", "T2", "T3"] as TierFilter[]).map((tf) => (
-            <button
-              key={tf}
-              type="button"
-              onClick={() => setTierFilter(tf)}
-              className={
-                tierFilter === tf
-                  ? "border border-tm-accent bg-tm-accent-soft px-2 py-px font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-accent"
-                  : "border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-fg"
-              }
-            >
-              {tf}
-            </button>
-          ))}
-        </div>
+        <TmToggleGroup
+          value={tierFilter}
+          onChange={setTierFilter}
+          ariaLabel={locale === "zh" ? "目录层级筛选" : "Catalog tier filter"}
+          options={(["all", "available", "T1", "T2", "T3"] as TierFilter[]).map((value) => ({ value, label: value }))}
+        />
       </div>
 
       <p className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
@@ -129,30 +119,6 @@ function filterOps<T extends { tier: CatalogTier; implemented: boolean }>(
   if (filter === "all") return items;
   if (filter === "available") return items.filter((it) => it.implemented);
   return items.filter((it) => it.tier === filter);
-}
-
-function TabBtn({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        active
-          ? "border-r border-tm-rule border-b-2 border-b-tm-accent bg-tm-bg px-3.5 py-2 font-tm-mono text-[11px] uppercase tracking-[0.04em] text-tm-accent"
-          : "border-r border-tm-rule px-3.5 py-2 font-tm-mono text-[11px] uppercase tracking-[0.04em] text-tm-muted hover:text-tm-fg"
-      }
-    >
-      {label}
-    </button>
-  );
 }
 
 // Generic per-category section — used for both operators and operands.

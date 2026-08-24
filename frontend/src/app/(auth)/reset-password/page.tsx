@@ -8,6 +8,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { resetPasswordAction, type ResetError } from "./actions";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
 
 const ERROR_KEY: Record<ResetError, Parameters<typeof t>[1]> = {
   invalid: "reset.error_invalid",
@@ -61,54 +63,46 @@ export default function ResetPasswordPage() {
         </p>
       ) : (
         <form onSubmit={onSubmit} className="space-y-3">
-          <label className="block text-xs text-tm-muted">
-            {t(locale, "reset.email_label")}
-          </label>
-          <input
+          <TmInput
+            label={t(locale, "reset.email_label")}
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={setEmail}
             placeholder={t(locale, "reset.email_placeholder")}
-            className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
           />
-          <label className="block text-xs text-tm-muted">
-            {t(locale, "reset.code_label")}
-          </label>
-          <input
+          <TmInput
+            label={t(locale, "reset.code_label")}
             type="text"
             required
             inputMode="numeric"
             pattern="\d{6}"
             maxLength={6}
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={setCode}
             placeholder={t(locale, "reset.code_placeholder")}
-            className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
           />
-          <label className="block text-xs text-tm-muted">
-            {t(locale, "reset.new_password_label")}
-          </label>
-          <input
+          <TmInput
+            label={t(locale, "reset.new_password_label")}
             type="password"
             required
             minLength={8}
             maxLength={32}
             value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
+            onChange={setNewPassword}
             placeholder={t(locale, "reset.new_password_placeholder")}
-            className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
           />
           {errorKey && (
             <p className="text-xs text-tm-neg">{t(locale, errorKey)}</p>
           )}
-          <button
+          <TmButton
             type="submit"
-            disabled={submitting}
-            className="w-full rounded border border-tm-rule bg-tm-bg px-3 py-1.5 text-sm text-tm-fg hover:border-tm-accent disabled:opacity-60"
+            loading={submitting}
+            loadingLabel={t(locale, "reset.submitting")}
+            className="w-full"
           >
-            {t(locale, submitting ? "reset.submitting" : "reset.submit_button")}
-          </button>
+            {t(locale, "reset.submit_button")}
+          </TmButton>
         </form>
       )}
       <p className="mt-4 text-center text-xs text-tm-muted">

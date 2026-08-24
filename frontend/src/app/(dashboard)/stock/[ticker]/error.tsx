@@ -7,6 +7,7 @@
 // renders the 404 page rather than this.
 import { useEffect } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { TmButton } from "@/components/tm/TmButton";
 
 export default function StockError({
   error,
@@ -42,12 +43,14 @@ export default function StockError({
       <p className="max-w-sm font-tm-mono text-[11px] leading-relaxed text-tm-muted">
         {copy.body}
       </p>
-      <button
+      <TmButton
+        variant="secondary"
+        size="sm"
         onClick={reset}
-        className="mt-1 rounded border border-tm-rule px-3 py-1.5 font-tm-mono text-[11px] text-tm-accent transition-colors hover:bg-tm-bg-2"
+        className="mt-1 rounded text-tm-accent"
       >
         {copy.retry}
-      </button>
+      </TmButton>
     </div>
   );
 }

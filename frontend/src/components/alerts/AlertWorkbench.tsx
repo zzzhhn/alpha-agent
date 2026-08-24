@@ -17,7 +17,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { useToast } from "@/components/ui/toast";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import { DecisionStrip } from "@/components/workbench/DecisionStrip";
-import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
+import { TmButton, TmLinkButton, TmRowButton } from "@/components/tm/TmButton";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 import { TmStatePane } from "@/components/tm/TmStatePane";
 import { ApiException } from "@/lib/api/client";
@@ -299,9 +299,8 @@ export default function AlertWorkbench() {
               {QUEUES.map(({ id, icon: Icon }) => {
                 const active = queue === id;
                 return (
-                  <button
+                  <TmRowButton
                     key={id}
-                    type="button"
                     onClick={() => setQueue(id)}
                     aria-pressed={active}
                     className={`flex min-h-10 w-full items-center gap-2 border-l-2 px-3 py-2 text-left text-[12px] ${active ? "border-tm-accent bg-tm-accent/10 text-tm-accent" : "border-transparent text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg"}`}
@@ -309,7 +308,7 @@ export default function AlertWorkbench() {
                     <Icon className="h-3.5 w-3.5" />
                     <span className="flex-1">{queueLabel(id, zh)}</span>
                     <span className="border border-tm-rule px-1.5 py-0.5 text-[9px]">{queueCount(data, id)}</span>
-                  </button>
+                  </TmRowButton>
                 );
               })}
             </nav>
@@ -377,9 +376,9 @@ export default function AlertWorkbench() {
             {error && data ? (
               <div role="alert" className="flex items-center justify-between gap-3 border-b border-tm-neg/50 bg-tm-neg/5 px-4 py-2 text-[10px]">
                 <span className="text-tm-neg">{zh ? "刷新失败，显示上次可用队列。" : "Refresh failed; showing the last available queue."}</span>
-                <button type="button" onClick={() => void load()} className="shrink-0 border border-tm-neg px-2 py-1 text-[9px] text-tm-neg hover:bg-tm-neg/10">
+                <TmButton type="button" onClick={() => void load()} variant="danger" size="xs">
                   {zh ? "重试" : "Retry"}
-                </button>
+                </TmButton>
               </div>
             ) : null}
             {authRequired ? (
@@ -432,9 +431,8 @@ export default function AlertWorkbench() {
                 {visible.map((item) => {
                   const active = selected?.id === item.id;
                   return (
-                    <button
+                    <TmRowButton
                       key={item.id}
-                      type="button"
                       onClick={() => setSelectedId(item.id)}
                       className={`grid min-h-[126px] w-full grid-cols-[68px_88px_minmax(150px,1.2fr)_minmax(130px,1fr)_84px] items-start gap-2 border-l-2 px-4 py-4 text-left transition-colors ${active ? "border-tm-accent bg-tm-accent/5 ring-1 ring-inset ring-tm-accent/30" : item.severity === "critical" ? "border-tm-neg hover:bg-tm-bg-2" : item.severity === "warning" ? "border-tm-warn hover:bg-tm-bg-2" : "border-sky-500/60 hover:bg-tm-bg-2"}`}
                     >
@@ -471,7 +469,7 @@ export default function AlertWorkbench() {
                         <p className="mt-2 font-mono text-[17px] text-tm-fg">{item.triage_score}</p>
                         <p className="mt-1 text-[9px] text-tm-muted">{zh ? "分诊分数" : "Triage"}</p>
                       </div>
-                    </button>
+                    </TmRowButton>
                   );
                 })}
               </div>
@@ -578,26 +576,29 @@ export default function AlertWorkbench() {
                   <p className="mt-2 text-[9.5px] leading-4 text-tm-muted">
                     {zh ? "先查看标的上下文，再决定是否关闭该事项。系统不会自动交易。" : "Review the ticker context before resolving. The system never trades automatically."}
                   </p>
-                  <button
-                    type="button"
+                  <TmButton
                     disabled={busyId === selected.id}
                     onClick={() => void persistState(selected, selected.state.status === "resolved" ? "open" : "resolved")}
-                    className="mt-4 flex h-11 w-full items-center justify-center gap-2 bg-tm-accent px-3 text-[12px] font-semibold text-tm-bg hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
+                    variant="primary"
+                    size="md"
+                    loading={busyId === selected.id}
+                    className="mt-4 w-full"
                   >
                     {busyId === selected.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                     {selected.state.status === "resolved"
                       ? (zh ? "重新打开" : "Reopen alert")
                       : (zh ? "标记已处理" : "Mark resolved")}
-                  </button>
+                  </TmButton>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
+                    <TmButton
                       disabled={busyId === selected.id}
                       onClick={() => void persistState(selected, "snoozed", new Date(Date.now() + 4 * 3600_000).toISOString())}
-                      className="flex items-center justify-center gap-1.5 border border-tm-rule px-2 py-1.5 text-[10px] text-tm-fg-2 hover:border-tm-warn hover:text-tm-warn disabled:opacity-50"
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
                     >
                       <Clock3 className="h-3 w-3" /> {zh ? "4 小时后提醒" : "Snooze 4h"}
-                    </button>
+                    </TmButton>
                     <Link
                       href={`/stock/${selected.ticker}#news`}
                       className="flex items-center justify-center gap-1.5 border border-tm-rule px-2 py-1.5 text-[10px] text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent"
@@ -619,16 +620,17 @@ export default function AlertWorkbench() {
           <div className="flex min-h-8 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4 text-[9px] uppercase tracking-[0.08em] text-tm-muted">
             <span>{zh ? "审计轨迹" : "Audit trail"}</span>
             {auditCandidates.length > 3 ? (
-              <button
-                type="button"
+              <TmButton
                 aria-expanded={auditExpanded}
                 onClick={() => setAuditExpanded((expanded) => !expanded)}
-                className="text-tm-accent hover:underline"
+                variant="ghost"
+                size="xs"
+                className="text-tm-accent"
               >
                 {auditExpanded
                   ? (zh ? "收起" : "Show latest 3")
                   : (zh ? `查看全部（${auditCandidates.length}）` : `View all (${auditCandidates.length})`)}
-              </button>
+              </TmButton>
             ) : null}
           </div>
           <div className="grid h-9 grid-cols-[190px_100px_120px_minmax(0,1fr)_120px] items-center gap-3 border-b border-tm-rule bg-tm-bg-2/40 px-4 text-[9px] uppercase tracking-[0.08em] text-tm-muted">

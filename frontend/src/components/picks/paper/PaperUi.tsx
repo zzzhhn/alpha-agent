@@ -9,9 +9,10 @@
  *   - TwoStepConfirm: inline two-step confirm, replaces window.confirm (fix #3)
  */
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TmButton } from "@/components/tm/TmButton";
 
 export function Metric({
   label,
@@ -87,7 +88,6 @@ export function TwoStepConfirm({
   const { locale } = useLocale();
   const [state, setState] = useState<ConfirmState>("idle");
   const [err, setErr] = useState<string | null>(null);
-  const toneCls = tone === "neg" ? "border-tm-neg text-tm-neg" : "border-tm-accent text-tm-accent";
 
   async function confirm() {
     setState("sending");
@@ -115,24 +115,22 @@ export function TwoStepConfirm({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-tm-mono text-[10.5px] text-tm-muted">{warnText}</span>
-        <button
-          type="button"
+        <TmButton
+          variant={tone === "neg" ? "danger" : "secondary"}
+          size="xs"
           onClick={() => void confirm()}
-          disabled={state === "sending"}
-          className={`inline-flex items-center gap-1.5 border px-2 py-0.5 font-tm-mono text-[10.5px] font-bold uppercase disabled:opacity-50 ${toneCls}`}
+          loading={state === "sending"}
+          loadingLabel={t(locale, "sim.confirm_btn")}
         >
-          {state === "sending" ? (
-            <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.75} />
-          ) : null}
           {t(locale, "sim.confirm_btn")}
-        </button>
-        <button
-          type="button"
+        </TmButton>
+        <TmButton
+          variant="ghost"
+          size="xs"
           onClick={() => setState("idle")}
-          className="font-tm-mono text-[10.5px] text-tm-muted hover:text-tm-fg"
         >
           {t(locale, "sim.cancel_btn")}
-        </button>
+        </TmButton>
         {state === "error" && err ? (
           <span className="font-tm-mono text-[10px] text-tm-neg">{err}</span>
         ) : null}
@@ -141,12 +139,13 @@ export function TwoStepConfirm({
   }
 
   return (
-    <button
-      type="button"
+    <TmButton
+      variant="secondary"
+      size="xs"
       onClick={() => setState("confirm")}
-      className="border border-tm-rule px-2 py-0.5 font-tm-mono text-[10px] text-tm-muted hover:border-tm-neg hover:text-tm-neg transition-colors"
+      className="hover:border-tm-neg hover:text-tm-neg"
     >
       {idleLabel}
-    </button>
+    </TmButton>
   );
 }

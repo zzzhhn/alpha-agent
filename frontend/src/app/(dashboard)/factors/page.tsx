@@ -57,7 +57,7 @@ import {
   TmChip,
 } from "@/components/tm/TmSubbar";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
-import { TmButton } from "@/components/tm/TmButton";
+import { TmButton, TmIconButton, TmRowButton } from "@/components/tm/TmButton";
 import {
   TmTable,
   TmTableBody,
@@ -783,13 +783,12 @@ function LeaderRow({
         <span className="tabular-nums text-tm-fg-2">{ic.toFixed(3)}</span>
       </DCell>
       <DCell align="right">
-        <button
-          type="button"
+        <TmIconButton
           onClick={onPick}
-          className="font-tm-mono text-[10px] text-tm-muted hover:text-tm-accent"
-        >
-          ▶
-        </button>
+          label={name}
+          variant="ghost"
+          icon={<span aria-hidden="true">▶</span>}
+        />
       </DCell>
     </>
   );
@@ -1265,8 +1264,7 @@ function SortHeader({
   const active = col === current;
   const arrow = active ? (dir === "asc" ? "▲" : "▼") : "·";
   return (
-    <button
-      type="button"
+    <TmRowButton
       onClick={() => onClick(col)}
       className={`flex items-center gap-1 bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] hover:text-tm-fg ${
         align === "right" ? "justify-end" : ""
@@ -1274,7 +1272,7 @@ function SortHeader({
     >
       <span>{children}</span>
       <span className="text-[8px]">{arrow}</span>
-    </button>
+    </TmRowButton>
   );
 }
 

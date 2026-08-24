@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
+import { TmButton } from "@/components/tm/TmButton";
 import type { FactorUniverse } from "@/lib/types";
 import type { ChainState } from "./types";
 
@@ -45,9 +46,9 @@ export function AlphaResearchContext({
         { label: zh ? "数据状态" : "Data state", value: result ? (zh ? "随运行返回" : "Returned with run") : (zh ? "等待运行" : "Awaiting run"), tone: result ? "positive" : "default" },
       ]}
       action={result ? (
-          <button type="button" onClick={onOpenBacktest} className="inline-flex items-center gap-2 border border-tm-accent px-3 py-1.5 text-[10px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg">
+          <TmButton type="button" onClick={onOpenBacktest} variant="secondary" size="sm">
             {zh ? "在回测中比较" : "Compare in Backtest"} <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+          </TmButton>
         ) : undefined}
     />
   );

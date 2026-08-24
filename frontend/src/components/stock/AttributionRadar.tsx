@@ -9,6 +9,7 @@ import { useFactorMode } from "@/hooks/useFactorMode";
 import { applyFactorModeToCard } from "@/lib/picks-mode";
 import { useWeightsOverride } from "@/hooks/useWeightsOverride";
 import { applyWeightsToCard } from "@/lib/weights-override";
+import { TM_CHART_CSS } from "@/components/charts";
 
 // Dynamic imports keep Recharts (~150KB gzip) out of the initial server chunk.
 // Per CLAUDE.md memory: wrap ResponsiveContainer in a fixed-height div.
@@ -108,7 +109,7 @@ export default function AttributionRadar({ card }: { card: RatingCard }) {
     <div style={{ width: "100%", height: 280 }} className="text-tm-fg-2">
       <ResponsiveContainer>
         <RadarChart data={data} outerRadius="75%">
-          <PolarGrid stroke="#9ca3af" strokeOpacity={0.4} />
+          <PolarGrid stroke={TM_CHART_CSS.gridStrong} strokeOpacity={0.7} />
           <PolarAngleAxis
             dataKey="signal"
             tick={{ fontSize: 10, fill: "currentColor" }}
@@ -124,24 +125,24 @@ export default function AttributionRadar({ card }: { card: RatingCard }) {
           <Radar
             name={t(locale, "radar.bullish")}
             dataKey="pos"
-            stroke="#3b82f6"
-            fill="#3b82f6"
+            stroke={TM_CHART_CSS.information}
+            fill={TM_CHART_CSS.information}
             fillOpacity={0.4}
           />
           {/* bearish magnitude (red) */}
           <Radar
             name={t(locale, "radar.bearish")}
             dataKey="neg"
-            stroke="#dc2626"
-            fill="#dc2626"
+            stroke={TM_CHART_CSS.negative}
+            fill={TM_CHART_CSS.negative}
             fillOpacity={0.32}
           />
           <Tooltip
             contentStyle={{
-              background: "rgba(15, 23, 42, 0.92)",
-              border: "1px solid #475569",
-              borderRadius: 4,
-              color: "#e2e8f0",
+              background: TM_CHART_CSS.surface,
+              border: `1px solid ${TM_CHART_CSS.gridStrong}`,
+              borderRadius: 0,
+              color: TM_CHART_CSS.foreground,
               fontSize: 11,
             }}
             formatter={(_value, _name, item) => {

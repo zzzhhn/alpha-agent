@@ -17,6 +17,7 @@ import {
   TmTableRow,
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const pnl = (n: number) => `${n >= 0 ? "+" : ""}$${FMT.format(Math.abs(n))}`;
@@ -40,17 +41,13 @@ export default function PaperAttributionTable({
   const { locale } = useLocale();
 
   if (status === "unavailable") {
-    return (
-      <p className="font-tm-mono text-[11px] text-tm-muted">
-        {t(locale, "sim.attribution.unavailable")}
-      </p>
-    );
+    return <TmStatePane state="partial" title={t(locale, "sim.attribution.unavailable")} className="min-h-[120px] rounded-none" />;
   }
   if (status === "loading") {
-    return <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "common.loading")}</p>;
+    return <TmStatePane state="loading" title={t(locale, "common.loading")} className="min-h-[120px] rounded-none" />;
   }
   if (rows.length === 0) {
-    return <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "sim.attribution.empty")}</p>;
+    return <TmStatePane state="empty" title={t(locale, "sim.attribution.empty")} className="min-h-[120px] rounded-none" />;
   }
 
   return (

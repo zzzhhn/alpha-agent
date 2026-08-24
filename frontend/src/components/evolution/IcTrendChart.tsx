@@ -17,6 +17,7 @@ import { t, type Locale } from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { nativeHorizon } from "@/lib/signal-horizons";
 import { formatIcAnnotation } from "@/lib/ic-annotation-format";
+import { TM_CHART_SERIES_CSS } from "@/components/charts";
 
 // A weight-config change event drawn as a dashed vertical marker on the chart,
 // so every promote / rollback / inversion-guard flip is visible ON the IC
@@ -38,15 +39,7 @@ interface IcTrendChartProps {
 }
 
 // One color per signal, cycling through tm vars then fallback hex values.
-const SIGNAL_COLORS = [
-  "var(--tm-accent)",
-  "var(--tm-info)",
-  "var(--tm-pos, #10b981)",
-  "var(--tm-warn, #f59e0b)",
-  "var(--tm-neg, #f87171)",
-  "#a78bfa",
-  "#38bdf8",
-];
+const SIGNAL_COLORS = TM_CHART_SERIES_CSS;
 
 function shortDate(iso: string): string {
   // "2025-03-15T00:00:00" → "03-15"

@@ -8,7 +8,7 @@ import { FactorExampleModal } from "@/components/alpha/FactorExampleModal";
 import type { FactorExample } from "@/components/alpha/FactorExamples";
 import type { FactorUniverse } from "@/lib/types";
 import type { AlphaValidationParams } from "@/components/alpha/useAlphaChain";
-import { TmButton } from "@/components/tm/TmButton";
+import { TmButton, TmRowButton } from "@/components/tm/TmButton";
 import { TmNumberInput, TmSelect, TmTextarea } from "@/components/tm/TmField";
 
 // ---- Prop types ----
@@ -123,7 +123,7 @@ export function HypothesisInputCard(p: Props) {
                 <ul>
                   {p.history.map((h) => (
                     <li key={h.id} className="border-b border-tm-rule last:border-b-0">
-                      <button
+                      <TmRowButton
                         type="button"
                         onClick={() => {
                           p.onHistorySelect(h);
@@ -145,7 +145,7 @@ export function HypothesisInputCard(p: Props) {
                             <span className="ml-2 text-tm-warn">&#9733;</span>
                           )}
                         </div>
-                      </button>
+                      </TmRowButton>
                     </li>
                   ))}
                 </ul>

@@ -26,7 +26,7 @@
  * the legacy components are dead code and can be removed in S5 polish.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -51,6 +51,7 @@ import {
 } from "@/components/tm/TmSubbar";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmNumberInput, TmInput, TmTextarea } from "@/components/tm/TmField";
 import {
   FACTOR_EXAMPLES,
   type FactorExample,
@@ -766,19 +767,18 @@ function ReportPickerPane({
             <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
               cost bps
             </span>
-            <input
-              type="number"
+            <TmNumberInput
               min={0}
               max={50}
               step={1}
               value={config.transactionCostBps}
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                onConfig((c) => ({
-                  ...c,
-                  transactionCostBps: Number(e.target.value) || 0,
-                }))
+              onChange={(value) =>
+                onConfig((c) => ({ ...c, transactionCostBps: value }))
               }
-              className="h-6 w-14 border border-tm-rule bg-tm-bg-2 px-2 text-right font-tm-mono text-[11px] tabular-nums text-tm-fg outline-none focus:border-tm-accent"
+              aria-label="cost bps"
+              fieldSize="sm"
+              className="w-14"
+              inputClassName="text-right"
             />
           </div>
         </div>
@@ -849,22 +849,23 @@ function ReportPickerPane({
 
         {/* Custom input */}
         <div className="flex flex-col gap-2 border-t border-tm-rule pt-2.5">
-          <input
-            type="text"
+          <TmInput
             value={factorName}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              onFactorName(e.target.value)
-            }
+            onChange={onFactorName}
             placeholder={t(locale, "report.picker.namePlaceholder")}
-            className="h-8 w-full border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none placeholder:text-tm-muted focus:border-tm-accent"
+            aria-label={t(locale, "report.picker.namePlaceholder")}
+            className="w-full"
+            inputClassName="font-tm-mono text-[11.5px]"
           />
-          <textarea
+          <TmTextarea
             value={expr}
-            onChange={(e) => onExpr(e.target.value)}
+            onChange={onExpr}
             placeholder={t(locale, "report.picker.exprPlaceholder")}
             rows={2}
             spellCheck={false}
-            className="w-full resize-none border border-tm-rule bg-tm-bg-2 p-2 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg outline-none focus:border-tm-accent"
+            aria-label={t(locale, "report.picker.exprPlaceholder")}
+            className="w-full"
+            textareaClassName="resize-none font-tm-mono text-[11.5px] leading-relaxed"
           />
           <div className="flex justify-end">
             <TmButton

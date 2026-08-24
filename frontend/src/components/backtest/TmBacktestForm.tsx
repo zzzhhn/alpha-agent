@@ -14,11 +14,12 @@
  * the exact saved-headline backtest config.
  */
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmCheckbox, TmRange, TmTextarea } from "@/components/tm/TmField";
 import { TmChip } from "@/components/tm/TmSubbar";
 import {
   FACTOR_EXAMPLES,
@@ -190,13 +191,13 @@ export function TmBacktestForm({
       meta={`${expr.length} CHARS · ${direction} · ${mode}`}
     >
       <div className="flex flex-col gap-3 px-3 py-3">
-        <textarea
+        <TmTextarea
           value={expr}
-          onChange={(e) => setExpr(e.target.value)}
+          onChange={setExpr}
           placeholder={t(locale, "backtest.form.exprPlaceholder")}
           rows={3}
           spellCheck={false}
-          className="w-full resize-none border border-tm-rule bg-tm-bg-2 p-2 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg outline-none transition-colors focus:border-tm-accent"
+          textareaClassName="min-h-0 resize-none p-2 font-tm-mono text-[11.5px] leading-relaxed"
         />
 
         {/* Direction + Mode + Neutralize + Benchmark — 4 chip rows */}
@@ -315,46 +316,26 @@ export function TmBacktestForm({
 
         {/* Toggles */}
         <div className="flex flex-col gap-1.5">
-          <label className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-fg">
-            <input
-              type="checkbox"
-              checked={includeBreakdown}
-              onChange={(e) => setIncludeBreakdown(e.target.checked)}
-              className="cursor-pointer accent-[var(--tm-accent)]"
-            />
-            <span>{t(locale, "backtest.form.includeBreakdown")}</span>
-            <span className="text-[10.5px] text-tm-muted">
-              {t(locale, "backtest.form.includeBreakdownHint")}
-            </span>
-          </label>
-          <label className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-fg">
-            <input
-              type="checkbox"
-              checked={maskEarningsWindow}
-              onChange={(e) => setMaskEarningsWindow(e.target.checked)}
-              className="cursor-pointer accent-[var(--tm-accent)]"
-            />
-            <span>{t(locale, "backtest.form.maskEarnings")}</span>
-            <span className="text-[10.5px] text-tm-muted">
-              {t(locale, "backtest.form.maskEarningsHint")}
-            </span>
-          </label>
-          <label className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-fg">
-            <input
-              type="checkbox"
-              checked={applySurvivorshipMask}
-              onChange={(e) => setApplySurvivorshipMask(e.target.checked)}
-              className="cursor-pointer accent-[var(--tm-accent)]"
-            />
-            <span>
-              {locale === "zh" ? "应用 SP500 成员 mask (生存偏差修正)" : "Apply SP500 membership mask"}
-            </span>
-            <span className="text-[10.5px] text-tm-muted">
-              {locale === "zh"
-                ? "默认开。关闭后对照运行可量化生存偏差贡献。"
-                : "Default on. Toggle off + re-run to quantify the survivorship-bias contribution."}
-            </span>
-          </label>
+          <TmCheckbox
+            checked={includeBreakdown}
+            onChange={setIncludeBreakdown}
+            label={t(locale, "backtest.form.includeBreakdown")}
+            hint={t(locale, "backtest.form.includeBreakdownHint")}
+          />
+          <TmCheckbox
+            checked={maskEarningsWindow}
+            onChange={setMaskEarningsWindow}
+            label={t(locale, "backtest.form.maskEarnings")}
+            hint={t(locale, "backtest.form.maskEarningsHint")}
+          />
+          <TmCheckbox
+            checked={applySurvivorshipMask}
+            onChange={setApplySurvivorshipMask}
+            label={locale === "zh" ? "应用 SP500 成员 mask (生存偏差修正)" : "Apply SP500 membership mask"}
+            hint={locale === "zh"
+              ? "默认开。关闭后对照运行可量化生存偏差贡献。"
+              : "Default on. Toggle off + re-run to quantify the survivorship-bias contribution."}
+          />
         </div>
 
         {/* Footer: examples + run button */}
@@ -444,27 +425,14 @@ function TmSlider({
   readonly onChange: (n: number) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between font-tm-mono">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
-          {label}
-        </label>
-        <span className="text-[12px] tabular-nums text-tm-fg">
-          {value}
-          {unit}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e: ChangeEvent<HTMLInputElement>) =>
-          onChange(Number(e.target.value))
-        }
-        className="h-1 w-full accent-[var(--tm-accent)]"
-      />
-    </div>
+    <TmRange
+      label={label}
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={onChange}
+      formatValue={(current) => `${current}${unit}`}
+    />
   );
 }

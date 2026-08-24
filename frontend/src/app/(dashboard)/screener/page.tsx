@@ -32,7 +32,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ChangeEvent,
 } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
@@ -57,8 +56,9 @@ import { TmChip } from "@/components/tm/TmSubbar";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import { DecisionStrip } from "@/components/workbench/DecisionStrip";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
-import { TmButton } from "@/components/tm/TmButton";
-import { TmInput } from "@/components/tm/TmField";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
+import { TmInput, TmNumberInput, TmRange } from "@/components/tm/TmField";
+import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 import { TmPagination } from "@/components/tm/TmPagination";
 import {
   TmTable,
@@ -553,15 +553,17 @@ function FactorPickerPane({
       </p>
       <div className="flex items-center gap-2 border-b border-tm-rule px-3 py-2">
         <span className="font-tm-mono text-xs text-tm-muted">⌕</span>
-        <input
-          type="text"
+        <TmInput
           value={facQuery}
-          onChange={(e) => {
-            setFacQuery(e.target.value);
+          onChange={(value) => {
+            setFacQuery(value);
             setFacPage(0);
           }}
           placeholder={facCopy.search}
-          className="flex-1 bg-transparent font-tm-mono text-[11px] text-tm-fg outline-none placeholder:text-tm-muted"
+          aria-label={facCopy.search}
+          fieldSize="sm"
+          className="min-w-0 flex-1"
+          inputClassName="border-0 bg-transparent px-0 font-tm-mono text-[11px] placeholder:text-tm-muted focus:border-0"
         />
         <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
           {filteredZoo.length} / {zoo.length}
@@ -639,16 +641,16 @@ function FactorPickerPane({
                       onClick={(ev) => ev.stopPropagation()}
                     >
                       {sel ? (
-                        <input
-                          type="number"
+                        <TmNumberInput
                           min={0}
                           max={10}
                           step={0.1}
                           value={sel.weight}
-                          onChange={(ev) =>
-                            onUpdate(e.id, { weight: Number(ev.target.value) })
-                          }
-                          className="h-7 w-20 border border-tm-rule bg-tm-bg-2 px-2 text-right font-tm-mono text-[11px] tabular-nums text-tm-fg outline-none focus:border-tm-accent"
+                          onChange={(value) => onUpdate(e.id, { weight: value })}
+                          aria-label={`${e.name} weight`}
+                          fieldSize="sm"
+                          className="w-20"
+                          inputClassName="text-right"
                         />
                       ) : (
                         <span className="text-tm-muted">—</span>
@@ -797,52 +799,47 @@ function UniverseFilterPane({
               {zh ? "行业（留空 = 全部）" : "Sectors (blank = all)"}
             </span>
             {sectorTags.length > 0 && (
-              <button
-                type="button"
+              <TmButton
+                variant="ghost"
+                size="xs"
                 onClick={onClearSectors}
-                className="font-tm-mono text-[10px] text-tm-muted hover:text-tm-accent"
+                className="font-tm-mono text-[10px]"
               >
                 {zh ? "清空" : "clear"}
-              </button>
+              </TmButton>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <select
+            <TmSelectMenu
               value=""
-              onChange={(e) => {
-                if (e.target.value) onToggleSector(e.target.value);
-              }}
-              disabled={availableSectors.length === 0}
-              className="cursor-pointer border border-tm-rule bg-tm-bg-3 px-2.5 py-1.5 font-tm-mono text-[12px] text-tm-accent outline-none focus:border-tm-accent disabled:opacity-50"
-            >
-              <option value="">
-                {availableSectors.length === 0
+              onChange={onToggleSector}
+              ariaLabel={zh ? "添加行业" : "Add sector"}
+              placeholder={
+                availableSectors.length === 0
                   ? zh
                     ? "加载行业…"
                     : "loading…"
                   : zh
                     ? "+ 添加行业…"
-                    : "+ Add sector…"}
-              </option>
-              {sectorAvail.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+                    : "+ Add sector…"
+              }
+              options={sectorAvail.map((sector) => ({ value: sector, label: sector }))}
+              disabled={availableSectors.length === 0}
+              size="md"
+              buttonClassName="text-tm-accent"
+            />
             {sectorTags.map((s) => (
               <span
                 key={s}
                 className="inline-flex items-center gap-1.5 border border-tm-accent bg-tm-accent-soft px-2 py-1 font-tm-mono text-[11px] text-tm-accent"
               >
                 {s}
-                <button
-                  type="button"
+                <TmIconButton
+                  label={zh ? `移除行业 ${s}` : `Remove sector ${s}`}
+                  icon="✕"
                   onClick={() => onToggleSector(s)}
                   className="text-tm-muted hover:text-tm-fg"
-                >
-                  ✕
-                </button>
+                />
               </span>
             ))}
             {sectorTags.length === 0 && (
@@ -865,13 +862,12 @@ function UniverseFilterPane({
                 className="inline-flex items-center gap-1.5 border border-tm-neg bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-neg"
               >
                 {tk}
-                <button
-                  type="button"
+                <TmIconButton
+                  label={zh ? `移除排除标的 ${tk}` : `Remove excluded ticker ${tk}`}
+                  icon="✕"
                   onClick={() => removeTicker(tk)}
                   className="text-tm-muted hover:text-tm-neg"
-                >
-                  ✕
-                </button>
+                />
               </span>
             ))}
             {excluded.length === 0 && (
@@ -881,9 +877,9 @@ function UniverseFilterPane({
             )}
           </div>
           <div className="mt-2 flex gap-2">
-            <input
+            <TmInput
               value={tickerAdd}
-              onChange={(e) => setTickerAdd(e.target.value)}
+              onChange={setTickerAdd}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -891,15 +887,19 @@ function UniverseFilterPane({
                 }
               }}
               placeholder={zh ? "输入代码，如 TSLA" : "Ticker, e.g. TSLA"}
-              className="flex-1 border border-tm-rule bg-tm-bg-3 px-2.5 py-1.5 font-tm-mono text-[11px] uppercase text-tm-fg outline-none focus:border-tm-accent"
+              aria-label={zh ? "输入要排除的股票代码" : "Ticker to exclude"}
+              fieldSize="sm"
+              className="min-w-0 flex-1"
+              inputClassName="bg-tm-bg-3 font-tm-mono text-[11px] uppercase"
             />
-            <button
-              type="button"
+            <TmButton
               onClick={addTicker}
-              className="border border-tm-rule px-3 py-1.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+              variant="secondary"
+              size="sm"
+              className="font-tm-mono text-[11px]"
             >
               {zh ? "排除" : "Exclude"}
-            </button>
+            </TmButton>
           </div>
         </div>
 
@@ -1086,25 +1086,14 @@ function SliderWithPresets({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between font-tm-mono">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
-          {label}
-        </label>
-        <span className="text-[12px] tabular-nums text-tm-fg">
-          {value}
-          {unit}
-        </span>
-      </div>
-      <input
-        type="range"
+      <TmRange
+        label={label}
         min={min}
         max={max}
         step={step}
         value={value}
-        onChange={(e: ChangeEvent<HTMLInputElement>) =>
-          onChange(Number(e.target.value))
-        }
-        className="h-1 w-full accent-[var(--tm-accent)]"
+        onChange={onChange}
+        formatValue={(current) => `${current}${unit}`}
       />
       <div className="flex flex-wrap items-center gap-1">
         <span className="font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted">
@@ -1311,13 +1300,12 @@ function ResultsPane({
                     </span>
                   </RCell>
                   <RCell align="right">
-                    <button
-                      type="button"
+                    <TmIconButton
+                      label={isOpen ? `Collapse ${r.ticker}` : `Expand ${r.ticker}`}
+                      icon={isOpen ? "▾" : "▸"}
                       onClick={() => onExpand(isOpen ? null : r.ticker)}
                       className="font-tm-mono text-tm-muted hover:text-tm-accent"
-                    >
-                      {isOpen ? "▾" : "▸"}
-                    </button>
+                    />
                   </RCell>
                   {isOpen && (
                     <div

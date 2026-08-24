@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import IntradayDrawer from "./IntradayDrawer";
 import ExplainRangePanel from "./ExplainRangePanel";
+import { readTmChartPalette, tmChartColorWithAlpha } from "@/components/charts";
 
 // lightweight-charts v4 imports — keep dynamic to avoid SSR breakage (the
 // lib touches `document` at import time). The component itself is
@@ -57,11 +58,11 @@ export default function PriceChart({
 
     const { createChart, ColorType } = await import("lightweight-charts");
 
-    // Resolve theme from data-theme attribute (set globally by ThemeProvider).
-    const isLight = document.documentElement.dataset.theme === "light";
-    const bg = isLight ? "#fafaf7" : "#0a0a0a";
-    const text = isLight ? "#27272a" : "#d4d4d8";
-    const grid = isLight ? "#e4e4e7" : "#27272a";
+    const palette = readTmChartPalette(el);
+    if (!palette) return;
+    const bg = palette.surface;
+    const text = palette.secondary;
+    const grid = palette.grid;
 
     const chart = createChart(el, {
       width: el.clientWidth,
@@ -79,9 +80,9 @@ export default function PriceChart({
     );
 
     const candle = chart.addCandlestickSeries({
-      upColor: "#16a34a", downColor: "#dc2626",
-      borderUpColor: "#16a34a", borderDownColor: "#dc2626",
-      wickUpColor: "#16a34a", wickDownColor: "#dc2626",
+      upColor: palette.positive, downColor: palette.negative,
+      borderUpColor: palette.positive, borderDownColor: palette.negative,
+      wickUpColor: palette.positive, wickDownColor: palette.negative,
     });
     candle.setData(
       validBars.map((b) => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close }))
@@ -96,12 +97,12 @@ export default function PriceChart({
       validBars.map((b) => ({
         time: b.date,
         value: b.volume,
-        color: b.close >= b.open ? "rgba(22,163,74,0.4)" : "rgba(220,38,38,0.4)",
+        color: tmChartColorWithAlpha(b.close >= b.open ? palette.positive : palette.negative, 0.4),
       }))
     );
 
     const smaValues = sma(validBars.map((b) => b.close), 50);
-    const ma = chart.addLineSeries({ color: "#3b82f6", lineWidth: 1, priceLineVisible: false });
+    const ma = chart.addLineSeries({ color: palette.information, lineWidth: 1, priceLineVisible: false });
     ma.setData(
       validBars
         .map((b, i) => ({ time: b.date, value: smaValues[i] }))
@@ -151,7 +152,7 @@ export default function PriceChart({
           markers.push({
             time: day,
             position: "aboveBar",
-            color: mean > 0.1 ? "#16a34a" : mean < -0.1 ? "#dc2626" : "#9ca3af",
+            color: mean > 0.1 ? palette.positive : mean < -0.1 ? palette.negative : palette.muted,
             shape: "circle",
             text: `+${newsItems.length}`,
           });
@@ -160,7 +161,7 @@ export default function PriceChart({
           markers.push({
             time: day,
             position: "belowBar",
-            color: "#9ca3af",
+            color: palette.muted,
             shape: macroItems.some((e) => e.type === "macro_geopolitical")
               ? "arrowDown"
               : "square",
@@ -190,7 +191,7 @@ export default function PriceChart({
       const rows = shown
         .map((e) => {
           const s = e.sentiment_score ?? 0;
-          const dot = s > 0.1 ? "#16a34a" : s < -0.1 ? "#dc2626" : "#9ca3af";
+          const dot = s > 0.1 ? palette.positive : s < -0.1 ? palette.negative : palette.muted;
           const safe = e.headline
             .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
           return `<div style="display:flex;gap:6px;align-items:flex-start;margin-top:2px">

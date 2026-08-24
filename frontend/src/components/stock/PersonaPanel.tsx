@@ -27,6 +27,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { getPersonas } from "@/lib/personas";
 import { useHasByok } from "@/hooks/useHasByok";
+import { TmButton } from "@/components/tm/TmButton";
 
 type Status = "idle" | "streaming" | "done" | "error" | "aborted";
 
@@ -137,14 +138,15 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
           <p className="mt-0.5 text-xs text-tm-muted">{copy.subtitle}</p>
         </div>
         {status === "streaming" ? (
-          <button
-            type="button"
+          <TmButton
+            variant="danger"
+            size="xs"
             onClick={onAbort}
-            className="inline-flex shrink-0 items-center gap-1 rounded border border-tm-rule px-2 py-1 text-xs text-tm-fg hover:border-tm-neg"
+            className="rounded"
           >
             <Square aria-hidden className="w-3 h-3" strokeWidth={1.75} />
             {t(locale, "rich.stop_button")}
-          </button>
+          </TmButton>
         ) : null}
       </div>
       {locked ? (
@@ -158,9 +160,10 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
       ) : null}
       <div className="flex flex-wrap gap-1.5">
         {personas.map((p) => (
-          <button
+          <TmButton
             key={p.name}
-            type="button"
+            variant="secondary"
+            size="xs"
             onClick={() => void onExplain(p.name)}
             disabled={locked || status === "streaming"}
             className={`rounded border px-2.5 py-1 text-xs transition disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -171,7 +174,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
             title={locked ? copy.lockedHint : p.signals.join(" + ")}
           >
             {status === "streaming" && active === p.name ? copy.loading : p.label}
-          </button>
+          </TmButton>
         ))}
       </div>
       {/* Live + completed output: render whatever has streamed so far so
@@ -190,13 +193,14 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
       {status === "error" ? (
         <div className="flex items-center gap-2 text-xs text-tm-neg">
           <span>{errMsg}</span>
-          <button
-            type="button"
+          <TmButton
+            variant="danger"
+            size="xs"
             onClick={() => active && void onExplain(active)}
-            className="rounded border border-tm-neg/40 px-1.5 py-0.5"
+            className="rounded"
           >
             {copy.tryAgain}
-          </button>
+          </TmButton>
         </div>
       ) : null}
     </section>

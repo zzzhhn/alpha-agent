@@ -18,8 +18,9 @@ import {
   type BrainRunCandidate,
   type BrainRunCandidatePage,
 } from "@/lib/api/brain";
-import { TmButton } from "@/components/tm/TmButton";
+import { TmButton, TmIconButton, TmRowButton } from "@/components/tm/TmButton";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import { TmTooltip } from "@/components/tm/TmTooltip";
 
 type AuditFilter = "all" | "selected" | "withheld";
 
@@ -202,18 +203,23 @@ function CandidateRow({ candidate, zh }: { candidate: BrainRunCandidate; zh: boo
     <li className="border-t border-tm-rule first:border-t-0">
       <div className="grid min-w-[980px] grid-cols-[36px_minmax(360px,1fr)_112px_72px_72px_100px_132px] items-center gap-2 px-3 py-2 hover:bg-tm-bg-2">
         <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">{candidate.ordinal + 1}</span>
-        <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-w-0 items-center gap-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-tm-accent">
+        <TmRowButton onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-w-0 items-center gap-1.5">
           {open ? <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" /> : <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" />}
           <code className="truncate font-tm-mono text-[10px] text-tm-fg">{candidate.expression}</code>
-        </button>
+        </TmRowButton>
         <span className="truncate font-tm-mono text-[9px] uppercase text-tm-fg-2" title={candidate.mechanism ?? undefined}>{candidate.mechanism || "—"}</span>
         <span className="text-right font-tm-mono text-[11px] tabular-nums text-tm-fg">{score(candidate.evidence_score)}</span>
         <span className="text-right font-tm-mono text-[10px] tabular-nums text-tm-fg-2">{percent(evidence.coverage)}</span>
         <LlmState candidate={candidate} zh={zh} />
         <span className="flex items-center justify-end gap-1.5">
-          <button type="button" onClick={copyExpression} aria-label={zh ? "复制表达式" : "copy expression"} title={zh ? "复制表达式" : "copy expression"} className="inline-flex h-7 w-7 items-center justify-center border border-tm-rule text-tm-muted hover:border-tm-accent hover:text-tm-fg focus-visible:ring-1 focus-visible:ring-tm-accent">
-            {copied ? <Check className="h-3 w-3 text-tm-pos" /> : <Clipboard className="h-3 w-3" />}
-          </button>
+          <TmIconButton
+            onClick={copyExpression}
+            label={zh ? "复制表达式" : "copy expression"}
+            variant="secondary"
+            size="sm"
+            className="w-7"
+            icon={copied ? <Check className="h-3 w-3 text-tm-pos" /> : <Clipboard className="h-3 w-3" />}
+          />
           <span title={candidate.reason_text ?? undefined} className={`whitespace-nowrap border px-1.5 py-0.5 font-tm-mono text-[9px] ${decisionClass(candidate)}`}>{reasonLabel(candidate, zh)}</span>
         </span>
       </div>
@@ -349,7 +355,7 @@ export function BrainCandidateAudit({
     return zh
       ? `${providerName} 逻辑预筛${stateCopy}，${callCopy}。${scoreCopy}${simulationCopy}`
       : `${providerName} logic screening ${stateCopy}; ${callCopy}. ${scoreCopy} ${simulationCopy}`;
-  }, [callCount, completedCalls, elapsedMs, errorCalls, expressionCount, fullPoolTelemetry, legacyBatchCount, legacyCompletedBatches, legacyFailedBatchCount, legacyRetryCount, llmFallbacks, provider, screenStatus, scoredCount, selected, simulated, timedOutCalls, timeoutSeconds, totalCandidates, zh]);
+  }, [completedCalls, elapsedMs, errorCalls, expressionCount, fullPoolTelemetry, legacyBatchCount, legacyCompletedBatches, legacyFailedBatchCount, legacyRetryCount, llmFallbacks, provider, screenStatus, scoredCount, selected, simulated, timedOutCalls, timeoutSeconds, totalCandidates, zh]);
 
   if (runId == null) {
     return (
@@ -410,11 +416,11 @@ export function BrainCandidateAudit({
       ) : error ? (
         <div className="flex items-start gap-2 px-3 py-5 font-tm-mono text-[10px] leading-relaxed text-tm-neg" role="alert">
           <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
+          <span className="inline-flex items-center gap-2">
             {zh ? `候选审计读取失败：${error}` : `Candidate audit failed to load: ${error}`}
-            <button type="button" onClick={() => void load()} className="ml-2 border border-tm-neg px-2 py-0.5 hover:bg-tm-neg/10">
+            <TmButton variant="danger" size="xs" onClick={() => void load()}>
               {zh ? "重试" : "retry"}
-            </button>
+            </TmButton>
           </span>
         </div>
       ) : data && data.total === 0 ? (
@@ -434,15 +440,15 @@ export function BrainCandidateAudit({
               <span>#</span>
               <span>{zh ? "候选表达式" : "candidate expression"}</span>
               <span>{zh ? "机制" : "mechanism"}</span>
-              <span className="cursor-help text-right" title={zh ? "筛选前的综合研究证据分，不是 BRAIN 官方指标。" : "Pre-simulation research evidence score, not an official BRAIN metric."}>
-                {zh ? "证据" : "evidence"}
-              </span>
-              <span className="cursor-help text-right" title={zh ? "表达式字段在官方目录元数据中的可核验覆盖率。" : "Verifiable coverage of expression fields in official catalog metadata."}>
-                {zh ? "覆盖" : "coverage"}
-              </span>
-              <span className="cursor-help" title={zh ? "LLM 筛选器的技术状态，与因子经济质量分开记录。" : "Technical state of the LLM screen, recorded separately from economic quality."}>
-                LLM
-              </span>
+              <TmTooltip content={zh ? "筛选前的综合研究证据分，不是 BRAIN 官方指标。" : "Pre-simulation research evidence score, not an official BRAIN metric."} className="justify-end">
+                <span className="cursor-help text-right">{zh ? "证据" : "evidence"}</span>
+              </TmTooltip>
+              <TmTooltip content={zh ? "表达式字段在官方目录元数据中的可核验覆盖率。" : "Verifiable coverage of expression fields in official catalog metadata."} className="justify-end">
+                <span className="cursor-help text-right">{zh ? "覆盖" : "coverage"}</span>
+              </TmTooltip>
+              <TmTooltip content={zh ? "LLM 筛选器的技术状态，与因子经济质量分开记录。" : "Technical state of the LLM screen, recorded separately from economic quality."}>
+                <span className="cursor-help">LLM</span>
+              </TmTooltip>
               <span className="text-right">{zh ? "筛选结论" : "decision"}</span>
             </div>
             {candidates.length > 0 ? (

@@ -3,6 +3,7 @@
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { DecisionStrip } from "@/components/workbench/DecisionStrip";
+import { TmButton } from "@/components/tm/TmButton";
 import { t } from "@/lib/i18n";
 import type { ChainState, ThresholdEval, VerdictMetrics } from "./types";
 
@@ -62,12 +63,13 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
             {state.message}
           </span>
         </div>
-        <button
+        <TmButton
+          variant="danger"
+          size="sm"
           onClick={onReTranslate}
-          className="border border-tm-neg/60 px-3 py-1.5 font-tm-mono text-xs font-semibold text-tm-neg hover:bg-tm-neg/20"
         >
           {t(locale, "alpha.verdict.retranslate" as Parameters<typeof t>[1])}
-        </button>
+        </TmButton>
       </section>
     );
   }
@@ -91,14 +93,15 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
         { label: zh ? "证据完整度" : "Evidence", value: `${available} / 3`, detail: zh ? "服务端结果" : "Server result", tone: overallTone },
       ]}
       action={canSave ? (
-        <button
+        <TmButton
+          variant="primary"
+          size="sm"
           onClick={onSave}
           aria-label={t(locale, "alpha.verdict.saveToZoo" as Parameters<typeof t>[1])}
-          className="inline-flex items-center gap-1 border border-tm-accent px-3 py-2 font-tm-mono text-[11px] font-semibold text-tm-accent hover:bg-tm-accent hover:text-tm-bg"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
           {t(locale, "alpha.verdict.saveToZoo" as Parameters<typeof t>[1])}
-        </button>
+        </TmButton>
       ) : undefined}
     />
   );

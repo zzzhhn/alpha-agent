@@ -11,6 +11,8 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { registerAction, type RegisterError } from "./actions";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
 
 // Map a RegisterError code to an i18n key (keys defined in C2 Option A).
 const ERROR_KEY: Record<RegisterError, Parameters<typeof t>[1]> = {
@@ -58,53 +60,45 @@ export default function RegisterPage() {
         {t(locale, "register.title")}
       </h1>
       <form onSubmit={onSubmit} className="space-y-3">
-        <label className="block text-xs text-tm-muted">
-          {t(locale, "register.email_label")}
-        </label>
-        <input
+        <TmInput
+          label={t(locale, "register.email_label")}
           type="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={setEmail}
           placeholder={t(locale, "register.email_placeholder")}
-          className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
         />
-        <label className="block text-xs text-tm-muted">
-          {t(locale, "register.password_label")}
-        </label>
-        <input
+        <TmInput
+          label={t(locale, "register.password_label")}
           type="password"
           required
           minLength={8}
           maxLength={32}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={setPassword}
           placeholder={t(locale, "register.password_placeholder")}
-          className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
         />
-        <label className="block text-xs text-tm-muted">
-          {t(locale, "register.confirm_label")}
-        </label>
-        <input
+        <TmInput
+          label={t(locale, "register.confirm_label")}
           type="password"
           required
           minLength={8}
           maxLength={32}
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={setConfirmPassword}
           placeholder={t(locale, "register.confirm_placeholder")}
-          className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
         />
         {errorKey && (
           <p className="text-xs text-tm-neg">{t(locale, errorKey)}</p>
         )}
-        <button
+        <TmButton
           type="submit"
-          disabled={submitting}
-          className="w-full rounded border border-tm-rule bg-tm-bg px-3 py-1.5 text-sm text-tm-fg hover:border-tm-accent disabled:opacity-60"
+          loading={submitting}
+          loadingLabel={t(locale, "register.submitting")}
+          className="w-full"
         >
-          {t(locale, submitting ? "register.submitting" : "register.submit_button")}
-        </button>
+          {t(locale, "register.submit_button")}
+        </TmButton>
       </form>
       <p className="mt-4 text-center text-xs text-tm-muted">
         {t(locale, "register.have_account")}{" "}

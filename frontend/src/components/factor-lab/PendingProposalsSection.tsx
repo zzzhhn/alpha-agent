@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useToast } from "@/components/ui/toast";
 import { t } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmPagination } from "@/components/tm/TmPagination";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 import {
   approveFactorProposal,
@@ -177,19 +178,21 @@ export function PendingProposalsSection({
           return (
             <div key={p.id} className="px-3 py-2">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
+                <TmIconButton
+                  label={isOpen ? "Collapse proposal" : "Expand proposal"}
+                  icon={
+                    isOpen ? (
+                      <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    )
+                  }
+                  size="xs"
+                  variant="ghost"
                   onClick={() => toggleExpand(p.id)}
-                  className="text-tm-muted hover:text-tm-fg"
                   aria-expanded={isOpen}
-                  aria-label="expand"
-                >
-                  {isOpen ? (
-                    <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  ) : (
-                    <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  )}
-                </button>
+                  className="shrink-0"
+                />
                 <code className="flex-1 truncate font-mono text-[11px] text-tm-fg">
                   {p.expression}
                 </code>
@@ -205,34 +208,24 @@ export function PendingProposalsSection({
                 <span className="shrink-0 font-mono text-[11px] text-tm-fg-2">
                   <GlossaryTip term="DS">{t(locale, "factorLab.pending.colDS")}</GlossaryTip> {fmtNum(ds, 2)}
                 </span>
-                <button
-                  type="button"
+                <TmButton
+                  variant="primary"
+                  size="xs"
                   onClick={() => handleApprove(p)}
                   disabled={state !== "idle"}
-                  className="inline-flex items-center gap-1 rounded border border-tm-pos/60 bg-tm-pos/10 px-2 py-0.5 font-tm-mono text-[10px] text-tm-pos transition-opacity disabled:opacity-40 enabled:hover:bg-tm-pos/20"
+                  loading={state === "approving"}
                 >
-                  {state === "approving" ? (
-                    <Loader2
-                      className="h-3 w-3 animate-spin"
-                      strokeWidth={1.75}
-                    />
-                  ) : null}
                   <span>{t(locale, "factorLab.pending.approve")}</span>
-                </button>
-                <button
-                  type="button"
+                </TmButton>
+                <TmButton
+                  variant="danger"
+                  size="xs"
                   onClick={() => handleReject(p)}
                   disabled={state !== "idle"}
-                  className="inline-flex items-center gap-1 rounded border border-tm-rule bg-tm-bg-3 px-2 py-0.5 font-tm-mono text-[10px] text-tm-fg-2 transition-opacity disabled:opacity-40 enabled:hover:bg-tm-bg-3/60"
+                  loading={state === "rejecting"}
                 >
-                  {state === "rejecting" ? (
-                    <Loader2
-                      className="h-3 w-3 animate-spin"
-                      strokeWidth={1.75}
-                    />
-                  ) : null}
                   <span>{t(locale, "factorLab.pending.reject")}</span>
-                </button>
+                </TmButton>
               </div>
 
               {isOpen ? (

@@ -18,6 +18,7 @@ import { TmPane, TmCols2 } from "@/components/tm/TmPane";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { SignalTodayResponse } from "@/lib/types";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 
 interface TmTopBottomTableProps {
   readonly today: SignalTodayResponse | null;
@@ -33,18 +34,14 @@ export function TmTopBottomTable({ today, loading }: TmTopBottomTableProps) {
   if (loading && !today) {
     return (
       <TmPane title="SIGNAL.TODAY" meta="LOADING">
-        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
-          …
-        </p>
+        <TmStatePane state="loading" title={t(locale, "common.loading")} className="min-h-[140px] rounded-none border-0" />
       </TmPane>
     );
   }
   if (!today) {
     return (
       <TmPane title="SIGNAL.TODAY">
-        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
-          {t(locale, "signal.today.empty")}
-        </p>
+        <TmStatePane state="empty" title={t(locale, "signal.today.empty")} className="min-h-[140px] rounded-none border-0" />
       </TmPane>
     );
   }

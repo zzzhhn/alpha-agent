@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from "recharts";
 import type { PnlPoint } from "@/lib/api/brain";
+import { TM_CHART_CSS } from "@/components/charts";
 
 export type ChartKind = "pnl" | "sharpe" | "drawdown";
 
@@ -64,35 +65,34 @@ export function BrainPnLChart({
     kind === "sharpe"
       ? (v: number) => v.toFixed(1)
       : (v: number) => `${(v / 1000).toFixed(0)}k`;
-  const stroke =
-    kind === "drawdown" ? "var(--tm-neg, #f87171)" : "var(--accent, #34d399)";
+  const stroke = kind === "drawdown" ? TM_CHART_CSS.negative : TM_CHART_CSS.positive;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 12, left: 4, bottom: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.25} />
+        <CartesianGrid strokeDasharray="3 3" stroke={TM_CHART_CSS.grid} opacity={0.5} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 9, fill: "var(--muted)" }}
+          tick={{ fontSize: 9, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: string) => (typeof v === "string" ? v.slice(0, 7) : v)}
           interval="preserveStartEnd"
           minTickGap={40}
         />
         <YAxis
-          tick={{ fontSize: 9, fill: "var(--muted)" }}
+          tick={{ fontSize: 9, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: number) => yFmt(v)}
           domain={["auto", "auto"]}
           width={40}
         />
         <Tooltip
           contentStyle={{
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
+            background: TM_CHART_CSS.surface,
+            border: `1px solid ${TM_CHART_CSS.grid}`,
+            borderRadius: 0,
             fontSize: 11,
             fontFamily: "var(--font-tm-mono, monospace)",
           }}
-          labelStyle={{ color: "var(--muted)" }}
+          labelStyle={{ color: TM_CHART_CSS.muted }}
           formatter={(v) => [
             typeof v === "number" ? yFmt(v) : String(v),
             kind === "sharpe" ? "Sharpe" : kind === "drawdown" ? "DD" : "PnL",

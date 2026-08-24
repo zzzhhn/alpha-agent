@@ -4,6 +4,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { buildSmokeScorecard, type QcStatus } from "@/lib/factorQc";
 import type { FactorBacktestResponse, SmokeReport } from "@/lib/types";
+import { TmButton } from "@/components/tm/TmButton";
 import { PanePlaceholder } from "./PanePlaceholder";
 import type { PaneState } from "./types";
 
@@ -87,12 +88,14 @@ export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Prop
         <div className="flex flex-col gap-2 text-xs text-tm-neg">
           <div className="break-words font-tm-mono">{errorMessage}</div>
           {onRetry ? (
-            <button
+            <TmButton
+              variant="danger"
+              size="xs"
               onClick={onRetry}
-              className="w-fit rounded border border-tm-neg/40 px-2 py-0.5 font-tm-mono text-tm-neg hover:bg-tm-neg/10"
+              className="w-fit"
             >
               {tk("alpha.pane.retry")}
-            </button>
+            </TmButton>
           ) : null}
         </div>
       ) : data && sc ? (

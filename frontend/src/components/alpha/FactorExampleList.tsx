@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import type { Locale, TranslationKey } from "@/lib/i18n";
 import type { FactorExample } from "@/components/alpha/FactorExamples";
 import { TmInput } from "@/components/tm/TmField";
+import { TmRowButton } from "@/components/tm/TmButton";
 
 /**
  * Grouped, scannable, filterable LIST for FACTOR_EXAMPLES.
@@ -129,7 +130,7 @@ function FactorExampleRow({
   const retPositive = example.totalReturn >= 0;
   const hypothesis = locale === "zh" ? example.hypothesisZh : example.hypothesisEn;
   return (
-    <button
+    <TmRowButton
       type="button"
       onClick={() => onSelect(example)}
       disabled={disabled}
@@ -179,7 +180,7 @@ function FactorExampleRow({
       <span className="line-clamp-1 font-tm-sans text-[11px] leading-snug text-tm-muted group-hover:text-tm-fg-2">
         {hypothesis}
       </span>
-    </button>
+    </TmRowButton>
   );
 }
 

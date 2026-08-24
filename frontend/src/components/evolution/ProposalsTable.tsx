@@ -21,6 +21,7 @@ import {
   TmTableRow,
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
+import { TmButton } from "@/components/tm/TmButton";
 
 // Localized status label. Falls back to the raw enum for any unmapped status.
 function statusLabel(status: string, locale: Locale): string {
@@ -246,32 +247,24 @@ export function ProposalsTable({
                 <TmTableCell textAlign="center" className="px-2 py-1.5">
                   {isPending ? (
                     <div className="flex items-center gap-1.5 justify-center">
-                      <button
+                      <TmButton
+                        variant="primary"
+                        size="xs"
                         disabled={isRowPending}
                         onClick={() => handleAction(p.id, "approve")}
-                        className={clsx(
-                          "inline-flex items-center rounded border px-2 py-0.5 font-tm-mono text-[9px] leading-[16px] transition-opacity",
-                          "border-tm-pos/40 bg-tm-pos/10 text-tm-pos",
-                          isRowPending
-                            ? "opacity-40 cursor-not-allowed"
-                            : "hover:bg-tm-pos/20",
-                        )}
+                        className="text-[9px] leading-[16px]"
                       >
                         {isRowPending ? "..." : t(locale, "evolution.proposals.approve")}
-                      </button>
-                      <button
+                      </TmButton>
+                      <TmButton
+                        variant="danger"
+                        size="xs"
                         disabled={isRowPending}
                         onClick={() => handleAction(p.id, "reject")}
-                        className={clsx(
-                          "inline-flex items-center rounded border px-2 py-0.5 font-tm-mono text-[9px] leading-[16px] transition-opacity",
-                          "border-tm-neg/40 bg-tm-neg/10 text-tm-neg",
-                          isRowPending
-                            ? "opacity-40 cursor-not-allowed"
-                            : "hover:bg-tm-neg/20",
-                        )}
+                        className="text-[9px] leading-[16px]"
                       >
                         {isRowPending ? "..." : t(locale, "evolution.proposals.reject")}
-                      </button>
+                      </TmButton>
                     </div>
                   ) : (
                     <span className="font-tm-mono text-[9px] text-tm-muted">

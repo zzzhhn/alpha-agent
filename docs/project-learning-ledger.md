@@ -126,3 +126,11 @@
 - Design governance must be executable: the sidebar reference, migration ledger, cross-cutting conventions audit, dark/light and zh/en browser checks, and an explicit exception process are part of the product source of truth.
 - Accessibility contracts belong inside the primitive. Table captions, dialog focus entry and restoration, disclosure `aria-expanded`, and radio-group keyboard behavior should not depend on each route remembering the same implementation details.
 - Canonical chart tokens become useful only after a production chart consumes them. A token specimen plus real equity, drawdown, and walk-forward adoption is stronger evidence than a palette page alone.
+
+## 2026-08-24: Design-system closure needs an executable no-growth gate
+
+- Grep counts are useful for discovery but noisy for completion because comments, canonical internals, and polymorphic components blur the result. A TypeScript AST audit can distinguish production-native controls from canonical internals and explicit semantic exceptions.
+- Full-row interactions deserve their own primitive. Recasting every dense ledger row as a normal button changes hierarchy; `TmRowButton` preserves row-owned layout while centralizing focus, hover, disabled, and keyboard semantics.
+- Modal behavior is cross-cutting infrastructure. Dialogs and drawers should share focus entry, trap, Escape, scroll lock, and trigger restoration instead of reimplementing them per route.
+- Chart governance needs both CSS-token and resolved-canvas adapters. Hard-coded hex values otherwise return as soon as a chart moves from SVG to Canvas.
+- A compatibility backlog must be bounded. The native-title ledger is allowed only for truncation and legacy hints, and the audit fails if its recorded count grows.

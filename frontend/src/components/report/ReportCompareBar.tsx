@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { ZooEntry } from "@/lib/factor-zoo";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 
 /**
  * ReportCompareBar (ALPHACORE design, report block lines 568-581) — the
@@ -44,42 +46,39 @@ export function ReportCompareBar({
             {tk("report.compare2.subtitle")}
           </p>
         </div>
-        <button
-          type="button"
+        <TmButton
           onClick={handleGenerate}
           disabled={running || !staged}
-          className="shrink-0 bg-tm-accent px-3.5 py-1.5 font-tm-mono text-[12px] font-semibold text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0"
         >
           {tk("report.compare2.generate")}
-        </button>
+        </TmButton>
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5 px-3.5 py-2.5">
-        <select
+        <TmSelectMenu
           value={staged}
-          onChange={(e) => setStaged(e.target.value)}
+          onChange={setStaged}
+          ariaLabel={tk("report.compare2.pick")}
+          placeholder={tk("report.compare2.pick")}
+          options={zoo.map((z) => ({ value: z.name, label: z.name }))}
           disabled={running || zoo.length === 0}
-          className="min-w-[240px] cursor-pointer border border-tm-rule bg-tm-bg-3 px-2.5 py-1.5 font-tm-mono text-[12px] text-tm-accent outline-none focus:border-tm-accent disabled:opacity-50"
-        >
-          <option value="">{tk("report.compare2.pick")}</option>
-          {zoo.map((z) => (
-            <option key={z.id} value={z.name}>
-              {z.name}
-            </option>
-          ))}
-        </select>
+          size="md"
+          buttonClassName="min-w-[240px] text-tm-accent"
+        />
 
         {compareName ? (
           <span className="inline-flex items-center gap-2 font-tm-mono text-[11px] text-tm-fg-2">
             {tk("report.compare2.current")}
             <span className="text-tm-info">{compareName}</span>
-            <button
-              type="button"
+            <TmButton
+              variant="secondary"
+              size="xs"
               onClick={onClear}
-              className="border border-tm-rule px-1.5 py-px text-[10px] text-tm-muted transition-colors hover:border-tm-neg hover:text-tm-neg"
+              className="px-1.5 text-[10px] text-tm-muted hover:border-tm-neg hover:text-tm-neg"
             >
               {tk("report.compare2.clear")}
-            </button>
+            </TmButton>
           </span>
         ) : (
           <span className="font-tm-mono text-[11px] text-tm-muted">

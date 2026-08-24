@@ -17,14 +17,14 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
 } from "react";
 import { ChevronDown } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { Locale, TranslationKey } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
-import { TmButton } from "@/components/tm/TmButton";
+import { TmButton, TmRowButton } from "@/components/tm/TmButton";
+import { TmRange, TmTextarea } from "@/components/tm/TmField";
 import { TmChip } from "@/components/tm/TmSubbar";
 import {
   FACTOR_EXAMPLES,
@@ -72,13 +72,14 @@ export function TmSignalForm({ running, onRun }: TmSignalFormProps) {
   return (
     <TmPane title="SIGNAL.FORM" meta={`${expr.length} CHARS`}>
       <div className="flex flex-col gap-3 px-3 py-3">
-        <textarea
+        <TmTextarea
           value={expr}
-          onChange={(e) => setExpr(e.target.value)}
+          onChange={setExpr}
           placeholder={t(locale, "signal.form.exprPlaceholder")}
           rows={3}
           spellCheck={false}
-          className="w-full resize-none border border-tm-rule bg-tm-bg-2 p-2 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg outline-none transition-colors focus:border-tm-accent"
+          className="w-full"
+          textareaClassName="resize-none p-2 text-[11.5px] leading-relaxed"
         />
 
         <div className="flex flex-wrap items-end gap-4">
@@ -145,28 +146,16 @@ function TmSlider({
   className,
 }: TmSliderProps) {
   return (
-    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
-      <div className="flex items-center justify-between font-tm-mono">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
-          {label}
-        </label>
-        <span className="text-[12px] tabular-nums text-tm-fg">
-          {value}
-          {unit}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e: ChangeEvent<HTMLInputElement>) =>
-          onChange(Number(e.target.value))
-        }
-        className="tm-range h-1 w-full accent-[var(--tm-accent)]"
-      />
-    </div>
+    <TmRange
+      label={label}
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      onChange={onChange}
+      formatValue={(next) => `${next}${unit}`}
+      className={className}
+    />
   );
 }
 
@@ -237,11 +226,12 @@ function LoadExampleMenu({
 
   return (
     <div className="relative" ref={ref}>
-      <button
-        type="button"
+      <TmButton
+        variant="secondary"
+        size="xs"
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
-        className="inline-flex items-center gap-1.5 border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-[10.5px] leading-4 text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg disabled:cursor-not-allowed disabled:opacity-50"
+        className="leading-4 hover:border-tm-accent hover:text-tm-fg"
       >
         <span className="uppercase tracking-[0.06em]">
           {t(locale, "signal.form.loadExampleMenu")}
@@ -251,7 +241,7 @@ function LoadExampleMenu({
           strokeWidth={1.75}
           aria-hidden="true"
         />
-      </button>
+      </TmButton>
 
       {open && (
         <div className="absolute left-0 top-full z-20 mt-1 max-h-[360px] w-[320px] overflow-y-auto border border-tm-rule bg-tm-bg-2 shadow-lg">
@@ -305,11 +295,10 @@ function ExampleMenuSection({
       <ul>
         {items.map((ex) => (
           <li key={ex.name}>
-            <button
-              type="button"
+            <TmRowButton
               onClick={() => onPick(ex)}
               title={ex.expression}
-              className="group flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-tm-bg-3"
+              className="group flex items-center gap-2 px-2 py-1.5 hover:bg-tm-bg-3"
             >
               <span
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`}
@@ -321,7 +310,7 @@ function ExampleMenuSection({
               <code className="hidden max-w-[140px] shrink-0 truncate font-tm-mono text-[10px] text-tm-muted sm:block">
                 {ex.expression}
               </code>
-            </button>
+            </TmRowButton>
           </li>
         ))}
       </ul>
