@@ -2,12 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, Filter } from "lucide-react";
+import { Filter } from "lucide-react";
 import { fetchAlertsRecent, type AlertRow } from "@/lib/api/alertsFeed";
 import { t, type Locale } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput, TmSelect } from "@/components/tm/TmField";
+import { TmStatePane } from "@/components/tm/TmStatePane";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
+import { TmTooltip } from "@/components/tm/TmTooltip";
 
 function relativeTime(iso: string, locale: Locale): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -53,10 +67,12 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [rows, setRows] = useState<AlertRow[] | null>(null);
   const [err, setErr] = useState<string>("");
+  const [loading, setLoading] = useState(false);
   const { isWatched } = useWatchlist();
 
   const load = useCallback(async () => {
     setErr("");
+    setLoading(true);
     try {
       const r = await fetchAlertsRecent({
         ticker: filter.trim() || undefined,
@@ -66,6 +82,8 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setRows([]);
+    } finally {
+      setLoading(false);
     }
   }, [filter]);
 
@@ -113,71 +131,82 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Filter aria-hidden className="w-4 h-4 text-tm-muted" strokeWidth={1.75} />
-        <input
+        <TmInput
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={setFilter}
           placeholder={t(locale, "alerts.filter_placeholder")}
-          className="rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 text-sm text-tm-fg w-64"
+          fieldSize="sm"
+          className="w-64"
         />
-        <select
+        <TmSelect
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 text-sm text-tm-fg"
+          onChange={setTypeFilter}
+          fieldSize="sm"
+          options={[
+            { value: "", label: t(locale, "alerts.filter_all_types") },
+            ...availableTypes.map((value) => ({ value, label: typeLabel(value, locale) })),
+          ]}
           aria-label={t(locale, "alerts.col_type")}
-        >
-          <option value="">{t(locale, "alerts.filter_all_types")}</option>
-          {availableTypes.map((ty) => (
-            <option key={ty} value={ty}>
-              {typeLabel(ty, locale)}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
+        />
+        <TmButton
+          variant="secondary"
+          size="sm"
           onClick={load}
-          className="text-xs text-tm-muted hover:text-tm-accent"
+          loading={loading}
+          loadingLabel={locale === "zh" ? "刷新中" : "Refreshing"}
         >
           {locale === "zh" ? "刷新" : "Refresh"}
-        </button>
+        </TmButton>
       </div>
 
       {err ? (
-        <div className="text-sm text-tm-neg">Error: {err}</div>
+        <TmStatePane
+          state="error"
+          title={locale === "zh" ? "警报加载失败" : "Alerts failed to load"}
+          description={err}
+          action={{
+            label: locale === "zh" ? "重试" : "Retry",
+            onClick: () => { void load(); },
+            loading,
+          }}
+        />
       ) : displayRows == null ? (
-        <div className="text-sm text-tm-muted">{locale === "zh" ? "加载中…" : "Loading…"}</div>
+        <TmStatePane
+          state="loading"
+          title={locale === "zh" ? "正在加载警报" : "Loading alerts"}
+        />
       ) : displayRows.length === 0 ? (
-        <div className="flex items-center gap-2 text-sm text-tm-muted">
-          <Bell aria-hidden className="w-4 h-4" strokeWidth={1.75} />
-          {t(locale, "alerts.empty")}
-        </div>
+        <TmStatePane
+          state="empty"
+          title={t(locale, "alerts.empty")}
+          description={locale === "zh" ? "调整代码或类型筛选后重试。" : "Adjust the ticker or type filter and try again."}
+        />
       ) : (
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-tm-fg-2 border-b border-tm-rule">
-              <th className="text-left px-2 py-1">{t(locale, "alerts.col_time")}</th>
-              <th className="text-left px-2 py-1">{t(locale, "alerts.col_ticker")}</th>
-              <th className="text-left px-2 py-1">{t(locale, "alerts.col_type")}</th>
-              <th className="text-left px-2 py-1">{t(locale, "alerts.col_payload")}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <TmTableFrame>
+          <TmTable density="compact" caption={locale === "zh" ? "最近警报" : "Recent alerts"}>
+          <TmTableHead>
+            <TmTableRow>
+              <TmTableHeaderCell>{t(locale, "alerts.col_time")}</TmTableHeaderCell>
+              <TmTableHeaderCell>{t(locale, "alerts.col_ticker")}</TmTableHeaderCell>
+              <TmTableHeaderCell>{t(locale, "alerts.col_type")}</TmTableHeaderCell>
+              <TmTableHeaderCell>{t(locale, "alerts.col_payload")}</TmTableHeaderCell>
+            </TmTableRow>
+          </TmTableHead>
+          <TmTableBody>
             {displayRows.map((r) => (
-              <tr
-                key={r.id}
-                className="border-b border-tm-rule transition-colors hover:bg-tm-bg-2"
-              >
-                <td className="px-2 py-1 text-tm-muted whitespace-nowrap">
+              <TmTableRow key={r.id}>
+                <TmTableCell className="whitespace-nowrap px-2 text-tm-muted">
                   {relativeTime(r.created_at, locale)}
                   {r.count > 1 ? (
-                    <span
-                      className="ml-1.5 rounded bg-tm-bg-3 px-1 text-[10px] text-tm-fg-2"
-                      title={t(locale, "alerts.dedup_hint")}
+                    <TmTooltip
+                      content={t(locale, "alerts.dedup_hint")}
+                      ariaLabel={t(locale, "alerts.dedup_hint")}
                     >
-                      ×{r.count}
-                    </span>
+                      <span className="ml-1.5 rounded-[2px] bg-tm-bg-3 px-1 text-[10px] text-tm-fg-2">×{r.count}</span>
+                    </TmTooltip>
                   ) : null}
-                </td>
-                <td className="px-2 py-1">
+                </TmTableCell>
+                <TmTableRowHeader className="px-2 font-normal">
                   {isWatched(r.ticker) ? (
                     <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" />
                   ) : null}
@@ -189,13 +218,14 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
                   >
                     {r.ticker}
                   </Link>
-                </td>
-                <td className="px-2 py-1 text-tm-fg-2">{typeLabel(r.type, locale)}</td>
-                <td className="px-2 py-1 text-tm-muted font-mono">{fmtPayload(r.payload)}</td>
-              </tr>
+                </TmTableRowHeader>
+                <TmTableCell className="px-2">{typeLabel(r.type, locale)}</TmTableCell>
+                <TmTableCell className="px-2 text-tm-muted">{fmtPayload(r.payload)}</TmTableCell>
+              </TmTableRow>
             ))}
-          </tbody>
-        </table>
+          </TmTableBody>
+          </TmTable>
+        </TmTableFrame>
       )}
     </div>
   );

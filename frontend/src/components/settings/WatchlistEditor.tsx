@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/watchlist";
 import { syncWatchlistRemote } from "@/lib/api/watchlist";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-
-const FORM_INPUT =
-  "h-7 flex-1 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none transition-colors placeholder:text-tm-muted focus:border-tm-accent";
 
 export default function WatchlistEditor() {
   const { locale } = useLocale();
@@ -49,15 +47,16 @@ export default function WatchlistEditor() {
   return (
     <div className="flex flex-col gap-3 px-3 py-3">
       <div className="flex gap-2">
-        <input
-          className={FORM_INPUT}
+        <TmInput
+          fieldSize="sm"
           placeholder={t(locale, "watchlist.input_placeholder")}
           value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
+          onChange={(next) => {
+            setDraft(next);
             setError(null);
           }}
           onKeyDown={handleKeyDown}
+          className="min-w-0 flex-1"
         />
         <TmButton variant="primary" onClick={handleAdd}>+ ADD</TmButton>
       </div>
@@ -76,13 +75,14 @@ export default function WatchlistEditor() {
               className="flex items-center justify-between px-3 py-1.5"
             >
               <span className="font-tm-mono text-[11px] text-tm-fg">{ticker}</span>
-              <button
-                type="button"
-                className="font-tm-mono text-[10px] text-tm-neg hover:text-tm-neg cursor-pointer transition-colors"
+              <TmButton
+                variant="ghost"
+                size="xs"
+                className="px-0 text-tm-neg hover:text-tm-neg"
                 onClick={() => handleRemove(ticker)}
               >
                 × REMOVE
-              </button>
+              </TmButton>
             </li>
           ))}
         </ul>

@@ -439,17 +439,16 @@ input[type="range"]:focus-visible {
   outline: none;
 }
 
-/* Focus ring — applied via :focus-visible so mouse clicks don't show
-   it (only keyboard navigation does). 1px tm-accent ring with 2px
-   offset is workstation-tight. */
+/* Focus ring — applied via :focus-visible so mouse clicks don't show it.
+   Two pixels stays visible across both themes without changing geometry. */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [tabindex]:focus-visible {
-  outline: 1px solid var(--tm-accent);
-  outline-offset: 2px;
+  outline: 2px solid var(--tm-accent);
+  outline-offset: 1px;
 }
 
 /* Text selection color — highlights match terminal aesthetic. */

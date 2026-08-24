@@ -7,6 +7,16 @@
 import type { TickerAttribution } from "@/lib/api/paper";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t, type TranslationKey } from "@/lib/i18n";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const pnl = (n: number) => `${n >= 0 ? "+" : ""}$${FMT.format(Math.abs(n))}`;
@@ -44,40 +54,37 @@ export default function PaperAttributionTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left">
-        <thead>
-          <tr className="border-b border-tm-rule">
-            {COLS.map((k) => (
-              <th
-                key={k}
-                className="px-3 py-1.5 font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted text-right first:text-left"
-              >
+    <TmTableFrame>
+      <TmTable density="compact" caption={t(locale, "sim.attribution.title")} className="text-left">
+        <TmTableHead>
+          <TmTableRow>
+            {COLS.map((k, index) => (
+              <TmTableHeaderCell key={k} textAlign={index === 0 ? "left" : "right"} className="text-[10px] tracking-wide">
                 {t(locale, k)}
-              </th>
+              </TmTableHeaderCell>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TmTableRow>
+        </TmTableHead>
+        <TmTableBody>
           {rows.map((r) => (
-            <tr key={r.ticker} className="border-b border-tm-rule hover:bg-tm-bg-2">
-              <td className="px-3 py-2 font-tm-mono text-[12px] font-semibold text-tm-accent">{r.ticker}</td>
-              <td className={`px-3 py-2 font-tm-mono text-[11px] tabular-nums text-right ${pnlTone(r.realized_pnl)}`}>
+            <TmTableRow key={r.ticker}>
+              <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">{r.ticker}</TmTableRowHeader>
+              <TmTableCell numeric textAlign="right" className={`text-[11px] ${pnlTone(r.realized_pnl)}`}>
                 {pnl(r.realized_pnl)}
-              </td>
-              <td className={`px-3 py-2 font-tm-mono text-[11px] tabular-nums text-right ${pnlTone(r.unrealized_pnl)}`}>
+              </TmTableCell>
+              <TmTableCell numeric textAlign="right" className={`text-[11px] ${pnlTone(r.unrealized_pnl)}`}>
                 {pnl(r.unrealized_pnl)}
-              </td>
-              <td className="px-3 py-2 font-tm-mono text-[11px] tabular-nums text-right text-tm-fg-2">
+              </TmTableCell>
+              <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
                 {r.pick_linked_trades}
-              </td>
-              <td className="px-3 py-2 font-tm-mono text-[11px] tabular-nums text-right text-tm-fg-2">
+              </TmTableCell>
+              <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
                 {r.self_directed_trades}
-              </td>
-            </tr>
+              </TmTableCell>
+            </TmTableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TmTableBody>
+      </TmTable>
+    </TmTableFrame>
   );
 }

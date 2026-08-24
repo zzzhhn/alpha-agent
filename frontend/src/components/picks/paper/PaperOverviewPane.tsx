@@ -9,6 +9,14 @@ import SimPositionRow from "../SimPositionRow";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t, type Locale } from "@/lib/i18n";
 import { TmButton } from "@/components/tm/TmButton";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+} from "@/components/tm/TmTable";
 import { Metric, Disclaimer, TwoStepConfirm } from "./PaperUi";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -79,27 +87,24 @@ export default function PaperOverviewPane({
             </TmButton>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-tm-rule">
-                  {POS_HEADERS[locale].map((h) => (
-                    <th
-                      key={h}
-                      className="px-3 py-1.5 font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted text-right first:text-left"
-                    >
+          <TmTableFrame>
+            <TmTable density="compact" caption={t(locale, "sim.positions.title")} className="text-left">
+              <TmTableHead>
+                <TmTableRow>
+                  {POS_HEADERS[locale].map((h, index) => (
+                    <TmTableHeaderCell key={h} textAlign={index === 0 ? "left" : "right"} className="text-[10px] tracking-wide">
                       {h}
-                    </th>
+                    </TmTableHeaderCell>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TmTableRow>
+              </TmTableHead>
+              <TmTableBody>
                 {account.positions.map((p) => (
                   <SimPositionRow key={p.ticker} pos={p} locale={locale} />
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TmTableBody>
+            </TmTable>
+          </TmTableFrame>
         )}
       </div>
 

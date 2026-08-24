@@ -27,7 +27,7 @@ export function WorkbenchHeader({
   readonly action?: ReactNode;
 }) {
   return (
-    <header className="flex min-h-[76px] items-center gap-6 border-b border-tm-rule px-6 py-3">
+    <header className="flex min-h-20 items-center gap-6 border-b border-tm-rule px-6 py-3">
       <div className="min-w-0 flex-1">
         {eyebrow ? (
           <p className="mb-1 font-tm-mono text-[10px] uppercase tracking-[0.16em] text-tm-accent">
@@ -35,7 +35,7 @@ export function WorkbenchHeader({
           </p>
         ) : null}
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em] text-tm-fg">
+          <h1 className="font-tm-serif text-[26px] font-semibold tracking-[-0.025em] text-tm-fg lg:text-[28px]">
             {title}
           </h1>
           <p className="text-[12px] text-tm-muted">{subtitle}</p>

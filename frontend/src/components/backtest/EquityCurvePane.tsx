@@ -21,10 +21,12 @@ import {
   ReferenceLine,
 } from "recharts";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { EquityCurvePoint } from "@/lib/types";
 import type { Run, RunState } from "./types";
+import { TM_CHART_CSS } from "@/components/charts";
 
 interface Props {
   readonly runState: RunState;
@@ -59,31 +61,6 @@ function buildSeries(
   return out;
 }
 
-function Skeleton() {
-  return (
-    <div className="flex flex-col gap-2 p-3">
-      <div className="h-3 w-1/3 animate-pulse rounded bg-tm-bg-3" />
-      <div className="h-[200px] w-full animate-pulse rounded bg-tm-bg-3" />
-    </div>
-  );
-}
-
-function EmptyMessage({ text }: { readonly text: string }) {
-  return (
-    <div className="flex h-[220px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
-      {text}
-    </div>
-  );
-}
-
-function ErrorPlaceholder({ text }: { readonly text: string }) {
-  return (
-    <div className="flex h-32 w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
-      {text}
-    </div>
-  );
-}
-
 export function EquityCurvePane({ runState, currentRun }: Props) {
   const { locale } = useLocale();
   const title = t(locale, "backtest.evidence.equity");
@@ -99,7 +76,12 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
   if (runState.kind === "running") {
     return (
       <TmPane title={title}>
-        <Skeleton />
+        <TmStatePane
+          state="loading"
+          title={title}
+          description={t(locale, "backtest.evidence.waiting")}
+          className="min-h-[220px] rounded-none border-0"
+        />
       </TmPane>
     );
   }
@@ -108,8 +90,10 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
     // so the same 422 message isn't repeated 3+ times down the page.
     return (
       <TmPane title={title}>
-        <ErrorPlaceholder
-          text={t(locale, "backtest.evidence.errorPlaceholder")}
+        <TmStatePane
+          state="error"
+          title={t(locale, "backtest.evidence.errorPlaceholder")}
+          className="min-h-[220px] rounded-none border-0"
         />
       </TmPane>
     );
@@ -117,12 +101,14 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
   if (!currentRun || data.length === 0) {
     return (
       <TmPane title={title}>
-        <EmptyMessage
-          text={
+        <TmStatePane
+          state="empty"
+          title={
             currentRun
               ? t(locale, "backtest.evidence.unavailable")
               : t(locale, "backtest.evidence.waiting")
           }
+          className="min-h-[220px] rounded-none border-0"
         />
       </TmPane>
     );
@@ -137,27 +123,27 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
       <div className="w-full px-1 pb-2 pt-2" style={{ width: "100%", height: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
+            <CartesianGrid strokeDasharray="2 4" stroke={TM_CHART_CSS.grid} />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
               interval="preserveStartEnd"
               minTickGap={40}
-              stroke="var(--tm-rule)"
+              stroke={TM_CHART_CSS.grid}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
               tickFormatter={(v: number) => v.toFixed(2)}
-              stroke="var(--tm-rule)"
+              stroke={TM_CHART_CSS.grid}
               domain={["auto", "auto"]}
             />
             <Tooltip
               contentStyle={{
-                background: "var(--tm-bg-2)",
-                border: "1px solid var(--tm-rule)",
+                background: TM_CHART_CSS.surface,
+                border: `1px solid ${TM_CHART_CSS.grid}`,
                 fontSize: 11,
                 fontFamily: "var(--font-jetbrains-mono)",
-                color: "var(--tm-fg)",
+                color: TM_CHART_CSS.foreground,
               }}
               formatter={(v) =>
                 typeof v === "number" ? v.toFixed(3) : String(v ?? "")
@@ -169,12 +155,12 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
                 fontFamily: "var(--font-jetbrains-mono)",
               }}
             />
-            <ReferenceLine y={1} stroke="var(--tm-rule-2)" strokeWidth={1} />
+            <ReferenceLine y={1} stroke={TM_CHART_CSS.gridStrong} strokeWidth={1} />
             <Line
               type="monotone"
               dataKey="benchmark"
               name={t(locale, "backtest.evidence.benchmark")}
-              stroke="var(--tm-muted)"
+              stroke={TM_CHART_CSS.muted}
               strokeWidth={1.5}
               dot={false}
               strokeDasharray="3 3"
@@ -184,7 +170,7 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
               type="monotone"
               dataKey="factor"
               name={t(locale, "backtest.evidence.factor")}
-              stroke="var(--tm-accent)"
+              stroke={TM_CHART_CSS.positive}
               strokeWidth={1.8}
               dot={false}
               isAnimationActive={false}

@@ -7,6 +7,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { useToast } from "@/components/ui/toast";
 import { t } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmPagination } from "@/components/tm/TmPagination";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 import {
   approveFactorProposal,
@@ -337,14 +338,38 @@ export function PendingProposalsSection({
           );
         })}
       </div>
-      <div className="flex h-10 items-center justify-between border-t border-tm-rule px-3 font-tm-mono text-[10px] text-tm-muted">
-        <span>{locale === "zh" ? `每页 ${pageSize} 条，只允许展开一条` : `${pageSize} per page, one expanded row`}</span>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => { setPage((value) => Math.max(0, value - 1)); setExpandedId(null); }} disabled={page === 0} className="border border-tm-rule px-2 py-1 disabled:opacity-30 hover:text-tm-accent">{locale === "zh" ? "上一页" : "Prev"}</button>
-          <span>{page + 1}/{pageCount}</span>
-          <button type="button" onClick={() => { setPage((value) => Math.min(pageCount - 1, value + 1)); setExpandedId(null); }} disabled={page >= pageCount - 1} className="border border-tm-rule px-2 py-1 disabled:opacity-30 hover:text-tm-accent">{locale === "zh" ? "下一页" : "Next"}</button>
-        </div>
-      </div>
+      <TmPagination
+        page={page + 1}
+        pageSize={pageSize}
+        totalItems={proposals.length}
+        pageSizeOptions={[pageSize]}
+        labels={{
+          navigation:
+            locale === "zh"
+              ? "待处理提案分页"
+              : "Pending proposals pagination",
+          previous: locale === "zh" ? "上一页" : "Prev",
+          previousAriaLabel: locale === "zh" ? "上一页" : "Previous page",
+          next: locale === "zh" ? "下一页" : "Next",
+          nextAriaLabel: locale === "zh" ? "下一页" : "Next page",
+          page: (currentPage, totalPages) =>
+            locale === "zh"
+              ? `第 ${currentPage}/${totalPages} 页`
+              : `PAGE ${currentPage}/${totalPages}`,
+          pageSize: locale === "zh" ? "每页" : "PAGE SIZE",
+          total: (total) =>
+            locale === "zh"
+              ? `共 ${total} 条，每页 ${pageSize} 条，只允许展开一条`
+              : `${total} total, ${pageSize} per page, one expanded row`,
+        }}
+        onPageChange={(nextPage) => {
+          setPage(nextPage - 1);
+          setExpandedId(null);
+        }}
+        onPageSizeChange={() => {
+          setExpandedId(null);
+        }}
+      />
     </TmPane>
   );
 }

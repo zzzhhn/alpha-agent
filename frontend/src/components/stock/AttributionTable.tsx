@@ -15,6 +15,16 @@ import { useFactorMode } from "@/hooks/useFactorMode";
 import { applyFactorMode } from "@/lib/picks-mode";
 import { useWeightsOverride } from "@/hooks/useWeightsOverride";
 import { applyWeightsToBreakdown } from "@/lib/weights-override";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+} from "@/components/tm/TmTable";
+import { TmButton } from "@/components/tm/TmButton";
 
 type SortKey = "signal" | "z" | "weight" | "contribution";
 
@@ -144,10 +154,14 @@ export default function AttributionTable({
       ) : null}
       {/* P3-5: 10-column table scrolls horizontally on narrow screens
           instead of overflowing the card. */}
-      <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-xs border-collapse">
-        <thead>
-        <tr className="text-tm-fg-2 border-b border-tm-rule">
+      <TmTableFrame>
+      <TmTable
+        density="compact"
+        caption={locale === "zh" ? "信号归因" : "Signal attribution"}
+        className="min-w-[640px] text-xs"
+      >
+        <TmTableHead>
+        <TmTableRow>
           <SortTh
             onClick={() => setSort("signal")}
             active={sortKey === "signal"}
@@ -179,32 +193,32 @@ export default function AttributionTable({
           >
             {t(locale, "attribution.contribution")}
           </SortTh>
-          <th className="px-2 py-1.5 text-right text-tm-fg-2">
+          <TmTableHeaderCell textAlign="right" className="px-2 py-1.5 text-tm-fg-2">
             <span className="inline-flex items-center gap-1">
               {t(locale, "attribution.live_ic")}
               <InfoTooltip content={t(locale, "attribution.tooltip_rank_ic")} />
             </span>
-          </th>
-          <th className="px-2 py-1.5 text-right text-tm-fg-2">
+          </TmTableHeaderCell>
+          <TmTableHeaderCell textAlign="right" className="px-2 py-1.5 text-tm-fg-2">
             <span className="inline-flex items-center gap-1">
               {t(locale, "attribution.icir")}
               <InfoTooltip content={t(locale, "attribution.tooltip_icir")} />
             </span>
-          </th>
-          <th className="px-2 py-1.5 text-right text-tm-fg-2">
+          </TmTableHeaderCell>
+          <TmTableHeaderCell textAlign="right" className="px-2 py-1.5 text-tm-fg-2">
             <span className="inline-flex items-center gap-1">
               {t(locale, "attribution.ir")}
               <InfoTooltip content={t(locale, "attribution.tooltip_ir")} />
             </span>
-          </th>
-          <th className="px-2 py-1.5 text-center text-tm-fg-2">
+          </TmTableHeaderCell>
+          <TmTableHeaderCell textAlign="center" className="px-2 py-1.5 text-tm-fg-2">
             {t(locale, "attribution.tier")}
-          </th>
-          <th className="px-2 py-1.5 text-left text-tm-fg-2">{t(locale, "attribution.col_source")}</th>
-          <th className="px-2 py-1.5 text-left text-tm-fg-2">{t(locale, "attribution.col_time")}</th>
-        </tr>
-      </thead>
-      <tbody>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell className="px-2 py-1.5 text-tm-fg-2">{t(locale, "attribution.col_source")}</TmTableHeaderCell>
+          <TmTableHeaderCell className="px-2 py-1.5 text-tm-fg-2">{t(locale, "attribution.col_time")}</TmTableHeaderCell>
+        </TmTableRow>
+      </TmTableHead>
+      <TmTableBody>
         {sorted.map((b) => {
           const h = healthMap[b.signal];
           const tier: SignalHealthEntry["tier"] = h?.tier ?? "unknown";
@@ -222,7 +236,7 @@ export default function AttributionTable({
               ? t(locale, "attribution.insufficient_data_tooltip")
               : "";
           return (
-            <tr
+            <TmTableRow
               key={b.signal}
               title={rowTooltip}
               className={clsx(
@@ -230,7 +244,7 @@ export default function AttributionTable({
                 isDropped ? "opacity-40" : "",
               )}
             >
-              <td className="px-2 py-1 text-tm-fg">
+              <TmTableCell className="px-2 py-1 text-tm-fg">
                 <span className="inline-flex items-center gap-1">
                   {getSignalDisplayLabel(b.signal, locale)}
                   <InfoTooltip
@@ -241,19 +255,21 @@ export default function AttributionTable({
                     )}
                   />
                 </span>
-              </td>
-              <td className="px-2 py-1 text-right font-mono text-tm-fg">
+              </TmTableCell>
+              <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg">
                 {(() => {
                   const z = b.z ?? 0;
                   return `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
                 })()}
-              </td>
-              <td className="px-2 py-1 text-right font-mono text-tm-fg">
+              </TmTableCell>
+              <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg">
                 {(b.weight ?? 0).toFixed(2)}
-              </td>
-              <td
+              </TmTableCell>
+              <TmTableCell
+                numeric
+                textAlign="right"
                 className={clsx(
-                  "px-2 py-1 text-right font-mono",
+                  "px-2 py-1",
                   (b.contribution ?? 0) > 0
                     ? "text-tm-pos"
                     : (b.contribution ?? 0) < 0
@@ -265,9 +281,11 @@ export default function AttributionTable({
                   const c = b.contribution ?? 0;
                   return `${c >= 0 ? "+" : ""}${c.toFixed(2)}`;
                 })()}
-              </td>
-              <td
-                className="px-2 py-1 text-right font-mono text-tm-fg"
+              </TmTableCell>
+              <TmTableCell
+                numeric
+                textAlign="right"
+                className="px-2 py-1 text-tm-fg"
                 title={
                   typeof h?.n_obs_30d === "number" && h.n_obs_30d > 0
                     ? `n_obs=${h.n_obs_30d}`
@@ -277,18 +295,18 @@ export default function AttributionTable({
                 {typeof h?.live_ic_30d === "number"
                   ? `${h.live_ic_30d >= 0 ? "+" : ""}${h.live_ic_30d.toFixed(3)}`
                   : "-"}
-              </td>
-              <td className="px-2 py-1 text-right font-mono text-tm-fg">
+              </TmTableCell>
+              <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg">
                 {typeof h?.icir_30d === "number"
                   ? `${h.icir_30d >= 0 ? "+" : ""}${h.icir_30d.toFixed(2)}`
                   : "-"}
-              </td>
-              <td className="px-2 py-1 text-right font-mono text-tm-fg">
+              </TmTableCell>
+              <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg">
                 {typeof h?.ir_30d === "number"
                   ? `${h.ir_30d >= 0 ? "+" : ""}${h.ir_30d.toFixed(2)}`
                   : "-"}
-              </td>
-              <td className="px-2 py-1 text-center">
+              </TmTableCell>
+              <TmTableCell textAlign="center" className="px-2 py-1">
                 <span
                   className={clsx(
                     "inline-block h-2 w-2 rounded-full",
@@ -296,17 +314,17 @@ export default function AttributionTable({
                   )}
                   title={rowTooltip}
                 />
-              </td>
-              <td className="px-2 py-1 text-tm-muted">{b.source}</td>
-              <td className="px-2 py-1 text-tm-muted">
+              </TmTableCell>
+              <TmTableCell className="px-2 py-1 text-tm-muted">{b.source}</TmTableCell>
+              <TmTableCell className="px-2 py-1 text-tm-muted">
                 {formatTimestamp(b.timestamp)}
-              </td>
-            </tr>
+              </TmTableCell>
+            </TmTableRow>
           );
         })}
-      </tbody>
-      </table>
-      </div>
+      </TmTableBody>
+      </TmTable>
+      </TmTableFrame>
     </div>
   );
 }
@@ -338,16 +356,24 @@ function SortTh({
   numeric?: boolean;
 }) {
   return (
-    <th
-      onClick={onClick}
-      className={clsx(
-        "cursor-pointer px-2 py-1.5 select-none",
-        numeric ? "text-right" : "text-left",
-        active ? "text-tm-fg" : "text-tm-fg-2",
-      )}
+    <TmTableHeaderCell
+      sortDirection={active ? (desc ? "descending" : "ascending") : "none"}
+      className="px-2 py-1.5"
+      textAlign={numeric ? "right" : "left"}
     >
-      {children}
-      {active ? (desc ? " ▼" : " ▲") : ""}
-    </th>
+      <TmButton
+        variant="ghost"
+        size="xs"
+        onClick={onClick}
+        className={clsx(
+          "h-auto p-0 text-[inherit] font-[inherit] tracking-[inherit]",
+          numeric && "ml-auto",
+          active ? "text-tm-fg" : "text-tm-fg-2",
+        )}
+      >
+        {children}
+        {active ? (desc ? " ▼" : " ▲") : ""}
+      </TmButton>
+    </TmTableHeaderCell>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * TmSubbar + TmChip — workstation control strip primitives.
+ * TmSubbar + TmChip: workstation control strip primitives.
  *
  * The subbar is the thin horizontal band that sits between the page
  * chrome and the first pane. It carries the page's "active context"
@@ -94,12 +94,13 @@ export function TmChip({
   return (
     <button
       type={type}
+      {...rest}
+      aria-pressed={on}
       className={clsx(
-        "inline-flex items-center gap-1.5 border px-2 py-px font-tm-mono text-[10.5px] leading-4 transition-colors",
+        "inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[2px] border px-2 font-tm-mono text-[10px] leading-4 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
         tonePalette,
         className,
       )}
-      {...rest}
     >
       {children}
       {count !== undefined && count !== null && (

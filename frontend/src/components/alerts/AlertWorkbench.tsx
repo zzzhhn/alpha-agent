@@ -17,6 +17,9 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { useToast } from "@/components/ui/toast";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import { DecisionStrip } from "@/components/workbench/DecisionStrip";
+import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 import { ApiException } from "@/lib/api/client";
 import {
   fetchAlertInbox,
@@ -269,9 +272,9 @@ export default function AlertWorkbench() {
           { label: zh ? "需要处理" : "Needs action", value: String(needsAction), tone: needsAction > 0 ? "negative" : "positive" },
         ]}
         action={(
-          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 border border-tm-rule px-2 py-1 text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent">
+          <TmButton variant="secondary" size="xs" onClick={() => void load()}>
             <RefreshCw className="h-3 w-3" /> {zh ? "刷新" : "Refresh"}
-          </button>
+          </TmButton>
         )}
       />
 
@@ -283,7 +286,7 @@ export default function AlertWorkbench() {
           { label: zh ? "影响候选" : "Picks", value: recommendationCount, tone: recommendationCount > 0 ? "warning" : "default" },
           { label: zh ? "队列总数" : "Queue total", value: data?.alerts.length ?? 0 },
         ]}
-        action={<Link href="/methodology#alerts" className="border border-tm-rule px-3 py-2 text-[10px] text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent">{zh ? "规则与阈值" : "Rules & thresholds"}</Link>}
+        action={<TmLinkButton href="/methodology#alerts" variant="secondary" size="md">{zh ? "规则与阈值" : "Rules & thresholds"}</TmLinkButton>}
       />
 
       <div className="flex flex-1 flex-col">
@@ -300,6 +303,7 @@ export default function AlertWorkbench() {
                     key={id}
                     type="button"
                     onClick={() => setQueue(id)}
+                    aria-pressed={active}
                     className={`flex min-h-10 w-full items-center gap-2 border-l-2 px-3 py-2 text-left text-[12px] ${active ? "border-tm-accent bg-tm-accent/10 text-tm-accent" : "border-transparent text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg"}`}
                   >
                     <Icon className="h-3.5 w-3.5" />
@@ -315,22 +319,33 @@ export default function AlertWorkbench() {
                 {zh ? "严重性" : "Severity"}
               </p>
               <div className="mt-2 grid grid-cols-2 gap-1 px-2">
-                {(["all", "critical", "warning", "info"] as SeverityFilter[]).map((value) => (
-                  <button key={value} type="button" onClick={() => setSeverityFilter(value)} className={`border px-2 py-1.5 text-left text-[10px] ${severityFilter === value ? "border-tm-accent text-tm-accent" : "border-tm-rule text-tm-muted hover:text-tm-fg"}`}>
-                    {value === "all" ? (zh ? "全部" : "All") : severityLabel(value, locale)}
-                  </button>
-                ))}
+                <TmToggleGroup<SeverityFilter>
+                  value={severityFilter}
+                  onChange={setSeverityFilter}
+                  ariaLabel={zh ? "严重性筛选" : "Severity filter"}
+                  className="col-span-2 w-full [&>button]:flex-1"
+                  options={(["all", "critical", "warning", "info"] as SeverityFilter[]).map((value) => ({
+                    value,
+                    label: value === "all" ? (zh ? "全部" : "All") : severityLabel(value, locale),
+                  }))}
+                />
               </div>
             </div>
 
             <div className="mt-5 border-t border-tm-rule pt-3">
               <p className="px-2 text-[10px] uppercase tracking-[0.12em] text-tm-muted">{zh ? "关联对象" : "Relevance"}</p>
               <div className="mt-2 space-y-1 px-2">
-                {(["all", "position", "recommendation", "watchlist", "market", "record"] as RelevanceFilter[]).map((value) => (
-                  <button key={value} type="button" onClick={() => setRelevanceFilter(value)} className={`flex w-full justify-between border-l-2 px-2 py-1.5 text-[10px] ${relevanceFilter === value ? "border-tm-accent bg-tm-accent/5 text-tm-accent" : "border-transparent text-tm-muted hover:text-tm-fg"}`}>
-                    <span>{value === "all" ? (zh ? "全部关联" : "All relevance") : relevanceLabel(value, locale)}</span>
-                  </button>
-                ))}
+                <TmToggleGroup<RelevanceFilter>
+                  value={relevanceFilter}
+                  onChange={setRelevanceFilter}
+                  ariaLabel={zh ? "关联对象筛选" : "Relevance filter"}
+                  orientation="vertical"
+                  className="w-full"
+                  options={(["all", "position", "recommendation", "watchlist", "market", "record"] as RelevanceFilter[]).map((value) => ({
+                    value,
+                    label: value === "all" ? (zh ? "全部关联" : "All relevance") : relevanceLabel(value, locale),
+                  }))}
+                />
               </div>
             </div>
 
@@ -338,9 +353,9 @@ export default function AlertWorkbench() {
               <p>{zh ? "排序：相关性 × 严重性 × 新鲜度 × 置信度" : "Rank: relevance × severity × freshness × confidence"}</p>
               <p className="mt-2">J / K {zh ? "上下选择" : "move selection"}</p>
               <p>{zh ? "所有处理动作保留撤销窗口" : "All triage actions support undo"}</p>
-              <button type="button" onClick={saveView} className="mt-3 w-full border border-tm-rule px-2 py-2 text-[10px] text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent">
+              <TmButton variant="secondary" size="sm" onClick={saveView} className="mt-3 w-full">
                 {zh ? "保存当前视图" : "Save current view"}
-              </button>
+              </TmButton>
               <p className="mt-1 text-[8.5px]">{zh ? "筛选配置仅保存在当前浏览器" : "Filters are browser-local"}</p>
             </div>
           </aside>
@@ -375,39 +390,43 @@ export default function AlertWorkbench() {
                   <p className="mt-2 text-[11px] leading-5 text-tm-muted">
                     {zh ? "持仓、今日候选、关注列表与处理状态都属于你的账户上下文。" : "Positions, picks, watchlists, and triage state belong to your account context."}
                   </p>
-                  <Link href="/login" className="mt-4 inline-block border border-tm-accent px-3 py-1.5 text-[11px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg">
+                  <TmLinkButton href="/login" variant="primary" size="sm" className="mt-4">
                     {zh ? "前往登录" : "Sign in"}
-                  </Link>
+                  </TmLinkButton>
                 </div>
               </div>
             ) : !data ? (
-              <div role={error ? "alert" : undefined} className={`flex min-h-[360px] items-center justify-center p-6 text-center ${error ? "border-b border-tm-neg/50 bg-tm-neg/5" : "bg-tm-bg-2/20"}`}>
-                <div>
-                  <p className={`text-sm ${error ? "text-tm-neg" : "text-tm-muted"}`}>
-                    {error ? (zh ? "警报队列加载失败" : "Alert queue failed to load") : (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {zh ? "正在建立决策上下文…" : "Building decision context…"}
-                      </span>
-                    )}
-                  </p>
-                  {error ? <p className="mt-2 max-w-xl text-[10px] text-tm-muted">{error}</p> : null}
-                  {error ? (
-                    <button type="button" onClick={() => void load()} className="mt-4 border border-tm-neg px-3 py-1.5 text-[10px] text-tm-neg hover:bg-tm-neg/10">
-                      {zh ? "重试" : "Retry"}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+              <TmStatePane
+                state={error ? "error" : "loading"}
+                title={error
+                  ? (zh ? "警报队列加载失败" : "Alert queue failed to load")
+                  : (zh ? "正在建立决策上下文" : "Building decision context")}
+                description={error ?? (zh
+                  ? "正在读取数据源、持仓与候选关联。"
+                  : "Loading feed, position, and recommendation relationships.")}
+                action={error ? {
+                  label: zh ? "重试此队列" : "Retry this queue",
+                  onClick: () => void load(),
+                  variant: "secondary",
+                } : undefined}
+                className="min-h-[360px] rounded-none border-0 border-b border-tm-rule"
+              />
             ) : visible.length === 0 ? (
-              <div className="flex h-full min-h-80 items-center justify-center text-center text-[11px] text-tm-muted">
-                <div>
-                  <CheckCircle2 className="mx-auto mb-2 h-5 w-5 text-tm-pos" />
-                  {queue === "needs_action"
-                    ? (zh ? "当前没有需要立即处理的警报。" : "Nothing needs immediate action.")
-                    : (zh ? "这个队列目前为空。" : "This queue is empty.")}
-                </div>
-              </div>
+              <TmStatePane
+                state="empty"
+                title={queue === "needs_action"
+                  ? (zh ? "当前没有需要立即处理的警报" : "Nothing needs immediate action")
+                  : (zh ? "这个队列目前为空" : "This queue is empty")}
+                description={zh
+                  ? "更改筛选条件或刷新队列以检查新变化。"
+                  : "Change the filters or refresh the queue to check for new changes."}
+                action={{
+                  label: zh ? "刷新队列" : "Refresh queue",
+                  onClick: () => void load(),
+                  variant: "secondary",
+                }}
+                className="h-full min-h-80 rounded-none border-0"
+              />
             ) : (
               <div className="divide-y divide-tm-rule overflow-y-auto">
                 {visible.map((item) => {

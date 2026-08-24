@@ -2,6 +2,11 @@
 import clsx from "clsx";
 import type { PositionOut } from "@/lib/api/paper";
 import type { Locale } from "@/lib/i18n";
+import {
+  TmTableCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 
 export default function SimPositionRow({
   pos,
@@ -21,31 +26,31 @@ export default function SimPositionRow({
     : `-$${Math.abs(pos.unrealized_pnl).toFixed(0)}`;
 
   return (
-    <tr className="border-b border-tm-rule hover:bg-tm-bg-2 transition-colors">
-      <td className="px-3 py-2 font-tm-mono text-[12px] font-semibold text-tm-accent">
+    <TmTableRow>
+      <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">
         {pos.ticker}
-      </td>
-      <td className="px-3 py-2 font-tm-mono text-[11px] tabular-nums text-tm-fg-2 text-right">
+      </TmTableRowHeader>
+      <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
         {pos.qty.toLocaleString()}
-      </td>
-      <td className="px-3 py-2 font-tm-mono text-[11px] tabular-nums text-tm-fg-2 text-right">
+      </TmTableCell>
+      <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
         ${pos.avg_cost.toFixed(2)}
-      </td>
-      <td className="px-3 py-2 font-tm-mono text-[11px] tabular-nums text-tm-fg-2 text-right">
+      </TmTableCell>
+      <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
         {pos.current_price !== null ? `$${pos.current_price.toFixed(2)}` : "—"}
-      </td>
-      <td className={clsx(
-        "px-3 py-2 font-tm-mono text-[11px] tabular-nums text-right font-semibold",
+      </TmTableCell>
+      <TmTableCell numeric textAlign="right" className={clsx(
+        "text-[11px] font-semibold",
         pnlPos ? "text-tm-pos" : "text-tm-neg",
       )}>
         {pnlStr}
-      </td>
-      <td className={clsx(
-        "px-3 py-2 font-tm-mono text-[11px] tabular-nums text-right",
+      </TmTableCell>
+      <TmTableCell numeric textAlign="right" className={clsx(
+        "text-[11px]",
         pnlPos ? "text-tm-pos" : "text-tm-neg",
       )}>
         {pctStr}
-      </td>
-    </tr>
+      </TmTableCell>
+    </TmTableRow>
   );
 }

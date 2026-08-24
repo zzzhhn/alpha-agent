@@ -28,13 +28,20 @@ import {
   ChevronDown,
   ChevronUp,
   Library,
-  Loader2,
   Play,
   Save,
 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { TmButton } from "@/components/tm/TmButton";
+import {
+  TmCheckbox,
+  TmFieldShell,
+  TmNumberInput,
+  TmSelect,
+  TmTextarea,
+} from "@/components/tm/TmField";
 import {
   extractOperands,
   extractOps,
@@ -77,14 +84,6 @@ const DIRECTION_OPTIONS: ReadonlyArray<DirectionMode> = [
 const MODE_OPTIONS: ReadonlyArray<BacktestMode> = ["static", "walk_forward"];
 
 const BENCHMARK_OPTIONS: ReadonlyArray<"SPY" | "RSP"> = ["SPY", "RSP"];
-
-// Shared control geometry so every field box (select / number / checkbox /
-// button) lands on the SAME height and fills its grid track. `h-9` (36px) is
-// the single source of truth for control height across both rows — change it
-// here and the entire form stays aligned. Inputs keep mono for numerics; the
-// box border / bg match the terminal palette.
-const CONTROL_BOX =
-  "flex h-9 w-full items-center rounded border border-tm-rule bg-tm-bg-3 px-2 font-tm-mono text-xs text-tm-fg transition-colors focus-within:border-tm-accent focus:border-tm-accent focus:outline-none";
 
 export function BacktestFormSticky({
   params,
@@ -186,30 +185,33 @@ export function BacktestFormSticky({
         {/* Row 0 — load a saved factor + surface that the form auto-saves */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Load from Zoo: pull a saved factor straight into the expression */}
-          <label className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-muted">
-            <Library className="h-3.5 w-3.5" strokeWidth={1.75} />
-            {t(locale, "backtest.loadZoo.label")}
-            <select
-              value=""
-              onChange={(e) => {
-                const entry = zoo.find((z) => z.id === e.target.value);
-                if (entry) loadFromZoo(entry);
-              }}
-              disabled={zoo.length === 0}
-              className="cursor-pointer border border-tm-rule bg-tm-bg-3 px-2 py-1 font-tm-mono text-[11px] text-tm-accent outline-none focus:border-tm-accent disabled:opacity-50"
-            >
-              <option value="">
-                {zoo.length === 0
-                  ? t(locale, "backtest.loadZoo.empty")
-                  : t(locale, "backtest.loadZoo.placeholder")}
-              </option>
-              {zoo.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {z.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <TmSelect
+            label={(
+              <span className="flex items-center gap-2">
+                <Library className="h-3.5 w-3.5" strokeWidth={1.75} />
+                {t(locale, "backtest.loadZoo.label")}
+              </span>
+            )}
+            className="min-w-0 flex-row items-center gap-2"
+            fieldSize="md"
+            value=""
+            onChange={(value) => {
+              const entry = zoo.find((z) => z.id === value);
+              if (entry) loadFromZoo(entry);
+            }}
+            disabled={zoo.length === 0}
+            selectClassName="w-auto min-w-[10rem] text-tm-accent"
+            options={[
+              {
+                value: "",
+                label:
+                  zoo.length === 0
+                    ? t(locale, "backtest.loadZoo.empty")
+                    : t(locale, "backtest.loadZoo.placeholder"),
+              },
+              ...zoo.map((entry) => ({ value: entry.id, label: entry.name })),
+            ]}
+          />
 
           {/* Autosave indicator (discoverability) + reset (Forgiveness) */}
           <div className="flex items-center gap-2 font-tm-mono text-[10.5px] text-tm-muted">
@@ -219,33 +221,28 @@ export function BacktestFormSticky({
                 {t(locale, "backtest.memory.label")}
               </span>
             </HoverTip>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="border border-tm-rule px-2 py-0.5 text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
-            >
+            <TmButton variant="ghost" size="md" onClick={resetForm}>
               {t(locale, "backtest.memory.reset")}
-            </button>
+            </TmButton>
           </div>
         </div>
 
         <div className="grid items-end gap-3 xl:grid-cols-[minmax(320px,1.35fr)_minmax(720px,2.65fr)]">
           <div>
-            <label className="mb-1 block font-tm-mono text-[9px] uppercase tracking-[0.1em] text-tm-muted">
-              {t(locale, "backtest.form.title")}
-            </label>
-            <textarea
-          value={params.expression}
-          onChange={(e) => updateExpression(e.target.value)}
-          placeholder={t(locale, "backtest.form.exprPlaceholder")}
-          spellCheck={false}
-          rows={1}
-          aria-label={t(locale, "backtest.form.title")}
-          className="h-9 min-h-9 w-full resize-y border border-tm-rule bg-tm-bg px-3 py-2 font-tm-mono text-[12px] leading-relaxed text-tm-accent outline-none transition-[min-height,border-color] placeholder:text-tm-muted focus:min-h-[84px] focus:border-tm-accent"
-          aria-invalid={hasValidationIssues || undefined}
-          aria-describedby={
-            hasValidationIssues ? "backtest-unknown-ops" : undefined
-          }
+            <TmTextarea
+              label={t(locale, "backtest.form.title")}
+              value={params.expression}
+              onChange={updateExpression}
+              placeholder={t(locale, "backtest.form.exprPlaceholder")}
+              spellCheck={false}
+              rows={1}
+              id="backtest-expression"
+              aria-invalid={hasValidationIssues || undefined}
+              aria-describedby={
+                hasValidationIssues ? "backtest-unknown-ops" : undefined
+              }
+              className="min-w-0"
+              textareaClassName="h-8 min-h-8 w-full resize-y bg-tm-bg px-3 py-2 text-[12px] leading-relaxed text-tm-accent transition-[min-height,border-color] focus:min-h-[84px]"
             />
 
         {/* Inline validation — unknown ops/operands before backend 4xx.
@@ -300,66 +297,55 @@ export function BacktestFormSticky({
             flush at the trailing edge, bottom-aligned to the control baseline.
             Even, gap-free tiles instead of fixed-track bricks with a void. */}
           <div className="flex flex-wrap items-end gap-3">
-          <FieldShell
+          <TmSelect
             label={t(locale, "backtest.form.direction")}
             className="min-w-[160px] flex-1"
-          >
-            <select
-              value={params.direction}
-              onChange={(e) =>
-                updateField("direction", e.target.value as DirectionMode)
-              }
-              className={CONTROL_BOX}
-            >
-              {DIRECTION_OPTIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d.replace("_", " ")}
-                </option>
-              ))}
-            </select>
-          </FieldShell>
+            fieldSize="md"
+            value={params.direction}
+            onChange={(value) =>
+              updateField("direction", value as DirectionMode)
+            }
+            options={DIRECTION_OPTIONS.map((option) => ({
+              value: option,
+              label: option.replace("_", " "),
+            }))}
+          />
 
-          <FieldShell
+          <TmNumberInput
             label={t(locale, "backtest.form.topPct")}
             className="min-w-[120px] flex-1"
-          >
-            <NumberWithSuffix
-              value={params.topPct}
-              min={1}
-              max={50}
-              step={1}
-              suffix="%"
-              onChange={(n) => updateField("topPct", n)}
-            />
-          </FieldShell>
+            fieldSize="md"
+            value={params.topPct}
+            min={1}
+            max={50}
+            step={1}
+            suffix="%"
+            onChange={(value) => updateField("topPct", value)}
+          />
 
-          <FieldShell
+          <TmSelect
             label={t(locale, "backtest.form.universe")}
             className="min-w-[150px] flex-1"
-          >
-            <select
-              value={params.universe === "custom" ? "SP500" : params.universe}
-              onChange={(e) =>
-                updateField("universe", e.target.value as FactorUniverse)
-              }
-              className={CONTROL_BOX}
-            >
-              {UNIVERSE_OPTIONS.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
-            </select>
-          </FieldShell>
+            fieldSize="md"
+            value={params.universe === "custom" ? "SP500" : params.universe}
+            onChange={(value) =>
+              updateField("universe", value as FactorUniverse)
+            }
+            options={UNIVERSE_OPTIONS.map((option) => ({
+              value: option,
+              label: option,
+            }))}
+          />
 
           {/* Toggle + RUN — trailing action cluster, bottom-aligned to the
               input baseline of the fields to its left. */}
           <div className="flex items-end gap-2">
-            <button
-              type="button"
+            <TmButton
+              variant="secondary"
+              size="md"
               onClick={() => setAdvancedOpen((o) => !o)}
               aria-expanded={advancedOpen}
-              className="inline-flex h-9 shrink-0 items-center gap-1 border border-tm-rule px-2.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
+              className="shrink-0"
             >
               {advancedOpen ? (
                 <ChevronUp className="h-3 w-3" strokeWidth={1.75} />
@@ -371,26 +357,20 @@ export function BacktestFormSticky({
                   ? t(locale, "backtest.action.advancedHide")
                   : t(locale, "backtest.action.advancedShow")}
               </span>
-            </button>
+            </TmButton>
 
-            <button
-              type="button"
+            <TmButton
+              variant="primary"
+              size="md"
               onClick={onRun}
               disabled={runDisabled}
-              className="inline-flex h-9 items-center gap-2 bg-tm-accent px-5 font-tm-mono text-xs font-semibold uppercase tracking-wider text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              loading={isRunning}
+              loadingLabel={t(locale, "backtest.verdict.running")}
+              className="px-5 uppercase tracking-wider"
             >
-              {isRunning ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-                  <span>{t(locale, "backtest.verdict.running")}</span>
-                </>
-              ) : (
-                <>
-                  <Play className="h-3.5 w-3.5" strokeWidth={2} />
-                  <span>{t(locale, "backtest.action.runBacktest")}</span>
-                </>
-              )}
-            </button>
+              <Play className="h-3.5 w-3.5" strokeWidth={2} />
+              <span>{t(locale, "backtest.action.runBacktest")}</span>
+            </TmButton>
           </div>
           </div>
         </div>
@@ -403,189 +383,116 @@ export function BacktestFormSticky({
           aria-hidden={!advancedOpen}
         >
           <div className="flex flex-wrap items-start gap-3 border-t border-tm-rule pt-3">
-            <FieldShell
+            <TmNumberInput
               label={t(locale, "backtest.form.bottomPct")}
               className="min-w-[120px] flex-1"
-            >
-              <NumberWithSuffix
-                value={params.bottomPct}
-                min={1}
-                max={50}
-                step={1}
-                suffix="%"
-                onChange={(n) => updateField("bottomPct", n)}
-              />
-            </FieldShell>
+              fieldSize="md"
+              value={params.bottomPct}
+              min={1}
+              max={50}
+              step={1}
+              suffix="%"
+              onChange={(value) => updateField("bottomPct", value)}
+            />
 
-            <FieldShell
+            <TmNumberInput
               label={t(locale, "backtest.form.lookback")}
               className="min-w-[120px] flex-1"
-            >
-              <NumberWithSuffix
-                value={params.lookback}
-                min={10}
-                max={2000}
-                step={1}
-                suffix="d"
-                onChange={(n) => updateField("lookback", n)}
-              />
-            </FieldShell>
+              fieldSize="md"
+              value={params.lookback}
+              min={10}
+              max={2000}
+              step={1}
+              suffix="d"
+              onChange={(value) => updateField("lookback", value)}
+            />
 
-            <FieldShell
+            <TmSelect
               label={t(locale, "backtest.form.benchmark")}
               className="min-w-[120px] flex-1"
-            >
-              <select
-                value={params.benchmark}
-                onChange={(e) =>
-                  updateField("benchmark", e.target.value as "SPY" | "RSP")
-                }
-                className={CONTROL_BOX}
-              >
-                {BENCHMARK_OPTIONS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </FieldShell>
+              fieldSize="md"
+              value={params.benchmark}
+              onChange={(value) =>
+                updateField("benchmark", value as "SPY" | "RSP")
+              }
+              options={BENCHMARK_OPTIONS.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+            />
 
-            {/* Neutralize — boxed checkbox cell with the same h-9 control
-                height + border/bg as its row-mates, so the toggle reads as a
-                field control instead of floating between the inputs. */}
-            <FieldShell
+            <TmFieldShell
               label={t(locale, "backtest.form.neutralize")}
               className="min-w-[140px] flex-1"
+              htmlFor="backtest-neutralize"
             >
-              <div className={`${CONTROL_BOX} cursor-pointer gap-2`}>
-                <input
-                  type="checkbox"
-                  checked={params.neutralize}
-                  onChange={(e) => updateField("neutralize", e.target.checked)}
-                  className="shrink-0 cursor-pointer accent-[var(--tm-accent)]"
-                />
-                <span className="truncate">
-                  {params.neutralize
+              <TmCheckbox
+                id="backtest-neutralize"
+                checked={params.neutralize}
+                onChange={(checked) => updateField("neutralize", checked)}
+                label={
+                  params.neutralize
                     ? t(locale, "backtest.form.neutralize.sector")
-                    : t(locale, "backtest.form.neutralize.none")}
-                </span>
-              </div>
-            </FieldShell>
+                    : t(locale, "backtest.form.neutralize.none")
+                }
+              />
+            </TmFieldShell>
 
-            <FieldShell
+            <TmNumberInput
               label={t(locale, "backtest.form.costBps")}
               className="min-w-[120px] flex-1"
-            >
-              <NumberWithSuffix
-                value={params.transactionCostBps}
-                min={0}
-                max={50}
-                step={1}
-                suffix="bps"
-                onChange={(n) => updateField("transactionCostBps", n)}
-              />
-            </FieldShell>
+              fieldSize="md"
+              value={params.transactionCostBps}
+              min={0}
+              max={50}
+              step={1}
+              suffix="bps"
+              onChange={(value) => updateField("transactionCostBps", value)}
+            />
 
-            <FieldShell
+            <TmSelect
               label={t(locale, "backtest.form.modeLabel")}
               className="min-w-[140px] flex-1"
-            >
-              <select
-                value={params.mode}
-                onChange={(e) =>
-                  updateField("mode", e.target.value as BacktestMode)
-                }
-                className={CONTROL_BOX}
-              >
-                {MODE_OPTIONS.map((m) => (
-                  <option key={m} value={m}>
-                    {t(
-                      locale,
-                      m === "static"
-                        ? "backtest.form.modeStatic"
-                        : "backtest.form.modeWalkForward",
-                    )}
-                  </option>
-                ))}
-              </select>
-            </FieldShell>
+              fieldSize="md"
+              value={params.mode}
+              onChange={(value) =>
+                updateField("mode", value as BacktestMode)
+              }
+              options={MODE_OPTIONS.map((option) => ({
+                value: option,
+                label: t(
+                  locale,
+                  option === "static"
+                    ? "backtest.form.modeStatic"
+                    : "backtest.form.modeWalkForward",
+                ),
+              }))}
+            />
 
-            <FieldShell
+            <TmFieldShell
               label={t(locale, "backtest.form.includeBreakdown")}
               className="min-w-[220px] flex-[1.4]"
+              htmlFor="backtest-include-breakdown"
             >
-              <label className={`${CONTROL_BOX} cursor-pointer gap-2`} title={t(locale, "backtest.form.includeBreakdownHint")}>
-                <input
-                  type="checkbox"
-                  checked={params.includeBreakdown}
-                  onChange={(e) => updateField("includeBreakdown", e.target.checked)}
-                  className="shrink-0 cursor-pointer accent-[var(--tm-accent)]"
-                />
-                <span className="truncate">
-                  {params.includeBreakdown
-                    ? (locale === "zh" ? "已开启，约 +200 KB" : "Enabled, about +200 KB")
-                    : (locale === "zh" ? "关闭，减少响应体积" : "Off, smaller response")}
-                </span>
-              </label>
-            </FieldShell>
+              <TmCheckbox
+                id="backtest-include-breakdown"
+                checked={params.includeBreakdown}
+                onChange={(checked) => updateField("includeBreakdown", checked)}
+                hint={t(locale, "backtest.form.includeBreakdownHint")}
+                label={
+                  params.includeBreakdown
+                    ? (locale === "zh"
+                      ? "已开启，约 +200 KB"
+                      : "Enabled, about +200 KB")
+                    : (locale === "zh"
+                      ? "关闭，减少响应体积"
+                      : "Off, smaller response")
+                }
+              />
+            </TmFieldShell>
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-/* ── Primitives ──────────────────────────────────────────────────── */
-
-function FieldShell({
-  label,
-  children,
-  className,
-}: {
-  readonly label: string;
-  readonly children: React.ReactNode;
-  readonly className?: string;
-}) {
-  return (
-    <label className={`flex min-w-0 flex-col gap-1.5 ${className ?? ""}`}>
-      <span className="font-tm-sans text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-tm-muted">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function NumberWithSuffix({
-  value,
-  min,
-  max,
-  step,
-  suffix,
-  onChange,
-}: {
-  readonly value: number;
-  readonly min: number;
-  readonly max: number;
-  readonly step: number;
-  readonly suffix: string;
-  readonly onChange: (n: number) => void;
-}) {
-  return (
-    <div className={`${CONTROL_BOX} gap-1`}>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => {
-          const next = Number(e.target.value);
-          if (Number.isFinite(next)) onChange(next);
-        }}
-        className="min-w-0 flex-1 bg-transparent font-tm-mono text-xs tabular-nums text-tm-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-      />
-      <span className="shrink-0 font-tm-mono text-[11px] text-tm-muted">{suffix}</span>
-    </div>
   );
 }

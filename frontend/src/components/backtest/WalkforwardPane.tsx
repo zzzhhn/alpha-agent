@@ -24,10 +24,12 @@ import {
   ReferenceLine,
 } from "recharts";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { WalkForwardWindow } from "@/lib/types";
 import type { Run, RunState } from "./types";
+import { TM_CHART_CSS } from "@/components/charts";
 
 interface Props {
   readonly runState: RunState;
@@ -46,31 +48,6 @@ function buildFolds(windows: readonly WalkForwardWindow[]): FoldPoint[] {
   }));
 }
 
-function Skeleton() {
-  return (
-    <div className="flex flex-col gap-2 p-3">
-      <div className="h-3 w-1/3 animate-pulse rounded bg-tm-bg-3" />
-      <div className="h-[200px] w-full animate-pulse rounded bg-tm-bg-3" />
-    </div>
-  );
-}
-
-function EmptyMessage({ text }: { readonly text: string }) {
-  return (
-    <div className="flex h-[220px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
-      {text}
-    </div>
-  );
-}
-
-function ErrorPlaceholder({ text }: { readonly text: string }) {
-  return (
-    <div className="flex h-32 w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
-      {text}
-    </div>
-  );
-}
-
 const IC_THRESHOLD = 0.02;
 
 export function WalkforwardPane({ runState, currentRun }: Props) {
@@ -86,7 +63,12 @@ export function WalkforwardPane({ runState, currentRun }: Props) {
   if (runState.kind === "running") {
     return (
       <TmPane title={title}>
-        <Skeleton />
+        <TmStatePane
+          state="loading"
+          title={title}
+          description={t(locale, "backtest.evidence.waiting")}
+          className="min-h-[220px] rounded-none border-0"
+        />
       </TmPane>
     );
   }
@@ -95,8 +77,10 @@ export function WalkforwardPane({ runState, currentRun }: Props) {
     // so the same 422 message isn't repeated 3+ times down the page.
     return (
       <TmPane title={title}>
-        <ErrorPlaceholder
-          text={t(locale, "backtest.evidence.errorPlaceholder")}
+        <TmStatePane
+          state="error"
+          title={t(locale, "backtest.evidence.errorPlaceholder")}
+          className="min-h-[220px] rounded-none border-0"
         />
       </TmPane>
     );
@@ -104,14 +88,22 @@ export function WalkforwardPane({ runState, currentRun }: Props) {
   if (!currentRun) {
     return (
       <TmPane title={title}>
-        <EmptyMessage text={t(locale, "backtest.evidence.waiting")} />
+        <TmStatePane
+          state="empty"
+          title={t(locale, "backtest.evidence.waiting")}
+          className="min-h-[220px] rounded-none border-0"
+        />
       </TmPane>
     );
   }
   if (folds.length === 0) {
     return (
       <TmPane title={title}>
-        <EmptyMessage text={t(locale, "backtest.evidence.unavailable")} />
+        <TmStatePane
+          state="empty"
+          title={t(locale, "backtest.evidence.unavailable")}
+          className="min-h-[220px] rounded-none border-0"
+        />
       </TmPane>
     );
   }
@@ -132,40 +124,40 @@ export function WalkforwardPane({ runState, currentRun }: Props) {
             data={folds}
             margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
           >
-            <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
+            <CartesianGrid strokeDasharray="2 4" stroke={TM_CHART_CSS.grid} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
               interval={0}
-              stroke="var(--tm-rule)"
+              stroke={TM_CHART_CSS.grid}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
               tickFormatter={(v: number) => v.toFixed(2)}
-              stroke="var(--tm-rule)"
+              stroke={TM_CHART_CSS.grid}
               domain={["auto", "auto"]}
             />
             <Tooltip
               contentStyle={{
-                background: "var(--tm-bg-2)",
-                border: "1px solid var(--tm-rule)",
+                background: TM_CHART_CSS.surface,
+                border: `1px solid ${TM_CHART_CSS.grid}`,
                 fontSize: 11,
                 fontFamily: "var(--font-jetbrains-mono)",
-                color: "var(--tm-fg)",
+                color: TM_CHART_CSS.foreground,
               }}
               formatter={(v) =>
                 typeof v === "number" ? v.toFixed(4) : String(v ?? "")
               }
             />
-            <ReferenceLine y={0} stroke="var(--tm-rule-2)" />
+            <ReferenceLine y={0} stroke={TM_CHART_CSS.gridStrong} />
             <ReferenceLine
               y={IC_THRESHOLD}
-              stroke="var(--tm-accent)"
+              stroke={TM_CHART_CSS.positive}
               strokeDasharray="2 4"
               strokeWidth={1}
               label={{
                 value: t(locale, "backtest.evidence.icThreshold"),
-                fill: "var(--tm-muted)",
+                fill: TM_CHART_CSS.muted,
                 fontSize: 10,
                 fontFamily: "var(--font-jetbrains-mono)",
                 position: "insideTopRight",
@@ -179,7 +171,7 @@ export function WalkforwardPane({ runState, currentRun }: Props) {
               {folds.map((f, idx) => (
                 <Cell
                   key={`fold-${idx}`}
-                  fill={f.ic >= 0 ? "var(--tm-pos)" : "var(--tm-neg)"}
+                  fill={f.ic >= 0 ? TM_CHART_CSS.positive : TM_CHART_CSS.negative}
                 />
               ))}
             </Bar>

@@ -1,8 +1,12 @@
 # Alpha Workstation Master Design System
 
-Status: implementation source of truth
+Status: implementation source of truth for workstation page composition
 
-Scope: desktop research workbenches at `/alpha`, `/backtest`, `/alerts`, and `/evolution`
+Scope: all desktop workstation routes. Authentication and print exceptions are
+defined in `ALPHA-DESIGN-SYSTEM-ASSET-CATALOG.md`.
+
+Reusable component, control, typography, state, and operating-pattern source of
+truth: `ALPHA-DESIGN-SYSTEM-ASSET-CATALOG.md` and the living `/reference` route.
 
 Reference viewport: 1672 × 941 px
 
@@ -142,7 +146,7 @@ The repository does not contain a canonical generated Screener reference image. 
 - Every generated expression is written to a durable run-scoped candidate ledger before optional LLM screening. The audit view exposes settings, mechanism, evidence, LLM technical state, selection decision, and exact withholding reason; `brain_alphas` remains the official-simulation outcome table.
 - Filters and pagination apply within the selected run only. A completed run with generated candidates but zero simulations opens the audit view by default and points users to the blocking evidence instead of showing an unexplained empty result table.
 - Candidate detail keeps BRAIN-official metrics separate from Alpha Agent diagnostics, including adjusted self-correlation, lineage, retry history, and local screening evidence when available.
-- Official self-correlation uses BRAIN's `0.70` hard limit. `0.65–0.70` is an internal warning band only: it may prompt a marginal-contribution review but must not reject an otherwise eligible alpha.
+- Official self-correlation uses BRAIN's `0.70` hard limit. `0.65` to `0.70` is an internal warning band only: it may prompt a marginal-contribution review but must not reject an otherwise eligible alpha.
 - A missing official self-correlation exposes its real state: pending computation, skipped because an earlier prerequisite failed, or temporarily unavailable after a bounded poll. GOOD-or-better rejected rows receive bounded post-run enrichment so useful research evidence is not silently discarded.
 - Performance quality and novelty are separate verdict axes. A candidate may be high quality but redundant; the UI names both states and recommends switching mechanism or data rather than implying that a good grade guarantees submission eligibility.
 - Options mining means multiple economic mechanisms, not one IV-skew template. The selected pool exposes mechanism labels and uses a bounded diversity quota before real simulations.

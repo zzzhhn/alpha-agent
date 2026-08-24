@@ -16,6 +16,18 @@ import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { BrainPnLChart, type ChartKind } from "@/components/brain/BrainPnLChart";
 import { BrainCandidateAudit } from "@/components/brain/BrainCandidateAudit";
+import { TmPagination } from "@/components/tm/TmPagination";
+import { TmStatePane } from "@/components/tm/TmStatePane";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 import { Play } from "lucide-react";
 import {
   fetchBrainAlphas,
@@ -464,43 +476,61 @@ function YearlyTable({ rowId, hasAlpha }: { rowId: number; hasAlpha: boolean }) 
         {zh ? "历年 IS 概要" : "IS Summary by year"}
       </div>
       {rows && rows.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse font-mono text-[10.5px]">
-            <thead>
-              <tr className="border-b border-tm-rule text-tm-muted">
-                {cols.map((c) => (
-                  <th key={c} className="px-2 py-1 text-right font-tm-mono text-[9px] uppercase first:text-left">
+        <TmTableFrame>
+          <TmTable
+            density="compact"
+            caption={zh ? "历年 IS 概要" : "IS Summary by year"}
+            className="min-w-[560px] text-[10.5px]"
+          >
+            <TmTableHead>
+              <TmTableRow>
+                {cols.map((c, index) => (
+                  <TmTableHeaderCell
+                    key={c}
+                    textAlign={index === 0 ? "left" : "right"}
+                    className="px-2 text-[9px]"
+                  >
                     {c}
-                  </th>
+                  </TmTableHeaderCell>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TmTableRow>
+            </TmTableHead>
+            <TmTableBody>
               {rows.map((r, i) => (
-                <tr key={i} className="border-b border-tm-rule/50">
-                  {cols.map((c) => (
-                    <td key={c} className="px-2 py-1 text-right tabular-nums text-tm-fg-2 first:text-left first:text-tm-fg">
-                      {r[c] === null || r[c] === undefined
-                        ? "—"
-                        : typeof r[c] === "number"
-                        ? (r[c] as number).toFixed(c === "year" ? 0 : 2)
-                        : String(r[c])}
-                    </td>
-                  ))}
-                </tr>
+                <TmTableRow key={i}>
+                  {cols.map((c, index) => {
+                    const value = r[c] === null || r[c] === undefined
+                      ? "—"
+                      : typeof r[c] === "number"
+                      ? (r[c] as number).toFixed(c === "year" ? 0 : 2)
+                      : String(r[c]);
+                    return index === 0 ? (
+                      <TmTableRowHeader key={c} className="px-2 font-normal">
+                        {value}
+                      </TmTableRowHeader>
+                    ) : (
+                      <TmTableCell key={c} numeric textAlign="right" className="px-2 text-tm-fg-2">
+                        {value}
+                      </TmTableCell>
+                    );
+                  })}
+                </TmTableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TmTableBody>
+          </TmTable>
+        </TmTableFrame>
       ) : err ? (
-        <p className="font-tm-mono text-[11px] text-tm-muted">
-          {zh ? "无历年数据" : "no yearly data"}
-        </p>
+        <TmStatePane
+          state="empty"
+          title={zh ? "无历年数据" : "No yearly data"}
+          className="min-h-20 rounded-none border-0"
+        />
       ) : (
-        <p className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-muted">
-          <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.75} />
-          {zh ? "拉取历年数据…" : "fetching yearly…"}
-        </p>
+        <TmStatePane
+          state="loading"
+          title={zh ? "拉取历年数据…" : "Fetching yearly data…"}
+          className="min-h-20 rounded-none border-0"
+        />
       )}
     </div>
   );
@@ -2031,7 +2061,6 @@ export function BrainMiningPanel() {
   }
 
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const meta = `${total} ${zh ? "个 alpha" : "alphas"}`;
   const selectedRun = runs?.find((run) => run.id === selectedRunId) ?? null;
   const recentRuns = runs ?? [];
@@ -2330,49 +2359,35 @@ export function BrainMiningPanel() {
           </ul>
         )}
 
-        {/* pagination + custom page size */}
+        {/* Canonical workstation pagination. */}
         {total > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-tm-rule px-3 py-2 font-tm-mono text-[11px] text-tm-muted">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="hover:text-tm-fg disabled:opacity-40"
-            >
-              ‹ {zh ? "上一页" : "prev"}
-            </button>
-            <span className="flex items-center gap-2 tabular-nums">
-              <span>
-                {zh
-                  ? `第 ${page + 1} / ${pageCount} 页 · 共 ${total} 条`
-                  : `page ${page + 1} / ${pageCount} · ${total} total`}
-              </span>
-              <span className="flex items-center gap-1">
-                <span>{zh ? "每页" : "per page"}</span>
-                <input
-                  value={String(pageSize)}
-                  onChange={(e) => {
-                    const n = parseInt(e.target.value.replace(/\D/g, ""), 10);
-                    // clamp 1..200 (server also caps limit at 200); empty -> keep
-                    if (Number.isFinite(n) && n > 0) setPageSize(Math.min(200, n));
-                    else if (e.target.value === "") setPageSize(1);
-                  }}
-                  inputMode="numeric"
-                  aria-label={zh ? "每页条数" : "rows per page"}
-                  className="h-5 w-12 border border-tm-rule bg-tm-bg-2 px-1 text-center text-tm-fg outline-none focus:border-tm-accent"
-                />
-                <span>{zh ? "条" : "rows"}</span>
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-              disabled={page >= pageCount - 1}
-              className="hover:text-tm-fg disabled:opacity-40"
-            >
-              {zh ? "下一页" : "next"} ›
-            </button>
-          </div>
+          <TmPagination
+            page={page + 1}
+            pageSize={pageSize}
+            totalItems={total}
+            pageSizeOptions={[10, 20, 50, 100, 200]}
+            labels={{
+              navigation: zh ? "BRAIN 因子结果分页" : "BRAIN alpha result pagination",
+              previous: zh ? "上一页" : "Previous",
+              previousAriaLabel: zh ? "上一页" : "Previous page",
+              next: zh ? "下一页" : "Next",
+              nextAriaLabel: zh ? "下一页" : "Next page",
+              page: (currentPage, totalPages) =>
+                zh
+                  ? `第 ${currentPage} / ${totalPages} 页`
+                  : `Page ${currentPage} / ${totalPages}`,
+              pageSize: zh ? "每页" : "Rows",
+              total: (count) => (zh ? `共 ${count} 条` : `${count} total`),
+            }}
+            onPageChange={(nextPage) => {
+              setPage(nextPage - 1);
+              setExpanded(new Set());
+            }}
+            onPageSizeChange={(nextPageSize) => {
+              setPageSize(nextPageSize);
+              setExpanded(new Set());
+            }}
+          />
         ) : null}
           </>
         )}

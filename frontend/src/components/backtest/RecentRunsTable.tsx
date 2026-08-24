@@ -17,6 +17,18 @@ import { Bookmark, RotateCcw, Star } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmIconButton } from "@/components/tm/TmButton";
+import { TmStatePane } from "@/components/tm/TmStatePane";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 import type { BacktestParams, Run } from "./types";
 
 interface RecentRunsTableProps {
@@ -138,9 +150,11 @@ export function RecentRunsTable({
   if (runs.length === 0) {
     return (
       <TmPane title={title}>
-        <div className="flex h-[80px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
-          {t(locale, "backtest.runs.empty")}
-        </div>
+        <TmStatePane
+          state="empty"
+          title={t(locale, "backtest.runs.empty")}
+          className="min-h-20 rounded-none border-0"
+        />
       </TmPane>
     );
   }
@@ -150,45 +164,46 @@ export function RecentRunsTable({
 
   return (
     <TmPane title={title}>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[11.5px]">
-          <thead>
-            <tr className="h-9 border-b border-tm-rule bg-tm-bg-2 font-tm-mono uppercase tracking-[0.04em] text-tm-muted">
-              <th className="px-2 py-1 text-left font-semibold" style={{ width: "6ch" }}>
+      <TmTableFrame>
+        <TmTable density="standard" caption={title} className="text-[11.5px]">
+          <TmTableHead>
+            <TmTableRow>
+              <TmTableHeaderCell style={{ width: "6ch" }}>
                 {t(locale, "backtest.runs.colRun")}
-              </th>
-              <th
-                className="px-1 py-1 text-center font-semibold"
+              </TmTableHeaderCell>
+              <TmTableHeaderCell
+                className="px-1"
+                textAlign="center"
                 style={{ width: "2ch" }}
                 aria-label={t(locale, "backtest.runs.baselineMark")}
               />
-              <th className="px-2 py-1 text-right font-semibold" style={{ width: "8ch" }}>
+              <TmTableHeaderCell textAlign="right" style={{ width: "8ch" }}>
                 {t(locale, "backtest.wf.colSharpe")}
-              </th>
-              <th className="px-2 py-1 text-right font-semibold" style={{ width: "8ch" }}>
+              </TmTableHeaderCell>
+              <TmTableHeaderCell textAlign="right" style={{ width: "8ch" }}>
                 {t(locale, "backtest.wf.colMdd")}
-              </th>
-              <th className="px-2 py-1 text-right font-semibold" style={{ width: "8ch" }}>
+              </TmTableHeaderCell>
+              <TmTableHeaderCell textAlign="right" style={{ width: "8ch" }}>
                 {t(locale, "backtest.wf.colIc")}
-              </th>
-              <th className="px-2 py-1 text-right font-semibold" style={{ width: "6ch" }}>
+              </TmTableHeaderCell>
+              <TmTableHeaderCell textAlign="right" style={{ width: "6ch" }}>
                 {t(locale, "backtest.runs.colTurnover")}
-              </th>
-              <th className="px-2 py-1 text-right font-semibold" style={{ width: "6ch" }}>
+              </TmTableHeaderCell>
+              <TmTableHeaderCell textAlign="right" style={{ width: "6ch" }}>
                 {t(locale, "backtest.runs.colAnnRet")}
-              </th>
-              <th className="px-2 py-1 text-left font-semibold">
+              </TmTableHeaderCell>
+              <TmTableHeaderCell>
                 {t(locale, "backtest.runs.colParams")}
-              </th>
-              <th
-                className="px-2 py-1 text-right font-semibold"
+              </TmTableHeaderCell>
+              <TmTableHeaderCell
+                textAlign="right"
                 style={{ width: "12ch" }}
               >
                 {t(locale, "backtest.runs.colActions")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </TmTableHeaderCell>
+            </TmTableRow>
+          </TmTableHead>
+          <TmTableBody>
             {runs.map((run, idx) => {
               const runNum = total - idx;
               const isPinned = run.id === baselineRunId;
@@ -197,14 +212,14 @@ export function RecentRunsTable({
                 ? "bg-tm-bg-3 hover:bg-tm-bg-3"
                 : "hover:bg-tm-bg-3";
               return (
-                <tr
+                <TmTableRow
                   key={run.id}
-                  className={`h-11 border-b border-tm-rule font-tm-mono text-tm-fg ${rowBgClass}`}
+                  className={`h-11 ${rowBgClass}`}
                 >
-                  <td className="px-2 py-1 text-left font-mono text-tm-muted">
+                  <TmTableRowHeader className="px-2 font-normal text-tm-muted">
                     {runNum}
-                  </td>
-                  <td className="px-1 py-1 text-center">
+                  </TmTableRowHeader>
+                  <TmTableCell className="px-1" textAlign="center">
                     {isPinned ? (
                       <Star
                         className="inline h-3 w-3 text-tm-accent"
@@ -215,76 +230,64 @@ export function RecentRunsTable({
                     ) : (
                       <span aria-hidden="true">&nbsp;</span>
                     )}
-                  </td>
-                  <td className="px-2 py-1 text-right">
+                  </TmTableCell>
+                  <TmTableCell numeric textAlign="right" className="px-2">
                     <MetricNumCell
                       text={fmtSharpe(m.sharpe)}
                       glyph={m.sharpe === null ? null : classifySharpe(m.sharpe)}
                     />
-                  </td>
-                  <td className="px-2 py-1 text-right">
+                  </TmTableCell>
+                  <TmTableCell numeric textAlign="right" className="px-2">
                     <MetricNumCell
                       text={fmtMaxDD(m.maxDD)}
                       glyph={m.maxDD === null ? null : classifyMaxDD(m.maxDD)}
                     />
-                  </td>
-                  <td className="px-2 py-1 text-right">
+                  </TmTableCell>
+                  <TmTableCell numeric textAlign="right" className="px-2">
                     <MetricNumCell
                       text={fmtIC(m.ic)}
                       glyph={m.ic === null ? null : classifyIC(m.ic)}
                     />
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono">
+                  </TmTableCell>
+                  <TmTableCell numeric textAlign="right" className="px-2">
                     {fmtTurnover(m.turnover)}
-                  </td>
-                  <td className="px-2 py-1 text-right font-mono">
+                  </TmTableCell>
+                  <TmTableCell numeric textAlign="right" className="px-2">
                     {fmtAnnReturn(m.annReturn)}
-                  </td>
-                  <td className="px-2 py-1 text-left font-mono text-tm-fg-2">
+                  </TmTableCell>
+                  <TmTableCell className="px-2 text-tm-fg-2">
                     {formatParamsSummary(run.params)}
-                  </td>
-                  <td className="px-2 py-1 text-right">
+                  </TmTableCell>
+                  <TmTableCell className="px-2" textAlign="right">
                     <div className="inline-flex items-center justify-end gap-1">
-                      <button
-                        type="button"
+                      <TmIconButton
                         onClick={() => onRefill(run.id)}
-                        aria-label={t(locale, "backtest.runs.refill")}
-                        title={t(locale, "backtest.runs.refill")}
-                        className="rounded p-1 text-tm-fg hover:bg-tm-bg-3"
-                      >
-                        <RotateCcw className="h-4 w-4" strokeWidth={1.75} />
-                      </button>
-                      <button
-                        type="button"
+                        label={t(locale, "backtest.runs.refill")}
+                        icon={<RotateCcw className="h-4 w-4" strokeWidth={1.75} />}
+                      />
+                      <TmIconButton
                         onClick={() => onTogglePin(run.id)}
-                        aria-label={t(locale, "backtest.runs.pin")}
+                        label={t(locale, "backtest.runs.pin")}
                         aria-pressed={isPinned}
-                        title={t(locale, "backtest.runs.pin")}
-                        className="rounded p-1 text-tm-fg hover:bg-tm-bg-3"
-                      >
-                        <Star
+                        icon={<Star
                           className="h-4 w-4"
                           strokeWidth={1.75}
                           fill={isPinned ? "currentColor" : "none"}
-                        />
-                      </button>
-                      <button
-                        type="button"
+                        />}
+                      />
+                      <TmIconButton
                         onClick={() => onSaveToZoo(run.id)}
-                        aria-label={t(locale, "backtest.runs.zoo")}
-                        title={t(locale, "backtest.runs.zoo")}
-                        className="rounded p-1 text-tm-fg hover:bg-tm-bg-3"
-                      >
-                        <Bookmark className="h-4 w-4" strokeWidth={1.75} />
-                      </button>
+                        label={t(locale, "backtest.runs.zoo")}
+                        icon={<Bookmark className="h-4 w-4" strokeWidth={1.75} />}
+                      />
                     </div>
-                  </td>
-                </tr>
+                  </TmTableCell>
+                </TmTableRow>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </TmTableBody>
+        </TmTable>
+      </TmTableFrame>
     </TmPane>
   );
 }

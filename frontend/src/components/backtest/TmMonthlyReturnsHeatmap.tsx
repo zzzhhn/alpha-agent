@@ -18,6 +18,7 @@ import { TmPane } from "@/components/tm/TmPane";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { MonthlyReturn } from "@/lib/types";
+import { TmTooltip } from "@/components/tm/TmTooltip";
 
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -76,6 +77,9 @@ export function TmMonthlyReturnsHeatmap({
           className="w-full border-separate font-tm-mono"
           style={{ borderSpacing: 2 }}
         >
+          <caption className="sr-only">
+            {locale === "zh" ? "按年份和月份展示的回测收益热力图" : "Backtest returns heatmap by year and month"}
+          </caption>
           <thead>
             <tr>
               <th className="sticky left-0 z-10 bg-tm-bg px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
@@ -110,9 +114,14 @@ export function TmMonthlyReturnsHeatmap({
                         <td
                           key={idx}
                           className="border border-tm-rule bg-tm-bg-2 px-1 py-1 text-center text-[10.5px] text-tm-muted"
-                          title="no data"
                         >
-                          —
+                          <TmTooltip
+                            content={locale === "zh" ? "该月无回测数据" : "No backtest data for this month"}
+                            ariaLabel={locale === "zh" ? "无数据" : "No data"}
+                            className="w-full justify-center"
+                          >
+                            —
+                          </TmTooltip>
                         </td>
                       );
                     }
@@ -124,9 +133,14 @@ export function TmMonthlyReturnsHeatmap({
                           background: colorFor(m.return),
                           color: textColorFor(m.return),
                         }}
-                        title={`${y}-${String(m.month).padStart(2, "0")}: ${(m.return * 100).toFixed(2)}% (${m.n_days} d)`}
                       >
-                        {(m.return * 100).toFixed(1)}
+                        <TmTooltip
+                          content={`${y}-${String(m.month).padStart(2, "0")}: ${(m.return * 100).toFixed(2)}% (${m.n_days} d)`}
+                          ariaLabel={`${y}-${String(m.month).padStart(2, "0")}`}
+                          className="w-full justify-center"
+                        >
+                          {(m.return * 100).toFixed(1)}
+                        </TmTooltip>
                       </td>
                     );
                   })}

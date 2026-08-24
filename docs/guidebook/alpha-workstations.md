@@ -1,5 +1,14 @@
 # Alpha Workstation Guidebook
 
+## Design System Reference
+
+Open `参考 / REFERENCE` and select `设计系统 / Design System` to inspect the
+same tokens, controls, data displays, feedback states, overlays, chart palette,
+and operating patterns used by production routes. Examples are labelled sample
+content and do not represent live market or account data. New route-specific
+controls should first be represented here or documented as an explicit native
+exception in the asset catalog.
+
 ## Factor Alpha
 
 Write one falsifiable hypothesis, confirm universe, direction, bucket size, cost, neutralization, and benchmark, then use “Translate and backtest.” After translation, “Rerun current expression” keeps the expression and uses the latest visible parameters. Read the verdict strip before opening detailed evidence. The example library is a starting-point catalogue, not proof that an example remains valid.

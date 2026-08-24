@@ -18,6 +18,8 @@ import {
   type BrainRunCandidate,
   type BrainRunCandidatePage,
 } from "@/lib/api/brain";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 
 type AuditFilter = "all" | "selected" | "withheld";
 
@@ -360,19 +362,37 @@ export function BrainCandidateAudit({
   return (
     <section aria-label={zh ? "候选审计" : "candidate audit"}>
       <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
-        {(["all", "selected", "withheld"] as const).map((key) => {
-          const count = key === "all" ? data?.total ?? generatedCount ?? 0 : key === "selected" ? selected : withheld;
-          const label = key === "all" ? (zh ? "全部候选" : "all candidates") : key === "selected" ? (zh ? "入选" : "selected") : (zh ? "未入选" : "withheld");
-          return (
-            <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={filter === key} className={`border px-2.5 py-1 font-tm-mono text-[10px] transition-colors focus-visible:ring-1 focus-visible:ring-tm-accent ${filter === key ? "border-tm-accent bg-tm-accent text-tm-bg" : "border-tm-rule text-tm-muted hover:text-tm-fg"}`}>
-              {label} <span className="tabular-nums">{count}</span>
-            </button>
-          );
-        })}
-        <button type="button" onClick={() => void load()} disabled={loading} className="ml-auto inline-flex items-center gap-1.5 border border-tm-rule px-2.5 py-1 font-tm-mono text-[10px] text-tm-muted hover:text-tm-fg disabled:opacity-50">
-          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+        <TmToggleGroup<AuditFilter>
+          value={filter}
+          onChange={setFilter}
+          ariaLabel={zh ? "候选审计筛选" : "Candidate audit filter"}
+          options={[
+            {
+              value: "all",
+              label: <>{zh ? "全部候选" : "all candidates"} <span className="tabular-nums">{data?.total ?? generatedCount ?? 0}</span></>,
+            },
+            {
+              value: "selected",
+              label: <>{zh ? "入选" : "selected"} <span className="tabular-nums">{selected}</span></>,
+            },
+            {
+              value: "withheld",
+              label: <>{zh ? "未入选" : "withheld"} <span className="tabular-nums">{withheld}</span></>,
+            },
+          ]}
+        />
+        <TmButton
+          type="button"
+          variant="secondary"
+          size="xs"
+          loading={loading}
+          loadingLabel={zh ? "刷新中" : "refreshing"}
+          onClick={() => void load()}
+          className="ml-auto"
+        >
+          <RefreshCw className="h-3 w-3" />
           {zh ? "刷新审计" : "refresh audit"}
-        </button>
+        </TmButton>
       </div>
 
       {llmFallbacks > 0 ? (

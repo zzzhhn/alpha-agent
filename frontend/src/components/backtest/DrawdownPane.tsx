@@ -21,10 +21,12 @@ import {
   ReferenceLine,
 } from "recharts";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { EquityCurvePoint } from "@/lib/types";
 import type { Run, RunState } from "./types";
+import { TM_CHART_CSS } from "@/components/charts";
 
 interface Props {
   readonly runState: RunState;
@@ -62,31 +64,6 @@ function buildUnderwater(eq: readonly EquityCurvePoint[]): BuildOutput {
   return { points, worstDate, worstDD };
 }
 
-function Skeleton() {
-  return (
-    <div className="flex flex-col gap-2 p-3">
-      <div className="h-3 w-1/3 animate-pulse rounded bg-tm-bg-3" />
-      <div className="h-[200px] w-full animate-pulse rounded bg-tm-bg-3" />
-    </div>
-  );
-}
-
-function EmptyMessage({ text }: { readonly text: string }) {
-  return (
-    <div className="flex h-[220px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
-      {text}
-    </div>
-  );
-}
-
-function ErrorPlaceholder({ text }: { readonly text: string }) {
-  return (
-    <div className="flex h-32 w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
-      {text}
-    </div>
-  );
-}
-
 export function DrawdownPane({ runState, currentRun }: Props) {
   const { locale } = useLocale();
   const title = t(locale, "backtest.evidence.drawdown");
@@ -99,7 +76,12 @@ export function DrawdownPane({ runState, currentRun }: Props) {
   if (runState.kind === "running") {
     return (
       <TmPane title={title}>
-        <Skeleton />
+        <TmStatePane
+          state="loading"
+          title={title}
+          description={t(locale, "backtest.evidence.waiting")}
+          className="min-h-[220px] rounded-none border-0"
+        />
       </TmPane>
     );
   }
@@ -108,8 +90,10 @@ export function DrawdownPane({ runState, currentRun }: Props) {
     // so the same 422 message isn't repeated 3+ times down the page.
     return (
       <TmPane title={title}>
-        <ErrorPlaceholder
-          text={t(locale, "backtest.evidence.errorPlaceholder")}
+        <TmStatePane
+          state="error"
+          title={t(locale, "backtest.evidence.errorPlaceholder")}
+          className="min-h-[220px] rounded-none border-0"
         />
       </TmPane>
     );
@@ -117,12 +101,14 @@ export function DrawdownPane({ runState, currentRun }: Props) {
   if (!currentRun || built.points.length === 0) {
     return (
       <TmPane title={title}>
-        <EmptyMessage
-          text={
+        <TmStatePane
+          state="empty"
+          title={
             currentRun
               ? t(locale, "backtest.evidence.unavailable")
               : t(locale, "backtest.evidence.waiting")
           }
+          className="min-h-[220px] rounded-none border-0"
         />
       </TmPane>
     );
@@ -142,41 +128,41 @@ export function DrawdownPane({ runState, currentRun }: Props) {
           >
             <defs>
               <linearGradient id="bt-pane-dd-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--tm-neg)" stopOpacity={0.05} />
-                <stop offset="100%" stopColor="var(--tm-neg)" stopOpacity={0.55} />
+                <stop offset="0%" stopColor={TM_CHART_CSS.negative} stopOpacity={0.05} />
+                <stop offset="100%" stopColor={TM_CHART_CSS.negative} stopOpacity={0.55} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
+            <CartesianGrid strokeDasharray="2 4" stroke={TM_CHART_CSS.grid} />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
               interval="preserveStartEnd"
               minTickGap={40}
-              stroke="var(--tm-rule)"
+              stroke={TM_CHART_CSS.grid}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
               tickFormatter={(v: number) => `${v.toFixed(0)}%`}
               domain={["auto", 0]}
-              stroke="var(--tm-rule)"
+              stroke={TM_CHART_CSS.grid}
             />
             <Tooltip
               contentStyle={{
-                background: "var(--tm-bg-2)",
-                border: "1px solid var(--tm-rule)",
+                background: TM_CHART_CSS.surface,
+                border: `1px solid ${TM_CHART_CSS.grid}`,
                 fontSize: 11,
                 fontFamily: "var(--font-jetbrains-mono)",
-                color: "var(--tm-fg)",
+                color: TM_CHART_CSS.foreground,
               }}
               formatter={(v) =>
                 typeof v === "number" ? `${v.toFixed(2)}%` : String(v ?? "")
               }
             />
-            <ReferenceLine y={0} stroke="var(--tm-rule-2)" />
+            <ReferenceLine y={0} stroke={TM_CHART_CSS.gridStrong} />
             {built.worstDate ? (
               <ReferenceLine
                 x={built.worstDate}
-                stroke="var(--tm-neg)"
+                stroke={TM_CHART_CSS.negative}
                 strokeDasharray="2 4"
                 strokeWidth={1}
               />
@@ -184,7 +170,7 @@ export function DrawdownPane({ runState, currentRun }: Props) {
             <Area
               type="monotone"
               dataKey="drawdown"
-              stroke="var(--tm-neg)"
+              stroke={TM_CHART_CSS.negative}
               strokeWidth={1.5}
               fill="url(#bt-pane-dd-grad)"
               isAnimationActive={false}
