@@ -1,6 +1,6 @@
 # Alpha Agent Design System Consolidation
 
-Status: implementation milestone complete; production deployment pending
+Status: implementation milestone deployed to production
 
 Date: 2026-08-24
 
@@ -75,6 +75,20 @@ route, an explicit migration ledger, route adoption, and browser acceptance.
 `/alpha` and `/settings` redirect anonymous sessions to sign-in. Their static,
 type, lint, and build gates pass, but authenticated production-path browser
 acceptance remains a separate post-deployment gate.
+
+## Production release
+
+- Implementation merged through PR #27 to `main`.
+- Vercel Git integration deployed the merged revision as frontend deployment
+  `dpl_G2qCzqUd9oDWc7a7NbTosrF154gT` and assigned
+  `https://alpha.bobbyzhong.com`.
+- `https://alpha.bobbyzhong.com/reference` returns the new Design System route,
+  and the frontend content version is `cebd3de7e4b4be25`.
+- `GET /api/_health` returns JSON with `tunnel=ok` and `db=ok`.
+- Production OpenAPI exposes 136 paths, including the health surface.
+- Visible Chrome acceptance against the custom domain passed dark/light,
+  zh/en, pagination, keyboard controls, 1440 px and 1024 px overflow checks,
+  and reported no browser errors.
 
 ## Remaining migration
 
