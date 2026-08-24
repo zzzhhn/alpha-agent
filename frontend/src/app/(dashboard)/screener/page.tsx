@@ -59,6 +59,17 @@ import { DecisionStrip } from "@/components/workbench/DecisionStrip";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
+import { TmPagination } from "@/components/tm/TmPagination";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 
 const PREFILL_KEY = "alphacore.screener.prefill.v1";
@@ -519,8 +530,8 @@ function FactorPickerPane({
   );
   const facCopy =
     locale === "zh"
-      ? { search: "搜索因子…", page: `第 ${facPageClamped + 1}/${facPageCount} 页` }
-      : { search: "Search factors…", page: `PAGE ${facPageClamped + 1}/${facPageCount}` };
+      ? { search: "搜索因子…" }
+      : { search: "Search factors…" };
 
   if (zoo.length === 0) {
     return (
@@ -556,39 +567,44 @@ function FactorPickerPane({
           {filteredZoo.length} / {zoo.length}
         </span>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse font-tm-mono text-[11.5px]">
-          <thead>
-            <tr className="bg-tm-bg-2 text-[9px] uppercase tracking-[0.06em] text-tm-muted">
-              <th className="w-9 px-3.5 py-2 text-left font-medium">·</th>
-              <th className="px-3 py-2 text-left font-medium">
+      <TmTableFrame>
+        <TmTable
+          density="standard"
+          caption={locale === "zh" ? "因子选择" : "Screener factors"}
+          className="min-w-[860px] text-left text-[11.5px]"
+        >
+          <TmTableHead>
+            <TmTableRow>
+              <TmTableHeaderCell className="w-9 px-3.5 py-2 font-medium">·</TmTableHeaderCell>
+              <TmTableHeaderCell className="px-3 py-2 font-medium">
                 {t(locale, "screener.factors.colName")}
-              </th>
-              <th className="px-3 py-2 text-left font-medium">
+              </TmTableHeaderCell>
+              <TmTableHeaderCell className="px-3 py-2 font-medium">
                 {t(locale, "zoo.colExpr")}
-              </th>
-              <th className="px-3.5 py-2 text-right font-medium">
+              </TmTableHeaderCell>
+              <TmTableHeaderCell textAlign="right" className="px-3.5 py-2 font-medium">
                 {t(locale, "screener.factors.colDirection")}
-              </th>
+              </TmTableHeaderCell>
               {showWeights && (
-                <th className="px-3 py-2 text-right font-medium">
+                <TmTableHeaderCell textAlign="right" className="px-3 py-2 font-medium">
                   {t(locale, "screener.factors.colWeight")}
-                </th>
+                </TmTableHeaderCell>
               )}
-            </tr>
-          </thead>
-          <tbody>
+            </TmTableRow>
+          </TmTableHead>
+          <TmTableBody>
             {facPageRows.map((e) => {
               const sel = selectedById.get(e.id);
               const isSelected = Boolean(sel);
               const dir = sel?.direction ?? readDirection(e);
               return (
-                <tr
+                <TmTableRow
                   key={e.id}
+                  selected={isSelected}
                   onClick={() => onToggle(e)}
-                  className="cursor-pointer border-t border-tm-rule transition-colors hover:bg-tm-bg-2"
+                  className="cursor-pointer"
                 >
-                  <td className="px-3.5 py-2.5">
+                  <TmTableCell className="px-3.5 py-2.5">
                     <span
                       aria-hidden="true"
                       className={`inline-block h-3.5 w-3.5 border ${
@@ -597,28 +613,29 @@ function FactorPickerPane({
                           : "border-tm-rule bg-transparent"
                       }`}
                     />
-                  </td>
-                  <td
+                  </TmTableCell>
+                  <TmTableRowHeader
                     className={`whitespace-nowrap px-3 py-2.5 ${
                       isSelected ? "text-tm-accent" : "text-tm-fg"
                     }`}
                   >
                     {e.name}
-                  </td>
-                  <td className="px-3 py-2.5">
+                  </TmTableRowHeader>
+                  <TmTableCell className="px-3 py-2.5">
                     <span
                       className="block max-w-[520px] truncate text-[11px] text-tm-accent"
                       title={e.expression}
                     >
                       {e.expression}
                     </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-right">
+                  </TmTableCell>
+                  <TmTableCell textAlign="right" className="px-3.5 py-2.5">
                     <ScreenerDirBadge direction={dir} />
-                  </td>
+                  </TmTableCell>
                   {showWeights && (
-                    <td
-                      className="px-3 py-2.5 text-right"
+                    <TmTableCell
+                      textAlign="right"
+                      className="px-3 py-2.5"
                       onClick={(ev) => ev.stopPropagation()}
                     >
                       {sel ? (
@@ -636,38 +653,52 @@ function FactorPickerPane({
                       ) : (
                         <span className="text-tm-muted">—</span>
                       )}
-                    </td>
+                    </TmTableCell>
                   )}
-                </tr>
+                </TmTableRow>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </TmTableBody>
+        </TmTable>
+      </TmTableFrame>
       {facPageCount > 1 ? (
-        <div className="flex items-center justify-between border-t border-tm-rule px-3 py-2">
-          <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
-            {facCopy.page} · {filteredZoo.length}
-          </span>
-          <span className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setFacPage((p) => Math.max(0, p - 1))}
-              disabled={facPageClamped === 0}
-              className="border border-tm-rule px-3 py-0.5 font-tm-mono text-[11px] text-tm-fg-2 transition hover:bg-tm-bg-2 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              ←
-            </button>
-            <button
-              type="button"
-              onClick={() => setFacPage((p) => Math.min(facPageCount - 1, p + 1))}
-              disabled={facPageClamped >= facPageCount - 1}
-              className="border border-tm-rule px-3 py-0.5 font-tm-mono text-[11px] text-tm-fg-2 transition hover:bg-tm-bg-2 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              →
-            </button>
-          </span>
-        </div>
+        <TmPagination
+          page={facPage + 1}
+          pageSize={FAC_PAGE_SIZE}
+          totalItems={filteredZoo.length}
+          pageSizeOptions={[FAC_PAGE_SIZE]}
+          labels={{
+            navigation:
+              locale === "zh" ? "因子列表分页" : "Factor list pagination",
+            previous: (
+              <>
+                <span aria-hidden="true">←</span>
+                <span className="sr-only">
+                  {locale === "zh" ? "上一页" : "Previous"}
+                </span>
+              </>
+            ),
+            previousAriaLabel: locale === "zh" ? "上一页" : "Previous page",
+            next: (
+              <>
+                <span aria-hidden="true">→</span>
+                <span className="sr-only">
+                  {locale === "zh" ? "下一页" : "Next"}
+                </span>
+              </>
+            ),
+            nextAriaLabel: locale === "zh" ? "下一页" : "Next page",
+            page: (currentPage, totalPages) =>
+              locale === "zh"
+                ? `第 ${currentPage}/${totalPages} 页`
+                : `PAGE ${currentPage}/${totalPages}`,
+            pageSize: locale === "zh" ? "每页" : "PAGE SIZE",
+            total: (total) =>
+              locale === "zh" ? `共 ${total} 个` : `${total} FACTORS`,
+          }}
+          onPageChange={(nextPage) => setFacPage(nextPage - 1)}
+          onPageSizeChange={() => setFacPage(0)}
+        />
       ) : null}
     </TmPane>
   );

@@ -5,6 +5,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { Locale, TranslationKey } from "@/lib/i18n";
 import type { FactorExample } from "@/components/alpha/FactorExamples";
+import { TmInput } from "@/components/tm/TmField";
 
 /**
  * Grouped, scannable, filterable LIST for FACTOR_EXAMPLES.
@@ -244,13 +245,12 @@ export function FactorExampleList({
   return (
     <div className="flex flex-col gap-2">
       {/* Search / filter */}
-      <input
-        type="text"
+      <TmInput
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={setQuery}
         placeholder={t(locale, "report.example.filterPlaceholder")}
         spellCheck={false}
-        className="h-7 w-full border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none placeholder:text-tm-muted focus:border-tm-accent"
+        fieldSize="sm"
       />
 
       {totalShown === 0 ? (

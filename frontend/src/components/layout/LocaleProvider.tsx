@@ -55,6 +55,10 @@ export function LocaleProvider({ children, initialLocale }: LocaleProviderProps)
     }
   }, [initialLocale]);
 
+  useEffect(() => {
+    document.documentElement.lang = locale === "en" ? "en" : "zh-CN";
+  }, [locale]);
+
   const setLocale: Dispatch<SetStateAction<Locale>> = useCallback(
     (action) => {
       setLocaleState((prev) => {

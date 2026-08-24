@@ -8,6 +8,8 @@ import { FactorExampleModal } from "@/components/alpha/FactorExampleModal";
 import type { FactorExample } from "@/components/alpha/FactorExamples";
 import type { FactorUniverse } from "@/lib/types";
 import type { AlphaValidationParams } from "@/components/alpha/useAlphaChain";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmNumberInput, TmSelect, TmTextarea } from "@/components/tm/TmField";
 
 // ---- Prop types ----
 
@@ -97,11 +99,11 @@ export function HypothesisInputCard(p: Props) {
 
         {/* History popover */}
         <div className="relative" ref={popoverRef}>
-          <button
+          <TmButton
             type="button"
+            variant="secondary"
             onClick={() => setHistoryOpen((o) => !o)}
             aria-label={t(locale, "alpha.input.historyBtn" as Parameters<typeof t>[1])}
-            className="inline-flex items-center gap-1 border border-tm-rule px-2.5 py-1.5 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
           >
             <History className="h-3.5 w-3.5" strokeWidth={1.75} />
             <span>{t(locale, "alpha.input.historyBtn" as Parameters<typeof t>[1])}</span>
@@ -109,7 +111,7 @@ export function HypothesisInputCard(p: Props) {
               className={`h-3 w-3 transition-transform ${historyOpen ? "rotate-180" : ""}`}
               strokeWidth={1.75}
             />
-          </button>
+          </TmButton>
 
           {historyOpen && (
             <div className="absolute right-0 top-full z-10 mt-1 max-h-[400px] w-[380px] overflow-y-auto rounded border border-tm-rule bg-tm-bg-2 shadow-lg">
@@ -154,34 +156,38 @@ export function HypothesisInputCard(p: Props) {
       </header>
 
       <div className="grid grid-cols-[minmax(0,1fr)_176px] gap-3">
-        <textarea
+        <TmTextarea
           value={p.text}
-          onChange={(e) => p.onTextChange(e.target.value)}
+          onChange={p.onTextChange}
           placeholder={t(locale, "alpha.placeholder" as Parameters<typeof t>[1])}
           aria-label={t(locale, "alpha.input.title" as Parameters<typeof t>[1])}
-          className="min-h-[72px] resize-y border border-tm-rule bg-tm-bg px-4 py-3 font-tm-mono text-[15px] leading-6 text-tm-fg placeholder:text-tm-muted focus:border-tm-accent focus:outline-none disabled:opacity-50"
+          rows={2}
+          textareaClassName="min-h-[72px] bg-tm-bg px-4 py-3 text-[15px] leading-6"
           disabled={p.disabled}
         />
-        <div className="grid min-h-[72px] grid-rows-[1fr_auto] gap-2">
-          <button
+        <div className="grid min-h-[72px] grid-rows-2 gap-2">
+          <TmButton
             type="button"
+            size="md"
             onClick={p.onSubmit}
             disabled={p.disabled || empty}
-            className="flex items-center justify-center bg-tm-accent px-5 font-tm-mono text-[13px] font-semibold text-tm-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full"
           >
-            <span className="mr-2 text-[18px]">▷</span>
+            <span aria-hidden="true">▷</span>
             {t(locale, "alpha.input.submitFull" as Parameters<typeof t>[1])}
-          </button>
-          <button
+          </TmButton>
+          <TmButton
             type="button"
+            variant="secondary"
+            size="md"
             onClick={p.onRerun}
             disabled={p.disabled || !p.canRerun}
             title={locale === "zh" ? "保留当前表达式，使用下方最新参数重新回测" : "Keep the translated expression and rerun with the latest parameters"}
-            className="inline-flex h-8 items-center justify-center gap-1.5 border border-tm-rule font-tm-mono text-[10px] text-tm-fg-2 hover:border-tm-accent hover:text-tm-accent disabled:cursor-not-allowed disabled:opacity-35"
+            className="w-full text-[10px]"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             {locale === "zh" ? "按当前参数重测" : "Rerun current expression"}
-          </button>
+          </TmButton>
         </div>
       </div>
 
@@ -193,48 +199,32 @@ export function HypothesisInputCard(p: Props) {
 
         <div className="grid flex-1 grid-cols-3 items-end gap-2 xl:grid-cols-[minmax(120px,1fr)_repeat(5,minmax(105px,0.75fr))_auto]">
           {/* Universe selector */}
-          <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
-            {t(locale, "alpha.universe" as Parameters<typeof t>[1])}
-            <select
-              value={p.universe}
-              onChange={(e) => p.onUniverseChange(e.target.value as FactorUniverse)}
-              aria-label={t(locale, "alpha.universe" as Parameters<typeof t>[1])}
-              className="mt-1 block h-9 w-full border border-tm-rule bg-tm-bg px-2 font-tm-mono text-[11px] normal-case tracking-normal text-tm-fg focus:border-tm-accent focus:outline-none"
-            >
-              {UNIVERSES.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
-          </label>
+          <TmSelect
+            label={t(locale, "alpha.universe" as Parameters<typeof t>[1])}
+            value={p.universe}
+            onChange={(value) => p.onUniverseChange(value as FactorUniverse)}
+            options={UNIVERSES.map((value) => ({ value, label: value }))}
+          />
 
           <ValidationSelect label={locale === "zh" ? "策略方向" : "Direction"} value={p.validation.direction} onChange={(value) => updateValidation("direction", value as AlphaValidationParams["direction"])} options={["long_short", "long_only", "short_only"]} />
-          <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
-            {locale === "zh" ? "分组比例" : "Bucket size"}
-            <div className="mt-1 flex h-9 items-center border border-tm-rule bg-tm-bg">
-              <input type="number" min={5} max={50} step={5} value={p.validation.topPct} onChange={(event) => updateValidation("topPct", Math.min(50, Math.max(5, Number(event.target.value))))} className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[11px] normal-case tracking-normal text-tm-fg outline-none" />
-              <span className="pr-2 text-[9px]">%</span>
-            </div>
-          </label>
-          <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
-            {locale === "zh" ? "成本模型" : "Round-trip cost"}
-            <div className="mt-1 flex h-9 items-center border border-tm-rule bg-tm-bg">
-              <input type="number" min={0} max={200} value={p.validation.transactionCostBps} onChange={(event) => updateValidation("transactionCostBps", Math.min(200, Math.max(0, Number(event.target.value))))} className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[11px] normal-case tracking-normal text-tm-fg outline-none" />
-              <span className="pr-2 text-[9px]">bps</span>
-            </div>
-          </label>
+          <TmNumberInput label={locale === "zh" ? "分组比例" : "Bucket size"} min={5} max={50} step={5} value={p.validation.topPct} onChange={(value) => updateValidation("topPct", Math.min(50, Math.max(5, value)))} suffix="%" />
+          <TmNumberInput label={locale === "zh" ? "成本模型" : "Round-trip cost"} min={0} max={200} value={p.validation.transactionCostBps} onChange={(value) => updateValidation("transactionCostBps", Math.min(200, Math.max(0, value)))} suffix="bps" />
           <ValidationSelect label={locale === "zh" ? "行业中性" : "Neutralize"} value={p.validation.neutralize} onChange={(value) => updateValidation("neutralize", value as AlphaValidationParams["neutralize"])} options={["none", "sector"]} />
           <ValidationSelect label={locale === "zh" ? "基准" : "Benchmark"} value={p.validation.benchmarkTicker} onChange={(value) => updateValidation("benchmarkTicker", value as AlphaValidationParams["benchmarkTicker"])} options={["SPY", "RSP"]} />
 
           {/* Browse examples — opens the example library modal (left of submit) */}
           {p.examples.length > 0 && (
-            <button
+            <TmButton
               type="button"
+              variant="secondary"
+              size="md"
               onClick={() => setExamplesOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-1.5 border border-tm-rule px-3 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:border-tm-accent hover:text-tm-fg"
             >
               <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.75} />
               <span>
                 {t(locale, "alpha.examples.browse" as Parameters<typeof t>[1])}
               </span>
-            </button>
+            </TmButton>
           )}
 
         </div>
@@ -267,11 +257,14 @@ function ValidationSelect({
   readonly onChange: (value: string) => void;
 }) {
   return (
-    <label className="block text-[9px] uppercase tracking-[0.1em] text-tm-muted">
-      {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 block h-9 w-full border border-tm-rule bg-tm-bg px-2 font-tm-mono text-[11px] normal-case tracking-normal text-tm-fg focus:border-tm-accent focus:outline-none">
-        {options.map((option) => <option key={option} value={option}>{option.replace("_", " ")}</option>)}
-      </select>
-    </label>
+    <TmSelect
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={options.map((option) => ({
+        value: option,
+        label: option.replace("_", " "),
+      }))}
+    />
   );
 }

@@ -28,6 +28,8 @@ import {
   TmStatusPill,
 } from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import { TmFieldShell, TmInput } from "@/components/tm/TmField";
 import {
   type LLMProvider,
   PROVIDER_PRESETS,
@@ -54,13 +56,6 @@ type TestState =
   | { kind: "fail"; status: number | null; message: string };
 
 const PROVIDER_VALUES: ReadonlyArray<LLMProvider> = ["openai", "kimi", "ollama", "anthropic"];
-
-// Workstation form-row label class (mirrors `.tm-form label`).
-const FORM_LABEL =
-  "block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-tm-muted";
-
-const FORM_INPUT =
-  "h-7 w-full bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none transition-colors placeholder:text-tm-muted focus:border-tm-accent";
 
 export default function SettingsPage() {
   const { locale } = useLocale();
@@ -313,22 +308,23 @@ export default function SettingsPage() {
           <span className="flex-1">
             {t(locale, "settings.byok.import_banner")}
           </span>
-          <button
-            type="button"
-            disabled={importBusy}
+          <TmButton
+            variant="primary"
+            size="xs"
+            loading={importBusy}
+            loadingLabel={t(locale, "settings.byok.import_button")}
             onClick={() => { void handleImport(); }}
-            className="border border-tm-accent bg-tm-accent px-3 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-white disabled:opacity-50"
           >
             {t(locale, "settings.byok.import_button")}
-          </button>
-          <button
-            type="button"
+          </TmButton>
+          <TmButton
+            variant="secondary"
+            size="xs"
             disabled={importBusy}
             onClick={handleDiscardImport}
-            className="border border-tm-rule px-3 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg disabled:opacity-50"
           >
             {t(locale, "settings.byok.discard_button")}
-          </button>
+          </TmButton>
         </div>
       )}
       <TmSubbar>
@@ -370,87 +366,70 @@ export default function SettingsPage() {
           {/* Provider — chip row instead of dropdown so all 4 options
               are visible at once and clicking any switches without
               opening a menu. */}
-          <div className="flex flex-col gap-1">
-            <label className={FORM_LABEL}>
-              {zh ? "服务商 / PROVIDER" : "PROVIDER"}
-            </label>
-            <div className="flex flex-wrap gap-1">
-              {PROVIDER_VALUES.map((p) => {
-                const active = p === provider;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => {
-                      setProvider(p);
-                      setTestState({ kind: "idle" });
-                    }}
-                    className={
-                      active
-                        ? "border border-tm-accent bg-tm-accent-soft px-2 py-0.5 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-accent"
-                        : "border border-tm-rule bg-tm-bg-2 px-2 py-0.5 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg"
-                    }
-                  >
-                    {PROVIDER_PRESETS[p].label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <TmFieldShell label={zh ? "服务商 / PROVIDER" : "PROVIDER"}>
+            <TmToggleGroup
+              value={provider}
+              options={PROVIDER_VALUES.map((p) => ({
+                value: p,
+                label: PROVIDER_PRESETS[p].label,
+              }))}
+              onChange={(next) => {
+                setProvider(next);
+                setTestState({ kind: "idle" });
+              }}
+              ariaLabel={zh ? "服务商" : "Provider"}
+              size="xs"
+              className="flex-wrap"
+            />
+          </TmFieldShell>
 
           {/* API Key with reveal toggle inline */}
-          <div className="flex flex-col gap-1">
-            <label className={FORM_LABEL}>API KEY</label>
+          <TmFieldShell label="API KEY" htmlFor="settings-api-key">
             <div className="flex gap-1">
-              <input
+              <TmInput
+                id="settings-api-key"
+                fieldSize="sm"
                 type={revealKey ? "text" : "password"}
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={setApiKey}
                 placeholder={
                   provider === "ollama"
                     ? zh ? "Ollama 不需要 key（任意填写）" : "not required for Ollama"
                     : "sk-..."
                 }
-                className={FORM_INPUT}
+                className="min-w-0 flex-1"
               />
-              <button
+              <TmButton
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => setRevealKey((r) => !r)}
-                className="border border-tm-rule px-2 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-fg"
               >
                 {revealKey
                   ? zh ? "隐藏" : "HIDE"
                   : zh ? "显示" : "REVEAL"}
-              </button>
+              </TmButton>
             </div>
-          </div>
+          </TmFieldShell>
 
           {/* Side-by-side base + model — `tm-form .row` pattern */}
           <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <label className={FORM_LABEL}>
-                {zh ? "BASE URL（可选）" : "BASE URL (optional)"}
-              </label>
-              <input
-                type="text"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
+            <TmInput
+              label={zh ? "BASE URL（可选）" : "BASE URL (optional)"}
+              fieldSize="sm"
+              value={baseUrl}
+              onChange={setBaseUrl}
                 placeholder={preset.defaultBase}
-                className={FORM_INPUT}
-              />
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label className={FORM_LABEL}>
-                {zh ? "模型 ID（可选）" : "MODEL ID (optional)"}
-              </label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder={preset.defaultModel}
-                className={FORM_INPUT}
-              />
-            </div>
+              className="min-w-0 flex-1"
+            />
+            <TmInput
+              label={zh ? "模型 ID（可选）" : "MODEL ID (optional)"}
+              fieldSize="sm"
+              value={model}
+              onChange={setModel}
+              placeholder={preset.defaultModel}
+              className="min-w-0 flex-1"
+            />
           </div>
 
           <p className="font-tm-mono text-[10.5px] text-tm-muted">
@@ -478,10 +457,10 @@ export default function SettingsPage() {
             variant="secondary"
             onClick={handleTest}
             disabled={!canSave || testState.kind === "running"}
+            loading={testState.kind === "running"}
+            loadingLabel={zh ? "测试中…" : "TESTING…"}
           >
-            {testState.kind === "running"
-              ? zh ? "测试中…" : "TESTING…"
-              : zh ? "测试连通" : "TEST CONNECTION"}
+            {zh ? "测试连通" : "TEST CONNECTION"}
           </TmButton>
           <TmButton variant="ghost" onClick={handleClear}>
             {zh ? "清除已保存" : "CLEAR SAVED"}
@@ -559,10 +538,10 @@ export default function SettingsPage() {
               variant="secondary"
               onClick={() => { void handleExport(); }}
               disabled={exportInProgress}
+              loading={exportInProgress}
+              loadingLabel={zh ? "导出中…" : "EXPORTING…"}
             >
-              {exportInProgress
-                ? zh ? "导出中…" : "EXPORTING…"
-                : t(locale, "settings.danger.export").toUpperCase()}
+              {t(locale, "settings.danger.export").toUpperCase()}
             </TmButton>
             <span className="font-tm-mono text-[10.5px] text-tm-muted">
               {zh ? "下载 JSON 数据包" : "downloads a JSON data bundle"}
@@ -578,21 +557,22 @@ export default function SettingsPage() {
               {t(locale, "settings.danger.delete_confirm")}
             </p>
             <div className="flex gap-2">
-              <input
-                type="text"
+              <TmInput
+                fieldSize="sm"
                 value={deleteConfirm}
-                onChange={(e) => setDeleteConfirm(e.target.value)}
+                onChange={setDeleteConfirm}
                 placeholder="DELETE"
-                className="h-7 w-36 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none placeholder:text-tm-muted focus:border-red-500"
+                className="w-36 shrink-0"
+                inputClassName="focus:border-red-500"
               />
               <TmButton
-                variant="ghost"
+                variant="danger"
                 onClick={() => { void handleDeleteAccount(); }}
                 disabled={deleteConfirm !== "DELETE" || deleteInProgress}
+                loading={deleteInProgress}
+                loadingLabel={zh ? "删除中…" : "DELETING…"}
               >
-                {deleteInProgress
-                  ? zh ? "删除中…" : "DELETING…"
-                  : t(locale, "settings.danger.delete").toUpperCase()}
+                {t(locale, "settings.danger.delete").toUpperCase()}
               </TmButton>
             </div>
           </div>

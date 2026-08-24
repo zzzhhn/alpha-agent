@@ -1,10 +1,10 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { HypothesisTranslateResponse } from "@/lib/types";
+import { TmDisclosureButton } from "@/components/tm/TmButton";
 
 interface Props {
   translate: HypothesisTranslateResponse | null;
@@ -52,19 +52,14 @@ export function AnalyticsAccordion({ translate }: Props) {
     <section className="border border-tm-rule bg-tm-bg">
       {flags.degenerate && <DegenerateWarningPane translate={translate} />}
 
-      <button
+      <TmDisclosureButton
         onClick={() => setShowAll((s) => !s)}
         aria-label={accordionLabel()}
-        className="flex h-10 w-full items-center justify-between border-b border-tm-rule bg-tm-bg-2/35 px-3 font-tm-mono text-[10px] uppercase tracking-[0.08em] text-tm-fg-2 hover:text-tm-fg"
-      >
-        <span className="flex items-center gap-2">
-          {showAll ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-          {accordionLabel()}
-        </span>
-        <span className="normal-case tracking-normal text-tm-muted">
-          {locale === "zh" ? "Smoke · LLM 用量 · 操作符" : "Smoke · LLM usage · operators"}
-        </span>
-      </button>
+        expanded={showAll}
+        label={accordionLabel()}
+        meta={locale === "zh" ? "Smoke · LLM 用量 · 操作符" : "Smoke · LLM usage · operators"}
+        className="border-x-0 border-t-0"
+      />
 
       {showAll && (
         <div className="grid grid-cols-3 divide-x divide-tm-rule">

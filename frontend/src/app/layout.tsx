@@ -34,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="zh"
+      lang="zh-CN"
       data-theme="dark"
       suppressHydrationWarning
       className={`${jetbrainsMono.variable} ${interTight.variable}`}

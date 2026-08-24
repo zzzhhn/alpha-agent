@@ -4,6 +4,15 @@ import clsx from "clsx";
 import type { EvolutionChange } from "@/lib/api/evolution";
 import { t, type Locale } from "@/lib/i18n";
 import { formatUtc8DateTime } from "@/lib/format-datetime";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+} from "@/components/tm/TmTable";
 
 // Source badge color mapping
 const SOURCE_BADGE: Record<
@@ -126,52 +135,56 @@ export function ChangeHistoryTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[480px] text-xs border-collapse">
-        <thead>
-          <tr className="text-tm-fg-2 border-b border-tm-rule">
-            <th className="px-2 py-1.5 text-right w-8">#</th>
-            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.changes.col_time")}</th>
-            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.changes.col_source")}</th>
-            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.changes.col_baseline_ic")}</th>
-            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.changes.col_ic_around")}</th>
-            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.changes.col_note")}</th>
-          </tr>
-        </thead>
-        <tbody>
+    <TmTableFrame>
+      <TmTable
+        density="compact"
+        caption={t(locale, "evolution.changes")}
+        className="min-w-[480px] text-xs"
+      >
+        <TmTableHead>
+          <TmTableRow>
+            <TmTableHeaderCell textAlign="right" className="w-8 px-2 py-1.5">#</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5">{t(locale, "evolution.changes.col_time")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5">{t(locale, "evolution.changes.col_source")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="right" className="px-2 py-1.5">{t(locale, "evolution.changes.col_baseline_ic")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="right" className="px-2 py-1.5">{t(locale, "evolution.changes.col_ic_around")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5">{t(locale, "evolution.changes.col_note")}</TmTableHeaderCell>
+          </TmTableRow>
+        </TmTableHead>
+        <TmTableBody>
           {changes.map((change) => {
             const baselineIc = parseBaselineIc(change.new_value);
             const isRollback = change.source === "auto_rollback";
 
             return (
-              <tr key={change.id} className="border-b border-tm-rule">
+              <TmTableRow key={change.id}>
                 {/* ID */}
-                <td className="px-2 py-1 text-right font-mono text-tm-muted">
+                <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-muted">
                   {change.id}
-                </td>
+                </TmTableCell>
 
                 {/* Timestamp */}
-                <td className="px-2 py-1 font-mono text-tm-fg-2 whitespace-nowrap">
+                <TmTableCell className="whitespace-nowrap px-2 py-1">
                   {formatChangedAt(change.changed_at)}
-                </td>
+                </TmTableCell>
 
                 {/* Source badge */}
-                <td className="px-2 py-1">
+                <TmTableCell className="px-2 py-1">
                   <SourceBadge source={change.source} />
-                </td>
+                </TmTableCell>
 
                 {/* Baseline IC */}
-                <td className="px-2 py-1 text-right font-mono text-tm-fg">
+                <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg">
                   {baselineIc}
-                </td>
+                </TmTableCell>
 
                 {/* IC 7d before -> after (retrospection) */}
-                <td className="px-2 py-1 text-right">
+                <TmTableCell textAlign="right" className="px-2 py-1">
                   <IcAroundCell change={change} />
-                </td>
+                </TmTableCell>
 
                 {/* Note — rollback reference */}
-                <td className="px-2 py-1 font-mono text-tm-muted">
+                <TmTableCell className="px-2 py-1 text-tm-muted">
                   {isRollback && change.rollback_of !== null ? (
                     <span className="text-tm-neg">
                       &#x21A9;&nbsp;#{change.rollback_of}
@@ -179,12 +192,12 @@ export function ChangeHistoryTable({
                   ) : (
                     "—"
                   )}
-                </td>
-              </tr>
+                </TmTableCell>
+              </TmTableRow>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </TmTableBody>
+      </TmTable>
+    </TmTableFrame>
   );
 }

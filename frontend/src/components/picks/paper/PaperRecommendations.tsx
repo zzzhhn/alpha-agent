@@ -6,6 +6,16 @@ import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { TmButton } from "@/components/tm/TmButton";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 
 const TIER_TONE: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -89,21 +99,20 @@ export default function PaperRecommendations({
           );
         })}
       </div>
-      <div className="hidden overflow-x-auto sm:block">
-      <table className="w-full min-w-[720px] border-collapse text-left">
-        <thead className="bg-tm-bg-2">
-          <tr className="border-b border-tm-rule">
+      <TmTableFrame className="hidden sm:block">
+      <TmTable
+        density="standard"
+        caption={t(locale, "sim.workspace.today_picks")}
+        className="min-w-[720px] text-left"
+      >
+        <TmTableHead>
+          <TmTableRow>
             {[t(locale, "sim.workspace.company_ticker"), t(locale, "sim.form.side_label"), t(locale, "sim.workspace.latest_close"), t(locale, "sim.workspace.day_change"), t(locale, "sim.workspace.confidence_5d"), t(locale, "sim.workspace.rationale"), ""].map((label) => (
-              <th
-                key={label || "action"}
-                className="px-3 py-2 font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted"
-              >
-                {label}
-              </th>
+              <TmTableHeaderCell key={label || "action"}>{label}</TmTableHeaderCell>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TmTableRow>
+        </TmTableHead>
+        <TmTableBody>
           {picks.map((pick) => {
             const selected = selectedTicker === pick.ticker;
             const company = locale === "zh"
@@ -115,41 +124,39 @@ export default function PaperRecommendations({
               .map((name) => getSignalDisplayLabel(name, locale))
               .join(" · ");
             return (
-              <tr
+              <TmTableRow
                 key={pick.ticker}
-                className={clsx(
-                  "border-b border-tm-rule transition-colors",
-                  selected ? "bg-tm-accent-soft outline outline-1 -outline-offset-1 outline-tm-accent" : "hover:bg-tm-bg-2",
-                )}
+                selected={selected}
+                className={selected ? "outline outline-1 -outline-offset-1 outline-tm-accent" : undefined}
               >
-                <td className="px-3 py-2.5">
+                <TmTableRowHeader className="font-normal">
                   <div className="text-[12px] text-tm-fg">{company ?? pick.ticker}</div>
                   <div className="font-tm-mono text-[11px] font-semibold text-tm-accent">{pick.ticker}</div>
-                </td>
-                <td className={clsx("px-3 py-2.5 font-tm-mono text-[11px] font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</td>
-                <td className="px-3 py-2.5 font-tm-mono text-[11px] tabular-nums text-tm-fg-2">
+                </TmTableRowHeader>
+                <TmTableCell className={clsx("text-[11px] font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</TmTableCell>
+                <TmTableCell numeric className="text-[11px] text-tm-fg-2">
                   {typeof pick.latest_price === "number" ? `$${pick.latest_price.toFixed(2)}` : "—"}
                   {pick.price_date ? <span className="block text-[9px] text-tm-muted">{pick.price_date}</span> : null}
-                </td>
-                <td className={clsx(
-                  "px-3 py-2.5 font-tm-mono text-[11px] tabular-nums",
+                </TmTableCell>
+                <TmTableCell numeric className={clsx(
+                  "text-[11px]",
                   (pick.daily_change_pct ?? 0) >= 0 ? "text-tm-pos" : "text-tm-neg",
-                )}>{pct(pick.daily_change_pct)}</td>
-                <td className="px-3 py-2.5 font-tm-mono text-[11px] tabular-nums text-tm-fg-2">
+                )}>{pct(pick.daily_change_pct)}</TmTableCell>
+                <TmTableCell numeric className="text-[11px] text-tm-fg-2">
                   {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
-                </td>
-                <td className="max-w-48 px-3 py-2.5 text-[11px] leading-4 text-tm-muted">{rationale || "—"}</td>
-                <td className="px-3 py-2.5 text-right">
+                </TmTableCell>
+                <TmTableCell className="max-w-48 text-[11px] leading-4 text-tm-muted">{rationale || "—"}</TmTableCell>
+                <TmTableCell className="text-right">
                   <TmButton variant="secondary" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
                     {t(locale, "sim.workspace.follow")}
                   </TmButton>
-                </td>
-              </tr>
+                </TmTableCell>
+              </TmTableRow>
             );
           })}
-        </tbody>
-      </table>
-      </div>
+        </TmTableBody>
+      </TmTable>
+      </TmTableFrame>
     </>
   );
 }

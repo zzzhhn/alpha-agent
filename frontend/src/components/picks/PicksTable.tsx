@@ -9,8 +9,17 @@ import { HoverTip } from "@/components/ui/HoverTip";
 import PickRow from "./PickRow";
 import { GradeStripHeader, computeHiddenDims } from "./GradeStrip";
 import PicksCards from "./PicksCards";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+} from "@/components/tm/TmTable";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 
-const TH = "px-3 py-2.5 font-tm-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-tm-fg-2 select-none";
+const HEADER_CLASS = "text-[12px] select-none";
 
 export default function PicksTable({
   picks,
@@ -52,9 +61,7 @@ export default function PicksTable({
 
   if (picks.length === 0) {
     return (
-      <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
-        {t(locale, "picks_table.empty")}
-      </div>
+      <TmStatePane state="empty" title={t(locale, "picks_table.empty")} className="rounded-none border-0" />
     );
   }
 
@@ -63,53 +70,53 @@ export default function PicksTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-    <table className="min-w-[1060px] w-full border-collapse">
-      <thead className="border-b border-tm-rule bg-tm-bg-2">
-        <tr>
-          <th className={`${TH} text-left w-8`}>
+    <TmTableFrame>
+    <TmTable density="standard" caption={locale === "zh" ? "今日推荐明细" : "Today's recommendations"} className="min-w-[1060px]">
+      <TmTableHead>
+        <TmTableRow>
+          <TmTableHeaderCell className={`${HEADER_CLASS} w-8`}>
             <HoverTip content={t(locale, "picks_table.col_rank_tip")} placement="bottom" width={200}>
               <span className="cursor-help">{t(locale, "picks_table.col_rank")}</span>
             </HoverTip>
-          </th>
-          <th className={`${TH} text-left`}>{t(locale, "picks_table.col_ticker")}</th>
-          <th className={`${TH} text-left`}>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell className={HEADER_CLASS}>{t(locale, "picks_table.col_ticker")}</TmTableHeaderCell>
+          <TmTableHeaderCell className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_rating_tip")} placement="bottom" width={240}>
               <span className="cursor-help">{t(locale, "picks_table.col_rating")}</span>
             </HoverTip>
-          </th>
-          <th className={`${TH} text-left`}>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_suggestion_tip")} placement="bottom" width={240}>
               <span className="cursor-help">{t(locale, "picks_table.col_suggestion")}</span>
             </HoverTip>
-          </th>
-          <th className={`${TH} text-right`}>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell textAlign="right" className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_composite_tip")} placement="bottom" width={260}>
               <span className="cursor-help">{t(locale, "picks_table.col_composite")}</span>
             </HoverTip>
-          </th>
-          <th className={`${TH} text-right`}>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell textAlign="right" className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_confidence_tip")} placement="bottom" width={280}>
               <span className="cursor-help">{t(locale, "picks_table.col_confidence")}</span>
             </HoverTip>
-          </th>
-          <th className={`${TH} text-left`}>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_grades_tip")} placement="bottom" width={260}>
               <span className="flex flex-col gap-0.5 cursor-help">
                 <span>{t(locale, "picks_table.col_grades")}</span>
                 <GradeStripHeader locale={locale} hidden={hiddenDims} />
               </span>
             </HoverTip>
-          </th>
-          <th className={`${TH} text-left`}>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_drivers_drags_tip")} placement="bottom" width={260}>
               <span className="cursor-help">{t(locale, "picks_table.col_drivers_drags")}</span>
             </HoverTip>
-          </th>
-          <th className={`${TH} text-left`}>{t(locale, "sim.tab")}</th>
-        </tr>
-      </thead>
-      <tbody>
+          </TmTableHeaderCell>
+          <TmTableHeaderCell className={HEADER_CLASS}>{t(locale, "sim.tab")}</TmTableHeaderCell>
+        </TmTableRow>
+      </TmTableHead>
+      <TmTableBody>
         {picks.map((card, i) => (
           <PickRow
             key={card.ticker}
@@ -125,8 +132,8 @@ export default function PicksTable({
             ordersDisabled={ordersDisabled}
           />
         ))}
-      </tbody>
-    </table>
-    </div>
+      </TmTableBody>
+    </TmTable>
+    </TmTableFrame>
   );
 }

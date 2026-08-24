@@ -14,6 +14,8 @@ import { t, type Locale } from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { getSuggestion } from "@/lib/suggestion";
 import SimOrderDrawer from "./SimOrderDrawer";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmTableCell, TmTableRow, TmTableRowHeader } from "@/components/tm/TmTable";
 
 const TIER_COLOR: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -144,11 +146,11 @@ export default function PickRow({
   const heldQty = simPositions?.get(card.ticker) ?? 0;
 
   return (
-    <tr className="border-b border-tm-rule hover:bg-tm-bg-2 transition-colors">
-      <td className="px-3 py-2.5 font-tm-mono text-xs text-tm-muted tabular-nums">
+    <TmTableRow className="h-11">
+      <TmTableCell numeric className="text-xs text-tm-muted">
         {rank ?? "—"}
-      </td>
-      <td className="px-3 py-2.5 font-tm-mono text-[13px] font-semibold">
+      </TmTableCell>
+      <TmTableRowHeader className="text-[13px] font-semibold">
         {watched ? (
           <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" />
         ) : null}
@@ -189,8 +191,8 @@ export default function PickRow({
             {staleDays}d
           </span>
         ) : null}
-      </td>
-      <td className="px-3 py-2.5 font-tm-mono text-xs">
+      </TmTableRowHeader>
+      <TmTableCell className="text-xs">
         <span
           className={clsx(
             "font-semibold",
@@ -199,8 +201,8 @@ export default function PickRow({
         >
           {card.rating}
         </span>
-      </td>
-      <td className="px-3 py-2.5 text-[13px]">
+      </TmTableCell>
+      <TmTableCell className="text-[13px]">
         {(() => {
           const sug = getSuggestion(card.rating, hit, locale);
           const tone =
@@ -221,13 +223,13 @@ export default function PickRow({
             <span className={clsx("font-semibold", tone)}>{sug.label}</span>
           );
         })()}
-      </td>
-      <td className="px-3 py-2.5 font-tm-mono text-xs tabular-nums text-right">
+      </TmTableCell>
+      <TmTableCell numeric textAlign="right" className="text-xs">
         {sign}
         {composite.toFixed(2)}
         <span className="text-tm-muted">σ</span>
-      </td>
-      <td className="px-3 py-2.5 font-tm-mono text-[11px] tabular-nums text-right">
+      </TmTableCell>
+      <TmTableCell numeric textAlign="right" className="text-[11px]">
         <HoverTip
           className="justify-end"
           content={
@@ -275,11 +277,11 @@ export default function PickRow({
             ))}
           </span>
         </HoverTip>
-      </td>
-      <td className="px-3 py-2.5">
+      </TmTableCell>
+      <TmTableCell>
         <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} hidden={hiddenDims} />
-      </td>
-      <td className="px-3 py-2.5 font-tm-sans text-[12px]">
+      </TmTableCell>
+      <TmTableCell className="font-tm-sans text-[12px]">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           {drivers.length > 0 ? (
             <span className="text-tm-pos">
@@ -295,26 +297,28 @@ export default function PickRow({
             <span className="text-tm-muted">—</span>
           ) : null}
         </span>
-      </td>
-      <td className="px-2 py-2.5">
-        <button
+      </TmTableCell>
+      <TmTableCell className="px-2">
+        <TmButton
           type="button"
+          variant="secondary"
+          size="xs"
           onClick={() => setDrawerOpen(true)}
           disabled={ordersDisabled}
           title={ordersDisabled ? t(locale, "picks.stale_order_disabled") : undefined}
           className={clsx(
-            "rounded border px-1.5 py-0.5 font-tm-mono text-[11px] transition-colors",
+            "px-1.5 text-[11px]",
             ordersDisabled
-              ? "cursor-not-allowed border-tm-rule text-tm-muted opacity-50"
+              ? "text-tm-muted"
               : heldQty > 0
-              ? "border-tm-pos text-tm-pos cursor-pointer hover:border-tm-accent hover:text-tm-accent"
-              : "border-tm-rule text-tm-muted hover:border-tm-accent hover:text-tm-accent",
+              ? "border-tm-pos text-tm-pos hover:border-tm-accent hover:text-tm-accent"
+              : "text-tm-muted hover:border-tm-accent hover:text-tm-accent",
           )}
         >
           {heldQty > 0
             ? t(locale, "sim.held_btn")
             : t(locale, "sim.order_btn")}
-        </button>
+        </TmButton>
         {drawerOpen && !ordersDisabled && (
           <SimOrderDrawer
             ticker={card.ticker}
@@ -327,7 +331,7 @@ export default function PickRow({
             }}
           />
         )}
-      </td>
-    </tr>
+      </TmTableCell>
+    </TmTableRow>
   );
 }

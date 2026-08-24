@@ -5,6 +5,16 @@ import { Clipboard, Check } from "lucide-react";
 import clsx from "clsx";
 import { useRouter } from "next/navigation";
 import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
+import {
   rollbackFactorProposal,
   type FactorProposal,
 } from "@/lib/api/factor-lab";
@@ -138,31 +148,31 @@ export function FactorHistoryTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-xs">
-        <thead>
-          <tr className="border-b border-tm-rule text-left">
-            <th className="px-2 py-1.5 font-tm-mono text-[10px] text-tm-fg-2">
+    <TmTableFrame>
+      <TmTable density="compact" caption="Factor proposal history" className="min-w-[640px] text-xs">
+        <TmTableHead>
+          <TmTableRow>
+            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
               Expression
-            </th>
-            <th className="px-2 py-1.5 font-tm-mono text-[10px] text-tm-fg-2">
+            </TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
               Status
-            </th>
-            <th className="px-2 py-1.5 font-tm-mono text-[10px] text-tm-fg-2">
+            </TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
               dSharpe
-            </th>
-            <th className="px-2 py-1.5 font-tm-mono text-[10px] text-tm-fg-2">
+            </TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
               Decided
-            </th>
-            <th className="px-2 py-1.5 font-tm-mono text-[10px] text-tm-fg-2">
+            </TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
               By
-            </th>
-            <th className="px-2 py-1.5 text-center font-tm-mono text-[10px] text-tm-fg-2">
+            </TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="center" className="px-2 py-1.5 text-[10px]">
               Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+            </TmTableHeaderCell>
+          </TmTableRow>
+        </TmTableHead>
+        <TmTableBody>
           {proposals.map((p) => {
             const isRowPending = pendingId === p.id;
             const rowError = rowErrors[p.id];
@@ -173,39 +183,39 @@ export function FactorHistoryTable({
                 : "—";
 
             return (
-              <tr key={p.id} className="border-b border-tm-rule align-top">
+              <TmTableRow key={p.id} className="align-top">
                 {/* Expression */}
-                <td className="max-w-[260px] px-2 py-1.5">
+                <TmTableRowHeader className="max-w-[260px] px-2 py-1.5 font-normal">
                   <div className="flex items-start gap-1">
                     <code className="break-all font-mono text-[10px] text-tm-fg">
                       {p.expression}
                     </code>
                     <CopyButton text={p.expression} />
                   </div>
-                </td>
+                </TmTableRowHeader>
 
                 {/* Status */}
-                <td className="px-2 py-1.5">
+                <TmTableCell className="px-2 py-1.5">
                   <StatusBadge status={p.status} />
-                </td>
+                </TmTableCell>
 
                 {/* Deflated Sharpe */}
-                <td className="px-2 py-1.5 font-mono text-[10px] text-tm-fg-2">
+                <TmTableCell className="px-2 py-1.5 text-[10px] text-tm-fg-2">
                   {dsharpe}
-                </td>
+                </TmTableCell>
 
                 {/* Decided at */}
-                <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[10px] text-tm-fg-2">
+                <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-[10px] text-tm-fg-2">
                   {relativeTime(p.decided_at)}
-                </td>
+                </TmTableCell>
 
                 {/* Decided by */}
-                <td className="px-2 py-1.5 font-mono text-[10px] text-tm-fg-2">
+                <TmTableCell className="px-2 py-1.5 text-[10px] text-tm-fg-2">
                   {p.decided_by ?? "—"}
-                </td>
+                </TmTableCell>
 
                 {/* Actions */}
-                <td className="px-2 py-1.5 text-center">
+                <TmTableCell textAlign="center" className="px-2 py-1.5">
                   {p.status === "approved" ? (
                     <div className="flex flex-col items-center gap-0.5">
                       <button
@@ -232,12 +242,12 @@ export function FactorHistoryTable({
                       —
                     </span>
                   )}
-                </td>
-              </tr>
+                </TmTableCell>
+              </TmTableRow>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </TmTableBody>
+      </TmTable>
+    </TmTableFrame>
   );
 }

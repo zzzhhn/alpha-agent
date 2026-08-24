@@ -116,3 +116,13 @@
 - Score the generated pool in one call when the provider's dominant cost is reasoning startup. Keep an evidence-based 240-second boundary below the client's read timeout, and do not synchronously replay a slow request.
 - A technical timeout still falls back to the shared deterministic evidence screen. Partial usable scores remain valid, and provider latency never becomes a BRAIN simulation failure.
 - Persist sanitized provider, model, elapsed time, call mode, pool size, scored count, and error class/status. Never persist raw headers, credentials, response bodies, or exception messages that may echo them.
+
+## 2026-08-24: A design system is a migration contract, not a component gallery
+
+- A reusable component only becomes canonical when the production component, a `/reference` specimen, operating semantics, and real route adoption all agree. A visually convincing gallery alone does not reduce product inconsistency.
+- Inventory raw controls by interaction role before replacing them. A selectable data row, icon action, exclusive toggle, and primary mutation may all use `<button>`, but they should not collapse into one visual treatment.
+- Control density is a small fixed scale. The Topbar exposed 22 and 25 px local variants beside the 24, 28, and 32 px workstation scale; moving locale, theme, and filter choices to one radio-semantic toggle group removed both geometry drift and keyboard inconsistency.
+- Historical and compatibility components should alias canonical primitives before deletion. This lets route migration proceed in bounded batches without breaking every consumer at once.
+- Design governance must be executable: the sidebar reference, migration ledger, cross-cutting conventions audit, dark/light and zh/en browser checks, and an explicit exception process are part of the product source of truth.
+- Accessibility contracts belong inside the primitive. Table captions, dialog focus entry and restoration, disclosure `aria-expanded`, and radio-group keyboard behavior should not depend on each route remembering the same implementation details.
+- Canonical chart tokens become useful only after a production chart consumes them. A token specimen plus real equity, drawdown, and walk-forward adoption is stronger evidence than a palette page alone.

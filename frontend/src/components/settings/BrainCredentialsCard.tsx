@@ -4,17 +4,13 @@ import { useEffect, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmFieldShell, TmInput } from "@/components/tm/TmField";
 import {
   fetchBrainStatus,
   saveBrainCredentials,
   testBrainConnection,
   type BrainStatus,
 } from "@/lib/api/brain";
-
-const FORM_LABEL =
-  "block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-tm-muted";
-const FORM_INPUT =
-  "h-7 w-full bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11.5px] text-tm-fg outline-none transition-colors placeholder:text-tm-muted focus:border-tm-accent";
 
 type Busy = "idle" | "saving" | "testing";
 
@@ -93,48 +89,56 @@ export function BrainCredentialsCard() {
             : "Your WorldQuant BRAIN login. Stored encrypted, used server-side only for mining simulations; plaintext is never returned. A dedicated/limited account is recommended."}
         </p>
 
-        <div className="flex flex-col gap-1">
-          <label className={FORM_LABEL}>
-            {zh ? "BRAIN 用户名 / 邮箱" : "BRAIN USERNAME / EMAIL"}
-          </label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder={zh ? "你的 BRAIN 登录邮箱" : "your BRAIN login email"}
-            className={FORM_INPUT}
-            autoComplete="off"
-          />
-        </div>
+        <TmInput
+          label={zh ? "BRAIN 用户名 / 邮箱" : "BRAIN USERNAME / EMAIL"}
+          fieldSize="sm"
+          value={username}
+          onChange={setUsername}
+          placeholder={zh ? "你的 BRAIN 登录邮箱" : "your BRAIN login email"}
+          autoComplete="off"
+        />
 
-        <div className="flex flex-col gap-1">
-          <label className={FORM_LABEL}>{zh ? "BRAIN 密码" : "BRAIN PASSWORD"}</label>
+        <TmFieldShell label={zh ? "BRAIN 密码" : "BRAIN PASSWORD"} htmlFor="brain-password">
           <div className="flex gap-1">
-            <input
+            <TmInput
+              id="brain-password"
+              fieldSize="sm"
               type={reveal ? "text" : "password"}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               placeholder="••••••••"
-              className={FORM_INPUT}
+              className="min-w-0 flex-1"
               autoComplete="off"
             />
-            <button
+            <TmButton
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setReveal((r) => !r)}
-              className="border border-tm-rule px-2 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-fg"
             >
               {reveal ? (zh ? "隐藏" : "HIDE") : zh ? "显示" : "REVEAL"}
-            </button>
+            </TmButton>
           </div>
-        </div>
+        </TmFieldShell>
 
         <div className="flex gap-2">
-          <TmButton onClick={onSave} disabled={busy !== "idle"}>
-            {busy === "saving" ? "…" : zh ? "保存" : "Save"}
+          <TmButton
+            onClick={onSave}
+            disabled={busy !== "idle"}
+            loading={busy === "saving"}
+            loadingLabel={zh ? "保存中…" : "Saving…"}
+          >
+            {zh ? "保存" : "Save"}
           </TmButton>
           {status?.connected ? (
-            <TmButton variant="secondary" onClick={onTest} disabled={busy !== "idle"}>
-              {busy === "testing" ? "…" : zh ? "测试连接" : "Test connection"}
+            <TmButton
+              variant="secondary"
+              onClick={onTest}
+              disabled={busy !== "idle"}
+              loading={busy === "testing"}
+              loadingLabel={zh ? "测试中…" : "Testing…"}
+            >
+              {zh ? "测试连接" : "Test connection"}
             </TmButton>
           ) : null}
         </div>

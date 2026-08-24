@@ -10,6 +10,7 @@
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmButton } from "@/components/tm/TmButton";
 import type { FactorBacktestResponse } from "@/lib/types";
 import type { Run } from "./types";
 
@@ -92,13 +93,13 @@ export function DailyBreakdownPane({ currentRun }: Props) {
             .replace("{n}", String(populated.length))
             .replace("{hit}", `${(hitRate * 100).toFixed(0)}%`)}
         </span>
-        <button
-          type="button"
+        <TmButton
+          variant="ghost"
+          size="xs"
           onClick={downloadFlat}
-          className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted hover:text-tm-accent"
         >
           {t(locale, "backtest.breakdown.download")}
-        </button>
+        </TmButton>
       </div>
       <div className="overflow-x-auto">
         <div

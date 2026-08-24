@@ -58,6 +58,16 @@ import {
 } from "@/components/tm/TmSubbar";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 import { SegmentedTabs, type SegmentedTabItem } from "@/components/ui/SegmentedTabs";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 
@@ -1475,41 +1485,44 @@ function CorrelationPanel({
           </ul>
         </div>
       )}
-      <div className="overflow-x-auto px-3 py-3">
-        <table className="font-tm-mono text-[10.5px]">
-          <thead>
-            <tr>
-              <th className="px-2 py-1"></th>
+      <TmTableFrame className="px-3 py-3">
+        <TmTable
+          density="compact"
+          caption={t(locale, "zoo.corr.title")}
+          className="w-auto text-[10.5px]"
+        >
+          <TmTableHead>
+            <TmTableRow>
+              <TmTableHeaderCell className="px-2 py-1" />
               {names.map((n) => (
-                <th
-                  key={n}
-                  className="whitespace-nowrap px-2 py-1 text-left text-tm-muted"
-                >
+                <TmTableHeaderCell key={n} className="whitespace-nowrap px-2 py-1">
                   {n}
-                </th>
+                </TmTableHeaderCell>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TmTableRow>
+          </TmTableHead>
+          <TmTableBody>
             {matrix.map((row, i) => (
-              <tr key={names[i]}>
-                <td className="whitespace-nowrap px-2 py-1 text-tm-muted">
+              <TmTableRow key={names[i]}>
+                <TmTableRowHeader className="whitespace-nowrap px-2 py-1 text-tm-muted">
                   {names[i]}
-                </td>
+                </TmTableRowHeader>
                 {row.map((v, j) => (
-                  <td
+                  <TmTableCell
                     key={j}
-                    className={`px-2 py-1 text-center tabular-nums ${cellTone(v)}`}
+                    numeric
+                    textAlign="center"
+                    className={`px-2 py-1 ${cellTone(v)}`}
                   >
                     {v >= 0 ? "+" : ""}
                     {v.toFixed(2)}
-                  </td>
+                  </TmTableCell>
                 ))}
-              </tr>
+              </TmTableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TmTableBody>
+        </TmTable>
+      </TmTableFrame>
     </div>
   );
 }

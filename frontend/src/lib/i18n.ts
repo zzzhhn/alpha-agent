@@ -471,6 +471,7 @@ const translations = {
     "lifecycle.screener": "选股 Screener",
     "lifecycle.methodology": "方法论 Methodology",
     "lifecycle.settings": "设置 Settings",
+    "lifecycle.reference": "设计系统 Design System",
     "lifecycle.stub.title": "W2 即将上线",
     "lifecycle.stub.body": "此阶段的交互面板将在 W2 落地。当前可访问的仅为导航骨架。",
 
@@ -781,6 +782,19 @@ const translations = {
     "nav.group.research": "研究",
     "nav.group.decisions": "决策",
     "nav.group.reference": "参考",
+    "reference.eyebrow": "参考 · 设计资产",
+    "reference.title": "设计系统",
+    "reference.subtitle": "真实生产组件、状态与操作模式的统一参考。",
+    "reference.status.coverage": "资产覆盖",
+    "reference.status.version": "规范版本",
+    "reference.status.theme": "主题支持",
+    "reference.section.foundations": "基础规范",
+    "reference.section.controls": "控件",
+    "reference.section.data": "数据显示",
+    "reference.section.feedback": "状态与恢复",
+    "reference.section.surfaces": "浮层与图表",
+    "reference.section.patterns": "操作模式",
+    "reference.copy.sample": "示例内容，不代表实时市场或账户状态。",
     "nav.group.workflow": "每日工作流",
     "nav.group.advanced": "高级研究工具",
     "nav.alerts": "警报",
@@ -1837,6 +1851,7 @@ const translations = {
     "lifecycle.screener": "Screener",
     "lifecycle.methodology": "Methodology",
     "lifecycle.settings": "Settings",
+    "lifecycle.reference": "Design System",
     "lifecycle.stub.title": "Coming in W2",
 
     /* Screener (D2 of v3) */
@@ -2147,6 +2162,19 @@ const translations = {
     "nav.group.research": "RESEARCH",
     "nav.group.decisions": "DECISIONS",
     "nav.group.reference": "REFERENCE",
+    "reference.eyebrow": "REFERENCE · DESIGN ASSETS",
+    "reference.title": "Design System",
+    "reference.subtitle": "One reference for real production components, states, and operating patterns.",
+    "reference.status.coverage": "Asset coverage",
+    "reference.status.version": "Spec version",
+    "reference.status.theme": "Theme support",
+    "reference.section.foundations": "Foundations",
+    "reference.section.controls": "Controls",
+    "reference.section.data": "Data display",
+    "reference.section.feedback": "Status and recovery",
+    "reference.section.surfaces": "Overlays and charts",
+    "reference.section.patterns": "Operating patterns",
+    "reference.copy.sample": "Sample content. It is not live market or account state.",
     "nav.group.workflow": "DAILY WORKFLOW",
     "nav.group.advanced": "ADVANCED RESEARCH",
     "nav.alerts": "Alerts",
@@ -2764,6 +2792,7 @@ export function getLocaleFromStorage(): Locale {
 export function setLocaleToStorage(locale: Locale): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("alphacore-locale", locale);
+  document.documentElement.lang = locale === "en" ? "en" : "zh-CN";
   document.cookie = `locale=${locale}; path=/; max-age=31536000; samesite=lax`;
 }
 

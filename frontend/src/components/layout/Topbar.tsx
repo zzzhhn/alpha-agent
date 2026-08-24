@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "./LocaleProvider";
 import { t, type Locale } from "@/lib/i18n";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 
 type Theme = "dark" | "light";
 
@@ -34,32 +35,6 @@ function getStoredTheme(): Theme {
 
 function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute("data-theme", theme);
-}
-
-interface ToggleButtonProps {
-  readonly active: boolean;
-  readonly onClick: () => void;
-  readonly children: React.ReactNode;
-  readonly ariaLabel?: string;
-}
-
-function ToggleButton({ active, onClick, children, ariaLabel }: ToggleButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      aria-pressed={active}
-      className={[
-        "px-2 py-[3px] text-[10.5px] tracking-[0.04em] cursor-pointer transition-colors",
-        active
-          ? "bg-tm-accent-soft text-tm-accent font-semibold"
-          : "text-tm-muted hover:text-tm-fg",
-      ].join(" ")}
-    >
-      {children}
-    </button>
-  );
 }
 
 export function Topbar() {
@@ -111,53 +86,33 @@ export function Topbar() {
       </div>
 
       <div className="flex gap-2">
-        {/* Locale toggle — Stage 2 keeps the same persistence path
-            (lib/i18n setLocaleToStorage via the provider). */}
-        <div
-          className="inline-flex border border-tm-rule"
-          role="group"
-          aria-label="Locale"
-        >
-          <ToggleButton
-            active={locale === "en"}
-            onClick={() => switchLocale("en")}
-            ariaLabel="English"
-          >
-            EN
-          </ToggleButton>
-          <ToggleButton
-            active={locale === "zh"}
-            onClick={() => switchLocale("zh")}
-            ariaLabel="中文"
-          >
-            中
-          </ToggleButton>
-        </div>
+        <TmToggleGroup<Locale>
+          value={locale}
+          onChange={switchLocale}
+          ariaLabel="Locale"
+          options={[
+            { value: "en", label: "EN", ariaLabel: "English" },
+            { value: "zh", label: "中", ariaLabel: "中文" },
+          ]}
+        />
 
-        {/* Theme toggle — split into two explicit LT / DK buttons matching
-            the design (rather than the legacy single "Light"/"Dark" button)
-            so the active state is always visible without needing to click
-            to discover. */}
-        <div
-          className="inline-flex border border-tm-rule"
-          role="group"
-          aria-label={t(locale, "theme.toggle" as Parameters<typeof t>[1])}
-        >
-          <ToggleButton
-            active={theme === "light"}
-            onClick={() => switchTheme("light")}
-            ariaLabel={t(locale, "theme.light" as Parameters<typeof t>[1])}
-          >
-            LT
-          </ToggleButton>
-          <ToggleButton
-            active={theme === "dark"}
-            onClick={() => switchTheme("dark")}
-            ariaLabel={t(locale, "theme.dark" as Parameters<typeof t>[1])}
-          >
-            DK
-          </ToggleButton>
-        </div>
+        <TmToggleGroup<Theme>
+          value={theme}
+          onChange={switchTheme}
+          ariaLabel={t(locale, "theme.toggle" as Parameters<typeof t>[1])}
+          options={[
+            {
+              value: "light",
+              label: "LT",
+              ariaLabel: t(locale, "theme.light" as Parameters<typeof t>[1]),
+            },
+            {
+              value: "dark",
+              label: "DK",
+              ariaLabel: t(locale, "theme.dark" as Parameters<typeof t>[1]),
+            },
+          ]}
+        />
       </div>
     </header>
   );

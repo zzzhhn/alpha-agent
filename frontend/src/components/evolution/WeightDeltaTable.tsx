@@ -6,6 +6,16 @@ import type { EvolutionWeight } from "@/lib/api/evolution";
 import { t, type Locale } from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { formatUtc8DateTime } from "@/lib/format-datetime";
+import {
+  TmTable,
+  TmTableBody,
+  TmTableCell,
+  TmTableFrame,
+  TmTableHead,
+  TmTableHeaderCell,
+  TmTableRow,
+  TmTableRowHeader,
+} from "@/components/tm/TmTable";
 
 export function WeightDeltaTable({
   weights,
@@ -78,21 +88,25 @@ export function WeightDeltaTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-xs border-collapse">
-        <thead>
-          <tr className="text-tm-fg-2 border-b border-tm-rule">
-            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_signal")}</th>
-            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_live")}</th>
-            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_shadow")}</th>
-            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_guarded")}</th>
-            <th className="px-2 py-1.5 text-right">{t(locale, "evolution.weights.col_delta")}</th>
-            <th className="px-2 py-1.5 text-center">{t(locale, "evolution.weights.col_streak")}</th>
-            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_reason")}</th>
-            <th className="px-2 py-1.5 text-left">{t(locale, "evolution.weights.col_updated")}</th>
-          </tr>
-        </thead>
-        <tbody>
+    <TmTableFrame>
+      <TmTable
+        density="compact"
+        caption={t(locale, "evolution.weights")}
+        className="min-w-[640px] text-xs"
+      >
+        <TmTableHead>
+          <TmTableRow>
+            <TmTableHeaderCell className="px-2 py-1.5">{t(locale, "evolution.weights.col_signal")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="right" className="px-2 py-1.5">{t(locale, "evolution.weights.col_live")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="right" className="px-2 py-1.5">{t(locale, "evolution.weights.col_shadow")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="right" className="px-2 py-1.5">{t(locale, "evolution.weights.col_guarded")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="right" className="px-2 py-1.5">{t(locale, "evolution.weights.col_delta")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="center" className="px-2 py-1.5">{t(locale, "evolution.weights.col_streak")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5">{t(locale, "evolution.weights.col_reason")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5">{t(locale, "evolution.weights.col_updated")}</TmTableHeaderCell>
+          </TmTableRow>
+        </TmTableHead>
+        <TmTableBody>
           {rows.map(({ signal_name, live, shadow, liveWeight, shadowWeight, guardedWeight, delta }) => {
             const consecutiveBad = live?.consecutive_bad_windows ?? shadow?.consecutive_bad_windows ?? 0;
             const shadowStreak = shadow?.shadow_streak ?? 0;
@@ -101,12 +115,11 @@ export function WeightDeltaTable({
               shadow?.last_updated ?? live?.last_updated ?? null;
 
             return (
-              <tr
+              <TmTableRow
                 key={signal_name}
-                className="border-b border-tm-rule"
               >
                 {/* Signal */}
-                <td className="px-2 py-1 text-tm-fg font-tm-mono">
+                <TmTableRowHeader className="px-2 py-1 font-tm-mono text-tm-fg">
                   <span className="inline-flex items-center gap-1.5">
                     {getSignalDisplayLabel(signal_name, locale)}
                     {consecutiveBad > 0 && (
@@ -118,27 +131,29 @@ export function WeightDeltaTable({
                       </span>
                     )}
                   </span>
-                </td>
+                </TmTableRowHeader>
 
                 {/* Live weight */}
-                <td className="px-2 py-1 text-right font-mono text-tm-fg">
+                <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg">
                   {liveWeight !== null ? liveWeight.toFixed(4) : "—"}
-                </td>
+                </TmTableCell>
 
                 {/* Shadow weight (aggressive adaptive candidate) */}
-                <td className="px-2 py-1 text-right font-mono text-tm-fg-2">
+                <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg-2">
                   {shadowWeight !== null ? shadowWeight.toFixed(4) : "—"}
-                </td>
+                </TmTableCell>
 
                 {/* Guarded-shrinkage shadow (council #6, not promoted live) */}
-                <td className="px-2 py-1 text-right font-mono text-tm-fg-2">
+                <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg-2">
                   {guardedWeight !== null ? guardedWeight.toFixed(4) : "—"}
-                </td>
+                </TmTableCell>
 
                 {/* Delta */}
-                <td
+                <TmTableCell
+                  numeric
+                  textAlign="right"
                   className={clsx(
-                    "px-2 py-1 text-right font-mono",
+                    "px-2 py-1",
                     delta === null
                       ? "text-tm-muted"
                       : delta > 0
@@ -151,28 +166,28 @@ export function WeightDeltaTable({
                   {delta === null
                     ? "—"
                     : `${delta >= 0 ? "+" : ""}${delta.toFixed(4)}`}
-                </td>
+                </TmTableCell>
 
                 {/* Shadow streak toward promotion */}
-                <td className="px-2 py-1 text-center font-mono text-tm-fg-2">
+                <TmTableCell numeric textAlign="center" className="px-2 py-1 text-tm-fg-2">
                   {shadow ? `${shadowStreak}/5` : "—"}
-                </td>
+                </TmTableCell>
 
                 {/* Reason */}
-                <td className="px-2 py-1 text-tm-muted max-w-[200px] truncate">
+                <TmTableCell className="max-w-[200px] truncate px-2 py-1 text-tm-muted">
                   {reason ?? "—"}
-                </td>
+                </TmTableCell>
 
                 {/* Last updated */}
-                <td className="px-2 py-1 text-tm-muted">
+                <TmTableCell className="px-2 py-1 text-tm-muted">
                   {formatTimestamp(lastUpdated)}
-                </td>
-              </tr>
+                </TmTableCell>
+              </TmTableRow>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </TmTableBody>
+      </TmTable>
+    </TmTableFrame>
   );
 }
 

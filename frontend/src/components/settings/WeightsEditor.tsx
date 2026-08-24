@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmTextarea } from "@/components/tm/TmField";
 import { DEFAULT_WEIGHTS, WEIGHTS_KEY } from "@/lib/weights-override";
 
 // Single source of truth: the canonical default + storage key live in
@@ -10,9 +11,6 @@ import { DEFAULT_WEIGHTS, WEIGHTS_KEY } from "@/lib/weights-override";
 const KEY = WEIGHTS_KEY;
 
 const DEFAULT_JSON = JSON.stringify(DEFAULT_WEIGHTS, null, 2);
-
-const FORM_LABEL =
-  "block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-tm-muted";
 
 export default function WeightsEditor() {
   const [text, setText] = useState(DEFAULT_JSON);
@@ -81,18 +79,17 @@ export default function WeightsEditor() {
 
   return (
     <div className="flex flex-col gap-3 px-3 py-3">
-      <label className={FORM_LABEL}>
-        JSON: signal → weight (auto-renormalized; relative values matter)
-      </label>
-      <textarea
-        className="h-52 w-full resize-none border border-tm-rule bg-tm-bg-2 p-2 font-tm-mono text-[11px] text-tm-fg outline-none transition-colors focus:border-tm-accent placeholder:text-tm-muted"
+      <TmTextarea
+        label="JSON: signal → weight (auto-renormalized; relative values matter)"
+        id="settings-weight-json"
         value={text}
-        onChange={(e) => {
-          setText(e.target.value);
+        onChange={(next) => {
+          setText(next);
           setError(null);
           setSavedAt(null);
         }}
         spellCheck={false}
+        textareaClassName="h-52 min-h-0 resize-none p-2 text-[11px]"
       />
       <div className="flex flex-wrap items-center gap-2 border-t border-tm-rule pt-2">
         <TmButton variant="primary" onClick={handleSave}>SAVE</TmButton>

@@ -100,11 +100,10 @@ export function TmCols2({ children, className }: TmCols2Props) {
   return (
     <div
       className={clsx(
-        "grid grid-cols-2 bg-tm-bg",
-        // Internal hairline between the two pane children — last child
-        // has no right border so it doesn't double-up against the
-        // screen's outer chrome.
-        "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-tm-rule",
+        "grid grid-cols-1 bg-tm-bg lg:grid-cols-2",
+        // Stacked panes get a horizontal rule. At desktop widths the same
+        // relationship becomes one vertical divider.
+        "[&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-tm-rule lg:[&>*:not(:last-child)]:border-b-0 lg:[&>*:not(:last-child)]:border-r",
         className,
       )}
     >

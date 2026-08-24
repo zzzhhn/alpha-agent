@@ -11,6 +11,7 @@ import { t } from "@/lib/i18n";
 import { parseFactorError } from "@/lib/factor-errors";
 import { BacktestVerdictHeadline } from "./BacktestVerdictHeadline";
 import { DecisionStrip } from "@/components/workbench/DecisionStrip";
+import { TmButton } from "@/components/tm/TmButton";
 import type {
   MetricDelta,
   Run,
@@ -217,7 +218,7 @@ export function BacktestVerdictBar({
           { label: t(locale, "backtest.metric.turnover"), value: "—", tone: "negative" },
           { label: t(locale, "backtest.metric.annReturn"), value: "—", tone: "negative" },
         ]}
-        action={<div className="grid gap-2"><button type="button" onClick={onReRun} className="border border-tm-neg/60 px-3 py-1.5 font-tm-mono text-[10px] font-semibold text-tm-neg hover:bg-tm-neg/10">{t(locale, "backtest.verdict.reRun")}</button>{showDetail ? <details className="max-w-44 font-tm-mono text-[9px] text-tm-muted"><summary className="cursor-pointer hover:text-tm-fg-2">{t(locale, "backtest.verdict.errorDetails")}</summary><pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-all border border-tm-rule bg-tm-bg p-1.5 text-[9px] leading-snug">{parsed.detail}</pre></details> : null}</div>}
+        action={<div className="grid gap-2"><TmButton variant="danger" size="sm" onClick={onReRun}>{t(locale, "backtest.verdict.reRun")}</TmButton>{showDetail ? <details className="max-w-44 font-tm-mono text-[9px] text-tm-muted"><summary className="cursor-pointer hover:text-tm-fg-2">{t(locale, "backtest.verdict.errorDetails")}</summary><pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-all border border-tm-rule bg-tm-bg p-1.5 text-[9px] leading-snug">{parsed.detail}</pre></details> : null}</div>}
       />
     );
   }
@@ -252,17 +253,18 @@ export function BacktestVerdictBar({
       ]}
       action={(
         <div className="grid gap-2">
-        <button
-          type="button"
+        <TmButton
+          variant="secondary"
+          size="sm"
           onClick={onSaveToZoo}
           aria-label={t(locale, "backtest.action.saveToZoo")}
-          className="inline-flex items-center justify-center gap-1 border border-tm-rule bg-tm-bg px-3 py-1.5 font-tm-mono text-[10px] font-semibold text-tm-fg hover:border-tm-accent"
         >
           <Bookmark className="h-3.5 w-3.5" strokeWidth={1.75} />
           {t(locale, "backtest.action.saveToZoo")}
-        </button>
-        <button
-          type="button"
+        </TmButton>
+        <TmButton
+          variant="secondary"
+          size="sm"
           onClick={onTogglePin}
           aria-label={
             isPinned
@@ -270,7 +272,6 @@ export function BacktestVerdictBar({
               : t(locale, "backtest.action.pinAsBaseline")
           }
           aria-pressed={isPinned}
-          className="inline-flex items-center justify-center gap-1 border border-tm-rule bg-tm-bg px-3 py-1.5 font-tm-mono text-[10px] font-semibold text-tm-fg hover:border-tm-accent"
         >
           <Star
             className="h-3.5 w-3.5"
@@ -280,7 +281,7 @@ export function BacktestVerdictBar({
           {isPinned
             ? t(locale, "backtest.action.unpin")
             : t(locale, "backtest.action.pinAsBaseline")}
-        </button>
+        </TmButton>
         </div>
       )}
     />
