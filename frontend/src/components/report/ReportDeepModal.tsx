@@ -4,6 +4,7 @@ import { LayoutGrid, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 
 /**
  * ReportDeepModal (ALPHACORE design, report block lines 668-718) — collapses
@@ -43,14 +44,14 @@ export function ReportDeepModal({
   return (
     <>
       {/* Floating action button — always reachable while a report is open */}
-      <button
-        type="button"
+      <TmButton
         onClick={onOpen}
-        className="fixed bottom-7 right-7 z-[55] inline-flex items-center gap-2 bg-tm-accent px-4 py-3 font-tm-mono text-[12px] font-bold tracking-[0.04em] text-tm-bg shadow-[0_8px_24px_rgba(0,0,0,0.4)] transition-opacity hover:opacity-90"
+        size="md"
+        className="fixed bottom-7 right-7 z-[55] px-4 font-tm-mono text-[12px] font-bold tracking-[0.04em] shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
       >
         <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
         {tk("report.deep.fab")}
-      </button>
+      </TmButton>
 
       {open ? (
         <div
@@ -73,14 +74,12 @@ export function ReportDeepModal({
                   {tk("report.deep.meta")}
                 </span>
               </div>
-              <button
-                type="button"
+              <TmIconButton
+                label="close"
+                icon={<X className="h-4 w-4" strokeWidth={1.75} />}
                 onClick={onClose}
-                aria-label="close"
                 className="shrink-0 rounded p-1 text-tm-muted transition-colors hover:bg-tm-bg-3 hover:text-tm-fg"
-              >
-                <X className="h-4 w-4" strokeWidth={1.75} />
-              </button>
+              />
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
               {children}

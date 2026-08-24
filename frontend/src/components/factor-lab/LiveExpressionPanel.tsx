@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Pencil, X } from "lucide-react";
+import { Check, Pencil, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
 import {
@@ -15,6 +15,8 @@ import {
 } from "@/lib/factor-spec";
 import { setLiveExpression } from "@/lib/api/factor-lab";
 import { parseFactorError } from "@/lib/factor-errors";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmTextarea } from "@/components/tm/TmField";
 
 interface LiveExpressionPanelProps {
   readonly locale: Locale;
@@ -80,15 +82,15 @@ export function LiveExpressionPanel({
           {t(locale, "factorLab.decision.liveExpression")}
         </div>
         {!editing ? (
-          <button
-            type="button"
+          <TmButton
+            variant="secondary"
+            size="xs"
             onClick={() => setEditing(true)}
-            className="flex items-center gap-1 rounded border border-tm-rule px-1.5 py-0.5 font-tm-mono text-[10px] text-tm-muted hover:bg-tm-bg-3 hover:text-tm-fg"
             aria-label={t(locale, "factorLab.decision.editLive")}
           >
             <Pencil className="h-3 w-3" strokeWidth={1.75} />
             <span>{t(locale, "factorLab.decision.editLive")}</span>
-          </button>
+          </TmButton>
         ) : null}
       </div>
 
@@ -98,13 +100,13 @@ export function LiveExpressionPanel({
         </pre>
       ) : (
         <div className="flex flex-col gap-1.5">
-          <textarea
+          <TmTextarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             spellCheck={false}
             rows={3}
-            className="w-full resize-y rounded bg-tm-bg-2 p-2.5 font-mono text-[11px] text-tm-fg outline-none focus:ring-1 focus:ring-tm-accent"
             aria-invalid={hasValidationIssues || undefined}
+            textareaClassName="min-h-0 resize-y rounded bg-tm-bg-2 p-2.5 font-mono text-[11px] text-tm-fg outline-none focus:ring-1 focus:ring-tm-accent"
           />
           {hasValidationIssues ? (
             <div
@@ -149,28 +151,26 @@ export function LiveExpressionPanel({
             </div>
           ) : null}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <TmButton
+              variant="primary"
+              size="xs"
               onClick={handleSave}
               disabled={!canSave || saving}
-              className="inline-flex items-center gap-1 rounded border border-tm-accent/60 bg-tm-accent px-2 py-0.5 font-tm-mono text-[10px] text-tm-bg transition-opacity disabled:opacity-40 enabled:hover:bg-tm-accent/90"
+              loading={saving}
+              loadingLabel={t(locale, "factorLab.decision.saveLive")}
             >
-              {saving ? (
-                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.75} />
-              ) : (
-                <Check className="h-3 w-3" strokeWidth={1.75} />
-              )}
+              <Check className="h-3 w-3" strokeWidth={1.75} />
               <span>{t(locale, "factorLab.decision.saveLive")}</span>
-            </button>
-            <button
-              type="button"
+            </TmButton>
+            <TmButton
+              variant="secondary"
+              size="xs"
               onClick={handleCancel}
               disabled={saving}
-              className="inline-flex items-center gap-1 rounded border border-tm-rule bg-tm-bg-3 px-2 py-0.5 font-tm-mono text-[10px] text-tm-fg-2 transition-opacity disabled:opacity-40 enabled:hover:bg-tm-bg-3/60"
             >
               <X className="h-3 w-3" strokeWidth={1.75} />
               <span>{t(locale, "factorLab.decision.cancelLive")}</span>
-            </button>
+            </TmButton>
           </div>
         </div>
       )}

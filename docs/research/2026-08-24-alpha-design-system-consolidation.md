@@ -1,10 +1,10 @@
 # Alpha Agent Design System Consolidation
 
-Status: implementation milestone deployed to production
+Status: phase 1 deployed; phase 2 implementation and browser acceptance complete
 
 Date: 2026-08-24
 
-Branch: `codex/alpha-design-system-consolidation`
+Branches: `codex/alpha-design-system-consolidation`, `codex/alpha-design-system-consolidation-phase2`
 
 ## Objective
 
@@ -90,25 +90,63 @@ acceptance remains a separate post-deployment gate.
   zh/en, pagination, keyboard controls, 1440 px and 1024 px overflow checks,
   and reported no browser errors.
 
-## Remaining migration
+## Phase 2 closure
 
-The current static baseline still contains 113 raw buttons across 51 production
-files and 43 raw field elements across 17 production files. They must be classified before
-replacement because selectable rows, icon actions, native file controls, and
-primary mutations have different semantics. The next batches are:
+The residual inventory was classified by interaction role and migrated across
+authentication, shared shell, Alpha, BRAIN, Backtest, Alerts, Report, Screener,
+Picks, Paper, Signal, Evolution, Factor Lab, Factors, Data, Settings, Stock, and
+error or recovery routes.
 
-1. Shared action surfaces: icon buttons, pin/save/retry actions, and repeated
-   workbench command rows.
-2. Forms: remaining Screener, Report, Picks, Signal, and authentication controls
-   mapped to the canonical field shell and button states.
-3. Feedback: route-local loading, empty, error, stale, and partial blocks mapped
-   to stable `TmStatePane` compositions.
-4. Data surfaces: table density, selected rows, sorting labels, expandable
-   evidence, and native tooltip replacements.
-5. Charts and overlays: remove hard-coded colors and verify text summaries,
-   focus entry, Escape close, and focus restoration.
+New canonical assets:
 
-This deployment is a substantial system-wide migration milestone, not a claim
-that every historical raw element has disappeared. The work remains open until
-the residual inventory is either migrated or listed as a justified exception,
-and the authenticated route set passes browser acceptance.
+- `TmRowButton` for full-row ledger and evidence actions without flattening
+  them into ordinary command-button hierarchy.
+- `TmRange` for labelled numeric sliders with a visible value and native
+  keyboard semantics.
+- `TmSelectMenu` for metadata-bearing rich options, with portal placement,
+  disabled-option skipping, listbox keyboard behavior, and focus restoration.
+- `TmDrawer` plus shared `useTmModalFocus` for focus entry, trap, Escape,
+  scroll lock, overlay close, and trigger restoration.
+- CSS and Canvas chart adapters that resolve all ordinary production series
+  from semantic chart tokens.
+
+`npm run audit:design-system` is now an executable release gate. The accepted
+inventory is zero unexplained native controls, zero unexplained standard native
+tables, two canonical-internal control files, one semantic heatmap matrix, and
+a no-growth budget of 35 native truncation or compatibility titles.
+
+## Phase 2 verification
+
+- `tsc --noEmit`, `git diff --check`, the AST design-system audit, and the full
+  Next.js production build pass.
+- Dark Chinese and light English `/reference` checks passed at 1672 × 941 and
+  1440 × 900. The 1024 px narrow-desktop boundary has no horizontal overflow.
+- `TmSelectMenu` passed Arrow, Home, End, Enter, Space, Escape, disabled-option
+  skipping, and trigger-focus restoration checks.
+- `TmDialog` and `TmDrawer` passed focus entry, focus containment, Escape close,
+  and trigger-focus restoration.
+- `/reference`, `/brain`, `/paper`, `/screener`, and `/factors` rendered at
+  1672 × 941 without horizontal overflow. Production screenshots were visually
+  inspected rather than treating the reference gallery as sufficient proof.
+- Anonymous local runs reported only the expected Auth.js configuration and
+  unauthorized API noise because production credentials are deliberately not
+  copied into the local browser environment. Authenticated custom-domain
+  acceptance remains part of the post-merge production gate.
+
+## Recorded exceptions and follow-up
+
+- `SegmentedTabs` keeps its native button internals because they implement the
+  canonical ARIA tab contract.
+- Toast infrastructure keeps its private native controls; route code cannot use
+  them as a page-local control family.
+- `TmMonthlyReturnsHeatmap` keeps a native table for its two-dimensional sticky
+  matrix semantics and data-driven cell ramp.
+- The 35 native `title` attributes are bounded compatibility or truncation
+  hints. New explanatory content must use `TmTooltip`; the audit rejects count
+  growth.
+
+Phase 2 is released by merging the reviewed branch into `main` and allowing the
+existing Vercel Git integration to build the configured `frontend` root. A push
+alone is not release evidence; the custom domain, frontend version endpoint,
+backend health content type, OpenAPI path set, and representative production
+routes must be checked after deployment.

@@ -10,6 +10,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
 
 function SignInForm() {
   const [locale, setLocale] = useState<Locale>("zh");
@@ -41,43 +43,39 @@ function SignInForm() {
         {t(locale, "signin.title")}
       </h1>
       <form onSubmit={onPasswordSubmit} className="space-y-3">
-        <label className="block text-xs text-tm-muted">
-          {t(locale, "signin.email_label")}
-        </label>
-        <input
+        <TmInput
+          label={t(locale, "signin.email_label")}
           type="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={setEmail}
           placeholder={t(locale, "signin.email_placeholder")}
-          className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
         />
-        <label className="block text-xs text-tm-muted">
-          {t(locale, "signin.password_label")}
-        </label>
-        <input
+        <TmInput
+          label={t(locale, "signin.password_label")}
           type="password"
           required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={setPassword}
           placeholder={t(locale, "signin.password_placeholder")}
-          className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
         />
-        <button
+        <TmButton
           type="submit"
-          disabled={submitting}
-          className="w-full rounded border border-tm-rule bg-tm-bg px-3 py-1.5 text-sm text-tm-fg hover:border-tm-accent disabled:opacity-60"
+          loading={submitting}
+          loadingLabel={t(locale, "signin.signing_in")}
+          className="w-full"
         >
-          {t(locale, submitting ? "signin.signing_in" : "signin.signin_button")}
-        </button>
+          {t(locale, "signin.signin_button")}
+        </TmButton>
       </form>
-      <button
+      <TmButton
         type="button"
         onClick={onGoogle}
-        className="mt-3 w-full rounded border border-tm-rule bg-tm-bg px-3 py-1.5 text-sm text-tm-fg hover:border-tm-accent"
+        variant="secondary"
+        className="mt-3 w-full"
       >
         {t(locale, "signin.google_button")}
-      </button>
+      </TmButton>
       <div className="mt-4 flex flex-col gap-1 text-center text-xs text-tm-muted">
         <Link href="/register" className="text-tm-accent hover:underline">
           {t(locale, "signin.register_link")}

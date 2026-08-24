@@ -7,76 +7,93 @@ import clsx from "clsx";
 import { TmIconButton } from "./TmButton";
 import { useTmModalFocus } from "./useTmModalFocus";
 
-interface TmDialogProps {
+type DrawerSide = "left" | "right";
+type DrawerWidth = "sm" | "md" | "lg";
+
+interface TmDrawerProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly eyebrow?: ReactNode;
-  readonly headerAside?: ReactNode;
   readonly children: ReactNode;
   readonly closeLabel: string;
+  readonly side?: DrawerSide;
+  readonly width?: DrawerWidth;
   readonly className?: string;
   readonly bodyClassName?: string;
+  readonly footer?: ReactNode;
 }
 
-/** Canonical workstation dialog with focus entry, trap, Escape and restore. */
-export function TmDialog({
+const WIDTHS: Record<DrawerWidth, string> = {
+  sm: "w-[320px]",
+  md: "w-[420px]",
+  lg: "w-[560px]",
+};
+
+/** Canonical modal side panel for contextual work without losing page state. */
+export function TmDrawer({
   open,
   onClose,
   title,
   description,
   eyebrow,
-  headerAside,
   children,
   closeLabel,
+  side = "right",
+  width = "md",
   className,
   bodyClassName,
-}: TmDialogProps) {
+  footer,
+}: TmDrawerProps) {
   const titleId = useId();
   const descriptionId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  useTmModalFocus(open, onClose, dialogRef, closeRef);
+  useTmModalFocus(open, onClose, drawerRef, closeRef);
 
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6 sm:p-10"
+      className={clsx(
+        "fixed inset-0 z-[60] flex bg-black/70",
+        side === "right" ? "justify-end" : "justify-start",
+      )}
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
       }}
     >
       <div
-        ref={dialogRef}
+        ref={drawerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description === undefined ? undefined : descriptionId}
         tabIndex={-1}
         className={clsx(
-          "flex max-h-[84vh] w-full max-w-[1040px] flex-col border border-tm-rule-2 bg-tm-bg shadow-2xl outline-none",
+          "flex h-full max-w-[calc(100vw-24px)] flex-col bg-tm-bg shadow-2xl outline-none",
+          WIDTHS[width],
+          side === "right" ? "border-l border-tm-rule-2" : "border-r border-tm-rule-2",
           className,
         )}
       >
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-tm-rule bg-tm-bg-2/45 px-5 py-4">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-tm-rule bg-tm-bg-2/45 px-4 py-3">
           <div className="min-w-0 flex-1">
             {eyebrow !== undefined && eyebrow !== null ? (
-              <div className="font-tm-mono text-[10px] uppercase tracking-[0.16em] text-tm-accent">
+              <div className="font-tm-mono text-[9.5px] uppercase tracking-[0.16em] text-tm-accent">
                 {eyebrow}
               </div>
             ) : null}
-            <h2 id={titleId} className="mt-1 text-[18px] font-semibold text-tm-fg">
+            <h2 id={titleId} className="mt-1 text-[16px] font-semibold text-tm-fg">
               {title}
             </h2>
             {description !== undefined && description !== null ? (
-              <p id={descriptionId} className="mt-1 truncate text-[11px] text-tm-muted">
+              <p id={descriptionId} className="mt-1 text-[10.5px] leading-4 text-tm-muted">
                 {description}
               </p>
             ) : null}
           </div>
-          {headerAside}
           <TmIconButton
             ref={closeRef}
             onClick={onClose}
@@ -90,6 +107,11 @@ export function TmDialog({
         <div className={clsx("min-h-0 flex-1 overflow-y-auto p-4", bodyClassName)}>
           {children}
         </div>
+        {footer !== undefined && footer !== null ? (
+          <footer className="shrink-0 border-t border-tm-rule bg-tm-bg-2/45 p-3">
+            {footer}
+          </footer>
+        ) : null}
       </div>
     </div>,
     document.body,

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "audit:design-system": "node scripts/audit-design-system.mjs"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.2",

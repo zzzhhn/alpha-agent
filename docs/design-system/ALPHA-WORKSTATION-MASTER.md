@@ -45,6 +45,10 @@ The generated reference images define desktop geometry and information hierarchy
 | Row density | 32 to 44 px for queues, tables, and ledgers |
 | Primary action | One filled `--tm-accent` action per screen |
 | Secondary actions | Outline or text actions; refresh must not compete with the primary action |
+| Form controls | Use the canonical TM field family, including `TmRange` and rich-option `TmSelectMenu`; do not add route-local native styling |
+| Row actions | Use `TmRowButton` for a full interactive row and keep inline actions independently named |
+| Overlays | Dialogs and drawers share `useTmModalFocus`; Escape closes and focus returns to the trigger |
+| Charts | SVG and canvas colors resolve from shared semantic chart tokens; every chart retains a text summary |
 
 ## 4. Typography and tokens
 

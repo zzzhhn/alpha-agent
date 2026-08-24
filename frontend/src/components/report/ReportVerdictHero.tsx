@@ -5,6 +5,7 @@ import { t } from "@/lib/i18n";
 import { classifyFactorTier } from "@/lib/factor-tier";
 import type { ZooEntry } from "@/lib/factor-zoo";
 import type { FactorBacktestResponse } from "@/lib/types";
+import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 
 /**
  * ReportVerdictHero (ALPHACORE design, report block lines 553-567) — the
@@ -93,8 +94,8 @@ export function ReportVerdictHero({
 
   const reco = primary ? deriveReco(primary.backtest) : null;
 
-  function handleSwitch(e: React.ChangeEvent<HTMLSelectElement>) {
-    const entry = zoo.find((z) => z.name === e.target.value);
+  function handleSwitch(value: string) {
+    const entry = zoo.find((z) => z.name === value);
     if (entry) onSwitch(entry);
   }
 
@@ -173,21 +174,16 @@ export function ReportVerdictHero({
       {/* Right — switch-factor dropdown */}
       <label className="flex shrink-0 items-center gap-2 font-tm-mono text-[10px] text-tm-muted">
         {tk("report.hero.switch")}
-        <select
+        <TmSelectMenu
           value={primary?.name ?? ""}
           onChange={handleSwitch}
+          ariaLabel={tk("report.hero.switch")}
+          placeholder={tk("report.compare2.pick")}
+          options={zoo.map((z) => ({ value: z.name, label: z.name }))}
           disabled={running || zoo.length === 0}
-          className="cursor-pointer border border-tm-rule bg-tm-bg-3 px-2.5 py-1.5 font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent disabled:opacity-50"
-        >
-          <option value="" disabled>
-            {tk("report.compare2.pick")}
-          </option>
-          {zoo.map((z) => (
-            <option key={z.id} value={z.name}>
-              {z.name}
-            </option>
-          ))}
-        </select>
+          size="md"
+          buttonClassName="text-tm-fg"
+        />
       </label>
     </section>
   );

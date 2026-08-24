@@ -18,9 +18,10 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TmDisclosureButton } from "@/components/tm/TmButton";
 
 export type GroupBadgeSeverity = "warn" | "alert";
 
@@ -58,22 +59,14 @@ export function GroupAccordion({
 
   return (
     <section className="flex flex-col rounded border border-tm-rule bg-tm-bg">
-      <button
-        type="button"
+      <TmDisclosureButton
+        expanded={open}
         onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 border-b border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-[10.5px] hover:bg-tm-bg-3"
-      >
-        <span className="flex items-center gap-2">
-          {open ? (
-            <ChevronDown className="h-3.5 w-3.5 text-tm-muted" strokeWidth={1.75} />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-tm-muted" strokeWidth={1.75} />
-          )}
+        label={
+          <span className="flex items-center gap-2">
           <span className="font-semibold uppercase tracking-[0.06em] text-tm-accent">
             {title}
           </span>
-          <span className="text-tm-muted">· {open ? hideLabel : countLabel}</span>
           {badge ? (
             <span
               title={badge.reason}
@@ -85,8 +78,11 @@ export function GroupAccordion({
               </span>
             </span>
           ) : null}
-        </span>
-      </button>
+          </span>
+        }
+        meta={open ? hideLabel : countLabel}
+        className="h-auto border-x-0 border-t-0 bg-tm-bg-2 px-3 py-2 font-tm-mono text-[10.5px] hover:bg-tm-bg-3"
+      />
       {open ? (
         <div className="flex flex-col gap-3 bg-tm-bg p-3">{children}</div>
       ) : null}

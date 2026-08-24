@@ -9,6 +9,11 @@ content and do not represent live market or account data. New route-specific
 controls should first be represented here or documented as an explicit native
 exception in the asset catalog.
 
+The reference also demonstrates the rich-option selector, numeric range,
+dialog, and contextual drawer. Arrow, Home, and End move listbox selection;
+Enter or Space confirms; Escape closes overlays and restores focus to the
+trigger. These are the same interaction contracts used by production routes.
+
 ## Factor Alpha
 
 Write one falsifiable hypothesis, confirm universe, direction, bucket size, cost, neutralization, and benchmark, then use “Translate and backtest.” After translation, “Rerun current expression” keeps the expression and uses the latest visible parameters. Read the verdict strip before opening detailed evidence. The example library is a starting-point catalogue, not proof that an example remains valid.

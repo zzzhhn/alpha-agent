@@ -8,6 +8,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { forgotPasswordAction, type ForgotError } from "./actions";
 import { t, getLocaleFromStorage, type Locale } from "@/lib/i18n";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
 
 const ERROR_KEY: Record<ForgotError, Parameters<typeof t>[1]> = {
   invalid: "forgot.error_invalid",
@@ -49,27 +51,25 @@ export default function ForgotPasswordPage() {
         <p className="text-sm text-tm-muted">{t(locale, "forgot.sent_body")}</p>
       ) : (
         <form onSubmit={onSubmit} className="space-y-3">
-          <label className="block text-xs text-tm-muted">
-            {t(locale, "forgot.email_label")}
-          </label>
-          <input
+          <TmInput
+            label={t(locale, "forgot.email_label")}
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={setEmail}
             placeholder={t(locale, "forgot.email_placeholder")}
-            className="w-full rounded border border-tm-rule bg-tm-bg px-2 py-1.5 text-sm text-tm-fg"
           />
           {errorKey && (
             <p className="text-xs text-tm-neg">{t(locale, errorKey)}</p>
           )}
-          <button
+          <TmButton
             type="submit"
-            disabled={submitting}
-            className="w-full rounded border border-tm-rule bg-tm-bg px-3 py-1.5 text-sm text-tm-fg hover:border-tm-accent disabled:opacity-60"
+            loading={submitting}
+            loadingLabel={t(locale, "forgot.submitting")}
+            className="w-full"
           >
-            {t(locale, submitting ? "forgot.submitting" : "forgot.submit_button")}
-          </button>
+            {t(locale, "forgot.submit_button")}
+          </TmButton>
         </form>
       )}
       <p className="mt-4 text-center text-xs text-tm-muted">

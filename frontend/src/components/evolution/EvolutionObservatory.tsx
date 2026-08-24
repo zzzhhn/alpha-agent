@@ -21,6 +21,8 @@ import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 import { IcTrendChart } from "./IcTrendChart";
 import { ReliabilityChart } from "./ReliabilityChart";
 import { WeightDeltaTable } from "./WeightDeltaTable";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 
 type DetailTab = "weights" | "calibration";
 
@@ -159,16 +161,15 @@ export default function EvolutionObservatory({
               <p className="mt-1 text-[10px] text-tm-muted">{zh ? "按劣化窗口、负 IC 和保护状态确定关注顺序" : "Attention order uses degrading windows, negative IC, and guard state"}</p>
             </div>
             <div className="flex gap-1">
-              {focus.map((signal) => (
-                <button
-                  key={signal}
-                  type="button"
-                  onClick={() => setSelectedSignal(signal)}
-                  className={`border px-2.5 py-1.5 text-[10px] ${selected === signal ? "border-tm-accent bg-tm-accent/10 text-tm-accent" : "border-tm-rule text-tm-muted hover:text-tm-fg"}`}
-                >
-                  {getSignalDisplayLabel(signal, locale)}
-                </button>
-              ))}
+              <TmToggleGroup
+                value={selected}
+                onChange={setSelectedSignal}
+                ariaLabel={zh ? "重点信号" : "Focus signal"}
+                options={focus.map((signal) => ({
+                  value: signal,
+                  label: getSignalDisplayLabel(signal, locale),
+                }))}
+              />
               <a href="#evolution-signal-details" className="border border-tm-rule px-2.5 py-1.5 text-[10px] text-tm-muted hover:border-tm-accent hover:text-tm-accent">
                 {zh ? `全部 ${signalNames.size}` : `All ${signalNames.size}`}
               </a>
@@ -247,12 +248,17 @@ export default function EvolutionObservatory({
           <span>{zh ? "展开全部信号权重与校准明细" : "Expand all signal weights and calibration details"}</span>
           <span>{zh ? "按需加载视图" : "On-demand view"}</span>
         </summary>
-        <div className="flex h-11 items-center gap-1 border-y border-tm-rule px-6">
-          {(["weights", "calibration"] as DetailTab[]).map((tab) => (
-            <button key={tab} type="button" onClick={() => setDetailTab(tab)} className={`h-full border-b-2 px-4 text-[11px] ${detailTab === tab ? "border-tm-accent text-tm-accent" : "border-transparent text-tm-muted hover:text-tm-fg"}`}>
-              {tab === "weights" ? (zh ? "权重差异" : "Weight deltas") : (zh ? "置信校准" : "Calibration")}
-            </button>
-          ))}
+        <div className="flex min-h-11 items-center gap-3 border-y border-tm-rule px-6 py-1.5">
+          <SegmentedTabs
+            idBase="evolution-signal-detail"
+            ariaLabel={zh ? "信号明细视图" : "Signal detail view"}
+            items={[
+              { key: "weights", label: zh ? "权重差异" : "Weight deltas" },
+              { key: "calibration", label: zh ? "置信校准" : "Calibration" },
+            ]}
+            active={detailTab}
+            onChange={setDetailTab}
+          />
           <span className="ml-auto flex items-center gap-1 text-[9px] text-tm-muted"><ShieldCheck className="h-3 w-3" /> {signalNames.size} {zh ? "个信号受控" : "signals governed"}</span>
         </div>
         <div className="px-6 py-4">

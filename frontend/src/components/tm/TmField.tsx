@@ -395,6 +395,77 @@ export const TmTextarea = forwardRef<HTMLTextAreaElement, TmTextareaProps>(
   },
 );
 
+// ── TmRange ─────────────────────────────────────────────────────────
+
+type TmRangeBaseProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "type" | "value" | "onChange" | "className" | "min" | "max" | "step"
+>;
+
+interface TmRangeProps extends TmRangeBaseProps {
+  readonly label?: ReactNode;
+  readonly hint?: ReactNode;
+  readonly value: number;
+  readonly onChange: (next: number) => void;
+  readonly min: number;
+  readonly max: number;
+  readonly step?: number;
+  readonly formatValue?: (value: number) => ReactNode;
+  readonly className?: string;
+}
+
+/** Canonical numeric slider with a visible value and keyboard-native semantics. */
+export function TmRange({
+  label,
+  hint,
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  formatValue = (current) => current,
+  className,
+  id,
+  disabled,
+  ...rest
+}: TmRangeProps) {
+  const generatedId = useId();
+  const controlId = id ?? generatedId;
+  const hintId = hint ? `${controlId}-hint` : undefined;
+  const progress = max === min ? 0 : ((value - min) / (max - min)) * 100;
+  return (
+    <TmFieldShell
+      label={label}
+      hint={hint}
+      htmlFor={controlId}
+      hintId={hintId}
+      className={className}
+    >
+      <div className="flex min-h-8 items-center gap-3 border border-tm-rule bg-tm-bg-2 px-2 focus-within:border-tm-accent">
+        <input
+          id={controlId}
+          type="range"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          aria-describedby={hintId}
+          onChange={(event) => onChange(Number(event.target.value))}
+          style={{
+            background: `linear-gradient(to right, var(--tm-accent) 0%, var(--tm-accent) ${progress}%, var(--tm-rule-2) ${progress}%, var(--tm-rule-2) 100%)`,
+          }}
+          className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-none outline-none disabled:cursor-not-allowed disabled:opacity-50 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-none [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-tm-fg [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-none [&::-webkit-slider-thumb]:bg-tm-fg"
+          {...rest}
+        />
+        <output htmlFor={controlId} className="min-w-10 text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg">
+          {formatValue(value)}
+        </output>
+      </div>
+    </TmFieldShell>
+  );
+}
+
 // ── TmCheckbox ──────────────────────────────────────────────────────
 
 type TmCheckboxBaseProps = Omit<

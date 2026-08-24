@@ -17,7 +17,12 @@ import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { BrainPnLChart, type ChartKind } from "@/components/brain/BrainPnLChart";
 import { BrainCandidateAudit } from "@/components/brain/BrainCandidateAudit";
 import { TmPagination } from "@/components/tm/TmPagination";
+import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 import { TmStatePane } from "@/components/tm/TmStatePane";
+import { TmButton, TmRowButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import { TmTooltip } from "@/components/tm/TmTooltip";
 import {
   TmTable,
   TmTableBody,
@@ -223,28 +228,29 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
     <div className="flex items-center gap-2">
       {state === "confirm" ? (
         <>
-          <button
-            type="button"
+          <TmButton
             onClick={doSubmit}
-            className="inline-flex items-center gap-1.5 rounded border border-tm-accent bg-tm-accent px-2.5 py-1 font-tm-mono text-[11px] font-bold text-tm-bg hover:opacity-90"
+            variant="primary"
+            size="xs"
           >
             <Send className="h-3 w-3" strokeWidth={2} />
             {zh ? "确认提交" : "Confirm"}
-          </button>
-          <button
-            type="button"
+          </TmButton>
+          <TmButton
             onClick={() => setState("idle")}
-            className="font-tm-mono text-[11px] text-tm-muted hover:text-tm-fg"
+            variant="ghost"
+            size="xs"
           >
             {zh ? "取消" : "cancel"}
-          </button>
+          </TmButton>
         </>
       ) : (
-        <button
-          type="button"
+        <TmButton
           onClick={() => setState("confirm")}
-          disabled={state === "sending"}
-          className="inline-flex items-center gap-1.5 rounded border border-tm-accent/60 bg-tm-accent/10 px-2.5 py-1 font-tm-mono text-[11px] text-tm-accent transition-opacity hover:bg-tm-accent/20 disabled:opacity-50"
+          loading={state === "sending"}
+          loadingLabel={zh ? "提交中" : "Submitting"}
+          variant="secondary"
+          size="xs"
         >
           {state === "sending" ? (
             <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.75} />
@@ -252,7 +258,7 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
             <Send className="h-3 w-3" strokeWidth={1.75} />
           )}
           {zh ? "提交到 BRAIN" : "Submit to BRAIN"}
-        </button>
+        </TmButton>
       )}
       {state === "error" && msg ? (
         <span className="font-tm-mono text-[10.5px] text-tm-neg">{msg}</span>
@@ -360,12 +366,15 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
             {hypothesis?.confidence || "—"} · {hypothesis?.target || "—"}
           </div>
           {semantic ? (
-            <div
-              className={`mt-1 font-tm-mono text-[9.5px] ${alignmentStatus === "aligned" ? "text-tm-pos" : "text-tm-warn"}`}
-              title={semantic.target_outcome_alignment?.target}
+            <TmTooltip
+              content={semantic.target_outcome_alignment?.target || alignmentLabel}
+              ariaLabel={alignmentLabel}
+              className="mt-1"
             >
-              {alignmentLabel}
-            </div>
+              <span className={`font-tm-mono text-[9.5px] ${alignmentStatus === "aligned" ? "text-tm-pos" : "text-tm-warn"}`}>
+                {alignmentLabel}
+              </span>
+            </TmTooltip>
           ) : null}
         </div>
         <div>
@@ -384,12 +393,11 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
                 {semanticLabel} · {semantic.matched_required_semantics?.length ?? 0}/{semantic.required_semantics?.length ?? 0}
               </div>
               {semantic.missing_required_semantics?.length ? (
-                <div
-                  className="mt-1 truncate font-tm-mono text-[9px] text-tm-neg"
-                  title={semantic.missing_required_semantics.join(" · ")}
-                >
-                  {zh ? "缺失" : "missing"}: {semantic.missing_required_semantics.join(", ")}
-                </div>
+                <TmTooltip content={semantic.missing_required_semantics.join(" · ")} className="mt-1 max-w-full">
+                  <span className="truncate font-tm-mono text-[9px] text-tm-neg">
+                    {zh ? "缺失" : "missing"}: {semantic.missing_required_semantics.join(", ")}
+                  </span>
+                </TmTooltip>
               ) : null}
             </>
           ) : null}
@@ -417,19 +425,23 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
               <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
                 {zh ? "官方自相关估计" : "official self-corr estimate"} {pct(prediction.self_corr)} · {zh ? "分散化代理" : "diversification proxy"} {pct(prediction.marginal_proxy)}
               </div>
-              <div
-                className="mt-1 font-tm-mono text-[9px] text-tm-muted"
-                title={zh
+              <TmTooltip
+                className="mt-1"
+                content={zh
                   ? "分散化代理为 1 − 调整后自相关²，并非真实组合边际收益回归。"
                   : "Diversification proxy is 1 minus adjusted self-correlation squared, not a portfolio-level incremental-return regression."}
               >
-                {zh ? "近 20% 时间留出集验证，仅以 15% 权重参与预筛" : "validated on the latest 20% holdout; 15% screen weight"}
-              </div>
+                <span className="font-tm-mono text-[9px] text-tm-muted">
+                  {zh ? "近 20% 时间留出集验证，仅以 15% 权重参与预筛" : "validated on the latest 20% holdout; 15% screen weight"}
+                </span>
+              </TmTooltip>
             </>
           ) : (
-            <div className="text-tm-muted" title={proxy?.reason}>
-              {zh ? "未通过样本或留出验证门槛" : "sample or holdout gate not met"}
-            </div>
+            <TmTooltip content={proxy?.reason || (zh ? "未通过样本或留出验证门槛" : "sample or holdout gate not met")}>
+              <span className="text-tm-muted">
+                {zh ? "未通过样本或留出验证门槛" : "sample or holdout gate not met"}
+              </span>
+            </TmTooltip>
           )}
         </div>
       </div>
@@ -608,13 +620,12 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
           {zh ? "BRAIN 综合评级" : "BRAIN overall grade"}
         </span>
         {alpha.created_at ? (
-          <span
-            className="ml-auto flex items-center gap-1 font-tm-mono text-[10px] tabular-nums text-tm-muted"
-            title={zh ? "该回测结果记录时间(UTC+8)" : "backtest record time (UTC+8)"}
-          >
-            {fmtUtc8(alpha.created_at)}
-            <span className="opacity-60">UTC+8</span>
-          </span>
+          <TmTooltip content={zh ? "该回测结果记录时间（UTC+8）" : "Backtest record time (UTC+8)"} className="ml-auto">
+            <span className="flex items-center gap-1 font-tm-mono text-[10px] tabular-nums text-tm-muted">
+              {fmtUtc8(alpha.created_at)}
+              <span className="opacity-60">UTC+8</span>
+            </span>
+          </TmTooltip>
         ) : null}
       </div>
 
@@ -666,18 +677,12 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
           <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
             {zh ? "曲线" : "chart"}
           </span>
-          <div className="flex gap-1">
-            {CHART_KINDS.map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setChartKind(k)}
-                className={`border px-1.5 py-px font-tm-mono text-[10px] ${chartKind === k ? "border-tm-accent text-tm-accent" : "border-tm-rule text-tm-muted hover:text-tm-fg"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <TmToggleGroup
+            value={chartKind}
+            onChange={setChartKind}
+            ariaLabel={zh ? "曲线类型" : "Chart kind"}
+            options={CHART_KINDS.map(([value, label]) => ({ value, label }))}
+          />
         </div>
         {pnl && pnl.length > 0 ? (
           <BrainPnLChart points={pnl} kind={chartKind} />
@@ -745,43 +750,40 @@ function OfficialSCorrCell({ alpha, zh }: { alpha: BrainAlpha; zh: boolean }) {
   );
   if (status === "skipped_prerequisite") {
     return (
-      <span
-        className="cursor-help text-tm-muted"
-        title={
+      <TmTooltip
+        content={
           zh
             ? "该因子先未通过 BRAIN 的持仓集中度、子股票池 Sharpe 等提交前置检查，因此主流程未执行自相关请求。GOOD 及以上结果会在轮次末尾进入限量补查。"
             : "This factor failed an earlier BRAIN submission prerequisite, so the main path skipped the self-correlation request. GOOD-or-better rows enter a bounded post-run enrichment pass."
         }
       >
-        {zh ? "未执行" : "skipped"}
-      </span>
+        <span className="cursor-help text-tm-muted">{zh ? "未执行" : "skipped"}</span>
+      </TmTooltip>
     );
   }
   if (status === "unavailable") {
     return (
-      <span
-        className="cursor-help text-tm-warn"
-        title={
+      <TmTooltip
+        content={
           zh
             ? "已请求 BRAIN 官方自相关，但在本轮限时轮询内尚未返回。后台回填任务会继续重试。"
             : "Official self-correlation was requested but did not settle within the bounded poll. The scheduled backfill will retry."
         }
       >
-        {zh ? "暂不可用" : "unavail"}
-      </span>
+        <span className="cursor-help text-tm-warn">{zh ? "暂不可用" : "unavail"}</span>
+      </TmTooltip>
     );
   }
   return (
-    <span
-      className="cursor-help text-tm-muted"
-      title={
+    <TmTooltip
+      content={
         zh
           ? "BRAIN 官方自相关正在等待计算或尚未进入补查队列。0.70 是官方硬门槛，0.65–0.70 仅作预警。"
           : "Official BRAIN self-correlation is waiting to compute or has not entered enrichment yet. 0.70 is the hard limit; 0.65–0.70 is warning-only."
       }
     >
-      {zh ? "待计算" : "pending"}
-    </span>
+      <span className="cursor-help text-tm-muted">{zh ? "待计算" : "pending"}</span>
+    </TmTooltip>
   );
 }
 
@@ -832,31 +834,25 @@ function FamilyBadge({
   const shape = "shrink-0 border px-1 py-px font-tm-mono text-[9px] uppercase leading-none";
   if (!onClick) {
     return (
-      <span title={family} className={`${shape} ${cls}`}>
-        {label}
-      </span>
+      <TmTooltip content={family} width={180}>
+        <span className={`${shape} ${cls}`}>{label}</span>
+      </TmTooltip>
     );
   }
   return (
-    <span
-      role="button"
-      tabIndex={0}
-      title={active ? `clear ${label} filter` : `filter: ${label}`}
+    <TmButton
+      variant="ghost"
+      size="xs"
+      aria-pressed={active}
+      aria-label={active ? `clear ${label} filter` : `filter: ${label}`}
       onClick={(e) => {
         e.stopPropagation();
         onClick(family);
       }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.stopPropagation();
-          e.preventDefault();
-          onClick(family);
-        }
-      }}
-      className={`${shape} cursor-pointer hover:border-tm-accent ${cls}`}
+      className={`h-4 border px-1 text-[9px] leading-none hover:border-tm-accent ${cls}`}
     >
       {label}
-    </span>
+    </TmButton>
   );
 }
 
@@ -902,25 +898,24 @@ function OutcomeTags({ alpha }: { alpha: BrainAlpha }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {alpha.retried ? (
-        <span
-          title={
+        <TmTooltip
+          content={
             zh
               ? "对该因子做过一次参数自适应重试(调 decay / universe / truncation)"
               : "a settings-adaptation retry was run for this factor"
           }
-          className="rounded-sm border border-tm-info/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-info"
         >
-          {zh ? "已调参重试" : "retried"}
-        </span>
+          <span className="rounded-sm border border-tm-info/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-info">
+            {zh ? "已调参重试" : "retried"}
+          </span>
+        </TmTooltip>
       ) : null}
       {checks.map((c) => (
-        <span
-          key={c}
-          title={zh ? "未通过的在样内检查" : "failed in-sample check"}
-          className="rounded-sm border border-tm-warn/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-warn"
-        >
-          {checkLabel(c, zh)}
-        </span>
+        <TmTooltip key={c} content={zh ? "未通过的在样内检查" : "failed in-sample check"}>
+          <span className="rounded-sm border border-tm-warn/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-warn">
+            {checkLabel(c, zh)}
+          </span>
+        </TmTooltip>
       ))}
     </div>
   );
@@ -932,8 +927,10 @@ function OutcomeTags({ alpha }: { alpha: BrainAlpha }) {
 function AlphaIdChip({ alphaId }: { alphaId: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <span
-      title={alphaId}
+    <TmButton
+      variant="ghost"
+      size="xs"
+      aria-label={`copy alpha id ${alphaId}`}
       onClick={(e) => {
         e.stopPropagation();
         navigator.clipboard?.writeText(alphaId).then(
@@ -944,10 +941,10 @@ function AlphaIdChip({ alphaId }: { alphaId: string }) {
           () => undefined,
         );
       }}
-      className="shrink-0 cursor-pointer rounded-sm border border-tm-rule px-1 py-px font-tm-mono text-[9px] tabular-nums text-tm-muted hover:border-tm-accent/60 hover:text-tm-accent"
+      className="h-4 rounded-sm border border-tm-rule px-1 text-[9px] tabular-nums hover:border-tm-accent/60 hover:text-tm-accent"
     >
       {copied ? "copied" : alphaId}
-    </span>
+    </TmButton>
   );
 }
 
@@ -1166,18 +1163,14 @@ function MineButton({
           <span className="font-tm-mono text-[11px] tabular-nums text-tm-accent">
             {filled} / {job.n}
           </span>
-          <button
-            type="button"
+          <TmButton
             onClick={() => finish(job, "stopped")}
-            title={
-              zh
-                ? "仅停止本页跟踪,不会取消已在运行的挖矿任务"
-                : "stops tracking here; does not cancel the running job"
-            }
-            className="ml-auto font-tm-mono text-[10.5px] text-tm-muted hover:text-tm-fg"
+            variant="ghost"
+            size="xs"
+            className="ml-auto"
           >
             {zh ? "停止跟踪" : "stop tracking"}
-          </button>
+          </TmButton>
         </div>
         <ProgressSegments filled={filled} total={job.n} />
         <span className="font-tm-mono text-[10px] text-tm-muted">
@@ -1190,83 +1183,74 @@ function MineButton({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-      <span
-        className="cursor-help font-tm-mono text-[11px] text-tm-fg-2"
-        title={
-          zh
-            ? "真正提交到 WorldQuant BRAIN 的仿真上限，直接决定耗时和上游配额"
-            : "Maximum real WorldQuant BRAIN simulations; this drives runtime and quota"
-        }
-      >
-        {zh ? "仿真预算" : "simulation budget"}
-      </span>
-      <input
+    <div className="grid items-end gap-3 px-3 py-3 xl:grid-cols-[128px_18px_128px_180px_auto_minmax(240px,1fr)]">
+      <TmInput
+        label={zh ? "仿真预算" : "simulation budget"}
+        hint={zh ? "真实 BRAIN 仿真上限" : "real BRAIN simulation cap"}
         value={n}
-        onChange={(e) => setN(e.target.value)}
+        onChange={setN}
         inputMode="numeric"
         aria-label={zh ? "真实仿真预算" : "real simulation budget"}
-        className="h-7 w-16 border border-tm-rule bg-tm-bg-2 px-2 text-center font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent"
+        fieldSize="sm"
+        inputClassName="text-center tabular-nums"
       />
-      <span className="font-tm-mono text-[10px] text-tm-muted">←</span>
-      <span
-        className="cursor-help font-tm-mono text-[11px] text-tm-fg-2"
-        title={
-          zh
-            ? "先在本地低成本生成更多表达式，再由 logic screen 排名并缩减到仿真预算"
-            : "Cheap local pool ranked by the logic screen before consuming simulations"
-        }
-      >
-        {zh ? "生成池" : "generation pool"}
-      </span>
-      <input
+      <span className="pb-6 text-center font-tm-mono text-[10px] text-tm-muted">←</span>
+      <TmInput
+        label={zh ? "生成池" : "generation pool"}
+        hint={zh ? "低成本候选表达式" : "low-cost candidates"}
         value={generationTarget}
-        onChange={(e) => setGenerationTarget(e.target.value)}
+        onChange={setGenerationTarget}
         inputMode="numeric"
         aria-label={zh ? "候选表达式生成池" : "generated expression pool"}
-        className="h-7 w-16 border border-tm-rule bg-tm-bg-2 px-2 text-center font-tm-mono text-[12px] text-tm-fg outline-none focus:border-tm-accent"
+        fieldSize="sm"
+        inputClassName="text-center tabular-nums"
       />
-      <FamilySelect value={family} onChange={setFamily} zh={zh} />
-      {selectedRun ? (
-        <button
-          type="button"
-          onClick={reuseSelectedRun}
-          className="h-7 border border-tm-rule px-2 font-tm-mono text-[10.5px] text-tm-muted hover:border-tm-accent/60 hover:text-tm-fg"
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+          {zh ? "因子家族" : "alpha family"}
+        </span>
+        <FamilySelect value={family} onChange={setFamily} zh={zh} />
+        <span className="text-[10.5px] text-tm-muted">
+          {zh ? "决定字段与结构搜索空间" : "controls fields and structure search"}
+        </span>
+      </div>
+      <div className="flex min-h-[50px] items-start gap-2 pt-[18px]">
+        {selectedRun ? (
+          <TmButton onClick={reuseSelectedRun} variant="secondary" size="sm">
+            {zh ? `复用 RUN #${selectedRun.id}` : `reuse RUN #${selectedRun.id}`}
+          </TmButton>
+        ) : null}
+        <TmButton
+          onClick={go}
+          loading={state === "sending"}
+          loadingLabel={zh ? "派发中" : "dispatching"}
+          variant="primary"
+          size="sm"
         >
-          {zh ? `复用 RUN #${selectedRun.id}` : `reuse RUN #${selectedRun.id}`}
-        </button>
-      ) : null}
-      <button
-        type="button"
-        onClick={go}
-        disabled={state === "sending"}
-        className="inline-flex items-center gap-1.5 rounded border border-tm-accent/60 bg-tm-accent px-3 py-1.5 font-tm-mono text-[11px] font-bold text-tm-bg transition-opacity hover:opacity-90 disabled:opacity-50"
-      >
-        {state === "sending" ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-        ) : (
           <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
+          {zh ? "开始挖矿" : "Start mining"}
+        </TmButton>
+      </div>
+      <div className="min-w-0 pb-1 text-[10.5px] leading-4">
+        {state === "error" && errMsg ? (
+          <span className="font-tm-mono text-tm-neg">{errMsg}</span>
+        ) : doneMsg ? (
+          <span className="inline-flex items-start gap-1.5 font-tm-mono text-tm-pos">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            {doneMsg}
+          </span>
+        ) : (
+          <span className="font-tm-mono text-tm-muted">
+            {zh
+              ? parentRunId != null
+                ? `将作为 RUN #${parentRunId} 的独立衍生轮次，原结果不会被覆盖`
+                : "生成池先经过证据筛选，仅入选候选消耗真实仿真预算"
+              : parentRunId != null
+                ? `new child of RUN #${parentRunId}; original results stay unchanged`
+                : "the evidence screen selects which candidates consume real simulations"}
+          </span>
         )}
-        {zh ? "开始挖矿" : "Start mining"}
-      </button>
-      {state === "error" && errMsg ? (
-        <span className="font-tm-mono text-[11px] text-tm-neg">{errMsg}</span>
-      ) : doneMsg ? (
-        <span className="inline-flex items-center gap-1.5 font-tm-mono text-[11px] text-tm-pos">
-          <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-          {doneMsg}
-        </span>
-      ) : (
-        <span className="font-tm-mono text-[10.5px] text-tm-muted">
-          {zh
-            ? parentRunId != null
-              ? `将作为 RUN #${parentRunId} 的独立衍生轮次，原结果不会被覆盖`
-              : "先筛选生成池，再在 GitHub Actions 上执行真实仿真"
-            : parentRunId != null
-              ? `new child of RUN #${parentRunId}; original results stay unchanged`
-              : "rank the generated pool, then run real simulations on GitHub Actions"}
-        </span>
-      )}
+      </div>
     </div>
   );
 }
@@ -1288,66 +1272,18 @@ function OutcomeSelect({
   onChange: (v: BrainOutcome | "") => void;
   zh: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   const labelOf = (o: BrainOutcome | "") =>
     o ? outcomeLabel(o, zh) : zh ? "全部状态" : "all";
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex h-6 min-w-[92px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
-      >
-        <span className="text-tm-fg">{labelOf(value)}</span>
-        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
-      </button>
-      {open ? (
-        <ul
-          role="listbox"
-          className="absolute left-0 top-full z-50 mt-1 min-w-full border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
-        >
-          {OUTCOMES.map((o) => (
-            <li key={o || "all"}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={o === value}
-                onClick={() => {
-                  onChange(o);
-                  setOpen(false);
-                }}
-                className={`block w-full whitespace-nowrap px-2 py-1 text-left font-tm-mono text-[11px] hover:bg-tm-bg-3 ${
-                  o === value ? "text-tm-accent" : "text-tm-fg"
-                }`}
-              >
-                {labelOf(o)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <TmSelectMenu
+      value={value}
+      onChange={(next) => onChange(next as BrainOutcome | "")}
+      ariaLabel={zh ? "按仿真结论筛选" : "Filter by simulation outcome"}
+      size="xs"
+      buttonClassName="min-w-[92px]"
+      options={OUTCOMES.map((outcome) => ({ value: outcome, label: labelOf(outcome) }))}
+    />
   );
 }
 
@@ -1365,64 +1301,18 @@ function FamilyFilterSelect({
   onChange: (v: string) => void;
   zh: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
   const labelOf = (v: string) =>
     v ? FAMILY_LABEL[v] ?? v : zh ? "全部家族" : "all families";
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={zh ? "按家族筛选结果" : "filter results by family"}
-        className="flex h-6 min-w-[104px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
-      >
-        <span className="text-tm-fg">{labelOf(value)}</span>
-        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
-      </button>
-      {open ? (
-        <ul
-          role="listbox"
-          className="absolute left-0 top-full z-50 mt-1 min-w-full border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
-        >
-          {FAMILY_FILTER_KEYS.map((v) => (
-            <li key={v || "all"}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={v === value}
-                onClick={() => {
-                  onChange(v);
-                  setOpen(false);
-                }}
-                className={`block w-full whitespace-nowrap px-2 py-1 text-left font-tm-mono text-[11px] hover:bg-tm-bg-3 ${
-                  v === value ? "text-tm-accent" : "text-tm-fg"
-                }`}
-              >
-                {labelOf(v)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <TmSelectMenu
+      value={value}
+      onChange={onChange}
+      ariaLabel={zh ? "按家族筛选结果" : "Filter results by family"}
+      size="xs"
+      buttonClassName="min-w-[104px]"
+      menuMinWidth={160}
+      options={FAMILY_FILTER_KEYS.map((family) => ({ value: family, label: labelOf(family) }))}
+    />
   );
 }
 
@@ -1453,70 +1343,24 @@ function FamilySelect({
   onChange: (v: string) => void;
   zh: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
   const labelOf = (v: string) => {
     const f = FAMILIES.find((x) => x[0] === v) ?? FAMILIES[0];
     return zh ? f[1] : f[2];
   };
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={
-          zh
-            ? "挖矿家族。期权多机制会在 IV 偏度、偏度变化、期限结构、IV 动量、VRP、PCR 动态和 breakeven-forward 之间分配预算，不再只改同一模板的窗口。"
-            : "Mining family. Options multi-mechanism allocates budget across IV skew, skew change, term structure, IV momentum, VRP, PCR dynamics, and breakeven-forward instead of window variants of one template."
-        }
-        className="flex h-7 min-w-[104px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
-      >
-        <span className="text-tm-fg">{labelOf(value)}</span>
-        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
-      </button>
-      {open ? (
-        <ul
-          role="listbox"
-          className="absolute left-0 top-full z-50 mt-1 min-w-full border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
-        >
-          {FAMILIES.map((f) => (
-            <li key={f[0] || "normal"}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={f[0] === value}
-                onClick={() => {
-                  onChange(f[0]);
-                  setOpen(false);
-                }}
-                className={`block w-full whitespace-nowrap px-2 py-1 text-left font-tm-mono text-[11px] hover:bg-tm-bg-3 ${
-                  f[0] === value ? "text-tm-accent" : "text-tm-fg"
-                }`}
-              >
-                {zh ? f[1] : f[2]}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <TmSelectMenu
+      value={value}
+      onChange={onChange}
+      ariaLabel={zh ? "选择挖矿家族" : "Select mining family"}
+      size="sm"
+      buttonClassName="min-w-[120px]"
+      menuMinWidth={180}
+      options={FAMILIES.map(([family, zhLabel, enLabel]) => ({
+        value: family,
+        label: zh ? zhLabel : enLabel,
+      }))}
+      placeholder={labelOf(value)}
+    />
   );
 }
 
@@ -1686,26 +1530,7 @@ function RunSelector({
   onChange: (id: number | null) => void;
   zh: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const selected = runs.find((run) => run.id === selectedRunId) ?? null;
-
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   const buttonLabel = selected
     ? `RUN #${selected.id}`
     : selectedRunId != null
@@ -1715,70 +1540,27 @@ function RunSelector({
         : "all results";
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex h-7 min-w-[150px] items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none hover:border-tm-accent/60 focus:border-tm-accent"
-      >
-        <span className="truncate text-left">
-          {buttonLabel}
-          {selected ? ` · ${runSourceLabel(selected, zh)}` : ""}
-        </span>
-        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
-      </button>
-      {open ? (
-        <ul
-          role="listbox"
-          className="absolute left-0 top-full z-50 mt-1 max-h-72 min-w-[250px] overflow-y-auto border border-tm-rule bg-tm-bg-2 py-0.5 shadow-lg"
-        >
-          <li>
-            <button
-              type="button"
-              role="option"
-              aria-selected={selectedRunId === null}
-              onClick={() => {
-                onChange(null);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-3 border-b border-tm-rule px-2 py-1.5 text-left font-tm-mono text-[10.5px] hover:bg-tm-bg-3 ${selectedRunId === null ? "text-tm-accent" : "text-tm-fg"}`}
-            >
-              <span>{zh ? "历史兼容视图 · 全部结果" : "legacy view · all results"}</span>
-              <span className="text-[9px] text-tm-muted">ALL</span>
-            </button>
-          </li>
-          {runs.map((run) => (
-            <li key={run.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={run.id === selectedRunId}
-                onClick={() => {
-                  onChange(run.id);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between gap-3 px-2 py-1.5 text-left font-tm-mono text-[10.5px] hover:bg-tm-bg-3 ${run.id === selectedRunId ? "text-tm-accent" : "text-tm-fg"}`}
-              >
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">RUN #{run.id} · {runSourceLabel(run, zh)}</span>
-                  <span className="text-[9px] text-tm-muted">
-                    {run.family_focus || (zh ? "混合家族" : "mixed family")} · {fmtUtc8(run.created_at ?? run.started_at)}
-                  </span>
-                </span>
-                <span className={runStatusClass(run)}>{runStatusLabel(run, zh)}</span>
-              </button>
-            </li>
-          ))}
-          {runs.length === 0 ? (
-            <li className="px-2 py-1.5 font-tm-mono text-[10.5px] text-tm-muted">
-              {zh ? "暂无运行记录" : "no run records"}
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
-    </div>
+    <TmSelectMenu
+      value={selectedRunId == null ? "" : String(selectedRunId)}
+      onChange={(next) => onChange(next ? Number(next) : null)}
+      ariaLabel={zh ? "选择挖矿运行" : "Select mining run"}
+      size="sm"
+      buttonClassName="min-w-[150px]"
+      menuMinWidth={270}
+      placeholder={buttonLabel}
+      options={[
+        {
+          value: "",
+          label: zh ? "历史兼容视图 · 全部结果" : "legacy view · all results",
+          meta: "ALL",
+        },
+        ...runs.map((run) => ({
+          value: String(run.id),
+          label: `RUN #${run.id} · ${runSourceLabel(run, zh)}`,
+          meta: `${run.family_focus || (zh ? "混合家族" : "mixed family")} · ${fmtUtc8(run.created_at ?? run.started_at)} · ${runStatusLabel(run, zh)}`,
+        })),
+      ]}
+    />
   );
 }
 
@@ -2081,9 +1863,6 @@ export function BrainMiningPanel() {
     setWorkbenchView(generated > 0 && simulated === 0 ? "audit" : "results");
   }, [selectedRun]);
 
-  const INPUT =
-    "h-6 bg-tm-bg-2 border border-tm-rule px-2 font-tm-mono text-[11px] text-tm-fg outline-none focus:border-tm-accent placeholder:text-tm-muted";
-
   return (
     <TmScreen>
       <TmPane title={zh ? "挖矿控制" : "MINING.CONTROL"}>
@@ -2097,15 +1876,15 @@ export function BrainMiningPanel() {
       <TmPane
         title="WORLDQUANT.BRAIN"
         meta={
-          <button
-            type="button"
+          <TmButton
             onClick={() => void load()}
-            className="flex items-center gap-1.5 text-tm-muted hover:text-tm-fg"
-            title={zh ? "刷新" : "refresh"}
+            variant="ghost"
+            size="xs"
+            aria-label={zh ? "刷新 BRAIN 结果" : "Refresh BRAIN results"}
           >
             {meta}
             <RefreshCw className="h-3 w-3" strokeWidth={1.75} />
-          </button>
+          </TmButton>
         }
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
@@ -2160,28 +1939,31 @@ export function BrainMiningPanel() {
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
           <OutcomeSelect value={outcome} onChange={setOutcome} zh={zh} />
           <FamilyFilterSelect value={familyFilter} onChange={setFamilyFilter} zh={zh} />
-          <input
+          <TmInput
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={setQ}
             placeholder={zh ? "搜索表达式或编码…" : "search expr or code…"}
-            className={`${INPUT} w-56`}
+            fieldSize="sm"
+            className="w-56"
           />
-          <input
+          <TmInput
             value={sharpeMin}
-            onChange={(e) => setSharpeMin(e.target.value)}
+            onChange={setSharpeMin}
             placeholder={zh ? "Sharpe ≥" : "Sharpe ≥"}
             inputMode="decimal"
-            className={`${INPUT} w-24`}
+            fieldSize="sm"
+            className="w-24"
           />
           <span className="ml-auto font-tm-mono text-[10px] text-tm-muted">
             {zh ? "排序:" : "sort:"}
           </span>
           {SORTS.map((s) => (
-            <button
+            <TmButton
               key={s}
-              type="button"
               onClick={() => toggleSort(s)}
-              className={`inline-flex items-center gap-0.5 font-tm-mono text-[10px] uppercase ${sort === s ? "text-tm-accent" : "text-tm-muted hover:text-tm-fg"}`}
+              variant="ghost"
+              size="xs"
+              className={sort === s ? "text-tm-accent" : undefined}
             >
               {s === "created_at" ? (zh ? "时间" : "date") : s}
               {sort === s ? (
@@ -2191,7 +1973,7 @@ export function BrainMiningPanel() {
                   <ArrowUp className="h-2.5 w-2.5" strokeWidth={2} />
                 )
               ) : null}
-            </button>
+            </TmButton>
           ))}
         </div>
 
@@ -2204,26 +1986,26 @@ export function BrainMiningPanel() {
           <span className="w-12 text-right">{zh ? "收益" : "Ret"}</span>
           <span className="w-12 text-right">{zh ? "回撤" : "DD"}</span>
           <span className="w-14 text-right">Margin</span>
-          <span
-            className="w-12 cursor-help text-right"
-            title={
+          <TmTooltip
+            className="w-12 justify-end"
+            content={
               zh
                 ? "BRAIN 官方自相关性:与已提交(ACTIVE)因子的最大相关性。0.70 为官方硬门槛,0.65–0.70 仅预警。"
                 : "BRAIN official maximum correlation vs ACTIVE alphas. 0.70 is the hard limit; 0.65–0.70 is warning-only."
             }
           >
-            S-corr
-          </span>
-          <span
-            className="w-14 cursor-help text-right text-tm-info"
-            title={
+            <span className="cursor-help">S-corr</span>
+          </TmTooltip>
+          <TmTooltip
+            className="w-14 justify-end"
+            content={
               zh
                 ? "调整后自相关性:额外计入已挖出但暂未提交的通过因子。仍以 0.70 为硬门槛,0.65–0.70 只提示组合拥挤风险。"
                 : "Adjusted correlation also counts passed-but-unsubmitted factors. The hard limit remains 0.70; 0.65–0.70 only warns about crowding."
             }
           >
-            S-corr⁺
-          </span>
+            <span className="cursor-help text-tm-info">S-corr⁺</span>
+          </TmTooltip>
           <span className="w-24 text-right">{zh ? "编码" : "code"}</span>
           <span className="w-14 text-right">{zh ? "评级" : "grade"}</span>
           <span className="w-20 text-right">{zh ? "结论" : "verdict"}</span>
@@ -2275,8 +2057,7 @@ export function BrainMiningPanel() {
                   key={a.id}
                   className={i > 0 && !newBatch ? "border-t border-tm-rule" : ""}
                 >
-                  <button
-                    type="button"
+                  <TmRowButton
                     onClick={() => toggle(a.id)}
                     className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 px-3 py-2 text-left hover:bg-tm-bg-2"
                   >
@@ -2321,14 +2102,13 @@ export function BrainMiningPanel() {
                       <GradeBadge grade={a.grade} />
                     </span>
                     <span className="flex w-20 justify-end">
-                      <span
-                        title={zh ? verdict.detailZh : verdict.detailEn}
-                        className={`whitespace-nowrap border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${verdict.cls}`}
-                      >
-                        {zh ? verdict.labelZh : verdict.labelEn}
-                      </span>
+                      <TmTooltip content={zh ? verdict.detailZh : verdict.detailEn}>
+                        <span className={`whitespace-nowrap border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${verdict.cls}`}>
+                          {zh ? verdict.labelZh : verdict.labelEn}
+                        </span>
+                      </TmTooltip>
                     </span>
-                  </button>
+                  </TmRowButton>
                   {open ? <RowDetail alpha={a} onDone={() => void load()} /> : null}
                 </li>
               );
@@ -2338,12 +2118,12 @@ export function BrainMiningPanel() {
               // so crossing down enters the round dispatched at this timestamp).
               return [
                 <li key={`div-${a.id}`} aria-hidden>
-                  <div
-                    className="group relative flex cursor-help items-center py-1.5"
-                    title={
+                  <TmTooltip
+                    className="group relative flex w-full cursor-help items-center py-1.5"
+                    content={
                       a.batch_started_at
                         ? `${zh ? "本批次发起于 " : "batch dispatched "}${fmtUtc8(a.batch_started_at)} UTC+8`
-                        : undefined
+                        : "—"
                     }
                   >
                     <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />
@@ -2351,7 +2131,7 @@ export function BrainMiningPanel() {
                       {a.batch_started_at ? `${fmtUtc8(a.batch_started_at)} UTC+8` : "—"}
                     </span>
                     <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />
-                  </div>
+                  </TmTooltip>
                 </li>,
                 row,
               ];

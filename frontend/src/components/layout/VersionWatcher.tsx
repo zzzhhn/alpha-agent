@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 
 // The commit SHA baked into THIS bundle at build time (next.config env). The
 // live deploy's SHA comes from /api/fe/version at runtime; when they diverge,
@@ -94,30 +95,30 @@ export default function VersionWatcher() {
             {t(locale, "version.auto_refresh").replace("{n}", String(countdown))}
           </div>
           <div className="mt-0.5 flex items-center gap-2">
-            <button
-              type="button"
+            <TmButton
+              variant="primary"
+              size="xs"
               onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-1 rounded border border-tm-accent/60 bg-tm-accent px-2.5 py-1 font-tm-mono text-[11px] text-tm-bg transition-opacity hover:opacity-90"
+              className="rounded"
             >
               {t(locale, "version.refresh_now")}
-            </button>
-            <button
-              type="button"
+            </TmButton>
+            <TmButton
+              variant="secondary"
+              size="xs"
               onClick={dismiss}
-              className="inline-flex items-center gap-1 rounded border border-tm-rule px-2.5 py-1 font-tm-mono text-[11px] text-tm-fg-2 transition-colors hover:bg-tm-bg-3/40"
+              className="rounded"
             >
               {t(locale, "version.later")}
-            </button>
+            </TmButton>
           </div>
         </div>
-        <button
-          type="button"
+        <TmIconButton
+          label={t(locale, "version.later")}
           onClick={dismiss}
-          aria-label={t(locale, "version.later")}
-          className="ml-1 shrink-0 text-tm-muted transition-colors hover:text-tm-fg"
-        >
-          <X className="h-3.5 w-3.5" strokeWidth={1.75} />
-        </button>
+          className="ml-1 shrink-0"
+          icon={<X className="h-3.5 w-3.5" strokeWidth={1.75} />}
+        />
       </div>
     </div>
   );

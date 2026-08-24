@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { triggerRefresh, fetchLastRefresh } from "@/lib/api/admin";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { TmButton } from "@/components/tm/TmButton";
 import {
   clearDispatch,
   DISPATCH_EVENT,
@@ -292,17 +293,20 @@ export default function RefreshButton() {
           {t(locale, "picks.lastrun")}:{" "}
           <span className="text-tm-fg-2">{ageLabel}</span>
         </span>
-        <button
-          type="button"
+        <TmButton
+          variant="secondary"
+          size="sm"
           onClick={onClick}
           disabled={pending || inFlight}
           title={inFlight ? t(locale, "picks.refresh.inflight_tip") : undefined}
-          className="rounded border border-tm-rule bg-tm-bg-2 px-2 py-1 text-tm-fg hover:border-tm-accent disabled:cursor-not-allowed disabled:opacity-60"
+          loading={pending}
+          loadingLabel={t(locale, "picks.refresh.pending")}
+          className="rounded"
         >
           {inFlight
             ? `${t(locale, "picks.refresh.inflight")} ${btnPct}%`
-            : t(locale, pending ? "picks.refresh.pending" : "picks.refresh")}
-        </button>
+            : t(locale, "picks.refresh")}
+        </TmButton>
         {toastText ? (
           <span className={`text-xs ${toastTone}`}>{toastText}</span>
         ) : null}

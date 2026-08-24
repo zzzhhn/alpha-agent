@@ -33,6 +33,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
+import { TmRowButton } from "@/components/tm/TmButton";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
@@ -48,14 +49,12 @@ const CATEGORY_LABEL_KEY = {
   fundamental: "data.coverage.catFundamental",
 } as const;
 
-// Coverage health colour ramp — tokens for accent/warn/neg, hex
-// fallbacks for the lime/orange middle steps that don't have palette
-// equivalents yet.
+// Coverage health colour ramp derived entirely from workstation tokens.
 function colorFor(rate: number): string {
   if (rate >= 0.99) return "var(--tm-pos)";
-  if (rate >= 0.95) return "#84cc16"; // lime
+  if (rate >= 0.95) return "color-mix(in srgb, var(--tm-pos) 72%, var(--tm-warn))";
   if (rate >= 0.85) return "var(--tm-warn)";
-  if (rate >= 0.7) return "#f97316"; // orange
+  if (rate >= 0.7) return "color-mix(in srgb, var(--tm-warn) 74%, var(--tm-neg))";
   return "var(--tm-neg)";
 }
 
@@ -264,8 +263,7 @@ function CategoryRow({
 
   return (
     <div className="border-t border-tm-rule first:border-t-0">
-      <button
-        type="button"
+      <TmRowButton
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-[11px] transition-colors hover:bg-tm-bg-2"
         aria-expanded={open}
@@ -289,7 +287,7 @@ function CategoryRow({
         <span className="w-14 text-right tabular-nums text-tm-fg">
           {(avg * 100).toFixed(2)}%
         </span>
-      </button>
+      </TmRowButton>
       {open && (
         <div className="flex flex-col gap-1 bg-tm-bg-2 px-3 py-2">
           {fields.map((f) => (
@@ -351,8 +349,7 @@ function Collapsible({
         : "text-tm-muted";
   return (
     <div className="border-t border-tm-rule">
-      <button
-        type="button"
+      <TmRowButton
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-[10px] uppercase tracking-[0.08em] transition-colors hover:bg-tm-bg-2"
         aria-expanded={open}
@@ -362,7 +359,7 @@ function Collapsible({
         </span>
         <span className="font-semibold text-tm-fg-2">{label}</span>
         {summary && <span className={summaryTone}>· {summary}</span>}
-      </button>
+      </TmRowButton>
       {open && children}
     </div>
   );
@@ -476,10 +473,9 @@ function SectorBlock({
           siblings, not nested — an <a>/InfoTooltip inside a <button> is
           invalid interactive nesting. */}
       <div className="flex items-center bg-tm-bg-2">
-        <button
-          type="button"
+        <TmRowButton
           onClick={() => setOpen((o) => !o)}
-          className="flex flex-1 items-center gap-2 px-3 py-1.5 text-left font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 transition-colors hover:text-tm-fg"
+          className="flex flex-1 items-center gap-2 px-3 py-1.5 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg"
           aria-expanded={open}
         >
           <span className="w-3 text-tm-muted" aria-hidden="true">
@@ -487,7 +483,7 @@ function SectorBlock({
           </span>
           <span className="font-semibold text-tm-accent">{displayLabel}</span>
           <span className="text-tm-muted">· {bucket.tickers.length}</span>
-        </button>
+        </TmRowButton>
         {bucket.isDelisted ? (
           <div className="flex items-center gap-1.5 pr-3">
             <InfoTooltip content={t(locale, "data.delistedTooltip")} />

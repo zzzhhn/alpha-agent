@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Loader2, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t, type TranslationKey } from "@/lib/i18n";
 import {
@@ -12,6 +12,7 @@ import {
   type ProposeResult,
 } from "@/lib/api/factor-lab";
 import { parseFactorError } from "@/lib/factor-errors";
+import { TmButton, TmDisclosureButton } from "@/components/tm/TmButton";
 
 // Phase D state machine:
 //   idle ──click──► running (jobId set, polling) ──► ok | error
@@ -137,34 +138,26 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <button
-        type="button"
+      <TmButton
+        variant="primary"
+        size="sm"
         onClick={handleClick}
         disabled={state.kind === "running"}
-        className="inline-flex w-fit items-center gap-2 rounded border border-tm-accent/60 bg-tm-accent px-3 py-1.5 font-tm-mono text-[11px] text-tm-bg transition-opacity disabled:opacity-50 enabled:hover:bg-tm-accent/90"
+        loading={state.kind === "running"}
+        loadingLabel={buttonLabel}
+        className="w-fit"
       >
-        {state.kind === "running" ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-        ) : (
-          <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
-        )}
+        <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
         <span>{buttonLabel}</span>
-      </button>
+      </TmButton>
 
       {state.kind === "ok" ? (
         <div className="flex flex-col gap-1 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2">
-          <button
-            type="button"
+          <TmDisclosureButton
+            expanded={resultExpanded}
             onClick={() => setResultExpanded((e) => !e)}
-            className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-fg-2"
-            aria-expanded={resultExpanded}
-          >
-            {resultExpanded ? (
-              <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
-            ) : (
-              <ChevronRight className="h-3 w-3" strokeWidth={1.75} />
-            )}
-            <span>
+            label={
+              <span>
               {t(locale, "factorLab.propose.lastResult")}
               {" · "}
               <span className="font-mono">
@@ -172,8 +165,10 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
               </span>
               {" · "}
               <span className="font-mono">{formatTs(state.ts)}</span>
-            </span>
-          </button>
+              </span>
+            }
+            className="h-auto border-0 bg-transparent px-0 font-tm-mono text-[11px] text-tm-fg-2 hover:border-transparent hover:bg-transparent hover:text-tm-fg"
+          />
           {resultExpanded ? (
             <p className="pl-5 font-tm-mono text-[11px] text-tm-fg-2">
               {t(locale, outcomeKey(state.result)).replace(

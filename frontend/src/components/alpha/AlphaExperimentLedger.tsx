@@ -4,6 +4,7 @@ import { Clock3, Star } from "lucide-react";
 
 import { useLocale } from "@/components/layout/LocaleProvider";
 import type { HypothesisHistoryEntry } from "@/lib/types";
+import { TmRowButton } from "@/components/tm/TmButton";
 
 export function AlphaExperimentLedger({
   history,
@@ -33,12 +34,12 @@ export function AlphaExperimentLedger({
           </div>
           <div className="divide-y divide-tm-rule">
           {history.slice(0, 5).map((entry) => (
-            <button key={entry.id} type="button" onClick={() => onOpen(entry)} className="grid min-h-11 w-full grid-cols-[170px_minmax(260px,1.2fr)_minmax(260px,1fr)_110px] items-center gap-4 px-4 py-2 text-left text-[10.5px] hover:bg-tm-bg-2">
+            <TmRowButton key={entry.id} onClick={() => onOpen(entry)} className="grid min-h-11 grid-cols-[170px_minmax(260px,1.2fr)_minmax(260px,1fr)_110px] items-center gap-4 px-4 py-2 text-[10.5px]">
               <span className="flex items-center gap-1 text-tm-muted"><Clock3 className="h-3 w-3" /> {new Date(entry.timestamp).toLocaleString(zh ? "zh-CN" : "en-US")}</span>
               <span className="truncate text-tm-fg" title={entry.request.text}>{entry.request.text}</span>
               <code className="truncate text-tm-fg-2" title={entry.result.spec.expression}>{entry.result.spec.expression}</code>
               <span className="flex items-center justify-end gap-2 text-right text-tm-muted">{entry.isFavorite ? <Star className="h-3 w-3 fill-tm-warn text-tm-warn" /> : entry.request.universe}<span className="border border-tm-rule px-2 py-0.5 text-[9px] text-tm-fg-2">{zh ? "重开" : "Reopen"}</span></span>
-            </button>
+            </TmRowButton>
           ))}
           </div>
         </div>

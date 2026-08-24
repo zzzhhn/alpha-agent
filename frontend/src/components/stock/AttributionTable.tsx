@@ -135,17 +135,18 @@ export default function AttributionTable({
             <span className="font-semibold">{locale === "zh" ? "生效" : "ACTIVE"}</span>
           </span>
         ) : null}
-        <button
-          type="button"
+        <TmButton
+          variant="secondary"
+          size="xs"
           onClick={() => setFactorMode(factorMode === "short" ? "long" : "short")}
           title={modeTip}
-          className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/40 bg-tm-accent/10 px-2 py-0.5 font-tm-sans text-[11px] text-tm-accent transition hover:bg-tm-accent/20"
+          className="rounded-md border-tm-accent/40 bg-tm-accent/10 font-tm-sans text-[11px] text-tm-accent hover:bg-tm-accent/20"
         >
           <span className="opacity-70">{modeLabel}</span>
           <span className="font-semibold">
             {factorMode === "short" ? modeShortLabel : modeLongLabel}
           </span>
-        </button>
+        </TmButton>
       </div>
       {!icAvailable ? (
         <div className="rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 font-tm-sans text-[11px] leading-relaxed text-tm-muted">

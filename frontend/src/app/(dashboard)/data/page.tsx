@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
+import { TmScreen, TmCols2 } from "@/components/tm/TmPane";
 import {
   TmSubbar,
   TmSubbarKV,
@@ -27,6 +27,7 @@ import {
   TmChip,
 } from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 import {
   UniverseOverview,
   UniverseTickers,
@@ -154,19 +155,16 @@ export default function DataPage() {
       </TmSubbar>
 
       {error && (
-        <TmPane title="ERROR" meta={t(locale, "data.error")}>
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
-            {error}
-          </p>
-        </TmPane>
+        <TmStatePane
+          state="error"
+          title={t(locale, "data.error")}
+          description={error}
+          action={{ label: t(locale, "data.refresh"), onClick: () => void handleRefresh() }}
+        />
       )}
 
       {!error && !universes && (
-        <TmPane title="LOADING">
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
-            {t(locale, "data.loading")}
-          </p>
-        </TmPane>
+        <TmStatePane state="loading" title={t(locale, "data.loading")} />
       )}
 
       {/* Overview (universe + coverage merged) | Tickers (sector-grouped).

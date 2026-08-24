@@ -22,6 +22,8 @@ import {
   type ExplainRangeResponse,
 } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -95,35 +97,37 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
         </h3>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <label className="flex items-center gap-1 text-tm-fg-2">
-          {copy.from}
-          <input
-            type="date"
-            value={fromTs}
-            onChange={(e) => setFromTs(e.target.value)}
-            max={toTs}
-            className="rounded border border-tm-rule bg-tm-bg px-1.5 py-0.5 font-tm-mono text-[11px] text-tm-fg"
-          />
-        </label>
-        <label className="flex items-center gap-1 text-tm-fg-2">
-          {copy.to}
-          <input
-            type="date"
-            value={toTs}
-            onChange={(e) => setToTs(e.target.value)}
-            min={fromTs}
-            max={defaultTo()}
-            className="rounded border border-tm-rule bg-tm-bg px-1.5 py-0.5 font-tm-mono text-[11px] text-tm-fg"
-          />
-        </label>
-        <button
-          type="button"
+        <TmInput
+          type="date"
+          label={copy.from}
+          value={fromTs}
+          onChange={setFromTs}
+          max={toTs}
+          fieldSize="sm"
+          className="min-w-[8.5rem]"
+          inputClassName="rounded bg-tm-bg px-1.5 text-[11px]"
+        />
+        <TmInput
+          type="date"
+          label={copy.to}
+          value={toTs}
+          onChange={setToTs}
+          min={fromTs}
+          max={defaultTo()}
+          fieldSize="sm"
+          className="min-w-[8.5rem]"
+          inputClassName="rounded bg-tm-bg px-1.5 text-[11px]"
+        />
+        <TmButton
+          variant="secondary"
+          size="xs"
           onClick={onGenerate}
-          disabled={status === "loading"}
-          className="rounded border border-tm-rule bg-tm-bg px-2.5 py-0.5 text-xs text-tm-fg hover:border-tm-accent disabled:opacity-50"
+          loading={status === "loading"}
+          loadingLabel={copy.loading}
+          className="rounded text-xs hover:border-tm-accent"
         >
-          {status === "loading" ? copy.loading : copy.button}
-        </button>
+          {copy.button}
+        </TmButton>
       </div>
       {status === "error" ? (
         <div className="text-xs text-tm-neg">{errMsg}</div>

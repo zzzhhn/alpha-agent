@@ -14,6 +14,7 @@ import {
   TmTableRow,
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 import {
   rollbackFactorProposal,
   type FactorProposal,
@@ -78,17 +79,21 @@ function CopyButton({ text }: { text: string }) {
   }
 
   return (
-    <button
+    <TmIconButton
+      label="Copy expression"
+      variant="ghost"
+      size="xs"
+      icon={
+        copied ? (
+          <Check className="h-3 w-3" strokeWidth={1.75} />
+        ) : (
+          <Clipboard className="h-3 w-3" strokeWidth={1.75} />
+        )
+      }
       onClick={handleCopy}
       title="Copy expression"
-      className="ml-1 inline-flex items-center rounded p-0.5 text-tm-muted transition-colors hover:text-tm-fg"
-    >
-      {copied ? (
-        <Check className="h-3 w-3" strokeWidth={1.75} />
-      ) : (
-        <Clipboard className="h-3 w-3" strokeWidth={1.75} />
-      )}
-    </button>
+      className="ml-1"
+    />
   );
 }
 
@@ -218,19 +223,16 @@ export function FactorHistoryTable({
                 <TmTableCell textAlign="center" className="px-2 py-1.5">
                   {p.status === "approved" ? (
                     <div className="flex flex-col items-center gap-0.5">
-                      <button
+                      <TmButton
+                        variant="secondary"
+                        size="xs"
                         disabled={isRowPending}
                         onClick={() => handleRollback(p.id)}
-                        className={clsx(
-                          "inline-flex items-center rounded border px-2 py-0.5 font-tm-mono text-[9px] leading-[16px] transition-opacity",
-                          "border-tm-rule bg-tm-bg-3/40 text-tm-fg-2",
-                          isRowPending
-                            ? "cursor-not-allowed opacity-40"
-                            : "hover:bg-tm-bg-2 hover:text-tm-fg",
-                        )}
+                        loading={isRowPending}
+                        className="text-[9px] leading-[16px]"
                       >
-                        {isRowPending ? "..." : "Rollback"}
-                      </button>
+                        Rollback
+                      </TmButton>
                       {rowError && (
                         <p className="mt-0.5 max-w-[120px] text-center font-tm-mono text-[9px] text-tm-neg">
                           {rowError}

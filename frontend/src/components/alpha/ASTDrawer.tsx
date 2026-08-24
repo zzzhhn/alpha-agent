@@ -6,6 +6,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { explainAst } from "@/lib/api";
 import type { AstNode } from "@/lib/types";
+import { TmDisclosureButton } from "@/components/tm/TmButton";
 
 interface ASTDrawerProps {
   readonly expression: string;
@@ -50,18 +51,12 @@ export function ASTDrawer({ expression }: ASTDrawerProps) {
 
   return (
     <Card padding="md">
-      <button
-        type="button"
+      <TmDisclosureButton
+        expanded={open}
         onClick={toggle}
-        className="flex w-full items-center justify-between text-left"
-      >
-        <span className="text-base font-semibold text-text">
-          {t(locale, "alpha.ast.title")}
-        </span>
-        <span className="text-[13px] text-muted">
-          {open ? "▾" : "▸"}
-        </span>
-      </button>
+        label={t(locale, "alpha.ast.title")}
+        className="h-auto border-0 bg-transparent px-0 font-sans text-base font-semibold tracking-normal text-text hover:border-transparent hover:bg-transparent hover:text-text"
+      />
 
       {open && (
         <div className="mt-3">

@@ -34,8 +34,8 @@ The 2026-08-24 inventory covered all files under `frontend/src`.
 | Surface | Verified current state | Canonical destination |
 | --- | --- | --- |
 | Tokens | Legacy tokens and `--tm-*` coexist | `--tm-*` semantic tokens |
-| Buttons | `TmButton`, legacy `ui/Button`, and route-local raw buttons | `TmButton` family plus explicit rich-row exceptions |
-| Fields | Canonical fields coexist with route-local native fields | `TmInput`, `TmSelect`, `TmTextarea` |
+| Buttons | Production actions and rich rows use the canonical TM family | `TmButton`, `TmIconButton`, `TmLinkButton`, `TmDisclosureButton`, `TmRowButton` |
+| Fields | Production forms use the canonical TM field family | `TmInput`, `TmNumberInput`, `TmSelect`, `TmSelectMenu`, `TmTextarea`, `TmCheckbox`, `TmRange` |
 | Panes/cards | `TmPane`, legacy `Card`, and glass-card utilities | `TmPane` |
 | Type scale | 20 arbitrary pixel sizes | named roles in section 4 |
 | Heights | 27 arbitrary fixed heights | 24, 28, 32, 36, 44 px scale |
@@ -44,8 +44,8 @@ The 2026-08-24 inventory covered all files under `frontend/src`.
 | Pagination | multiple incompatible local implementations | `TmPagination` |
 | Status | pills, badges, text colors, and page-local alerts | `TmBadge`, `TmStatePane` |
 | Tooltips | two components plus native `title` attributes | one accessible tooltip contract |
-| Overlays | modal, drawer, and inline inspector variants | shared focus and escape contract |
-| Charts | TM tokens plus hard-coded colors | shared chart token adapter |
+| Overlays | dialogs and drawers share one modal focus contract | `TmDialog`, `TmDrawer`, and `useTmModalFocus` |
+| Charts | SVG and canvas charts consume semantic adapters | `chartTokens`, `TM_CHART_SERIES_CSS`, and resolved canvas palette |
 
 These counts are a migration baseline, not a target to preserve. A raw native
 element is allowed only when the canonical primitive cannot express required
@@ -131,12 +131,21 @@ change and a reference-page specimen before production use.
 - `TmDisclosureButton`: one full-width, 32 px disclosure row with explicit
   `aria-expanded`, focus treatment, reduced-motion behavior, and optional
   right-aligned scope metadata.
+- `TmRowButton`: semantic full-row action for dense ledgers and selectable
+  evidence rows. Callers own layout while the primitive owns hover, focus,
+  disabled, and keyboard behavior.
 - `TmToggleGroup`: exclusive compact choices with radio semantics, roving
   keyboard focus, and the 24 or 28 px control-height scale.
 - `TmFieldShell`: label, required marker, hint, and error relationship.
 - `TmInput`, `TmNumberInput`, `TmSelect`, `TmTextarea`, and `TmCheckbox`:
   standard and compact density, visible focus, programmatic labels, hint, and
   error connections. Numeric units remain visible through an affixed suffix.
+- `TmRange` provides a visible current value, label and hint relationship,
+  semantic token track, and native keyboard slider behavior.
+- `TmSelectMenu` is the rich-option listbox exception for metadata-bearing
+  options. It uses a portal, viewport clamping, disabled-option skipping,
+  Arrow/Home/End movement, Enter/Space selection, Escape close, and trigger
+  focus restoration. Plain choices continue to use native `TmSelect`.
 - Future `TmRadio`, `TmSwitch`, and `TmCombobox` must reuse the
   same field shell and focus grammar before page adoption.
 
@@ -159,9 +168,10 @@ change and a reference-page specimen before production use.
   without collapsing the pane. Recovery is local and explicit.
 - Toasts announce completed transient actions. Persistent or decision-changing
   information remains in the pane or ledger and is not toast-only.
-- `TmDialog` provides portal layering, focus entry and trap, Escape and overlay
-  close, scroll lock, and focus restoration. Tooltip, future popover, and
-  future drawer assets must use the same overlay contract.
+- `TmDialog` and `TmDrawer` provide portal layering, focus entry and trap,
+  Escape and overlay close, scroll lock, and focus restoration through the
+  shared `useTmModalFocus` contract. A dialog interrupts for a bounded
+  decision; a drawer preserves page context for a short side task.
 - Every chart uses semantic tokens, a text summary, stable loading/empty/error
   geometry, responsive measurement, and accessible legend text.
 
@@ -259,14 +269,14 @@ or account state.
 
 | Category | Canonical asset | Migrated production surfaces | Remaining evidence |
 | --- | --- | --- | --- |
-| Buttons | `TmButton`, `TmIconButton`, `TmLinkButton`, and `TmDisclosureButton` | compatibility `ui/Button`; BRAIN audit; Backtest; Alerts; Settings; Alpha hypothesis and example surfaces | 113 production raw buttons across 51 files, classify rich rows and specialized controls before replacement |
-| Fields | `TmInput`, `TmNumberInput`, `TmSelect`, `TmTextarea`, `TmCheckbox` | Backtest; Settings; Alpha hypothesis and example search; Alerts timeline; `/reference` | 30 raw inputs, 8 selects, and 5 textareas remain across 17 production files |
+| Buttons | `TmButton`, `TmIconButton`, `TmLinkButton`, `TmDisclosureButton`, and `TmRowButton` | Auth, BRAIN, Backtest, Alerts, Settings, Alpha, Report, Screener, Picks, Paper, Evolution, Factor Lab, Factors, Stock, and shared shell | executable audit reports zero unexplained native controls; only canonical `SegmentedTabs` and toast internals remain |
+| Fields | `TmInput`, `TmNumberInput`, `TmSelect`, `TmSelectMenu`, `TmTextarea`, `TmCheckbox`, and `TmRange` | Auth, Backtest, Settings, Alpha, Alerts, Report, Screener, Picks, Signal, BRAIN, and `/reference` | executable audit reports zero unexplained native fields |
 | Exclusive toggle | `TmToggleGroup` | Topbar locale/theme; BRAIN audit filters; Alerts severity and relevance filters | replace any future local exclusive selector before adding a page-local style |
 | Pagination | `TmPagination` | Screener factor picker; Evolution proposals; BRAIN results; `/reference` | repository scan shows no separate local pagination implementation |
-| State feedback | `TmStatePane` | `/reference`; Alerts main queue; Backtest equity, drawdown, and walk-forward evidence | migrate remaining route-local loading, empty, error, stale, and partial blocks in bounded page batches |
-| Tooltip | `TmTooltip` | compatibility `HoverTip` and `InfoTooltip`; `/reference` | replace native `title` explanations and verify overlay focus restore by consumer |
-| Charts | `chartTokens` | `/reference`; Backtest equity, drawdown, and walk-forward charts | migrate remaining hard-coded chart colors component by component with a text summary |
-| Dialog | `TmDialog` | `/reference`; Alpha example library | migrate remaining dialogs only after verifying focus restore and mutation semantics |
+| State feedback | `TmStatePane` | `/reference`; Alerts; Backtest evidence; Data; Methodology; Paper attribution and positions; Signal charts and tables | legacy truncation-only copy remains allowed, but lifecycle state must not collapse geometry |
+| Tooltip | `TmTooltip` | compatibility `HoverTip` and `InfoTooltip`; `/reference`; BRAIN evidence and official metric explanations | native `title` is limited to 35 truncation or compatibility hints and is protected by the no-growth audit budget |
+| Charts | `chartTokens`, `TM_CHART_SERIES_CSS`, and `tmChartColorWithAlpha` | `/reference`; Backtest; BRAIN PnL; Factors; Evolution; Stock radar, price, and intraday | the monthly heatmap keeps its data-driven cell ramp as an explicit semantic-matrix exception |
+| Overlays | `TmDialog`, `TmDrawer`, and `useTmModalFocus` | `/reference`; Alpha example library; simulated-order drawer | browser verification covers focus entry, Escape, trap, and trigger-focus restoration |
 | Tables | `TmTable` compositional family | all standard production tables, including Picks, Paper, BRAIN yearly evidence, Backtest history, Alerts timeline, Screener, Evolution, Factor Lab, and Stock detail | no unexplained page-local standard table remains; `TmMonthlyReturnsHeatmap` retains a native matrix table for sticky axes, 2D cell color, and border-separated heatmap geometry, with an accessible caption and canonical tooltips |
 
 Counts are static migration evidence, not a command to replace semantic row
@@ -285,6 +295,10 @@ Completion requires all of the following evidence:
   1440 × 900 and 1672 × 941, plus a narrow viewport usability check.
 - Keyboard-only focus, tab order, error recovery, and overlay close/restore are
   verified in a real browser.
+
+Run `npm run audit:design-system` before every frontend release. The AST audit
+rejects unexplained native controls and standard tables, and rejects growth
+beyond the recorded native-title compatibility budget.
 
 ## 9. Ten-principles re-check
 

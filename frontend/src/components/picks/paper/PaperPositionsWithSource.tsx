@@ -14,6 +14,7 @@ import {
   TmTableRow,
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 
 function sourceLabel(source: TickerAttribution["source_type"] | undefined, locale: "zh" | "en") {
   if (source === "pick") return t(locale, "sim.workspace.source_pick");
@@ -32,11 +33,7 @@ export default function PaperPositionsWithSource({
   const sourceByTicker = new Map(attribution.map((row) => [row.ticker, row]));
 
   if (positions.length === 0) {
-    return (
-      <p className="px-3 py-8 font-tm-mono text-[11px] text-tm-muted">
-        {t(locale, "sim.overview.empty_hint")}
-      </p>
-    );
+    return <TmStatePane state="empty" title={t(locale, "sim.overview.empty_hint")} className="m-3 min-h-[120px] rounded-none" />;
   }
 
   const headers = [

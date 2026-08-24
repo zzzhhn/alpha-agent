@@ -19,8 +19,9 @@ import { useEffect, useState } from "react";
 import { placeOrder, fetchPaperAccount } from "@/lib/api/paper";
 import { t, type Locale } from "@/lib/i18n";
 import { CheckCircle } from "lucide-react";
-import clsx from "clsx";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
+import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 
 interface Props {
   /** When provided the ticker input is hidden and this value is used. */
@@ -45,8 +46,6 @@ const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 const FIELD_LABEL =
   "mb-1 block font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted";
-const INPUT =
-  "border border-tm-rule bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[13px] text-tm-fg focus:border-tm-accent focus:outline-none";
 
 /** Compact segmented pills — border+text active state (GradeBadge language),
  *  no solid fill. The order form's one primary CTA (submit) stays solid. */
@@ -54,30 +53,21 @@ function Segmented<T extends string>({
   value,
   options,
   onChange,
+  ariaLabel,
 }: {
   value: T;
-  options: ReadonlyArray<{ key: T; label: string; active: string }>;
+  options: ReadonlyArray<{ key: T; label: string }>;
   onChange: (v: T) => void;
+  ariaLabel: string;
 }) {
   return (
-    <div className="inline-flex overflow-hidden border border-tm-rule">
-      {options.map((o, i) => (
-        <button
-          key={o.key}
-          type="button"
-          onClick={() => onChange(o.key)}
-          className={clsx(
-            "px-3 py-1 font-tm-mono text-[11px] font-semibold uppercase transition-colors",
-            i > 0 && "border-l border-tm-rule",
-            value === o.key
-              ? o.active
-              : "text-tm-muted hover:bg-tm-bg-2 hover:text-tm-fg",
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <TmToggleGroup
+      value={value}
+      onChange={onChange}
+      ariaLabel={ariaLabel}
+      size="sm"
+      options={options.map((o) => ({ value: o.key, label: o.label }))}
+    />
   );
 }
 
@@ -168,16 +158,15 @@ export default function SimOrderForm({
       {/* Controls row — packs horizontally, wraps in the narrow drawer */}
       <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
         {!fixedTicker && (
-          <div>
-            <label className={FIELD_LABEL}>{t(locale, "sim.form.ticker_label")}</label>
-            <input
-              type="text"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              placeholder="AAPL"
-              className={clsx(INPUT, "w-28 uppercase placeholder:normal-case placeholder:text-tm-muted")}
-            />
-          </div>
+          <TmInput
+            label={t(locale, "sim.form.ticker_label")}
+            value={ticker}
+            onChange={(next) => setTicker(next.toUpperCase())}
+            placeholder="AAPL"
+            fieldSize="sm"
+            className="w-28"
+            inputClassName="uppercase placeholder:normal-case"
+          />
         )}
         {fixedTicker && (
           <div>
@@ -192,44 +181,54 @@ export default function SimOrderForm({
           </div>
         )}
         <div>
-          <label className={FIELD_LABEL}>{t(locale, "sim.form.side_label")}</label>
+          <span className={FIELD_LABEL}>{t(locale, "sim.form.side_label")}</span>
           <Segmented
             value={side}
             onChange={setSide}
+            ariaLabel={t(locale, "sim.form.side_label")}
             options={[
-              { key: "buy", label: t(locale, "sim.order_side.buy"), active: "bg-tm-pos/10 text-tm-pos" },
-              { key: "sell", label: t(locale, "sim.order_side.sell"), active: "bg-tm-neg/10 text-tm-neg" },
+              { key: "buy", label: t(locale, "sim.order_side.buy") },
+              { key: "sell", label: t(locale, "sim.order_side.sell") },
             ]}
           />
         </div>
         <div>
-          <label className={FIELD_LABEL}>{t(locale, "sim.form.type_label")}</label>
+          <span className={FIELD_LABEL}>{t(locale, "sim.form.type_label")}</span>
           <Segmented
             value={orderType}
             onChange={setOrderType}
+            ariaLabel={t(locale, "sim.form.type_label")}
             options={[
-              { key: "market", label: t(locale, "sim.order_type.market"), active: "bg-tm-accent-soft text-tm-accent" },
-              { key: "limit", label: t(locale, "sim.order_type.limit"), active: "bg-tm-accent-soft text-tm-accent" },
+              { key: "market", label: t(locale, "sim.order_type.market") },
+              { key: "limit", label: t(locale, "sim.order_type.limit") },
             ]}
           />
         </div>
         <div>
-          <label className={FIELD_LABEL}>{t(locale, "sim.form.qty_label")}</label>
-          <input
-            type="number" min={1} step={1} value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            className={clsx(INPUT, "w-24")}
+          <TmInput
+            label={t(locale, "sim.form.qty_label")}
+            type="number"
+            min={1}
+            step={1}
+            value={qty}
+            onChange={setQty}
+            fieldSize="sm"
+            className="w-24"
           />
           {fixedTicker ? <p className="mt-1 max-w-44 font-tm-mono text-[9px] leading-4 text-tm-muted">{locale === "zh" ? `默认按组合净值的 ${(targetWeight * 100).toFixed(0)}% 估算，可手动调整` : `Suggested at ${(targetWeight * 100).toFixed(0)}% of portfolio NAV; editable`}</p> : null}
         </div>
         {orderType === "limit" && (
           <div>
-            <label className={FIELD_LABEL}>{t(locale, "sim.form.limit_label")}</label>
-            <input
-              type="number" min={0.01} step={0.01} value={limitPrice}
-              onChange={(e) => setLimitPrice(e.target.value)}
+            <TmInput
+              label={t(locale, "sim.form.limit_label")}
+              type="number"
+              min={0.01}
+              step={0.01}
+              value={limitPrice}
+              onChange={setLimitPrice}
               placeholder="0.00"
-              className={clsx(INPUT, "w-28")}
+              fieldSize="sm"
+              className="w-28"
             />
           </div>
         )}

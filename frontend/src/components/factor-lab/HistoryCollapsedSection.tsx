@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
+import { TmDisclosureButton } from "@/components/tm/TmButton";
 import { TmPane } from "@/components/tm/TmPane";
 import { FactorHistoryTable } from "./FactorHistoryTable";
 import type { FactorProposal } from "@/lib/api/factor-lab";
@@ -44,23 +44,18 @@ export function HistoryCollapsedSection({
 
   return (
     <TmPane title={t(locale, "factorLab.history.title")}>
-      <button
-        type="button"
+      <TmDisclosureButton
+        expanded={expanded}
         onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center justify-between px-3 py-2.5 font-tm-mono text-[11px] text-tm-fg-2 hover:bg-tm-bg-3"
-        aria-expanded={expanded}
-      >
-        <span>
+        label={
+          <span>
           {history.length === 0
             ? t(locale, "factorLab.history.empty")
             : summaryText}
-        </span>
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />
-        )}
-      </button>
+          </span>
+        }
+        className="h-auto border-0 bg-transparent px-3 py-2.5 font-tm-mono text-[11px] text-tm-fg-2 hover:border-transparent hover:bg-tm-bg-3 hover:text-tm-fg"
+      />
       {expanded && history.length > 0 ? (
         <div className="border-t border-tm-rule px-3 py-2.5">
           <FactorHistoryTable proposals={history as FactorProposal[]} />

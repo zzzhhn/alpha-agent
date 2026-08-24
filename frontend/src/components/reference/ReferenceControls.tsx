@@ -4,10 +4,11 @@ import { useState, type ReactNode } from "react";
 import { Play, RefreshCw, Trash2 } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import { TmButton, TmDisclosureButton, TmIconButton, TmLinkButton } from "@/components/tm/TmButton";
-import { TmCheckbox, TmInput, TmNumberInput, TmSelect, TmTextarea } from "@/components/tm/TmField";
+import { TmCheckbox, TmInput, TmNumberInput, TmRange, TmSelect, TmTextarea } from "@/components/tm/TmField";
 import { TmCols2, TmPane } from "@/components/tm/TmPane";
 import { TmChip } from "@/components/tm/TmSubbar";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 
 type DemoTab = "overview" | "evidence" | "history";
@@ -26,6 +27,8 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
   const [breakdown, setBreakdown] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
   const [topPct, setTopPct] = useState(20);
+  const [family, setFamily] = useState("options");
+  const [threshold, setThreshold] = useState(0.7);
 
   return (
     <div>
@@ -108,6 +111,16 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             label={zh ? "返回每日明细" : "Return daily breakdown"}
             hint={zh ? "显式开启高成本证据。" : "Explicitly opt in to heavier evidence."}
           />
+          <TmRange
+            label={zh ? "自相关门槛" : "Self-correlation threshold"}
+            hint={zh ? "方向键支持精细调整" : "Arrow keys support precise adjustment"}
+            value={threshold}
+            onChange={setThreshold}
+            min={0.5}
+            max={0.9}
+            step={0.01}
+            formatValue={(value) => value.toFixed(2)}
+          />
           <TmTextarea
             label={zh ? "研究备注" : "Research note"}
             hint={zh ? "仅在长文本需要时使用" : "Use only when long text is required"}
@@ -120,6 +133,36 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
         </TmPane>
 
         <TmPane title="CONTROLS.NAVIGATION" bodyClassName="space-y-5 p-4">
+          <div>
+            <p className="mb-2 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">SELECT MENU</p>
+            <TmSelectMenu
+              value={family}
+              onChange={setFamily}
+              ariaLabel={zh ? "选择研究家族" : "Select research family"}
+              buttonClassName="w-full"
+              menuMinWidth={260}
+              options={[
+                {
+                  value: "options",
+                  label: zh ? "期权多机制" : "Options mechanisms",
+                  meta: zh ? "隐含波动率、偏度、期限结构" : "IV, skew, and term structure",
+                },
+                {
+                  value: "fundamental",
+                  label: zh ? "基本面" : "Fundamental",
+                  meta: zh ? "质量、估值与修正" : "quality, value, and revisions",
+                },
+                {
+                  value: "sentiment",
+                  label: zh ? "情绪" : "Sentiment",
+                  meta: zh ? "新闻与行为代理" : "news and behavioral proxies",
+                },
+              ]}
+            />
+            <p className="mt-1 text-[10px] leading-4 text-tm-muted">
+              {zh ? "支持方向键、Home、End、Enter、Space 与 Escape。" : "Supports arrows, Home, End, Enter, Space, and Escape."}
+            </p>
+          </div>
           <div>
             <p className="mb-2 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">SEGMENTED TABS</p>
             <SegmentedTabs

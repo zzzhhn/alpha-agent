@@ -8,10 +8,12 @@ import { TmCols2, TmPane } from "@/components/tm/TmPane";
 import { TmTooltip } from "@/components/tm/TmTooltip";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmDialog } from "@/components/tm/TmDialog";
+import { TmDrawer } from "@/components/tm/TmDrawer";
 
 export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
   const zh = locale === "zh";
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   return (
     <div>
       <TmCols2>
@@ -80,9 +82,9 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
       <TmPane title="SURFACE.OVERLAY CONTRACT" meta={zh ? "没有完成的资产不冒充生产组件" : "planned assets never masquerade as production-ready"}>
         <div className="grid gap-px bg-tm-rule p-px sm:grid-cols-2 xl:grid-cols-4">
           <Contract name="TmTooltip" state="READY" />
-          <Contract name="TmPopover" state="PLANNED" />
+          <Contract name="TmSelectMenu" state="READY" />
           <Contract name="TmDialog" state="READY" />
-          <Contract name="TmDrawer" state="PLANNED" />
+          <Contract name="TmDrawer" state="READY" />
         </div>
       </TmPane>
 
@@ -107,6 +109,36 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
             {zh ? "焦点不会离开对话框，关闭后会回到触发按钮。" : "Focus stays inside the dialog and returns to its trigger after close."}
           </p>
         </TmDialog>
+      </TmPane>
+
+      <TmPane
+        title="SURFACE.DRAWER"
+        meta={zh ? "保留主页面上下文的侧向任务工作区" : "a side task workspace that preserves page context"}
+        bodyClassName="p-4"
+      >
+        <TmButton variant="secondary" onClick={() => setDrawerOpen(true)}>
+          {zh ? "打开抽屉示例" : "Open drawer example"}
+        </TmButton>
+        <TmDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          closeLabel={zh ? "关闭抽屉" : "Close drawer"}
+          eyebrow="DRAWER.SAMPLE"
+          title={zh ? "创建模拟订单" : "Create paper order"}
+          description={
+            zh
+              ? "抽屉适合短任务与上下文编辑，不用于替代完整页面。"
+              : "Use drawers for short contextual tasks, not as a substitute for a full page."
+          }
+          width="sm"
+        >
+          <div className="space-y-3 text-[11px] leading-5 text-tm-fg-2">
+            <p>{zh ? "焦点进入抽屉后保持在其中，Escape 关闭并恢复到触发按钮。" : "Focus remains inside, Escape closes, and focus returns to the trigger."}</p>
+            <div className="border border-tm-rule bg-tm-bg-2 p-3 font-tm-mono text-[10px] text-tm-muted">
+              {zh ? "示例内容，不连接真实账户。" : "Sample content, not connected to a live account."}
+            </div>
+          </div>
+        </TmDrawer>
       </TmPane>
     </div>
   );

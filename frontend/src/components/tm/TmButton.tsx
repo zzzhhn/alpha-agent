@@ -45,6 +45,10 @@ export interface TmDisclosureButtonProps
   readonly meta?: ReactNode;
 }
 
+export interface TmRowButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  readonly children: ReactNode;
+}
+
 const VARIANTS: Record<Variant, string> = {
   primary:
     "bg-tm-accent text-tm-bg hover:opacity-90 disabled:bg-tm-bg-3 disabled:text-tm-muted disabled:cursor-progress",
@@ -203,3 +207,29 @@ export function TmDisclosureButton({
     </button>
   );
 }
+
+/**
+ * Semantic full-row action for dense ledgers, tables, and disclosure headers.
+ * Layout remains caller-owned; focus, hover, disabled, and keyboard semantics
+ * stay consistent with the workstation control family.
+ */
+export const TmRowButton = forwardRef<HTMLButtonElement, TmRowButtonProps>(function TmRowButton({
+  className,
+  type = "button",
+  children,
+  ...rest
+}: TmRowButtonProps, ref) {
+  return (
+    <button
+      ref={ref}
+      type={type}
+      className={clsx(
+        "w-full cursor-pointer text-left outline-none transition-colors hover:bg-tm-bg-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-tm-accent disabled:cursor-not-allowed disabled:opacity-50",
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+});

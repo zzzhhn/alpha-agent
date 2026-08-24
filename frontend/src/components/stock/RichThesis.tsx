@@ -8,6 +8,7 @@ import { streamBrief } from "@/lib/api/streamBrief";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useHasByok } from "@/hooks/useHasByok";
+import { TmButton } from "@/components/tm/TmButton";
 
 type Status = "idle" | "streaming" | "done" | "error" | "aborted";
 
@@ -110,24 +111,26 @@ export default function RichThesis({ ticker }: { ticker: string }) {
             {/* 2026-06-04: zh/en picker removed — the brief streams in the
                 current page locale. */}
             {status === "streaming" ? (
-              <button
-                type="button"
+              <TmButton
+                variant="danger"
+                size="xs"
                 onClick={onAbort}
-                className="inline-flex items-center gap-1 rounded border border-tm-rule px-2 py-1 text-xs text-tm-fg hover:border-tm-neg"
+                className="rounded"
               >
                 <Square aria-hidden className="w-3 h-3" strokeWidth={1.75} />
                 {t(locale, "rich.stop_button")}
-              </button>
+              </TmButton>
             ) : (
-              <button
-                type="button"
+              <TmButton
+                variant="secondary"
+                size="xs"
                 onClick={() => void onGenerate()}
-                className="rounded border border-tm-rule bg-tm-bg px-3 py-1 text-xs text-tm-fg hover:border-tm-accent"
+                className="rounded hover:border-tm-accent"
               >
                 {hasContent
                   ? t(locale, "rich.regenerate_button")
                   : t(locale, "rich.generate_button")}
-              </button>
+              </TmButton>
             )}
           </div>
         ) : authStatus === "unauthenticated" ? (
