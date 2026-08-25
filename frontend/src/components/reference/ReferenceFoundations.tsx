@@ -12,6 +12,7 @@ const COLORS = [
   ["RULE", "bg-tm-rule", "--tm-rule"],
   ["STRONG RULE", "bg-tm-rule-2", "--tm-rule-2"],
   ["ACCENT", "bg-tm-accent", "--tm-accent"],
+  ["ACCENT SOFT", "bg-tm-accent-soft", "--tm-accent-soft"],
   ["POSITIVE", "bg-tm-pos", "--tm-pos"],
   ["WARNING", "bg-tm-warn", "--tm-warn"],
   ["NEGATIVE", "bg-tm-neg", "--tm-neg"],
@@ -32,8 +33,8 @@ export function ReferenceFoundations({ locale }: { readonly locale: Locale }) {
         {COLORS.map(([label, colorClass, token]) => (
           <div key={token} className="min-w-0 bg-tm-bg px-3 py-3">
             <div className={`h-10 w-full border border-tm-rule ${colorClass}`} />
-            <p className="mt-2 font-tm-mono text-[10px] font-semibold text-tm-fg">{label}</p>
-            <code className="font-tm-mono text-[9.5px] text-tm-muted">{token}</code>
+            <p className="mt-2 font-tm-mono text-xs font-semibold text-tm-fg">{label}</p>
+            <code className="font-tm-mono text-xs text-tm-muted">{token}</code>
           </div>
         ))}
       </TmPane>
@@ -56,32 +57,32 @@ export function ReferenceFoundations({ locale }: { readonly locale: Locale }) {
             </span>
           </TypeRow>
           <TypeRow label="CONTROL / DATA">
-            <span className="font-tm-mono text-[11px] tabular-nums text-tm-fg">
+            <span className="font-tm-mono text-xs tabular-nums text-tm-fg">
               SP500_subset · SHARPE 1.84
             </span>
           </TypeRow>
           <TypeRow label="LABEL / CAPTION">
-            <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+            <span className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
               STATUS · UPDATED 08:32 UTC
             </span>
           </TypeRow>
         </TmPane>
 
         <TmPane title="FOUNDATIONS.GEOMETRY" bodyClassName="p-4">
-          <p className="mb-4 max-w-prose text-[11px] leading-5 text-tm-fg-2">
+          <p className="mb-4 max-w-prose text-xs leading-5 text-tm-fg-2">
             {zh
               ? "仅使用固定密度、间距与 0 至 2px 圆角。键盘焦点为 2px 语义绿色轮廓，不改变布局。"
               : "Use the fixed density and spacing scale with 0 to 2px radius. Keyboard focus is a 2px semantic outline that never changes layout."}
           </p>
           <div className="space-y-2">
             {SPACING.map((space) => (
-              <div key={space} className="flex items-center gap-3 font-tm-mono text-[10px] text-tm-muted">
+              <div key={space} className="flex items-center gap-3 font-tm-mono text-xs text-tm-muted">
                 <span className="w-8 tabular-nums">{space}px</span>
                 <span className="h-2 bg-tm-accent" style={{ width: `${space * 3}px` }} />
               </div>
             ))}
           </div>
-          <div className="mt-5 grid grid-cols-3 gap-2 font-tm-mono text-[10px] text-tm-fg-2">
+          <div className="mt-5 grid grid-cols-3 gap-2 font-tm-mono text-xs text-tm-fg-2">
             {["24px · XS", "28px · SM", "32px · MD"].map((height) => (
               <div key={height} className="border border-tm-rule bg-tm-bg-2 px-2 py-2 text-center">
                 {height}
@@ -97,7 +98,7 @@ export function ReferenceFoundations({ locale }: { readonly locale: Locale }) {
 function TypeRow({ label, children }: { readonly label: string; readonly children: ReactNode }) {
   return (
     <div className="grid min-h-16 grid-cols-[120px_1fr] items-center gap-4 px-4 py-3">
-      <span className="font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">{label}</span>
+      <span className="font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{label}</span>
       <div className="min-w-0">{children}</div>
     </div>
   );

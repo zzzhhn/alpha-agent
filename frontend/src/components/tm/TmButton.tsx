@@ -61,9 +61,15 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  xs: "h-6 px-2 text-[10px]",
-  sm: "h-7 px-3 text-[11px]",
-  md: "h-8 px-3 text-[11px]",
+  xs: "h-6 px-2 text-xs",
+  sm: "h-7 px-3 text-xs",
+  md: "h-8 px-3 text-xs",
+};
+
+const ICON_BUTTON_SIZES: Record<Size, string> = {
+  xs: "w-6 !px-0",
+  sm: "w-7 !px-0",
+  md: "w-8 !px-0",
 };
 
 const BUTTON_BASE =
@@ -156,20 +162,36 @@ export const TmIconButton = forwardRef<HTMLButtonElement, TmIconButtonProps>(fun
   size = "xs",
   variant = "ghost",
   className,
+  loading = false,
+  disabled,
+  type = "button",
   ...rest
 }: TmIconButtonProps, ref) {
   return (
-    <TmButton
+    <button
       ref={ref}
+      type={type}
       aria-label={label}
+      aria-busy={loading || undefined}
       title={title ?? label}
-      size={size}
-      variant={variant}
-      className={clsx("w-6 px-0", className)}
+      disabled={disabled || loading}
+      className={buttonClassName(
+        variant,
+        size,
+        clsx(ICON_BUTTON_SIZES[size], "leading-none", className),
+        loading,
+      )}
       {...rest}
     >
-      {icon}
-    </TmButton>
+      <span className="flex h-full w-full items-center justify-center">
+        {loading ? (
+          <span
+            aria-hidden="true"
+            className="h-1.5 w-1.5 animate-tm-pulse bg-current motion-reduce:animate-none"
+          />
+        ) : icon}
+      </span>
+    </button>
   );
 });
 
@@ -187,7 +209,7 @@ export function TmDisclosureButton({
       type={type}
       aria-expanded={expanded}
       className={clsx(
-        "flex h-8 w-full items-center justify-between gap-3 border-y border-tm-rule bg-tm-bg-2 px-3 font-tm-mono text-[10px] font-semibold tracking-[0.06em] text-tm-fg-2 transition-colors hover:border-tm-rule-2 hover:text-tm-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-tm-accent",
+        "flex h-8 w-full items-center justify-between gap-3 border-y border-tm-rule bg-tm-bg-2 px-3 font-tm-mono text-xs font-semibold tracking-[0.06em] text-tm-fg-2 transition-colors hover:border-tm-rule-2 hover:text-tm-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-tm-accent",
         className,
       )}
       {...rest}

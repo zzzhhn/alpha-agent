@@ -26,8 +26,8 @@ export interface TmToggleGroupProps<K extends string> {
 }
 
 const SIZE_STYLES = {
-  xs: "h-6 px-2 text-[10px]",
-  sm: "h-7 px-2.5 text-[10.5px]",
+  xs: "h-6 px-2 text-xs",
+  sm: "h-7 px-2.5 text-xs",
 } as const;
 
 /**

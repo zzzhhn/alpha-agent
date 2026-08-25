@@ -110,7 +110,7 @@ export function TmStatePane({
         className,
       )}
     >
-      <div className="flex min-w-0 max-w-[32rem] flex-col items-center gap-2 text-center">
+      <div className="flex min-w-0 max-w-[72rem] flex-col items-center gap-2 text-center">
         {state === "loading" ? (
           <span aria-hidden="true" className="flex items-center gap-1 py-1">
             <span className="h-1.5 w-6 animate-pulse bg-tm-info motion-reduce:animate-none" />
@@ -130,12 +130,12 @@ export function TmStatePane({
           </span>
         )}
 
-        <p id={titleId} className="text-[11px] font-semibold tracking-[0.04em] text-tm-fg">
+        <p id={titleId} className="text-xs font-semibold tracking-[0.04em] text-tm-fg">
           {title}
         </p>
 
         {description !== undefined && description !== null && (
-          <p id={descriptionId} className="max-w-prose text-[10.5px] leading-5 text-tm-muted">
+          <p id={descriptionId} className="max-w-none text-xs leading-5 text-tm-muted lg:whitespace-nowrap">
             {description}
           </p>
         )}

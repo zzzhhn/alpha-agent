@@ -70,7 +70,7 @@ export function TmKpi({
         className,
       )}
     >
-      <div className="text-[9.5px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+      <div className="text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
         {label}
       </div>
       <div
@@ -82,7 +82,7 @@ export function TmKpi({
         {value}
       </div>
       {sub !== undefined && sub !== null && (
-        <div className="mt-0.5 truncate text-[10px] tabular-nums text-tm-muted">
+        <div className="mt-0.5 truncate text-xs tabular-nums text-tm-muted">
           {sub}
         </div>
       )}

@@ -63,7 +63,7 @@ export function TmDialog({
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-tm-rule bg-tm-bg-2/45 px-5 py-4">
           <div className="min-w-0 flex-1">
             {eyebrow !== undefined && eyebrow !== null ? (
-              <div className="font-tm-mono text-[10px] uppercase tracking-[0.16em] text-tm-accent">
+              <div className="font-tm-mono text-xs uppercase tracking-[0.16em] text-tm-accent">
                 {eyebrow}
               </div>
             ) : null}
@@ -71,7 +71,7 @@ export function TmDialog({
               {title}
             </h2>
             {description !== undefined && description !== null ? (
-              <p id={descriptionId} className="mt-1 truncate text-[11px] text-tm-muted">
+              <p id={descriptionId} className="mt-1 truncate text-xs text-tm-muted">
                 {description}
               </p>
             ) : null}
@@ -84,7 +84,6 @@ export function TmDialog({
             icon={<X className="h-4 w-4" strokeWidth={1.75} />}
             variant="secondary"
             size="md"
-            className="w-8"
           />
         </header>
         <div className={clsx("min-h-0 flex-1 overflow-y-auto p-4", bodyClassName)}>

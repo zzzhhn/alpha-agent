@@ -54,9 +54,9 @@ The generated reference images define desktop geometry and information hierarchy
 
 - Product and page titles use the current display serif treatment.
 - Labels, controls, status, tables, formulas, and numeric values use `font-tm-mono` or `font-mono`.
-- Labels are 9 to 11 px with controlled letter spacing. Body copy is 11 to 13 px. Page titles are 27 to 31 px.
+- Labels, captions, controls, and ordinary data never render below the 12 px body baseline. Page titles are 27 to 31 px.
 - Use the existing tokens in `frontend/src/app/globals.css`: `--tm-bg`, `--tm-bg-2`, `--tm-bg-3`, `--tm-fg`, `--tm-fg-2`, `--tm-muted`, `--tm-rule`, `--tm-rule-2`, `--tm-accent`, `--tm-warn`, `--tm-neg`, and `--tm-info`.
-- Green means healthy, validated, or primary action. Amber means incomplete or requires review. Red means failed or blocked. Muted text must remain readable on `--tm-bg`.
+- Accent emerald means interaction, focus, selection, or the one primary action. Leaf green means a positive or validated outcome. Amber means incomplete or requires review. Red means failed or blocked. Muted text must remain readable on `--tm-bg`.
 
 ## 5. Shared composition
 

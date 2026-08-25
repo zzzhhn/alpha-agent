@@ -36,9 +36,9 @@ interface TmSelectMenuProps {
 }
 
 const SIZE_CLASSES = {
-  xs: "h-6 text-[10px]",
-  sm: "h-7 text-[11px]",
-  md: "h-8 text-[11px]",
+  xs: "h-6 text-xs",
+  sm: "h-7 text-xs",
+  md: "h-8 text-xs",
 };
 
 const VIEWPORT_GAP = 8;
@@ -223,7 +223,7 @@ export function TmSelectMenu({
                 }
               }}
               className={clsx(
-                "z-[80] max-h-72 overflow-y-auto border border-tm-rule-2 bg-tm-bg-2 py-0.5 font-tm-mono text-[10.5px] text-tm-fg shadow-xl outline-none focus-visible:ring-1 focus-visible:ring-tm-accent",
+                "z-[80] max-h-72 overflow-y-auto border border-tm-rule-2 bg-tm-bg-2 py-0.5 font-tm-mono text-xs text-tm-fg shadow-xl outline-none focus-visible:ring-1 focus-visible:ring-tm-accent",
                 menuClassName,
               )}
             >
@@ -247,7 +247,7 @@ export function TmSelectMenu({
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate">{option.label}</span>
                     {option.meta !== undefined && option.meta !== null ? (
-                      <span className="truncate text-[9px] text-tm-muted">{option.meta}</span>
+                      <span className="truncate text-xs text-tm-muted">{option.meta}</span>
                     ) : null}
                   </span>
                   <Check

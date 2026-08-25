@@ -13,6 +13,10 @@ The reference also demonstrates the rich-option selector, numeric range,
 dialog, and contextual drawer. Arrow, Home, and End move listbox selection;
 Enter or Space confirms; Escape closes overlays and restores focus to the
 trigger. These are the same interaction contracts used by production routes.
+Accent green marks interaction and selection, while positive green marks a
+validated or favorable outcome. The tooltip specimen covers all four portal
+placements. Compact labels, captions, controls, and data share a 12 px minimum
+so dense desktop layouts remain readable.
 
 ## Factor Alpha
 

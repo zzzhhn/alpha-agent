@@ -136,8 +136,8 @@ function FeedbackSpecimens({ locale }: { readonly locale: Locale }) {
     partial: {
       title: zh ? "部分证据可用" : "Partial evidence available",
       description: zh
-        ? "示例：5 项证据中已完成 4 项；官方 self-correlation 暂不可用。仅重试缺失项。"
-        : "Sample: 4 of 5 evidence checks completed; official self-correlation is unavailable. Retry only the missing check.",
+        ? "5 项证据已完成 4 项，官方 self-correlation 暂不可用。仅重试缺失项。"
+        : "4 of 5 checks completed; official self-correlation is unavailable. Retry only the missing check.",
     },
   };
   return (

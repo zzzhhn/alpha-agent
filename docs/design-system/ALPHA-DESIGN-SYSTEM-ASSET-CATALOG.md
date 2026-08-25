@@ -67,7 +67,8 @@ Only semantic `--tm-*` tokens are valid inside production workstation assets.
 | muted text | `--tm-muted` | labels with AA-readable contrast |
 | rule | `--tm-rule` | default hairline |
 | strong rule | `--tm-rule-2` | selected or emphasized boundary |
-| primary/positive | `--tm-accent`, `--tm-pos` | primary action, valid, healthy |
+| primary interaction | `--tm-accent`, `--tm-accent-soft` | primary action, focus, selection, and active navigation |
+| positive outcome | `--tm-pos`, `--tm-pos-soft` | validated, healthy, favorable result |
 | warning | `--tm-warn` | incomplete, stale, review required |
 | negative | `--tm-neg` | failed, blocked, destructive |
 | informational | `--tm-info` | neutral system information |
@@ -81,12 +82,12 @@ text label, icon, or explicit status phrase.
 | --- | --- | --- | --- |
 | page title | `font-tm-serif` | 28 px | 600, one per route |
 | section title | serif in zh, sans in en | 18 px | 600, major narrative section |
-| pane title | `font-tm-mono` | 10 px | 600, uppercase, 0.06 em tracking |
+| pane title | `font-tm-mono` | 12 px | 600, uppercase, 0.06 em tracking |
 | body | `font-sans` | 12 px | normal explanation copy |
-| control | `font-tm-mono` | 11 px | 600, action and input value |
-| table/data | `font-tm-mono` | 11 px | tabular numbers where applicable |
-| label | `font-tm-mono` | 10 px | 600, uppercase, 0.06 em tracking |
-| caption | `font-sans` | 10.5 px | secondary help, never below 10 px |
+| control | `font-tm-mono` | 12 px | 600, action and input value |
+| table/data | `font-tm-mono` | 12 px | tabular numbers where applicable |
+| label | `font-tm-mono` | 12 px | 600, uppercase, 0.06 em tracking |
+| caption | `font-sans` | 12 px | secondary help, never below body size |
 | KPI value | `font-tm-mono` | 18 px | tabular numbers |
 
 Do not introduce another arbitrary pixel size. A new role requires a catalog
@@ -171,7 +172,8 @@ change and a reference-page specimen before production use.
 - `TmDialog` and `TmDrawer` provide portal layering, focus entry and trap,
   Escape and overlay close, scroll lock, and focus restoration through the
   shared `useTmModalFocus` contract. A dialog interrupts for a bounded
-  decision; a drawer preserves page context for a short side task.
+  decision; a drawer preserves page context for a short side task. Drawer
+  widths are 320, 420, 560, and 720 px, clamped to the viewport.
 - Every chart uses semantic tokens, a text summary, stable loading/empty/error
   geometry, responsive measurement, and accessible legend text.
 

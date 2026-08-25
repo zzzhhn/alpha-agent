@@ -75,7 +75,7 @@ export function TmPane({
       )}
     >
       {(title || meta) && (
-        <header className="flex items-center justify-between gap-3 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10.5px]">
+        <header className="flex items-center justify-between gap-3 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs">
           <span className="font-semibold uppercase tracking-[0.06em] text-tm-accent">
             {title}
           </span>

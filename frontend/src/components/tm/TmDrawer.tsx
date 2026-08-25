@@ -8,7 +8,7 @@ import { TmIconButton } from "./TmButton";
 import { useTmModalFocus } from "./useTmModalFocus";
 
 type DrawerSide = "left" | "right";
-type DrawerWidth = "sm" | "md" | "lg";
+type DrawerWidth = "sm" | "md" | "lg" | "xl";
 
 interface TmDrawerProps {
   readonly open: boolean;
@@ -29,6 +29,7 @@ const WIDTHS: Record<DrawerWidth, string> = {
   sm: "w-[320px]",
   md: "w-[420px]",
   lg: "w-[560px]",
+  xl: "w-[720px]",
 };
 
 /** Canonical modal side panel for contextual work without losing page state. */
@@ -78,10 +79,10 @@ export function TmDrawer({
           className,
         )}
       >
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-tm-rule bg-tm-bg-2/45 px-4 py-3">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-tm-rule bg-tm-bg-2/45 px-4 py-3">
           <div className="min-w-0 flex-1">
             {eyebrow !== undefined && eyebrow !== null ? (
-              <div className="font-tm-mono text-[9.5px] uppercase tracking-[0.16em] text-tm-accent">
+              <div className="font-tm-mono text-xs uppercase tracking-[0.16em] text-tm-accent">
                 {eyebrow}
               </div>
             ) : null}
@@ -89,7 +90,7 @@ export function TmDrawer({
               {title}
             </h2>
             {description !== undefined && description !== null ? (
-              <p id={descriptionId} className="mt-1 text-[10.5px] leading-4 text-tm-muted">
+              <p id={descriptionId} className="mt-1 text-xs leading-5 text-tm-muted">
                 {description}
               </p>
             ) : null}
@@ -101,7 +102,6 @@ export function TmDrawer({
             icon={<X className="h-4 w-4" strokeWidth={1.75} />}
             variant="secondary"
             size="md"
-            className="w-8"
           />
         </header>
         <div className={clsx("min-h-0 flex-1 overflow-y-auto p-4", bodyClassName)}>

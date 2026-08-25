@@ -134,3 +134,22 @@
 - Modal behavior is cross-cutting infrastructure. Dialogs and drawers should share focus entry, trap, Escape, scroll lock, and trigger restoration instead of reimplementing them per route.
 - Chart governance needs both CSS-token and resolved-canvas adapters. Hard-coded hex values otherwise return as soon as a chart moves from SVG to Canvas.
 - A compatibility backlog must be bounded. The native-title ledger is allowed only for truncation and legacy hints, and the audit fails if its recorded count grows.
+
+## 2026-08-25: A semantic token must look different from the state it is not
+
+- Interaction accent and positive outcome cannot share the same resolved
+  color. Accent owns focus, selection, navigation, and the one primary action;
+  positive owns validated or favorable evidence.
+- A reference gallery must expose tokens that production already uses. Leaving
+  `--tm-accent-soft` implicit produced a blank palette cell and hid a real
+  selection-surface contract.
+- Typography roles are production contracts. Enlarging only the specimen would
+  make the gallery dishonest, so labels, captions, controls, data, and the
+  canonical primitives that render them moved together to the 12 px body
+  baseline.
+- Browser-native select chrome is not stable across Safari and Chromium. A
+  canonical select must remove the native indicator, reserve explicit icon
+  space, and vertically center text within the fixed control height.
+- Overlay dimensions and close-button alignment belong to reusable primitives
+  and documented scales. Page-local width conflicts or icon nudges are not an
+  acceptable substitute.

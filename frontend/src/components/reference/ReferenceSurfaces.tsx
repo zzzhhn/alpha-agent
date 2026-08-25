@@ -23,7 +23,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
           bodyClassName="p-4"
         >
           <div className="flex min-h-24 flex-wrap items-center justify-center gap-6">
-            {(["top", "bottom", "right"] as const).map((placement) => (
+            {(["top", "right", "bottom", "left"] as const).map((placement) => (
               <TmTooltip
                 key={placement}
                 placement={placement}
@@ -34,7 +34,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
                     : "This is the production TmTooltip. Its portal is not clipped by tables or navigation."
                 }
               >
-                <span className="inline-flex h-7 items-center border border-tm-rule bg-tm-bg-2 px-3 font-tm-mono text-[10px] uppercase text-tm-fg-2">
+                <span className="inline-flex h-7 items-center border border-tm-rule bg-tm-bg-2 px-3 font-tm-mono text-xs uppercase text-tm-fg-2">
                   {placement}
                 </span>
               </TmTooltip>
@@ -70,7 +70,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
                 strokeWidth="3"
               />
             </svg>
-            <figcaption className="mt-2 text-[10.5px] leading-5 text-tm-muted">
+            <figcaption className="mt-2 text-xs leading-5 text-tm-muted">
               {zh
                 ? "示例数据：绿色表示正向路径，红色表示回撤段；图表必须同时提供文字总结。"
                 : "Sample data: green is the positive path and red is the drawdown segment. Every chart also needs a text summary."}
@@ -103,9 +103,9 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
           eyebrow="DIALOG.SAMPLE"
           title={zh ? "确认研究上下文" : "Confirm research context"}
           description={zh ? "示例内容，不代表真实账户或市场状态。" : "Sample content, not live account or market state."}
-          className="max-w-[560px]"
+          className="min-h-[360px] !max-w-[1120px]"
         >
-          <p className="text-[11px] leading-5 text-tm-fg-2">
+          <p className="text-xs leading-5 text-tm-fg-2">
             {zh ? "焦点不会离开对话框，关闭后会回到触发按钮。" : "Focus stays inside the dialog and returns to its trigger after close."}
           </p>
         </TmDialog>
@@ -130,11 +130,11 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
               ? "抽屉适合短任务与上下文编辑，不用于替代完整页面。"
               : "Use drawers for short contextual tasks, not as a substitute for a full page."
           }
-          width="sm"
+          width="xl"
         >
-          <div className="space-y-3 text-[11px] leading-5 text-tm-fg-2">
+          <div className="space-y-3 text-xs leading-5 text-tm-fg-2">
             <p>{zh ? "焦点进入抽屉后保持在其中，Escape 关闭并恢复到触发按钮。" : "Focus remains inside, Escape closes, and focus returns to the trigger."}</p>
-            <div className="border border-tm-rule bg-tm-bg-2 p-3 font-tm-mono text-[10px] text-tm-muted">
+            <div className="border border-tm-rule bg-tm-bg-2 p-3 font-tm-mono text-xs text-tm-muted">
               {zh ? "示例内容，不连接真实账户。" : "Sample content, not connected to a live account."}
             </div>
           </div>
@@ -147,7 +147,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
 function Contract({ name, state }: { readonly name: string; readonly state: "READY" | "PLANNED" }) {
   return (
     <div className="flex min-h-16 items-center justify-between bg-tm-bg px-3 py-3">
-      <code className="font-tm-mono text-[11px] text-tm-fg">{name}</code>
+      <code className="font-tm-mono text-xs text-tm-fg">{name}</code>
       <TmBadge tone={state === "READY" ? "positive" : "warning"}>{state}</TmBadge>
     </div>
   );

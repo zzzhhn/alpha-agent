@@ -69,6 +69,7 @@ const config: Config = {
           "neg-soft": "var(--tm-neg-soft)",
           info: "var(--tm-info)",
           pos: "var(--tm-pos)",
+          "pos-soft": "var(--tm-pos-soft)",
         },
       },
       fontFamily: {
