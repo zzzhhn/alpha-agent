@@ -23,7 +23,7 @@ export function TmTable({ density = "standard", caption, className, children, ..
     <table
       data-density={density}
       className={clsx(
-        "w-full border-collapse font-tm-mono text-[11px]",
+        "w-full border-collapse font-tm-mono text-xs",
         density === "compact"
           ? "[&_td]:h-8 [&_th[scope=row]]:h-8"
           : "[&_td]:h-9 [&_th[scope=row]]:h-9",
@@ -43,7 +43,7 @@ export function TmTableHead({ className, ...rest }: HTMLAttributes<HTMLTableSect
   return (
     <thead
       className={clsx(
-        "bg-tm-bg-2 font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted [&_tr]:bg-tm-bg-2 [&_tr]:hover:bg-tm-bg-2",
+        "bg-tm-bg-2 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted [&_tr]:bg-tm-bg-2 [&_tr]:hover:bg-tm-bg-2",
         className,
       )}
       {...rest}

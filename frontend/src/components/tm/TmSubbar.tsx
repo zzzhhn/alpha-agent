@@ -32,7 +32,7 @@ export function TmSubbar({ children, className }: TmSubbarProps) {
       className={clsx(
         // P3-5: flex-wrap so the status strip reflows onto multiple rows on
         // narrow screens instead of overflowing / clipping.
-        "flex min-h-[28px] flex-wrap items-center gap-x-3 gap-y-1 bg-tm-bg-2 px-3 py-1 font-tm-mono text-[10.5px] tracking-[0.04em] text-tm-muted",
+        "flex min-h-[28px] flex-wrap items-center gap-x-3 gap-y-1 bg-tm-bg-2 px-3 py-1 font-tm-mono text-xs tracking-[0.04em] text-tm-muted",
         className,
       )}
     >
@@ -97,14 +97,14 @@ export function TmChip({
       {...rest}
       aria-pressed={on}
       className={clsx(
-        "inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[2px] border px-2 font-tm-mono text-[10px] leading-4 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[2px] border px-2 font-tm-mono text-xs leading-4 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
         tonePalette,
         className,
       )}
     >
       {children}
       {count !== undefined && count !== null && (
-        <span className="text-[9.5px] text-tm-muted">{count}</span>
+        <span className="text-xs text-tm-muted">{count}</span>
       )}
     </button>
   );
@@ -132,7 +132,7 @@ export function TmStatusPill({
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1.5 px-2 py-px font-tm-mono text-[10px] font-semibold tracking-[0.04em]",
+        "inline-flex items-center gap-1.5 px-2 py-px font-tm-mono text-xs font-semibold tracking-[0.04em]",
         palette,
         className,
       )}

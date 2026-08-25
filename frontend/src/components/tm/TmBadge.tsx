@@ -17,7 +17,7 @@ export interface TmBadgeProps extends HTMLAttributes<HTMLSpanElement> {
 
 const TONE_STYLES: Record<TmBadgeTone, string> = {
   neutral: "border-tm-rule text-tm-fg-2 bg-tm-bg-2",
-  positive: "border-tm-accent text-tm-accent bg-tm-accent-soft",
+  positive: "border-tm-pos text-tm-pos bg-tm-pos-soft",
   warning: "border-tm-warn text-tm-warn bg-tm-warn-soft",
   negative: "border-tm-neg text-tm-neg bg-tm-neg-soft",
   info: "border-tm-info text-tm-info bg-tm-bg-2",
@@ -47,7 +47,7 @@ export function TmBadge({
   return (
     <span
       className={clsx(
-        "inline-flex min-h-5 items-center gap-1 border px-2 py-px font-tm-mono text-[10px] font-semibold leading-4 tracking-[0.04em] rounded-[2px]",
+        "inline-flex min-h-6 items-center gap-1 border px-2 py-px font-tm-mono text-xs font-semibold leading-4 tracking-[0.04em] rounded-[2px]",
         TONE_STYLES[tone],
         className,
       )}

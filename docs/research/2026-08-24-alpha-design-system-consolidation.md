@@ -150,3 +150,22 @@ existing Vercel Git integration to build the configured `frontend` root. A push
 alone is not release evidence; the custom domain, frontend version endpoint,
 backend health content type, OpenAPI path set, and representative production
 routes must be checked after deployment.
+
+## 2026-08-25 reference acceptance corrections
+
+- Split interaction accent from positive outcome colors in both themes and
+  exposed the already-used `--tm-accent-soft` token in the living palette.
+- Raised canonical label, caption, control, table, tooltip, and state copy to a
+  12 px minimum rather than enlarging only the gallery specimen.
+- Normalized native select geometry and chevrons in `TmField` and
+  `TmPagination`, including Safari-safe vertical centering and page-size width.
+- Aligned loading and disabled button specimens at their control edge, added
+  the missing left tooltip placement, and kept partial recovery copy on one
+  desktop line while allowing narrow layouts to wrap.
+- Centered icon-button content through the primitive, expanded the dialog
+  specimen to 1120 × 360 px, and added the 720 px drawer width to the canonical
+  scale.
+
+Acceptance remains light and dark, Chinese and English, at 1672 × 941 plus the
+1024 px narrow-desktop overflow boundary. Dialog, drawer, select, pagination,
+and tooltip behavior are browser-visible gates, not inferred from build output.

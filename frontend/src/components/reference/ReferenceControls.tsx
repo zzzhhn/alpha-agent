@@ -60,7 +60,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             <TmButton loading loadingLabel={zh ? "运行中" : "Running"}>{zh ? "运行" : "Run"}</TmButton>
             <span className="inline-flex flex-col items-start gap-1">
               <TmButton variant="secondary" disabled>{zh ? "不可用" : "Disabled"}</TmButton>
-              <span className="max-w-44 text-[9.5px] leading-4 text-tm-muted">
+              <span className="max-w-44 text-xs leading-5 text-tm-muted">
                 {zh ? "前置条件：先选择数据集。" : "Prerequisite: select a dataset first."}
               </span>
             </span>
@@ -134,7 +134,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
 
         <TmPane title="CONTROLS.NAVIGATION" bodyClassName="space-y-5 p-4">
           <div>
-            <p className="mb-2 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">SELECT MENU</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">SELECT MENU</p>
             <TmSelectMenu
               value={family}
               onChange={setFamily}
@@ -159,12 +159,12 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
                 },
               ]}
             />
-            <p className="mt-1 text-[10px] leading-4 text-tm-muted">
+            <p className="mt-1 text-xs leading-5 text-tm-muted">
               {zh ? "支持方向键、Home、End、Enter、Space 与 Escape。" : "Supports arrows, Home, End, Enter, Space, and Escape."}
             </p>
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">SEGMENTED TABS</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">SEGMENTED TABS</p>
             <SegmentedTabs
               idBase="reference-control-demo"
               ariaLabel={zh ? "控件示例分类" : "Control example categories"}
@@ -180,13 +180,13 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
               id={`reference-control-demo-panel-${tab}`}
               role="tabpanel"
               aria-labelledby={`reference-control-demo-tab-${tab}`}
-              className="border-x border-b border-tm-rule p-3 text-[11px] text-tm-fg-2"
+              className="border-x border-b border-tm-rule p-3 text-xs text-tm-fg-2"
             >
               {zh ? "方向键、Home 和 End 均可切换。" : "Arrow keys, Home, and End all switch tabs."}
             </div>
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">DISCLOSURE</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">DISCLOSURE</p>
             <TmDisclosureButton
               expanded={disclosureOpen}
               onClick={() => setDisclosureOpen((current) => !current)}
@@ -194,13 +194,13 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
               meta={zh ? "3 个面板" : "3 panes"}
             />
             {disclosureOpen ? (
-              <div className="border-x border-b border-tm-rule p-3 text-[11px] text-tm-fg-2">
+              <div className="border-x border-b border-tm-rule p-3 text-xs text-tm-fg-2">
                 {zh ? "展开状态与键盘焦点共享同一规范。" : "Expanded state and keyboard focus share one convention."}
               </div>
             ) : null}
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">EXCLUSIVE TOGGLE</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">EXCLUSIVE TOGGLE</p>
             <TmToggleGroup
               value={density}
               onChange={setDensity}
@@ -212,7 +212,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             />
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">FILTER CHIPS</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">FILTER CHIPS</p>
             <div className="flex flex-wrap gap-1.5">
               {["all", "passed", "review"].map((value) => (
                 <TmChip key={value} on={chip === value} onClick={() => setChip(value)}>
@@ -230,8 +230,8 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
 function Specimen({ label, children }: { readonly label: string; readonly children: ReactNode }) {
   return (
     <div className="min-w-0 border border-tm-rule bg-tm-bg-2 p-3">
-      <p className="mb-3 font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">{label}</p>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
+      <p className="mb-3 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{label}</p>
+      <div className="flex flex-wrap items-start gap-2">{children}</div>
     </div>
   );
 }

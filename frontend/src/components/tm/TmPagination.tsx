@@ -2,6 +2,7 @@
 
 import { useEffect, type ChangeEvent, type ReactNode } from "react";
 import clsx from "clsx";
+import { ChevronDown } from "lucide-react";
 import { TmButton } from "./TmButton";
 
 export interface TmPaginationLabels {
@@ -94,7 +95,7 @@ export function TmPagination({
       aria-label={labels.navigation}
       aria-busy={loading || undefined}
       className={clsx(
-        "flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-tm-rule bg-tm-bg px-3 py-2 font-tm-mono text-[10px] text-tm-muted sm:flex-nowrap",
+        "flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-tm-rule bg-tm-bg px-3 py-2 font-tm-mono text-xs text-tm-muted sm:flex-nowrap",
         className,
       )}
     >
@@ -136,20 +137,27 @@ export function TmPagination({
         {options.length > 1 ? (
           <label className="flex min-h-7 shrink-0 items-center gap-1 text-tm-muted">
             <span>{labels.pageSize}</span>
-            <select
-              value={safePageSize}
-              onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                changePageSize(Number(event.target.value))
-              }
-              disabled={isDisabled}
-              className="h-7 min-w-[3.5rem] rounded-[2px] border border-tm-rule bg-tm-bg-2 px-1.5 font-tm-mono text-[10px] text-tm-fg disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            <span className="relative inline-flex shrink-0">
+              <select
+                value={safePageSize}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                  changePageSize(Number(event.target.value))
+                }
+                disabled={isDisabled}
+                className="h-7 min-w-[4rem] appearance-none rounded-[2px] border border-tm-rule bg-tm-bg-2 py-0 pl-2 pr-7 font-tm-mono text-xs leading-normal text-tm-fg [background-image:none] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-tm-muted"
+                strokeWidth={1.75}
+              />
+            </span>
           </label>
         ) : null}
       </div>

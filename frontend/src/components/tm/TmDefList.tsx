@@ -46,7 +46,7 @@ export function TmDef({ term, children, expr = false }: TmDefProps) {
   // React.Fragment so dt + dd land as siblings under the parent dl grid.
   return (
     <>
-      <dt className="bg-tm-bg-2 px-3 py-1.5 text-[10.5px] tracking-[0.04em] text-tm-muted">
+      <dt className="bg-tm-bg-2 px-3 py-1.5 text-xs tracking-[0.04em] text-tm-muted">
         {term}
       </dt>
       <dd

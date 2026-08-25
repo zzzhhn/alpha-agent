@@ -81,8 +81,8 @@ export function ReferencePatterns({ locale }: { readonly locale: Locale }) {
 function PatternRow({ label, text }: { readonly label: string; readonly text: string }) {
   return (
     <div className="grid min-h-14 grid-cols-[110px_1fr] gap-4 px-4 py-3">
-      <span className="font-tm-mono text-[9.5px] tracking-[0.06em] text-tm-muted">{label}</span>
-      <p className="text-[11px] leading-5 text-tm-fg-2">{text}</p>
+      <span className="font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{label}</span>
+      <p className="text-xs leading-5 text-tm-fg-2">{text}</p>
     </div>
   );
 }

@@ -34,14 +34,14 @@ import { ChevronDown } from "lucide-react";
 type FieldSize = "sm" | "md";
 
 const FIELD_BASE =
-  "w-full border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg outline-none transition-colors placeholder:text-tm-muted hover:border-tm-rule-2 focus:border-tm-accent disabled:cursor-not-allowed disabled:bg-tm-bg-3 disabled:text-tm-muted disabled:opacity-70";
+  "w-full border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-xs leading-normal text-tm-fg outline-none transition-colors placeholder:text-tm-muted hover:border-tm-rule-2 focus:border-tm-accent disabled:cursor-not-allowed disabled:bg-tm-bg-3 disabled:text-tm-muted disabled:opacity-70";
 
 const FIELD_SIZE: Record<FieldSize, string> = {
   sm: "h-7",
   md: "h-8",
 };
 
-const LABEL_BASE = "text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted";
+const LABEL_BASE = "text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted";
 
 interface TmFieldShellProps {
   readonly label?: ReactNode;
@@ -76,10 +76,10 @@ export function TmFieldShell({
       )}
       {children}
       {hint && (
-        <p id={hintId} className="text-[10.5px] text-tm-muted">{hint}</p>
+        <p id={hintId} className="text-xs leading-5 text-tm-muted">{hint}</p>
       )}
       {error && (
-        <p id={errorId} role="alert" className="text-[10.5px] text-tm-neg">
+        <p id={errorId} role="alert" className="text-xs leading-5 text-tm-neg">
           {error}
         </p>
       )}
@@ -228,12 +228,12 @@ export function TmNumberInput({
           aria-invalid={Boolean(error) || undefined}
           aria-describedby={describedBy}
           className={clsx(
-            "min-w-0 flex-1 bg-transparent font-tm-mono text-[11px] tabular-nums text-tm-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+            "min-w-0 flex-1 bg-transparent font-tm-mono text-xs tabular-nums text-tm-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
             inputClassName,
           )}
           {...rest}
         />
-        {suffix ? <span className="shrink-0 text-[10px] text-tm-muted">{suffix}</span> : null}
+        {suffix ? <span className="shrink-0 text-xs text-tm-muted">{suffix}</span> : null}
       </div>
     </TmFieldShell>
   );
@@ -304,7 +304,7 @@ export function TmSelect({
           className={clsx(
             FIELD_BASE,
             FIELD_SIZE[fieldSize],
-            "appearance-none pr-7",
+            "appearance-none py-0 pr-8 [background-image:none]",
             error && "border-tm-neg focus:border-tm-neg",
             selectClassName,
           )}
@@ -318,7 +318,8 @@ export function TmSelect({
         </select>
         <ChevronDown
           aria-hidden="true"
-          className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-tm-muted"
+          className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-tm-muted"
+          strokeWidth={1.75}
         />
       </div>
     </TmFieldShell>
@@ -458,7 +459,7 @@ export function TmRange({
           className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-none outline-none disabled:cursor-not-allowed disabled:opacity-50 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-none [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-tm-fg [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-none [&::-webkit-slider-thumb]:bg-tm-fg"
           {...rest}
         />
-        <output htmlFor={controlId} className="min-w-10 text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg">
+        <output htmlFor={controlId} className="min-w-10 text-right font-tm-mono text-xs tabular-nums text-tm-fg">
           {formatValue(value)}
         </output>
       </div>
@@ -500,7 +501,7 @@ export function TmCheckbox({
       <label
         htmlFor={controlId}
         className={clsx(
-          "flex min-h-8 cursor-pointer items-center gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-[11px] text-tm-fg transition-colors hover:border-tm-rule-2",
+          "flex min-h-8 cursor-pointer items-center gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-xs text-tm-fg transition-colors hover:border-tm-rule-2",
           disabled && "cursor-not-allowed bg-tm-bg-3 text-tm-muted opacity-70",
         )}
       >
@@ -518,7 +519,7 @@ export function TmCheckbox({
         <span
           aria-hidden="true"
           className={clsx(
-            "flex h-4 w-4 shrink-0 items-center justify-center rounded-[2px] border border-tm-rule-2 bg-tm-bg text-[11px] font-semibold text-tm-bg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-tm-accent",
+            "flex h-4 w-4 shrink-0 items-center justify-center rounded-[2px] border border-tm-rule-2 bg-tm-bg text-xs font-semibold text-tm-bg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-tm-accent",
             checked && "border-tm-accent bg-tm-accent",
           )}
         >
@@ -527,7 +528,7 @@ export function TmCheckbox({
         <span className="min-w-0">{label}</span>
         {required ? <span className="text-tm-neg">*</span> : null}
       </label>
-      {hint ? <p id={hintId} className="text-[10.5px] text-tm-muted">{hint}</p> : null}
+      {hint ? <p id={hintId} className="text-xs leading-5 text-tm-muted">{hint}</p> : null}
     </div>
   );
 }

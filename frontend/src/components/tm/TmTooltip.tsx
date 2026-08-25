@@ -107,7 +107,7 @@ export function TmTooltip({
               id={tooltipId}
               role="tooltip"
               style={{ position: "fixed", top: position.top, left: position.left, width }}
-              className="pointer-events-none z-[1000] whitespace-pre-line rounded-[2px] border border-tm-rule-2 bg-tm-bg-2 p-2 font-sans text-[10.5px] leading-5 text-tm-fg shadow-lg"
+              className="pointer-events-none z-[1000] whitespace-pre-line rounded-[2px] border border-tm-rule-2 bg-tm-bg-2 p-2 font-sans text-xs leading-5 text-tm-fg shadow-lg"
             >
               {content}
             </span>,

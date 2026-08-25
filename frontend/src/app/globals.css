@@ -318,7 +318,10 @@ h2 {
   --tm-neg: #f06464;
   --tm-neg-soft: rgba(240, 100, 100, 0.12);
   --tm-info: #6aa9ff;
-  --tm-pos: #39d98a;
+  /* Interaction accent and positive outcome are intentionally distinct:
+     emerald drives actions, leaf green communicates validated performance. */
+  --tm-pos: #9fdf6c;
+  --tm-pos-soft: rgba(159, 223, 108, 0.12);
 }
 
 [data-theme="light"] {
@@ -343,7 +346,8 @@ h2 {
   --tm-neg: #b91c1c;
   --tm-neg-soft: rgba(185, 28, 28, 0.10);
   --tm-info: #1e63cc;
-  --tm-pos: #0a7344;
+  --tm-pos: #34762a;
+  --tm-pos-soft: rgba(52, 118, 42, 0.10);
 }
 
 /* Keyframes shared with the workstation chrome — single definition so
