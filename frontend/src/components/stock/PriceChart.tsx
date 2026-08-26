@@ -281,13 +281,13 @@ export default function PriceChart({
   }, [bars, events, renderChart]);
 
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-tm-fg">
           {t(locale, "chart.title")} · {ticker}
         </h2>
         {status === "ok" ? (
-          <div className="inline-flex items-center gap-1.5 rounded-md border border-tm-accent/30 bg-tm-accent/10 px-2.5 py-1 text-sm text-tm-accent">
+          <div className="inline-flex items-center gap-1.5 rounded-[2px] border border-tm-accent/30 bg-tm-accent/10 px-2.5 py-1 text-sm text-tm-accent">
             <MousePointerClick className="h-4 w-4" strokeWidth={1.75} />
             <span className="font-medium">
               {t(locale, "chart.click_for_intraday")}
@@ -305,7 +305,7 @@ export default function PriceChart({
         {/* crosshair news tooltip */}
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute z-10 hidden max-w-[240px] rounded border border-tm-rule bg-tm-bg-2/95 px-2 py-1.5 font-tm-sans text-xs leading-snug text-tm-fg shadow-lg shadow-black/30"
+          className="pointer-events-none absolute z-10 hidden max-w-[240px] rounded-[2px] border border-tm-rule bg-tm-bg-2/95 px-2 py-1.5 font-tm-sans text-xs leading-snug text-tm-fg shadow-lg shadow-black/30"
         />
         {status !== "ok" ? (
           <div className="absolute inset-0 flex items-center justify-center bg-tm-bg-2">

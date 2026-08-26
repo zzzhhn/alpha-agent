@@ -28,7 +28,7 @@ function ThesisBlock({
   const accentBorder = tone === "bull" ? "border-tm-pos" : "border-tm-neg";
   const accentTitle = tone === "bull" ? "text-tm-pos" : "text-tm-neg";
   return (
-    <div className={`rounded border ${accentBorder} bg-tm-bg-2 p-4`}>
+    <div className={`rounded-[2px] border ${accentBorder} bg-tm-bg-2 p-4`}>
       <h3 className={`font-semibold mb-2 ${accentTitle}`}>{title}</h3>
       <ul className="space-y-1.5 text-sm text-tm-fg">
         {items.map((it, i) => (

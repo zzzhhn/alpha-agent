@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import type {
   ChartEvent,
   GexInfo,
@@ -29,6 +28,9 @@ import MarketContextWidget from "./MarketContextWidget";
 import SourcesBlock from "./SourcesBlock";
 import { useWeightsOverride } from "@/hooks/useWeightsOverride";
 import { applyWeightsToCard } from "@/lib/weights-override";
+import { TmScreen } from "@/components/tm/TmPane";
+import { TmLinkButton } from "@/components/tm/TmButton";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
 export default function StockCardLayout({
   card,
@@ -58,22 +60,45 @@ export default function StockCardLayout({
   // they stay from the original card.
   const weights = useWeightsOverride();
   const shownCard = weights ? applyWeightsToCard(card, weights) : card;
+  const composite =
+    typeof shownCard.composite_score === "number" && Number.isFinite(shownCard.composite_score)
+      ? shownCard.composite_score
+      : 0;
+  const agreement =
+    typeof card.agreement === "number" && Number.isFinite(card.agreement)
+      ? card.agreement
+      : card.confidence;
   return (
-    // P3-5: single column on mobile, 3+9 split from lg up. The sidebar is
-    // only sticky on lg — when stacked above the main column on mobile,
-    // sticky would pin it awkwardly.
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 px-4 py-6">
+    <TmScreen>
+      <WorkbenchHeader
+        eyebrow={locale === "zh" ? "研究 · 股票详情" : "Research · Stock detail"}
+        title={<>{card.ticker} <span className="font-normal text-tm-fg-2">{shownCard.rating}</span></>}
+        subtitle={locale === "zh" ? "从组合判断进入单股证据、风险与来源。" : "Inspect single-name evidence, risk, and sources from the portfolio decision."}
+        statuses={[
+          {
+            label: locale === "zh" ? "数据状态" : "Data status",
+            value: stale ? (locale === "zh" ? "需刷新" : "STALE") : (locale === "zh" ? "最新" : "CURRENT"),
+            tone: stale ? "warning" : "positive",
+          },
+          {
+            label: locale === "zh" ? "综合分" : "Composite",
+            value: `${composite >= 0 ? "+" : ""}${composite.toFixed(2)}σ`,
+            tone: composite >= 0 ? "positive" : "negative",
+          },
+          {
+            label: locale === "zh" ? "信号一致度" : "Agreement",
+            value: typeof agreement === "number" ? `${Math.round(agreement * 100)}%` : "—",
+            tone: typeof agreement === "number" && agreement < 0.5 ? "warning" : "default",
+          },
+        ]}
+        action={<TmLinkButton href="/picks" variant="secondary" size="sm">← {locale === "zh" ? "返回今日推荐" : "Back to picks"}</TmLinkButton>}
+      />
+      {/* P3-5: single column on mobile, 3+9 split from lg up. The sidebar is
+          only sticky on lg; when stacked above the main column on mobile,
+          sticky would pin it awkwardly. */}
+    <div className="grid grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-12">
       {/* Left rail (sticky on lg) */}
       <aside className="lg:col-span-3 lg:sticky lg:top-4 self-start space-y-4">
-        {/* Back-to-picks: small affordance because direct URL access (e.g. */}
-        {/* shared link) leaves no history entry → router.back() would no-op. */}
-        <Link
-          href="/picks"
-          className="inline-flex items-center gap-1 text-xs text-tm-muted hover:text-tm-accent"
-        >
-          <span aria-hidden="true">←</span>
-          <span>{t(locale, "stock_layout.back_to_picks")}</span>
-        </Link>
         <div
           className={`flex items-center gap-1.5 text-2xl font-bold ${watched ? "text-tm-accent" : "text-tm-fg"}`}
         >
@@ -100,13 +125,13 @@ export default function StockCardLayout({
         <div className="text-xs text-tm-muted space-y-0.5">
           <div>{t(locale, "stock_layout.as_of")} {formatAsOf(card.as_of)}</div>
           {stale ? (
-            <div className="rounded bg-tm-warn-soft px-2 py-1 text-tm-warn">
+            <div className="rounded-[2px] bg-tm-warn-soft px-2 py-1 text-tm-warn">
               ⚠ {t(locale, "stock_layout.stale_warning")}
               {staleLagSuffix(card.as_of, locale)}
             </div>
           ) : null}
           {card.partial ? (
-            <div className="rounded bg-tm-bg-2 px-2 py-1 text-tm-muted">
+            <div className="rounded-[2px] bg-tm-bg-2 px-2 py-1 text-tm-muted">
               {t(locale, "stock_layout.partial_data")}
             </div>
           ) : null}
@@ -164,6 +189,7 @@ export default function StockCardLayout({
         <SourcesBlock card={card} />
       </main>
     </div>
+    </TmScreen>
   );
 }
 
@@ -240,7 +266,7 @@ function GexBadge({ info, locale }: { info: GexInfo; locale: Locale }) {
   return (
     <div
       title={tip}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-tm-mono text-xs ${tone}`}
+      className={`inline-flex items-center gap-1.5 rounded-[2px] border px-2 py-1 font-tm-mono text-xs ${tone}`}
     >
       <span className="opacity-70">GEX</span>
       <span className="font-semibold">{label}</span>

@@ -60,7 +60,7 @@ export default function LetterGradeRibbon({
       : "Per-dimension letter grade A+ to F, derived from breakdown z-scores averaged within each dimension. A+ ≥1.5σ, F ≤-1.0σ.";
 
   return (
-    <div title={tip} className="rounded border border-tm-rule bg-tm-bg-2 p-2">
+    <div title={tip} className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-2">
       <div className="mb-1 text-xs uppercase tracking-wide text-tm-muted font-tm-sans">
         {locale === "zh" ? "维度评级" : "GRADES"}
       </div>
@@ -72,7 +72,7 @@ export default function LetterGradeRibbon({
           return (
             <div
               key={dim}
-              className={`flex flex-col items-center rounded border ${tone} px-1 py-0.5`}
+              className={`flex flex-col items-center rounded-[2px] border ${tone} px-1 py-0.5`}
               title={`${dim}: ${grade}`}
             >
               <span className="text-xs font-tm-sans opacity-70">{label}</span>

@@ -36,6 +36,7 @@ import {
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmStatePane } from "@/components/tm/TmStatePane";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import {
   fetchOperandCatalogWithSignatures,
   fetchSectors,
@@ -215,6 +216,16 @@ export default function MethodologyPage() {
 
   return (
     <TmScreen>
+      <WorkbenchHeader
+        eyebrow={locale === "zh" ? "参考 · 方法与口径" : "Reference · Methods and definitions"}
+        title={locale === "zh" ? "方法论" : "Methodology"}
+        subtitle={locale === "zh" ? "查看数据管线、运算符与回测口径，避免跨模块误读。" : "Inspect data pipelines, operators, and backtest definitions to prevent cross-module ambiguity."}
+        statuses={[
+          { label: locale === "zh" ? "当前视图" : "View", value: tab.toUpperCase() },
+          { label: locale === "zh" ? "数据读取" : "Data fetch", value: dataTabHasError || Boolean(catalogError) ? (locale === "zh" ? "部分失败" : "PARTIAL") : (locale === "zh" ? "正常" : "READY"), tone: dataTabHasError || Boolean(catalogError) ? "warning" : "positive" },
+          { label: locale === "zh" ? "字段" : "Fields", value: String(PANEL_SCHEMA.length) },
+        ]}
+      />
       <TmSubbar>
         <span className="text-tm-muted">METHODOLOGY</span>
         <TmSubbarSep />

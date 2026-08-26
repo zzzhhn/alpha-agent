@@ -177,13 +177,6 @@ h2 {
     text-wrap: balance;
   }
 
-  /* Card system (Linear) */
-  .glass-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-  }
-
   .glass-inner {
     background: var(--card-inner);
     border: 1px solid var(--border);
@@ -254,15 +247,6 @@ h2 {
   body, html {
     background: #ffffff !important;
     color: #1a1a1a !important;
-  }
-
-  /* Single column, no card glassmorphism */
-  .glass-card {
-    background: #ffffff !important;
-    border: 1px solid #d1d5db !important;
-    box-shadow: none !important;
-    break-inside: avoid;
-    page-break-inside: avoid;
   }
 
   /* Recharts tooltip / interactive overlays — strip them */

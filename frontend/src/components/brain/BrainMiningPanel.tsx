@@ -23,6 +23,7 @@ import { TmButton, TmRowButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 import { TmTooltip } from "@/components/tm/TmTooltip";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import {
   TmTable,
   TmTableBody,
@@ -1865,6 +1866,16 @@ export function BrainMiningPanel() {
 
   return (
     <TmScreen>
+      <WorkbenchHeader
+        eyebrow={zh ? "高级研究工具 · WorldQuant" : "Advanced research · WorldQuant"}
+        title={zh ? "BRAIN 因子挖掘" : "BRAIN Alpha Mining"}
+        subtitle={zh ? "从候选生成、证据筛选到官方仿真，完整保留运行与淘汰原因。" : "Trace candidate generation, evidence screening, and official simulation with complete rejection reasons."}
+        statuses={[
+          { label: zh ? "当前运行" : "Selected run", value: selectedRun ? `#${selectedRun.id}` : "—" },
+          { label: zh ? "运行状态" : "Run status", value: selectedRun?.status?.toUpperCase() ?? (zh ? "未选择" : "NONE"), tone: selectedRunFailed ? "negative" : selectedRun?.status === "completed" ? "positive" : selectedRun ? "warning" : "default" },
+          { label: zh ? "已入库" : "Persisted", value: String(selectedRun?.persisted_n ?? total) },
+        ]}
+      />
       <TmPane title={zh ? "挖矿控制" : "MINING.CONTROL"}>
         <MineButton
           selectedRun={selectedRun}

@@ -67,6 +67,7 @@ import { FactorPnLChart } from "@/components/charts/FactorPnLChart";
 import { TmCompareEquityChart } from "@/components/charts/TmCompareEquityChart";
 import { TmTopBottomTable } from "@/components/signal/TmTopBottomTable";
 import { TmExposureChart } from "@/components/signal/TmExposureChart";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 // IC timeseries, folded in from the merged /signal page (/signal redirects here).
 import { TmICTimeseriesChart } from "@/components/signal/TmICTimeseriesChart";
 import { listZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
@@ -382,6 +383,16 @@ export default function ReportPage() {
 
   return (
     <TmScreen>
+      <WorkbenchHeader
+        eyebrow={locale === "zh" ? "研究 · 证据报告" : "Research · Evidence report"}
+        title={locale === "zh" ? "报告" : "Report"}
+        subtitle={locale === "zh" ? "把回测、风险和信号证据汇总为可复核的研究结论。" : "Consolidate backtest, risk, and signal evidence into a reviewable conclusion."}
+        statuses={[
+          { label: locale === "zh" ? "主因子" : "Primary", value: primary?.name ?? factorName ?? "—" },
+          { label: locale === "zh" ? "生成状态" : "Generation", value: running ? (locale === "zh" ? "运行中" : "RUNNING") : error ? (locale === "zh" ? "失败" : "ERROR") : primary ? (locale === "zh" ? "已完成" : "READY") : (locale === "zh" ? "待配置" : "IDLE"), tone: error ? "negative" : running ? "warning" : primary ? "positive" : "default" },
+          { label: locale === "zh" ? "对比因子" : "Comparison", value: compare?.name ?? "—" },
+        ]}
+      />
       <TmSubbar>
         <span className="text-tm-muted">REPORT</span>
         <TmSubbarSep />

@@ -37,6 +37,7 @@ import PaperCurvePane from "./PaperCurvePane";
 import PaperSourceSummary from "./PaperSourceSummary";
 import PaperOrdersPane from "./PaperOrdersPane";
 import PaperL2Evidence from "./PaperL2Evidence";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
@@ -150,9 +151,18 @@ export default function PaperScreen() {
 
   return (
     <TmScreen className="overflow-y-auto">
-      <h1 className="sr-only">{t(locale, "sim.page_title")}</h1>
-      <TmPane
+      <WorkbenchHeader
+        eyebrow={locale === "zh" ? "每日工作流 · 组合执行" : "Daily workflow · Portfolio execution"}
         title={t(locale, "sim.page_title")}
+        subtitle={locale === "zh" ? "先核验推荐来源与账户状态，再进行可追踪的模拟下单。" : "Verify recommendation provenance and account state before traceable simulated execution."}
+        statuses={[
+          { label: locale === "zh" ? "账户状态" : "Account", value: authRequired ? (locale === "zh" ? "需登录" : "SIGN IN") : account ? (locale === "zh" ? "就绪" : "READY") : loading ? (locale === "zh" ? "读取中" : "LOADING") : (locale === "zh" ? "不可用" : "UNAVAILABLE"), tone: authRequired ? "warning" : account ? "positive" : paperError ? "negative" : "warning" },
+          { label: locale === "zh" ? "持仓数" : "Positions", value: String(account?.positions.length ?? 0) },
+          { label: locale === "zh" ? "推荐来源" : "Pick source", value: picksRun ? `RUN #${picksRun.run_id}` : "—", tone: picksFrozen ? "warning" : picksRun ? "positive" : "default" },
+        ]}
+      />
+      <TmPane
+        title={locale === "zh" ? "账户概览" : "ACCOUNT.OVERVIEW"}
         meta={
           <span className="flex items-center gap-2">
             <span>{t(locale, "sim.workspace.disclosure")}</span>
@@ -275,5 +285,5 @@ function SectionError({ detail, onRetry }: { readonly detail: string; readonly o
 
 function FrozenRecommendations() {
   const { locale } = useLocale();
-  return <p className="mx-3 my-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
+  return <p className="mx-3 my-2 rounded-[2px] border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
 }

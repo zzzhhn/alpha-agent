@@ -89,7 +89,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
         };
 
   return (
-    <div className="mt-4 rounded border border-tm-rule bg-tm-bg-3/40 p-3 space-y-2">
+    <div className="mt-4 rounded-[2px] border border-tm-rule bg-tm-bg-3/40 p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-tm-fg flex items-center gap-1">
           <Sparkles aria-hidden className="h-3.5 w-3.5 text-tm-accent" strokeWidth={1.75} />
@@ -105,7 +105,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
           max={toTs}
           fieldSize="sm"
           className="min-w-[8.5rem]"
-          inputClassName="rounded bg-tm-bg px-1.5 text-xs"
+          inputClassName="rounded-[2px] bg-tm-bg px-1.5 text-xs"
         />
         <TmInput
           type="date"
@@ -116,7 +116,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
           max={defaultTo()}
           fieldSize="sm"
           className="min-w-[8.5rem]"
-          inputClassName="rounded bg-tm-bg px-1.5 text-xs"
+          inputClassName="rounded-[2px] bg-tm-bg px-1.5 text-xs"
         />
         <TmButton
           variant="secondary"
@@ -124,7 +124,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
           onClick={onGenerate}
           loading={status === "loading"}
           loadingLabel={copy.loading}
-          className="rounded text-xs hover:border-tm-accent"
+          className="rounded-[2px] text-xs hover:border-tm-accent"
         >
           {copy.button}
         </TmButton>

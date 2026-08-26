@@ -278,7 +278,7 @@ export default function BasketEdgeStrip() {
   const spreadLabel = t(locale, "edge.spread_label");
 
   return (
-    <div className="mx-3 mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 rounded border border-tm-rule bg-tm-bg-2 px-3 py-3 sm:mx-4 sm:items-center sm:py-2">
+    <div className="mx-3 mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-3 sm:mx-4 sm:items-center sm:py-2">
       <div className="flex w-full items-center gap-1.5 sm:w-auto">
         <span className="font-tm-mono text-[12px] font-semibold uppercase tracking-wider text-tm-accent">
           {title}

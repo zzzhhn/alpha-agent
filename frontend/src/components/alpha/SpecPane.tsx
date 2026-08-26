@@ -18,9 +18,9 @@ interface Props {
 function Skeleton() {
   return (
     <div className="flex flex-col gap-2">
-      <div className="h-3 w-3/4 animate-pulse rounded bg-tm-bg-3" />
-      <div className="h-3 w-1/2 animate-pulse rounded bg-tm-bg-3" />
-      <div className="h-16 w-full animate-pulse rounded bg-tm-bg-3" />
+      <div className="h-3 w-3/4 animate-pulse rounded-[2px] bg-tm-bg-3" />
+      <div className="h-3 w-1/2 animate-pulse rounded-[2px] bg-tm-bg-3" />
+      <div className="h-16 w-full animate-pulse rounded-[2px] bg-tm-bg-3" />
     </div>
   );
 }

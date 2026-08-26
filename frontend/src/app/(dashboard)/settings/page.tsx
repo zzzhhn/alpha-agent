@@ -48,6 +48,7 @@ import WeightsEditor from "@/components/settings/WeightsEditor";
 import WatchlistEditor from "@/components/settings/WatchlistEditor";
 import ChangeLog from "@/components/settings/ChangeLog";
 import { BrainCredentialsCard } from "@/components/settings/BrainCredentialsCard";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
 type TestState =
   | { kind: "idle" }
@@ -303,6 +304,16 @@ export default function SettingsPage() {
 
   return (
     <TmScreen>
+      <WorkbenchHeader
+        eyebrow={zh ? "参考 · 运行配置" : "Reference · Runtime configuration"}
+        title={zh ? "设置" : "Settings"}
+        subtitle={zh ? "管理模型连接、研究偏好和账户数据，不在界面中回显密钥。" : "Manage model connections, research preferences, and account data without exposing secrets."}
+        statuses={[
+          { label: zh ? "服务商" : "Provider", value: provider.toUpperCase() },
+          { label: zh ? "服务端凭据" : "Server credential", value: serverLast4 ? `…${serverLast4}` : (zh ? "未配置" : "NONE"), tone: serverLast4 ? "positive" : "warning" },
+          { label: zh ? "连接测试" : "Connection test", value: testState.kind === "ok" ? (zh ? "通过" : "PASSED") : testState.kind === "fail" ? (zh ? "失败" : "FAILED") : testState.kind === "running" ? (zh ? "测试中" : "RUNNING") : (zh ? "待测试" : "IDLE"), tone: testState.kind === "ok" ? "positive" : testState.kind === "fail" ? "negative" : testState.kind === "running" ? "warning" : "default" },
+        ]}
+      />
       {showImportBanner && (
         <div className="flex items-center gap-3 border-b border-tm-rule bg-tm-accent-soft px-4 py-2 font-tm-mono text-xs text-tm-fg">
           <span className="flex-1">
@@ -549,8 +560,8 @@ export default function SettingsPage() {
           </div>
 
           {/* Delete account */}
-          <div className="flex flex-col gap-2 border border-red-800/40 bg-red-950/20 p-3">
-            <p className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-red-400">
+          <div className="flex flex-col gap-2 border border-tm-neg/50 bg-tm-neg-soft p-3">
+            <p className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-neg">
               {t(locale, "settings.danger.delete")}
             </p>
             <p className="font-tm-mono text-xs text-tm-muted">
@@ -563,7 +574,7 @@ export default function SettingsPage() {
                 onChange={setDeleteConfirm}
                 placeholder="DELETE"
                 className="w-36 shrink-0"
-                inputClassName="focus:border-red-500"
+                inputClassName="focus:border-tm-neg"
               />
               <TmButton
                 variant="danger"

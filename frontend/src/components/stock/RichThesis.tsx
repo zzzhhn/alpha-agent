@@ -91,7 +91,7 @@ export default function RichThesis({ ticker }: { ticker: string }) {
     sections.summary || sections.bull || sections.bear;
 
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4 space-y-3">
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-tm-fg flex items-center gap-2">
           <Sparkles aria-hidden className="w-4 h-4 text-tm-accent" strokeWidth={1.75} />
@@ -115,7 +115,7 @@ export default function RichThesis({ ticker }: { ticker: string }) {
                 variant="danger"
                 size="xs"
                 onClick={onAbort}
-                className="rounded"
+                className="rounded-[2px]"
               >
                 <Square aria-hidden className="w-3 h-3" strokeWidth={1.75} />
                 {t(locale, "rich.stop_button")}
@@ -125,7 +125,7 @@ export default function RichThesis({ ticker }: { ticker: string }) {
                 variant="secondary"
                 size="xs"
                 onClick={() => void onGenerate()}
-                className="rounded hover:border-tm-accent"
+                className="rounded-[2px] hover:border-tm-accent"
               >
                 {hasContent
                   ? t(locale, "rich.regenerate_button")

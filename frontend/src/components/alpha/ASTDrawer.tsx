@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card } from "@/components/ui/Card";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { explainAst } from "@/lib/api";
 import type { AstNode } from "@/lib/types";
 import { TmDisclosureButton } from "@/components/tm/TmButton";
+import { TmPane } from "@/components/tm/TmPane";
 
 interface ASTDrawerProps {
   readonly expression: string;
@@ -50,32 +50,32 @@ export function ASTDrawer({ expression }: ASTDrawerProps) {
   }
 
   return (
-    <Card padding="md">
+    <TmPane standalone bodyClassName="p-4">
       <TmDisclosureButton
         expanded={open}
         onClick={toggle}
         label={t(locale, "alpha.ast.title")}
-        className="h-auto border-0 bg-transparent px-0 font-sans text-base font-semibold tracking-normal text-text hover:border-transparent hover:bg-transparent hover:text-text"
+        className="h-auto border-0 bg-transparent px-0 font-tm-mono text-xs font-semibold tracking-[0.06em] text-tm-fg hover:border-transparent hover:bg-transparent hover:text-tm-fg"
       />
 
       {open && (
         <div className="mt-3">
           {loading && (
-            <p className="text-[13px] text-muted">{t(locale, "common.loading")}</p>
+            <p className="text-xs text-tm-muted">{t(locale, "common.loading")}</p>
           )}
           {error && (
-            <p className="text-[13px] text-red">
+            <p className="text-xs text-tm-neg">
               {t(locale, "alpha.ast.error")}: {error}
             </p>
           )}
           {tree && (
-            <div className="font-mono text-[13px]">
+            <div className="font-tm-mono text-xs">
               <ASTNode node={tree} depth={0} />
             </div>
           )}
         </div>
       )}
-    </Card>
+    </TmPane>
   );
 }
 
@@ -85,8 +85,8 @@ function ASTNode({ node, depth }: { readonly node: AstNode; readonly depth: numb
   if (node.type === "literal") {
     return (
       <div style={{ paddingLeft: indent }} className="py-0.5">
-        <span className="text-yellow">{node.value}</span>
-        <span className="ml-2 text-xs text-muted">literal</span>
+        <span className="text-tm-warn">{node.value}</span>
+        <span className="ml-2 text-xs text-tm-muted">literal</span>
       </div>
     );
   }
@@ -94,8 +94,8 @@ function ASTNode({ node, depth }: { readonly node: AstNode; readonly depth: numb
   if (node.type === "operand") {
     return (
       <div style={{ paddingLeft: indent }} className="py-0.5">
-        <span className="text-green">{node.name}</span>
-        <span className="ml-2 text-xs text-muted">operand</span>
+        <span className="text-tm-pos">{node.name}</span>
+        <span className="ml-2 text-xs text-tm-muted">operand</span>
       </div>
     );
   }
@@ -103,9 +103,9 @@ function ASTNode({ node, depth }: { readonly node: AstNode; readonly depth: numb
   return (
     <div className="py-0.5">
       <div style={{ paddingLeft: indent }}>
-        <span className="text-accent">{node.name}</span>
-        <span className="text-muted">(</span>
-        <span className="ml-2 text-xs text-muted">
+        <span className="text-tm-accent">{node.name}</span>
+        <span className="text-tm-muted">(</span>
+        <span className="ml-2 text-xs text-tm-muted">
           operator · {node.args.length} arg{node.args.length === 1 ? "" : "s"}
         </span>
       </div>
@@ -113,7 +113,7 @@ function ASTNode({ node, depth }: { readonly node: AstNode; readonly depth: numb
         <ASTNode key={idx} node={child} depth={depth + 1} />
       ))}
       <div style={{ paddingLeft: indent }}>
-        <span className="text-muted">)</span>
+        <span className="text-tm-muted">)</span>
       </div>
     </div>
   );
