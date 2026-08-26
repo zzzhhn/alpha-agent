@@ -17,7 +17,7 @@ _log = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from pydantic import BaseModel
 
-from alpha_agent.api.byok import get_llm_client
+from alpha_agent.api.byok import fetch_user_llm_credential, managed_llm_client
 from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.storage.queries import (
@@ -302,7 +302,7 @@ async def explain_range(
     to_ts: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     language: Literal["zh", "en"] = Query("en"),
     user_id: int = Depends(require_user),
-    llm: LLMClient = Depends(get_llm_client),
+    llm: LLMClient = Depends(managed_llm_client),
 ) -> ExplainRangeResponse:
     """B4 lasso replacement (v1): LLM-generated 3-sentence explanation
     of which events most likely drove a price move within the user's
@@ -416,7 +416,7 @@ async def persona_explain(
     persona_name: str = Path(min_length=2, max_length=24),
     language: Literal["zh", "en"] = Query("en"),
     user_id: int = Depends(require_user),
-    llm: LLMClient = Depends(get_llm_client),
+    llm: LLMClient = Depends(managed_llm_client),
 ) -> PersonaExplainResponse:
     """Render a named persona's commentary for one ticker.
 
@@ -575,11 +575,7 @@ async def persona_explain_stream(
         if b.get("signal") in persona.signals
     ]
 
-    byok = await pool.fetchrow(
-        "SELECT provider, ciphertext, nonce, model, base_url "
-        "FROM user_byok WHERE user_id = $1 LIMIT 1",
-        user_id,
-    )
+    byok = await fetch_user_llm_credential(pool, user_id)
     if byok is None:
         raise HTTPException(
             status_code=400, detail="No BYOK key set; visit /settings to add one"
@@ -808,11 +804,7 @@ async def news_day_summary_stream(
             headers=SSE_HEADERS,
         )
 
-    byok = await pool.fetchrow(
-        "SELECT provider, ciphertext, nonce, model, base_url "
-        "FROM user_byok WHERE user_id = $1 LIMIT 1",
-        user_id,
-    )
+    byok = await fetch_user_llm_credential(pool, user_id)
     if byok is None:
         raise HTTPException(
             status_code=400, detail="No BYOK key set; visit /settings to add one"

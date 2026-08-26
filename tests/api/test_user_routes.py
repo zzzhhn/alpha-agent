@@ -70,9 +70,20 @@ def test_post_byok_encrypts_and_stores(client, monkeypatch):
     assert "api_key" not in body
     assert "sk-secret" not in r.text
     # The INSERT call must carry ciphertext bytes, not the plaintext.
-    insert_sql = pool.execute.call_args.args[0]
+    insert_call = next(
+        call for call in pool.execute.call_args_list
+        if "INSERT INTO user_byok" in call.args[0]
+    )
+    insert_sql = insert_call.args[0]
     assert "INSERT INTO user_byok" in insert_sql
-    assert b"sk-secret-tail1234" not in pool.execute.call_args.args
+    assert b"sk-secret-tail1234" not in insert_call.args
+    # Saving an LLM provider removes only obsolete LLM rows, never the
+    # separately stored worldquant_brain credential.
+    delete_call = next(
+        call for call in pool.execute.call_args_list
+        if "provider <> $3" in call.args[0]
+    )
+    assert "provider = ANY" in delete_call.args[0]
 
 
 def test_get_byok_returns_last4_only(client, monkeypatch):

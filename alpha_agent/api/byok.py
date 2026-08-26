@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import Depends, HTTPException
 
@@ -63,6 +65,25 @@ _PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
 }
 
 _VALID_PROVIDERS = frozenset(_PROVIDER_DEFAULTS.keys())
+LLM_CREDENTIAL_PROVIDERS = tuple(sorted(_VALID_PROVIDERS))
+
+
+async def fetch_user_llm_credential(pool: Any, user_id: int) -> Any | None:
+    """Return the newest actual LLM credential, never a BRAIN credential.
+
+    ``user_byok`` also stores ``worldquant_brain`` credentials.  The old
+    unfiltered ``LIMIT 1`` made every LLM route depend on PostgreSQL row order.
+    Keep this selection centralized so streaming and non-streaming routes use
+    the same deterministic credential.
+    """
+    return await pool.fetchrow(
+        "SELECT provider, ciphertext, nonce, last4, model, base_url, "
+        "encrypted_at, last_used_at FROM user_byok "
+        "WHERE user_id = $1 AND provider = ANY($2::text[]) "
+        "ORDER BY encrypted_at DESC, provider ASC LIMIT 1",
+        user_id,
+        list(LLM_CREDENTIAL_PROVIDERS),
+    )
 
 
 def _build_byok_client(
@@ -137,11 +158,7 @@ async def get_llm_client(
     Use as `llm: LLMClient = Depends(get_llm_client)` in any route that calls llm.chat().
     """
     pool = await get_db_pool()
-    row = await pool.fetchrow(
-        "SELECT provider, ciphertext, nonce, base_url, model "
-        "FROM user_byok WHERE user_id = $1 LIMIT 1",
-        user_id,
-    )
+    row = await fetch_user_llm_credential(pool, user_id)
     if row is None:
         raise HTTPException(
             status_code=400,
@@ -166,3 +183,16 @@ async def get_llm_client(
         api_base=row["base_url"],
         model=row["model"],
     )
+
+
+async def managed_llm_client(
+    user_id: int = Depends(require_user),
+) -> AsyncIterator[LLMClient]:
+    """FastAPI dependency that closes per-request HTTP clients reliably."""
+    client = await get_llm_client(user_id=user_id)
+    try:
+        yield client
+    finally:
+        close = getattr(client, "close", None)
+        if close is not None:
+            await close()

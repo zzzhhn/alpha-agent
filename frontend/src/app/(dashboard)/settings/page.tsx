@@ -5,8 +5,8 @@
  *
  * Phase 2 (BYOK): the open-source deploy of alpha-agent doesn't supply
  * an LLM key on the public endpoint. Visitors paste their own provider
- * credentials here; values live in browser localStorage and ship as
- * X-LLM-* headers on every request via `lib/byok.ts`.
+ * credentials here; the canonical copy is encrypted server-side. Legacy
+ * localStorage credentials can be imported once and then removed.
  *
  * Stage 3 redesign — re-port to match the design's actual workstation
  * layout (full-width edge-to-edge `tm-screen` with stacked panes
@@ -40,6 +40,8 @@ import {
 import {
   getByok,
   saveByok as saveByokServer,
+  testByok,
+  deleteByok as deleteByokServer,
   deleteAccount,
   exportAccount,
 } from "@/lib/api/user";
@@ -206,20 +208,29 @@ export default function SettingsPage() {
     }
   }
 
-  function handleClear() {
-    clearByok();
-    setProvider("openai");
-    setApiKey("");
-    setBaseUrl("");
-    setModel("");
-    setSavedAt(null);
-    setTestState({ kind: "idle" });
+  async function handleClear() {
+    try {
+      await deleteByokServer();
+      clearByok();
+      setProvider("openai");
+      setApiKey("");
+      setBaseUrl("");
+      setModel("");
+      setServerLast4(null);
+      setSavedAt(null);
+      setTestState({ kind: "idle" });
+    } catch (exc) {
+      setTestState({
+        kind: "fail",
+        status: null,
+        message: exc instanceof Error ? exc.message : String(exc),
+      });
+    }
   }
 
-  // Live test: saves the key server-side first via saveByokServer(), then
-  // calls /api/v1/alpha/translate same-origin so the Next.js middleware
-  // injects the auth Bearer header. The backend reads the just-saved key
-  // from user_byok; the old X-LLM-* headers are no longer used post-M5.
+  // Live test: save first, then exercise a dedicated minimal chat probe.
+  // Connectivity is intentionally decoupled from factor JSON generation so
+  // schema/prompt failures are not misreported as credential failures.
   async function handleTest() {
     if (!canSave) return;
     setTestState({ kind: "running" });
@@ -231,66 +242,14 @@ export default function SettingsPage() {
         base_url: baseUrl.trim() || undefined,
         model: model.trim() || undefined,
       });
-      const res = await fetch("/api/v1/alpha/translate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          // budget_tokens must leave room for the model to actually emit the
-          // JSON. kimi-for-coding (k2.6) is a reasoning model that spends output
-          // tokens on internal thinking; at the 500 floor it burns the whole
-          // budget reasoning and returns empty content -> 422 "LLM did not
-          // return parseable JSON. Head: ''". 3000 gives comfortable headroom
-          // (the translate endpoint's own default is 4000).
-          text: "5-day mean reversion",
-          universe: "SP500",
-          budget_tokens: 3000,
-        }),
-      });
-      const elapsed = Math.round(performance.now() - started);
-      if (!res.ok) {
-        const body = await res.text();
-        let detail = body.slice(0, 240);
-        try {
-          const parsed = JSON.parse(body) as { detail?: unknown };
-          if (parsed?.detail !== undefined) {
-            // FastAPI 422 ⇒ array of validation errors. Render readably.
-            if (Array.isArray(parsed.detail)) {
-              detail = parsed.detail
-                .map((e: unknown) => {
-                  if (typeof e === "object" && e !== null) {
-                    const err = e as { loc?: unknown[]; msg?: string };
-                    const path = (err.loc ?? []).join(".");
-                    return `${path}: ${err.msg ?? "validation error"}`;
-                  }
-                  return String(e);
-                })
-                .join("; ")
-                .slice(0, 240);
-            } else if (typeof parsed.detail === "string") {
-              detail = parsed.detail;
-            } else {
-              detail = JSON.stringify(parsed.detail).slice(0, 240);
-            }
-          }
-        } catch {
-          // body is not JSON — keep raw slice
-        }
-        setTestState({ kind: "fail", status: res.status, message: detail });
-        return;
-      }
-      const data = (await res.json()) as {
-        token_usage?: { prompt_tokens?: number; completion_tokens?: number };
-      };
-      const usage = data.token_usage ?? {};
+      const data = await testByok();
+      const elapsed = Math.max(data.latency_ms, Math.round(performance.now() - started));
       setTestState({
         kind: "ok",
         ms: elapsed,
         tokens: {
-          prompt: usage.prompt_tokens ?? 0,
-          completion: usage.completion_tokens ?? 0,
+          prompt: data.prompt_tokens,
+          completion: data.completion_tokens,
         },
       });
     } catch (exc) {
@@ -473,7 +432,7 @@ export default function SettingsPage() {
           >
             {zh ? "测试连通" : "TEST CONNECTION"}
           </TmButton>
-          <TmButton variant="ghost" onClick={handleClear}>
+          <TmButton variant="ghost" onClick={() => { void handleClear(); }}>
             {zh ? "清除已保存" : "CLEAR SAVED"}
           </TmButton>
 
@@ -502,13 +461,13 @@ export default function SettingsPage() {
         <ul className="flex flex-col gap-1 px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
           <li>
             {zh
-              ? "localStorage 仅在本浏览器、本域名下可见。换浏览器或换设备需要重新填写。"
-              : "localStorage is scoped to this browser and origin. Re-enter on a different browser or device."}
+              ? "LLM 凭据以加密形式保存在服务端，同一账号可跨浏览器使用；明文不会被接口回显。"
+              : "LLM credentials are encrypted server-side and follow the account across browsers; plaintext is never returned."}
           </li>
           <li>
             {zh
-              ? "preview 部署 URL 与 production 是不同 origin，凭证不会跨越。"
-              : "Vercel preview URLs and production are separate origins; credentials do not carry across."}
+              ? "清除 LLM 凭据不会删除独立保存的 WorldQuant BRAIN 登录信息。"
+              : "Clearing the LLM credential does not remove the separately stored WorldQuant BRAIN login."}
           </li>
         </ul>
       </TmPane>

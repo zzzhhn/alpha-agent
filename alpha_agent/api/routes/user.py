@@ -8,13 +8,20 @@ ON DELETE CASCADE FKs for atomicity.
 from __future__ import annotations
 
 import os
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from alpha_agent.api.byok import (
+    LLM_CREDENTIAL_PROVIDERS,
+    fetch_user_llm_credential,
+    managed_llm_client,
+)
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.crypto_box import CryptoError, encrypt
 from alpha_agent.auth.dependencies import require_user
+from alpha_agent.llm.base import LLMClient, Message
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
@@ -48,6 +55,14 @@ class ByokGetResponse(BaseModel):
     last_used_at: str | None
 
 
+class ByokTestResponse(BaseModel):
+    provider: str
+    model: str
+    latency_ms: int
+    prompt_tokens: int
+    completion_tokens: int
+
+
 @router.get("/me", response_model=MeResponse)
 async def get_me(user_id: int = Depends(require_user)) -> MeResponse:
     pool = await get_db_pool()
@@ -57,7 +72,10 @@ async def get_me(user_id: int = Depends(require_user)) -> MeResponse:
     if row is None:
         raise HTTPException(status_code=404, detail="user not found")
     has_byok = await pool.fetchval(
-        "SELECT EXISTS(SELECT 1 FROM user_byok WHERE user_id = $1)", user_id
+        "SELECT EXISTS(SELECT 1 FROM user_byok "
+        "WHERE user_id = $1 AND provider = ANY($2::text[]))",
+        user_id,
+        list(LLM_CREDENTIAL_PROVIDERS),
     )
     return MeResponse(
         user_id=row["id"],
@@ -94,11 +112,7 @@ async def save_byok(
     # (ciphertext/nonce) is intentionally OUT of the log — only the
     # operationally-rollback-safe fields (provider/model/base_url) are
     # journaled.
-    prior = await pool.fetchrow(
-        "SELECT provider, model, base_url FROM user_byok "
-        "WHERE user_id = $1 LIMIT 1",
-        user_id,
-    )
+    prior = await fetch_user_llm_credential(pool, user_id)
 
     await pool.execute(
         """
@@ -114,6 +128,16 @@ async def save_byok(
             encrypted_at = now()
         """,
         user_id, body.provider, ciphertext, nonce, last4, body.model, body.base_url,
+    )
+    # One active LLM credential per user.  Preserve non-LLM rows such as
+    # ``worldquant_brain`` while removing stale provider choices that could
+    # otherwise be selected by old clients or future regressions.
+    await pool.execute(
+        "DELETE FROM user_byok WHERE user_id = $1 "
+        "AND provider = ANY($2::text[]) AND provider <> $3",
+        user_id,
+        list(LLM_CREDENTIAL_PROVIDERS),
+        body.provider,
     )
 
     # B9 change-log writes are best-effort (a logger failure must not
@@ -140,11 +164,7 @@ async def save_byok(
 @router.get("/byok", response_model=ByokGetResponse)
 async def get_byok(user_id: int = Depends(require_user)) -> ByokGetResponse:
     pool = await get_db_pool()
-    row = await pool.fetchrow(
-        "SELECT provider, last4, model, base_url, encrypted_at, last_used_at "
-        "FROM user_byok WHERE user_id = $1 LIMIT 1",
-        user_id,
-    )
+    row = await fetch_user_llm_credential(pool, user_id)
     if row is None:
         raise HTTPException(status_code=404, detail="no BYOK key set")
     return ByokGetResponse(
@@ -157,10 +177,61 @@ async def get_byok(user_id: int = Depends(require_user)) -> ByokGetResponse:
     )
 
 
+@router.post("/byok/test", response_model=ByokTestResponse)
+async def test_byok(
+    user_id: int = Depends(require_user),
+    llm: LLMClient = Depends(managed_llm_client),
+) -> ByokTestResponse:
+    """Exercise the configured provider without coupling health to factor JSON."""
+    started = time.monotonic()
+    try:
+        result = await llm.chat(
+            [Message(role="user", content="Reply with exactly: OK")],
+            temperature=0.0,
+            max_tokens=128,
+        )
+        if not result.content.strip():
+            raise RuntimeError("provider completed without user-visible text")
+    except Exception as exc:  # noqa: BLE001 - normalized into a safe status
+        response = getattr(exc, "response", None)
+        upstream_status = getattr(response, "status_code", None)
+        if upstream_status in (401, 403):
+            detail = "LLM provider rejected the API key or account access"
+        elif upstream_status == 429:
+            detail = "LLM provider quota or rate limit was reached"
+        elif upstream_status is not None:
+            detail = f"LLM provider returned HTTP {upstream_status}"
+        else:
+            detail = f"LLM request failed ({type(exc).__name__})"
+        raise HTTPException(status_code=502, detail=detail) from exc
+    pool = await get_db_pool()
+    credential = await fetch_user_llm_credential(pool, user_id)
+    if credential is None:
+        raise HTTPException(status_code=400, detail="No BYOK key set")
+    await pool.execute(
+        "UPDATE user_byok SET last_used_at = now() "
+        "WHERE user_id = $1 AND provider = $2",
+        user_id,
+        credential["provider"],
+    )
+    return ByokTestResponse(
+        provider=credential["provider"],
+        model=result.model,
+        latency_ms=round((time.monotonic() - started) * 1000),
+        prompt_tokens=result.prompt_tokens,
+        completion_tokens=result.completion_tokens,
+    )
+
+
 @router.delete("/byok", status_code=204)
 async def delete_byok(user_id: int = Depends(require_user)) -> Response:
     pool = await get_db_pool()
-    await pool.execute("DELETE FROM user_byok WHERE user_id = $1", user_id)
+    await pool.execute(
+        "DELETE FROM user_byok WHERE user_id = $1 "
+        "AND provider = ANY($2::text[])",
+        user_id,
+        list(LLM_CREDENTIAL_PROVIDERS),
+    )
     return Response(status_code=204)
 
 
@@ -189,8 +260,10 @@ async def export_account(user_id: int = Depends(require_user)) -> dict:
     )
     byok = await pool.fetch(
         "SELECT provider, last4, model, encrypted_at, last_used_at "
-        "FROM user_byok WHERE user_id = $1",
+        "FROM user_byok WHERE user_id = $1 "
+        "AND provider = ANY($2::text[])",
         user_id,
+        list(LLM_CREDENTIAL_PROVIDERS),
     )
     return {
         "user": {
