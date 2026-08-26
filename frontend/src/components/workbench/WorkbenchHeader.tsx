@@ -30,7 +30,7 @@ export function WorkbenchHeader({
     <header className="flex min-h-20 items-center gap-6 border-b border-tm-rule px-6 py-3">
       <div className="min-w-0 flex-1">
         {eyebrow ? (
-          <p className="mb-1 font-tm-mono text-[10px] uppercase tracking-[0.16em] text-tm-accent">
+          <p className="mb-1 font-tm-mono text-xs uppercase tracking-[0.16em] text-tm-accent">
             {eyebrow}
           </p>
         ) : null}
@@ -46,7 +46,7 @@ export function WorkbenchHeader({
         <div className="hidden shrink-0 items-stretch divide-x divide-tm-rule border-y border-tm-rule xl:flex">
           {statuses.map((status) => (
             <div key={status.label} className="min-w-[118px] px-4 py-2 text-right">
-              <p className="font-tm-mono text-[9px] uppercase tracking-[0.1em] text-tm-muted">
+              <p className="font-tm-mono text-xs uppercase tracking-[0.1em] text-tm-muted">
                 {status.label}
               </p>
               <p className={`mt-1 font-tm-mono text-[12px] ${STATUS_TONE[status.tone ?? "default"]}`}>

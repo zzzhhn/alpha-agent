@@ -93,7 +93,7 @@ export function OperandCatalog({ catalog }: OperandCatalogProps) {
         />
       </div>
 
-      <p className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "data.operands.subtitle")}
       </p>
 
@@ -133,7 +133,7 @@ function CategorySection({
 }) {
   return (
     <section>
-      <div className="border-t border-tm-rule px-3 py-1 font-tm-mono text-[10px] uppercase tracking-[0.10em] text-tm-muted first:border-t-0">
+      <div className="border-t border-tm-rule px-3 py-1 font-tm-mono text-xs uppercase tracking-[0.10em] text-tm-muted first:border-t-0">
         {title} ({count})
       </div>
       <div className="grid gap-px bg-tm-rule p-px [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
@@ -152,7 +152,7 @@ function OperatorList({
 }) {
   if (operators.length === 0) {
     return (
-      <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
+      <p className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
         no items
       </p>
     );
@@ -201,7 +201,7 @@ function OperandList({
 }) {
   if (operands.length === 0) {
     return (
-      <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
+      <p className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
         no items
       </p>
     );
@@ -274,9 +274,9 @@ function OpRow({
         {name}
         {!implemented && " · planned"}
       </span>
-      <span className="truncate text-[10.5px] text-tm-fg-2">{sig}</span>
+      <span className="truncate text-xs text-tm-fg-2">{sig}</span>
       <span
-        className={`text-[9.5px] uppercase tracking-[0.06em] ${TIER_TONE[tier]}`}
+        className={`text-xs uppercase tracking-[0.06em] ${TIER_TONE[tier]}`}
       >
         {tier} · {tierShort(tier, locale)}
       </span>

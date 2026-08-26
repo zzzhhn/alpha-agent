@@ -150,7 +150,7 @@ export default function StockCardLayout({
         {/* Tier 3 — reference: demoted below a labeled divider so the long
             supporting tail no longer competes with the decision/analysis tiers. */}
         <div className="flex items-center gap-3 pt-2" aria-hidden>
-          <span className="font-tm-sans text-[11px] uppercase tracking-[0.08em] text-tm-muted">
+          <span className="font-tm-sans text-xs uppercase tracking-[0.08em] text-tm-muted">
             {t(locale, "stock_layout.reference")}
           </span>
           <span className="h-px flex-1 bg-tm-rule" />
@@ -240,7 +240,7 @@ function GexBadge({ info, locale }: { info: GexInfo; locale: Locale }) {
   return (
     <div
       title={tip}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-tm-mono text-[10px] ${tone}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-tm-mono text-xs ${tone}`}
     >
       <span className="opacity-70">GEX</span>
       <span className="font-semibold">{label}</span>

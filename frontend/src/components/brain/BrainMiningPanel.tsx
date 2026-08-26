@@ -201,7 +201,7 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
 
   if (state === "done") {
     return (
-      <span className="inline-flex items-center gap-1.5 font-tm-mono text-[11px] text-tm-pos">
+      <span className="inline-flex items-center gap-1.5 font-tm-mono text-xs text-tm-pos">
         <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
         {zh ? "已提交" : "submitted"}
         {msg ? ` · ${msg}` : ""}
@@ -261,7 +261,7 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
         </TmButton>
       )}
       {state === "error" && msg ? (
-        <span className="font-tm-mono text-[10.5px] text-tm-neg">{msg}</span>
+        <span className="font-tm-mono text-xs text-tm-neg">{msg}</span>
       ) : null}
     </div>
   );
@@ -287,12 +287,12 @@ function SettingsRow({ settings }: { settings: Record<string, unknown> }) {
   ];
   return (
     <div>
-      <div className="mb-1 font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+      <div className="mb-1 font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
         {zh ? "仿真参数" : "Simulation settings"}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
         {cells.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-2 font-mono text-[10.5px]">
+          <div key={k} className="flex justify-between gap-2 font-mono text-xs">
             <span className="text-tm-muted">{k}</span>
             <span className="tabular-nums text-tm-fg-2">{v}</span>
           </div>
@@ -334,10 +334,10 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
   return (
     <div className="border border-tm-rule bg-tm-bg px-3 py-2.5">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-accent">
+        <span className="font-tm-mono text-xs uppercase tracking-wider text-tm-accent">
           {zh ? "研究证据" : "Research evidence"}
         </span>
-        <span className="font-tm-mono text-[9.5px] text-tm-muted">
+        <span className="font-tm-mono text-xs text-tm-muted">
           {proxy?.active
             ? `${zh ? "代理已验证" : "proxy validated"} · n=${proxy.sample_n ?? "—"}`
             : zh
@@ -345,9 +345,9 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
               : "proxy inactive; hierarchical posterior used"}
         </span>
       </div>
-      <div className="grid gap-3 text-[10.5px] lg:grid-cols-4">
+      <div className="grid gap-3 text-xs lg:grid-cols-4">
         <div>
-          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+          <div className="font-tm-mono text-xs uppercase text-tm-muted">
             {zh ? "假设" : "Hypothesis"}
           </div>
           {hypothesis?.source_url ? (
@@ -362,7 +362,7 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
           ) : (
             <div className="text-tm-fg">{hypothesis?.title || hypothesis?.id || "—"}</div>
           )}
-          <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+          <div className="mt-1 font-tm-mono text-xs text-tm-muted">
             {hypothesis?.confidence || "—"} · {hypothesis?.target || "—"}
           </div>
           {semantic ? (
@@ -371,30 +371,30 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
               ariaLabel={alignmentLabel}
               className="mt-1"
             >
-              <span className={`font-tm-mono text-[9.5px] ${alignmentStatus === "aligned" ? "text-tm-pos" : "text-tm-warn"}`}>
+              <span className={`font-tm-mono text-xs ${alignmentStatus === "aligned" ? "text-tm-pos" : "text-tm-warn"}`}>
                 {alignmentLabel}
               </span>
             </TmTooltip>
           ) : null}
         </div>
         <div>
-          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+          <div className="font-tm-mono text-xs uppercase text-tm-muted">
             {zh ? "字段可测量性" : "Field measurability"}
           </div>
           <div className="font-tm-mono text-tm-fg">
             {mapping?.dataset_ids?.join(" + ") || "unmapped"}
           </div>
-          <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+          <div className="mt-1 font-tm-mono text-xs text-tm-muted">
             coverage {pct(mapping?.coverage)} · mapped {pct(mapping?.mapped_ratio)}
           </div>
           {semantic ? (
             <>
-              <div className={`mt-1 font-tm-mono text-[9.5px] ${semanticTone}`}>
+              <div className={`mt-1 font-tm-mono text-xs ${semanticTone}`}>
                 {semanticLabel} · {semantic.matched_required_semantics?.length ?? 0}/{semantic.required_semantics?.length ?? 0}
               </div>
               {semantic.missing_required_semantics?.length ? (
                 <TmTooltip content={semantic.missing_required_semantics.join(" · ")} className="mt-1 max-w-full">
-                  <span className="truncate font-tm-mono text-[9px] text-tm-neg">
+                  <span className="truncate font-tm-mono text-xs text-tm-neg">
                     {zh ? "缺失" : "missing"}: {semantic.missing_required_semantics.join(", ")}
                   </span>
                 </TmTooltip>
@@ -403,18 +403,18 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
           ) : null}
         </div>
         <div>
-          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+          <div className="font-tm-mono text-xs uppercase text-tm-muted">
             {zh ? "筛选证据" : "Screen evidence"}
           </div>
           <div className="font-tm-mono text-tm-fg">
             score {typeof screen?.score === "number" ? screen.score.toFixed(2) : "—"}
           </div>
-          <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+          <div className="mt-1 font-tm-mono text-xs text-tm-muted">
             history {typeof screen?.history === "number" ? screen.history.toFixed(2) : "—"} · context n={screen?.context_n ?? 0}
           </div>
         </div>
         <div>
-          <div className="font-tm-mono text-[9px] uppercase text-tm-muted">
+          <div className="font-tm-mono text-xs uppercase text-tm-muted">
             {zh ? "代理预测" : "Proxy prediction"}
           </div>
           {proxy?.active ? (
@@ -422,7 +422,7 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
               <div className="font-tm-mono text-tm-fg">
                 GOOD {pct(prediction.good)} · {zh ? "集中风险" : "concentration"} {pct(prediction.concentration)}
               </div>
-              <div className="mt-1 font-tm-mono text-[9.5px] text-tm-muted">
+              <div className="mt-1 font-tm-mono text-xs text-tm-muted">
                 {zh ? "官方自相关估计" : "official self-corr estimate"} {pct(prediction.self_corr)} · {zh ? "分散化代理" : "diversification proxy"} {pct(prediction.marginal_proxy)}
               </div>
               <TmTooltip
@@ -431,7 +431,7 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
                   ? "分散化代理为 1 − 调整后自相关²，并非真实组合边际收益回归。"
                   : "Diversification proxy is 1 minus adjusted self-correlation squared, not a portfolio-level incremental-return regression."}
               >
-                <span className="font-tm-mono text-[9px] text-tm-muted">
+                <span className="font-tm-mono text-xs text-tm-muted">
                   {zh ? "近 20% 时间留出集验证，仅以 15% 权重参与预筛" : "validated on the latest 20% holdout; 15% screen weight"}
                 </span>
               </TmTooltip>
@@ -446,7 +446,7 @@ function ResearchEvidencePanel({ alpha }: { alpha: BrainAlpha }) {
         </div>
       </div>
       {hypothesis?.falsification ? (
-        <div className="mt-2 border-t border-tm-rule pt-2 font-tm-mono text-[9.5px] text-tm-muted">
+        <div className="mt-2 border-t border-tm-rule pt-2 font-tm-mono text-xs text-tm-muted">
           {zh ? "证伪条件" : "Falsification"}: {hypothesis.falsification}
         </div>
       ) : null}
@@ -484,7 +484,7 @@ function YearlyTable({ rowId, hasAlpha }: { rowId: number; hasAlpha: boolean }) 
 
   return (
     <div>
-      <div className="mb-1 font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+      <div className="mb-1 font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
         {zh ? "历年 IS 概要" : "IS Summary by year"}
       </div>
       {rows && rows.length > 0 ? (
@@ -492,7 +492,7 @@ function YearlyTable({ rowId, hasAlpha }: { rowId: number; hasAlpha: boolean }) 
           <TmTable
             density="compact"
             caption={zh ? "历年 IS 概要" : "IS Summary by year"}
-            className="min-w-[560px] text-[10.5px]"
+            className="min-w-[560px] text-xs"
           >
             <TmTableHead>
               <TmTableRow>
@@ -500,7 +500,7 @@ function YearlyTable({ rowId, hasAlpha }: { rowId: number; hasAlpha: boolean }) 
                   <TmTableHeaderCell
                     key={c}
                     textAlign={index === 0 ? "left" : "right"}
-                    className="px-2 text-[9px]"
+                    className="px-2 text-xs"
                   >
                     {c}
                   </TmTableHeaderCell>
@@ -579,7 +579,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
   return (
     <div className="flex flex-col gap-3 border-t border-tm-rule bg-tm-bg-2 px-3 py-3">
       <code
-        className={`block break-all font-tm-mono text-[11.5px] leading-snug ${alpha.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
+        className={`block break-all font-tm-mono text-xs leading-snug ${alpha.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
       >
         {alpha.expression}
       </code>
@@ -590,10 +590,10 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
       {alpha.is_blend && alpha.blend_parents && alpha.blend_parents.length > 0 ? (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1.5">
-            <span className="rounded-sm border border-tm-accent/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-accent">
+            <span className="rounded-sm border border-tm-accent/60 px-1.5 py-px font-tm-mono text-xs font-bold uppercase text-tm-accent">
               BLEND
             </span>
-            <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+            <span className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
               {zh ? "父因子" : "parents"}
             </span>
           </div>
@@ -601,7 +601,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
             {alpha.blend_parents.map((p, i) => (
               <code
                 key={i}
-                className="block break-all font-tm-mono text-[10.5px] leading-snug text-tm-muted"
+                className="block break-all font-tm-mono text-xs leading-snug text-tm-muted"
               >
                 {p}
               </code>
@@ -612,16 +612,16 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
 
       {/* BRAIN's overall performance grade for this alpha + record timestamp */}
       <div className="flex items-center gap-2">
-        <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
           {zh ? "性能评级" : "performance"}
         </span>
         <GradeBadge grade={alpha.grade} full />
-        <span className="font-tm-mono text-[10px] text-tm-muted">
+        <span className="font-tm-mono text-xs text-tm-muted">
           {zh ? "BRAIN 综合评级" : "BRAIN overall grade"}
         </span>
         {alpha.created_at ? (
           <TmTooltip content={zh ? "该回测结果记录时间（UTC+8）" : "Backtest record time (UTC+8)"} className="ml-auto">
-            <span className="flex items-center gap-1 font-tm-mono text-[10px] tabular-nums text-tm-muted">
+            <span className="flex items-center gap-1 font-tm-mono text-xs tabular-nums text-tm-muted">
               {fmtUtc8(alpha.created_at)}
               <span className="opacity-60">UTC+8</span>
             </span>
@@ -634,17 +634,17 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
 
       <div className="grid border border-tm-rule sm:grid-cols-[150px_1fr]">
         <div className="flex items-center border-b border-tm-rule px-3 py-2 sm:border-b-0 sm:border-r">
-          <span className={`border px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase ${verdict.cls}`}>
+          <span className={`border px-1.5 py-px font-tm-mono text-xs font-bold uppercase ${verdict.cls}`}>
             {zh ? verdict.labelZh : verdict.labelEn}
           </span>
         </div>
-        <div className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+        <div className="px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
           {zh ? verdict.detailZh : verdict.detailEn}
         </div>
       </div>
 
       {/* full IS metric set (6) + self-corr + BRAIN id */}
-      <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2 sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-3 gap-2 font-mono text-xs text-tm-fg-2 sm:grid-cols-4 lg:grid-cols-8">
         <Metric label="Sharpe" value={fmt(alpha.sharpe)} />
         <Metric label="Fitness" value={fmt(alpha.fitness)} />
         <Metric label={zh ? "换手" : "Turnover"} value={fmt(alpha.turnover)} />
@@ -652,7 +652,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         <Metric label="Drawdown" value={fmt(alpha.drawdown)} />
         <Metric label="Margin" value={fmt(alpha.margin, 4)} />
         <div className="flex flex-col">
-          <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+          <span className="font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
             {zh ? "自相关·官方" : "S-corr (BRAIN)"}
           </span>
           <span className="tabular-nums text-tm-fg">
@@ -660,7 +660,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
           </span>
         </div>
         <div className="flex flex-col">
-          <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+          <span className="font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
             {zh ? "自相关·调整" : "S-corr⁺ (adj)"}
           </span>
           <span className="tabular-nums">
@@ -674,7 +674,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
 
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+          <span className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
             {zh ? "曲线" : "chart"}
           </span>
           <TmToggleGroup
@@ -687,9 +687,9 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         {pnl && pnl.length > 0 ? (
           <BrainPnLChart points={pnl} kind={chartKind} />
         ) : pnlErr ? (
-          <p className="font-tm-mono text-[11px] text-tm-muted">{pnlErr}</p>
+          <p className="font-tm-mono text-xs text-tm-muted">{pnlErr}</p>
         ) : (
-          <p className="flex items-center gap-2 font-tm-mono text-[11px] text-tm-muted">
+          <p className="flex items-center gap-2 font-tm-mono text-xs text-tm-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
             {zh ? "从 BRAIN 拉取 PnL…" : "fetching PnL from BRAIN…"}
           </p>
@@ -708,7 +708,7 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+      <span className="font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
         {label}
       </span>
       <span className="tabular-nums text-tm-fg">{value}</span>
@@ -831,7 +831,7 @@ function FamilyBadge({
     ? "border-tm-rule text-tm-muted"
     : "border-tm-accent/40 text-tm-fg-2";
   const cls = active ? "border-tm-accent text-tm-accent" : base;
-  const shape = "shrink-0 border px-1 py-px font-tm-mono text-[9px] uppercase leading-none";
+  const shape = "shrink-0 border px-1 py-px font-tm-mono text-xs uppercase leading-none";
   if (!onClick) {
     return (
       <TmTooltip content={family} width={180}>
@@ -849,7 +849,7 @@ function FamilyBadge({
         e.stopPropagation();
         onClick(family);
       }}
-      className={`h-4 border px-1 text-[9px] leading-none hover:border-tm-accent ${cls}`}
+      className={`h-4 border px-1 text-xs leading-none hover:border-tm-accent ${cls}`}
     >
       {label}
     </TmButton>
@@ -858,13 +858,13 @@ function FamilyBadge({
 
 function GradeBadge({ grade, full = false }: { grade: string | null; full?: boolean }) {
   if (!grade) {
-    return <span className="font-tm-mono text-[10px] text-tm-muted">—</span>;
+    return <span className="font-tm-mono text-xs text-tm-muted">—</span>;
   }
   const s = GRADE_STYLE[grade.toUpperCase()];
   const label = full ? grade : (s?.short ?? grade.slice(0, 4).toUpperCase());
   const cls = s?.cls ?? "border-tm-rule text-tm-muted";
   return (
-    <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${cls}`}>
+    <span className={`border px-1 py-px font-tm-mono text-xs font-bold uppercase ${cls}`}>
       {label}
     </span>
   );
@@ -905,14 +905,14 @@ function OutcomeTags({ alpha }: { alpha: BrainAlpha }) {
               : "a settings-adaptation retry was run for this factor"
           }
         >
-          <span className="rounded-sm border border-tm-info/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-info">
+          <span className="rounded-sm border border-tm-info/60 px-1.5 py-px font-tm-mono text-xs font-bold uppercase text-tm-info">
             {zh ? "已调参重试" : "retried"}
           </span>
         </TmTooltip>
       ) : null}
       {checks.map((c) => (
         <TmTooltip key={c} content={zh ? "未通过的在样内检查" : "failed in-sample check"}>
-          <span className="rounded-sm border border-tm-warn/60 px-1.5 py-px font-tm-mono text-[9px] font-bold uppercase text-tm-warn">
+          <span className="rounded-sm border border-tm-warn/60 px-1.5 py-px font-tm-mono text-xs font-bold uppercase text-tm-warn">
             {checkLabel(c, zh)}
           </span>
         </TmTooltip>
@@ -941,7 +941,7 @@ function AlphaIdChip({ alphaId }: { alphaId: string }) {
           () => undefined,
         );
       }}
-      className="h-4 rounded-sm border border-tm-rule px-1 text-[9px] tabular-nums hover:border-tm-accent/60 hover:text-tm-accent"
+      className="h-4 rounded-sm border border-tm-rule px-1 text-xs tabular-nums hover:border-tm-accent/60 hover:text-tm-accent"
     >
       {copied ? "copied" : alphaId}
     </TmButton>
@@ -1157,10 +1157,10 @@ function MineButton({
       <div className="flex flex-col gap-2 px-3 py-2.5">
         <div className="flex items-center gap-2">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-tm-accent" strokeWidth={1.75} />
-          <span className="font-tm-mono text-[11px] text-tm-fg-2">
+          <span className="font-tm-mono text-xs text-tm-fg-2">
             {zh ? "挖矿进行中" : "mining in progress"} · {phase}
           </span>
-          <span className="font-tm-mono text-[11px] tabular-nums text-tm-accent">
+          <span className="font-tm-mono text-xs tabular-nums text-tm-accent">
             {filled} / {job.n}
           </span>
           <TmButton
@@ -1173,7 +1173,7 @@ function MineButton({
           </TmButton>
         </div>
         <ProgressSegments filled={filled} total={job.n} />
-        <span className="font-tm-mono text-[10px] text-tm-muted">
+        <span className="font-tm-mono text-xs text-tm-muted">
           {zh
             ? `生成池 ${job.generationTarget ?? job.n} 个表达式，最多执行 ${job.n} 次真实仿真 · 可离开本页，回来会继续跟踪`
             : `${job.generationTarget ?? job.n} generated expressions, at most ${job.n} real simulations · safe to leave`}
@@ -1194,7 +1194,7 @@ function MineButton({
         fieldSize="sm"
         inputClassName="text-center tabular-nums"
       />
-      <span className="pb-6 text-center font-tm-mono text-[10px] text-tm-muted">←</span>
+      <span className="pb-6 text-center font-tm-mono text-xs text-tm-muted">←</span>
       <TmInput
         label={zh ? "生成池" : "generation pool"}
         hint={zh ? "低成本候选表达式" : "low-cost candidates"}
@@ -1206,11 +1206,11 @@ function MineButton({
         inputClassName="text-center tabular-nums"
       />
       <div className="flex flex-col gap-1">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+        <span className="text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
           {zh ? "因子家族" : "alpha family"}
         </span>
         <FamilySelect value={family} onChange={setFamily} zh={zh} />
-        <span className="text-[10.5px] text-tm-muted">
+        <span className="text-xs text-tm-muted">
           {zh ? "决定字段与结构搜索空间" : "controls fields and structure search"}
         </span>
       </div>
@@ -1231,7 +1231,7 @@ function MineButton({
           {zh ? "开始挖矿" : "Start mining"}
         </TmButton>
       </div>
-      <div className="min-w-0 pb-1 text-[10.5px] leading-4">
+      <div className="min-w-0 pb-1 text-xs leading-4">
         {state === "error" && errMsg ? (
           <span className="font-tm-mono text-tm-neg">{errMsg}</span>
         ) : doneMsg ? (
@@ -1580,7 +1580,7 @@ function RunLedger({
   if (!run) {
     return (
       <div className="border-b border-tm-rule px-3 py-2">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-[10.5px] text-tm-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-xs text-tm-muted">
           <span className="uppercase tracking-wider text-tm-accent">{zh ? "运行账本" : "run ledger"}</span>
           {selectedRunId != null ? (
             <span>{zh ? `RUN #${selectedRunId} 等待账本记录` : `RUN #${selectedRunId} awaiting ledger record`}</span>
@@ -1593,7 +1593,7 @@ function RunLedger({
           )}
         </div>
         {runsError ? (
-          <p className="mt-1 font-tm-mono text-[10px] text-tm-warn">
+          <p className="mt-1 font-tm-mono text-xs text-tm-warn">
             {zh ? `运行账本读取失败：${runsError}` : `run ledger unavailable: ${runsError}`}
           </p>
         ) : null}
@@ -1620,7 +1620,7 @@ function RunLedger({
 
   return (
     <div className="border-b border-tm-rule px-3 py-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-[10.5px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-xs">
         <span className="uppercase tracking-wider text-tm-accent">RUN #{run.id}</span>
         <span className="text-tm-fg-2">{runSourceLabel(run, zh)}</span>
         <span className="text-tm-muted">{run.family_focus || (zh ? "混合家族" : "mixed family")}</span>
@@ -1634,12 +1634,12 @@ function RunLedger({
       <div className="mt-2 grid grid-cols-5 gap-2 border-t border-tm-rule/60 pt-1.5">
         {funnel.map(([label, value]) => (
           <div key={label} className="flex min-w-0 flex-col font-tm-mono">
-            <span className="truncate text-[9px] uppercase tracking-wider text-tm-muted">{label}</span>
+            <span className="truncate text-xs uppercase tracking-wider text-tm-muted">{label}</span>
             <span className="tabular-nums text-[12px] text-tm-fg">{value}</span>
           </div>
         ))}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-[10px]">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-xs">
         {outcome.map(([label, count, className]) => (
           <span key={label} className={className}>{label} {count}</span>
         ))}
@@ -1650,7 +1650,7 @@ function RunLedger({
         ) : null}
       </div>
       {run.screen_detail || run.error_detail ? (
-        <p className="mt-1 break-words font-tm-mono text-[10px] leading-relaxed text-tm-warn">
+        <p className="mt-1 break-words font-tm-mono text-xs leading-relaxed text-tm-warn">
           {run.error_detail || run.screen_detail}
         </p>
       ) : null}
@@ -1661,15 +1661,15 @@ function RunLedger({
           [zh ? "仿真错误" : "sim errors", runRate(run.sim_error_n, run.simulated_n)],
         ].map(([label, value]) => (
           <div key={label} className="bg-tm-bg px-2 py-1.5 font-tm-mono">
-            <div className="text-[9px] uppercase tracking-wider text-tm-muted">{label}</div>
-            <div className="mt-0.5 text-[11px] tabular-nums text-tm-fg">{value}</div>
+            <div className="text-xs uppercase tracking-wider text-tm-muted">{label}</div>
+            <div className="mt-0.5 text-xs tabular-nums text-tm-fg">{value}</div>
           </div>
         ))}
         <div className="bg-tm-bg px-2 py-1.5 font-tm-mono">
-          <div className="text-[9px] uppercase tracking-wider text-tm-accent">
+          <div className="text-xs uppercase tracking-wider text-tm-accent">
             {zh ? "下一步" : "next action"}
           </div>
-          <div className="mt-0.5 text-[10px] leading-relaxed text-tm-fg-2">
+          <div className="mt-0.5 text-xs leading-relaxed text-tm-fg-2">
             {runNextStep(run, zh)}
           </div>
         </div>
@@ -1888,7 +1888,7 @@ export function BrainMiningPanel() {
         }
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
-          <span className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+          <span className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
             {zh ? "查看运行" : "view run"}
           </span>
           <RunSelector
@@ -1898,9 +1898,9 @@ export function BrainMiningPanel() {
             zh={zh}
           />
           {runsLoading ? (
-            <span className="font-tm-mono text-[10px] text-tm-muted">{zh ? "读取账本…" : "loading ledger…"}</span>
+            <span className="font-tm-mono text-xs text-tm-muted">{zh ? "读取账本…" : "loading ledger…"}</span>
           ) : runsError ? (
-            <span className="font-tm-mono text-[10px] text-tm-warn">{zh ? "兼容模式" : "legacy mode"}</span>
+            <span className="font-tm-mono text-xs text-tm-warn">{zh ? "兼容模式" : "legacy mode"}</span>
           ) : null}
         </div>
         <RunLedger
@@ -1915,12 +1915,12 @@ export function BrainMiningPanel() {
             {
               key: "results",
               label: zh ? "仿真结果" : "simulation results",
-              badge: <span className="font-tm-mono text-[9px] tabular-nums">{selectedRun?.persisted_n ?? total}</span>,
+              badge: <span className="font-tm-mono text-xs tabular-nums">{selectedRun?.persisted_n ?? total}</span>,
             },
             {
               key: "audit",
               label: zh ? "候选审计" : "candidate audit",
-              badge: <span className="font-tm-mono text-[9px] tabular-nums">{selectedRun?.generated_n ?? 0}</span>,
+              badge: <span className="font-tm-mono text-xs tabular-nums">{selectedRun?.generated_n ?? 0}</span>,
             },
           ]}
           active={workbenchView}
@@ -1954,7 +1954,7 @@ export function BrainMiningPanel() {
             fieldSize="sm"
             className="w-24"
           />
-          <span className="ml-auto font-tm-mono text-[10px] text-tm-muted">
+          <span className="ml-auto font-tm-mono text-xs text-tm-muted">
             {zh ? "排序:" : "sort:"}
           </span>
           {SORTS.map((s) => (
@@ -1978,7 +1978,7 @@ export function BrainMiningPanel() {
         </div>
 
         {/* column header */}
-        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
           <span>{zh ? "表达式" : "expr"}</span>
           <span className="w-12 text-right">Sharpe</span>
           <span className="w-12 text-right">Fitness</span>
@@ -2013,12 +2013,12 @@ export function BrainMiningPanel() {
 
         {/* rows */}
         {data === null ? (
-          <p className="flex items-center gap-2 px-3 py-5 font-tm-mono text-[11px] text-tm-muted">
+          <p className="flex items-center gap-2 px-3 py-5 font-tm-mono text-xs text-tm-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
             {zh ? "加载中…" : "loading…"}
           </p>
         ) : data.alphas.length === 0 ? (
-          <p className="px-3 py-5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+          <p className="px-3 py-5 font-tm-mono text-xs leading-relaxed text-tm-muted">
             {loadError
               ? (zh ? `读取失败: ${loadError}` : `load failed: ${loadError}`)
               : selectedRunFailed
@@ -2075,7 +2075,7 @@ export function BrainMiningPanel() {
                         }
                       />
                       <code
-                        className={`truncate font-tm-mono text-[11px] ${a.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
+                        className={`truncate font-tm-mono text-xs ${a.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
                       >
                         {a.expression}
                       </code>
@@ -2083,19 +2083,19 @@ export function BrainMiningPanel() {
                         <CheckCircle2 className="h-3 w-3 shrink-0 text-tm-pos" strokeWidth={1.75} />
                       ) : null}
                     </span>
-                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.sharpe)}</span>
-                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.fitness)}</span>
-                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.turnover)}</span>
-                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.returns)}</span>
-                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.drawdown)}</span>
-                    <span className="w-14 text-right font-mono text-[11px] tabular-nums text-tm-fg-2">{fmt(a.margin, 4)}</span>
-                    <span className="w-12 text-right font-mono text-[11px] tabular-nums text-tm-fg-2"><OfficialSCorrCell alpha={a} zh={zh} /></span>
-                    <span className="w-14 text-right font-mono text-[11px] tabular-nums"><SCorrValue value={a.self_correlation_adj} /></span>
+                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.sharpe)}</span>
+                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.fitness)}</span>
+                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.turnover)}</span>
+                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.returns)}</span>
+                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.drawdown)}</span>
+                    <span className="w-14 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.margin, 4)}</span>
+                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2"><OfficialSCorrCell alpha={a} zh={zh} /></span>
+                    <span className="w-14 text-right font-mono text-xs tabular-nums"><SCorrValue value={a.self_correlation_adj} /></span>
                     <span className="flex w-24 justify-end">
                       {a.alpha_id ? (
                         <AlphaIdChip alphaId={a.alpha_id} />
                       ) : (
-                        <span className="font-tm-mono text-[10px] text-tm-muted">—</span>
+                        <span className="font-tm-mono text-xs text-tm-muted">—</span>
                       )}
                     </span>
                     <span className="flex w-14 justify-end">
@@ -2103,7 +2103,7 @@ export function BrainMiningPanel() {
                     </span>
                     <span className="flex w-20 justify-end">
                       <TmTooltip content={zh ? verdict.detailZh : verdict.detailEn}>
-                        <span className={`whitespace-nowrap border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${verdict.cls}`}>
+                        <span className={`whitespace-nowrap border px-1 py-px font-tm-mono text-xs font-bold uppercase ${verdict.cls}`}>
                           {zh ? verdict.labelZh : verdict.labelEn}
                         </span>
                       </TmTooltip>
@@ -2127,7 +2127,7 @@ export function BrainMiningPanel() {
                     }
                   >
                     <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />
-                    <span className="whitespace-nowrap px-2 font-tm-mono text-[9px] uppercase tracking-wide text-tm-muted opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="whitespace-nowrap px-2 font-tm-mono text-xs uppercase tracking-wide text-tm-muted opacity-0 transition-opacity group-hover:opacity-100">
                       {a.batch_started_at ? `${fmtUtc8(a.batch_started_at)} UTC+8` : "—"}
                     </span>
                     <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />

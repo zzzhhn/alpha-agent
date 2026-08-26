@@ -110,7 +110,7 @@ export function WorstDrawdownsPane({ currentRun }: Props) {
       title="WORST.DRAWDOWNS"
       meta={`top ${periods.length} · worst ${(worstDepth * 100).toFixed(1)}%`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.worstDD.subtitle" as Parameters<typeof t>[1])}
       </p>
       <div className="overflow-x-auto">
@@ -199,7 +199,7 @@ function RHeader({
 }) {
   return (
     <div
-      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${
         align === "right" ? "text-right" : ""
       }`}
     >
@@ -217,7 +217,7 @@ function RCell({
 }) {
   return (
     <div
-      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
+      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs ${
         align === "right" ? "justify-end" : ""
       }`}
     >
@@ -228,7 +228,7 @@ function RCell({
 
 function UnavailableMessage({ text }: { readonly text: string }) {
   return (
-    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
+    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-xs text-tm-muted">
       {text}
     </div>
   );

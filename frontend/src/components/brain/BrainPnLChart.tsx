@@ -73,13 +73,13 @@ export function BrainPnLChart({
         <CartesianGrid strokeDasharray="3 3" stroke={TM_CHART_CSS.grid} opacity={0.5} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 9, fill: TM_CHART_CSS.muted }}
+          tick={{ fontSize: 12, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: string) => (typeof v === "string" ? v.slice(0, 7) : v)}
           interval="preserveStartEnd"
           minTickGap={40}
         />
         <YAxis
-          tick={{ fontSize: 9, fill: TM_CHART_CSS.muted }}
+          tick={{ fontSize: 12, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: number) => yFmt(v)}
           domain={["auto", "auto"]}
           width={40}
@@ -89,7 +89,7 @@ export function BrainPnLChart({
             background: TM_CHART_CSS.surface,
             border: `1px solid ${TM_CHART_CSS.grid}`,
             borderRadius: 0,
-            fontSize: 11,
+            fontSize: 12,
             fontFamily: "var(--font-tm-mono, monospace)",
           }}
           labelStyle={{ color: TM_CHART_CSS.muted }}

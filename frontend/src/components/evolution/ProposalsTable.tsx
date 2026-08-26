@@ -81,7 +81,7 @@ function StatusBadge({ status, locale }: { status: string; locale: Locale }) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded border px-1.5 py-0 font-tm-mono text-[9px] leading-[18px]",
+        "inline-flex items-center rounded border px-1.5 py-0 font-tm-mono text-xs leading-[18px]",
         style.border,
         style.bg,
         style.text,
@@ -116,7 +116,7 @@ function EvidenceCell({ evidence }: { evidence: Record<string, unknown> }) {
   if (nTrials !== null) lines.push(`n_trials=${nTrials}`);
 
   return (
-    <TmTableCell className="max-w-[260px] px-2 py-1 text-[10px]">
+    <TmTableCell className="max-w-[260px] px-2 py-1 text-xs">
       {lines.length > 0 && (
         <div className="whitespace-nowrap text-tm-fg-2 mb-0.5">
           {lines.join(" · ")}
@@ -149,7 +149,7 @@ export function ProposalsTable({
 
   if (proposals.length === 0) {
     return (
-      <p className="px-3 py-4 font-tm-mono text-[11px] text-tm-muted text-center">
+      <p className="px-3 py-4 font-tm-mono text-xs text-tm-muted text-center">
         {t(locale, "evolution.proposals.empty")}
       </p>
     );
@@ -192,13 +192,13 @@ export function ProposalsTable({
       >
         <TmTableHead>
           <TmTableRow>
-            <TmTableHeaderCell textAlign="right" className="w-8 px-2 py-1.5 text-[10px]">#</TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">{t(locale, "evolution.proposals.col_field")}</TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">{t(locale, "evolution.proposals.col_change")}</TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">{t(locale, "evolution.proposals.col_evidence")}</TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">{t(locale, "evolution.proposals.col_status")}</TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">{t(locale, "evolution.proposals.col_when")}</TmTableHeaderCell>
-            <TmTableHeaderCell textAlign="center" className="px-2 py-1.5 text-[10px]">{t(locale, "evolution.proposals.col_actions")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="right" className="w-8 px-2 py-1.5 text-xs">#</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">{t(locale, "evolution.proposals.col_field")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">{t(locale, "evolution.proposals.col_change")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">{t(locale, "evolution.proposals.col_evidence")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">{t(locale, "evolution.proposals.col_status")}</TmTableHeaderCell>
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">{t(locale, "evolution.proposals.col_when")}</TmTableHeaderCell>
+            <TmTableHeaderCell textAlign="center" className="px-2 py-1.5 text-xs">{t(locale, "evolution.proposals.col_actions")}</TmTableHeaderCell>
           </TmTableRow>
         </TmTableHead>
         <TmTableBody>
@@ -220,7 +220,7 @@ export function ProposalsTable({
                 </TmTableRowHeader>
 
                 {/* old -> new */}
-                <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-[10px]">
+                <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-xs">
                   <span className="text-tm-neg">{formatValue(p.old_value)}</span>
                   <ArrowRight
                     className="inline mx-1 text-tm-muted"
@@ -239,7 +239,7 @@ export function ProposalsTable({
                 </TmTableCell>
 
                 {/* Timestamp */}
-                <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-[10px]">
+                <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-xs">
                   {formatChangedAt(p.changed_at)}
                 </TmTableCell>
 
@@ -252,7 +252,7 @@ export function ProposalsTable({
                         size="xs"
                         disabled={isRowPending}
                         onClick={() => handleAction(p.id, "approve")}
-                        className="text-[9px] leading-[16px]"
+                        className="text-xs leading-[16px]"
                       >
                         {isRowPending ? "..." : t(locale, "evolution.proposals.approve")}
                       </TmButton>
@@ -261,18 +261,18 @@ export function ProposalsTable({
                         size="xs"
                         disabled={isRowPending}
                         onClick={() => handleAction(p.id, "reject")}
-                        className="text-[9px] leading-[16px]"
+                        className="text-xs leading-[16px]"
                       >
                         {isRowPending ? "..." : t(locale, "evolution.proposals.reject")}
                       </TmButton>
                     </div>
                   ) : (
-                    <span className="font-tm-mono text-[9px] text-tm-muted">
+                    <span className="font-tm-mono text-xs text-tm-muted">
                       {statusLabel(p.status, locale)}
                     </span>
                   )}
                   {rowError && (
-                    <p className="mt-0.5 font-tm-mono text-[9px] text-tm-neg text-center max-w-[120px]">
+                    <p className="mt-0.5 font-tm-mono text-xs text-tm-neg text-center max-w-[120px]">
                       {rowError}
                     </p>
                   )}

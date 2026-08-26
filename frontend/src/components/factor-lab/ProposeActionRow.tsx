@@ -167,10 +167,10 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
               <span className="font-mono">{formatTs(state.ts)}</span>
               </span>
             }
-            className="h-auto border-0 bg-transparent px-0 font-tm-mono text-[11px] text-tm-fg-2 hover:border-transparent hover:bg-transparent hover:text-tm-fg"
+            className="h-auto border-0 bg-transparent px-0 font-tm-mono text-xs text-tm-fg-2 hover:border-transparent hover:bg-transparent hover:text-tm-fg"
           />
           {resultExpanded ? (
-            <p className="pl-5 font-tm-mono text-[11px] text-tm-fg-2">
+            <p className="pl-5 font-tm-mono text-xs text-tm-fg-2">
               {t(locale, outcomeKey(state.result)).replace(
                 "{n}",
                 String(
@@ -192,7 +192,7 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
             const hasDetail =
               parsed.detail != null && parsed.detail !== summary;
             return (
-              <div className="rounded border border-tm-neg/60 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] text-tm-neg">
+              <div className="rounded border border-tm-neg/60 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs text-tm-neg">
                 <div>
                   {t(locale, "factorLab.propose.errorPrefix")}
                   {": "}
@@ -200,10 +200,10 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
                 </div>
                 {hasDetail ? (
                   <details className="mt-1 text-tm-muted">
-                    <summary className="cursor-pointer text-[10px]">
+                    <summary className="cursor-pointer text-xs">
                       {t(locale, "backtest.verdict.errorDetails")}
                     </summary>
-                    <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all text-[10px]">
+                    <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all text-xs">
                       {parsed.detail}
                     </pre>
                   </details>

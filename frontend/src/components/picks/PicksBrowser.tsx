@@ -289,18 +289,18 @@ export default function PicksBrowser({
       <section className="border-b border-tm-rule bg-tm-bg px-4 py-4" aria-labelledby="picks-heading">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="font-tm-mono text-[10px] uppercase tracking-[0.12em] text-tm-accent">01 · {locale === "zh" ? "理解变化" : "UNDERSTAND CHANGES"}</p>
+            <p className="font-tm-mono text-xs uppercase tracking-[0.12em] text-tm-accent">01 · {locale === "zh" ? "理解变化" : "UNDERSTAND CHANGES"}</p>
             <h1 id="picks-heading" className="mt-1 text-xl font-semibold text-tm-fg">{locale === "zh" ? "今日组合决策" : "Today’s Portfolio Decision"}</h1>
             <p className="mt-2 max-w-2xl text-[12px] leading-5 text-tm-muted">
               {locale === "zh" ? "先确认快照与策略，再查看候选及驱动。真正的交易动作在组合工作台完成，避免把单只股票分数误当成仓位指令。" : "Confirm the snapshot and policy, then inspect candidates and drivers. Execute in the portfolio workspace so a single-name score is not mistaken for a position instruction."}
             </p>
           </div>
-          <Link href="/paper" prefetch={false} className="inline-flex shrink-0 items-center justify-center border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-[11px] font-semibold text-tm-bg hover:opacity-90">
+          <Link href="/paper" prefetch={false} className="inline-flex shrink-0 items-center justify-center border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-xs font-semibold text-tm-bg hover:opacity-90">
             {locale === "zh" ? "02 · 打开组合工作台" : "02 · OPEN PORTFOLIO WORKSPACE"}
           </Link>
         </div>
         {factorMode === "long" ? (
-          <p className="mt-3 rounded border border-tm-warn/40 bg-tm-warn/10 px-3 py-2 font-tm-mono text-[10.5px] leading-5 text-tm-warn">
+          <p className="mt-3 rounded border border-tm-warn/40 bg-tm-warn/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-warn">
             {locale === "zh" ? "战略 60 日策略正在独立前瞻验证，未使用 5 日校准置信度，不应直接与战术榜单的置信度横向比较。" : "The strategic 60d policy is in independent forward validation. It does not use the 5d calibrated confidence and should not be compared as if both figures shared one basis."}
           </p>
         ) : null}
@@ -367,10 +367,10 @@ export default function PicksBrowser({
         {!searching && data.changes ? (
           <section className="border-b border-tm-rule bg-tm-bg px-4 py-3" aria-labelledby="changes-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="changes-heading" className="font-tm-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-tm-fg">
+              <h2 id="changes-heading" className="font-tm-mono text-xs font-semibold uppercase tracking-[0.08em] text-tm-fg">
                 {locale === "zh" ? "相对上一快照的组合变化" : "PORTFOLIO CHANGES VS PRIOR SNAPSHOT"}
               </h2>
-              {data.changes.available && data.changes.turnover != null ? <span className="font-tm-mono text-[10px] text-tm-muted">{locale === "zh" ? "名单换手" : "NAME TURNOVER"} {(data.changes.turnover * 100).toFixed(1)}%</span> : null}
+              {data.changes.available && data.changes.turnover != null ? <span className="font-tm-mono text-xs text-tm-muted">{locale === "zh" ? "名单换手" : "NAME TURNOVER"} {(data.changes.turnover * 100).toFixed(1)}%</span> : null}
             </div>
             {data.changes.available ? (
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -379,7 +379,7 @@ export default function PicksBrowser({
                 <ChangeList tone="text-tm-accent" title={locale === "zh" ? "评级变化" : "TIER CHANGES"} empty={locale === "zh" ? "无评级变化" : "No tier changes"} items={data.changes.tier_changes.map((item) => `${item.ticker} ${item.prior_tier ?? "—"}→${item.current_tier ?? "—"}`)} />
               </div>
             ) : (
-              <p className="mt-2 font-tm-mono text-[10px] leading-5 text-tm-muted">{factorMode === "long" ? (locale === "zh" ? "独立战略政策尚未积累两个同政策快照，因此不伪造跨政策变化。" : "The independent strategic policy does not yet have two same-policy snapshots, so cross-policy changes are not fabricated.") : (locale === "zh" ? "尚无可比的上一份同政策快照。" : "No comparable prior snapshot exists for this policy.")}</p>
+              <p className="mt-2 font-tm-mono text-xs leading-5 text-tm-muted">{factorMode === "long" ? (locale === "zh" ? "独立战略政策尚未积累两个同政策快照，因此不伪造跨政策变化。" : "The independent strategic policy does not yet have two same-policy snapshots, so cross-policy changes are not fabricated.") : (locale === "zh" ? "尚无可比的上一份同政策快照。" : "No comparable prior snapshot exists for this policy.")}</p>
             )}
           </section>
         ) : null}
@@ -456,13 +456,13 @@ export default function PicksBrowser({
                 inputClassName="rounded"
               />
               {loading ? (
-                <span className="font-tm-mono text-[11px] text-tm-muted">
+                <span className="font-tm-mono text-xs text-tm-muted">
                   {copy.loading}
                 </span>
               ) : null}
             </div>
             {count === 0 && searching ? (
-              <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
+              <div className="px-3 py-6 font-tm-mono text-xs text-tm-muted">
                 {copy.empty}
               </div>
             ) : (
@@ -483,5 +483,5 @@ export default function PicksBrowser({
 }
 
 function ChangeList({ title, items, empty, tone }: { readonly title: string; readonly items: readonly string[]; readonly empty: string; readonly tone: string }) {
-  return <div className="rounded border border-tm-rule bg-tm-bg-2 px-3 py-2"><div className={`font-tm-mono text-[9.5px] font-semibold uppercase ${tone}`}>{title}</div><p className="mt-1 truncate font-tm-mono text-[10.5px] text-tm-fg-2" title={items.join(" · ")}>{items.length ? items.slice(0, 5).join(" · ") : empty}</p></div>;
+  return <div className="rounded border border-tm-rule bg-tm-bg-2 px-3 py-2"><div className={`font-tm-mono text-xs font-semibold uppercase ${tone}`}>{title}</div><p className="mt-1 truncate font-tm-mono text-xs text-tm-fg-2" title={items.join(" · ")}>{items.length ? items.slice(0, 5).join(" · ") : empty}</p></div>;
 }

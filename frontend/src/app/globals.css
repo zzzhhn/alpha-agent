@@ -305,12 +305,12 @@ h2 {
 [data-theme="dark"] {
   --tm-bg: #0a0c0f;
   --tm-bg-2: #11141a;
-  --tm-bg-3: #161a22;
+  --tm-bg-3: #19212b;
   --tm-fg: #e7eaf0;
   --tm-fg-2: #aab1bd;
   --tm-muted: #868d99;  /* readability: was #6c7280 (~4.2:1), now ~5.6:1 on #0a0c0f for small labels */
-  --tm-rule: #1f242c;
-  --tm-rule-2: #2a3038;
+  --tm-rule: #2b333e;
+  --tm-rule-2: #3b4654;
   --tm-accent: #39d98a;       /* terminal green */
   --tm-accent-soft: rgba(57, 217, 138, 0.10);
   --tm-warn: #f0b34a;
@@ -330,12 +330,12 @@ h2 {
      like warm paper, not a cold screen. Semantic colors below kept (AA-tuned). */
   --tm-bg: #f3efe7;
   --tm-bg-2: #fbf8f2;          /* warm off-white card, replaces glary pure white */
-  --tm-bg-3: #ebe5d9;
+  --tm-bg-3: #e8dfd0;
   --tm-fg: #211f1a;            /* warm near-black, was cool blue-black #161a20 */
   --tm-fg-2: #4b463d;
   --tm-muted: #6e675b;        /* warm gray, ~4.4:1 on the cream bg (kept AA) */
-  --tm-rule: #ddd5c8;
-  --tm-rule-2: #c7bdac;
+  --tm-rule: #cbbfad;
+  --tm-rule-2: #aa9b86;
   /* P1-5: #0c8a4f green was ~3.5:1 on the cream bg — below WCAG AA (4.5:1)
      for normal text. #0a7344 is ~5.3:1 on cream / ~5.9:1 on white while
      staying unmistakably green, preserving the research-paper palette. */

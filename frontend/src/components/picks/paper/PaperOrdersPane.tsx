@@ -44,13 +44,13 @@ export default function PaperOrdersPane({
     <div className="flex flex-col gap-5 px-3 py-3">
       <TmTableFrame>
         {orders.length === 0 ? (
-          <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "common.noData")}</p>
+          <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "common.noData")}</p>
         ) : (
           <TmTable density="compact" caption={t(locale, "sim.orders.title")} className="text-left">
             <TmTableHead>
               <TmTableRow>
                 {ORDER_HEADERS[locale].map((h) => (
-                  <TmTableHeaderCell key={h} className="text-[10px] tracking-wide">
+                  <TmTableHeaderCell key={h} className="text-xs tracking-wide">
                     {h}
                   </TmTableHeaderCell>
                 ))}
@@ -66,7 +66,7 @@ export default function PaperOrdersPane({
       </TmTableFrame>
 
       {showAttribution ? <div>
-        <div className="mb-2 border-b border-tm-rule pb-1.5 font-tm-mono text-[10px] uppercase tracking-[0.08em] text-tm-muted">
+        <div className="mb-2 border-b border-tm-rule pb-1.5 font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
           {t(locale, "sim.attribution.title")}
         </div>
         <PaperAttributionTable rows={attribution} status={attributionStatus} />
@@ -92,36 +92,36 @@ function OrderRow({
       : t(locale, `sim.status.${o.status}` as "sim.status.pending");
   return (
     <TmTableRow>
-      <TmTableCell className="text-[11px] text-tm-muted">{o.signal_date}</TmTableCell>
+      <TmTableCell className="text-xs text-tm-muted">{o.signal_date}</TmTableCell>
       <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">
         {o.ticker}
         {o.pick_ticker ? (
           <span
             title={t(locale, "sim.followed_tag")}
-            className="ml-1.5 border border-tm-rule px-1 py-px align-middle font-tm-mono text-[8px] uppercase text-tm-muted"
+            className="ml-1.5 border border-tm-rule px-1 py-px align-middle font-tm-mono text-xs uppercase text-tm-muted"
           >
             {t(locale, "sim.followed_tag")}
           </span>
         ) : null}
       </TmTableRowHeader>
-      <TmTableCell className={`text-[11px] ${o.side === "buy" ? "text-tm-pos" : "text-tm-neg"}`}>
+      <TmTableCell className={`text-xs ${o.side === "buy" ? "text-tm-pos" : "text-tm-neg"}`}>
         {t(locale, `sim.order_side.${o.side}` as "sim.order_side.buy")}
       </TmTableCell>
-      <TmTableCell className="text-[11px] text-tm-fg-2">
+      <TmTableCell className="text-xs text-tm-fg-2">
         {t(locale, `sim.order_type.${o.order_type}` as "sim.order_type.market")}
       </TmTableCell>
-      <TmTableCell numeric className="text-[11px] text-tm-fg-2">{o.qty}</TmTableCell>
-      <TmTableCell numeric className="text-[11px] text-tm-fg-2">
+      <TmTableCell numeric className="text-xs text-tm-fg-2">{o.qty}</TmTableCell>
+      <TmTableCell numeric className="text-xs text-tm-fg-2">
         {o.limit_price !== null ? `$${o.limit_price.toFixed(2)}` : "—"}
       </TmTableCell>
-      <TmTableCell numeric className="text-[11px] text-tm-fg-2">
+      <TmTableCell numeric className="text-xs text-tm-fg-2">
         {o.fill_price !== null ? `$${o.fill_price.toFixed(2)}` : "—"}
       </TmTableCell>
-      <TmTableCell className="text-[11px]">
+      <TmTableCell className="text-xs">
         <div className="flex items-center gap-2">
           <StatusChip status={o.status} label={statusLabel} />
           {o.status === "failed" && o.fail_reason ? (
-            <span className="font-tm-mono text-[10px] text-tm-muted" title={o.fail_reason}>
+            <span className="font-tm-mono text-xs text-tm-muted" title={o.fail_reason}>
               {o.fail_reason}
             </span>
           ) : null}

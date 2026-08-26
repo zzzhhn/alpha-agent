@@ -169,7 +169,7 @@ export default function PaperScreen() {
         <div className="grid grid-cols-1 gap-3 px-3 py-2.5 sm:grid-cols-[minmax(14rem,1fr)_minmax(0,2fr)_auto] sm:items-center">
           <div className="min-w-0">
             <div className="font-tm-mono text-[12px] text-tm-fg">{t(locale, "sim.workspace.subtitle")}</div>
-            <div className="mt-1 flex items-center gap-2 font-tm-mono text-[9.5px] uppercase tracking-wide text-tm-muted">
+            <div className="mt-1 flex items-center gap-2 font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
               <span>01 {t(locale, "sim.workspace.guide_step1")}</span><span>→</span>
               <span>02 {t(locale, "sim.workspace.guide_step2")}</span><span>→</span>
               <span>03 {t(locale, "sim.workspace.guide_step3")}</span>
@@ -184,7 +184,7 @@ export default function PaperScreen() {
           {account ? <div className="justify-self-start sm:justify-self-end"><TwoStepConfirm idleLabel={t(locale, "sim.reset_btn")} warnText={t(locale, "sim.reset_confirm")} doneText={t(locale, "sim.reset_done")} onConfirm={handleReset} /></div> : null}
         </div>
         {guideOpen ? (
-          <div className="relative border-t border-tm-rule bg-tm-bg-2 px-3 py-2 pr-10 font-tm-mono text-[10px] leading-5 text-tm-muted">
+          <div className="relative border-t border-tm-rule bg-tm-bg-2 px-3 py-2 pr-10 font-tm-mono text-xs leading-5 text-tm-muted">
             {t(locale, "sim.tour.step2_desc")} {t(locale, "sim.workspace.source_note")}
             <TmIconButton label={t(locale, "sim.close")} className="absolute right-2 top-1.5" onClick={() => setGuideOpen(false)} icon={<X className="h-3.5 w-3.5" />} />
           </div>
@@ -223,7 +223,7 @@ export default function PaperScreen() {
                 targetWeight={0.02}
                 initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
               />
-            ) : paperError ? <PaperError detail={paperError} /> : <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "sim.workspace.no_picks")}</p>}
+            ) : paperError ? <PaperError detail={paperError} /> : <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "sim.workspace.no_picks")}</p>}
           </div>
         </TmPane>
       </div>
@@ -251,17 +251,17 @@ export default function PaperScreen() {
 
 function Loading() {
   const { locale } = useLocale();
-  return <div className="px-3 py-10 font-tm-mono text-[11px] text-tm-muted">{t(locale, "common.loading")}</div>;
+  return <div className="px-3 py-10 font-tm-mono text-xs text-tm-muted">{t(locale, "common.loading")}</div>;
 }
 
 function AuthPrompt({ hint, cta }: { readonly hint: string; readonly cta: string }) {
-  return <div className="flex flex-col items-start gap-3 px-3 py-8"><p className="font-tm-mono text-[11px] text-tm-muted">{hint}</p><Link href="/signin?callbackUrl=/paper" className="border border-tm-accent px-3 py-1.5 font-tm-mono text-[11px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg">{cta}</Link></div>;
+  return <div className="flex flex-col items-start gap-3 px-3 py-8"><p className="font-tm-mono text-xs text-tm-muted">{hint}</p><Link href="/signin?callbackUrl=/paper" className="border border-tm-accent px-3 py-1.5 font-tm-mono text-xs text-tm-accent hover:bg-tm-accent hover:text-tm-bg">{cta}</Link></div>;
 }
 
 function PaperError({ detail }: { readonly detail: string }) {
   const { locale } = useLocale();
   void detail;
-  return <p className="font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "sim.load_error_hint")}</p>;
+  return <p className="font-tm-mono text-xs leading-5 text-tm-neg">{t(locale, "sim.load_error_hint")}</p>;
 }
 
 function SectionError({ detail, onRetry }: { readonly detail: string; readonly onRetry: () => void }) {
@@ -270,10 +270,10 @@ function SectionError({ detail, onRetry }: { readonly detail: string; readonly o
   const message = authRequired
     ? (locale === "zh" ? "登录后可查看该区块，当前未将未知数据显示为空记录。" : "Sign in to view this section; unknown data is not shown as an empty record.")
     : (locale === "zh" ? "该区块暂时无法确认，未将其显示为零。" : "This section is unavailable; unknown data is not shown as zero.");
-  return <div role={authRequired ? "status" : "alert"} className={`m-3 flex items-center justify-between gap-3 border px-3 py-2 font-tm-mono text-[10.5px] ${authRequired ? "border-tm-rule bg-tm-bg-2 text-tm-muted" : "border-tm-neg/40 bg-tm-neg/10 text-tm-neg"}`}><span>{message}</span><TmButton type="button" onClick={onRetry} variant={authRequired ? "secondary" : "danger"} size="xs">{locale === "zh" ? "重新检查" : "Check again"}</TmButton></div>;
+  return <div role={authRequired ? "status" : "alert"} className={`m-3 flex items-center justify-between gap-3 border px-3 py-2 font-tm-mono text-xs ${authRequired ? "border-tm-rule bg-tm-bg-2 text-tm-muted" : "border-tm-neg/40 bg-tm-neg/10 text-tm-neg"}`}><span>{message}</span><TmButton type="button" onClick={onRetry} variant={authRequired ? "secondary" : "danger"} size="xs">{locale === "zh" ? "重新检查" : "Check again"}</TmButton></div>;
 }
 
 function FrozenRecommendations() {
   const { locale } = useLocale();
-  return <p className="mx-3 my-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
+  return <p className="mx-3 my-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
 }

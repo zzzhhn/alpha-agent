@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import type { Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { TmBadge, type TmBadgeTone } from "@/components/tm/TmBadge";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmPagination } from "@/components/tm/TmPagination";
@@ -52,7 +52,7 @@ function DataSpecimens({ locale }: { readonly locale: Locale }) {
   const visibleRows = DEMO_ROWS.slice((page - 1) * pageSize, page * pageSize);
   return (
     <div>
-      <TmPane title="DATA.BADGE + KPI" bodyClassName="p-4">
+      <TmPane title={t(locale, "reference.pane.dataBadgeKpi")} bodyClassName="p-4">
         <div className="mb-4 flex flex-wrap gap-2">
           <TmBadge tone="neutral">NEUTRAL</TmBadge>
           <TmBadge tone="positive">VALIDATED</TmBadge>
@@ -68,7 +68,7 @@ function DataSpecimens({ locale }: { readonly locale: Locale }) {
         </TmKpiGrid>
       </TmPane>
 
-      <TmPane title="DATA.TABLE + PAGINATION" meta={zh ? "选择、排序与分页语义统一" : "shared selection, sorting, and paging grammar"}>
+      <TmPane title={t(locale, "reference.pane.dataTable")} meta={zh ? "选择、排序与分页语义统一" : "shared selection, sorting, and paging grammar"}>
         <TmTableFrame>
           <TmTable caption={zh ? "信号评分示例" : "Signal score example"}>
             <TmTableHead>
@@ -141,7 +141,7 @@ function FeedbackSpecimens({ locale }: { readonly locale: Locale }) {
     },
   };
   return (
-    <TmPane title="FEEDBACK.STATE PANE" meta={zh ? "稳定几何 + 局部恢复" : "stable geometry + local recovery"} bodyClassName="p-4">
+    <TmPane title={t(locale, "reference.pane.feedbackState")} meta={zh ? "稳定几何 + 局部恢复" : "stable geometry + local recovery"} bodyClassName="p-4">
       <div className="mb-4 flex flex-wrap gap-1.5">
         {STATES.map((value) => (
           <TmChip key={value} on={state === value} onClick={() => setState(value)}>

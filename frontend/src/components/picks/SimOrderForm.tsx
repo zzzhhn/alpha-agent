@@ -45,7 +45,7 @@ interface Props {
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 const FIELD_LABEL =
-  "mb-1 block font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted";
+  "mb-1 block font-tm-mono text-xs uppercase tracking-wide text-tm-muted";
 
 /** Compact segmented pills — border+text active state (GradeBadge language),
  *  no solid fill. The order form's one primary CTA (submit) stays solid. */
@@ -173,7 +173,7 @@ export default function SimOrderForm({
             <span className={FIELD_LABEL}>{t(locale, "sim.workspace.selected")}</span>
             <span className="font-tm-mono text-[15px] font-bold text-tm-fg">{fixedTicker}</span>
             {typeof latestPrice === "number" ? (
-              <span className="ml-2 font-tm-mono text-[11px] tabular-nums text-tm-fg-2">
+              <span className="ml-2 font-tm-mono text-xs tabular-nums text-tm-fg-2">
                 ${latestPrice.toFixed(2)}
                 {priceDate ? <span className="ml-1 text-tm-muted">({priceDate})</span> : null}
               </span>
@@ -215,7 +215,7 @@ export default function SimOrderForm({
             fieldSize="sm"
             className="w-24"
           />
-          {fixedTicker ? <p className="mt-1 max-w-44 font-tm-mono text-[9px] leading-4 text-tm-muted">{locale === "zh" ? `默认按组合净值的 ${(targetWeight * 100).toFixed(0)}% 估算，可手动调整` : `Suggested at ${(targetWeight * 100).toFixed(0)}% of portfolio NAV; editable`}</p> : null}
+          {fixedTicker ? <p className="mt-1 max-w-44 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `默认按组合净值的 ${(targetWeight * 100).toFixed(0)}% 估算，可手动调整` : `Suggested at ${(targetWeight * 100).toFixed(0)}% of portfolio NAV; editable`}</p> : null}
         </div>
         {orderType === "limit" && (
           <div>
@@ -236,7 +236,7 @@ export default function SimOrderForm({
 
       {/* Footer: buying power + estimate on the left, one primary action right */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-tm-rule pt-3">
-        <div className="font-tm-mono text-[11px] text-tm-muted">
+        <div className="font-tm-mono text-xs text-tm-muted">
           {t(locale, "sim.available_cash")}{" "}
           <span className="text-tm-fg-2">{cash !== null ? `$${FMT.format(cash)}` : "—"}</span>
           {estimatedCost !== null && (
@@ -252,10 +252,10 @@ export default function SimOrderForm({
       </div>
 
       {error && (
-        <p className="border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-[11px] text-tm-neg">{error}</p>
+        <p className="border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs text-tm-neg">{error}</p>
       )}
       {placed && (
-        <div className="flex items-center gap-2 border border-tm-pos/40 bg-tm-pos/10 px-3 py-2 font-tm-mono text-[11px] text-tm-pos">
+        <div className="flex items-center gap-2 border border-tm-pos/40 bg-tm-pos/10 px-3 py-2 font-tm-mono text-xs text-tm-pos">
           <CheckCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
           {t(locale, "sim.form.order_placed")}
         </div>

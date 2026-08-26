@@ -81,7 +81,7 @@ export function TmICTimeseriesChart({
         />
       </TmKpiGrid>
 
-      <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "signal.ic.subtitle")}
       </p>
 
@@ -94,20 +94,20 @@ export function TmICTimeseriesChart({
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               interval="preserveStartEnd"
               minTickGap={30}
               stroke="var(--tm-rule)"
             />
             <YAxis
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
             />
             <Tooltip
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -117,7 +117,7 @@ export function TmICTimeseriesChart({
             />
             <Legend
               wrapperStyle={{
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
               }}
             />

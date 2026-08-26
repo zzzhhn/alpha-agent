@@ -70,7 +70,7 @@ function IcAroundCell({ change }: { change: EvolutionChange }) {
       <span className="mx-0.5 text-tm-muted">→</span>
       <span className={tone}>{fmt(a)}</span>
       {change.signal ? (
-        <span className="ml-1 text-[10px] text-tm-muted">{change.signal}</span>
+        <span className="ml-1 text-xs text-tm-muted">{change.signal}</span>
       ) : null}
     </span>
   );
@@ -86,7 +86,7 @@ function SourceBadge({ source }: { source: string }) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded border px-1.5 py-0 font-tm-mono text-[9px] leading-[18px]",
+        "inline-flex items-center rounded border px-1.5 py-0 font-tm-mono text-xs leading-[18px]",
         style.border,
         style.bg,
         style.text,
@@ -128,7 +128,7 @@ export function ChangeHistoryTable({
 }) {
   if (changes.length === 0) {
     return (
-      <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
+      <p className="px-1 py-4 font-tm-mono text-xs text-tm-muted text-center">
         {t(locale, "evolution.changes.empty")}
       </p>
     );

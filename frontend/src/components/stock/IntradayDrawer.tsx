@@ -291,7 +291,7 @@ export default function IntradayDrawer({
       {/* that day's news / events */}
       <div className="mt-3 border-t border-tm-rule pt-3">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="font-tm-sans text-[11px] uppercase tracking-wide text-tm-muted">
+          <span className="font-tm-sans text-xs uppercase tracking-wide text-tm-muted">
             {t(locale, "intraday.news_title")} · {news.length}
           </span>
           {/* LLM summary + sentiment of this day's news. Hidden when locked
@@ -323,7 +323,7 @@ export default function IntradayDrawer({
         </div>
         {/* No-key gate: a lock + Settings link instead of a button that errors. */}
         {news.length > 0 && locked ? (
-          <div className="mb-2 flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-[11px] text-tm-muted">
+          <div className="mb-2 flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-xs text-tm-muted">
             <Lock aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             <span>{t(locale, "intraday.analyze_locked")}</span>
             <Link href="/settings" className="text-tm-accent hover:underline">
@@ -335,12 +335,12 @@ export default function IntradayDrawer({
             done / aborted / no-news / error terminal state. */}
         {analysis && (analysisStatus === "streaming" || analysisStatus === "done") ? (
           <div className="mb-2 rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
-            <div className="mb-1 font-tm-sans text-[11px] uppercase tracking-wide text-tm-muted">
+            <div className="mb-1 font-tm-sans text-xs uppercase tracking-wide text-tm-muted">
               {t(locale, "intraday.analysis_title")}
             </div>
             <p className="whitespace-pre-wrap">{analysis}</p>
             {analysisStatus === "done" && analysisCacheHit ? (
-              <p className="mt-1 text-[11px] text-tm-muted">
+              <p className="mt-1 text-xs text-tm-muted">
                 {t(locale, "intraday.analyze_cache_hit")}
               </p>
             ) : null}
@@ -394,17 +394,17 @@ export default function IntradayDrawer({
                 <>
                   <div className="mb-1 flex items-center gap-2">
                     <span
-                      className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tone.pill}`}
+                      className={`rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${tone.pill}`}
                     >
                       {tone.label}
                     </span>
                     {tod ? (
-                      <span className="font-tm-mono text-[11px] text-tm-muted">
+                      <span className="font-tm-mono text-xs text-tm-muted">
                         {tod}
                       </span>
                     ) : null}
                     {src ? (
-                      <span className="truncate text-[11px] text-tm-muted">
+                      <span className="truncate text-xs text-tm-muted">
                         · {src}
                       </span>
                     ) : null}

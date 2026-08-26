@@ -202,7 +202,7 @@ export default function AlertTimeline({ ticker }: { ticker?: string }) {
                       content={t(locale, "alerts.dedup_hint")}
                       ariaLabel={t(locale, "alerts.dedup_hint")}
                     >
-                      <span className="ml-1.5 rounded-[2px] bg-tm-bg-3 px-1 text-[10px] text-tm-fg-2">×{r.count}</span>
+                      <span className="ml-1.5 rounded-[2px] bg-tm-bg-3 px-1 text-xs text-tm-fg-2">×{r.count}</span>
                     </TmTooltip>
                   ) : null}
                 </TmTableCell>

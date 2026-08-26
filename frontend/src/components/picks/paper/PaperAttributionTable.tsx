@@ -56,7 +56,7 @@ export default function PaperAttributionTable({
         <TmTableHead>
           <TmTableRow>
             {COLS.map((k, index) => (
-              <TmTableHeaderCell key={k} textAlign={index === 0 ? "left" : "right"} className="text-[10px] tracking-wide">
+              <TmTableHeaderCell key={k} textAlign={index === 0 ? "left" : "right"} className="text-xs tracking-wide">
                 {t(locale, k)}
               </TmTableHeaderCell>
             ))}
@@ -66,16 +66,16 @@ export default function PaperAttributionTable({
           {rows.map((r) => (
             <TmTableRow key={r.ticker}>
               <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">{r.ticker}</TmTableRowHeader>
-              <TmTableCell numeric textAlign="right" className={`text-[11px] ${pnlTone(r.realized_pnl)}`}>
+              <TmTableCell numeric textAlign="right" className={`text-xs ${pnlTone(r.realized_pnl)}`}>
                 {pnl(r.realized_pnl)}
               </TmTableCell>
-              <TmTableCell numeric textAlign="right" className={`text-[11px] ${pnlTone(r.unrealized_pnl)}`}>
+              <TmTableCell numeric textAlign="right" className={`text-xs ${pnlTone(r.unrealized_pnl)}`}>
                 {pnl(r.unrealized_pnl)}
               </TmTableCell>
-              <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
+              <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
                 {r.pick_linked_trades}
               </TmTableCell>
-              <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
+              <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
                 {r.self_directed_trades}
               </TmTableCell>
             </TmTableRow>

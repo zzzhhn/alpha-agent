@@ -15,7 +15,7 @@ export default function AlertList({ cronRuns }: AlertListProps) {
 
   if (entries.length === 0) {
     return (
-      <div className="px-3 py-6 font-tm-mono text-[11px] text-tm-muted">
+      <div className="px-3 py-6 font-tm-mono text-xs text-tm-muted">
         {t(locale, "alerts.no_cron")}
       </div>
     );
@@ -25,14 +25,14 @@ export default function AlertList({ cronRuns }: AlertListProps) {
     <div className="flex flex-col">
       {entries.map(([name, runs]) => (
         <section key={name} className="border-b border-tm-rule last:border-b-0">
-          <header className="flex items-center gap-3 bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10.5px]">
+          <header className="flex items-center gap-3 bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs">
             <span className="font-semibold uppercase tracking-[0.06em] text-tm-fg-2">
               {name}
             </span>
             <span className="text-tm-muted">{runs.length} run{runs.length !== 1 ? "s" : ""}</span>
           </header>
           {runs.length === 0 ? (
-            <div className="px-3 py-2 font-tm-mono text-[10.5px] text-tm-muted">
+            <div className="px-3 py-2 font-tm-mono text-xs text-tm-muted">
               {t(locale, "alerts.no_runs")}
             </div>
           ) : (
@@ -45,7 +45,7 @@ export default function AlertList({ cronRuns }: AlertListProps) {
                 return (
                   <li
                     key={i}
-                    className="flex items-center gap-3 px-3 py-1.5 font-tm-mono text-[10.5px]"
+                    className="flex items-center gap-3 px-3 py-1.5 font-tm-mono text-xs"
                   >
                     <span
                       className={clsx(

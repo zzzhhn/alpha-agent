@@ -123,11 +123,11 @@ export function BacktestVerdictHeadline({
       className={`border border-l-[3px] border-tm-rule ${tone.bar} ${tone.bg} px-4 py-3`}
     >
       <div className="flex flex-wrap items-center gap-2.5">
-        <span className="font-tm-mono text-[9px] font-semibold tracking-[0.16em] text-tm-muted">
+        <span className="font-tm-mono text-xs font-semibold tracking-[0.16em] text-tm-muted">
           {tk("backtest.verdict.heading")}
         </span>
         <span
-          className={`border px-2 py-0.5 font-tm-mono text-[11px] font-bold tracking-[0.04em] ${tone.badge}`}
+          className={`border px-2 py-0.5 font-tm-mono text-xs font-bold tracking-[0.04em] ${tone.badge}`}
         >
           {label}
         </span>
@@ -137,7 +137,7 @@ export function BacktestVerdictHeadline({
         {msg}
       </p>
 
-      <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-[11.5px]">
+      <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-xs">
         <Kpi
           label={tk("backtest.verdict.kpiTestSharpe")}
           value={fmtSharpe(testSharpe)}

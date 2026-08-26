@@ -141,12 +141,12 @@ function BreakdownEmptyState({
   return (
     <div className="grid min-h-[112px] grid-cols-[minmax(0,1fr)_280px] items-center gap-6 bg-tm-bg px-5 py-4">
       <div>
-        <p className="text-[11px] font-semibold text-tm-fg">
+        <p className="text-xs font-semibold text-tm-fg">
           {locale === "zh"
             ? requested ? "后端未返回每日持仓明细" : "本次运行未请求每日持仓明细"
             : requested ? "The backend returned no daily breakdown" : "Daily breakdown was not requested for this run"}
         </p>
-        <p className="mt-1 text-[10px] leading-5 text-tm-muted">
+        <p className="mt-1 text-xs leading-5 text-tm-muted">
           {locale === "zh"
             ? requested
               ? "请求已包含明细开关，但数据源没有生成可用记录。请检查样本区间和候选股票覆盖后重跑。"
@@ -156,7 +156,7 @@ function BreakdownEmptyState({
               : "This is the bandwidth-saving default, not a page load failure."}
         </p>
       </div>
-      <div className="border-l border-tm-rule pl-5 text-[10px] leading-5 text-tm-fg-2">
+      <div className="border-l border-tm-rule pl-5 text-xs leading-5 text-tm-fg-2">
         <p className="font-semibold text-tm-accent">{locale === "zh" ? "如何获得数据" : "How to populate this section"}</p>
         <p>{locale === "zh" ? "展开顶部“高级”参数，开启“返回每日明细”，然后重新运行回测。" : "Open Advanced, enable Return daily breakdown, then rerun the backtest."}</p>
       </div>

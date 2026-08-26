@@ -81,7 +81,7 @@ export function WeightDeltaTable({
 
   if (rows.length === 0) {
     return (
-      <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
+      <p className="px-1 py-4 font-tm-mono text-xs text-tm-muted text-center">
         {t(locale, "evolution.weights.empty")}
       </p>
     );
@@ -123,7 +123,7 @@ export function WeightDeltaTable({
                   <span className="inline-flex items-center gap-1.5">
                     {getSignalDisplayLabel(signal_name, locale)}
                     {consecutiveBad > 0 && (
-                      <span className="inline-flex items-center rounded border border-tm-neg/40 bg-tm-neg/10 px-1 py-0 font-tm-mono text-[9px] text-tm-neg leading-4">
+                      <span className="inline-flex items-center rounded border border-tm-neg/40 bg-tm-neg/10 px-1 py-0 font-tm-mono text-xs text-tm-neg leading-4">
                         {t(locale, "evolution.weights.bad").replace(
                           "{n}",
                           String(consecutiveBad),

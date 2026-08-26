@@ -12,7 +12,7 @@ export default function SidebarAuthSlot() {
 
   if (status === "loading") {
     return (
-      <div className="border-t border-tm-rule p-3 text-[10.5px] text-tm-muted">
+      <div className="border-t border-tm-rule p-3 text-xs text-tm-muted">
         …
       </div>
     );
@@ -23,7 +23,7 @@ export default function SidebarAuthSlot() {
       <div className="border-t border-tm-rule p-3">
         <TmRowButton
           onClick={() => signIn()}
-          className="flex w-full items-center gap-2 px-1.5 py-1 text-[11.5px] text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg"
+          className="flex w-full items-center gap-2 px-1.5 py-1 text-xs text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg"
         >
           <LogIn aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
           {t(locale, "auth.sign_in")}
@@ -35,13 +35,13 @@ export default function SidebarAuthSlot() {
   const email = session.user.email ?? "user";
   return (
     <div className="border-t border-tm-rule p-3 space-y-1">
-      <div className="flex items-center gap-2 px-1.5 text-[10.5px] text-tm-muted">
+      <div className="flex items-center gap-2 px-1.5 text-xs text-tm-muted">
         <UserCircle aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
         <span className="truncate">{email}</span>
       </div>
       <TmRowButton
         onClick={() => signOut({ callbackUrl: "/picks" })}
-        className="flex w-full items-center gap-2 px-1.5 py-1 text-[11.5px] text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg"
+        className="flex w-full items-center gap-2 px-1.5 py-1 text-xs text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg"
       >
         <LogOut aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
         {t(locale, "auth.sign_out")}

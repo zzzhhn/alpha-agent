@@ -26,15 +26,15 @@ export default function PaperSourceSummary({ rows }: { readonly rows: readonly T
 
   return (
     <div className="border-t border-tm-rule">
-      <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10px] uppercase tracking-wide text-tm-muted">
+      <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
         {t(locale, "sim.workspace.source_record")}
       </div>
       <div className="grid grid-cols-3 divide-x divide-tm-rule">
         {groups.map((group) => (
           <div key={group.source} className="px-3 py-2.5">
-            <div className="font-tm-mono text-[9.5px] uppercase tracking-wide text-tm-muted">{label[group.source]}</div>
+            <div className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">{label[group.source]}</div>
             <div className={`mt-1 font-tm-mono text-[16px] font-semibold tabular-nums ${group.pnl >= 0 ? "text-tm-pos" : "text-tm-neg"}`}>{money(group.pnl)}</div>
-            <div className="mt-0.5 font-tm-mono text-[9.5px] text-tm-muted">{t(locale, "sim.workspace.tracked_tickers")} {group.count}</div>
+            <div className="mt-0.5 font-tm-mono text-xs text-tm-muted">{t(locale, "sim.workspace.tracked_tickers")} {group.count}</div>
           </div>
         ))}
       </div>

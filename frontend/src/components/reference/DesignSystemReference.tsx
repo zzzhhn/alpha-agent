@@ -16,10 +16,12 @@ import { t } from "@/lib/i18n";
 import { ReferenceControls } from "./ReferenceControls";
 import { ReferenceDataFeedback } from "./ReferenceDataFeedback";
 import { ReferenceFoundations } from "./ReferenceFoundations";
+import { ReferenceIconography } from "./ReferenceIconography";
 import { ReferencePatterns } from "./ReferencePatterns";
 import { ReferenceSurfaces } from "./ReferenceSurfaces";
+import { ReferenceVisualizations } from "./ReferenceVisualizations";
 
-type Section = "foundations" | "controls" | "data" | "feedback" | "surfaces" | "patterns";
+type Section = "foundations" | "icons" | "controls" | "data" | "visualizations" | "feedback" | "surfaces" | "patterns";
 
 export function DesignSystemReference() {
   const { locale } = useLocale();
@@ -27,8 +29,10 @@ export function DesignSystemReference() {
   const zh = locale === "zh";
   const items = [
     { key: "foundations", label: t(locale, "reference.section.foundations") },
+    { key: "icons", label: t(locale, "reference.section.icons") },
     { key: "controls", label: t(locale, "reference.section.controls") },
     { key: "data", label: t(locale, "reference.section.data") },
+    { key: "visualizations", label: t(locale, "reference.section.visualizations") },
     { key: "feedback", label: t(locale, "reference.section.feedback") },
     { key: "surfaces", label: t(locale, "reference.section.surfaces") },
     { key: "patterns", label: t(locale, "reference.section.patterns") },
@@ -43,12 +47,12 @@ export function DesignSystemReference() {
         statuses={[
           {
             label: t(locale, "reference.status.coverage"),
-            value: zh ? "首批已固化" : "Core batch fixed",
+            value: zh ? "全量登记中" : "Full registry",
             tone: "positive",
           },
           {
             label: t(locale, "reference.status.version"),
-            value: "2026.08",
+            value: "2026.08.2",
           },
           {
             label: t(locale, "reference.status.theme"),
@@ -80,8 +84,10 @@ export function DesignSystemReference() {
         className="min-h-0 flex-1"
       >
         {section === "foundations" ? <ReferenceFoundations locale={locale} /> : null}
+        {section === "icons" ? <ReferenceIconography locale={locale} /> : null}
         {section === "controls" ? <ReferenceControls locale={locale} /> : null}
         {section === "data" ? <ReferenceDataFeedback locale={locale} mode="data" /> : null}
+        {section === "visualizations" ? <ReferenceVisualizations locale={locale} /> : null}
         {section === "feedback" ? <ReferenceDataFeedback locale={locale} mode="feedback" /> : null}
         {section === "surfaces" ? <ReferenceSurfaces locale={locale} /> : null}
         {section === "patterns" ? <ReferencePatterns locale={locale} /> : null}

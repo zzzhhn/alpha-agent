@@ -165,7 +165,7 @@ export function RecentRunsTable({
   return (
     <TmPane title={title}>
       <TmTableFrame>
-        <TmTable density="standard" caption={title} className="text-[11.5px]">
+        <TmTable density="standard" caption={title} className="text-xs">
           <TmTableHead>
             <TmTableRow>
               <TmTableHeaderCell style={{ width: "6ch" }}>

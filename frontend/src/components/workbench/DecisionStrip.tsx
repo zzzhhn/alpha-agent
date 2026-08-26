@@ -30,7 +30,7 @@ export function DecisionStrip({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch xl:gap-5">
         <div className="flex min-w-0 flex-1 flex-col justify-center border-b border-tm-rule pb-4 xl:min-w-[260px] xl:border-b-0 xl:border-r xl:pb-0 xl:pr-5">
           <div className="text-[18px] font-semibold leading-6 text-tm-fg">{headline}</div>
-          {description ? <p className="mt-1 text-[11px] leading-5 text-tm-muted">{description}</p> : null}
+          {description ? <p className="mt-1 text-xs leading-5 text-tm-muted">{description}</p> : null}
         </div>
         <div
           className="grid min-w-0 flex-[2] gap-px bg-tm-rule"
@@ -38,13 +38,13 @@ export function DecisionStrip({
         >
           {metrics.map((metric) => (
             <div key={metric.label} className="min-w-0 bg-tm-bg px-3 py-3">
-              <p className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+              <p className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
                 {metric.label}
               </p>
               <div className={`mt-1.5 font-tm-mono text-[18px] leading-none tabular-nums ${TONE[metric.tone ?? "default"]}`}>
                 {metric.value}
               </div>
-              {metric.detail ? <p className="mt-1.5 truncate text-[10px] text-tm-muted">{metric.detail}</p> : null}
+              {metric.detail ? <p className="mt-1.5 truncate text-xs text-tm-muted">{metric.detail}</p> : null}
             </div>
           ))}
         </div>

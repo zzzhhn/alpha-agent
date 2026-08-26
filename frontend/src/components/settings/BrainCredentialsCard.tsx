@@ -83,7 +83,7 @@ export function BrainCredentialsCard() {
   return (
     <TmPane title="WORLDQUANT.BRAIN" meta={meta}>
       <div className="flex flex-col gap-3 px-3 py-3">
-        <p className="font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+        <p className="font-tm-mono text-xs leading-relaxed text-tm-muted">
           {zh
             ? "填入你的 WorldQuant BRAIN 登录。加密存储,仅在服务端用于挖矿仿真,明文永不回传。建议用专用/受限账号。"
             : "Your WorldQuant BRAIN login. Stored encrypted, used server-side only for mining simulations; plaintext is never returned. A dedicated/limited account is recommended."}
@@ -145,7 +145,7 @@ export function BrainCredentialsCard() {
 
         {msg ? (
           <p
-            className={`font-tm-mono text-[11px] ${msg.kind === "ok" ? "text-tm-pos" : "text-tm-neg"}`}
+            className={`font-tm-mono text-xs ${msg.kind === "ok" ? "text-tm-pos" : "text-tm-neg"}`}
           >
             {msg.text}
           </p>

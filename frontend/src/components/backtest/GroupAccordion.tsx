@@ -73,7 +73,7 @@ export function GroupAccordion({
               className={`ml-1 inline-flex items-center gap-1 ${badgeToneClass}`}
             >
               <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.75} />
-              <span className="text-[10px] uppercase tracking-[0.04em]">
+              <span className="text-xs uppercase tracking-[0.04em]">
                 {badge.reason}
               </span>
             </span>
@@ -81,7 +81,7 @@ export function GroupAccordion({
           </span>
         }
         meta={open ? hideLabel : countLabel}
-        className="h-auto border-x-0 border-t-0 bg-tm-bg-2 px-3 py-2 font-tm-mono text-[10.5px] hover:bg-tm-bg-3"
+        className="h-auto border-x-0 border-t-0 bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs hover:bg-tm-bg-3"
       />
       {open ? (
         <div className="flex flex-col gap-3 bg-tm-bg p-3">{children}</div>

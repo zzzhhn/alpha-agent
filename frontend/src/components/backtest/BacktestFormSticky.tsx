@@ -214,7 +214,7 @@ export function BacktestFormSticky({
           />
 
           {/* Autosave indicator (discoverability) + reset (Forgiveness) */}
-          <div className="flex items-center gap-2 font-tm-mono text-[10.5px] text-tm-muted">
+          <div className="flex items-center gap-2 font-tm-mono text-xs text-tm-muted">
             <HoverTip content={t(locale, "backtest.memory.hint")} width={260}>
               <span className="inline-flex cursor-help items-center gap-1 border-b border-dotted border-tm-muted/50 hover:border-tm-fg">
                 <Save className="h-3 w-3" strokeWidth={1.75} />
@@ -253,7 +253,7 @@ export function BacktestFormSticky({
           <div
             id="backtest-unknown-ops"
             role="alert"
-            className="mt-2 flex flex-col gap-1 border border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-[11px] text-tm-warn"
+            className="mt-2 flex flex-col gap-1 border border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-xs text-tm-warn"
           >
             {unknownOps.map(({ op, suggestion }) => (
               <div key={`op-${op}`}>

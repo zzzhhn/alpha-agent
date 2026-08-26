@@ -125,10 +125,10 @@ export default function EvolutionHealthStrip({
   return (
     <div className="border-b border-tm-rule bg-tm-bg-2/40">
       <div className="flex items-center justify-between px-4 pt-3">
-        <h2 className="font-tm-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-tm-accent">
+        <h2 className="font-tm-mono text-xs font-semibold uppercase tracking-[0.08em] text-tm-accent">
           {zh ? "自进化健康度" : "SELF-EVOLUTION HEALTH"}
         </h2>
-        <span className={clsx("font-tm-mono text-[10px]", overallMeta.color)}>
+        <span className={clsx("font-tm-mono text-xs", overallMeta.color)}>
           {overallMeta.glyph} {zh ? overallMeta.zh : overallMeta.en}
         </span>
       </div>
@@ -141,14 +141,14 @@ export default function EvolutionHealthStrip({
               className="rounded border border-tm-rule bg-tm-bg px-2.5 py-2"
             >
               <div className="flex items-center justify-between">
-                <span className="font-tm-mono text-[10px] text-tm-fg-2">
+                <span className="font-tm-mono text-xs text-tm-fg-2">
                   {label}
                 </span>
-                <span className={clsx("font-tm-mono text-[10px]", meta.color)}>
+                <span className={clsx("font-tm-mono text-xs", meta.color)}>
                   {meta.glyph} {zh ? meta.zh : meta.en}
                 </span>
               </div>
-              <p className="mt-1 font-tm-mono text-[10px] leading-snug text-tm-muted">
+              <p className="mt-1 font-tm-mono text-xs leading-snug text-tm-muted">
                 {readout}
               </p>
             </div>

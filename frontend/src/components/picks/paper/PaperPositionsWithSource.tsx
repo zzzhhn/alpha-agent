@@ -67,23 +67,23 @@ export default function PaperPositionsWithSource({
             return (
               <TmTableRow key={position.ticker}>
                 <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">{position.ticker}</TmTableRowHeader>
-                <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">{position.qty.toLocaleString()}</TmTableCell>
-                <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">${position.avg_cost.toFixed(2)}</TmTableCell>
-                <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">{currentValue === null ? "—" : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</TmTableCell>
-                <TmTableCell numeric textAlign="right" className={clsx("text-[11px] font-semibold", pnlPositive ? "text-tm-pos" : "text-tm-neg")}>{pnlPositive ? "+" : "-"}${Math.abs(position.unrealized_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="ml-1 font-normal">({position.unrealized_pct >= 0 ? "+" : ""}{position.unrealized_pct.toFixed(2)}%)</span></TmTableCell>
+                <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">{position.qty.toLocaleString()}</TmTableCell>
+                <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">${position.avg_cost.toFixed(2)}</TmTableCell>
+                <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">{currentValue === null ? "—" : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</TmTableCell>
+                <TmTableCell numeric textAlign="right" className={clsx("text-xs font-semibold", pnlPositive ? "text-tm-pos" : "text-tm-neg")}>{pnlPositive ? "+" : "-"}${Math.abs(position.unrealized_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="ml-1 font-normal">({position.unrealized_pct >= 0 ? "+" : ""}{position.unrealized_pct.toFixed(2)}%)</span></TmTableCell>
                 <TmTableCell>
                   <span className={clsx(
-                    "border px-1.5 py-0.5 font-tm-mono text-[9.5px] uppercase tracking-wide",
+                    "border px-1.5 py-0.5 font-tm-mono text-xs uppercase tracking-wide",
                     source?.source_type === "pick" ? "border-tm-accent text-tm-accent" : "border-tm-rule text-tm-fg-2",
                   )}>{sourceLabel(source?.source_type, locale)}</span>
-                  {source?.latest_pick_date ? <span className="ml-2 font-tm-mono text-[9px] text-tm-muted">{source.latest_pick_date}</span> : null}
+                  {source?.latest_pick_date ? <span className="ml-2 font-tm-mono text-xs text-tm-muted">{source.latest_pick_date}</span> : null}
                 </TmTableCell>
               </TmTableRow>
             );
           })}
         </TmTableBody>
       </TmTable>
-      <p className="px-3 py-2 font-tm-mono text-[9.5px] leading-4 text-tm-muted">
+      <p className="px-3 py-2 font-tm-mono text-xs leading-4 text-tm-muted">
         {t(locale, "sim.workspace.source_note")}
       </p>
     </TmTableFrame>

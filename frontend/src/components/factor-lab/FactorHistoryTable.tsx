@@ -52,7 +52,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded border px-1.5 py-0 font-tm-mono text-[9px] leading-[18px]",
+        "inline-flex items-center rounded border px-1.5 py-0 font-tm-mono text-xs leading-[18px]",
         style.border,
         style.bg,
         style.text,
@@ -126,7 +126,7 @@ export function FactorHistoryTable({
 
   if (proposals.length === 0) {
     return (
-      <p className="px-3 py-4 text-center font-tm-mono text-[11px] text-tm-muted">
+      <p className="px-3 py-4 text-center font-tm-mono text-xs text-tm-muted">
         No history yet.
       </p>
     );
@@ -157,22 +157,22 @@ export function FactorHistoryTable({
       <TmTable density="compact" caption="Factor proposal history" className="min-w-[640px] text-xs">
         <TmTableHead>
           <TmTableRow>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">
               Expression
             </TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">
               Status
             </TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">
               dSharpe
             </TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">
               Decided
             </TmTableHeaderCell>
-            <TmTableHeaderCell className="px-2 py-1.5 text-[10px]">
+            <TmTableHeaderCell className="px-2 py-1.5 text-xs">
               By
             </TmTableHeaderCell>
-            <TmTableHeaderCell textAlign="center" className="px-2 py-1.5 text-[10px]">
+            <TmTableHeaderCell textAlign="center" className="px-2 py-1.5 text-xs">
               Actions
             </TmTableHeaderCell>
           </TmTableRow>
@@ -192,7 +192,7 @@ export function FactorHistoryTable({
                 {/* Expression */}
                 <TmTableRowHeader className="max-w-[260px] px-2 py-1.5 font-normal">
                   <div className="flex items-start gap-1">
-                    <code className="break-all font-mono text-[10px] text-tm-fg">
+                    <code className="break-all font-mono text-xs text-tm-fg">
                       {p.expression}
                     </code>
                     <CopyButton text={p.expression} />
@@ -205,17 +205,17 @@ export function FactorHistoryTable({
                 </TmTableCell>
 
                 {/* Deflated Sharpe */}
-                <TmTableCell className="px-2 py-1.5 text-[10px] text-tm-fg-2">
+                <TmTableCell className="px-2 py-1.5 text-xs text-tm-fg-2">
                   {dsharpe}
                 </TmTableCell>
 
                 {/* Decided at */}
-                <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-[10px] text-tm-fg-2">
+                <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-xs text-tm-fg-2">
                   {relativeTime(p.decided_at)}
                 </TmTableCell>
 
                 {/* Decided by */}
-                <TmTableCell className="px-2 py-1.5 text-[10px] text-tm-fg-2">
+                <TmTableCell className="px-2 py-1.5 text-xs text-tm-fg-2">
                   {p.decided_by ?? "—"}
                 </TmTableCell>
 
@@ -229,18 +229,18 @@ export function FactorHistoryTable({
                         disabled={isRowPending}
                         onClick={() => handleRollback(p.id)}
                         loading={isRowPending}
-                        className="text-[9px] leading-[16px]"
+                        className="text-xs leading-[16px]"
                       >
                         Rollback
                       </TmButton>
                       {rowError && (
-                        <p className="mt-0.5 max-w-[120px] text-center font-tm-mono text-[9px] text-tm-neg">
+                        <p className="mt-0.5 max-w-[120px] text-center font-tm-mono text-xs text-tm-neg">
                           {rowError}
                         </p>
                       )}
                     </div>
                   ) : (
-                    <span className="font-tm-mono text-[9px] text-tm-muted">
+                    <span className="font-tm-mono text-xs text-tm-muted">
                       —
                     </span>
                   )}

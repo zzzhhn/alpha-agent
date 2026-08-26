@@ -115,14 +115,14 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
         />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
+          tick={{ fontSize: 12, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: string) => v.slice(5)}
           interval="preserveStartEnd"
           minTickGap={32}
         />
         <YAxis
           yAxisId="left"
-          tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
+          tick={{ fontSize: 12, fill: TM_CHART_CSS.muted }}
           tickFormatter={(v: number) => `${sym}${(v / 1000).toFixed(0)}k`}
           domain={["auto", "auto"]}
           label={{
@@ -130,7 +130,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
             angle: -90,
             position: "insideLeft",
             fill: TM_CHART_CSS.muted,
-            fontSize: 11,
+            fontSize: 12,
             dy: 40,
           }}
         />
@@ -141,7 +141,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
         <YAxis
           yAxisId="right"
           orientation="right"
-          tick={{ fontSize: 10, fill: TM_CHART_CSS.positive }}
+          tick={{ fontSize: 12, fill: TM_CHART_CSS.positive }}
           tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`}
           domain={["auto", "auto"]}
           label={{
@@ -149,7 +149,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
             angle: 90,
             position: "insideRight",
             fill: TM_CHART_CSS.positive,
-            fontSize: 11,
+            fontSize: 12,
             dy: -40,
           }}
         />
@@ -193,7 +193,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
               value: "Train | Test",
               position: "top",
               fill: TM_CHART_CSS.muted,
-              fontSize: 10,
+              fontSize: 12,
             }}
           />
         ) : null}
@@ -206,7 +206,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
             value: "Train",
             position: "insideBottom",
             fill: TM_CHART_CSS.muted,
-            fontSize: 11,
+            fontSize: 12,
             dy: 18,
           }}
         />
@@ -217,7 +217,7 @@ export function FactorPnLChart({ data, height = 340 }: FactorPnLChartProps) {
             value: "Test",
             position: "insideBottom",
             fill: TM_CHART_CSS.muted,
-            fontSize: 11,
+            fontSize: 12,
             dy: 18,
           }}
         />

@@ -61,7 +61,7 @@ export function TmDrawdownChart({
       title="DRAWDOWN.UNDERWATER"
       meta={`worst ${minDD.toFixed(2)}% · ${data.length} sessions`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.drawdown.subtitle")}
       </p>
       <div className="h-[220px] w-full px-1 pb-2 pt-2">
@@ -79,13 +79,13 @@ export function TmDrawdownChart({
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               interval="preserveStartEnd"
               minTickGap={40}
               stroke="var(--tm-rule)"
             />
             <YAxis
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => `${v.toFixed(0)}%`}
               domain={["auto", 0]}
               stroke="var(--tm-rule)"
@@ -94,7 +94,7 @@ export function TmDrawdownChart({
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}

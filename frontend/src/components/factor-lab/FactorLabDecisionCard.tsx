@@ -22,7 +22,7 @@ export function FactorLabDecisionCard({
     return (
       <TmPane title={title}>
         <div className="flex flex-col gap-3 px-3 py-2.5">
-          <p className="font-tm-mono text-[11px] text-tm-neg">
+          <p className="font-tm-mono text-xs text-tm-neg">
             {t(locale, "factorLab.decision.diagnosticUnavailable")}
           </p>
           <div>

@@ -35,7 +35,7 @@ export function MiningJournalPane({
   return (
     <TmPane title="MINING.JOURNAL" meta={meta}>
       {lessons.length === 0 ? (
-        <p className="px-3 py-4 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+        <p className="px-3 py-4 font-tm-mono text-xs leading-relaxed text-tm-muted">
           {locale === "zh"
             ? "还没有挖矿经验。运行一次「提出因子」后，AI 每评估一个候选就会在这里写下一条经验（保留 / 偏弱 / 拒绝），下一轮它会读这些经验来避免重复、调整方向。"
             : "No lessons yet. Run a propose round — the agent writes one lesson per evaluated candidate here (KEEP / WEAK / AVOID), then reads them back next round to avoid repeats and shift direction."}
@@ -47,20 +47,20 @@ export function MiningJournalPane({
             return (
               <li key={i} className="flex items-start gap-3 px-3 py-2">
                 <span
-                  className={`mt-0.5 shrink-0 border px-1.5 py-px font-tm-mono text-[9px] font-bold tracking-[0.04em] ${o.cls}`}
+                  className={`mt-0.5 shrink-0 border px-1.5 py-px font-tm-mono text-xs font-bold tracking-[0.04em] ${o.cls}`}
                 >
                   {o.tag}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <code className="block truncate font-tm-mono text-[11px] text-tm-accent">
+                  <code className="block truncate font-tm-mono text-xs text-tm-accent">
                     {l.expression}
                   </code>
-                  <p className="mt-0.5 text-[11px] leading-snug text-tm-fg-2">
+                  <p className="mt-0.5 text-xs leading-snug text-tm-fg-2">
                     {l.lesson}
                   </p>
                 </div>
                 {l.test_sharpe != null ? (
-                  <span className="shrink-0 font-tm-mono text-[10px] tabular-nums text-tm-muted">
+                  <span className="shrink-0 font-tm-mono text-xs tabular-nums text-tm-muted">
                     SR {l.test_sharpe >= 0 ? "+" : ""}
                     {l.test_sharpe.toFixed(2)}
                   </span>

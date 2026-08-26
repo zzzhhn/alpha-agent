@@ -84,22 +84,22 @@ export function BacktestValidationGate({ currentRun, thresholds }: { readonly cu
     <section className="h-full border border-tm-rule bg-tm-bg">
       <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4">
         <span className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{zh ? "验证门槛" : "Validation gates"}</span>
-        <span className={`text-[10px] ${failed ? "text-tm-neg" : checks.length ? "text-tm-pos" : "text-tm-muted"}`}>{checks.length === 0 ? (zh ? "等待运行" : "Waiting") : failed ? (zh ? `${failed} 项反证` : `${failed} counter-evidence`) : (zh ? "未发现硬性反证" : "No hard counter-evidence")}</span>
+        <span className={`text-xs ${failed ? "text-tm-neg" : checks.length ? "text-tm-pos" : "text-tm-muted"}`}>{checks.length === 0 ? (zh ? "等待运行" : "Waiting") : failed ? (zh ? `${failed} 项反证` : `${failed} counter-evidence`) : (zh ? "未发现硬性反证" : "No hard counter-evidence")}</span>
       </div>
-      {checks.length === 0 ? <div className="flex min-h-52 items-center justify-center px-4 text-center text-[10px] leading-5 text-tm-muted">{zh ? "运行回测后，这里会按稳健性问题逐项判断。" : "Run a backtest to evaluate robustness by decision question."}</div> : (
+      {checks.length === 0 ? <div className="flex min-h-52 items-center justify-center px-4 text-center text-xs leading-5 text-tm-muted">{zh ? "运行回测后，这里会按稳健性问题逐项判断。" : "Run a backtest to evaluate robustness by decision question."}</div> : (
         <div className="divide-y divide-tm-rule">
           {checks.map((check) => {
             const Icon = check.status === "pass" ? CheckCircle2 : check.status === "fail" ? XCircle : check.status === "warn" ? AlertTriangle : HelpCircle;
             const tone = check.status === "pass" ? "text-tm-pos" : check.status === "fail" ? "text-tm-neg" : check.status === "warn" ? "text-tm-warn" : "text-tm-muted";
-            return <div key={check.key} className="grid min-h-[62px] grid-cols-[28px_minmax(145px,0.9fr)_minmax(185px,1.2fr)] items-center gap-3 px-4 py-2 text-[10px]">
+            return <div key={check.key} className="grid min-h-[62px] grid-cols-[28px_minmax(145px,0.9fr)_minmax(185px,1.2fr)] items-center gap-3 px-4 py-2 text-xs">
               <span className="flex h-6 w-6 items-center justify-center border border-tm-rule"><Icon className={`h-3.5 w-3.5 ${tone}`} /></span>
-              <div><p className="text-tm-fg">{zh ? check.titleZh : check.titleEn}</p><p className={`mt-1 font-mono text-[11px] ${tone}`}>{check.value}</p></div>
+              <div><p className="text-tm-fg">{zh ? check.titleZh : check.titleEn}</p><p className={`mt-1 font-mono text-xs ${tone}`}>{check.value}</p></div>
               <p className="leading-4 text-tm-muted">{zh ? check.detailZh : check.detailEn}</p>
             </div>;
           })}
         </div>
       )}
-      <p className="border-t border-tm-rule px-3 py-2 text-[9px] leading-4 text-tm-muted">{zh ? "缺失项会明确标记，不会被当作已通过。" : "Missing evidence is explicit and never treated as a pass."}</p>
+      <p className="border-t border-tm-rule px-3 py-2 text-xs leading-4 text-tm-muted">{zh ? "缺失项会明确标记，不会被当作已通过。" : "Missing evidence is explicit and never treated as a pass."}</p>
     </section>
   );
 }

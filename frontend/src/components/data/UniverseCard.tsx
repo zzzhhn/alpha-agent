@@ -158,7 +158,7 @@ export function UniverseOverview({
           with the right pane. */}
       {coverage && (
         <section className="border-t border-tm-rule">
-          <div className="px-3 py-1 font-tm-mono text-[10px] uppercase tracking-[0.10em] text-tm-muted">
+          <div className="px-3 py-1 font-tm-mono text-xs uppercase tracking-[0.10em] text-tm-muted">
             {t(locale, "data.coverage.title")}
           </div>
           <div className="flex flex-col">
@@ -190,7 +190,7 @@ export function UniverseOverview({
             {worstTickers.map((tk) => (
               <div
                 key={tk.ticker}
-                className="flex items-center gap-3 text-[11px]"
+                className="flex items-center gap-3 text-xs"
               >
                 <span className="w-20 font-semibold text-tm-fg">
                   {tk.ticker}
@@ -207,7 +207,7 @@ export function UniverseOverview({
                 <span className="w-14 text-right tabular-nums text-tm-fg">
                   {(tk.fill_rate * 100).toFixed(1)}%
                 </span>
-                <span className="w-20 text-right text-[10px] text-tm-muted">
+                <span className="w-20 text-right text-xs text-tm-muted">
                   {tk.n_missing} missing
                 </span>
               </div>
@@ -217,7 +217,7 @@ export function UniverseOverview({
       )}
 
       {coverage && (
-        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
+        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
           {t(locale, "data.coverage.legend")}
         </p>
       )}
@@ -265,7 +265,7 @@ function CategoryRow({
     <div className="border-t border-tm-rule first:border-t-0">
       <TmRowButton
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-[11px] transition-colors hover:bg-tm-bg-2"
+        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-xs transition-colors hover:bg-tm-bg-2"
         aria-expanded={open}
       >
         <span className="w-3 text-tm-muted" aria-hidden="true">
@@ -302,7 +302,7 @@ function CategoryRow({
 function FieldBar({ field }: { field: FieldCoverage }) {
   const fill = effFill(field);
   return (
-    <div className="flex items-center gap-3 font-tm-mono text-[11px]">
+    <div className="flex items-center gap-3 font-tm-mono text-xs">
       <code className="w-32 truncate text-tm-fg" title={field.name}>
         {field.name}
       </code>
@@ -318,7 +318,7 @@ function FieldBar({ field }: { field: FieldCoverage }) {
       <span className="w-14 text-right tabular-nums text-tm-fg">
         {(fill * 100).toFixed(1)}%
       </span>
-      <span className="w-20 text-right text-[11px] text-tm-muted">
+      <span className="w-20 text-right text-xs text-tm-muted">
         {field.n_present.toLocaleString()} / {field.n_total.toLocaleString()}
       </span>
     </div>
@@ -351,7 +351,7 @@ function Collapsible({
     <div className="border-t border-tm-rule">
       <TmRowButton
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-[10px] uppercase tracking-[0.08em] transition-colors hover:bg-tm-bg-2"
+        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-xs uppercase tracking-[0.08em] transition-colors hover:bg-tm-bg-2"
         aria-expanded={open}
       >
         <span className="w-3 text-tm-muted" aria-hidden="true">
@@ -475,7 +475,7 @@ function SectorBlock({
       <div className="flex items-center bg-tm-bg-2">
         <TmRowButton
           onClick={() => setOpen((o) => !o)}
-          className="flex flex-1 items-center gap-2 px-3 py-1.5 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg"
+          className="flex flex-1 items-center gap-2 px-3 py-1.5 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg"
           aria-expanded={open}
         >
           <span className="w-3 text-tm-muted" aria-hidden="true">
@@ -489,7 +489,7 @@ function SectorBlock({
             <InfoTooltip content={t(locale, "data.delistedTooltip")} />
             <Link
               href="/methodology"
-              className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted underline-offset-2 hover:text-tm-accent hover:underline"
+              className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted underline-offset-2 hover:text-tm-accent hover:underline"
             >
               {t(locale, "data.delistedLink")}
             </Link>
@@ -506,7 +506,7 @@ function SectorBlock({
           {bucket.tickers.map((tk) => (
             <span
               key={tk}
-              className="bg-tm-bg px-2 py-1 font-tm-mono text-[11px] text-tm-fg-2"
+              className="bg-tm-bg px-2 py-1 font-tm-mono text-xs text-tm-fg-2"
             >
               {tk}
             </span>

@@ -91,7 +91,7 @@ export function TmEquityDrawdownChart({
           : undefined
       }
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.equity.subtitle")} · drawdown overlay on
         secondary axis.
       </p>
@@ -110,14 +110,14 @@ export function TmEquityDrawdownChart({
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               interval="preserveStartEnd"
               minTickGap={40}
               stroke="var(--tm-rule)"
             />
             <YAxis
               yAxisId="eq"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => v.toFixed(2)}
               stroke="var(--tm-rule)"
               domain={["auto", "auto"]}
@@ -125,7 +125,7 @@ export function TmEquityDrawdownChart({
             <YAxis
               yAxisId="dd"
               orientation="right"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => `${v.toFixed(0)}%`}
               stroke="var(--tm-rule)"
               domain={["auto", 0]}
@@ -134,7 +134,7 @@ export function TmEquityDrawdownChart({
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -148,7 +148,7 @@ export function TmEquityDrawdownChart({
             />
             <Legend
               wrapperStyle={{
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
               }}
             />

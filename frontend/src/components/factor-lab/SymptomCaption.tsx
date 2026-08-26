@@ -9,7 +9,7 @@ interface SymptomCaptionProps {
 export function SymptomCaption({ locale, symptom }: SymptomCaptionProps) {
   if (!symptom) return null;
   return (
-    <div className="border-t border-tm-rule pt-2 font-tm-mono text-[10px] text-tm-muted">
+    <div className="border-t border-tm-rule pt-2 font-tm-mono text-xs text-tm-muted">
       <span className="uppercase tracking-wider">
         {t(locale, "factorLab.decision.symptom")}
       </span>

@@ -603,7 +603,7 @@ export default function FactorsPage() {
             {decay.map((d) => (
               <li
                 key={d.factor_id}
-                className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[11px] last:border-b-0"
+                className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs last:border-b-0"
               >
                 <span className="text-tm-warn">▸</span>
                 <span className="text-tm-fg">{d.name}</span>
@@ -631,7 +631,7 @@ export default function FactorsPage() {
             {aggregates.staleEntries.map((e) => (
               <li
                 key={e.id}
-                className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[11px] last:border-b-0"
+                className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs last:border-b-0"
               >
                 <span className="text-tm-info">⏱</span>
                 <span className="flex-1 truncate text-tm-fg">{e.name}</span>
@@ -646,7 +646,7 @@ export default function FactorsPage() {
                 <TmButton
                   variant="ghost"
                   onClick={() => loadIntoBacktest(e)}
-                  className="h-6 px-1.5 text-[10px]"
+                  className="h-6 px-1.5 text-xs"
                 >
                   re-run
                 </TmButton>
@@ -682,7 +682,7 @@ export default function FactorsPage() {
           }
         >
           {corrError && (
-            <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+            <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-neg">
               {corrError}
             </p>
           )}
@@ -712,7 +712,7 @@ function LeaderSide({
   return (
     <TmPane title={title} meta={`${entries.length} SHOWN`}>
       {entries.length === 0 ? (
-        <p className="px-3 py-3 font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-3 py-3 font-tm-mono text-xs text-tm-muted">
           no ranked entries.
         </p>
       ) : (
@@ -807,7 +807,7 @@ function OperatorUsagePane({
   return (
     <TmPane title="OPS.USAGE" meta={`TOP ${opsCount.length} OF UNIQUE OPS`}>
       {opsCount.length === 0 ? (
-        <p className="px-3 py-3 font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-3 py-3 font-tm-mono text-xs text-tm-muted">
           no operators detected.
         </p>
       ) : (
@@ -821,7 +821,7 @@ function OperatorUsagePane({
                 className="grid items-center gap-3 border-b border-tm-rule px-3 py-1 last:border-b-0"
                 style={{ gridTemplateColumns: "minmax(120px, 140px) 1fr 60px 50px" }}
               >
-                <span className="truncate font-tm-mono text-[11px] text-tm-accent">
+                <span className="truncate font-tm-mono text-xs text-tm-accent">
                   {op}
                 </span>
                 <div className="relative h-3 w-full bg-tm-bg-2">
@@ -830,10 +830,10 @@ function OperatorUsagePane({
                     style={{ width: `${widthPct}%` }}
                   />
                 </div>
-                <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg-2">
+                <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">
                   {count}
                 </span>
-                <span className="text-right font-tm-mono text-[10px] tabular-nums text-tm-muted">
+                <span className="text-right font-tm-mono text-xs tabular-nums text-tm-muted">
                   {sharePct.toFixed(0)}%
                 </span>
               </li>
@@ -876,7 +876,7 @@ function DirectionMixPane({
               className="grid items-center gap-3 border-b border-tm-rule px-3 py-1.5 last:border-b-0"
               style={{ gridTemplateColumns: "minmax(120px, 140px) 1fr 60px 60px" }}
             >
-              <span className={`font-tm-mono text-[11px] ${d.textClass}`}>
+              <span className={`font-tm-mono text-xs ${d.textClass}`}>
                 {d.label}
               </span>
               <div className="relative h-3 w-full bg-tm-bg-2">
@@ -885,10 +885,10 @@ function DirectionMixPane({
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg-2">
+              <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">
                 {count}
               </span>
-              <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-muted">
+              <span className="text-right font-tm-mono text-xs tabular-nums text-tm-muted">
                 {pct.toFixed(0)}%
               </span>
             </li>
@@ -912,7 +912,7 @@ function DistChart({
 }) {
   return (
     <div className="flex flex-col bg-tm-bg">
-      <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+      <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
         {title}
       </div>
       <div className="h-[180px] w-full px-1 pb-1 pt-2">
@@ -921,12 +921,12 @@ function DistChart({
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
               interval={0}
             />
             <YAxis
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
               allowDecimals={false}
             />
@@ -934,7 +934,7 @@ function DistChart({
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -1016,13 +1016,13 @@ function TimelineActivityPane({
             />
             <XAxis
               dataKey="week"
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
               interval="preserveStartEnd"
               minTickGap={40}
             />
             <YAxis
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
               allowDecimals={false}
             />
@@ -1030,7 +1030,7 @@ function TimelineActivityPane({
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -1146,7 +1146,7 @@ function ZooCatalogPane({
       meta={`${filtered.length}/${entries.length} ENTRIES`}
     >
       <div className="flex flex-wrap items-center gap-1.5 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-        <span className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
           DIR
         </span>
         {dirChips.map((c) => (
@@ -1158,7 +1158,7 @@ function ZooCatalogPane({
             {c.label}
           </TmChip>
         ))}
-        <span className="ml-3 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+        <span className="ml-3 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
           STATUS
         </span>
         {statusChips.map((c) => (
@@ -1174,7 +1174,7 @@ function ZooCatalogPane({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
           {entries.length === 0
             ? t(locale, "zoo.empty")
             : "no entries match the current filter."}
@@ -1237,7 +1237,7 @@ function Header({
 }) {
   return (
     <div
-      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${
         align === "right" ? "text-right" : ""
       }`}
     >
@@ -1266,12 +1266,12 @@ function SortHeader({
   return (
     <TmRowButton
       onClick={() => onClick(col)}
-      className={`flex items-center gap-1 bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] hover:text-tm-fg ${
+      className={`flex items-center gap-1 bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] hover:text-tm-fg ${
         align === "right" ? "justify-end" : ""
       } ${active ? "text-tm-accent" : "text-tm-muted"}`}
     >
       <span>{children}</span>
-      <span className="text-[8px]">{arrow}</span>
+      <span className="text-xs">{arrow}</span>
     </TmRowButton>
   );
 }
@@ -1285,7 +1285,7 @@ function HCell({
 }) {
   return (
     <div
-      className={`bg-tm-bg-2 px-2 py-1 font-tm-mono text-[9.5px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+      className={`bg-tm-bg-2 px-2 py-1 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${
         align === "right" ? "text-right" : ""
       }`}
     >
@@ -1305,7 +1305,7 @@ function DCell({
 }) {
   return (
     <div
-      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
+      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs ${
         align === "right" ? "justify-end" : ""
       }`}
       title={title}
@@ -1324,7 +1324,7 @@ function DirBadge({ direction }: { readonly direction: "long_short" | "long_only
   const { label, tone } = map[direction];
   return (
     <GlossaryTip term={label} underline={false}>
-      <span className={`inline-block border border-current px-1 py-px font-tm-mono text-[9.5px] tabular-nums ${tone}`}>
+      <span className={`inline-block border border-current px-1 py-px font-tm-mono text-xs tabular-nums ${tone}`}>
         {label}
       </span>
     </GlossaryTip>
@@ -1356,7 +1356,7 @@ function ZooRow({
   const dir = entry.direction ?? "long_short";
   return (
     <>
-      <div className="flex min-w-0 items-center gap-1.5 bg-tm-bg px-2 py-1 font-tm-mono text-[11px]">
+      <div className="flex min-w-0 items-center gap-1.5 bg-tm-bg px-2 py-1 font-tm-mono text-xs">
         <span className="truncate text-tm-accent">{entry.name}</span>
         {isDecaying && (
           <GlossaryTip term="DECAYING" underline={false}>
@@ -1373,7 +1373,7 @@ function ZooRow({
         <DirBadge direction={dir} />
       </div>
       <div
-        className="flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px]"
+        className="flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs"
         title={entry.expression}
       >
         <span className="block truncate text-tm-fg-2">{entry.expression}</span>
@@ -1396,16 +1396,16 @@ function ZooRow({
       </DCell>
       <DCell align="right">
         <div className="flex justify-end gap-1">
-          <TmButton variant="ghost" onClick={onLoadBacktest} className="h-6 px-1.5 text-[10px]">
+          <TmButton variant="ghost" onClick={onLoadBacktest} className="h-6 px-1.5 text-xs">
             {t(locale, "zoo.actLoadBacktest")}
           </TmButton>
-          <TmButton variant="ghost" onClick={onLoadReport} className="h-6 px-1.5 text-[10px]">
+          <TmButton variant="ghost" onClick={onLoadReport} className="h-6 px-1.5 text-xs">
             {t(locale, "zoo.actLoadReport")}
           </TmButton>
-          <TmButton variant="ghost" onClick={onLoadScreener} className="h-6 px-1.5 text-[10px]">
+          <TmButton variant="ghost" onClick={onLoadScreener} className="h-6 px-1.5 text-xs">
             {t(locale, "zoo.actLoadScreener")}
           </TmButton>
-          <TmButton variant="ghost" onClick={onDelete} className="h-6 px-1.5 text-[10px]">
+          <TmButton variant="ghost" onClick={onDelete} className="h-6 px-1.5 text-xs">
             {t(locale, "zoo.actDelete")}
           </TmButton>
         </div>
@@ -1459,7 +1459,7 @@ function CorrelationPanel({
     <div className="flex flex-col">
       {warnings.length > 0 && (
         <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-2.5">
-          <div className="mb-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-neg">
+          <div className="mb-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-neg">
             {t(locale, "zoo.corr.warningsHeader").replace(
               "{n}",
               String(warnings.length),
@@ -1469,7 +1469,7 @@ function CorrelationPanel({
             {warnings.map((w) => (
               <li
                 key={`${w.a}|${w.b}`}
-                className="flex items-center gap-2 font-tm-mono text-[11px]"
+                className="flex items-center gap-2 font-tm-mono text-xs"
               >
                 <span className="text-tm-fg">{w.a}</span>
                 <span className="text-tm-muted">↔</span>
@@ -1487,7 +1487,7 @@ function CorrelationPanel({
         <TmTable
           density="compact"
           caption={t(locale, "zoo.corr.title")}
-          className="w-auto text-[10.5px]"
+          className="w-auto text-xs"
         >
           <TmTableHead>
             <TmTableRow>

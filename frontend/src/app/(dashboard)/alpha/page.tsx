@@ -199,7 +199,7 @@ export default function AlphaPage() {
           <h2 className="font-tm-mono text-[12px] font-semibold tracking-[0.08em] text-tm-fg">
             <span className="mr-2 text-tm-accent">③</span>{locale === "zh" ? "表达式、证据与反证" : "Expression, evidence, and counter-evidence"}
           </h2>
-          <span className="text-[9px] text-tm-muted">{locale === "zh" ? "详细诊断按需展开" : "Detailed diagnostics expand on demand"}</span>
+          <span className="text-xs text-tm-muted">{locale === "zh" ? "详细诊断按需展开" : "Detailed diagnostics expand on demand"}</span>
         </div>
         <EvidencePaneGrid
           state={chain.state}

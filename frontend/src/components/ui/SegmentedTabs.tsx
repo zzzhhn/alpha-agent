@@ -78,7 +78,7 @@ export function SegmentedTabs<K extends string>({
             onClick={() => onChange(item.key)}
             onKeyDown={(event) => moveFocus(index, event)}
             className={[
-              "relative flex h-8 items-center gap-1.5 whitespace-nowrap px-3 font-tm-mono text-[11px] uppercase tracking-[0.06em] transition-colors",
+              "relative flex h-8 items-center gap-1.5 whitespace-nowrap px-3 font-tm-mono text-xs uppercase tracking-[0.06em] transition-colors",
               isActive
                 ? "bg-tm-bg font-semibold text-tm-accent after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-tm-accent"
                 : "font-medium text-tm-muted hover:bg-tm-bg-3 hover:text-tm-fg",

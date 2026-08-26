@@ -544,7 +544,7 @@ export default function ReportPage() {
 
       {error && (
         <TmPane title="ERROR" meta="report generation failed">
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+          <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-neg">
             {error}
           </p>
         </TmPane>
@@ -555,7 +555,7 @@ export default function ReportPage() {
           title="COMPARE.OVERLAY"
           meta={`${primary.name} vs ${compare.name} vs ${primary.backtest.benchmark_ticker}`}
         >
-          <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+          <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
             {t(locale, "report.compare.subtitle")
               .replace("{a}", primary.name)
               .replace("{b}", compare.name)}
@@ -607,7 +607,7 @@ export default function ReportPage() {
               title="EQUITY.CURVE"
               meta={`${primary.backtest.equity_curve.length} sessions · vs ${primary.backtest.benchmark_ticker}`}
             >
-              <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+              <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
                 {t(locale, "backtest.equity.subtitle")}
               </p>
               <div className="px-2 pb-2 pt-2">
@@ -648,7 +648,7 @@ export default function ReportPage() {
       {compare && (
         <article className="report-tearsheet flex flex-col">
           <TmPane title="REPORT.COMPARE" meta="second factor tear sheet">
-            <p className="px-3 py-2 font-tm-mono text-[10.5px] uppercase tracking-[0.06em] text-tm-info">
+            <p className="px-3 py-2 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-info">
               {t(locale, "report.compare.secondLabel")}
             </p>
           </TmPane>
@@ -679,7 +679,7 @@ export default function ReportPage() {
 
       {!primary && !running && (
         <TmPane title="USAGE" meta="hint">
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+          <p className="px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
             {t(locale, "report.subtitle")}
           </p>
         </TmPane>
@@ -764,7 +764,7 @@ function ReportPickerPane({
             onChange={(v) => onConfig((c) => ({ ...c, benchmarkTicker: v as "SPY" | "RSP" }))}
           />
           <div className="flex items-center gap-2">
-            <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+            <span className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
               cost bps
             </span>
             <TmNumberInput
@@ -788,10 +788,10 @@ function ReportPickerPane({
             Run executes the backtest. */}
         <div className="border-t border-tm-rule pt-2.5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+            <p className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
               {t(locale, "report.picker.fromExamples")}
             </p>
-            <p className="font-tm-sans text-[11px] text-tm-muted">
+            <p className="font-tm-sans text-xs text-tm-muted">
               {t(locale, "report.example.listHint")}
             </p>
           </div>
@@ -804,11 +804,11 @@ function ReportPickerPane({
           {/* Run gate: visible only once an example is staged. */}
           {stagedName && (
             <div className="mt-2 flex items-center justify-between gap-2 border-t border-tm-rule pt-2">
-              <span className="inline-flex items-center gap-1.5 font-tm-mono text-[10.5px] text-tm-muted">
-                <span className="rounded-sm border border-tm-accent/40 bg-tm-accent-soft px-1.5 py-px text-[10px] uppercase tracking-[0.06em] text-tm-accent">
+              <span className="inline-flex items-center gap-1.5 font-tm-mono text-xs text-tm-muted">
+                <span className="rounded-sm border border-tm-accent/40 bg-tm-accent-soft px-1.5 py-px text-xs uppercase tracking-[0.06em] text-tm-accent">
                   {t(locale, "report.picker.staged")}
                 </span>
-                <span className="font-tm-sans text-[11px] text-tm-fg-2">
+                <span className="font-tm-sans text-xs text-tm-fg-2">
                   {stagedName}
                 </span>
               </span>
@@ -829,7 +829,7 @@ function ReportPickerPane({
         {/* From zoo */}
         {zoo.length > 0 && (
           <div className="border-t border-tm-rule pt-2.5">
-            <p className="mb-1.5 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+            <p className="mb-1.5 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
               {t(locale, "report.picker.fromZoo")}
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -855,7 +855,7 @@ function ReportPickerPane({
             placeholder={t(locale, "report.picker.namePlaceholder")}
             aria-label={t(locale, "report.picker.namePlaceholder")}
             className="w-full"
-            inputClassName="font-tm-mono text-[11.5px]"
+            inputClassName="font-tm-mono text-xs"
           />
           <TmTextarea
             value={expr}
@@ -865,7 +865,7 @@ function ReportPickerPane({
             spellCheck={false}
             aria-label={t(locale, "report.picker.exprPlaceholder")}
             className="w-full"
-            textareaClassName="resize-none font-tm-mono text-[11.5px] leading-relaxed"
+            textareaClassName="resize-none font-tm-mono text-xs leading-relaxed"
           />
           <div className="flex justify-end">
             <TmButton
@@ -883,10 +883,10 @@ function ReportPickerPane({
         {/* Compare slot — appears once primary is set */}
         {primary && (
           <div className="border-t border-tm-rule pt-2.5">
-            <p className="mb-1 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+            <p className="mb-1 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
               {t(locale, "report.picker.compareTitle")}
             </p>
-            <p className="mb-1.5 font-tm-mono text-[10.5px] text-tm-muted">
+            <p className="mb-1.5 font-tm-mono text-xs text-tm-muted">
               {t(locale, "report.picker.compareSubtitle")}
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -929,7 +929,7 @@ function ReportPickerPane({
                 <TmButton
                   variant="ghost"
                   onClick={clearCompare}
-                  className="h-6 px-2 text-[10px]"
+                  className="h-6 px-2 text-xs"
                 >
                   {t(locale, "report.picker.compareClear")}
                 </TmButton>
@@ -955,7 +955,7 @@ function ConfigChipGroup({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+      <span className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
         {label}
       </span>
       {options.map((o) => (
@@ -1003,7 +1003,7 @@ function ReportCoverPane({
         <h2 className="font-tm-mono text-[14px] font-semibold uppercase tracking-[0.04em] text-tm-accent">
           {factorName || r.backtest.factor_name}
         </h2>
-        <code className="mt-1 block break-all font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+        <code className="mt-1 block break-all font-tm-mono text-xs leading-relaxed text-tm-fg-2">
           {expr}
         </code>
       </div>
@@ -1047,12 +1047,12 @@ function ReportCoverPane({
       </TmKpiGrid>
 
       {intuition && (
-        <p className="border-t border-tm-rule px-3 py-2.5 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+        <p className="border-t border-tm-rule px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
           {intuition}
         </p>
       )}
 
-      <p className="border-t border-tm-rule bg-tm-bg-2 px-3 py-1 font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted">
+      <p className="border-t border-tm-rule bg-tm-bg-2 px-3 py-1 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
         {t(locale, "report.cover.generated")}:{" "}
         {new Date().toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}
       </p>
@@ -1080,7 +1080,7 @@ function RiskMetricsPane({ report }: { readonly report: FactorReport }) {
   }, [eq, bench]);
   return (
     <TmPane title="RISK.METRICS" meta="institutional risk-adjusted ratios">
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "report.risk.desc")}
       </p>
       <TmKpiGrid>
@@ -1146,7 +1146,7 @@ function TailRiskPane({ report }: { readonly report: FactorReport }) {
   }, [eq]);
   return (
     <TmPane title="TAIL.RISK" meta="historical VaR / streak / profit factor">
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "report.tail.desc")}
       </p>
       <TmKpiGrid>
@@ -1206,7 +1206,7 @@ function YearlyBreakdownPane({
   if (rows.length === 0) return null;
   return (
     <TmPane title="YEARLY.BREAKDOWN" meta={`${rows.length} year${rows.length === 1 ? "" : "s"}`}>
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "report.yearly.desc")}
       </p>
       <div className="overflow-x-auto">
@@ -1232,7 +1232,7 @@ function YHeader({
   children, align = "left",
 }: { readonly children: React.ReactNode; readonly align?: "left" | "right" }) {
   return (
-    <div className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${align === "right" ? "text-right" : ""}`}>
+    <div className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${align === "right" ? "text-right" : ""}`}>
       {children}
     </div>
   );
@@ -1265,7 +1265,7 @@ function YCell({
   children, align = "left",
 }: { readonly children: React.ReactNode; readonly align?: "left" | "right" }) {
   return (
-    <div className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${align === "right" ? "justify-end" : ""}`}>
+    <div className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs ${align === "right" ? "justify-end" : ""}`}>
       {children}
     </div>
   );
@@ -1374,7 +1374,7 @@ function CHeader({
   children, align = "left",
 }: { readonly children: React.ReactNode; readonly align?: "left" | "right" }) {
   return (
-    <div className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${align === "right" ? "text-right" : ""}`}>
+    <div className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${align === "right" ? "text-right" : ""}`}>
       {children}
     </div>
   );
@@ -1393,19 +1393,19 @@ function MetricCompareRow({ row }: { readonly row: MetricRow }) {
   const winnerTone = aWins ? "text-tm-pos" : bWins ? "text-tm-info" : "text-tm-muted";
   return (
     <>
-      <div className="flex items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] text-tm-fg">
+      <div className="flex items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs text-tm-fg">
         {row.label}
       </div>
-      <div className={`flex items-center justify-end bg-tm-bg px-2 py-1 font-tm-mono text-[11px] tabular-nums ${aTone}`}>
+      <div className={`flex items-center justify-end bg-tm-bg px-2 py-1 font-tm-mono text-xs tabular-nums ${aTone}`}>
         {row.fmt(row.a)}
       </div>
-      <div className={`flex items-center justify-end bg-tm-bg px-2 py-1 font-tm-mono text-[11px] tabular-nums ${bTone}`}>
+      <div className={`flex items-center justify-end bg-tm-bg px-2 py-1 font-tm-mono text-xs tabular-nums ${bTone}`}>
         {row.fmt(row.b)}
       </div>
-      <div className={`flex items-center justify-end bg-tm-bg px-2 py-1 font-tm-mono text-[10.5px] tabular-nums ${deltaTone}`}>
+      <div className={`flex items-center justify-end bg-tm-bg px-2 py-1 font-tm-mono text-xs tabular-nums ${deltaTone}`}>
         {delta >= 0 ? "+" : ""}{row.fmt(delta).replace(/^[+-]/, "")}
       </div>
-      <div className={`flex items-center justify-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] font-semibold ${winnerTone}`}>
+      <div className={`flex items-center justify-center bg-tm-bg px-2 py-1 font-tm-mono text-xs font-semibold ${winnerTone}`}>
         {winner}
       </div>
     </>
@@ -1446,7 +1446,7 @@ function CompareCorrelationPane({
       title="COMPARE.CORRELATION"
       meta={`full-period ρ = ${stats.fullCorr.toFixed(3)}${concentrationWarn ? " · ⚠ HIGH" : ""}`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "report.correlation.desc")}
       </p>
       <TmKpiGrid>
@@ -1481,13 +1481,13 @@ function CompareCorrelationPane({
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               interval="preserveStartEnd"
               minTickGap={40}
               stroke="var(--tm-rule)"
             />
             <YAxis
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               domain={[-1, 1]}
               tickFormatter={(v: number) => v.toFixed(1)}
               stroke="var(--tm-rule)"
@@ -1496,7 +1496,7 @@ function CompareCorrelationPane({
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -1553,7 +1553,7 @@ function RecentMomentumPane({ report }: { readonly report: FactorReport }) {
       title="RECENT.MOMENTUM"
       meta={`vs ${report.backtest.benchmark_ticker} · spread = factor − benchmark`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "report.momentum.desc")}
       </p>
       <TmKpiGrid>
@@ -1613,7 +1613,7 @@ function TickerOverlapPane({
       title="TICKER.OVERLAP"
       meta={`Jaccard long ${(data.longJaccard * 100).toFixed(0)}% · short ${(data.shortJaccard * 100).toFixed(0)}%`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "report.overlap.desc")}
       </p>
       <TmKpiGrid>
@@ -1661,17 +1661,17 @@ function OverlapList({
   const accent = tone === "pos" ? "text-tm-pos" : "text-tm-neg";
   return (
     <div className="bg-tm-bg px-3 py-2">
-      <div className={`mb-1 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] ${accent}`}>
+      <div className={`mb-1 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] ${accent}`}>
         {title} · {tickers.length}
       </div>
       <div className="flex flex-wrap gap-1.5">
         {tickers.length === 0 ? (
-          <span className="font-tm-mono text-[10.5px] text-tm-muted">none</span>
+          <span className="font-tm-mono text-xs text-tm-muted">none</span>
         ) : (
           tickers.map((tk) => (
             <span
               key={tk}
-              className={`border border-tm-rule bg-tm-bg-2 px-1.5 py-px font-tm-mono text-[10.5px] tabular-nums ${accent}`}
+              className={`border border-tm-rule bg-tm-bg-2 px-1.5 py-px font-tm-mono text-xs tabular-nums ${accent}`}
             >
               {tk}
             </span>
@@ -1696,7 +1696,7 @@ function RecoveryStatsPane({
       title="RECOVERY.STATS"
       meta={`${s.nDrawdownEpisodes} episodes · ${equityCurve.length} sessions`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "report.recovery.desc")}
       </p>
       <TmKpiGrid>

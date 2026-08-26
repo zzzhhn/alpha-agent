@@ -69,7 +69,7 @@ export function TmMonthlyReturnsHeatmap({
       title="MONTHLY.RETURNS"
       meta={`${years.length} YEAR${years.length === 1 ? "" : "S"} · compounded`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.monthly.subtitle")}
       </p>
       <div className="overflow-x-auto px-3 py-3">
@@ -82,18 +82,18 @@ export function TmMonthlyReturnsHeatmap({
           </caption>
           <thead>
             <tr>
-              <th className="sticky left-0 z-10 bg-tm-bg px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+              <th className="sticky left-0 z-10 bg-tm-bg px-2 py-1 text-left text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
                 {t(locale, "backtest.monthly.year")}
               </th>
               {MONTH_LABELS.map((m) => (
                 <th
                   key={m}
-                  className="px-1 py-1 text-center text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted"
+                  className="px-1 py-1 text-center text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted"
                 >
                   {m}
                 </th>
               ))}
-              <th className="px-2 py-1 text-right text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+              <th className="px-2 py-1 text-right text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
                 {t(locale, "backtest.monthly.total")}
               </th>
             </tr>
@@ -104,7 +104,7 @@ export function TmMonthlyReturnsHeatmap({
               const total = yearTotal(y);
               return (
                 <tr key={y}>
-                  <td className="sticky left-0 z-10 bg-tm-bg px-2 py-1 text-[11px] text-tm-fg">
+                  <td className="sticky left-0 z-10 bg-tm-bg px-2 py-1 text-xs text-tm-fg">
                     {y}
                   </td>
                   {MONTH_LABELS.map((_l, idx) => {
@@ -113,7 +113,7 @@ export function TmMonthlyReturnsHeatmap({
                       return (
                         <td
                           key={idx}
-                          className="border border-tm-rule bg-tm-bg-2 px-1 py-1 text-center text-[10.5px] text-tm-muted"
+                          className="border border-tm-rule bg-tm-bg-2 px-1 py-1 text-center text-xs text-tm-muted"
                         >
                           <TmTooltip
                             content={locale === "zh" ? "该月无回测数据" : "No backtest data for this month"}
@@ -128,7 +128,7 @@ export function TmMonthlyReturnsHeatmap({
                     return (
                       <td
                         key={idx}
-                        className="px-1 py-1 text-center text-[10.5px] font-medium"
+                        className="px-1 py-1 text-center text-xs font-medium"
                         style={{
                           background: colorFor(m.return),
                           color: textColorFor(m.return),
@@ -145,7 +145,7 @@ export function TmMonthlyReturnsHeatmap({
                     );
                   })}
                   <td
-                    className={`px-2 py-1 text-right text-[11px] font-semibold tabular-nums ${total >= 0 ? "text-tm-pos" : "text-tm-neg"}`}
+                    className={`px-2 py-1 text-right text-xs font-semibold tabular-nums ${total >= 0 ? "text-tm-pos" : "text-tm-neg"}`}
                   >
                     {(total * 100).toFixed(1)}%
                   </td>
@@ -155,7 +155,7 @@ export function TmMonthlyReturnsHeatmap({
           </tbody>
         </table>
       </div>
-      <p className="border-t border-tm-rule px-3 py-1.5 font-tm-mono text-[10px] text-tm-muted">
+      <p className="border-t border-tm-rule px-3 py-1.5 font-tm-mono text-xs text-tm-muted">
         {t(locale, "backtest.monthly.legend")}
       </p>
     </TmPane>

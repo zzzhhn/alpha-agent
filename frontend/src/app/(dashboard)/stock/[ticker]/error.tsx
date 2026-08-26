@@ -40,7 +40,7 @@ export default function StockError({
       <div className="font-tm-mono text-[13px] font-semibold text-tm-fg">
         {copy.title}
       </div>
-      <p className="max-w-sm font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+      <p className="max-w-sm font-tm-mono text-xs leading-relaxed text-tm-muted">
         {copy.body}
       </p>
       <TmButton

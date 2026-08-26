@@ -36,29 +36,29 @@ export default function PicksCards({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  {ranked ? <span className="font-tm-mono text-[10px] text-tm-muted">#{index + 1}</span> : null}
+                  {ranked ? <span className="font-tm-mono text-xs text-tm-muted">#{index + 1}</span> : null}
                   <Link href={`/stock/${card.ticker}`} prefetch={false} className="font-tm-mono text-[15px] font-semibold text-tm-fg hover:text-tm-accent">{card.ticker}</Link>
-                  <span className={`font-tm-mono text-[11px] font-semibold ${TONE[card.rating] ?? "text-tm-fg-2"}`}>{card.rating}</span>
+                  <span className={`font-tm-mono text-xs font-semibold ${TONE[card.rating] ?? "text-tm-fg-2"}`}>{card.rating}</span>
                 </div>
-                {name ? <p className="mt-1 truncate text-[11px] text-tm-muted">{name}</p> : null}
+                {name ? <p className="mt-1 truncate text-xs text-tm-muted">{name}</p> : null}
               </div>
               <div className="text-right font-tm-mono tabular-nums">
                 <div className="text-[13px] text-tm-fg">{score === null ? "—" : `${score >= 0 ? "+" : ""}${score.toFixed(2)}`}</div>
-                <div className="mt-1 text-[10px] text-tm-muted">{card.latest_price == null ? (locale === "zh" ? "收盘价未知" : "Close unavailable") : `$${card.latest_price.toFixed(2)}`}</div>
+                <div className="mt-1 text-xs text-tm-muted">{card.latest_price == null ? (locale === "zh" ? "收盘价未知" : "Close unavailable") : `$${card.latest_price.toFixed(2)}`}</div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-[10px]">
+            <div className="grid grid-cols-3 gap-2 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs">
               <div><span className="text-tm-muted">{locale === "zh" ? "信号一致性" : "Signal agreement"}</span><div className="mt-1 text-tm-fg-2">{card.agreement == null ? "—" : `${Math.round(card.agreement * 100)}%`}</div></div>
               <div><span className="text-tm-muted">{locale === "zh" ? "1日方向一致度" : "1D direction agreement"}</span><div className="mt-1 text-tm-fg-2">{d5Agreement === null ? "—" : `${Math.round(d5Agreement * 100)}%${d5Samples === null ? "" : ` · n=${d5Samples}`}`}</div></div>
               <div><span className="text-tm-muted">{locale === "zh" ? "5日校准置信度" : "5D calibrated confidence"}</span><div className="mt-1 text-tm-fg-2">{card.confidence == null ? "—" : `${Math.round(card.confidence * 100)}%`}</div></div>
             </div>
-            <p className="min-h-5 text-[11px] leading-5 text-tm-fg-2">{drivers || (locale === "zh" ? "当前没有足够的有效驱动信号" : "Not enough active drivers")}</p>
+            <p className="min-h-5 text-xs leading-5 text-tm-fg-2">{drivers || (locale === "zh" ? "当前没有足够的有效驱动信号" : "Not enough active drivers")}</p>
             <div className="flex items-center justify-between gap-3">
-              <span className="font-tm-mono text-[9.5px] text-tm-muted">{card.price_date ?? card.market_date ?? "—"}</span>
+              <span className="font-tm-mono text-xs text-tm-muted">{card.price_date ?? card.market_date ?? "—"}</span>
               <Link
                 href={ordersDisabled ? `/stock/${card.ticker}` : `/paper?ticker=${card.ticker}`}
                 prefetch={false}
-                className="border border-tm-accent px-3 py-1.5 font-tm-mono text-[11px] text-tm-accent hover:bg-tm-accent hover:text-tm-bg"
+                className="border border-tm-accent px-3 py-1.5 font-tm-mono text-xs text-tm-accent hover:bg-tm-accent hover:text-tm-bg"
               >
                 {ordersDisabled ? (locale === "zh" ? "查看研究" : "View research") : (locale === "zh" ? "进入组合决策" : "Open portfolio decision")}
               </Link>

@@ -45,7 +45,7 @@ export default function ConvictionBand({
 
   return (
     <div className="px-4 pt-3">
-      <div className="mb-2.5 font-tm-mono text-[11px] tracking-[0.12em] text-tm-accent">
+      <div className="mb-2.5 font-tm-mono text-xs tracking-[0.12em] text-tm-accent">
         ★ {copy.title}
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -111,7 +111,7 @@ export default function ConvictionBand({
                   {sug.label}
                   {sug.caution ? <span className="ml-1 text-tm-warn">⚠</span> : null}
                 </span>
-                <span className="font-tm-mono text-[11px] text-tm-muted">
+                <span className="font-tm-mono text-xs text-tm-muted">
                   {copy.agreement}{" "}
                   <span className={clsx("tabular-nums", TIER_COLOR[card.rating] ?? "text-tm-fg-2")}>
                     {Math.round(agr * 100)}%

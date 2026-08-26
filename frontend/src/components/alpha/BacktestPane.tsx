@@ -67,23 +67,23 @@ export function BacktestPane({ state, data, errorMessage, onRetry }: Props) {
             <p className={`text-[13px] font-semibold ${failedGates > 0 ? "text-tm-warn" : "text-tm-pos"}`}>
               {failedGates > 0 ? (zh ? `${failedGates} 项门槛需要反证` : `${failedGates} gates need counter-evidence`) : (zh ? "关键门槛通过" : "Key gates pass")}
             </p>
-            <p className="mt-1 text-[9.5px] text-tm-muted">{zh ? "判决使用样本外区间，不以综合分掩盖失败项。" : "Verdict uses OOS evidence and never hides a failed gate in a composite score."}</p>
+            <p className="mt-1 text-xs text-tm-muted">{zh ? "判决使用样本外区间，不以综合分掩盖失败项。" : "Verdict uses OOS evidence and never hides a failed gate in a composite score."}</p>
           </div>
           <div className="divide-y divide-tm-rule border-y border-tm-rule">
             {gates.map((gate) => (
-              <div key={gate.label} className="grid min-h-9 grid-cols-[1fr_70px_70px_62px] items-center gap-2 text-[10px]">
+              <div key={gate.label} className="grid min-h-9 grid-cols-[1fr_70px_70px_62px] items-center gap-2 text-xs">
                 <span className="text-tm-fg-2">{gate.label}</span>
                 <span className="font-mono text-tm-fg">{gate.value}</span>
-                <span className="font-mono text-[9px] text-tm-muted">{gate.hint}</span>
+                <span className="font-mono text-xs text-tm-muted">{gate.hint}</span>
                 <span className={gate.pass ? "text-tm-pos" : "text-tm-warn"}>{gate.pass ? (zh ? "通过" : "PASS") : (zh ? "复核" : "REVIEW")}</span>
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-px border border-tm-rule bg-tm-rule text-[9.5px]">
+          <div className="grid grid-cols-2 gap-px border border-tm-rule bg-tm-rule text-xs">
             <div className="bg-tm-bg px-2 py-2"><p className="text-tm-muted">OOS decay</p><p className="mt-1 font-mono text-tm-fg">{data.oos_decay == null ? "—" : `${(data.oos_decay * 100).toFixed(0)}%`}</p></div>
             <div className="bg-tm-bg px-2 py-2"><p className="text-tm-muted">{zh ? "过拟合标记" : "Overfit flag"}</p><p className={`mt-1 ${data.overfit_flag ? "text-tm-warn" : "text-tm-pos"}`}>{data.overfit_flag ? (zh ? "需要复核" : "REVIEW") : (zh ? "未触发" : "CLEAR")}</p></div>
           </div>
-          <div className="mt-auto border-t border-tm-rule pt-2 text-[9.5px] leading-5 text-tm-muted">
+          <div className="mt-auto border-t border-tm-rule pt-2 text-xs leading-5 text-tm-muted">
             <p className="text-tm-accent">{zh ? "下一步建议" : "Next step"}</p>
             <p>{failedGates > 0 ? (zh ? "先修改表达式或降低组合集中度，再进入候选库。" : "Revise the expression or reduce concentration before saving.") : (zh ? "固定候选，并在回测页与基线和上次运行同屏比较。" : "Pin the candidate, then compare it with the baseline and previous run.")}</p>
           </div>

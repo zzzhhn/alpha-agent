@@ -54,7 +54,7 @@ export function HistoryCollapsedSection({
             : summaryText}
           </span>
         }
-        className="h-auto border-0 bg-transparent px-3 py-2.5 font-tm-mono text-[11px] text-tm-fg-2 hover:border-transparent hover:bg-tm-bg-3 hover:text-tm-fg"
+        className="h-auto border-0 bg-transparent px-3 py-2.5 font-tm-mono text-xs text-tm-fg-2 hover:border-transparent hover:bg-tm-bg-3 hover:text-tm-fg"
       />
       {expanded && history.length > 0 ? (
         <div className="border-t border-tm-rule px-3 py-2.5">

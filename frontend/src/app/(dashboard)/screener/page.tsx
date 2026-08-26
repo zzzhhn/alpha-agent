@@ -312,7 +312,7 @@ export default function ScreenerPage() {
 
       {error && (
         <TmPane title="ERROR" meta="screener run failed">
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-neg">
+          <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-neg">
             {error}
           </p>
         </TmPane>
@@ -389,7 +389,7 @@ export default function ScreenerPage() {
 
       {!result && !running && (
         <TmPane title={locale === "zh" ? "开始选股" : "GET STARTED"} meta={locale === "zh" ? "操作提示" : "HINT"}>
-          <p className="px-3 py-2.5 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+          <p className="px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
             {t(locale, "screener.subtitle")}
           </p>
         </TmPane>
@@ -536,7 +536,7 @@ function FactorPickerPane({
   if (zoo.length === 0) {
     return (
       <TmPane title={locale === "zh" ? "因子选择" : "SCREENER.FACTORS"} meta={locale === "zh" ? "因子库为空" : "ZOO EMPTY"}>
-        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
           {t(locale, "screener.factors.empty")}
         </p>
       </TmPane>
@@ -548,7 +548,7 @@ function FactorPickerPane({
       title={locale === "zh" ? "因子选择" : "SCREENER.FACTORS"}
       meta={locale === "zh" ? `已选 ${selectedCount} / ${zoo.length}` : `${selectedCount} / ${zoo.length} SELECTED`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "screener.factors.subtitle")}
       </p>
       <div className="flex items-center gap-2 border-b border-tm-rule px-3 py-2">
@@ -563,9 +563,9 @@ function FactorPickerPane({
           aria-label={facCopy.search}
           fieldSize="sm"
           className="min-w-0 flex-1"
-          inputClassName="border-0 bg-transparent px-0 font-tm-mono text-[11px] placeholder:text-tm-muted focus:border-0"
+          inputClassName="border-0 bg-transparent px-0 font-tm-mono text-xs placeholder:text-tm-muted focus:border-0"
         />
-        <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+        <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
           {filteredZoo.length} / {zoo.length}
         </span>
       </div>
@@ -573,7 +573,7 @@ function FactorPickerPane({
         <TmTable
           density="standard"
           caption={locale === "zh" ? "因子选择" : "Screener factors"}
-          className="min-w-[860px] text-left text-[11.5px]"
+          className="min-w-[860px] text-left text-xs"
         >
           <TmTableHead>
             <TmTableRow>
@@ -625,7 +625,7 @@ function FactorPickerPane({
                   </TmTableRowHeader>
                   <TmTableCell className="px-3 py-2.5">
                     <span
-                      className="block max-w-[520px] truncate text-[11px] text-tm-accent"
+                      className="block max-w-[520px] truncate text-xs text-tm-accent"
                       title={e.expression}
                     >
                       {e.expression}
@@ -716,7 +716,7 @@ function ScreenerDirBadge({ direction }: { readonly direction: ZooDirection }) {
   return (
     <GlossaryTip term={label} underline={false}>
       <span
-        className={`inline-block border px-1.5 py-px font-tm-mono text-[9px] tabular-nums ${cls}`}
+        className={`inline-block border px-1.5 py-px font-tm-mono text-xs tabular-nums ${cls}`}
       >
         {label}
       </span>
@@ -795,7 +795,7 @@ function UniverseFilterPane({
         {/* Sectors — add via dropdown, selected shown as accent tags */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <span className="font-tm-mono text-[10px] text-tm-muted">
+            <span className="font-tm-mono text-xs text-tm-muted">
               {zh ? "行业（留空 = 全部）" : "Sectors (blank = all)"}
             </span>
             {sectorTags.length > 0 && (
@@ -803,7 +803,7 @@ function UniverseFilterPane({
                 variant="ghost"
                 size="xs"
                 onClick={onClearSectors}
-                className="font-tm-mono text-[10px]"
+                className="font-tm-mono text-xs"
               >
                 {zh ? "清空" : "clear"}
               </TmButton>
@@ -831,7 +831,7 @@ function UniverseFilterPane({
             {sectorTags.map((s) => (
               <span
                 key={s}
-                className="inline-flex items-center gap-1.5 border border-tm-accent bg-tm-accent-soft px-2 py-1 font-tm-mono text-[11px] text-tm-accent"
+                className="inline-flex items-center gap-1.5 border border-tm-accent bg-tm-accent-soft px-2 py-1 font-tm-mono text-xs text-tm-accent"
               >
                 {s}
                 <TmIconButton
@@ -843,7 +843,7 @@ function UniverseFilterPane({
               </span>
             ))}
             {sectorTags.length === 0 && (
-              <span className="font-tm-mono text-[11px] text-tm-muted">
+              <span className="font-tm-mono text-xs text-tm-muted">
                 {zh ? "全部行业" : "all sectors"}
               </span>
             )}
@@ -852,14 +852,14 @@ function UniverseFilterPane({
 
         {/* Exclude tickers — removable red tags + add field */}
         <div>
-          <div className="mb-2 font-tm-mono text-[10px] text-tm-muted">
+          <div className="mb-2 font-tm-mono text-xs text-tm-muted">
             {zh ? "排除标的（逗号分隔）" : "Exclude tickers (comma-sep)"}
           </div>
           <div className="flex min-h-[26px] flex-wrap items-center gap-2">
             {excluded.map((tk) => (
               <span
                 key={tk}
-                className="inline-flex items-center gap-1.5 border border-tm-neg bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-[11px] text-tm-neg"
+                className="inline-flex items-center gap-1.5 border border-tm-neg bg-tm-neg/10 px-2 py-0.5 font-tm-mono text-xs text-tm-neg"
               >
                 {tk}
                 <TmIconButton
@@ -871,7 +871,7 @@ function UniverseFilterPane({
               </span>
             ))}
             {excluded.length === 0 && (
-              <span className="font-tm-mono text-[11px] text-tm-muted">
+              <span className="font-tm-mono text-xs text-tm-muted">
                 {zh ? "未排除任何标的" : "none excluded"}
               </span>
             )}
@@ -890,13 +890,13 @@ function UniverseFilterPane({
               aria-label={zh ? "输入要排除的股票代码" : "Ticker to exclude"}
               fieldSize="sm"
               className="min-w-0 flex-1"
-              inputClassName="bg-tm-bg-3 font-tm-mono text-[11px] uppercase"
+              inputClassName="bg-tm-bg-3 font-tm-mono text-xs uppercase"
             />
             <TmButton
               onClick={addTicker}
               variant="secondary"
               size="sm"
-              className="font-tm-mono text-[11px]"
+              className="font-tm-mono text-xs"
             >
               {zh ? "排除" : "Exclude"}
             </TmButton>
@@ -948,7 +948,7 @@ function CapInputWithPresets({
         type="number"
       />
       <div className="flex flex-wrap items-center gap-1">
-        <span className="font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
           preset
         </span>
         {presets.map((p) => (
@@ -1025,7 +1025,7 @@ function CombineParamsPane({
           />
         </div>
         <div>
-          <span className="mb-1 block font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+          <span className="mb-1 block font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
             {t(locale, "screener.params.combine")}
           </span>
           <div className="flex flex-wrap gap-1.5">
@@ -1041,7 +1041,7 @@ function CombineParamsPane({
           </div>
         </div>
         <div>
-          <span className="mb-1 block font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+          <span className="mb-1 block font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
             {t(locale, "backtest.form.neutralize")}
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1054,7 +1054,7 @@ function CombineParamsPane({
                 {t(locale, `backtest.form.neutralize.${m}`)}
               </TmChip>
             ))}
-            <span className="ml-2 font-tm-mono text-[10px] text-tm-muted">
+            <span className="ml-2 font-tm-mono text-xs text-tm-muted">
               {t(locale, "backtest.form.neutralizeHint")}
             </span>
           </div>
@@ -1096,7 +1096,7 @@ function SliderWithPresets({
         formatValue={(current) => `${current}${unit}`}
       />
       <div className="flex flex-wrap items-center gap-1">
-        <span className="font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
           preset
         </span>
         {presets.map((p) => (
@@ -1144,7 +1144,7 @@ function AsOfWithPresets({
         hint={hint}
       />
       <div className="flex flex-wrap items-center gap-1">
-        <span className="font-tm-mono text-[9.5px] uppercase tracking-[0.06em] text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
           preset
         </span>
         {presets.map((p) => (
@@ -1233,20 +1233,20 @@ function ResultsPane({
       </TmKpiGrid>
 
       <div className="flex items-center justify-between border-t border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-        <span className="font-tm-mono text-[10.5px] text-tm-muted">
+        <span className="font-tm-mono text-xs text-tm-muted">
           {subtitle}
         </span>
         <TmButton
           variant="ghost"
           onClick={onExport}
-          className="-my-1 h-6 px-2 text-[10px]"
+          className="-my-1 h-6 px-2 text-xs"
         >
           {t(locale, "screener.results.exportCsv")}
         </TmButton>
       </div>
 
       {recs.length === 0 ? (
-        <p className="px-3 py-6 text-center font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
           {t(locale, "screener.results.empty")}
         </p>
       ) : (
@@ -1337,7 +1337,7 @@ function RHeader({
 }) {
   return (
     <div
-      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${
         align === "right" ? "text-right" : ""
       }`}
     >
@@ -1355,7 +1355,7 @@ function RCell({
 }) {
   return (
     <div
-      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
+      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs ${
         align === "right" ? "justify-end" : ""
       }`}
     >
@@ -1381,7 +1381,7 @@ function ContributionBars({
         return (
           <div
             key={s.factor_idx}
-            className="flex items-center gap-3 font-tm-mono text-[11px]"
+            className="flex items-center gap-3 font-tm-mono text-xs"
           >
             <code
               className="w-48 truncate text-tm-fg"
@@ -1436,7 +1436,7 @@ function RecsSectorsPane({
       meta={locale === "zh" ? `${breakdown.length} 个行业 · ${totalRecs} 只候选` : `${breakdown.length} GROUPS · ${totalRecs} TOP-N`}
     >
       {breakdown.length === 0 ? (
-        <p className="px-3 py-3 font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-3 py-3 font-tm-mono text-xs text-tm-muted">
           {t(locale, "screener.sectors.empty")}
         </p>
       ) : (
@@ -1459,7 +1459,7 @@ function RecsSectorsPane({
                   gridTemplateColumns: "minmax(140px, 180px) 1fr 50px 50px",
                 }}
               >
-                <span className={`truncate font-tm-mono text-[11px] ${tone}`}>
+                <span className={`truncate font-tm-mono text-xs ${tone}`}>
                   {b.label}
                 </span>
                 <div className="relative h-3 w-full bg-tm-bg-2">
@@ -1468,10 +1468,10 @@ function RecsSectorsPane({
                     style={{ width: `${b.share * 100}%` }}
                   />
                 </div>
-                <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg-2">
+                <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">
                   {b.count}
                 </span>
-                <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-muted">
+                <span className="text-right font-tm-mono text-xs tabular-nums text-tm-muted">
                   {(b.share * 100).toFixed(0)}%
                 </span>
               </li>
@@ -1503,7 +1503,7 @@ function RecsCapMixPane({
   if (allUnknown) {
     return (
       <TmPane title={locale === "zh" ? "候选股市值结构" : "RECS.CAPMIX"} meta={locale === "zh" ? "无市值数据" : "NO CAP DATA"}>
-        <div className="flex flex-col gap-1.5 px-3 py-3 font-tm-mono text-[11px]">
+        <div className="flex flex-col gap-1.5 px-3 py-3 font-tm-mono text-xs">
           <p className="text-tm-warn">
             {t(locale, "screener.capmix.warn").replace("{n}", String(totalRecs))}
           </p>
@@ -1536,7 +1536,7 @@ function RecsCapMixPane({
               gridTemplateColumns: "minmax(80px, 100px) 1fr 50px 50px",
             }}
           >
-            <span className="font-tm-mono text-[11px] text-tm-info">
+            <span className="font-tm-mono text-xs text-tm-info">
               {b.label}
             </span>
             <div className="relative h-3 w-full bg-tm-bg-2">
@@ -1545,10 +1545,10 @@ function RecsCapMixPane({
                 style={{ width: `${b.share * 100}%` }}
               />
             </div>
-            <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg-2">
+            <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">
               {b.count}
             </span>
-            <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-muted">
+            <span className="text-right font-tm-mono text-xs tabular-nums text-tm-muted">
               {(b.share * 100).toFixed(0)}%
             </span>
           </li>
@@ -1560,7 +1560,7 @@ function RecsCapMixPane({
               gridTemplateColumns: "minmax(80px, 100px) 1fr 50px 50px",
             }}
           >
-            <span className="font-tm-mono text-[11px] text-tm-warn">
+            <span className="font-tm-mono text-xs text-tm-warn">
               UNKNOWN
             </span>
             <div className="relative h-3 w-full bg-tm-bg-3">
@@ -1569,10 +1569,10 @@ function RecsCapMixPane({
                 style={{ width: `${unknownShare * 100}%` }}
               />
             </div>
-            <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-fg-2">
+            <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">
               {unknownCount}
             </span>
-            <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-warn">
+            <span className="text-right font-tm-mono text-xs tabular-nums text-tm-warn">
               {(unknownShare * 100).toFixed(0)}%
             </span>
           </li>
@@ -1613,7 +1613,7 @@ function AggregateContributionPane({
               }}
             >
               <span
-                className="truncate font-tm-mono text-[11px] text-tm-accent"
+                className="truncate font-tm-mono text-xs text-tm-accent"
                 title={diag?.expression ?? `factor[${r.factor_idx}]`}
               >
                 {diag?.expression ?? `factor[${r.factor_idx}]`}
@@ -1625,19 +1625,19 @@ function AggregateContributionPane({
                 />
               </div>
               <span
-                className={`text-right font-tm-mono text-[10.5px] tabular-nums ${netPositive ? "text-tm-pos" : "text-tm-neg"}`}
+                className={`text-right font-tm-mono text-xs tabular-nums ${netPositive ? "text-tm-pos" : "text-tm-neg"}`}
               >
                 {netPositive ? "+" : ""}
                 {r.netSum.toFixed(3)}
               </span>
-              <span className="text-right font-tm-mono text-[10.5px] tabular-nums text-tm-muted">
+              <span className="text-right font-tm-mono text-xs tabular-nums text-tm-muted">
                 {(r.share * 100).toFixed(0)}%
               </span>
             </li>
           );
         })}
       </ul>
-      <p className="border-t border-tm-rule px-3 py-1.5 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
+      <p className="border-t border-tm-rule px-3 py-1.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "screener.contribution.footer1")}{" "}
         {t(locale, "screener.contribution.footer2")}
       </p>
@@ -1711,7 +1711,7 @@ function DiagnosticsPane({
                     />
                   </div>
                   <span
-                    className={`w-12 text-right text-[10.5px] tabular-nums ${positive ? "text-tm-pos" : "text-tm-neg"}`}
+                    className={`w-12 text-right text-xs tabular-nums ${positive ? "text-tm-pos" : "text-tm-neg"}`}
                   >
                     {ic.toFixed(3)}
                   </span>
@@ -1730,7 +1730,7 @@ function DiagnosticsPane({
                       />
                     )}
                   </div>
-                  <span className="w-16 text-right text-[10.5px] tabular-nums text-tm-muted">
+                  <span className="w-16 text-right text-xs tabular-nums text-tm-muted">
                     {d.n_eligible}
                     {eligPct != null
                       ? ` / ${eligPct.toFixed(0)}%`

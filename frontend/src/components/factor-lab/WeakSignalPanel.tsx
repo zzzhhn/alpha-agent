@@ -19,10 +19,10 @@ export function WeakSignalPanel({
   if (weakSignal === null) {
     return (
       <div className="flex flex-col gap-1.5">
-        <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+        <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
           {t(locale, "factorLab.decision.weakSignal")}
         </div>
-        <div className="font-tm-mono text-[11px] text-tm-muted">
+        <div className="font-tm-mono text-xs text-tm-muted">
           {t(locale, "factorLab.decision.noWeakSignal")}
         </div>
       </div>
@@ -30,7 +30,7 @@ export function WeakSignalPanel({
   }
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+      <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
         {t(locale, "factorLab.decision.weakSignal")}
       </div>
       <div className="font-tm-mono text-[12px] text-tm-warn">
@@ -42,7 +42,7 @@ export function WeakSignalPanel({
         ) : null}
       </div>
       {worstFoldSharpe != null ? (
-        <div className="font-tm-mono text-[11px] text-tm-fg-2">
+        <div className="font-tm-mono text-xs text-tm-fg-2">
           {t(locale, "factorLab.decision.worstFold")}:{" "}
           <strong className="font-mono text-tm-neg">{worstFoldSharpe.toFixed(3)}</strong>
           {worstFoldWindow ? (

@@ -80,13 +80,13 @@ export function TmCompareEquityChart({
           <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+            tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
             interval="preserveStartEnd"
             minTickGap={40}
             stroke="var(--tm-rule)"
           />
           <YAxis
-            tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+            tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
             tickFormatter={(v: number) => v.toFixed(0)}
             domain={["dataMin", "dataMax"]}
             stroke="var(--tm-rule)"
@@ -95,7 +95,7 @@ export function TmCompareEquityChart({
             contentStyle={{
               background: "var(--tm-bg-2)",
               border: "1px solid var(--tm-rule)",
-              fontSize: 11,
+              fontSize: 12,
               fontFamily: "var(--font-jetbrains-mono)",
               color: "var(--tm-fg)",
             }}
@@ -105,7 +105,7 @@ export function TmCompareEquityChart({
           />
           <Legend
             wrapperStyle={{
-              fontSize: 11,
+              fontSize: 12,
               fontFamily: "var(--font-jetbrains-mono)",
             }}
           />

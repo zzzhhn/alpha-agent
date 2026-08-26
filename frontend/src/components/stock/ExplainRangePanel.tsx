@@ -105,7 +105,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
           max={toTs}
           fieldSize="sm"
           className="min-w-[8.5rem]"
-          inputClassName="rounded bg-tm-bg px-1.5 text-[11px]"
+          inputClassName="rounded bg-tm-bg px-1.5 text-xs"
         />
         <TmInput
           type="date"
@@ -116,7 +116,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
           max={defaultTo()}
           fieldSize="sm"
           className="min-w-[8.5rem]"
-          inputClassName="rounded bg-tm-bg px-1.5 text-[11px]"
+          inputClassName="rounded bg-tm-bg px-1.5 text-xs"
         />
         <TmButton
           variant="secondary"
@@ -137,7 +137,7 @@ export default function ExplainRangePanel({ ticker }: { ticker: string }) {
           <p className="text-sm leading-relaxed text-tm-fg">
             {result.explanation}
           </p>
-          <p className="text-[11px] text-tm-muted">
+          <p className="text-xs text-tm-muted">
             {copy.eventCount(result.event_count)}
             {result.cache === "hit" ? ` ${copy.cacheHit}` : null}
           </p>

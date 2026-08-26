@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { Locale } from "@/lib/i18n";
-import { TM_CHART_CSS } from "@/components/charts";
+import { t, type Locale } from "@/lib/i18n";
 import { TmBadge } from "@/components/tm/TmBadge";
-import { TmCols2, TmPane } from "@/components/tm/TmPane";
+import { TmPane } from "@/components/tm/TmPane";
 import { TmTooltip } from "@/components/tm/TmTooltip";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmDialog } from "@/components/tm/TmDialog";
@@ -16,9 +15,8 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   return (
     <div>
-      <TmCols2>
-        <TmPane
-          title="SURFACE.TOOLTIP"
+      <TmPane
+          title={t(locale, "reference.pane.surfaceTooltip")}
           meta={zh ? "hover、focus 与 Escape 语义一致" : "same hover, focus, and Escape behavior"}
           bodyClassName="p-4"
         >
@@ -42,44 +40,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
           </div>
         </TmPane>
 
-        <TmPane
-          title="SURFACE.CHART TOKENS"
-          meta={zh ? "SVG 与 Canvas 共用语义色" : "one semantic palette for SVG and canvas"}
-          bodyClassName="p-4"
-        >
-          <figure>
-            <svg
-              viewBox="0 0 520 132"
-              role="img"
-              aria-label={zh ? "示例净值曲线，先回撤后恢复" : "Sample equity curve with a drawdown and recovery"}
-              className="h-32 w-full border border-tm-rule bg-tm-bg"
-            >
-              {[32, 66, 100].map((y) => (
-                <line key={y} x1="0" x2="520" y1={y} y2={y} stroke={TM_CHART_CSS.grid} />
-              ))}
-              <polyline
-                points="8,104 78,82 146,91 214,54 282,73 350,45 420,51 512,20"
-                fill="none"
-                stroke={TM_CHART_CSS.positive}
-                strokeWidth="3"
-              />
-              <polyline
-                points="146,91 214,54 282,73"
-                fill="none"
-                stroke={TM_CHART_CSS.negative}
-                strokeWidth="3"
-              />
-            </svg>
-            <figcaption className="mt-2 text-xs leading-5 text-tm-muted">
-              {zh
-                ? "示例数据：绿色表示正向路径，红色表示回撤段；图表必须同时提供文字总结。"
-                : "Sample data: green is the positive path and red is the drawdown segment. Every chart also needs a text summary."}
-            </figcaption>
-          </figure>
-        </TmPane>
-      </TmCols2>
-
-      <TmPane title="SURFACE.OVERLAY CONTRACT" meta={zh ? "没有完成的资产不冒充生产组件" : "planned assets never masquerade as production-ready"}>
+      <TmPane title={t(locale, "reference.pane.surfaceContract")} meta={zh ? "没有完成的资产不冒充生产组件" : "planned assets never masquerade as production-ready"}>
         <div className="grid gap-px bg-tm-rule p-px sm:grid-cols-2 xl:grid-cols-4">
           <Contract name="TmTooltip" state="READY" />
           <Contract name="TmSelectMenu" state="READY" />
@@ -89,7 +50,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
       </TmPane>
 
       <TmPane
-        title="SURFACE.DIALOG"
+        title={t(locale, "reference.pane.surfaceDialog")}
         meta={zh ? "焦点进入、Tab 循环、Escape 关闭并恢复焦点" : "focus entry, Tab loop, Escape close, and focus restore"}
         bodyClassName="p-4"
       >
@@ -112,7 +73,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
       </TmPane>
 
       <TmPane
-        title="SURFACE.DRAWER"
+        title={t(locale, "reference.pane.surfaceDrawer")}
         meta={zh ? "保留主页面上下文的侧向任务工作区" : "a side task workspace that preserves page context"}
         bodyClassName="p-4"
       >

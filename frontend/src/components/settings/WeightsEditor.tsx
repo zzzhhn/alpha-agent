@@ -89,16 +89,16 @@ export default function WeightsEditor() {
           setSavedAt(null);
         }}
         spellCheck={false}
-        textareaClassName="h-52 min-h-0 resize-none p-2 text-[11px]"
+        textareaClassName="h-52 min-h-0 resize-none p-2 text-xs"
       />
       <div className="flex flex-wrap items-center gap-2 border-t border-tm-rule pt-2">
         <TmButton variant="primary" onClick={handleSave}>SAVE</TmButton>
         <TmButton variant="ghost" onClick={handleReset}>RESET TO DEFAULT</TmButton>
         {savedAt ? (
-          <span className="font-tm-mono text-[10px] text-tm-pos">SAVED {savedAt}</span>
+          <span className="font-tm-mono text-xs text-tm-pos">SAVED {savedAt}</span>
         ) : null}
         {error ? (
-          <span className="font-tm-mono text-[10px] text-tm-neg">{error}</span>
+          <span className="font-tm-mono text-xs text-tm-neg">{error}</span>
         ) : null}
       </div>
     </div>
