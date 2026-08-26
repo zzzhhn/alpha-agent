@@ -296,20 +296,44 @@ or account state.
    with components shared by the most routes.
 6. Legacy removal: delete old assets only after consumer searches are empty.
 
-### 8.1 Active migration ledger, 2026-08-24
+### 8.1 Active migration ledger, 2026-08-26
 
-| Category | Canonical asset | Migrated production surfaces | Remaining evidence |
-| --- | --- | --- | --- |
-| Buttons | `TmButton`, `TmIconButton`, `TmLinkButton`, `TmDisclosureButton`, and `TmRowButton` | Auth, BRAIN, Backtest, Alerts, Settings, Alpha, Report, Screener, Picks, Paper, Evolution, Factor Lab, Factors, Stock, and shared shell | executable audit reports zero unexplained native controls; only canonical `SegmentedTabs` and toast internals remain |
-| Fields | `TmInput`, `TmNumberInput`, `TmSelect`, `TmSelectMenu`, `TmTextarea`, `TmCheckbox`, and `TmRange` | Auth, Backtest, Settings, Alpha, Alerts, Report, Screener, Picks, Signal, BRAIN, and `/reference` | executable audit reports zero unexplained native fields |
-| Exclusive toggle | `TmToggleGroup` | Topbar locale/theme; BRAIN audit filters; Alerts severity and relevance filters | replace any future local exclusive selector before adding a page-local style |
-| Pagination | `TmPagination` | Screener factor picker; Evolution proposals; BRAIN results; `/reference` | repository scan shows no separate local pagination implementation |
-| State feedback | `TmStatePane` | `/reference`; Alerts; Backtest evidence; Data; Methodology; Paper attribution and positions; Signal charts and tables | legacy truncation-only copy remains allowed, but lifecycle state must not collapse geometry |
-| Tooltip | `TmTooltip` | compatibility `HoverTip` and `InfoTooltip`; `/reference`; BRAIN evidence and official metric explanations | native `title` is limited to 36 truncation or compatibility hints and is protected by the no-growth audit budget |
-| Icons | Lucide production registry plus text-glyph boundary | all 49 imported production glyphs and 12 compatibility glyphs rendered in `/reference` | audit rejects any production icon or required glyph exception missing from the registry |
-| Charts | `chartTokens`, `TM_CHART_TYPOGRAPHY`, `TmRadarChart`, and `tmChartColorWithAlpha` | all 25 detected visualization assets plus micro-graphs registered by route; stock radar rendered as the real shared component; three legacy charts marked source-only | audit rejects an undisclosed chart, inline Recharts route, or SVG asset; the monthly heatmap keeps its semantic-matrix exception |
-| Overlays | `TmDialog`, `TmDrawer`, and `useTmModalFocus` | `/reference`; Alpha example library; simulated-order drawer | browser verification covers focus entry, Escape, trap, and trigger-focus restoration |
-| Tables | `TmTable` compositional family | all standard production tables, including Picks, Paper, BRAIN yearly evidence, Backtest history, Alerts timeline, Screener, Evolution, Factor Lab, and Stock detail | no unexplained page-local standard table remains; `TmMonthlyReturnsHeatmap` retains a native matrix table for sticky axes, 2D cell color, and border-separated heatmap geometry, with an accessible caption and canonical tooltips |
+The living `/reference` ledger is the detailed source of truth. Each row names
+the legacy asset, canonical target, consumer scope, responsible area, current
+state, and closure action or evidence. Its five states are deliberately not a
+single completion scale:
+
+- `Canonical`: production adoption, a reference specimen, and automated
+  evidence agree.
+- `Aliased`: compatibility delegates to the canonical asset until legacy
+  consumers reach zero.
+- `In progress`: the target is fixed, but migration or browser evidence remains.
+- `Exception`: a semantic or infrastructure need is retained within an audited
+  no-growth boundary.
+- `Source only`: no production route mounts the asset; delete or migrate it
+  explicitly.
+
+The current 18-item ledger covers semantic tokens, typography, localized pane
+titles, buttons, fields, exclusive toggles, pagination, tables, lifecycle
+feedback, tooltips, icons, visualization coverage, source-only charts,
+overlays, pane/card migration, workbench composition, native-title budget, and
+native-control internals. The executable audit requires all 18 stable asset IDs
+to remain present so the visible ledger cannot silently lose a category.
+
+Key closure facts in the current snapshot:
+
+- Fields, toggles, pagination, typography floor, and shared lifecycle grammar
+  are canonical under the current audit.
+- `ui/Button`, technical pane-title mapping, `HoverTip`, and `InfoTooltip` are
+  compatibility aliases, not new canonical APIs.
+- Standard tables are canonical, while `TmMonthlyReturnsHeatmap` remains an
+  explicit semantic-matrix exception.
+- All 49 imported Lucide icons, 12 text-glyph exceptions, and 25 detected
+  visualization assets are registered. Registration does not imply that every
+  chart has a live shared specimen.
+- `EquityCurvePane`, `DrawdownPane`, and `ICTimeseriesChart` remain source-only.
+- Legacy color variables, remaining raw color utilities, `ui/Card` consumers,
+  transient overlay families, and route-shell specimens remain in progress.
 
 Counts are static migration evidence, not a command to replace semantic row
 buttons or native form elements mechanically. Each remaining control is first

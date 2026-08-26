@@ -188,3 +188,46 @@ Tailwind arbitrary sizes, and CSS at 12 px. `--tm-bg-3`, `--tm-rule`, and
 audit now blocks missing icons, unregistered visualizations, under-floor type,
 and raw reference taxonomy headings in addition to its existing control,
 table, and native-title gates.
+
+## 2026-08-26 migration-ledger completion
+
+The Operating Patterns migration pane is now a real release ledger instead of
+a twelve-row example. It records 18 stable asset categories with legacy entry,
+canonical target, production consumer scope, responsible area, state, and the
+remaining closure action or evidence. Summary counts and five explicit state
+definitions prevent `registered`, `canonical`, `exception`, and `source-only`
+from collapsing into a misleading ready/pending binary. The design audit now
+fails if any stable migration category disappears from the reference.
+
+The corrected data also removes two false claims in the old specimen. Fields
+are canonical under the current zero-unexplained-control audit, while chart
+coverage remains in progress because registration is complete but most charts
+do not yet have live shared specimens and three legacy chart files remain
+source-only.
+
+### Principles re-check
+
+- Intent and status visibility: each row exposes what is migrating, who owns
+  it, who consumes it, and what closes it.
+- Cognitive load: five state definitions and summary counts precede the full
+  ledger; technical evidence stays in one table rather than scattered notes.
+- Recovery and respect for time: in-progress and source-only rows name the next
+  bounded action instead of presenting an unactionable pending label.
+- Affordance and design transparency: badges use words and markers, not color
+  alone; horizontal overflow is contained by the table frame.
+- No deceptive defaults: registration is explicitly separated from migration,
+  and controlled exceptions are not presented as either failures or finished
+  work.
+
+### Cross-cutting conventions audit
+
+- Chinese and English labels, status meanings, owners, scope, and closure copy
+  switch together; stable IDs remain implementation-only.
+- Visible text remains at the 12 px floor and uses the canonical mono/data
+  hierarchy.
+- Semantic badge tones, rules, panes, and tables are reused in dark and light
+  themes.
+- The ledger remains desktop-first at the primary workstation geometry, with
+  bounded horizontal scrolling instead of clipped columns at narrower widths.
+- Automated evidence protects the 18 categories in addition to the existing
+  icon, visualization, control, table, title, taxonomy, and typography gates.

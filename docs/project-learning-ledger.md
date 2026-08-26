@@ -171,3 +171,15 @@
 - New icon and visualization assets enter production only after registration
   in the living reference. Import-to-registry checks prevent the catalog from
   becoming stale immediately after release.
+
+## 2026-08-26: A migration ledger must expose closure, not just replacement
+
+- A legacy-to-canonical mapping is incomplete without consumers, responsible
+  area, present state, and a testable closure condition. Otherwise `READY` can
+  conceal compatibility aliases, source-only files, or missing browser proof.
+- Registration, canonical adoption, controlled exception, and source-only code
+  are different states. Reducing them to ready/pending makes the reference less
+  truthful than the repository.
+- Stable ledger IDs belong in the executable audit. This prevents a design
+  category from disappearing from the product reference during an unrelated
+  UI edit.
