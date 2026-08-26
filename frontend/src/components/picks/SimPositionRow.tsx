@@ -30,23 +30,23 @@ export default function SimPositionRow({
       <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">
         {pos.ticker}
       </TmTableRowHeader>
-      <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
+      <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
         {pos.qty.toLocaleString()}
       </TmTableCell>
-      <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
+      <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
         ${pos.avg_cost.toFixed(2)}
       </TmTableCell>
-      <TmTableCell numeric textAlign="right" className="text-[11px] text-tm-fg-2">
+      <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
         {pos.current_price !== null ? `$${pos.current_price.toFixed(2)}` : "—"}
       </TmTableCell>
       <TmTableCell numeric textAlign="right" className={clsx(
-        "text-[11px] font-semibold",
+        "text-xs font-semibold",
         pnlPos ? "text-tm-pos" : "text-tm-neg",
       )}>
         {pnlStr}
       </TmTableCell>
       <TmTableCell numeric textAlign="right" className={clsx(
-        "text-[11px]",
+        "text-xs",
         pnlPos ? "text-tm-pos" : "text-tm-neg",
       )}>
         {pctStr}

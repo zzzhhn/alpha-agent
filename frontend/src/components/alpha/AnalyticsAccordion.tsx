@@ -88,7 +88,7 @@ function DegenerateWarningPane({
       <div className="mt-1 font-tm-mono text-tm-fg-2">
         {t(locale, "alpha.analytics.degenerateWarningBody" as Parameters<typeof t>[1])}
       </div>
-      <div className="mt-2 font-mono text-[11px] text-tm-muted">
+      <div className="mt-2 font-mono text-xs text-tm-muted">
         {t(locale, "alpha.analytics.degenerateFooter" as Parameters<typeof t>[1])}=
         {translate.smoke?.rows_valid ?? "n/a"}
         {" · "}
@@ -184,7 +184,7 @@ function LlmProvenancePane({
           <span className="font-mono text-tm-fg">{total.toLocaleString()}</span>
         </div>
       </div>
-      <div className="mt-2 font-tm-mono text-[11px] text-tm-muted">
+      <div className="mt-2 font-tm-mono text-xs text-tm-muted">
         {t(locale, "alpha.analytics.llmTokenNote" as Parameters<typeof t>[1])}
       </div>
     </div>
@@ -213,14 +213,14 @@ function OperatorUsagePane({
           {ops.map((op) => (
             <span
               key={op}
-              className="border border-tm-rule px-2 py-0.5 font-mono text-[11px] text-tm-fg"
+              className="border border-tm-rule px-2 py-0.5 font-mono text-xs text-tm-fg"
             >
               {op}
             </span>
           ))}
         </div>
       )}
-      <div className="mt-2 font-tm-mono text-[11px] text-tm-muted">
+      <div className="mt-2 font-tm-mono text-xs text-tm-muted">
         {t(locale, "alpha.analytics.opsNote" as Parameters<typeof t>[1])}
       </div>
     </div>

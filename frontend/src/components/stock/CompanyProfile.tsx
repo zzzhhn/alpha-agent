@@ -89,7 +89,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
 
   return (
     <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 space-y-1.5">
-      <div className="text-[11px] font-tm-sans uppercase tracking-wide text-tm-muted">
+      <div className="text-xs font-tm-sans uppercase tracking-wide text-tm-muted">
         {copy.title}
       </div>
       {(() => {
@@ -108,7 +108,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
                 {profile.name_zh}
               </div>
               {profile.name ? (
-                <div className="text-[11px] text-tm-muted">{profile.name}</div>
+                <div className="text-xs text-tm-muted">{profile.name}</div>
               ) : null}
             </div>
           );
@@ -121,7 +121,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
         <div className="text-xs text-tm-fg-2">{subtitle}</div>
       ) : null}
       {summary && locale === "zh" && profile.summary_lang === "en" ? (
-        <div className="text-[11px] italic text-tm-muted">{copy.pendingZh}</div>
+        <div className="text-xs italic text-tm-muted">{copy.pendingZh}</div>
       ) : null}
       {summary ? (
         <p
@@ -141,12 +141,12 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
           variant="ghost"
           size="xs"
           onClick={() => setExpanded((e) => !e)}
-          className="h-auto p-0 text-[11px] text-tm-accent hover:underline"
+          className="h-auto p-0 text-xs text-tm-accent hover:underline"
         >
           {expanded ? copy.showLess : copy.showMore}
         </TmButton>
       ) : null}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-tm-muted">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-xs text-tm-muted">
         {profile.employees ? (
           <span>
             {copy.employees}: {profile.employees.toLocaleString()}

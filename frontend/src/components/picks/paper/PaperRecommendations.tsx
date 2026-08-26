@@ -45,7 +45,7 @@ export default function PaperRecommendations({
 
   if (picks.length === 0) {
     return (
-      <p className="px-3 py-8 font-tm-mono text-[11px] text-tm-muted">
+      <p className="px-3 py-8 font-tm-mono text-xs text-tm-muted">
         {t(locale, "sim.workspace.no_picks")}
       </p>
     );
@@ -74,24 +74,24 @@ export default function PaperRecommendations({
             >
               <div className="min-w-0">
                 <div className="truncate text-[12px] text-tm-fg">{company ?? pick.ticker}</div>
-                <div className="font-tm-mono text-[11px] font-semibold text-tm-accent">{pick.ticker}</div>
+                <div className="font-tm-mono text-xs font-semibold text-tm-accent">{pick.ticker}</div>
               </div>
               <div className="text-right">
-                <div className={clsx("font-tm-mono text-[11px] font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</div>
-                <div className={clsx("font-tm-mono text-[10px] tabular-nums", (pick.daily_change_pct ?? 0) >= 0 ? "text-tm-pos" : "text-tm-neg")}>{pct(pick.daily_change_pct)}</div>
+                <div className={clsx("font-tm-mono text-xs font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</div>
+                <div className={clsx("font-tm-mono text-xs tabular-nums", (pick.daily_change_pct ?? 0) >= 0 ? "text-tm-pos" : "text-tm-neg")}>{pct(pick.daily_change_pct)}</div>
               </div>
-              <div className="font-tm-mono text-[11px] text-tm-fg-2">
+              <div className="font-tm-mono text-xs text-tm-fg-2">
                 {typeof pick.latest_price === "number" ? `$${pick.latest_price.toFixed(2)}` : "—"}
-                <span className="ml-2 text-[9px] text-tm-muted">{pick.price_date ?? "—"}</span>
+                <span className="ml-2 text-xs text-tm-muted">{pick.price_date ?? "—"}</span>
               </div>
               <div
-                className="font-tm-mono text-[10px] text-tm-muted"
+                className="font-tm-mono text-xs text-tm-muted"
                 title={t(locale, "sim.workspace.confidence_5d")}
                 aria-label={t(locale, "sim.workspace.confidence_5d")}
               >
                 {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
               </div>
-              <div className="min-w-0 truncate text-[10px] text-tm-muted">{rationale || "—"}</div>
+              <div className="min-w-0 truncate text-xs text-tm-muted">{rationale || "—"}</div>
               <TmButton variant="secondary" className="px-2 py-1" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
                 {t(locale, "sim.workspace.follow")}
               </TmButton>
@@ -131,21 +131,21 @@ export default function PaperRecommendations({
               >
                 <TmTableRowHeader className="font-normal">
                   <div className="text-[12px] text-tm-fg">{company ?? pick.ticker}</div>
-                  <div className="font-tm-mono text-[11px] font-semibold text-tm-accent">{pick.ticker}</div>
+                  <div className="font-tm-mono text-xs font-semibold text-tm-accent">{pick.ticker}</div>
                 </TmTableRowHeader>
-                <TmTableCell className={clsx("text-[11px] font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</TmTableCell>
-                <TmTableCell numeric className="text-[11px] text-tm-fg-2">
+                <TmTableCell className={clsx("text-xs font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</TmTableCell>
+                <TmTableCell numeric className="text-xs text-tm-fg-2">
                   {typeof pick.latest_price === "number" ? `$${pick.latest_price.toFixed(2)}` : "—"}
-                  {pick.price_date ? <span className="block text-[9px] text-tm-muted">{pick.price_date}</span> : null}
+                  {pick.price_date ? <span className="block text-xs text-tm-muted">{pick.price_date}</span> : null}
                 </TmTableCell>
                 <TmTableCell numeric className={clsx(
-                  "text-[11px]",
+                  "text-xs",
                   (pick.daily_change_pct ?? 0) >= 0 ? "text-tm-pos" : "text-tm-neg",
                 )}>{pct(pick.daily_change_pct)}</TmTableCell>
-                <TmTableCell numeric className="text-[11px] text-tm-fg-2">
+                <TmTableCell numeric className="text-xs text-tm-fg-2">
                   {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
                 </TmTableCell>
-                <TmTableCell className="max-w-48 text-[11px] leading-4 text-tm-muted">{rationale || "—"}</TmTableCell>
+                <TmTableCell className="max-w-48 text-xs leading-4 text-tm-muted">{rationale || "—"}</TmTableCell>
                 <TmTableCell className="text-right">
                   <TmButton variant="secondary" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
                     {t(locale, "sim.workspace.follow")}

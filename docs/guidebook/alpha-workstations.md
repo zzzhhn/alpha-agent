@@ -9,6 +9,15 @@ content and do not represent live market or account data. New route-specific
 controls should first be represented here or documented as an explicit native
 exception in the asset catalog.
 
+The reference is an inventory, not a mood board. `图标 / Icons` contains every
+Lucide glyph currently imported by production code and the bounded set of
+text-glyph compatibility exceptions. `图表 / Visualizations` contains the real
+stock-attribution radar primitive and a route-accurate registry of charts,
+custom SVGs, inline Recharts views, graph-like micro-primitives, and source-only
+legacy implementations. Section headings are localized human labels;
+dot-delimited forms such as `FOUNDATIONS.COLOR` are internal identifiers and
+must not appear in the Chinese UI.
+
 The reference also demonstrates the rich-option selector, numeric range,
 dialog, and contextual drawer. Arrow, Home, and End move listbox selection;
 Enter or Space confirms; Escape closes overlays and restores focus to the

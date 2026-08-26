@@ -304,7 +304,7 @@ export default function SettingsPage() {
   return (
     <TmScreen>
       {showImportBanner && (
-        <div className="flex items-center gap-3 border-b border-tm-rule bg-tm-accent-soft px-4 py-2 font-tm-mono text-[11px] text-tm-fg">
+        <div className="flex items-center gap-3 border-b border-tm-rule bg-tm-accent-soft px-4 py-2 font-tm-mono text-xs text-tm-fg">
           <span className="flex-1">
             {t(locale, "settings.byok.import_banner")}
           </span>
@@ -346,7 +346,7 @@ export default function SettingsPage() {
 
       {/* Intro pane */}
       <TmPane title="SETTINGS / BYOK" meta={preset.help}>
-        <p className="px-3 py-2.5 font-tm-mono text-[11.5px] leading-relaxed text-tm-fg-2">
+        <p className="px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
           {zh
             ? "你的 API Key 在服务端加密存储，仅在发起 LLM 请求的瞬间使用，不会被记录或回显。"
             : "Your API key is encrypted and stored server-side, used only at the moment an LLM request is made, and is never logged or displayed."}
@@ -432,7 +432,7 @@ export default function SettingsPage() {
             />
           </div>
 
-          <p className="font-tm-mono text-[10.5px] text-tm-muted">
+          <p className="font-tm-mono text-xs text-tm-muted">
             {zh ? "实际请求：" : "request will use: "}
             <span className="text-tm-fg-2">
               {provider} · {effectiveBase} · {effectiveModel}
@@ -488,7 +488,7 @@ export default function SettingsPage() {
 
       {/* Notes pane — origin-scoping warnings */}
       <TmPane title="NOTES">
-        <ul className="flex flex-col gap-1 px-3 py-2.5 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+        <ul className="flex flex-col gap-1 px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
           <li>
             {zh
               ? "localStorage 仅在本浏览器、本域名下可见。换浏览器或换设备需要重新填写。"
@@ -543,17 +543,17 @@ export default function SettingsPage() {
             >
               {t(locale, "settings.danger.export").toUpperCase()}
             </TmButton>
-            <span className="font-tm-mono text-[10.5px] text-tm-muted">
+            <span className="font-tm-mono text-xs text-tm-muted">
               {zh ? "下载 JSON 数据包" : "downloads a JSON data bundle"}
             </span>
           </div>
 
           {/* Delete account */}
           <div className="flex flex-col gap-2 border border-red-800/40 bg-red-950/20 p-3">
-            <p className="font-tm-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-red-400">
+            <p className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-red-400">
               {t(locale, "settings.danger.delete")}
             </p>
-            <p className="font-tm-mono text-[10.5px] text-tm-muted">
+            <p className="font-tm-mono text-xs text-tm-muted">
               {t(locale, "settings.danger.delete_confirm")}
             </p>
             <div className="flex gap-2">

@@ -119,17 +119,17 @@ export default function ChangeLog() {
             <div className="flex-1 space-y-0.5">
               <div className="flex items-center gap-2">
                 <span className="font-tm-mono text-tm-fg">{r.field}</span>
-                <span className="text-[10px] text-tm-muted">
+                <span className="text-xs text-tm-muted">
                   {relTime(r.changed_at, locale)}
                 </span>
                 {r.source === "rollback" ? (
-                  <span className="rounded bg-tm-warn/20 px-1.5 py-0 text-[10px] text-tm-warn">
+                  <span className="rounded bg-tm-warn/20 px-1.5 py-0 text-xs text-tm-warn">
                     ↶ {locale === "zh" ? "回滚" : "rollback"}
                     {r.rollback_of !== null ? ` #${r.rollback_of}` : null}
                   </span>
                 ) : null}
               </div>
-              <div className="font-tm-mono text-[11px]">
+              <div className="font-tm-mono text-xs">
                 <span className="text-tm-muted line-through">
                   {r.old_value ?? (locale === "zh" ? "(空)" : "(empty)")}
                 </span>
@@ -146,7 +146,7 @@ export default function ChangeLog() {
                 onClick={() => void onRollback(r.id)}
                 loading={rolling === r.id}
                 loadingLabel={locale === "zh" ? "回滚中…" : "rolling back…"}
-                className="rounded text-[10px] hover:border-tm-warn hover:text-tm-warn"
+                className="rounded text-xs hover:border-tm-warn hover:text-tm-warn"
               >
                 {locale === "zh" ? "↶ 回滚" : "↶ rollback"}
               </TmButton>

@@ -1,4 +1,4 @@
-import type { Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { TmBadge, type TmBadgeTone } from "@/components/tm/TmBadge";
 import { TmCols2, TmPane } from "@/components/tm/TmPane";
 import {
@@ -37,14 +37,14 @@ export function ReferencePatterns({ locale }: { readonly locale: Locale }) {
   return (
     <div>
       <TmCols2>
-        <TmPane title="PATTERN.ASYNC" bodyClassName="divide-y divide-tm-rule">
+        <TmPane title={t(locale, "reference.pane.patternAsync")} bodyClassName="divide-y divide-tm-rule">
           <PatternRow label="LOADING" text={zh ? "保留几何，说明阶段；不使用无文案的无限 spinner。" : "Preserve geometry and narrate the stage; never use an unexplained infinite spinner."} />
           <PatternRow label="EMPTY" text={zh ? "说明缺少什么、为何重要，以及唯一下一步。" : "Name what is absent, why it matters, and the one next step."} />
           <PatternRow label="ERROR" text={zh ? "错误留在受影响面板，重试不清空其他上下文。" : "Keep the error local; retry without erasing unrelated context."} />
           <PatternRow label="STALE / PARTIAL" text={zh ? "显示时间与缺失范围，只刷新受影响证据。" : "Show timestamp and missing scope; refresh only affected evidence."} />
         </TmPane>
 
-        <TmPane title="PATTERN.LIST + MUTATION" bodyClassName="divide-y divide-tm-rule">
+        <TmPane title={t(locale, "reference.pane.patternList")} bodyClassName="divide-y divide-tm-rule">
           <PatternRow label="ROW" text={zh ? "整行安全时可选择；行内操作阻止冒泡并有独立名称。" : "Select the whole row when safe; inline actions stop propagation and have distinct names."} />
           <PatternRow label="PAGING" text={zh ? "分页保留筛选；切换每页数量回到第一页。" : "Pagination preserves filters; changing page size returns to page one."} />
           <PatternRow label="MUTATION" text={zh ? "可逆操作优先撤销；不可逆操作才增加确认摩擦。" : "Prefer undo for reversible actions; add confirmation friction only when necessary."} />
@@ -52,7 +52,7 @@ export function ReferencePatterns({ locale }: { readonly locale: Locale }) {
         </TmPane>
       </TmCols2>
 
-      <TmPane title="MIGRATION.STATUS" meta={zh ? "旧资产必须有明确替代与收尾状态" : "every legacy asset needs an explicit replacement and closure state"}>
+      <TmPane title={t(locale, "reference.pane.migration")} meta={zh ? "旧资产必须有明确替代与收尾状态" : "every legacy asset needs an explicit replacement and closure state"}>
         <TmTableFrame>
           <TmTable density="standard" caption={zh ? "设计资产迁移状态" : "Design asset migration status"}>
             <TmTableHead>

@@ -142,10 +142,10 @@ function IcTooltip(props: {
   const anns = annByTs.get(row._ts) ?? [];
 
   return (
-    <div className="rounded border border-tm-rule bg-tm-bg-2 px-2.5 py-2 font-tm-mono text-[11px] text-tm-fg shadow-lg shadow-black/30">
+    <div className="rounded border border-tm-rule bg-tm-bg-2 px-2.5 py-2 font-tm-mono text-xs text-tm-fg shadow-lg shadow-black/30">
       <div className="mb-1 text-tm-muted">{row.date}</div>
       {anns.length === 0 ? (
-        <div className="text-[10px] text-tm-muted">
+        <div className="text-xs text-tm-muted">
           {t(locale, "evolution.trace.no_change_here")}
         </div>
       ) : (
@@ -161,9 +161,9 @@ function IcTooltip(props: {
               <div key={ann.signal_name} className="max-w-[260px]">
                 <div className={tone}>{f.headline}</div>
                 {f.flipNote ? (
-                  <div className="text-[10px] text-tm-warn">{f.flipNote}</div>
+                  <div className="text-xs text-tm-warn">{f.flipNote}</div>
                 ) : null}
-                <div className="mt-0.5 text-[10px] text-tm-muted">
+                <div className="mt-0.5 text-xs text-tm-muted">
                   {f.coOccurring.length > 0
                     ? f.coOccurring.join(" · ")
                     : f.noCause}
@@ -218,7 +218,7 @@ export function IcTrendChart({ series, locale, annotations, events, height = 320
 
   if (!hasData || merged.length === 0) {
     return (
-      <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
+      <p className="px-1 py-4 font-tm-mono text-xs text-tm-muted text-center">
         {t(locale, "evolution.ic.empty")}
       </p>
     );
@@ -231,13 +231,13 @@ export function IcTrendChart({ series, locale, annotations, events, height = 320
           <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+            tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
             interval="preserveStartEnd"
             minTickGap={40}
             stroke="var(--tm-rule)"
           />
           <YAxis
-            tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+            tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
             tickFormatter={(v: number) => v.toFixed(2)}
             domain={["auto", "auto"]}
             stroke="var(--tm-rule)"
@@ -254,7 +254,7 @@ export function IcTrendChart({ series, locale, annotations, events, height = 320
           />
           <Legend
             wrapperStyle={{
-              fontSize: 11,
+              fontSize: 12,
               fontFamily: "var(--font-jetbrains-mono)",
             }}
           />
@@ -272,7 +272,7 @@ export function IcTrendChart({ series, locale, annotations, events, height = 320
               label={{
                 value: ev.label,
                 position: "insideTopRight",
-                fontSize: 9,
+                fontSize: 12,
                 fill: "var(--tm-warn)",
                 fontFamily: "var(--font-jetbrains-mono)",
               }}

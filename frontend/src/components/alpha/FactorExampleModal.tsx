@@ -44,8 +44,8 @@ export function FactorExampleModal({
       description={tk("alpha.examples.modalSub")}
       headerAside={
         <div className="mr-2 hidden grid-cols-2 divide-x divide-tm-rule border-y border-tm-rule lg:grid">
-            <div className="px-4 py-2 text-right"><p className="text-[9px] uppercase text-tm-muted">{locale === "zh" ? "示例" : "Examples"}</p><p className="mt-1 font-mono text-[14px] text-tm-fg">{examples.length}</p></div>
-            <div className="px-4 py-2 text-right"><p className="text-[9px] uppercase text-tm-muted">{locale === "zh" ? "选择后" : "On select"}</p><p className="mt-1 text-[10px] text-tm-accent">{locale === "zh" ? "载入假设与参数" : "Load thesis + params"}</p></div>
+            <div className="px-4 py-2 text-right"><p className="text-xs uppercase text-tm-muted">{locale === "zh" ? "示例" : "Examples"}</p><p className="mt-1 font-mono text-[14px] text-tm-fg">{examples.length}</p></div>
+            <div className="px-4 py-2 text-right"><p className="text-xs uppercase text-tm-muted">{locale === "zh" ? "选择后" : "On select"}</p><p className="mt-1 text-xs text-tm-accent">{locale === "zh" ? "载入假设与参数" : "Load thesis + params"}</p></div>
         </div>
       }
     >

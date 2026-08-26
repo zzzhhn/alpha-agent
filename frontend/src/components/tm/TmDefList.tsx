@@ -24,7 +24,7 @@ export function TmDefList({ children, className, dtWidth }: TmDefListProps) {
   return (
     <dl
       className={clsx(
-        "grid gap-px bg-tm-rule p-px font-tm-mono text-[11.5px]",
+        "grid gap-px bg-tm-rule p-px font-tm-mono text-xs",
         className,
       )}
       style={{ gridTemplateColumns: `${dtWidth ?? "140px"} 1fr` }}

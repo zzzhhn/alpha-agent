@@ -34,16 +34,16 @@ export default function PaperCurvePane({
   return (
     <div className="flex flex-col gap-3 px-3 py-3">
       {!curve || normalizedSeries.length === 0 ? (
-        <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "common.noData")}</p>
+        <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "common.noData")}</p>
       ) : (
         <div style={{ width: "100%", height: compact ? 210 : 300 }}>
           <ResponsiveContainer>
             <ComposedChart data={normalizedSeries as unknown as Record<string, unknown>[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-tm-rule)" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fontFamily: "var(--font-tm-mono)" }} />
-              <YAxis tick={{ fontSize: 10, fontFamily: "var(--font-tm-mono)" }} />
+              <XAxis dataKey="date" tick={{ fontSize: 12, fontFamily: "var(--font-tm-mono)" }} />
+              <YAxis tick={{ fontSize: 12, fontFamily: "var(--font-tm-mono)" }} />
               <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line
                 type="monotone"
                 dataKey="portfolio_index"

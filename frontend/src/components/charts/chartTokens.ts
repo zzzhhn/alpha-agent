@@ -22,6 +22,14 @@ export const TM_CHART_SERIES_CSS = [
   "color-mix(in srgb, var(--tm-info) 72%, var(--tm-pos))",
 ] as const;
 
+/** Minimum readable typography for axes, legends, labels, and tooltips. */
+export const TM_CHART_TYPOGRAPHY = {
+  tick: 12,
+  label: 12,
+  legend: 12,
+  tooltip: 12,
+} as const;
+
 export type TmChartPalette = {
   readonly [Key in keyof typeof TM_CHART_CSS]: string;
 };

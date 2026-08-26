@@ -86,7 +86,7 @@ function ASTNode({ node, depth }: { readonly node: AstNode; readonly depth: numb
     return (
       <div style={{ paddingLeft: indent }} className="py-0.5">
         <span className="text-yellow">{node.value}</span>
-        <span className="ml-2 text-[11px] text-muted">literal</span>
+        <span className="ml-2 text-xs text-muted">literal</span>
       </div>
     );
   }
@@ -95,7 +95,7 @@ function ASTNode({ node, depth }: { readonly node: AstNode; readonly depth: numb
     return (
       <div style={{ paddingLeft: indent }} className="py-0.5">
         <span className="text-green">{node.name}</span>
-        <span className="ml-2 text-[11px] text-muted">operand</span>
+        <span className="ml-2 text-xs text-muted">operand</span>
       </div>
     );
   }
@@ -105,7 +105,7 @@ function ASTNode({ node, depth }: { readonly node: AstNode; readonly depth: numb
       <div style={{ paddingLeft: indent }}>
         <span className="text-accent">{node.name}</span>
         <span className="text-muted">(</span>
-        <span className="ml-2 text-[11px] text-muted">
+        <span className="ml-2 text-xs text-muted">
           operator · {node.args.length} arg{node.args.length === 1 ? "" : "s"}
         </span>
       </div>

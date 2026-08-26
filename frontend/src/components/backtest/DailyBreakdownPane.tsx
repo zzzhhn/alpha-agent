@@ -88,7 +88,7 @@ export function DailyBreakdownPane({ currentRun }: Props) {
       meta={`${populated.length} sessions · hit ${(hitRate * 100).toFixed(0)}%`}
     >
       <div className="flex items-center justify-between border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-        <span className="font-tm-mono text-[10.5px] text-tm-muted">
+        <span className="font-tm-mono text-xs text-tm-muted">
           {t(locale, "backtest.breakdown.subtitle")
             .replace("{n}", String(populated.length))
             .replace("{hit}", `${(hitRate * 100).toFixed(0)}%`)}
@@ -132,7 +132,7 @@ export function DailyBreakdownPane({ currentRun }: Props) {
             ))}
         </div>
       </div>
-      <p className="border-t border-tm-rule px-3 py-1.5 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
+      <p className="border-t border-tm-rule px-3 py-1.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.breakdown.tableHint")}
       </p>
     </TmPane>
@@ -202,7 +202,7 @@ function RHeader({
 }) {
   return (
     <div
-      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${
         align === "right" ? "text-right" : ""
       }`}
     >
@@ -220,7 +220,7 @@ function RCell({
 }) {
   return (
     <div
-      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-[11px] ${
+      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs ${
         align === "right" ? "justify-end" : ""
       }`}
     >
@@ -231,7 +231,7 @@ function RCell({
 
 function UnavailableMessage({ text }: { readonly text: string }) {
   return (
-    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
+    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-xs text-tm-muted">
       {text}
     </div>
   );

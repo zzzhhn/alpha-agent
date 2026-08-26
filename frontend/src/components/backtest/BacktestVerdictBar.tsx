@@ -218,7 +218,7 @@ export function BacktestVerdictBar({
           { label: t(locale, "backtest.metric.turnover"), value: "—", tone: "negative" },
           { label: t(locale, "backtest.metric.annReturn"), value: "—", tone: "negative" },
         ]}
-        action={<div className="grid gap-2"><TmButton variant="danger" size="sm" onClick={onReRun}>{t(locale, "backtest.verdict.reRun")}</TmButton>{showDetail ? <details className="max-w-44 font-tm-mono text-[9px] text-tm-muted"><summary className="cursor-pointer hover:text-tm-fg-2">{t(locale, "backtest.verdict.errorDetails")}</summary><pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-all border border-tm-rule bg-tm-bg p-1.5 text-[9px] leading-snug">{parsed.detail}</pre></details> : null}</div>}
+        action={<div className="grid gap-2"><TmButton variant="danger" size="sm" onClick={onReRun}>{t(locale, "backtest.verdict.reRun")}</TmButton>{showDetail ? <details className="max-w-44 font-tm-mono text-xs text-tm-muted"><summary className="cursor-pointer hover:text-tm-fg-2">{t(locale, "backtest.verdict.errorDetails")}</summary><pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-all border border-tm-rule bg-tm-bg p-1.5 text-xs leading-snug">{parsed.detail}</pre></details> : null}</div>}
       />
     );
   }

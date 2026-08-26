@@ -24,7 +24,7 @@ const RISK_CLS: Record<string, string> = {
 function SourceBadge({ source }: { source: string | null }) {
   if (!source) return null;
   return (
-    <span className="shrink-0 border border-tm-rule px-1 py-px font-tm-mono text-[9px] uppercase tracking-[0.04em] text-tm-muted">
+    <span className="shrink-0 border border-tm-rule px-1 py-px font-tm-mono text-xs uppercase tracking-[0.04em] text-tm-muted">
       {source}
     </span>
   );
@@ -34,25 +34,25 @@ function ItemRow({ item, flagged }: { item: BriefingItem; flagged: boolean }) {
   return (
     <li className="flex flex-col gap-1 px-3 py-2">
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate font-tm-mono text-[11px] text-tm-fg">
+        <code className="min-w-0 flex-1 truncate font-tm-mono text-xs text-tm-fg">
           {item.expression}
         </code>
         <SourceBadge source={item.source} />
         {flagged && item.risk_level ? (
           <span
-            className={`shrink-0 border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${RISK_CLS[item.risk_level] ?? RISK_CLS.medium}`}
+            className={`shrink-0 border px-1 py-px font-tm-mono text-xs font-bold uppercase ${RISK_CLS[item.risk_level] ?? RISK_CLS.medium}`}
           >
             {item.risk_level}
           </span>
         ) : null}
       </div>
-      <div className="flex flex-wrap gap-x-3 font-mono text-[10px] text-tm-muted">
+      <div className="flex flex-wrap gap-x-3 font-mono text-xs text-tm-muted">
         <span>dSR {fmt(item.deflated_sharpe)}</span>
         <span>IC {fmt(item.ic_oos, 4)}</span>
         <span>self-corr {fmt(item.self_correlation)}</span>
       </div>
       {flagged && item.concerns.length > 0 ? (
-        <ul className="list-disc pl-4 font-tm-mono text-[10.5px] text-tm-fg-2">
+        <ul className="list-disc pl-4 font-tm-mono text-xs text-tm-fg-2">
           {item.concerns.map((c, i) => (
             <li key={i}>{c}</li>
           ))}
@@ -76,12 +76,12 @@ function Bucket({
   return (
     <div>
       <div
-        className={`border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[10px] font-bold uppercase tracking-wider ${cls}`}
+        className={`border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs font-bold uppercase tracking-wider ${cls}`}
       >
         {title}
       </div>
       {empty ? (
-        <p className="px-3 py-2 font-tm-mono text-[11px] text-tm-muted">—</p>
+        <p className="px-3 py-2 font-tm-mono text-xs text-tm-muted">—</p>
       ) : (
         children
       )}
@@ -119,7 +119,7 @@ export function BriefingPane({
   return (
     <TmPane title="MINING.BRIEFING" meta={meta}>
       {isEmpty ? (
-        <p className="px-3 py-4 font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+        <p className="px-3 py-4 font-tm-mono text-xs leading-relaxed text-tm-muted">
           {t.empty}
         </p>
       ) : (
@@ -149,10 +149,10 @@ export function BriefingPane({
                   key={i}
                   className="flex items-center justify-between gap-3 px-3 py-2"
                 >
-                  <span className="min-w-0 flex-1 font-tm-mono text-[11px] text-tm-fg-2">
+                  <span className="min-w-0 flex-1 font-tm-mono text-xs text-tm-fg-2">
                     {f.pattern}
                   </span>
-                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-tm-neg">
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-tm-neg">
                     ×{f.count}
                   </span>
                 </li>

@@ -11,7 +11,7 @@
 export function PanePlaceholder({ hint }: { readonly hint: string }) {
   return (
     <div className="flex flex-1 items-center rounded border border-dashed border-tm-rule/70 bg-tm-bg-3/30 px-3 py-6">
-      <p className="font-tm-mono text-[11px] leading-relaxed text-tm-muted">
+      <p className="font-tm-mono text-xs leading-relaxed text-tm-muted">
         {hint}
       </p>
     </div>

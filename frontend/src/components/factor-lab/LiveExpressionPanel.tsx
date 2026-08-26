@@ -78,7 +78,7 @@ export function LiveExpressionPanel({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+        <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
           {t(locale, "factorLab.decision.liveExpression")}
         </div>
         {!editing ? (
@@ -95,7 +95,7 @@ export function LiveExpressionPanel({
       </div>
 
       {!editing ? (
-        <pre className="overflow-x-auto rounded bg-tm-bg-2 p-2.5 font-mono text-[11px] text-tm-fg">
+        <pre className="overflow-x-auto rounded bg-tm-bg-2 p-2.5 font-mono text-xs text-tm-fg">
           {expression}
         </pre>
       ) : (
@@ -106,12 +106,12 @@ export function LiveExpressionPanel({
             spellCheck={false}
             rows={3}
             aria-invalid={hasValidationIssues || undefined}
-            textareaClassName="min-h-0 resize-y rounded bg-tm-bg-2 p-2.5 font-mono text-[11px] text-tm-fg outline-none focus:ring-1 focus:ring-tm-accent"
+            textareaClassName="min-h-0 resize-y rounded bg-tm-bg-2 p-2.5 font-mono text-xs text-tm-fg outline-none focus:ring-1 focus:ring-tm-accent"
           />
           {hasValidationIssues ? (
             <div
               role="alert"
-              className="rounded border border-tm-warn/40 bg-tm-warn/5 px-2 py-1.5 font-tm-mono text-[10px] text-tm-warn"
+              className="rounded border border-tm-warn/40 bg-tm-warn/5 px-2 py-1.5 font-tm-mono text-xs text-tm-warn"
             >
               {unknownOps.map((op) => {
                 const sug = suggestOp(op);
@@ -146,7 +146,7 @@ export function LiveExpressionPanel({
             </div>
           ) : null}
           {saveError ? (
-            <div className="rounded border border-tm-neg/40 bg-tm-neg/10 px-2 py-1.5 font-tm-mono text-[10px] text-tm-neg">
+            <div className="rounded border border-tm-neg/40 bg-tm-neg/10 px-2 py-1.5 font-tm-mono text-xs text-tm-neg">
               {t(locale, "factorLab.decision.saveFailed")}: {saveError}
             </div>
           ) : null}
@@ -176,7 +176,7 @@ export function LiveExpressionPanel({
       )}
 
       {deployedAgoDays != null ? (
-        <div className="font-tm-mono text-[10px] text-tm-muted">
+        <div className="font-tm-mono text-xs text-tm-muted">
           {t(locale, "factorLab.decision.deployedAgo").replace(
             "{n}",
             String(deployedAgoDays),

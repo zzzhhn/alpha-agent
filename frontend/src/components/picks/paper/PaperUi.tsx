@@ -25,7 +25,7 @@ export function Metric({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-tm-mono text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+      <span className="font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
         {label}
       </span>
       <span className={`font-tm-mono text-[15px] font-semibold tabular-nums ${tone}`}>
@@ -46,7 +46,7 @@ const STATUS_CLS: Record<string, string> = {
 export function StatusChip({ status, label }: { readonly status: string; readonly label: string }) {
   const cls = STATUS_CLS[status] ?? "border-tm-rule text-tm-muted";
   return (
-    <span className={`border px-1 py-px font-tm-mono text-[9px] font-bold uppercase ${cls}`}>
+    <span className={`border px-1 py-px font-tm-mono text-xs font-bold uppercase ${cls}`}>
       {label}
     </span>
   );
@@ -57,7 +57,7 @@ export function Disclaimer() {
   return (
     <p
       data-tour="sim-disclaimer"
-      className="flex items-center gap-1.5 font-tm-mono text-[10px] leading-snug text-tm-muted"
+      className="flex items-center gap-1.5 font-tm-mono text-xs leading-snug text-tm-muted"
     >
       <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.75} />
       {t(locale, "sim.disclaimer")}
@@ -104,7 +104,7 @@ export function TwoStepConfirm({
 
   if (state === "done") {
     return (
-      <span className="inline-flex items-center gap-1.5 font-tm-mono text-[11px] text-tm-pos">
+      <span className="inline-flex items-center gap-1.5 font-tm-mono text-xs text-tm-pos">
         <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
         {doneText}
       </span>
@@ -114,7 +114,7 @@ export function TwoStepConfirm({
   if (state === "confirm" || state === "sending" || state === "error") {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-tm-mono text-[10.5px] text-tm-muted">{warnText}</span>
+        <span className="font-tm-mono text-xs text-tm-muted">{warnText}</span>
         <TmButton
           variant={tone === "neg" ? "danger" : "secondary"}
           size="xs"
@@ -132,7 +132,7 @@ export function TwoStepConfirm({
           {t(locale, "sim.cancel_btn")}
         </TmButton>
         {state === "error" && err ? (
-          <span className="font-tm-mono text-[10px] text-tm-neg">{err}</span>
+          <span className="font-tm-mono text-xs text-tm-neg">{err}</span>
         ) : null}
       </div>
     );

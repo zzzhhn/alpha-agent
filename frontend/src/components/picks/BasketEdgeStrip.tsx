@@ -60,11 +60,11 @@ function HorizonCell({ h }: { h: HorizonEdge }) {
   return (
     <HoverTip content={tip} placement="bottom" width={286}>
       <div className="flex min-w-0 cursor-help flex-col gap-0.5 sm:min-w-[104px]">
-        <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
           {h.horizon}d · n={h.n_days}
         </span>
         {h.insufficient ? (
-          <span className="font-tm-mono text-[11px] text-tm-muted">
+          <span className="font-tm-mono text-xs text-tm-muted">
             {insufficientLabel}
           </span>
         ) : (
@@ -76,7 +76,7 @@ function HorizonCell({ h }: { h: HorizonEdge }) {
             >
               {t(locale, "edge.spread_label")} {fmtPct(h.long_short_spread)}
             </span>
-            <span className="font-tm-mono text-[10px] tabular-nums">
+            <span className="font-tm-mono text-xs tabular-nums">
               <span className={sleeveToneClass(h.long_mean_return, "long")}>
                 {t(locale, "edge.long_label")} {fmtPct(h.long_mean_return)}
               </span>
@@ -85,7 +85,7 @@ function HorizonCell({ h }: { h: HorizonEdge }) {
                 {t(locale, "edge.short_label")} {fmtPct(h.short_mean_return)}
               </span>
             </span>
-            <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+            <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
               {t(locale, "edge.ic_label")} {fmtIc(h.mean_ic)}
             </span>
           </>
@@ -137,12 +137,12 @@ function ScoreboardCells({ sb }: { sb: PicksScoreboard }) {
       width={272}
     >
       <div className="flex cursor-help flex-wrap items-center gap-x-4 gap-y-1 border-l border-tm-rule pl-4">
-        <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
           {t(locale, "edge.sb_title").replace("{d}", String(sb.days))}
         </span>
         {items.map((it) => (
           <span key={it.label} className="flex items-baseline gap-1">
-            <span className="font-tm-mono text-[10px] text-tm-muted">{it.label}</span>
+            <span className="font-tm-mono text-xs text-tm-muted">{it.label}</span>
             <span className={`font-tm-mono text-[12px] font-semibold tabular-nums ${it.tone}`}>
               {it.value}
             </span>
@@ -206,24 +206,24 @@ function HonestMetricsBlock({
       width={320}
     >
       <div className="flex cursor-help flex-wrap items-center gap-x-3 gap-y-0.5 border-l border-tm-rule pl-4">
-        <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
+        <span className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
           {label}
         </span>
-        <span className="font-tm-mono text-[11px] tabular-nums text-tm-fg-2">
+        <span className="font-tm-mono text-xs tabular-nums text-tm-fg-2">
           {isZh
             ? `次日净收益(计成本) ${netPct} vs SPY ${spyPct}`
             : `1d net(cost) ${netPct} vs SPY ${spyPct}`}
         </span>
-        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+        <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
           {isZh ? `换手 ${toStr}/日` : `to ${toStr}/d`}
         </span>
-        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+        <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
           {isZh ? `盈亏平衡成本 ${beStr}` : `breakeven ${beStr}`}
         </span>
-        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+        <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
           {isZh ? `5日 IC ${icSigStr}` : `5d IC ${icSigStr}`}
         </span>
-        <span className="font-tm-mono text-[11px] tabular-nums text-tm-muted">
+        <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
           {isZh ? `修复后样本外 ${oosStr}` : `OOS(post-fix) ${oosStr}`}
         </span>
       </div>
@@ -285,13 +285,13 @@ export default function BasketEdgeStrip() {
         </span>
         <HoverTip content={t(locale, "edge.tip")} placement="bottom" width={272}>
           <span
-            className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-tm-rule font-tm-mono text-[9px] leading-none text-tm-muted"
+            className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-tm-rule font-tm-mono text-xs leading-none text-tm-muted"
             aria-hidden="true"
           >
             i
           </span>
         </HoverTip>
-        <span className="font-tm-mono text-[11px] text-tm-muted">
+        <span className="font-tm-mono text-xs text-tm-muted">
           {spreadLabel}
         </span>
       </div>
@@ -301,10 +301,10 @@ export default function BasketEdgeStrip() {
         <div className="grid w-full grid-cols-3 gap-3 sm:flex sm:w-auto sm:gap-6" aria-hidden="true">
           {[5, 20, 60].map((h) => (
             <div key={h} className="flex min-w-0 flex-col gap-0.5 sm:min-w-[88px]">
-              <span className="font-tm-mono text-[11px] uppercase tracking-wide text-tm-muted">
+              <span className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
                 {h}d
               </span>
-              <span className="font-tm-mono text-[11px] text-tm-muted">
+              <span className="font-tm-mono text-xs text-tm-muted">
                 {t(locale, "edge.loading")}
               </span>
             </div>
@@ -324,7 +324,7 @@ export default function BasketEdgeStrip() {
       </div>
       {sb ? (
         <details className="w-full border-t border-tm-rule pt-2 sm:hidden">
-          <summary className="cursor-pointer font-tm-mono text-[10px] uppercase tracking-wide text-tm-accent">
+          <summary className="cursor-pointer font-tm-mono text-xs uppercase tracking-wide text-tm-accent">
             {locale === "zh" ? "查看已实现收益、成本与显著性" : "VIEW REALIZED RETURN, COST AND SIGNIFICANCE"}
           </summary>
           <div className="mt-3 space-y-3">

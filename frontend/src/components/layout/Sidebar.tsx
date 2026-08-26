@@ -107,7 +107,7 @@ export function Sidebar() {
                 prefetch={false}
                 aria-current={isActive ? "page" : undefined}
                 className={clsx(
-                  "flex w-full items-center gap-2 px-1.5 py-1 text-[11.5px] transition-colors",
+                  "flex w-full items-center gap-2 px-1.5 py-1 text-xs transition-colors",
                   isActive
                     ? "bg-tm-accent-soft text-tm-accent"
                     : "text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg",
@@ -123,7 +123,7 @@ export function Sidebar() {
           if (group.secondary) {
             return (
               <details key={group.titleKey} open={containsActive}>
-                <summary className="cursor-pointer list-none px-1.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-tm-muted hover:text-tm-fg-2">
+                <summary className="cursor-pointer list-none px-1.5 py-1 text-xs font-semibold tracking-[0.12em] text-tm-muted hover:text-tm-fg-2">
                   {containsActive ? "▾" : "▸"} {t(locale, group.titleKey as Parameters<typeof t>[1])}
                 </summary>
                 <div className="mt-1">{links}</div>
@@ -132,7 +132,7 @@ export function Sidebar() {
           }
           return (
             <div key={group.titleKey}>
-              <div className="mb-1 px-1.5 text-[10px] font-semibold tracking-[0.12em] text-tm-muted">
+              <div className="mb-1 px-1.5 text-xs font-semibold tracking-[0.12em] text-tm-muted">
                 {t(locale, group.titleKey as Parameters<typeof t>[1])}
               </div>
               {links}
@@ -141,7 +141,7 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="mt-auto flex items-center gap-1.5 border-t border-tm-rule px-3 py-2 text-[10px] text-tm-muted">
+      <div className="mt-auto flex items-center gap-1.5 border-t border-tm-rule px-3 py-2 text-xs text-tm-muted">
         <span
           className="h-1.5 w-1.5 animate-tm-pulse bg-tm-accent"
           aria-hidden="true"
@@ -159,19 +159,19 @@ export function MobileNav() {
   const { locale } = useLocale();
   return (
     <details className="relative z-50 border-b border-tm-rule bg-tm-bg md:hidden">
-      <summary className="cursor-pointer list-none px-3 py-2 font-tm-mono text-[10.5px] uppercase tracking-[0.08em] text-tm-accent">
+      <summary className="cursor-pointer list-none px-3 py-2 font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-accent">
         {t(locale, "nav.mobile_menu")}
       </summary>
       <nav className="absolute inset-x-0 top-full grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto border-b border-tm-rule bg-tm-bg p-3 shadow-lg" aria-label={t(locale, "nav.mobile_menu")}>
         {NAV_GROUPS.map((group) => (
           <div key={group.titleKey}>
-            <div className="mb-1 font-tm-mono text-[9.5px] uppercase tracking-[0.1em] text-tm-muted">
+            <div className="mb-1 font-tm-mono text-xs uppercase tracking-[0.1em] text-tm-muted">
               {t(locale, group.titleKey as Parameters<typeof t>[1])}
             </div>
             {group.items.map((item) => {
               const active = pathname === item.href;
               return (
-                <Link key={item.id} href={item.href} prefetch={false} className={clsx("block px-2 py-1.5 font-tm-mono text-[11px]", active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2")}>
+                <Link key={item.id} href={item.href} prefetch={false} className={clsx("block px-2 py-1.5 font-tm-mono text-xs", active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2")}>
                   {t(locale, item.labelKey as Parameters<typeof t>[1])}
                 </Link>
               );

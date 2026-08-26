@@ -60,7 +60,7 @@ export function TmExposureChart({
 
   return (
     <TmPane title="EXPOSURE" meta={meta}>
-      <p className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "signal.exposure.subtitle").replace(/\{n\}/g, String(topN))}
       </p>
       <TmCols2>
@@ -93,13 +93,13 @@ function SubChart({
   if (rows.length === 0) {
     return (
       <div className="flex items-center justify-center px-3 py-12">
-        <span className="font-tm-mono text-[11px] text-tm-muted">no data</span>
+        <span className="font-tm-mono text-xs text-tm-muted">no data</span>
       </div>
     );
   }
   return (
     <div className="flex flex-col">
-      <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+      <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
         {title}
       </div>
       <div className="h-[260px] w-full px-1 pb-2 pt-2">
@@ -112,7 +112,7 @@ function SubChart({
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
             <XAxis
               type="number"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => `${v.toFixed(0)}%`}
               stroke="var(--tm-rule)"
             />
@@ -120,14 +120,14 @@ function SubChart({
               type="category"
               dataKey="name"
               width={120}
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
             />
             <Tooltip
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}

@@ -91,7 +91,7 @@ export default function VersionWatcher() {
           <div className="font-tm-mono text-[12px] text-tm-fg">
             {t(locale, "version.new_available")}
           </div>
-          <div className="font-tm-mono text-[11px] text-tm-muted">
+          <div className="font-tm-mono text-xs text-tm-muted">
             {t(locale, "version.auto_refresh").replace("{n}", String(countdown))}
           </div>
           <div className="mt-0.5 flex items-center gap-2">

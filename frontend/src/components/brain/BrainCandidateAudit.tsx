@@ -110,7 +110,7 @@ function LlmState({ candidate, zh }: { candidate: BrainRunCandidate; zh: boolean
       ? "text-tm-warn"
       : "text-tm-muted";
   return (
-    <span className={`font-tm-mono text-[10px] ${cls}`}>
+    <span className={`font-tm-mono text-xs ${cls}`}>
       {llmLabel(candidate, zh)}
       {candidate.llm_score != null ? ` · ${candidate.llm_score.toFixed(1)}` : ""}
     </span>
@@ -139,44 +139,44 @@ function CandidateDetail({ candidate, zh }: { candidate: BrainRunCandidate; zh: 
       <div className="grid gap-px border border-tm-rule bg-tm-rule sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(([label, value]) => (
           <div key={label} className="bg-tm-bg px-2.5 py-2 font-tm-mono">
-            <div className="text-[9px] uppercase tracking-wider text-tm-muted">{label}</div>
-            <div className="mt-1 text-[11px] tabular-nums text-tm-fg">{value}</div>
+            <div className="text-xs uppercase tracking-wider text-tm-muted">{label}</div>
+            <div className="mt-1 text-xs tabular-nums text-tm-fg">{value}</div>
           </div>
         ))}
       </div>
       <div className="mt-3 grid gap-3 xl:grid-cols-2">
         <div>
-          <div className="font-tm-mono text-[9px] uppercase tracking-wider text-tm-accent">
+          <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-accent">
             {zh ? "筛选判定" : "screen decision"}
           </div>
-          <p className="mt-1 font-tm-mono text-[10px] leading-relaxed text-tm-fg-2">
+          <p className="mt-1 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
             {reasonLabel(candidate, zh)}
           </p>
           {candidate.reason_text ? (
-            <p className="mt-1 font-tm-mono text-[9px] leading-relaxed text-tm-muted">
+            <p className="mt-1 font-tm-mono text-xs leading-relaxed text-tm-muted">
               {candidate.reason_text}
             </p>
           ) : null}
           {missing.length > 0 ? (
-            <p className="mt-1 font-tm-mono text-[10px] leading-relaxed text-tm-warn">
+            <p className="mt-1 font-tm-mono text-xs leading-relaxed text-tm-warn">
               {zh ? "缺失语义：" : "missing semantics: "}{missing.join(", ")}
             </p>
           ) : null}
         </div>
         <div>
-          <div className="font-tm-mono text-[9px] uppercase tracking-wider text-tm-accent">
+          <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-accent">
             {zh ? "仿真设置" : "simulation settings"}
           </div>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {settings.length > 0 ? settings.map(([key, value]) => (
-              <span key={key} className="border border-tm-rule bg-tm-bg px-1.5 py-1 font-tm-mono text-[9px] text-tm-fg-2">
+              <span key={key} className="border border-tm-rule bg-tm-bg px-1.5 py-1 font-tm-mono text-xs text-tm-fg-2">
                 {key}={String(value)}
               </span>
-            )) : <span className="font-tm-mono text-[10px] text-tm-muted">—</span>}
+            )) : <span className="font-tm-mono text-xs text-tm-muted">—</span>}
           </div>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-tm-mono text-[9px] text-tm-muted">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-tm-mono text-xs text-tm-muted">
         <span>cluster={textValue(evidence.behavioral_cluster) || textValue(evidence.cluster) || "—"}</span>
         <span>lane={textValue(evidence.lane) || "—"}</span>
         <span>datasets={textValue(evidence.datasets) || "—"}</span>
@@ -202,14 +202,14 @@ function CandidateRow({ candidate, zh }: { candidate: BrainRunCandidate; zh: boo
   return (
     <li className="border-t border-tm-rule first:border-t-0">
       <div className="grid min-w-[980px] grid-cols-[36px_minmax(360px,1fr)_112px_72px_72px_100px_132px] items-center gap-2 px-3 py-2 hover:bg-tm-bg-2">
-        <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">{candidate.ordinal + 1}</span>
+        <span className="font-tm-mono text-xs tabular-nums text-tm-muted">{candidate.ordinal + 1}</span>
         <TmRowButton onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-w-0 items-center gap-1.5">
           {open ? <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" /> : <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" />}
-          <code className="truncate font-tm-mono text-[10px] text-tm-fg">{candidate.expression}</code>
+          <code className="truncate font-tm-mono text-xs text-tm-fg">{candidate.expression}</code>
         </TmRowButton>
-        <span className="truncate font-tm-mono text-[9px] uppercase text-tm-fg-2" title={candidate.mechanism ?? undefined}>{candidate.mechanism || "—"}</span>
-        <span className="text-right font-tm-mono text-[11px] tabular-nums text-tm-fg">{score(candidate.evidence_score)}</span>
-        <span className="text-right font-tm-mono text-[10px] tabular-nums text-tm-fg-2">{percent(evidence.coverage)}</span>
+        <span className="truncate font-tm-mono text-xs uppercase text-tm-fg-2" title={candidate.mechanism ?? undefined}>{candidate.mechanism || "—"}</span>
+        <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg">{score(candidate.evidence_score)}</span>
+        <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">{percent(evidence.coverage)}</span>
         <LlmState candidate={candidate} zh={zh} />
         <span className="flex items-center justify-end gap-1.5">
           <TmIconButton
@@ -220,7 +220,7 @@ function CandidateRow({ candidate, zh }: { candidate: BrainRunCandidate; zh: boo
             className="w-7"
             icon={copied ? <Check className="h-3 w-3 text-tm-pos" /> : <Clipboard className="h-3 w-3" />}
           />
-          <span title={candidate.reason_text ?? undefined} className={`whitespace-nowrap border px-1.5 py-0.5 font-tm-mono text-[9px] ${decisionClass(candidate)}`}>{reasonLabel(candidate, zh)}</span>
+          <span title={candidate.reason_text ?? undefined} className={`whitespace-nowrap border px-1.5 py-0.5 font-tm-mono text-xs ${decisionClass(candidate)}`}>{reasonLabel(candidate, zh)}</span>
         </span>
       </div>
       {open ? <CandidateDetail candidate={candidate} zh={zh} /> : null}
@@ -359,7 +359,7 @@ export function BrainCandidateAudit({
 
   if (runId == null) {
     return (
-      <div className="px-3 py-8 text-center font-tm-mono text-[11px] text-tm-muted">
+      <div className="px-3 py-8 text-center font-tm-mono text-xs text-tm-muted">
         {zh ? "选择一个 RUN 后查看生成池与筛选证据。" : "Select a run to inspect its generated pool and screen evidence."}
       </div>
     );
@@ -402,19 +402,19 @@ export function BrainCandidateAudit({
       </div>
 
       {llmFallbacks > 0 ? (
-        <div className="flex items-start gap-2 border-b border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-[10px] leading-relaxed text-tm-warn" role="status">
+        <div className="flex items-start gap-2 border-b border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-warn" role="status">
           <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{technicalStatusCopy}</span>
         </div>
       ) : null}
 
       {loading && data == null ? (
-        <div className="flex items-center gap-2 px-3 py-6 font-tm-mono text-[11px] text-tm-muted" role="status">
+        <div className="flex items-center gap-2 px-3 py-6 font-tm-mono text-xs text-tm-muted" role="status">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           {zh ? "正在读取本轮候选审计账本…" : "Loading this run's candidate audit ledger…"}
         </div>
       ) : error ? (
-        <div className="flex items-start gap-2 px-3 py-5 font-tm-mono text-[10px] leading-relaxed text-tm-neg" role="alert">
+        <div className="flex items-start gap-2 px-3 py-5 font-tm-mono text-xs leading-relaxed text-tm-neg" role="alert">
           <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span className="inline-flex items-center gap-2">
             {zh ? `候选审计读取失败：${error}` : `Candidate audit failed to load: ${error}`}
@@ -424,7 +424,7 @@ export function BrainCandidateAudit({
           </span>
         </div>
       ) : data && data.total === 0 ? (
-        <div className="px-3 py-6 font-tm-mono text-[10px] leading-relaxed text-tm-muted">
+        <div className="px-3 py-6 font-tm-mono text-xs leading-relaxed text-tm-muted">
           {(generatedCount ?? 0) > 0
             ? zh
               ? "这轮发生在候选审计账本上线前，或 worker 尚未写入候选明细。聚合数量仍在，但表达式与逐条筛选原因无法从旧数据恢复。"
@@ -436,7 +436,7 @@ export function BrainCandidateAudit({
       ) : data ? (
         <>
           <div className="overflow-x-auto">
-            <div className="grid min-w-[980px] grid-cols-[36px_minmax(360px,1fr)_112px_72px_72px_100px_132px] items-center gap-2 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-[9px] uppercase tracking-wider text-tm-muted">
+            <div className="grid min-w-[980px] grid-cols-[36px_minmax(360px,1fr)_112px_72px_72px_100px_132px] items-center gap-2 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
               <span>#</span>
               <span>{zh ? "候选表达式" : "candidate expression"}</span>
               <span>{zh ? "机制" : "mechanism"}</span>
@@ -458,12 +458,12 @@ export function BrainCandidateAudit({
                 ))}
               </ul>
             ) : (
-              <div className="px-3 py-6 text-center font-tm-mono text-[10px] text-tm-muted">
+              <div className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
                 {zh ? "当前筛选条件下没有候选。" : "No candidates match this audit filter."}
               </div>
             )}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-tm-rule px-3 py-2 font-tm-mono text-[9px] text-tm-muted">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-tm-rule px-3 py-2 font-tm-mono text-xs text-tm-muted">
             <span>
               {zh
                 ? `共 ${data.total} 条，入选 ${selected} 条，未入选 ${withheld} 条。`

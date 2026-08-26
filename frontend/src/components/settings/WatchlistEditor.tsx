@@ -61,10 +61,10 @@ export default function WatchlistEditor() {
         <TmButton variant="primary" onClick={handleAdd}>+ ADD</TmButton>
       </div>
       {error ? (
-        <span className="font-tm-mono text-[10px] text-tm-neg">{error}</span>
+        <span className="font-tm-mono text-xs text-tm-neg">{error}</span>
       ) : null}
       {list.length === 0 ? (
-        <div className="font-tm-mono text-[10.5px] text-tm-muted py-2">
+        <div className="font-tm-mono text-xs text-tm-muted py-2">
           {t(locale, "watchlist.empty")}
         </div>
       ) : (
@@ -74,7 +74,7 @@ export default function WatchlistEditor() {
               key={ticker}
               className="flex items-center justify-between px-3 py-1.5"
             >
-              <span className="font-tm-mono text-[11px] text-tm-fg">{ticker}</span>
+              <span className="font-tm-mono text-xs text-tm-fg">{ticker}</span>
               <TmButton
                 variant="ghost"
                 size="xs"

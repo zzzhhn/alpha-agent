@@ -166,14 +166,14 @@ export default function PickRow({
             placement="bottom"
             className="ml-1 align-middle"
           >
-            <span className="cursor-help text-[11px] font-normal text-tm-warn">
+            <span className="cursor-help text-xs font-normal text-tm-warn">
               ⇄
             </span>
           </HoverTip>
         ) : null}
         {card.partial ? (
           <span
-            className="ml-1.5 rounded bg-tm-bg-2 px-1 py-0.5 align-middle text-[11px] font-semibold uppercase tracking-wide text-tm-muted"
+            className="ml-1.5 rounded bg-tm-bg-2 px-1 py-0.5 align-middle text-xs font-semibold uppercase tracking-wide text-tm-muted"
             title={t(locale, "picks_table.partial_tooltip")}
           >
             {t(locale, "picks_table.partial_badge")}
@@ -181,7 +181,7 @@ export default function PickRow({
         ) : null}
         {staleDays > 0 ? (
           <span
-            className="ml-1.5 rounded bg-tm-warn-soft px-1 py-0.5 align-middle text-[11px] font-semibold tabular-nums text-tm-warn"
+            className="ml-1.5 rounded bg-tm-warn-soft px-1 py-0.5 align-middle text-xs font-semibold tabular-nums text-tm-warn"
             title={
               locale === "zh"
                 ? `该行数据比榜单最新时间旧 ${staleDays} 天`
@@ -229,7 +229,7 @@ export default function PickRow({
         {composite.toFixed(2)}
         <span className="text-tm-muted">σ</span>
       </TmTableCell>
-      <TmTableCell numeric textAlign="right" className="text-[11px]">
+      <TmTableCell numeric textAlign="right" className="text-xs">
         <HoverTip
           className="justify-end"
           content={
@@ -254,7 +254,7 @@ export default function PickRow({
         >
           <span className="grid grid-cols-4 gap-x-1.5 text-right cursor-help">
             {consVals.map((c) => (
-              <span key={c.label} className="text-[10px] text-tm-muted">
+              <span key={c.label} className="text-xs text-tm-muted">
                 {c.label}
               </span>
             ))}
@@ -307,7 +307,7 @@ export default function PickRow({
           disabled={ordersDisabled}
           title={ordersDisabled ? t(locale, "picks.stale_order_disabled") : undefined}
           className={clsx(
-            "px-1.5 text-[11px]",
+            "px-1.5 text-xs",
             ordersDisabled
               ? "text-tm-muted"
               : heldQty > 0

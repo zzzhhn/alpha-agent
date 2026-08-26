@@ -44,13 +44,13 @@ export function ICTimeseriesChart({ data, loading }: ICTimeseriesChartProps) {
             <ResponsiveContainer>
               <ComposedChart data={data.points} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--muted)" }} interval="preserveStartEnd" minTickGap={30} />
-                <YAxis tick={{ fontSize: 10, fill: "var(--muted)" }} />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted)" }} interval="preserveStartEnd" minTickGap={30} />
+                <YAxis tick={{ fontSize: 12, fill: "var(--muted)" }} />
                 <Tooltip
-                  contentStyle={{ background: "var(--card-bg)", border: "1px solid var(--border)", fontSize: 11 }}
+                  contentStyle={{ background: "var(--card-bg)", border: "1px solid var(--border)", fontSize: 12 }}
                   formatter={(v) => (typeof v === "number" ? v.toFixed(4) : String(v ?? ""))}
                 />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
                 <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.2} />
                 <Bar dataKey="ic" name={t(locale, "signal.ic.legendDaily")} fill="var(--accent)" opacity={0.45} />
                 <Line type="monotone" dataKey="rolling_mean" name={t(locale, "signal.ic.legendRolling")}

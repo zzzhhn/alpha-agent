@@ -150,7 +150,7 @@ export default function EvolutionObservatory({
           { label: zh ? "权重自调节" : "Adaptive weights", value: degrading ?? "—", detail: zh ? "劣化信号" : "degrading signals", tone: healthTone(health.weights.tone) },
           { label: zh ? "提议状态" : "Proposals", value: pendingCount, detail: zh ? "等待人工审查" : "awaiting review", tone: pendingCount > 0 ? "negative" : "positive" },
         ]}
-        action={<a href="#evolution-review" className="inline-flex h-11 items-center gap-2 bg-tm-accent px-4 text-[11px] font-semibold text-tm-bg hover:brightness-110">{zh ? "审查变化" : "Review changes"} <span className="font-mono">{pendingCount}</span><ArrowRight className="h-3.5 w-3.5" /></a>}
+        action={<a href="#evolution-review" className="inline-flex h-11 items-center gap-2 bg-tm-accent px-4 text-xs font-semibold text-tm-bg hover:brightness-110">{zh ? "审查变化" : "Review changes"} <span className="font-mono">{pendingCount}</span><ArrowRight className="h-3.5 w-3.5" /></a>}
       />
 
       <div className="grid grid-cols-[minmax(720px,2fr)_minmax(380px,1fr)] gap-4 border-b border-tm-rule px-6 py-4">
@@ -158,7 +158,7 @@ export default function EvolutionObservatory({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{zh ? "样本外表现时间线" : "Out-of-sample performance timeline"}</p>
-              <p className="mt-1 text-[10px] text-tm-muted">{zh ? "按劣化窗口、负 IC 和保护状态确定关注顺序" : "Attention order uses degrading windows, negative IC, and guard state"}</p>
+              <p className="mt-1 text-xs text-tm-muted">{zh ? "按劣化窗口、负 IC 和保护状态确定关注顺序" : "Attention order uses degrading windows, negative IC, and guard state"}</p>
             </div>
             <div className="flex gap-1">
               <TmToggleGroup
@@ -170,7 +170,7 @@ export default function EvolutionObservatory({
                   label: getSignalDisplayLabel(signal, locale),
                 }))}
               />
-              <a href="#evolution-signal-details" className="border border-tm-rule px-2.5 py-1.5 text-[10px] text-tm-muted hover:border-tm-accent hover:text-tm-accent">
+              <a href="#evolution-signal-details" className="border border-tm-rule px-2.5 py-1.5 text-xs text-tm-muted hover:border-tm-accent hover:text-tm-accent">
                 {zh ? `全部 ${signalNames.size}` : `All ${signalNames.size}`}
               </a>
             </div>
@@ -178,7 +178,7 @@ export default function EvolutionObservatory({
           {icTrend && focusedSeries.length > 0 ? (
             <IcTrendChart series={focusedSeries} locale={locale} annotations={annotations.filter((item) => focus.includes(item.signal_name))} events={evidenceEvents} height={430} />
           ) : (
-            <div className="flex h-[220px] flex-col items-center justify-center border-t border-tm-rule px-6 text-center text-[11px] text-tm-muted"><span>{zh ? "暂无可绘制的 IC 数据，健康结论已降级为无数据。" : "No IC data is available; the health verdict is explicitly unavailable."}</span>{failures.length > 0 ? <span className="mt-2 text-tm-warn">{zh ? `部分数据源不可用：${failures.join("、")}` : `Unavailable sources: ${failures.join(", ")}`}</span> : null}</div>
+            <div className="flex h-[220px] flex-col items-center justify-center border-t border-tm-rule px-6 text-center text-xs text-tm-muted"><span>{zh ? "暂无可绘制的 IC 数据，健康结论已降级为无数据。" : "No IC data is available; the health verdict is explicitly unavailable."}</span>{failures.length > 0 ? <span className="mt-2 text-tm-warn">{zh ? `部分数据源不可用：${failures.join("、")}` : `Unavailable sources: ${failures.join(", ")}`}</span> : null}</div>
           )}
         </div>
 
@@ -190,7 +190,7 @@ export default function EvolutionObservatory({
             </span>
           </div>
           <h2 className="mt-4 text-[20px] font-semibold">{selected ? getSignalDisplayLabel(selected, locale) : (zh ? "没有可选信号" : "No signal selected")}</h2>
-          <div className="mt-3 grid grid-cols-3 gap-px border border-tm-rule bg-tm-rule text-center text-[9px]">
+          <div className="mt-3 grid grid-cols-3 gap-px border border-tm-rule bg-tm-rule text-center text-xs">
             {[
               [zh ? "线上 LIVE" : "LIVE", live?.weight],
               [zh ? "影子 SHADOW" : "SHADOW", shadow?.weight],
@@ -208,7 +208,7 @@ export default function EvolutionObservatory({
               label={zh ? "IC（滚动 20D）" : "IC (rolling 20D)"}
             />
           ) : null}
-          <div className="mt-4 space-y-3 border-t border-tm-rule pt-4 text-[10.5px] leading-5">
+          <div className="mt-4 space-y-3 border-t border-tm-rule pt-4 text-xs leading-5">
             <div className="flex justify-between gap-4"><span className="text-tm-muted"><GlossaryTip term="BRIER">{zh ? "校准（Brier）" : "Calibration (Brier)"}</GlossaryTip></span><span>{brier == null ? "—" : brier.toFixed(3)}</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "证据窗口" : "Evidence window"}</span><span>{selectedSeries?.points.length ?? 0} {zh ? "个观测" : "observations"}</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "劣化窗口" : "Degrading windows"}</span><span>{live?.consecutive_bad_windows ?? shadow?.consecutive_bad_windows ?? 0}</span></div>
@@ -216,7 +216,7 @@ export default function EvolutionObservatory({
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "最近同期事件" : "Latest co-occurring event"}</span><span className="max-w-[180px] truncate text-right" title={relatedChange?.source}>{relatedChange?.source ?? (zh ? "未记录" : "Not recorded")}</span></div>
             <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "事件时间" : "Event time"}</span><span>{formatUtc8DateTime(relatedChange?.changed_at, { year: "numeric", seconds: true })}</span></div>
           </div>
-          <p className="mt-4 border-l-2 border-tm-warn pl-3 text-[9.5px] leading-5 text-tm-muted">
+          <p className="mt-4 border-l-2 border-tm-warn pl-3 text-xs leading-5 text-tm-muted">
             {zh ? "这里只展示真实共现记录和前后 IC，不把相关性写成因果。" : "Only recorded co-occurrence and before/after IC are shown; correlation is not described as causation."}
           </p>
         </aside>
@@ -224,7 +224,7 @@ export default function EvolutionObservatory({
 
       <div className="border-b border-tm-rule px-6 py-4">
         <p className="mb-3 text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{zh ? "晋升漏斗（当前批次）" : "Promotion funnel (current cohort)"}</p>
-        <div className="grid grid-cols-5 gap-3 text-[10px]">
+        <div className="grid grid-cols-5 gap-3 text-xs">
         {[
           [zh ? "线上 LIVE" : "LIVE", liveCount],
           [zh ? "影子 SHADOW" : "SHADOW", shadowCount],
@@ -244,7 +244,7 @@ export default function EvolutionObservatory({
       {children}
 
       <details id="evolution-signal-details" className="border-b border-tm-rule">
-        <summary className="flex h-11 cursor-pointer list-none items-center justify-between px-6 text-[11px] text-tm-muted hover:text-tm-fg">
+        <summary className="flex h-11 cursor-pointer list-none items-center justify-between px-6 text-xs text-tm-muted hover:text-tm-fg">
           <span>{zh ? "展开全部信号权重与校准明细" : "Expand all signal weights and calibration details"}</span>
           <span>{zh ? "按需加载视图" : "On-demand view"}</span>
         </summary>
@@ -259,15 +259,15 @@ export default function EvolutionObservatory({
             active={detailTab}
             onChange={setDetailTab}
           />
-          <span className="ml-auto flex items-center gap-1 text-[9px] text-tm-muted"><ShieldCheck className="h-3 w-3" /> {signalNames.size} {zh ? "个信号受控" : "signals governed"}</span>
+          <span className="ml-auto flex items-center gap-1 text-xs text-tm-muted"><ShieldCheck className="h-3 w-3" /> {signalNames.size} {zh ? "个信号受控" : "signals governed"}</span>
         </div>
         <div className="px-6 py-4">
           {detailTab === "weights" ? <WeightDeltaTable weights={weights} locale={locale} /> : null}
-          {detailTab === "calibration" ? calibration ? <ReliabilityChart calibration={calibration} locale={locale} /> : <p className="py-8 text-center text-[10px] text-tm-muted">{zh ? "暂无校准数据" : "No calibration data"}</p> : null}
+          {detailTab === "calibration" ? calibration ? <ReliabilityChart calibration={calibration} locale={locale} /> : <p className="py-8 text-center text-xs text-tm-muted">{zh ? "暂无校准数据" : "No calibration data"}</p> : null}
         </div>
       </details>
 
-      <div className="flex min-h-7 items-center justify-between px-3 text-[9px] text-tm-muted">
+      <div className="flex min-h-7 items-center justify-between px-3 text-xs text-tm-muted">
         <span>{zh ? "60 秒缓存 · 默认只绘制 3 条重点信号 · 详情按需切换" : "60s cache · 3 focus signals by default · details on demand"}</span>
         <span className="inline-flex items-center gap-1"><RotateCcw className="h-3 w-3" /> {zh ? "所有变化保留回滚与审计记录" : "Every change retains rollback and audit history"}</span>
       </div>
@@ -288,7 +288,7 @@ function SignalSparkline({ points, label }: { readonly points: readonly { comput
   const zeroY = 78 - ((0 - min) / range) * 62;
   return (
     <div className="mt-3 border border-tm-rule bg-tm-bg px-3 py-2">
-      <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.08em] text-tm-muted"><span>{label}</span><span>{points.length} obs</span></div>
+      <div className="flex items-center justify-between text-xs uppercase tracking-[0.08em] text-tm-muted"><span>{label}</span><span>{points.length} obs</span></div>
       <svg viewBox="0 0 300 86" className="mt-2 h-[96px] w-full" role="img" aria-label={label}>
         <line x1="8" x2="292" y1={zeroY} y2={zeroY} stroke="currentColor" className="text-tm-rule" strokeDasharray="3 3" />
         <polyline points={polyline} fill="none" stroke="currentColor" className="text-tm-pos" strokeWidth="2" />

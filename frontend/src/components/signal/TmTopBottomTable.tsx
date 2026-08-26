@@ -77,7 +77,7 @@ function BasketSide({
   const accentClass = tone === "pos" ? "text-tm-pos" : "text-tm-neg";
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10.5px]">
+      <div className="flex items-center justify-between border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs">
         <span className={`font-semibold uppercase tracking-[0.06em] ${accentClass}`}>
           {title}
         </span>
@@ -115,7 +115,7 @@ function HeaderCell({
 }) {
   return (
     <div
-      className={`bg-tm-bg-2 px-2 py-1 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted ${
+      className={`bg-tm-bg-2 px-2 py-1 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${
         align === "right" ? "text-right" : ""
       }`}
     >
@@ -139,16 +139,16 @@ function RankRow({
 }) {
   return (
     <>
-      <div className="bg-tm-bg px-2 py-1 font-tm-mono text-[10.5px] text-tm-muted">
+      <div className="bg-tm-bg px-2 py-1 font-tm-mono text-xs text-tm-muted">
         {String(rank).padStart(2, "0")}
       </div>
-      <div className={`bg-tm-bg px-2 py-1 font-tm-mono text-[11.5px] font-semibold ${tone}`}>
+      <div className={`bg-tm-bg px-2 py-1 font-tm-mono text-xs font-semibold ${tone}`}>
         {ticker}
       </div>
-      <div className="bg-tm-bg px-2 py-1 text-right font-tm-mono text-[11px] tabular-nums text-tm-fg">
+      <div className="bg-tm-bg px-2 py-1 text-right font-tm-mono text-xs tabular-nums text-tm-fg">
         {factor.toFixed(3)}
       </div>
-      <div className="bg-tm-bg px-2 py-1 font-tm-mono text-[10.5px] text-tm-fg-2">
+      <div className="bg-tm-bg px-2 py-1 font-tm-mono text-xs text-tm-fg-2">
         {sector ?? "—"}
       </div>
     </>

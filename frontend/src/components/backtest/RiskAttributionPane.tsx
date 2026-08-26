@@ -57,7 +57,7 @@ export function RiskAttributionPane({ currentRun }: Props) {
 
   return (
     <TmPane title="RISK.ATTRIBUTION" meta="α / β / R² / verdict">
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.risk.subtitle")}
       </p>
       <TmKpiGrid>
@@ -90,7 +90,7 @@ export function RiskAttributionPane({ currentRun }: Props) {
 
 function UnavailableMessage({ text }: { readonly text: string }) {
   return (
-    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
+    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-xs text-tm-muted">
       {text}
     </div>
   );

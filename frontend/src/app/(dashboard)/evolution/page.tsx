@@ -150,7 +150,7 @@ export default async function EvolutionPage() {
           <section className="min-w-0 border border-tm-rule bg-tm-bg">
             <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4">
               <span className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{locale === "zh" ? "变更账本" : "Change ledger"}</span>
-              <span className="font-mono text-[9px] text-tm-muted">{changes?.changes.length ?? 0}</span>
+              <span className="font-mono text-xs text-tm-muted">{changes?.changes.length ?? 0}</span>
             </div>
             <div className="px-3 py-2">
               <ChangeHistoryTable changes={(changes?.changes ?? []).slice(0, 8)} locale={locale} />
@@ -161,7 +161,7 @@ export default async function EvolutionPage() {
       </EvolutionObservatory>
 
       <details className="border-b border-tm-rule px-6 py-3">
-        <summary className="cursor-pointer font-tm-mono text-[11px] text-tm-muted hover:text-tm-fg">
+        <summary className="cursor-pointer font-tm-mono text-xs text-tm-muted hover:text-tm-fg">
           {locale === "zh" ? "展开挖掘简报与学习日志" : "Expand mining briefing and learning journal"}
         </summary>
         <div className="mt-3 grid grid-cols-2 gap-4">

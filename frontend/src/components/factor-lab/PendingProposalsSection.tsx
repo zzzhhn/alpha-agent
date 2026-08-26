@@ -156,7 +156,7 @@ export function PendingProposalsSection({
   if (proposals.length === 0) {
     return (
       <TmPane title={title} meta="0">
-        <div className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
+        <div className="px-3 py-2.5 font-tm-mono text-xs text-tm-muted">
           {t(locale, "factorLab.pending.empty")}
         </div>
       </TmPane>
@@ -193,19 +193,19 @@ export function PendingProposalsSection({
                   aria-expanded={isOpen}
                   className="shrink-0"
                 />
-                <code className="flex-1 truncate font-mono text-[11px] text-tm-fg">
+                <code className="flex-1 truncate font-mono text-xs text-tm-fg">
                   {p.expression}
                 </code>
                 {ev?.skeptic ? (
                   <span
-                    className={`shrink-0 border px-1.5 py-px font-tm-mono text-[9px] font-bold tracking-[0.04em] ${RISK_CLS[ev.skeptic.risk_level] ?? RISK_CLS.medium}`}
+                    className={`shrink-0 border px-1.5 py-px font-tm-mono text-xs font-bold tracking-[0.04em] ${RISK_CLS[ev.skeptic.risk_level] ?? RISK_CLS.medium}`}
                     title={ev.skeptic.summary}
                   >
                     {(locale === "zh" ? "风险 " : "RISK ") +
                       ev.skeptic.risk_level.toUpperCase()}
                   </span>
                 ) : null}
-                <span className="shrink-0 font-mono text-[11px] text-tm-fg-2">
+                <span className="shrink-0 font-mono text-xs text-tm-fg-2">
                   <GlossaryTip term="DS">{t(locale, "factorLab.pending.colDS")}</GlossaryTip> {fmtNum(ds, 2)}
                 </span>
                 <TmButton
@@ -232,30 +232,30 @@ export function PendingProposalsSection({
                 <div className="mt-2 ml-5 flex flex-col gap-2 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2.5">
                   {symptom ? (
                     <div>
-                      <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+                      <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
                         {t(locale, "factorLab.pending.hypothesis")}
                       </div>
-                      <p className="font-tm-mono text-[11px] text-tm-fg-2">
+                      <p className="font-tm-mono text-xs text-tm-fg-2">
                         {symptom}
                       </p>
                     </div>
                   ) : null}
                   {rationale ? (
                     <div>
-                      <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+                      <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
                         {t(locale, "factorLab.pending.justification")}
                       </div>
-                      <p className="font-tm-mono text-[11px] text-tm-fg-2">
+                      <p className="font-tm-mono text-xs text-tm-fg-2">
                         {rationale}
                       </p>
                     </div>
                   ) : null}
                   {ev ? (
                     <div>
-                      <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+                      <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
                         {t(locale, "factorLab.pending.metrics")}
                       </div>
-                      <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-tm-fg-2">
+                      <div className="grid grid-cols-3 gap-2 font-mono text-xs text-tm-fg-2">
                         <span>
                           dSharpe {fmtNum(ev.deflated_sharpe, 2)}
                         </span>
@@ -286,17 +286,17 @@ export function PendingProposalsSection({
                   ) : null}
                   {ev?.skeptic ? (
                     <div>
-                      <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+                      <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
                         {(locale === "zh" ? "怀疑者审查 · " : "SKEPTIC · ") +
                           ev.skeptic.risk_level.toUpperCase()}
                       </div>
                       {ev.skeptic.summary ? (
-                        <p className="font-tm-mono text-[11px] text-tm-fg-2">
+                        <p className="font-tm-mono text-xs text-tm-fg-2">
                           {ev.skeptic.summary}
                         </p>
                       ) : null}
                       {ev.skeptic.concerns.length > 0 ? (
-                        <ul className="mt-0.5 list-disc pl-4 font-tm-mono text-[10.5px] text-tm-fg-2">
+                        <ul className="mt-0.5 list-disc pl-4 font-tm-mono text-xs text-tm-fg-2">
                           {ev.skeptic.concerns.map((c, i) => (
                             <li key={i}>{c}</li>
                           ))}
@@ -305,10 +305,10 @@ export function PendingProposalsSection({
                     </div>
                   ) : null}
                   <div>
-                    <div className="font-tm-mono text-[10px] uppercase tracking-wider text-tm-muted">
+                    <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
                       {t(locale, "factorLab.pending.diffVsLive")}
                     </div>
-                    <pre className="overflow-x-auto rounded bg-tm-bg-3/60 p-2 font-mono text-[10px]">
+                    <pre className="overflow-x-auto rounded bg-tm-bg-3/60 p-2 font-mono text-xs">
                       {diffLines(liveExpression, p.expression).map(
                         (line, i) => (
                           <div

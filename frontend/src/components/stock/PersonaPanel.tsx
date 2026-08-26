@@ -150,7 +150,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
         ) : null}
       </div>
       {locked ? (
-        <div className="flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-[11px] text-tm-muted">
+        <div className="flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-xs text-tm-muted">
           <Lock aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
           <span>{copy.lockedHint}</span>
           <Link href="/settings" className="text-tm-accent hover:underline">
@@ -183,7 +183,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
         <div className="rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
           <p className="whitespace-pre-wrap">{explanation}</p>
           {status === "done" && cacheHit ? (
-            <p className="mt-1 text-[11px] text-tm-muted">{copy.cacheHit}</p>
+            <p className="mt-1 text-xs text-tm-muted">{copy.cacheHit}</p>
           ) : null}
         </div>
       ) : null}

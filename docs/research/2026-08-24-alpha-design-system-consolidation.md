@@ -169,3 +169,22 @@ routes must be checked after deployment.
 Acceptance remains light and dark, Chinese and English, at 1672 × 941 plus the
 1024 px narrow-desktop overflow boundary. Dialog, drawer, select, pagination,
 and tooltip behavior are browser-visible gates, not inferred from build output.
+
+## 2026-08-26 full asset inventory correction
+
+The previous reference covered canonical primitives but did not prove full
+platform coverage. The correction adds dedicated Icon and Visualization tabs,
+renders all 49 imported Lucide icons plus 12 bounded text-glyph exceptions,
+extracts the stock-detail radar into the shared `TmRadarChart`, and records all
+25 detected route/component visualization assets together with graph-like
+micro-primitives. Route-reachable, live-specimen, and source-only states are
+distinct, so unused legacy charts no longer masquerade as route coverage.
+All reference taxonomy headings now use Chinese and English product labels.
+Legacy dot-delimited pane titles use a central localized compatibility map.
+
+The visible typography floor is now enforced across TSX chart settings,
+Tailwind arbitrary sizes, and CSS at 12 px. `--tm-bg-3`, `--tm-rule`, and
+`--tm-rule-2` were separated perceptually in both themes. The design-system
+audit now blocks missing icons, unregistered visualizations, under-floor type,
+and raw reference taxonomy headings in addition to its existing control,
+table, and native-title gates.

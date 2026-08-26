@@ -106,19 +106,19 @@ export function ReportVerdictHero({
         {primary && reco ? (
           <>
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="bg-tm-accent px-1.5 py-0.5 font-tm-mono text-[9px] font-bold tracking-[0.16em] text-tm-bg">
+              <span className="bg-tm-accent px-1.5 py-0.5 font-tm-mono text-xs font-bold tracking-[0.16em] text-tm-bg">
                 {tk("report.hero.factorTag")}
               </span>
               <span className="font-tm-mono text-base font-bold text-tm-fg">
                 {primary.name}
               </span>
               <span
-                className={`border px-2 py-px font-tm-mono text-[11px] font-bold tracking-[0.04em] ${TONE_BADGE[reco.tone]}`}
+                className={`border px-2 py-px font-tm-mono text-xs font-bold tracking-[0.04em] ${TONE_BADGE[reco.tone]}`}
               >
                 ★ {reco.tierLabel}
               </span>
             </div>
-            <code className="mt-1.5 block break-all font-tm-mono text-[11.5px] text-tm-accent">
+            <code className="mt-1.5 block break-all font-tm-mono text-xs text-tm-accent">
               {primary.expression}
             </code>
 
@@ -128,7 +128,7 @@ export function ReportVerdictHero({
                 {RECO_GLYPH[reco.tone]}
               </span>
               <div className="min-w-0">
-                <span className="font-tm-mono text-[9px] font-semibold tracking-[0.14em] text-tm-muted">
+                <span className="font-tm-mono text-xs font-semibold tracking-[0.14em] text-tm-muted">
                   {tk("report.hero.recoLabel")}
                 </span>
                 <p className="max-w-3xl text-[13px] leading-snug text-tm-fg">
@@ -138,7 +138,7 @@ export function ReportVerdictHero({
             </div>
 
             {/* Key numbers */}
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-[11.5px] text-tm-muted">
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-xs text-tm-muted">
               <span className="inline-flex items-baseline gap-1">
                 {tk("report.hero.kpiSharpe")}
                 <span className="font-mono tabular-nums text-tm-fg">
@@ -161,7 +161,7 @@ export function ReportVerdictHero({
           </>
         ) : (
           <div className="flex items-center gap-2">
-            <span className="bg-tm-accent px-1.5 py-0.5 font-tm-mono text-[9px] font-bold tracking-[0.16em] text-tm-bg">
+            <span className="bg-tm-accent px-1.5 py-0.5 font-tm-mono text-xs font-bold tracking-[0.16em] text-tm-bg">
               {tk("report.hero.factorTag")}
             </span>
             <p className="text-[13px] leading-snug text-tm-fg-2">
@@ -172,7 +172,7 @@ export function ReportVerdictHero({
       </div>
 
       {/* Right — switch-factor dropdown */}
-      <label className="flex shrink-0 items-center gap-2 font-tm-mono text-[10px] text-tm-muted">
+      <label className="flex shrink-0 items-center gap-2 font-tm-mono text-xs text-tm-muted">
         {tk("report.hero.switch")}
         <TmSelectMenu
           value={primary?.name ?? ""}

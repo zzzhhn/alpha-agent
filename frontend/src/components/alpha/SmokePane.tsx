@@ -58,7 +58,7 @@ function DimRow({
   status: QcStatus;
 }) {
   return (
-    <div className="flex items-center justify-between font-tm-mono text-[11px]">
+    <div className="flex items-center justify-between font-tm-mono text-xs">
       <span className="text-tm-fg-2">{label}</span>
       <span className="flex items-center gap-1.5">
         <span className="font-mono text-tm-fg">{value}</span>
@@ -109,7 +109,7 @@ export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Prop
             >
               {tk(`alpha.qc.verdict.${sc.verdict}`)}
             </span>
-            <span className="text-[11px] text-tm-muted">{tk("alpha.qc.subtitle")}</span>
+            <span className="text-xs text-tm-muted">{tk("alpha.qc.subtitle")}</span>
           </div>
 
           {/* Three structural dimensions — each value IS its own justification
@@ -136,17 +136,17 @@ export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Prop
               guidance (Forgiveness). Degenerate is blocking and shown alone; the
               two advisories show only when not already blocked. */}
           {data.degenerate ? (
-            <div className="rounded border border-tm-neg/40 bg-tm-neg/10 px-2 py-1 font-tm-mono text-[11px] text-tm-neg">
+            <div className="rounded border border-tm-neg/40 bg-tm-neg/10 px-2 py-1 font-tm-mono text-xs text-tm-neg">
               {tk("alpha.degenerateBlocked")}
             </div>
           ) : null}
           {data.high_turnover && !data.degenerate ? (
-            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
+            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
               {tk("alpha.highTurnoverWarn")}
             </div>
           ) : null}
           {data.low_robustness && !data.degenerate ? (
-            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
+            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
               {tk("alpha.lowRobustnessWarn")}
             </div>
           ) : null}
@@ -154,14 +154,14 @@ export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Prop
               the quantile-book turnover did NOT catch — otherwise the turnover
               warning already covers it (the two co-fire on most factors). */}
           {data.low_stability && !data.high_turnover && !data.degenerate ? (
-            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-[11px] text-tm-warn">
+            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
               {tk("alpha.lowStabilityWarn")}
             </div>
           ) : null}
 
           {/* Diagnostic footer: synthetic IC (indicative only) + turnover (the
               cost-relevant churn number) + run meta. */}
-          <div className="font-tm-mono text-[11px] text-tm-muted">
+          <div className="font-tm-mono text-xs text-tm-muted">
             IC <span className="font-mono">{data.ic_spearman.toFixed(4)}</span>
             {data.turnover !== undefined ? (
               <>
@@ -198,7 +198,7 @@ function EvidenceCurve({ result, locale }: { readonly result: FactorBacktestResp
 
   return (
     <div className="mt-auto border-t border-tm-rule pt-3">
-      <div className="mb-2 flex items-center justify-between text-[9px] uppercase tracking-[0.08em] text-tm-muted">
+      <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.08em] text-tm-muted">
         <span>{locale === "zh" ? "样本内／样本外证据" : "In-sample / out-of-sample evidence"}</span>
         <span>{result.benchmark_ticker}</span>
       </div>
@@ -207,10 +207,10 @@ function EvidenceCurve({ result, locale }: { readonly result: FactorBacktestResp
         <line x1={splitX} x2={splitX} y1="14" y2="104" stroke="currentColor" className="text-tm-warn" strokeDasharray="3 3" strokeWidth="0.8" />
         <polyline points={points(benchmark)} fill="none" stroke="currentColor" className="text-tm-muted" strokeWidth="1.5" />
         <polyline points={points(factor)} fill="none" stroke="currentColor" className="text-tm-pos" strokeWidth="2" />
-        <text x="16" y="114" fill="currentColor" className="fill-tm-muted text-[8px]">TRAIN</text>
-        <text x={Math.min(splitX + 5, 310)} y="114" fill="currentColor" className="fill-tm-accent text-[8px]">OOS</text>
+        <text x="16" y="114" fill="currentColor" className="fill-tm-muted text-xs">TRAIN</text>
+        <text x={Math.min(splitX + 5, 310)} y="114" fill="currentColor" className="fill-tm-accent text-xs">OOS</text>
       </svg>
-      <div className="mt-2 flex gap-4 text-[9px] text-tm-muted"><span className="text-tm-pos">{locale === "zh" ? "因子组合" : "Factor"}</span><span>{result.benchmark_ticker}</span><span className="ml-auto">{factor[0].date} → {factor.at(-1)?.date}</span></div>
+      <div className="mt-2 flex gap-4 text-xs text-tm-muted"><span className="text-tm-pos">{locale === "zh" ? "因子组合" : "Factor"}</span><span>{result.benchmark_ticker}</span><span className="ml-auto">{factor[0].date} → {factor.at(-1)?.date}</span></div>
     </div>
   );
 }

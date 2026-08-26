@@ -116,13 +116,13 @@ export function TrainTestSplitPane({ currentRun }: Props) {
             <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               interval="preserveStartEnd"
               minTickGap={40}
               stroke="var(--tm-rule)"
             />
             <YAxis
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => v.toFixed(2)}
               stroke="var(--tm-rule)"
             />
@@ -130,7 +130,7 @@ export function TrainTestSplitPane({ currentRun }: Props) {
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -173,7 +173,7 @@ export function TrainTestSplitPane({ currentRun }: Props) {
 
 function UnavailableMessage({ text }: { readonly text: string }) {
   return (
-    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
+    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-xs text-tm-muted">
       {text}
     </div>
   );

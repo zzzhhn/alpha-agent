@@ -34,7 +34,7 @@ export function BacktestContextHeader({
         { label: zh ? "最近运行" : "Last run", value: lastRun },
       ]}
       action={(
-        <div className="flex items-center gap-3 border border-tm-rule px-3 py-2 text-[10px] text-tm-muted">
+        <div className="flex items-center gap-3 border border-tm-rule px-3 py-2 text-xs text-tm-muted">
           <Cpu className="h-3.5 w-3.5 text-tm-accent" />
           <span>{zh ? "繁重计算由服务线程执行" : "Heavy compute runs off the request loop"}</span>
           <Gauge className="h-3.5 w-3.5" />

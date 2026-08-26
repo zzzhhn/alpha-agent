@@ -116,7 +116,7 @@ export function HypothesisInputCard(p: Props) {
           {historyOpen && (
             <div className="absolute right-0 top-full z-10 mt-1 max-h-[400px] w-[380px] overflow-y-auto rounded border border-tm-rule bg-tm-bg-2 shadow-lg">
               {p.history.length === 0 ? (
-                <div className="px-3 py-4 font-tm-mono text-[11px] text-tm-muted">
+                <div className="px-3 py-4 font-tm-mono text-xs text-tm-muted">
                   {t(locale, "alpha.historyEmpty" as Parameters<typeof t>[1])}
                 </div>
               ) : (
@@ -131,15 +131,15 @@ export function HypothesisInputCard(p: Props) {
                         }}
                         className="block w-full px-3 py-2 text-left transition-colors hover:bg-tm-bg-3"
                       >
-                        <div className="line-clamp-2 font-tm-mono text-[11px] text-tm-fg-2 hover:text-tm-fg">
+                        <div className="line-clamp-2 font-tm-mono text-xs text-tm-fg-2 hover:text-tm-fg">
                           {h.request.text}
                         </div>
                         {h.result?.spec?.expression && (
-                          <code className="mt-0.5 block truncate font-mono text-[10px] text-tm-muted">
+                          <code className="mt-0.5 block truncate font-mono text-xs text-tm-muted">
                             {h.result.spec.expression}
                           </code>
                         )}
-                        <div className="mt-1 font-tm-mono text-[10px] text-tm-muted">
+                        <div className="mt-1 font-tm-mono text-xs text-tm-muted">
                           {h.timestamp}
                           {h.isFavorite && (
                             <span className="ml-2 text-tm-warn">&#9733;</span>
@@ -183,7 +183,7 @@ export function HypothesisInputCard(p: Props) {
             onClick={p.onRerun}
             disabled={p.disabled || !p.canRerun}
             title={locale === "zh" ? "保留当前表达式，使用下方最新参数重新回测" : "Keep the translated expression and rerun with the latest parameters"}
-            className="w-full text-[10px]"
+            className="w-full text-xs"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             {locale === "zh" ? "按当前参数重测" : "Rerun current expression"}
@@ -193,7 +193,7 @@ export function HypothesisInputCard(p: Props) {
 
       {/* Validation context is real request state, not decorative metadata. */}
       <div className="mt-3 flex items-end justify-between gap-4">
-        <div className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+        <div className="font-tm-mono text-xs tabular-nums text-tm-muted">
           {p.text.length} {t(locale, "alpha.input.chars" as Parameters<typeof t>[1])}
         </div>
 

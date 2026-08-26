@@ -79,7 +79,7 @@ export function TmSignalForm({ running, onRun }: TmSignalFormProps) {
           rows={3}
           spellCheck={false}
           className="w-full"
-          textareaClassName="resize-none p-2 text-[11.5px] leading-relaxed"
+          textareaClassName="resize-none p-2 text-xs leading-relaxed"
         />
 
         <div className="flex flex-wrap items-end gap-4">
@@ -284,11 +284,11 @@ function ExampleMenuSection({
     <div className="border-b border-tm-rule last:border-b-0">
       <div className="flex items-baseline gap-2 bg-tm-bg-3 px-2 py-1">
         <span
-          className={`font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] ${head}`}
+          className={`font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] ${head}`}
         >
           {t(locale, labelKey)}
         </span>
-        <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+        <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
           {items.length}
         </span>
       </div>
@@ -304,10 +304,10 @@ function ExampleMenuSection({
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`}
                 aria-hidden="true"
               />
-              <span className="min-w-0 flex-1 truncate font-tm-sans text-[11.5px] text-tm-fg-2 group-hover:text-tm-fg">
+              <span className="min-w-0 flex-1 truncate font-tm-sans text-xs text-tm-fg-2 group-hover:text-tm-fg">
                 {ex.name}
               </span>
-              <code className="hidden max-w-[140px] shrink-0 truncate font-tm-mono text-[10px] text-tm-muted sm:block">
+              <code className="hidden max-w-[140px] shrink-0 truncate font-tm-mono text-xs text-tm-muted sm:block">
                 {ex.expression}
               </code>
             </TmRowButton>
@@ -334,7 +334,7 @@ function NeutralizeChips({
   const { locale } = useLocale();
   return (
     <div className="flex flex-col gap-1">
-      <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+      <span className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
         {label}
       </span>
       <div className="flex items-center gap-1.5">
@@ -343,7 +343,7 @@ function NeutralizeChips({
             {t(locale, `backtest.form.neutralize.${m}`)}
           </TmChip>
         ))}
-        <span className="font-tm-mono text-[10px] text-tm-muted" title={hint}>
+        <span className="font-tm-mono text-xs text-tm-muted" title={hint}>
           ?
         </span>
       </div>

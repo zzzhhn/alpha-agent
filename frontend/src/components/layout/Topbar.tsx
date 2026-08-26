@@ -65,7 +65,7 @@ export function Topbar() {
 
   return (
     <header
-      className="flex items-center justify-between border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[11px]"
+      className="flex items-center justify-between border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs"
       role="banner"
     >
       <div className="flex items-center gap-3.5 text-tm-fg-2">

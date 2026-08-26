@@ -126,13 +126,13 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
             <CartesianGrid strokeDasharray="2 4" stroke={TM_CHART_CSS.grid} />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
+              tick={{ fontSize: 12, fill: TM_CHART_CSS.muted }}
               interval="preserveStartEnd"
               minTickGap={40}
               stroke={TM_CHART_CSS.grid}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: TM_CHART_CSS.muted }}
+              tick={{ fontSize: 12, fill: TM_CHART_CSS.muted }}
               tickFormatter={(v: number) => v.toFixed(2)}
               stroke={TM_CHART_CSS.grid}
               domain={["auto", "auto"]}
@@ -141,7 +141,7 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
               contentStyle={{
                 background: TM_CHART_CSS.surface,
                 border: `1px solid ${TM_CHART_CSS.grid}`,
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: TM_CHART_CSS.foreground,
               }}
@@ -151,7 +151,7 @@ export function EquityCurvePane({ runState, currentRun }: Props) {
             />
             <Legend
               wrapperStyle={{
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
               }}
             />

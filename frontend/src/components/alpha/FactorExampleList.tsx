@@ -172,12 +172,12 @@ function FactorExampleRow({
       </span>
 
       {/* Expression — the factor's defining code */}
-      <code className="block min-w-0 truncate font-tm-mono text-[10.5px] text-tm-accent/90">
+      <code className="block min-w-0 truncate font-tm-mono text-xs text-tm-accent/90">
         {example.expression}
       </code>
 
       {/* Hypothesis — the per-row "more info" (locale-aware prose) */}
-      <span className="line-clamp-1 font-tm-sans text-[11px] leading-snug text-tm-muted group-hover:text-tm-fg-2">
+      <span className="line-clamp-1 font-tm-sans text-xs leading-snug text-tm-muted group-hover:text-tm-fg-2">
         {hypothesis}
       </span>
     </TmRowButton>
@@ -193,11 +193,11 @@ interface MetricProps {
 function Metric({ label, value, valueClass }: MetricProps) {
   return (
     <span className="inline-flex items-baseline gap-1">
-      <span className="font-tm-sans text-[10px] uppercase tracking-wide text-tm-muted">
+      <span className="font-tm-sans text-xs uppercase tracking-wide text-tm-muted">
         {label}
       </span>
       <span
-        className={`font-tm-mono text-[11px] font-medium tabular-nums ${valueClass ?? "text-tm-fg"}`}
+        className={`font-tm-mono text-xs font-medium tabular-nums ${valueClass ?? "text-tm-fg"}`}
       >
         {value}
       </span>
@@ -255,7 +255,7 @@ export function FactorExampleList({
       />
 
       {totalShown === 0 ? (
-        <p className="px-2 py-3 font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-2 py-3 font-tm-mono text-xs text-tm-muted">
           {t(locale, "report.example.filterEmpty")}
         </p>
       ) : (
@@ -265,11 +265,11 @@ export function FactorExampleList({
               {/* Section header: tier label + count */}
               <div className="flex items-baseline gap-2 border-b border-tm-rule px-2 pb-1">
                 <span
-                  className={`font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] ${g.meta.headText}`}
+                  className={`font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] ${g.meta.headText}`}
                 >
                   {t(locale, g.meta.labelKey)}
                 </span>
-                <span className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+                <span className="font-tm-mono text-xs tabular-nums text-tm-muted">
                   {g.items.length}
                 </span>
               </div>

@@ -146,12 +146,12 @@ export function TurnoverProfilePane({ currentRun }: Props) {
             />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
               interval={0}
             />
             <YAxis
-              tick={{ fontSize: 9, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               stroke="var(--tm-rule)"
               allowDecimals={false}
             />
@@ -159,7 +159,7 @@ export function TurnoverProfilePane({ currentRun }: Props) {
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -174,7 +174,7 @@ export function TurnoverProfilePane({ currentRun }: Props) {
 
 function UnavailableMessage({ text }: { readonly text: string }) {
   return (
-    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-[11px] text-tm-muted">
+    <div className="flex h-[120px] w-full items-center justify-center px-3 text-center font-tm-mono text-xs text-tm-muted">
       {text}
     </div>
   );

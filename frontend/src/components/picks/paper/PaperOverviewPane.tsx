@@ -63,13 +63,13 @@ export default function PaperOverviewPane({
           tone={account.realized_pnl >= 0 ? "text-tm-pos" : "text-tm-neg"}
         />
       </div>
-      <p className="font-tm-mono text-[10px] tabular-nums text-tm-muted">
+      <p className="font-tm-mono text-xs tabular-nums text-tm-muted">
         {PCT(account.total_return_pct)}
       </p>
 
       <div>
         <div className="mb-2 flex items-center justify-between border-b border-tm-rule pb-1.5">
-          <span className="font-tm-mono text-[10px] uppercase tracking-[0.08em] text-tm-muted">
+          <span className="font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
             {t(locale, "sim.positions.title")}
           </span>
           <TwoStepConfirm
@@ -81,7 +81,7 @@ export default function PaperOverviewPane({
         </div>
         {account.positions.length === 0 ? (
           <div className="flex flex-col items-start gap-2 py-2">
-            <p className="font-tm-mono text-[11px] text-tm-muted">{t(locale, "sim.overview.empty_hint")}</p>
+            <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "sim.overview.empty_hint")}</p>
             <TmButton variant="ghost" onClick={onGoToTrade}>
               {t(locale, "sim.overview.empty_cta")}
             </TmButton>
@@ -92,7 +92,7 @@ export default function PaperOverviewPane({
               <TmTableHead>
                 <TmTableRow>
                   {POS_HEADERS[locale].map((h, index) => (
-                    <TmTableHeaderCell key={h} textAlign={index === 0 ? "left" : "right"} className="text-[10px] tracking-wide">
+                    <TmTableHeaderCell key={h} textAlign={index === 0 ? "left" : "right"} className="text-xs tracking-wide">
                       {h}
                     </TmTableHeaderCell>
                   ))}

@@ -87,10 +87,10 @@ function Row({
         <span className="text-[13px] text-tm-fg-2">{t(locale, src.feedsKey)}</span>
       </Cell>
       <Cell>
-        <span className="font-tm-mono text-[11px] text-tm-accent">{src.signal}</span>
+        <span className="font-tm-mono text-xs text-tm-accent">{src.signal}</span>
       </Cell>
       <Cell>
-        <span className="text-[11px] text-tm-muted">{t(locale, src.cadenceKey)}</span>
+        <span className="text-xs text-tm-muted">{t(locale, src.cadenceKey)}</span>
       </Cell>
       <Cell>
         <DataStat locale={locale} stat={stat} loaded={loaded} />
@@ -111,12 +111,12 @@ function DataStat({
   stat: DataSourceStat | null | undefined;
   loaded: boolean;
 }) {
-  if (!loaded) return <span className="text-[11px] text-tm-muted">…</span>;
-  if (stat === null) return <span className="text-[11px] text-tm-muted">{t(locale, "data.src.live")}</span>;
-  if (!stat || stat.rows === null) return <span className="text-[11px] text-tm-warn">ERR</span>;
+  if (!loaded) return <span className="text-xs text-tm-muted">…</span>;
+  if (stat === null) return <span className="text-xs text-tm-muted">{t(locale, "data.src.live")}</span>;
+  if (!stat || stat.rows === null) return <span className="text-xs text-tm-warn">ERR</span>;
   const fresh = stat.last_fetched_at ? ago(stat.last_fetched_at, locale) : null;
   return (
-    <span className="font-tm-mono text-[11px] tabular-nums text-tm-fg">
+    <span className="font-tm-mono text-xs tabular-nums text-tm-fg">
       {stat.rows.toLocaleString()}
       {fresh ? <span className="ml-1.5 text-tm-muted">· {fresh}</span> : null}
     </span>
@@ -140,7 +140,7 @@ function Cell({ children, head = false }: { children: React.ReactNode; head?: bo
     <div
       className={
         head
-          ? "bg-tm-bg-2 px-3 py-1.5 font-tm-sans text-[11px] font-semibold uppercase tracking-[0.06em] text-tm-muted"
+          ? "bg-tm-bg-2 px-3 py-1.5 font-tm-sans text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted"
           : "bg-tm-bg px-3 py-2"
       }
     >

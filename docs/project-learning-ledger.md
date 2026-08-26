@@ -153,3 +153,21 @@
 - Overlay dimensions and close-button alignment belong to reusable primitives
   and documented scales. Page-local width conflicts or icon nudges are not an
   acceptable substitute.
+
+## 2026-08-26: A full design system needs an asset registry and a no-omission gate
+
+- A component gallery can look complete while omitting production icons,
+  custom SVGs, radar charts, and local type scales. Completeness must be
+  checked against imports and renderers in every route, not inferred from tabs.
+- Internal taxonomy identifiers such as `FOUNDATIONS.COLOR` are useful in code
+  but are not acceptable localized copy. A reference heading must have a
+  Chinese and English product label, while the internal ID remains an
+  implementation detail.
+- A 12 px specimen does not establish a 12 px platform floor. The release audit
+  must reject Tailwind arbitrary sizes, chart-library font sizes, and CSS text
+  below the floor across production sources.
+- Neutral tokens need perceptual separation. A hover surface and a one-pixel
+  rule have different jobs and must remain distinguishable in both themes.
+- New icon and visualization assets enter production only after registration
+  in the living reference. Import-to-registry checks prevent the catalog from
+  becoming stale immediately after release.

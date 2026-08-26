@@ -382,7 +382,7 @@ function DataTab({
             {[1, 2, 3, 4, 5].map((n) => (
               <li
                 key={n}
-                className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-[11px] leading-relaxed text-tm-fg last:border-b-0"
+                className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg last:border-b-0"
               >
                 <span className="shrink-0 text-tm-accent">
                   {String(n).padStart(2, "0")}
@@ -400,14 +400,14 @@ function DataTab({
 
         <div className="flex flex-col [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-tm-rule">
           <TmPane title="AVAILABLE.SECTORS" meta={`${sectors.length} GICS-1`}>
-            <p className="px-3 pt-2.5 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+            <p className="px-3 pt-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
               {t(locale, "methodology.data.sectorsSubtitle")}
             </p>
             <div className="flex flex-wrap gap-1.5 px-3 pb-3 pt-2">
               {sectors.map((s) => (
                 <span
                   key={s}
-                  className="border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-[10.5px] text-tm-fg-2"
+                  className="border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-xs text-tm-fg-2"
                 >
                   {s}
                 </span>
@@ -417,7 +417,7 @@ function DataTab({
 
           <TmPane title="BIAS.GUARDS" meta="2 INVARIANTS">
             <ul className="flex flex-col">
-              <li className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg">
+              <li className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg">
                 <span className="text-tm-accent">
                   ▸ {t(locale, "methodology.bias.survivorship.label")}
                 </span>
@@ -428,7 +428,7 @@ function DataTab({
                   {t(locale, "methodology.bias.survivorship.desc")}
                 </div>
               </li>
-              <li className="px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg">
+              <li className="px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg">
                 <span className="text-tm-accent">
                   ▸ {t(locale, "methodology.bias.lookahead.label")}
                 </span>
@@ -472,7 +472,7 @@ function DataTab({
 
 function SchemaHeader({ children }: { readonly children: React.ReactNode }) {
   return (
-    <div className="bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+    <div className="bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
       {children}
     </div>
   );
@@ -501,19 +501,19 @@ function SchemaRow({ field }: { readonly field: SchemaField }) {
           : "text-tm-info";
   return (
     <>
-      <div className={`bg-tm-bg px-3 py-1 font-tm-mono text-[10.5px] ${groupTone}`}>
+      <div className={`bg-tm-bg px-3 py-1 font-tm-mono text-xs ${groupTone}`}>
         {field.group}
       </div>
-      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-[11px] text-tm-fg">
+      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-xs text-tm-fg">
         {field.name}
       </div>
-      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-[10.5px] text-tm-fg-2">
+      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-xs text-tm-fg-2">
         {field.type}
       </div>
-      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-[10.5px] text-tm-muted">
+      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-xs text-tm-muted">
         {field.source}
       </div>
-      <div className={`bg-tm-bg px-3 py-1 font-tm-mono text-[10.5px] ${covTone}`}>
+      <div className={`bg-tm-bg px-3 py-1 font-tm-mono text-xs ${covTone}`}>
         {field.coverage}
       </div>
     </>
@@ -534,7 +534,7 @@ function OperatorsTab({
   if (!catalog) {
     return (
       <TmPane title="OPS.OVERVIEW">
-        <p className="px-3 py-2.5 font-tm-mono text-[11px] text-tm-muted">
+        <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-muted">
           {t(locale, "common.loading")}
         </p>
       </TmPane>
@@ -583,7 +583,7 @@ function OperatorsTab({
             sub={tiers.join(" · ")}
           />
         </TmKpiGrid>
-        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
           {t(locale, "methodology.operators.subtitle")
             .replace("{n}", String(implemented.length))
             .replace("{total}", String(ops.length))}
@@ -596,7 +596,7 @@ function OperatorsTab({
       >
         {/* Filter chips */}
         <div className="flex flex-wrap items-center gap-1.5 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-          <span className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+          <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
             CATEGORY
           </span>
           <TmChip on={catFilter === "all"} onClick={() => setCatFilter("all")}>
@@ -611,7 +611,7 @@ function OperatorsTab({
               {c}
             </TmChip>
           ))}
-          <span className="ml-3 font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+          <span className="ml-3 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
             TIER
           </span>
           <TmChip
@@ -639,7 +639,7 @@ function OperatorsTab({
               className="border-b border-tm-rule last:border-b-0"
             >
               <details className="group">
-                <summary className="flex cursor-pointer items-center gap-3 px-3 py-1.5 font-tm-mono text-[11px] hover:bg-tm-bg-2">
+                <summary className="flex cursor-pointer items-center gap-3 px-3 py-1.5 font-tm-mono text-xs hover:bg-tm-bg-2">
                   <span className="text-tm-muted group-open:text-tm-accent">
                     {">"}
                   </span>
@@ -651,7 +651,7 @@ function OperatorsTab({
                   <span className="w-6 text-tm-muted">{op.tier ?? "T1"}</span>
                 </summary>
                 {op.source_snippet && (
-                  <pre className="m-0 overflow-x-auto border-t border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg-2">
+                  <pre className="m-0 overflow-x-auto border-t border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
                     {op.source_snippet}
                   </pre>
                 )}
@@ -659,7 +659,7 @@ function OperatorsTab({
             </li>
           ))}
           {filtered.length === 0 && (
-            <li className="px-3 py-3 font-tm-mono text-[11px] text-tm-muted">
+            <li className="px-3 py-3 font-tm-mono text-xs text-tm-muted">
               {t(locale, "methodology.operators.empty")}
             </li>
           )}
@@ -718,7 +718,7 @@ function BacktestTab() {
             sub="α/β + bootstrap"
           />
         </TmKpiGrid>
-        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-[10.5px] leading-relaxed text-tm-muted">
+        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
           {t(locale, "methodology.backtest.subtitle")}
         </p>
       </TmPane>
@@ -728,7 +728,7 @@ function BacktestTab() {
         meta={`${filtered.length} SHOWN`}
       >
         <div className="flex flex-wrap items-center gap-1.5 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-          <span className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+          <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
             CATEGORY
           </span>
           <TmChip
@@ -777,7 +777,7 @@ function BacktestTab() {
           {[1, 2, 3, 4].map((n) => (
             <li
               key={n}
-              className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-[11px] leading-relaxed text-tm-fg last:border-b-0"
+              className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg last:border-b-0"
             >
               <span className="shrink-0 text-tm-accent">·</span>
               <span>
@@ -810,16 +810,16 @@ function MetricGridRow({ row }: { readonly row: MetricRow }) {
               : "text-tm-pos";
   return (
     <>
-      <div className={`bg-tm-bg px-3 py-1.5 font-tm-mono text-[10.5px] ${catTone}`}>
+      <div className={`bg-tm-bg px-3 py-1.5 font-tm-mono text-xs ${catTone}`}>
         {row.category}
       </div>
-      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-[11px] text-tm-accent">
+      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
         {t(locale, `methodology.backtest.${row.keyBase}` as Parameters<typeof t>[1])}
       </div>
-      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-[10.5px] leading-relaxed text-tm-fg">
+      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-xs leading-relaxed text-tm-fg">
         {row.formula}
       </div>
-      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-[10.5px] text-tm-muted">
+      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-xs text-tm-muted">
         {row.ref}
       </div>
     </>
@@ -847,7 +847,7 @@ function ErrorPane({
         {unique.map((m, i) => (
           <li
             key={i}
-            className="border-b border-tm-rule px-3 py-2 font-tm-mono text-[11px] leading-relaxed text-tm-neg last:border-b-0"
+            className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-neg last:border-b-0"
           >
             {m}
           </li>

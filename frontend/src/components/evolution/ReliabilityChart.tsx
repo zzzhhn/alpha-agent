@@ -57,7 +57,7 @@ function meanBrier(calibration: EvolutionCalibration): number | null {
 export function ReliabilityChart({ calibration, locale }: ReliabilityChartProps) {
   if (!calibration.applied) {
     return (
-      <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-warn text-center">
+      <p className="px-1 py-4 font-tm-mono text-xs text-tm-warn text-center">
         {t(locale, "evolution.cal.not_applied").replace(
           "{n}",
           String(calibration.n_pairs),
@@ -70,7 +70,7 @@ export function ReliabilityChart({ calibration, locale }: ReliabilityChartProps)
 
   if (points.length === 0) {
     return (
-      <p className="px-1 py-4 font-tm-mono text-[10.5px] text-tm-muted text-center">
+      <p className="px-1 py-4 font-tm-mono text-xs text-tm-muted text-center">
         {t(locale, "evolution.cal.no_buckets")}
       </p>
     );
@@ -88,14 +88,14 @@ export function ReliabilityChart({ calibration, locale }: ReliabilityChartProps)
               dataKey="mid"
               type="number"
               domain={[0, 1]}
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => v.toFixed(1)}
               label={{
                 value: t(locale, "evolution.cal.axis_predicted"),
                 position: "insideBottom",
                 offset: -4,
                 fill: "var(--tm-muted)",
-                fontSize: 10,
+                fontSize: 12,
               }}
               stroke="var(--tm-rule)"
             />
@@ -103,14 +103,14 @@ export function ReliabilityChart({ calibration, locale }: ReliabilityChartProps)
               dataKey="hit_rate"
               type="number"
               domain={[0, 1]}
-              tick={{ fontSize: 10, fill: "var(--tm-muted)" }}
+              tick={{ fontSize: 12, fill: "var(--tm-muted)" }}
               tickFormatter={(v: number) => v.toFixed(1)}
               label={{
                 value: t(locale, "evolution.cal.axis_actual"),
                 angle: -90,
                 position: "insideLeft",
                 fill: "var(--tm-muted)",
-                fontSize: 10,
+                fontSize: 12,
                 dy: 40,
               }}
               stroke="var(--tm-rule)"
@@ -119,7 +119,7 @@ export function ReliabilityChart({ calibration, locale }: ReliabilityChartProps)
               contentStyle={{
                 background: "var(--tm-bg-2)",
                 border: "1px solid var(--tm-rule)",
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
@@ -160,7 +160,7 @@ export function ReliabilityChart({ calibration, locale }: ReliabilityChartProps)
         </ResponsiveContainer>
       </div>
       {brier !== null && (
-        <p className="px-1 pb-1 font-tm-mono text-[10px] text-tm-muted text-right">
+        <p className="px-1 pb-1 font-tm-mono text-xs text-tm-muted text-right">
           {t(locale, "evolution.cal.brier").replace("{v}", brier.toFixed(4))}
           {calibration.as_of ? ` · ${calibration.as_of}` : ""}
         </p>

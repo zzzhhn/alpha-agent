@@ -37,7 +37,7 @@ The 2026-08-24 inventory covered all files under `frontend/src`.
 | Buttons | Production actions and rich rows use the canonical TM family | `TmButton`, `TmIconButton`, `TmLinkButton`, `TmDisclosureButton`, `TmRowButton` |
 | Fields | Production forms use the canonical TM field family | `TmInput`, `TmNumberInput`, `TmSelect`, `TmSelectMenu`, `TmTextarea`, `TmCheckbox`, `TmRange` |
 | Panes/cards | `TmPane`, legacy `Card`, and glass-card utilities | `TmPane` |
-| Type scale | 20 arbitrary pixel sizes | named roles in section 4 |
+| Type scale | production text formerly ranged from 8 to 28 px | named roles with a hard 12 px visible-text floor |
 | Heights | 27 arbitrary fixed heights | 24, 28, 32, 36, 44 px scale |
 | Radius | 247 rounded-class matches | 0 px default, 2 px exception |
 | Tables | Standard tables plus one native matrix heatmap | `TmTable`; documented matrix exception |
@@ -45,7 +45,8 @@ The 2026-08-24 inventory covered all files under `frontend/src`.
 | Status | pills, badges, text colors, and page-local alerts | `TmBadge`, `TmStatePane` |
 | Tooltips | two components plus native `title` attributes | one accessible tooltip contract |
 | Overlays | dialogs and drawers share one modal focus contract | `TmDialog`, `TmDrawer`, and `useTmModalFocus` |
-| Charts | SVG and canvas charts consume semantic adapters | `chartTokens`, `TM_CHART_SERIES_CSS`, and resolved canvas palette |
+| Icons | 49 Lucide glyphs plus 12 registered text-glyph exceptions | `/reference` icon registry, glyph boundary, and icon-use contract |
+| Charts | 25 detected route/component visualization assets plus graph-like micro-primitives | full route registry, source-only status, `chartTokens`, `TM_CHART_TYPOGRAPHY`, and resolved canvas palette |
 
 These counts are a migration baseline, not a target to preserve. A raw native
 element is allowed only when the canonical primitive cannot express required
@@ -108,6 +109,27 @@ change and a reference-page specimen before production use.
   `:focus-visible`; focus never changes layout geometry.
 - One screen has one filled green primary action. Other actions use outline,
   ghost, or negative treatments according to their effect.
+
+### 3.4 Section taxonomy and localization
+
+Strings such as `FOUNDATIONS.COLOR` are internal taxonomy identifiers, not
+user-facing headings. The Chinese interface displays `基础规范 · 颜色`; the
+English interface displays `Foundations · Color`. Reference-page headings must
+use typed locale keys. Legacy production pane identifiers pass through the
+central compatibility map until their callers are migrated. A raw uppercase
+taxonomy identifier in `/reference` is a release-blocking audit failure.
+
+### 3.5 Iconography
+
+The living reference registers every Lucide icon imported by production code.
+The audit compares production imports with this registry, so a new icon cannot
+land silently. The actual role scale is 12, 14, 16, 20, 24, and 28 px, with the
+larger sizes reserved for empty and brand states. Decorative icons are hidden
+from assistive technology; icon-only actions require an accessible name and
+canonical tooltip. The 12 existing navigation, pagination, sort, status, and
+external-link text glyphs are explicit compatibility exceptions, not a second
+icon library. If one becomes an independent action it must migrate to Lucide.
+Custom chart SVGs are visualization assets, not action icons.
 
 ## 4. Canonical asset taxonomy
 
@@ -175,7 +197,9 @@ change and a reference-page specimen before production use.
   decision; a drawer preserves page context for a short side task. Drawer
   widths are 320, 420, 560, and 720 px, clamped to the viewport.
 - Every chart uses semantic tokens, a text summary, stable loading/empty/error
-  geometry, responsive measurement, and accessible legend text.
+  geometry, responsive measurement, accessible legend text, and the 12 px
+  chart-text floor. The registry separates live specimens, registered route
+  assets, and source-only legacy implementations.
 
 ## 5. Operating patterns
 
@@ -233,11 +257,16 @@ It uses the real locale and theme providers and contains:
    expression/code blocks, and expandable evidence.
 5. **Feedback**: all async states, inline messages, banners, toast rules, and
    local recovery patterns.
-6. **Overlays and charts**: focus rules, chart palette, legend, tooltip, empty
-   frame, and reduced-motion examples.
-7. **Operating patterns**: list selection, sorting, filtering, pagination,
+6. **Icons**: every production Lucide glyph, actual role sizes, registered
+   stroke/fill exceptions, 12 compatibility text glyphs, and the boundary
+   between action icons and custom visualization graphics.
+7. **Visualizations**: real production radar plus trend, distribution, heatmap,
+   drawdown, legend, tooltip, empty-frame, and textual-summary contracts.
+8. **Overlays**: tooltip placement, focus rules, dialog, drawer, and modal
+   recovery behavior.
+9. **Operating patterns**: list selection, sorting, filtering, pagination,
    destructive actions, long-running tasks, and audit-ledger behavior.
-8. **Migration status**: legacy asset, canonical replacement, owner, and
+10. **Migration status**: legacy asset, canonical replacement, owner, and
    remaining consuming routes.
 
 Examples use clearly labelled sample data. They never masquerade as live market
@@ -276,8 +305,9 @@ or account state.
 | Exclusive toggle | `TmToggleGroup` | Topbar locale/theme; BRAIN audit filters; Alerts severity and relevance filters | replace any future local exclusive selector before adding a page-local style |
 | Pagination | `TmPagination` | Screener factor picker; Evolution proposals; BRAIN results; `/reference` | repository scan shows no separate local pagination implementation |
 | State feedback | `TmStatePane` | `/reference`; Alerts; Backtest evidence; Data; Methodology; Paper attribution and positions; Signal charts and tables | legacy truncation-only copy remains allowed, but lifecycle state must not collapse geometry |
-| Tooltip | `TmTooltip` | compatibility `HoverTip` and `InfoTooltip`; `/reference`; BRAIN evidence and official metric explanations | native `title` is limited to 35 truncation or compatibility hints and is protected by the no-growth audit budget |
-| Charts | `chartTokens`, `TM_CHART_SERIES_CSS`, and `tmChartColorWithAlpha` | `/reference`; Backtest; BRAIN PnL; Factors; Evolution; Stock radar, price, and intraday | the monthly heatmap keeps its data-driven cell ramp as an explicit semantic-matrix exception |
+| Tooltip | `TmTooltip` | compatibility `HoverTip` and `InfoTooltip`; `/reference`; BRAIN evidence and official metric explanations | native `title` is limited to 36 truncation or compatibility hints and is protected by the no-growth audit budget |
+| Icons | Lucide production registry plus text-glyph boundary | all 49 imported production glyphs and 12 compatibility glyphs rendered in `/reference` | audit rejects any production icon or required glyph exception missing from the registry |
+| Charts | `chartTokens`, `TM_CHART_TYPOGRAPHY`, `TmRadarChart`, and `tmChartColorWithAlpha` | all 25 detected visualization assets plus micro-graphs registered by route; stock radar rendered as the real shared component; three legacy charts marked source-only | audit rejects an undisclosed chart, inline Recharts route, or SVG asset; the monthly heatmap keeps its semantic-matrix exception |
 | Overlays | `TmDialog`, `TmDrawer`, and `useTmModalFocus` | `/reference`; Alpha example library; simulated-order drawer | browser verification covers focus entry, Escape, trap, and trigger-focus restoration |
 | Tables | `TmTable` compositional family | all standard production tables, including Picks, Paper, BRAIN yearly evidence, Backtest history, Alerts timeline, Screener, Evolution, Factor Lab, and Stock detail | no unexplained page-local standard table remains; `TmMonthlyReturnsHeatmap` retains a native matrix table for sticky axes, 2D cell color, and border-separated heatmap geometry, with an accessible caption and canonical tooltips |
 
@@ -298,9 +328,11 @@ Completion requires all of the following evidence:
 - Keyboard-only focus, tab order, error recovery, and overlay close/restore are
   verified in a real browser.
 
-Run `npm run audit:design-system` before every frontend release. The AST audit
-rejects unexplained native controls and standard tables, and rejects growth
-beyond the recorded native-title compatibility budget.
+Run `npm run audit:design-system` before every frontend release. The audit
+rejects unexplained native controls and standard tables, visible text below
+12 px, raw taxonomy headings in `/reference`, missing production icons, missing
+visualization registrations, and growth beyond the recorded native-title
+compatibility budget.
 
 ## 9. Ten-principles re-check
 

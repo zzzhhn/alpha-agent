@@ -70,7 +70,7 @@ export function ReportDeepModal({
                 <span className="font-tm-mono text-[13px] tracking-[0.06em] text-tm-accent">
                   {tk("report.deep.title")}
                 </span>
-                <span className="font-tm-mono text-[10px] text-tm-muted">
+                <span className="font-tm-mono text-xs text-tm-muted">
                   {tk("report.deep.meta")}
                 </span>
               </div>

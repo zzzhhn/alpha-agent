@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Play, RefreshCw, Trash2 } from "lucide-react";
-import type { Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { TmButton, TmDisclosureButton, TmIconButton, TmLinkButton } from "@/components/tm/TmButton";
 import { TmCheckbox, TmInput, TmNumberInput, TmRange, TmSelect, TmTextarea } from "@/components/tm/TmField";
 import { TmCols2, TmPane } from "@/components/tm/TmPane";
@@ -33,12 +33,12 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
   return (
     <div>
       <TmPane
-        title="CONTROLS.BUTTON"
+        title={t(locale, "reference.pane.controlButton")}
         meta={zh ? "一屏仅一个实心绿色主操作" : "one filled green primary action per screen"}
         bodyClassName="p-4"
       >
         <div className="grid gap-4 xl:grid-cols-3">
-          <Specimen label={zh ? "变体 / VARIANTS" : "VARIANTS"}>
+          <Specimen label={t(locale, "reference.group.variants")}>
             <TmButton variant="primary"><Play className="h-3.5 w-3.5" />{zh ? "运行分析" : "Run analysis"}</TmButton>
             <TmButton variant="secondary"><RefreshCw className="h-3.5 w-3.5" />{zh ? "刷新" : "Refresh"}</TmButton>
             <TmButton variant="ghost">{zh ? "查看详情" : "View details"}</TmButton>
@@ -47,7 +47,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             </TmLinkButton>
             <TmButton variant="danger"><Trash2 className="h-3.5 w-3.5" />{zh ? "删除" : "Delete"}</TmButton>
           </Specimen>
-          <Specimen label={zh ? "尺寸 / SIZES" : "SIZES"}>
+          <Specimen label={t(locale, "reference.group.sizes")}>
             <TmButton size="xs" variant="secondary">XS · 24</TmButton>
             <TmButton size="sm" variant="secondary">SM · 28</TmButton>
             <TmButton size="md" variant="secondary">MD · 32</TmButton>
@@ -56,7 +56,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
               icon={<RefreshCw className="h-3.5 w-3.5" />}
             />
           </Specimen>
-          <Specimen label={zh ? "状态 / STATES" : "STATES"}>
+          <Specimen label={t(locale, "reference.group.states")}>
             <TmButton loading loadingLabel={zh ? "运行中" : "Running"}>{zh ? "运行" : "Run"}</TmButton>
             <span className="inline-flex flex-col items-start gap-1">
               <TmButton variant="secondary" disabled>{zh ? "不可用" : "Disabled"}</TmButton>
@@ -69,7 +69,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
       </TmPane>
 
       <TmCols2>
-        <TmPane title="CONTROLS.FIELD" bodyClassName="grid gap-4 p-4 sm:grid-cols-2">
+        <TmPane title={t(locale, "reference.pane.controlField")} bodyClassName="grid gap-4 p-4 sm:grid-cols-2">
           <TmInput
             label={zh ? "因子表达式" : "Factor expression"}
             hint={zh ? "标准高度 32px" : "Standard 32px density"}
@@ -132,9 +132,9 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
           />
         </TmPane>
 
-        <TmPane title="CONTROLS.NAVIGATION" bodyClassName="space-y-5 p-4">
+        <TmPane title={t(locale, "reference.pane.controlNavigation")} bodyClassName="space-y-5 p-4">
           <div>
-            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">SELECT MENU</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{t(locale, "reference.group.selectMenu")}</p>
             <TmSelectMenu
               value={family}
               onChange={setFamily}
@@ -164,7 +164,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             </p>
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">SEGMENTED TABS</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{t(locale, "reference.group.segmentedTabs")}</p>
             <SegmentedTabs
               idBase="reference-control-demo"
               ariaLabel={zh ? "控件示例分类" : "Control example categories"}
@@ -186,7 +186,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             </div>
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">DISCLOSURE</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{t(locale, "reference.group.disclosure")}</p>
             <TmDisclosureButton
               expanded={disclosureOpen}
               onClick={() => setDisclosureOpen((current) => !current)}
@@ -200,7 +200,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             ) : null}
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">EXCLUSIVE TOGGLE</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{t(locale, "reference.group.toggle")}</p>
             <TmToggleGroup
               value={density}
               onChange={setDensity}
@@ -212,7 +212,7 @@ export function ReferenceControls({ locale }: { readonly locale: Locale }) {
             />
           </div>
           <div>
-            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">FILTER CHIPS</p>
+            <p className="mb-2 font-tm-mono text-xs tracking-[0.06em] text-tm-muted">{t(locale, "reference.group.filterChips")}</p>
             <div className="flex flex-wrap gap-1.5">
               {["all", "passed", "review"].map((value) => (
                 <TmChip key={value} on={chip === value} onClick={() => setChip(value)}>

@@ -197,7 +197,7 @@ export function TmBacktestForm({
           placeholder={t(locale, "backtest.form.exprPlaceholder")}
           rows={3}
           spellCheck={false}
-          textareaClassName="min-h-0 resize-none p-2 font-tm-mono text-[11.5px] leading-relaxed"
+          textareaClassName="min-h-0 resize-none p-2 font-tm-mono text-xs leading-relaxed"
         />
 
         {/* Direction + Mode + Neutralize + Benchmark — 4 chip rows */}
@@ -341,7 +341,7 @@ export function TmBacktestForm({
         {/* Footer: examples + run button */}
         <div className="flex flex-wrap items-end justify-between gap-3 border-t border-tm-rule pt-2.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-tm-mono text-[10px] uppercase tracking-[0.06em] text-tm-muted">
+            <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
               {t(locale, "backtest.form.loadExample")}
             </span>
             {FACTOR_EXAMPLES.map((ex) => (
@@ -382,7 +382,7 @@ function ChipGroup({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="font-tm-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-tm-muted">
+      <span className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
         {label}
       </span>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -396,7 +396,7 @@ function ChipGroup({
           </TmChip>
         ))}
         {hint && (
-          <span className="ml-1 font-tm-mono text-[10px] text-tm-muted">
+          <span className="ml-1 font-tm-mono text-xs text-tm-muted">
             {hint}
           </span>
         )}
