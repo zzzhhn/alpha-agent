@@ -6,7 +6,6 @@
 // anywhere in the full ~557-ticker universe (including slow-only "partial"
 // rows) is reachable, not just the top of the default board.
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   fetchPicks,
   type FactorMode,
@@ -25,7 +24,7 @@ import {
   TmSubbarSep,
   TmStatusPill,
 } from "@/components/tm/TmSubbar";
-import { TmButton } from "@/components/tm/TmButton";
+import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
@@ -43,6 +42,7 @@ import {
   saveSnapshot,
   type RefreshSettledDetail,
 } from "@/lib/dispatch-state";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
 type PicksData = PicksResponse;
 
@@ -286,21 +286,20 @@ export default function PicksBrowser({
 
   return (
     <>
-      <section className="border-b border-tm-rule bg-tm-bg px-4 py-4" aria-labelledby="picks-heading">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="font-tm-mono text-xs uppercase tracking-[0.12em] text-tm-accent">01 · {locale === "zh" ? "理解变化" : "UNDERSTAND CHANGES"}</p>
-            <h1 id="picks-heading" className="mt-1 text-xl font-semibold text-tm-fg">{locale === "zh" ? "今日组合决策" : "Today’s Portfolio Decision"}</h1>
-            <p className="mt-2 max-w-2xl text-[12px] leading-5 text-tm-muted">
-              {locale === "zh" ? "先确认快照与策略，再查看候选及驱动。真正的交易动作在组合工作台完成，避免把单只股票分数误当成仓位指令。" : "Confirm the snapshot and policy, then inspect candidates and drivers. Execute in the portfolio workspace so a single-name score is not mistaken for a position instruction."}
-            </p>
-          </div>
-          <Link href="/paper" prefetch={false} className="inline-flex shrink-0 items-center justify-center border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-xs font-semibold text-tm-bg hover:opacity-90">
-            {locale === "zh" ? "02 · 打开组合工作台" : "02 · OPEN PORTFOLIO WORKSPACE"}
-          </Link>
-        </div>
+      <WorkbenchHeader
+        eyebrow={`01 · ${locale === "zh" ? "理解变化" : "UNDERSTAND CHANGES"}`}
+        title={locale === "zh" ? "今日组合决策" : "Today’s Portfolio Decision"}
+        subtitle={locale === "zh" ? "先确认快照与策略，再查看候选及驱动。真正的交易动作在组合工作台完成。" : "Confirm the snapshot and policy, then inspect candidates and drivers before portfolio execution."}
+        statuses={[
+          { label: locale === "zh" ? "数据时间" : "As of", value: asOf },
+          { label: locale === "zh" ? "快照" : "Snapshot", value: snapshotStale ? (locale === "zh" ? "过期" : "STALE") : (locale === "zh" ? "有效" : "CURRENT"), tone: snapshotStale ? "warning" : "positive" },
+          { label: locale === "zh" ? "方向" : "Side", value: side === "short" ? (locale === "zh" ? "做空" : "SHORT") : (locale === "zh" ? "做多" : "LONG") },
+        ]}
+        action={<TmLinkButton href="/paper" variant="primary" size="md">{locale === "zh" ? "02 · 打开组合工作台" : "02 · OPEN PORTFOLIO WORKSPACE"}</TmLinkButton>}
+      />
+      <section className="border-b border-tm-rule bg-tm-bg px-4" aria-label={locale === "zh" ? "策略说明" : "Policy note"}>
         {factorMode === "long" ? (
-          <p className="mt-3 rounded border border-tm-warn/40 bg-tm-warn/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-warn">
+          <p className="border border-tm-warn/40 bg-tm-warn/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-warn">
             {locale === "zh" ? "战略 60 日策略正在独立前瞻验证，未使用 5 日校准置信度，不应直接与战术榜单的置信度横向比较。" : "The strategic 60d policy is in independent forward validation. It does not use the 5d calibrated confidence and should not be compared as if both figures shared one basis."}
           </p>
         ) : null}
@@ -328,7 +327,7 @@ export default function PicksBrowser({
           size="xs"
           onClick={onModeToggle}
           title={copy.modeTip}
-          className="rounded-md border-tm-accent/40 bg-tm-accent/10 text-tm-accent hover:bg-tm-accent/20 focus:outline-none focus:ring-1 focus:ring-tm-accent"
+          className="rounded-[2px] border-tm-accent/40 bg-tm-accent/10 text-tm-accent hover:bg-tm-accent/20 focus:outline-none focus:ring-1 focus:ring-tm-accent"
           aria-label={copy.modeLabel}
         >
           <span className="opacity-70">{copy.modeLabel}</span>
@@ -344,8 +343,8 @@ export default function PicksBrowser({
           title={copy.sideTip}
           className={
             side === "short"
-              ? "rounded-md border-tm-neg/40 bg-tm-neg/10 text-tm-neg hover:bg-tm-neg/20 focus:outline-none focus:ring-1 focus:ring-tm-neg"
-              : "rounded-md border-tm-pos/40 bg-tm-pos/10 text-tm-pos hover:bg-tm-pos/20 focus:outline-none focus:ring-1 focus:ring-tm-pos"
+              ? "rounded-[2px] border-tm-neg/40 bg-tm-neg/10 text-tm-neg hover:bg-tm-neg/20 focus:outline-none focus:ring-1 focus:ring-tm-neg"
+              : "rounded-[2px] border-tm-pos/40 bg-tm-pos/10 text-tm-pos hover:bg-tm-pos/20 focus:outline-none focus:ring-1 focus:ring-tm-pos"
           }
           aria-label={copy.sideLabel}
         >
@@ -408,7 +407,7 @@ export default function PicksBrowser({
             }
           >
             {refreshing ? (
-              <div className="mx-3 mt-2 rounded border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
+              <div className="mx-3 mt-2 rounded-[2px] border border-tm-accent/40 bg-tm-accent/10 px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
                 {refreshRemainingMin > 0
                   ? t(locale, "picks.freeze_banner").replace(
                       "{min}",
@@ -417,21 +416,21 @@ export default function PicksBrowser({
                   : t(locale, "picks.verify_banner")}
               </div>
             ) : refreshResult?.status === "published" ? (
-              <div className="mx-3 mt-2 rounded border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
+              <div className="mx-3 mt-2 rounded-[2px] border border-tm-pos/40 bg-tm-pos/10 px-3 py-1.5 font-tm-mono text-xs text-tm-pos">
                 {t(locale, "picks.published_banner").replace(
                   "{run}",
                   refreshResult.runId == null ? "—" : `#${refreshResult.runId}`,
                 )}
               </div>
             ) : refreshResult?.status === "no_op_same_market_date" ? (
-              <div className="mx-3 mt-2 rounded border border-tm-warn/40 bg-tm-warn/10 px-3 py-1.5 font-tm-mono text-xs text-tm-warn">
+              <div className="mx-3 mt-2 rounded-[2px] border border-tm-warn/40 bg-tm-warn/10 px-3 py-1.5 font-tm-mono text-xs text-tm-warn">
                 {t(locale, "picks.noop_banner").replace(
                   "{date}",
                   refreshResult.marketDate ?? "—",
                 )}
               </div>
             ) : refreshResult ? (
-              <div className="mx-3 mt-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-1.5 font-tm-mono text-xs text-tm-neg">
+              <div className="mx-3 mt-2 rounded-[2px] border border-tm-neg/40 bg-tm-neg/10 px-3 py-1.5 font-tm-mono text-xs text-tm-neg">
                 {t(
                   locale,
                   refreshResult.status === "health_gate_failed"
@@ -440,7 +439,7 @@ export default function PicksBrowser({
                 )}
               </div>
             ) : snapshotStale ? (
-              <div className="mx-3 mt-2 rounded border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">
+              <div className="mx-3 mt-2 rounded-[2px] border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">
                 {t(locale, "picks.stale_freeze_banner")}
               </div>
             ) : null}
@@ -453,7 +452,7 @@ export default function PicksBrowser({
                 maxLength={12}
                 fieldSize="sm"
                 className="w-56"
-                inputClassName="rounded"
+                inputClassName="rounded-[2px]"
               />
               {loading ? (
                 <span className="font-tm-mono text-xs text-tm-muted">
@@ -483,5 +482,5 @@ export default function PicksBrowser({
 }
 
 function ChangeList({ title, items, empty, tone }: { readonly title: string; readonly items: readonly string[]; readonly empty: string; readonly tone: string }) {
-  return <div className="rounded border border-tm-rule bg-tm-bg-2 px-3 py-2"><div className={`font-tm-mono text-xs font-semibold uppercase ${tone}`}>{title}</div><p className="mt-1 truncate font-tm-mono text-xs text-tm-fg-2" title={items.join(" · ")}>{items.length ? items.slice(0, 5).join(" · ") : empty}</p></div>;
+  return <div className="rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2"><div className={`font-tm-mono text-xs font-semibold uppercase ${tone}`}>{title}</div><p className="mt-1 truncate font-tm-mono text-xs text-tm-fg-2" title={items.join(" · ")}>{items.length ? items.slice(0, 5).join(" · ") : empty}</p></div>;
 }

@@ -67,10 +67,10 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
 
   if (status === "loading") {
     return (
-      <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 space-y-2">
-        <div className="h-3 w-20 animate-pulse rounded bg-tm-bg-3" />
-        <div className="h-3 w-full animate-pulse rounded bg-tm-bg-3" />
-        <div className="h-3 w-5/6 animate-pulse rounded bg-tm-bg-3" />
+      <div className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-3 space-y-2">
+        <div className="h-3 w-20 animate-pulse rounded-[2px] bg-tm-bg-3" />
+        <div className="h-3 w-full animate-pulse rounded-[2px] bg-tm-bg-3" />
+        <div className="h-3 w-5/6 animate-pulse rounded-[2px] bg-tm-bg-3" />
       </div>
     );
   }
@@ -88,7 +88,7 @@ export default function CompanyProfile({ ticker }: { ticker: string }) {
   const isLong = summary.length > 220;
 
   return (
-    <div className="rounded border border-tm-rule bg-tm-bg-2 p-3 space-y-1.5">
+    <div className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-3 space-y-1.5">
       <div className="text-xs font-tm-sans uppercase tracking-wide text-tm-muted">
         {copy.title}
       </div>

@@ -73,7 +73,7 @@ export default function FundamentalsBlock({ card }: { card: RatingCard }) {
 
   if (!fund) {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+      <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
         <h2 className="text-lg font-semibold mb-2 text-tm-fg">
           {t(locale, "fundamentals.title")}
         </h2>
@@ -98,7 +98,7 @@ export default function FundamentalsBlock({ card }: { card: RatingCard }) {
   ];
 
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
       <h2 className="text-lg font-semibold mb-3 text-tm-fg">
         {t(locale, "fundamentals.title")}
       </h2>

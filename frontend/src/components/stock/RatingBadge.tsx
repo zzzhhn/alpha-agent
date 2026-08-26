@@ -43,8 +43,8 @@ export default function RatingBadge({
     <div className="space-y-2">
       <div
         className={clsx(
-          "inline-block rounded border px-3 py-1 text-sm font-bold",
-          TIER_COLOR[rating] ?? "bg-zinc-700 text-zinc-200",
+          "inline-block rounded-[2px] border px-3 py-1 text-sm font-bold",
+          TIER_COLOR[rating] ?? "border-tm-rule-2 bg-tm-bg-3 text-tm-fg-2",
         )}
       >
         {rating} · composite {c >= 0 ? "+" : ""}
@@ -65,10 +65,10 @@ export default function RatingBadge({
             {(agr * 100).toFixed(0)}%
           </span>
         </div>
-        <div className="h-1.5 w-full bg-tm-bg-3 rounded">
+        <div className="h-1.5 w-full bg-tm-bg-3 rounded-[2px]">
           <div
             className={clsx(
-              "h-full rounded",
+              "h-full rounded-[2px]",
               lowAgr ? "bg-tm-warn" : "bg-tm-accent",
             )}
             style={{ width: `${agr * 100}%` }}

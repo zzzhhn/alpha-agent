@@ -43,7 +43,7 @@ export default function MarketContextWidget({ ticker }: { ticker: string }) {
 
   if (items === null) {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+      <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
         <h2 className="text-lg font-semibold mb-2 text-tm-fg">
           {t(locale, "market_context.title")}
         </h2>
@@ -54,7 +54,7 @@ export default function MarketContextWidget({ ticker }: { ticker: string }) {
 
   if (items.length === 0) {
     return (
-      <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+      <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
         <h2 className="text-lg font-semibold mb-2 text-tm-fg">
           {t(locale, "market_context.title")}
         </h2>
@@ -64,7 +64,7 @@ export default function MarketContextWidget({ ticker }: { ticker: string }) {
   }
 
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
       <h2 className="text-lg font-semibold mb-3 text-tm-fg">
         {t(locale, "market_context.title")}
       </h2>

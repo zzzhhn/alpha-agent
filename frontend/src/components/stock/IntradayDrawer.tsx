@@ -247,7 +247,7 @@ export default function IntradayDrawer({
   if (!date) return null;
 
   return (
-    <div className="mt-3 rounded border border-tm-rule bg-tm-bg-2 p-4">
+    <div className="mt-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-base font-semibold text-tm-fg">
           {ticker} {t(locale, "intraday.title")} · {date}
@@ -303,7 +303,7 @@ export default function IntradayDrawer({
                 variant="danger"
                 size="xs"
                 onClick={onAnalyzeAbort}
-                className="rounded"
+                className="rounded-[2px]"
               >
                 <Square aria-hidden className="h-3 w-3" strokeWidth={1.75} />
                 {t(locale, "rich.stop_button")}
@@ -313,7 +313,7 @@ export default function IntradayDrawer({
                 variant="secondary"
                 size="xs"
                 onClick={() => void onAnalyze()}
-                className="rounded"
+                className="rounded-[2px]"
               >
                 <Sparkles aria-hidden className="h-3 w-3 text-tm-accent" strokeWidth={1.75} />
                 {t(locale, "intraday.analyze_button")}
@@ -323,7 +323,7 @@ export default function IntradayDrawer({
         </div>
         {/* No-key gate: a lock + Settings link instead of a button that errors. */}
         {news.length > 0 && locked ? (
-          <div className="mb-2 flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-xs text-tm-muted">
+          <div className="mb-2 flex items-center gap-2 rounded-[2px] border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-xs text-tm-muted">
             <Lock aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             <span>{t(locale, "intraday.analyze_locked")}</span>
             <Link href="/settings" className="text-tm-accent hover:underline">
@@ -334,7 +334,7 @@ export default function IntradayDrawer({
         {/* Streamed analysis output: paints tokens live, then settles into the
             done / aborted / no-news / error terminal state. */}
         {analysis && (analysisStatus === "streaming" || analysisStatus === "done") ? (
-          <div className="mb-2 rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
+          <div className="mb-2 rounded-[2px] border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
             <div className="mb-1 font-tm-sans text-xs uppercase tracking-wide text-tm-muted">
               {t(locale, "intraday.analysis_title")}
             </div>
@@ -364,7 +364,7 @@ export default function IntradayDrawer({
               variant="danger"
               size="xs"
               onClick={() => void onAnalyze()}
-              className="rounded"
+              className="rounded-[2px]"
             >
               {t(locale, "intraday.analyze_retry")}
             </TmButton>
@@ -389,12 +389,12 @@ export default function IntradayDrawer({
               // The whole card is the click target (feed-like), not just the
               // headline text, so the hover affordance covers the full row.
               const cardClass =
-                "group block rounded-md border border-tm-rule/60 bg-tm-bg-3/30 px-3 py-2 transition-colors hover:border-tm-accent/50 hover:bg-tm-bg-3";
+                "group block rounded-[2px] border border-tm-rule/60 bg-tm-bg-3/30 px-3 py-2 transition-colors hover:border-tm-accent/50 hover:bg-tm-bg-3";
               const body = (
                 <>
                   <div className="mb-1 flex items-center gap-2">
                     <span
-                      className={`rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${tone.pill}`}
+                      className={`rounded-[2px] px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${tone.pill}`}
                     >
                       {tone.label}
                     </span>

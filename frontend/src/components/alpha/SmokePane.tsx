@@ -41,9 +41,9 @@ function num(x: number | undefined, digits: number): string {
 function Skeleton() {
   return (
     <div className="flex flex-col gap-2">
-      <div className="h-3 w-2/3 animate-pulse rounded bg-tm-bg-3" />
-      <div className="h-12 w-full animate-pulse rounded bg-tm-bg-3" />
-      <div className="h-3 w-1/2 animate-pulse rounded bg-tm-bg-3" />
+      <div className="h-3 w-2/3 animate-pulse rounded-[2px] bg-tm-bg-3" />
+      <div className="h-12 w-full animate-pulse rounded-[2px] bg-tm-bg-3" />
+      <div className="h-3 w-1/2 animate-pulse rounded-[2px] bg-tm-bg-3" />
     </div>
   );
 }
@@ -105,7 +105,7 @@ export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Prop
               that honest: real validity is the backtest's call. */}
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`rounded border px-2 py-0.5 font-tm-mono text-xs font-semibold uppercase ${VERDICT_BADGE[sc.verdict]}`}
+              className={`rounded-[2px] border px-2 py-0.5 font-tm-mono text-xs font-semibold uppercase ${VERDICT_BADGE[sc.verdict]}`}
             >
               {tk(`alpha.qc.verdict.${sc.verdict}`)}
             </span>
@@ -136,17 +136,17 @@ export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Prop
               guidance (Forgiveness). Degenerate is blocking and shown alone; the
               two advisories show only when not already blocked. */}
           {data.degenerate ? (
-            <div className="rounded border border-tm-neg/40 bg-tm-neg/10 px-2 py-1 font-tm-mono text-xs text-tm-neg">
+            <div className="rounded-[2px] border border-tm-neg/40 bg-tm-neg/10 px-2 py-1 font-tm-mono text-xs text-tm-neg">
               {tk("alpha.degenerateBlocked")}
             </div>
           ) : null}
           {data.high_turnover && !data.degenerate ? (
-            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
+            <div className="rounded-[2px] border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
               {tk("alpha.highTurnoverWarn")}
             </div>
           ) : null}
           {data.low_robustness && !data.degenerate ? (
-            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
+            <div className="rounded-[2px] border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
               {tk("alpha.lowRobustnessWarn")}
             </div>
           ) : null}
@@ -154,7 +154,7 @@ export function SmokePane({ state, data, errorMessage, onRetry, backtest }: Prop
               the quantile-book turnover did NOT catch — otherwise the turnover
               warning already covers it (the two co-fire on most factors). */}
           {data.low_stability && !data.high_turnover && !data.degenerate ? (
-            <div className="rounded border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
+            <div className="rounded-[2px] border border-tm-warn/40 bg-tm-warn/10 px-2 py-1 font-tm-mono text-xs text-tm-warn">
               {tk("alpha.lowStabilityWarn")}
             </div>
           ) : null}

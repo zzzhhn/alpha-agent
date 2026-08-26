@@ -47,7 +47,7 @@ export default function StockError({
         variant="secondary"
         size="sm"
         onClick={reset}
-        className="mt-1 rounded text-tm-accent"
+        className="mt-1 rounded-[2px] text-tm-accent"
       >
         {copy.retry}
       </TmButton>

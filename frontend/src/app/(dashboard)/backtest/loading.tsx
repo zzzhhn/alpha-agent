@@ -21,13 +21,13 @@ export default function BacktestLoading() {
       <TmPane title="FACTOR.EXPRESSION" meta="loading...">
         <div className="flex flex-col gap-3 px-3 py-3">
           {/* expression textarea */}
-          <div className="h-10 w-full animate-pulse rounded bg-tm-bg-2" />
+          <div className="h-10 w-full animate-pulse rounded-[2px] bg-tm-bg-2" />
           {/* config chips row */}
           <div className="flex flex-wrap gap-2">
             {Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}
-                className="h-7 w-24 animate-pulse rounded bg-tm-bg-2"
+                className="h-7 w-24 animate-pulse rounded-[2px] bg-tm-bg-2"
               />
             ))}
           </div>
@@ -36,13 +36,13 @@ export default function BacktestLoading() {
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
-                className="h-8 w-full animate-pulse rounded bg-tm-bg-2"
+                className="h-8 w-full animate-pulse rounded-[2px] bg-tm-bg-2"
               />
             ))}
           </div>
           {/* run button */}
           <div className="flex justify-end">
-            <div className="h-8 w-28 animate-pulse rounded bg-tm-bg-2" />
+            <div className="h-8 w-28 animate-pulse rounded-[2px] bg-tm-bg-2" />
           </div>
         </div>
       </TmPane>
@@ -50,7 +50,7 @@ export default function BacktestLoading() {
       {/* USAGE hint pane */}
       <TmPane title="USAGE" meta="hint">
         <div className="px-3 py-3">
-          <div className="h-4 w-3/4 animate-pulse rounded bg-tm-bg-2" />
+          <div className="h-4 w-3/4 animate-pulse rounded-[2px] bg-tm-bg-2" />
         </div>
       </TmPane>
     </TmScreen>

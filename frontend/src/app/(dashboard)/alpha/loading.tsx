@@ -21,10 +21,10 @@ export default function AlphaLoading() {
       {/* HYPOTHESIS.INPUT — textarea (h-16) + row of select + tips text */}
       <TmPane title="HYPOTHESIS.INPUT" meta="— CHARS">
         <div className="flex flex-col gap-3 px-3 py-3">
-          <div className="h-16 w-full animate-pulse rounded bg-tm-bg-2" />
+          <div className="h-16 w-full animate-pulse rounded-[2px] bg-tm-bg-2" />
           <div className="flex items-end gap-3">
-            <div className="h-8 w-40 animate-pulse rounded bg-tm-bg-2" />
-            <div className="ml-auto h-6 w-64 animate-pulse rounded bg-tm-bg-2" />
+            <div className="h-8 w-40 animate-pulse rounded-[2px] bg-tm-bg-2" />
+            <div className="ml-auto h-6 w-64 animate-pulse rounded-[2px] bg-tm-bg-2" />
           </div>
         </div>
       </TmPane>
@@ -41,19 +41,19 @@ export default function AlphaLoading() {
             >
               {/* name + badge row */}
               <div className="flex items-start justify-between gap-2">
-                <div className="h-4 w-32 animate-pulse rounded bg-tm-bg-2" />
-                <div className="h-4 w-16 animate-pulse rounded bg-tm-bg-2" />
+                <div className="h-4 w-32 animate-pulse rounded-[2px] bg-tm-bg-2" />
+                <div className="h-4 w-16 animate-pulse rounded-[2px] bg-tm-bg-2" />
               </div>
               {/* hypothesis text */}
-              <div className="h-8 w-full animate-pulse rounded bg-tm-bg-2" />
+              <div className="h-8 w-full animate-pulse rounded-[2px] bg-tm-bg-2" />
               {/* expression code block */}
-              <div className="h-6 w-full animate-pulse rounded bg-tm-bg-2" />
+              <div className="h-6 w-full animate-pulse rounded-[2px] bg-tm-bg-2" />
               {/* intuition lines */}
-              <div className="h-10 w-full animate-pulse rounded bg-tm-bg-2" />
+              <div className="h-10 w-full animate-pulse rounded-[2px] bg-tm-bg-2" />
               {/* metrics + button row */}
               <div className="flex items-center justify-between border-t border-tm-rule pt-2">
-                <div className="h-4 w-28 animate-pulse rounded bg-tm-bg-2" />
-                <div className="h-6 w-14 animate-pulse rounded bg-tm-bg-2" />
+                <div className="h-4 w-28 animate-pulse rounded-[2px] bg-tm-bg-2" />
+                <div className="h-6 w-14 animate-pulse rounded-[2px] bg-tm-bg-2" />
               </div>
             </div>
           ))}

@@ -58,7 +58,7 @@ export function GroupAccordion({
     badge?.severity === "alert" ? "text-tm-neg" : "text-tm-warn";
 
   return (
-    <section className="flex flex-col rounded border border-tm-rule bg-tm-bg">
+    <section className="flex flex-col rounded-[2px] border border-tm-rule bg-tm-bg">
       <TmDisclosureButton
         expanded={open}
         onClick={() => setOpen((o) => !o)}

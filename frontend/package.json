@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "audit:design-system": "node scripts/audit-design-system.mjs"
+    "audit:design-system": "node scripts/audit-design-system.mjs && node scripts/audit-route-design-language.mjs"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.2",

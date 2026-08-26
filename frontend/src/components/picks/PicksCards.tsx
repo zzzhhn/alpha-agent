@@ -47,7 +47,7 @@ export default function PicksCards({
                 <div className="mt-1 text-xs text-tm-muted">{card.latest_price == null ? (locale === "zh" ? "收盘价未知" : "Close unavailable") : `$${card.latest_price.toFixed(2)}`}</div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs">
+            <div className="grid grid-cols-3 gap-2 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs">
               <div><span className="text-tm-muted">{locale === "zh" ? "信号一致性" : "Signal agreement"}</span><div className="mt-1 text-tm-fg-2">{card.agreement == null ? "—" : `${Math.round(card.agreement * 100)}%`}</div></div>
               <div><span className="text-tm-muted">{locale === "zh" ? "1日方向一致度" : "1D direction agreement"}</span><div className="mt-1 text-tm-fg-2">{d5Agreement === null ? "—" : `${Math.round(d5Agreement * 100)}%${d5Samples === null ? "" : ` · n=${d5Samples}`}`}</div></div>
               <div><span className="text-tm-muted">{locale === "zh" ? "5日校准置信度" : "5D calibrated confidence"}</span><div className="mt-1 text-tm-fg-2">{card.confidence == null ? "—" : `${Math.round(card.confidence * 100)}%`}</div></div>

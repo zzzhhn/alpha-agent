@@ -332,8 +332,9 @@ Key closure facts in the current snapshot:
   visualization assets are registered. Registration does not imply that every
   chart has a live shared specimen.
 - `EquityCurvePane`, `DrawdownPane`, and `ICTimeseriesChart` remain source-only.
-- Legacy color variables, remaining raw color utilities, `ui/Card` consumers,
-  transient overlay families, and route-shell specimens remain in progress.
+- Semantic colors, pane/card adoption, and route-shell composition are now
+  canonical on all 15 dashboard routes. Transient overlay registration and
+  live shared chart specimens remain in progress.
 
 Counts are static migration evidence, not a command to replace semantic row
 buttons or native form elements mechanically. Each remaining control is first
@@ -356,7 +357,11 @@ Run `npm run audit:design-system` before every frontend release. The audit
 rejects unexplained native controls and standard tables, visible text below
 12 px, raw taxonomy headings in `/reference`, missing production icons, missing
 visualization registrations, and growth beyond the recorded native-title
-compatibility budget.
+compatibility budget. Its route-level companion also walks the dependency graph
+for every dashboard page and rejects a missing `TmScreen` or
+`WorkbenchHeader`, raw palette utilities, legacy token namespaces, old
+`ui/Card` / `glass-card` consumers, radii above 2 px, and workstation
+backdrop blur.
 
 ## 9. Ten-principles re-check
 

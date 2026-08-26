@@ -27,7 +27,7 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
     : 0;
   return (
     <div className="border-t border-tm-rule px-3 py-3">
-      <div className="mb-3 rounded border border-tm-rule bg-tm-bg-2 px-3 py-2">
+      <div className="mb-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2">
         <div className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">{locale === "zh" ? "连续份额级验证账户" : "Continuous share-level validation book"}</div>
         {continuous ? (
           <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">

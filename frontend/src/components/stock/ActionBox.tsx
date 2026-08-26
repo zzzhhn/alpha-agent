@@ -35,7 +35,7 @@ export default function ActionBox({ card }: { card: RatingCard }) {
   // still runs (hooks must be unconditional); its all-null result is unused.
   if (card.partial) {
     return (
-      <div className="rounded border border-tm-rule-2 bg-tm-bg-2 p-3 text-sm">
+      <div className="rounded-[2px] border border-tm-rule-2 bg-tm-bg-2 p-3 text-sm">
         <div className="font-semibold text-tm-warn">{t(locale, "actionbox.title")}</div>
         <p className="mt-1.5 text-xs leading-relaxed text-tm-muted">
           {t(locale, "actionbox.partial_hint")}
@@ -48,7 +48,7 @@ export default function ActionBox({ card }: { card: RatingCard }) {
 
   return (
     <div className={dimmed ? "opacity-50" : ""}>
-      <div className="rounded border border-tm-rule-2 bg-tm-bg-2 p-3 space-y-1.5 text-sm">
+      <div className="rounded-[2px] border border-tm-rule-2 bg-tm-bg-2 p-3 space-y-1.5 text-sm">
         <div className="font-semibold text-tm-warn">{t(locale, "actionbox.title")}</div>
         {dimmed ? (
           <div className="text-xs text-tm-warn">

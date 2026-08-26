@@ -28,7 +28,7 @@ export default function CatalystsBlock({ card }: { card: RatingCard }) {
   const calendar = decodeCalendar(card.breakdown.find((b) => b.signal === "calendar")?.raw);
 
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4 space-y-4">
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4 space-y-4">
       <h2 className="text-lg font-semibold text-tm-fg">{t(locale, "catalysts.title")}</h2>
 
       {/* Earnings card */}

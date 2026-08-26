@@ -178,7 +178,7 @@ export function BacktestFormSticky({
 
   return (
     <section
-      className="sticky top-0 z-30 border-b border-tm-rule bg-tm-bg-2/95 backdrop-blur supports-[backdrop-filter]:bg-tm-bg-2/80"
+      className="sticky top-0 z-30 border-b border-tm-rule bg-tm-bg-2"
       aria-label={t(locale, "backtest.form.title")}
     >
       <div className="flex flex-col gap-3 px-6 py-3">
@@ -258,11 +258,11 @@ export function BacktestFormSticky({
             {unknownOps.map(({ op, suggestion }) => (
               <div key={`op-${op}`}>
                 <span>{t(locale, "backtest.form.unknownOp")}: </span>
-                <code className="rounded bg-tm-bg-3 px-1 py-0.5 text-tm-fg">{op}</code>
+                <code className="rounded-[2px] bg-tm-bg-3 px-1 py-0.5 text-tm-fg">{op}</code>
                 {suggestion !== null && (
                   <>
                     <span> — {t(locale, "backtest.form.didYouMean")} </span>
-                    <code className="rounded bg-tm-bg-3 px-1 py-0.5 text-tm-pos">
+                    <code className="rounded-[2px] bg-tm-bg-3 px-1 py-0.5 text-tm-pos">
                       {suggestion}
                     </code>
                     <span>?</span>
@@ -273,13 +273,13 @@ export function BacktestFormSticky({
             {unknownOperands.map(({ operand, suggestion }) => (
               <div key={`opd-${operand}`}>
                 <span>{t(locale, "backtest.form.unknownOperand")}: </span>
-                <code className="rounded bg-tm-bg-3 px-1 py-0.5 text-tm-fg">
+                <code className="rounded-[2px] bg-tm-bg-3 px-1 py-0.5 text-tm-fg">
                   {operand}
                 </code>
                 {suggestion !== null && (
                   <>
                     <span> — {t(locale, "backtest.form.didYouMean")} </span>
-                    <code className="rounded bg-tm-bg-3 px-1 py-0.5 text-tm-pos">
+                    <code className="rounded-[2px] bg-tm-bg-3 px-1 py-0.5 text-tm-pos">
                       {suggestion}
                     </code>
                     <span>?</span>

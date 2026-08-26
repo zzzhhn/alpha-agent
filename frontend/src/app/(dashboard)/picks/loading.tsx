@@ -16,7 +16,7 @@ export default function PicksLoading() {
       </TmSubbar>
       <TmPane title="TODAY'S PICKS" meta="Loading...">
         <div className="flex items-center gap-2 px-3 py-2">
-          <div className="h-7 w-56 animate-pulse rounded bg-tm-bg-2" />
+          <div className="h-7 w-56 animate-pulse rounded-[2px] bg-tm-bg-2" />
         </div>
         <ul className="divide-y divide-tm-rule">
           {Array.from({ length: 12 }).map((_, i) => (
@@ -25,10 +25,10 @@ export default function PicksLoading() {
               className="flex items-center gap-3 px-3 py-2"
               style={{ opacity: 1 - i * 0.05 }}
             >
-              <div className="h-4 w-12 animate-pulse rounded bg-tm-bg-2" />
-              <div className="h-4 flex-1 animate-pulse rounded bg-tm-bg-2" />
-              <div className="h-4 w-16 animate-pulse rounded bg-tm-bg-2" />
-              <div className="h-4 w-10 animate-pulse rounded bg-tm-bg-2" />
+              <div className="h-4 w-12 animate-pulse rounded-[2px] bg-tm-bg-2" />
+              <div className="h-4 flex-1 animate-pulse rounded-[2px] bg-tm-bg-2" />
+              <div className="h-4 w-16 animate-pulse rounded-[2px] bg-tm-bg-2" />
+              <div className="h-4 w-10 animate-pulse rounded-[2px] bg-tm-bg-2" />
             </li>
           ))}
         </ul>

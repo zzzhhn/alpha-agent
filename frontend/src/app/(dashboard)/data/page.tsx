@@ -28,6 +28,7 @@ import {
 } from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmStatePane } from "@/components/tm/TmStatePane";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import {
   UniverseOverview,
   UniverseTickers,
@@ -105,6 +106,20 @@ export default function DataPage() {
 
   return (
     <TmScreen>
+      <WorkbenchHeader
+        eyebrow={locale === "zh" ? "参考 · 数据资产" : "Reference · Data assets"}
+        title={locale === "zh" ? "数据" : "Data"}
+        subtitle={locale === "zh" ? "核验股票池、字段覆盖与数据来源，再进入研究流程。" : "Verify universe, field coverage, and provenance before research."}
+        statuses={[
+          { label: locale === "zh" ? "股票池" : "Universe", value: activeUniverse?.id ?? "—" },
+          {
+            label: locale === "zh" ? "缓存命中" : "Cache hit",
+            value: coverage ? `${coverage.ohlcv_coverage_pct.toFixed(1)}%` : "—",
+            tone: coverage && coverage.ohlcv_coverage_pct < 99 ? "warning" : "positive",
+          },
+          { label: locale === "zh" ? "加载状态" : "Load state", value: error ? (locale === "zh" ? "失败" : "ERROR") : universes ? (locale === "zh" ? "就绪" : "READY") : (locale === "zh" ? "读取中" : "LOADING"), tone: error ? "negative" : universes ? "positive" : "warning" },
+        ]}
+      />
       <TmSubbar>
         <span className="text-tm-muted">UNIVERSE</span>
         {universes ? (

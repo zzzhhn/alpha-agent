@@ -128,7 +128,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
         };
 
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4 space-y-3">
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-tm-fg flex items-center gap-1.5">
@@ -142,7 +142,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
             variant="danger"
             size="xs"
             onClick={onAbort}
-            className="rounded"
+            className="rounded-[2px]"
           >
             <Square aria-hidden className="w-3 h-3" strokeWidth={1.75} />
             {t(locale, "rich.stop_button")}
@@ -150,7 +150,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
         ) : null}
       </div>
       {locked ? (
-        <div className="flex items-center gap-2 rounded border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-xs text-tm-muted">
+        <div className="flex items-center gap-2 rounded-[2px] border border-tm-rule bg-tm-bg-3/40 px-3 py-1.5 text-xs text-tm-muted">
           <Lock aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
           <span>{copy.lockedHint}</span>
           <Link href="/settings" className="text-tm-accent hover:underline">
@@ -166,7 +166,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
             size="xs"
             onClick={() => void onExplain(p.name)}
             disabled={locked || status === "streaming"}
-            className={`rounded border px-2.5 py-1 text-xs transition disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`rounded-[2px] border px-2.5 py-1 text-xs transition disabled:opacity-50 disabled:cursor-not-allowed ${
               active === p.name
                 ? "border-tm-accent bg-tm-accent/15 text-tm-accent"
                 : "border-tm-rule bg-tm-bg-3 text-tm-fg-2 hover:border-tm-accent/40 hover:text-tm-fg"
@@ -180,7 +180,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
       {/* Live + completed output: render whatever has streamed so far so
           tokens paint as they arrive, not only on done. */}
       {explanation && (status === "streaming" || status === "done") ? (
-        <div className="rounded border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
+        <div className="rounded-[2px] border-l-2 border-tm-accent/40 bg-tm-bg-3/40 px-3 py-2 text-sm leading-relaxed text-tm-fg">
           <p className="whitespace-pre-wrap">{explanation}</p>
           {status === "done" && cacheHit ? (
             <p className="mt-1 text-xs text-tm-muted">{copy.cacheHit}</p>
@@ -197,7 +197,7 @@ export default function PersonaPanel({ ticker }: { ticker: string }) {
             variant="danger"
             size="xs"
             onClick={() => active && void onExplain(active)}
-            className="rounded"
+            className="rounded-[2px]"
           >
             {copy.tryAgain}
           </TmButton>

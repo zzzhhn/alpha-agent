@@ -14,6 +14,7 @@ import type { AlphaValidationParams } from "@/components/alpha/useAlphaChain";
 import { VerdictBar } from "@/components/alpha/VerdictBar";
 import { AlphaResearchContext } from "@/components/alpha/AlphaResearchContext";
 import { AlphaExperimentLedger } from "@/components/alpha/AlphaExperimentLedger";
+import { TmScreen } from "@/components/tm/TmPane";
 import { useToast } from "@/components/ui/toast";
 import { addToZoo, isInZoo, removeFromZoo } from "@/lib/factor-zoo";
 import { getFavorites, getRecent } from "@/lib/hypothesis-history";
@@ -168,7 +169,7 @@ export default function AlphaPage() {
   }, [translate, chain.state, toast, locale]);
 
   return (
-    <main className="flex min-h-[calc(100vh-36px)] flex-col bg-tm-bg">
+    <TmScreen className="min-h-[calc(100vh-36px)]">
       <AlphaResearchContext state={chain.state} universe={universe} onOpenBacktest={handleOpenBacktest} />
       <HypothesisInputCard
         text={text}
@@ -212,6 +213,6 @@ export default function AlphaPage() {
       <div className="px-6 py-4">
         <AlphaExperimentLedger history={history} onOpen={handleHistorySelect} />
       </div>
-    </main>
+    </TmScreen>
   );
 }

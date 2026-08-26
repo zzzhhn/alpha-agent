@@ -20,6 +20,7 @@ import { DecisionStrip } from "@/components/workbench/DecisionStrip";
 import { TmButton, TmLinkButton, TmRowButton } from "@/components/tm/TmButton";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 import { TmStatePane } from "@/components/tm/TmStatePane";
+import { TmScreen } from "@/components/tm/TmPane";
 import { ApiException } from "@/lib/api/client";
 import {
   fetchAlertInbox,
@@ -53,7 +54,7 @@ const QUEUES: Array<{
 const SEVERITY_CLASS = {
   critical: "border-tm-neg text-tm-neg",
   warning: "border-tm-warn text-tm-warn",
-  info: "border-sky-500/70 text-sky-400",
+  info: "border-tm-info text-tm-info",
 };
 
 type SeverityFilter = "all" | AlertInboxItem["severity"];
@@ -261,7 +262,7 @@ export default function AlertWorkbench() {
   ).length ?? 0;
 
   return (
-    <div className="flex min-h-[calc(100vh-36px)] flex-col bg-tm-bg font-tm-mono text-tm-fg">
+    <TmScreen className="min-h-[calc(100vh-36px)] font-tm-mono text-tm-fg">
       <WorkbenchHeader
         eyebrow={zh ? "每日工作流" : "Daily workflow"}
         title={<>{zh ? "警报" : "Alerts"} <span className="font-normal text-tm-fg-2">Alerts</span></>}
@@ -434,7 +435,7 @@ export default function AlertWorkbench() {
                     <TmRowButton
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
-                      className={`grid min-h-[126px] w-full grid-cols-[68px_88px_minmax(150px,1.2fr)_minmax(130px,1fr)_84px] items-start gap-2 border-l-2 px-4 py-4 text-left transition-colors ${active ? "border-tm-accent bg-tm-accent/5 ring-1 ring-inset ring-tm-accent/30" : item.severity === "critical" ? "border-tm-neg hover:bg-tm-bg-2" : item.severity === "warning" ? "border-tm-warn hover:bg-tm-bg-2" : "border-sky-500/60 hover:bg-tm-bg-2"}`}
+                      className={`grid min-h-[126px] w-full grid-cols-[68px_88px_minmax(150px,1.2fr)_minmax(130px,1fr)_84px] items-start gap-2 border-l-2 px-4 py-4 text-left transition-colors ${active ? "border-tm-accent bg-tm-accent/5 ring-1 ring-inset ring-tm-accent/30" : item.severity === "critical" ? "border-tm-neg hover:bg-tm-bg-2" : item.severity === "warning" ? "border-tm-warn hover:bg-tm-bg-2" : "border-tm-info hover:bg-tm-bg-2"}`}
                     >
                       <div>
                         <span className={`inline-block border px-2 py-1 text-xs ${SEVERITY_CLASS[item.severity]}`}>
@@ -660,6 +661,6 @@ export default function AlertWorkbench() {
         <span>{zh ? "数据仅供研究参考，不构成投资建议，也不代表系统可执行任何交易。" : "Research only. Not investment advice and not an automated trading instruction."}</span>
         <span>{zh ? "排序可解释，可撤销，有审计记录" : "Explainable ranking · reversible · auditable"}</span>
       </footer>
-    </div>
+    </TmScreen>
   );
 }

@@ -64,7 +64,7 @@ function DispatchProgress({
       : `about ${remainingMin} min remaining`;
   return (
     <div className="flex w-56 flex-col gap-1">
-      <div className="h-1.5 w-full overflow-hidden rounded bg-tm-bg-3">
+      <div className="h-1.5 w-full overflow-hidden rounded-[2px] bg-tm-bg-3">
         <div
           className={`h-full transition-[width] duration-1000 ease-linear ${done ? "bg-tm-warn" : "bg-tm-accent"}`}
           style={{ width: `${Math.round(pct * 100)}%` }}
@@ -301,7 +301,7 @@ export default function RefreshButton() {
           title={inFlight ? t(locale, "picks.refresh.inflight_tip") : undefined}
           loading={pending}
           loadingLabel={t(locale, "picks.refresh.pending")}
-          className="rounded"
+          className="rounded-[2px]"
         >
           {inFlight
             ? `${t(locale, "picks.refresh.inflight")} ${btnPct}%`

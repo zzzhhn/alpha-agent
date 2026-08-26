@@ -173,7 +173,7 @@ export default function PickRow({
         ) : null}
         {card.partial ? (
           <span
-            className="ml-1.5 rounded bg-tm-bg-2 px-1 py-0.5 align-middle text-xs font-semibold uppercase tracking-wide text-tm-muted"
+            className="ml-1.5 rounded-[2px] bg-tm-bg-2 px-1 py-0.5 align-middle text-xs font-semibold uppercase tracking-wide text-tm-muted"
             title={t(locale, "picks_table.partial_tooltip")}
           >
             {t(locale, "picks_table.partial_badge")}
@@ -181,7 +181,7 @@ export default function PickRow({
         ) : null}
         {staleDays > 0 ? (
           <span
-            className="ml-1.5 rounded bg-tm-warn-soft px-1 py-0.5 align-middle text-xs font-semibold tabular-nums text-tm-warn"
+            className="ml-1.5 rounded-[2px] bg-tm-warn-soft px-1 py-0.5 align-middle text-xs font-semibold tabular-nums text-tm-warn"
             title={
               locale === "zh"
                 ? `该行数据比榜单最新时间旧 ${staleDays} 天`

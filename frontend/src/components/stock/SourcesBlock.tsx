@@ -16,7 +16,7 @@ import {
 export default function SourcesBlock({ card }: { card: RatingCard }) {
   const { locale } = useLocale();
   return (
-    <section className="rounded border border-tm-rule bg-tm-bg-2 p-4">
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
       <h2 className="text-lg font-semibold mb-2 text-tm-fg">{t(locale, "sources.title")}</h2>
       <TmTableFrame>
         <TmTable

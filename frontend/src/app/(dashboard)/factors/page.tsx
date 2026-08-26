@@ -70,6 +70,7 @@ import {
 } from "@/components/tm/TmTable";
 import { SegmentedTabs, type SegmentedTabItem } from "@/components/ui/SegmentedTabs";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
+import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
 /* ── Constants ────────────────────────────────────────────────────── */
 
@@ -430,6 +431,16 @@ export default function FactorsPage() {
 
   return (
     <TmScreen>
+      <WorkbenchHeader
+        eyebrow={locale === "zh" ? "研究 · 因子资产" : "Research · Factor assets"}
+        title={locale === "zh" ? "因子库" : "Factor Zoo"}
+        subtitle={locale === "zh" ? "比较绩效、衰减与相关性，管理可复用研究资产。" : "Compare performance, decay, and correlation across reusable research assets."}
+        statuses={[
+          { label: locale === "zh" ? "因子总数" : "Entries", value: String(entries.length) },
+          { label: locale === "zh" ? "衰减" : "Decaying", value: String(decay.length), tone: decay.length > 0 ? "warning" : "positive" },
+          { label: locale === "zh" ? "过期" : "Stale", value: String(aggregates.staleEntries.length), tone: aggregates.staleEntries.length > 0 ? "warning" : "positive" },
+        ]}
+      />
       <TmSubbar>
         <span className="text-tm-muted">FACTORS · ZOO</span>
         <TmSubbarSep />

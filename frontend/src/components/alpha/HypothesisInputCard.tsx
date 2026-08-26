@@ -114,7 +114,7 @@ export function HypothesisInputCard(p: Props) {
           </TmButton>
 
           {historyOpen && (
-            <div className="absolute right-0 top-full z-10 mt-1 max-h-[400px] w-[380px] overflow-y-auto rounded border border-tm-rule bg-tm-bg-2 shadow-lg">
+            <div className="absolute right-0 top-full z-10 mt-1 max-h-[400px] w-[380px] overflow-y-auto rounded-[2px] border border-tm-rule bg-tm-bg-2 shadow-lg">
               {p.history.length === 0 ? (
                 <div className="px-3 py-4 font-tm-mono text-xs text-tm-muted">
                   {t(locale, "alpha.historyEmpty" as Parameters<typeof t>[1])}
