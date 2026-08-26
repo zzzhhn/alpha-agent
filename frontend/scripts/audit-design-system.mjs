@@ -47,8 +47,29 @@ const visualizationAssets = [];
 const referenceVisualizationFile = path.join(ROOT, "components/reference/ReferenceVisualizations.tsx");
 const referenceVisualizationSource = fs.readFileSync(referenceVisualizationFile, "utf8");
 const referenceIconographySource = fs.readFileSync(path.join(ROOT, "components/reference/ReferenceIconography.tsx"), "utf8");
+const referencePatternsSource = fs.readFileSync(path.join(ROOT, "components/reference/ReferencePatterns.tsx"), "utf8");
 const tmPaneSource = fs.readFileSync(path.join(ROOT, "components/tm/TmPane.tsx"), "utf8");
 const REQUIRED_TEXT_GLYPHS = ["▶", "▾", "▸", "·", "←", "→", "▲", "▼", "✓", "×", "⚠", "↗"];
+const REQUIRED_MIGRATION_IDS = [
+  "semantic-token-bridge",
+  "typography-floor",
+  "pane-title-localization",
+  "button-family",
+  "field-family",
+  "exclusive-toggle",
+  "pagination-family",
+  "table-family",
+  "state-feedback",
+  "tooltip-family",
+  "icon-registry",
+  "visualization-registry",
+  "source-only-visualizations",
+  "overlay-family",
+  "pane-card-family",
+  "workbench-composition",
+  "native-title-budget",
+  "native-control-internals",
+];
 const INLINE_VISUALIZATION_KEYS = new Map([
   ["app/(dashboard)/factors/page.tsx", "app/factors inline Recharts"],
   ["app/(dashboard)/report/page.tsx", "app/report inline Recharts"],
@@ -134,6 +155,7 @@ const missingIcons = [...productionIcons].filter((name) => !referenceIcons.has(n
 const extraReferenceIcons = [...referenceIcons].filter((name) => !productionIcons.has(name)).sort();
 const missingVisualizations = visualizationAssets.filter(({ key }) => !referenceVisualizationSource.includes(key));
 const missingTextGlyphs = REQUIRED_TEXT_GLYPHS.filter((glyph) => !referenceIconographySource.includes(`"${glyph}"`));
+const missingMigrationItems = REQUIRED_MIGRATION_IDS.filter((id) => !referencePatternsSource.includes(`id: "${id}"`));
 
 console.log("DESIGN.SYSTEM.AUDIT");
 console.log(`raw controls: ${rawControls.length} total, ${unexpectedControls.length} unexpected`);
@@ -146,6 +168,7 @@ console.log(`registered text glyph exceptions: ${REQUIRED_TEXT_GLYPHS.length - m
 console.log(`visualization assets: ${visualizationAssets.length}, missing from reference registry: ${missingVisualizations.length}`);
 console.log(`raw reference taxonomy headings: ${rawReferenceTaxonomy.length}`);
 console.log(`unlocalized production pane titles: ${unlocalizedPaneTitles.length}`);
+console.log(`migration ledger assets: ${REQUIRED_MIGRATION_IDS.length - missingMigrationItems.length}/${REQUIRED_MIGRATION_IDS.length}`);
 
 for (const [file, reason] of CONTROL_EXCEPTIONS) console.log(`allowed control · ${file} · ${reason}`);
 for (const [file, reason] of TABLE_EXCEPTIONS) console.log(`allowed table · ${file} · ${reason}`);
@@ -158,6 +181,7 @@ for (const glyph of missingTextGlyphs) console.error(`text glyph missing from re
 for (const { rel } of missingVisualizations) console.error(`visualization missing from reference · ${rel}`);
 for (const item of rawReferenceTaxonomy) console.error(`raw reference taxonomy · ${item.rel} · ${item.token}`);
 for (const item of unlocalizedPaneTitles) console.error(`unlocalized pane title · ${item.rel} · ${item.token}`);
+for (const id of missingMigrationItems) console.error(`migration asset missing from ledger · ${id}`);
 
 if (nativeTitles.length > NATIVE_TITLE_BUDGET) {
   console.error(`native title budget exceeded by ${nativeTitles.length - NATIVE_TITLE_BUDGET}`);
@@ -166,7 +190,7 @@ if (nativeTitles.length > NATIVE_TITLE_BUDGET) {
 if (
   unexpectedControls.length || unexpectedTables.length || nativeTitles.length > NATIVE_TITLE_BUDGET ||
   undersizedType.length || missingIcons.length || missingTextGlyphs.length || missingVisualizations.length || rawReferenceTaxonomy.length ||
-  unlocalizedPaneTitles.length
+  unlocalizedPaneTitles.length || missingMigrationItems.length
 ) {
   process.exitCode = 1;
 }

@@ -27,6 +27,27 @@ validated or favorable outcome. The tooltip specimen covers all four portal
 placements. Compact labels, captions, controls, and data share a 12 px minimum
 so dense desktop layouts remain readable.
 
+Under `操作模式 / Operating Patterns`, `迁移 · 资产状态 / Migration · Asset
+status` is the release-facing migration ledger rather than a sample table. It
+records the legacy asset, canonical target, production consumers, responsible
+area, current state, and the remaining action or verification evidence. Read
+its state labels as follows:
+
+- `已固化 / Canonical`: production adoption, reference specimen, and audit
+  evidence agree.
+- `兼容别名 / Aliased`: the old entry delegates to the canonical asset and is
+  retained only until its consumers reach zero.
+- `迁移中 / In progress`: the target is fixed, but consumer migration or
+  browser evidence remains.
+- `受控例外 / Exception`: a semantic or infrastructure exception is retained
+  within an audited no-growth boundary.
+- `仅源码 / Source only`: the asset is not mounted by a production route and
+  awaits an explicit delete or migrate decision.
+
+Registration alone does not mean migration is complete. The visualization
+registry, for example, can be complete while only selected shared components
+have live specimens and three legacy chart files remain source-only.
+
 ## Factor Alpha
 
 Write one falsifiable hypothesis, confirm universe, direction, bucket size, cost, neutralization, and benchmark, then use “Translate and backtest.” After translation, “Rerun current expression” keeps the expression and uses the latest visible parameters. Read the verdict strip before opening detailed evidence. The example library is a starting-point catalogue, not proof that an example remains valid.

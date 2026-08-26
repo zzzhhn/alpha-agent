@@ -52,7 +52,7 @@ export function DesignSystemReference() {
           },
           {
             label: t(locale, "reference.status.version"),
-            value: "2026.08.2",
+            value: "2026.08.3",
           },
           {
             label: t(locale, "reference.status.theme"),
