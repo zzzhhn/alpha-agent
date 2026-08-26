@@ -48,16 +48,22 @@ def _ensure_initialized(app: FastAPI) -> None:
     # warned, not fatal — see feedback_silent_trycatch_antipattern.md;
     # we surface the reason via app.state.llm_init_error so /healthz can
     # report it.
-    try:
-        app.state.llm = create_llm_client(settings)
-        app.state.llm_init_error = None
-    except Exception as exc:  # noqa: BLE001 — surfaced via /healthz
+    require_byok = os.environ.get("ALPHACORE_REQUIRE_BYOK", "").lower() == "true"
+    if require_byok:
         app.state.llm = None
-        app.state.llm_init_error = f"{type(exc).__name__}: {exc}"
-        logger.warning(
-            "Platform LLM not available — running in BYOK-only mode: %s: %s",
-            type(exc).__name__, exc,
-        )
+        app.state.llm_init_error = None
+        logger.info("Platform LLM skipped: ALPHACORE_REQUIRE_BYOK=true")
+    else:
+        try:
+            app.state.llm = create_llm_client(settings)
+            app.state.llm_init_error = None
+        except Exception as exc:  # noqa: BLE001 — surfaced via /healthz
+            app.state.llm = None
+            app.state.llm_init_error = f"{type(exc).__name__}: {exc}"
+            logger.warning(
+                "Platform LLM not available — running in BYOK-only mode: %s: %s",
+                type(exc).__name__, exc,
+            )
     # Keep router_health if create_app() already populated it (non-serverless path).
     if not hasattr(app.state, "router_health"):
         app.state.router_health = []

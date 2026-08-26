@@ -14,6 +14,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
+from alpha_agent.api.byok import fetch_user_llm_credential
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.crypto_box import CryptoError, decrypt
@@ -133,11 +134,7 @@ async def post_brief_stream(
     if sig is None:
         raise HTTPException(status_code=404, detail=f"No rating for {ticker}")
 
-    byok = await pool.fetchrow(
-        "SELECT provider, ciphertext, nonce, model, base_url "
-        "FROM user_byok WHERE user_id = $1 LIMIT 1",
-        user_id,
-    )
+    byok = await fetch_user_llm_credential(pool, user_id)
     if byok is None:
         raise HTTPException(
             status_code=400, detail="No BYOK key set; visit /settings to add one"

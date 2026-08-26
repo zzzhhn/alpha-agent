@@ -28,6 +28,14 @@ export interface ByokSaveResponse {
   encrypted_at: string;
 }
 
+export interface ByokTestResponse {
+  provider: string;
+  model: string;
+  latency_ms: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+}
+
 export async function getByok(): Promise<ByokGetResponse | null> {
   const r = await fetch(`${API_BASE}/api/user/byok`, {
     credentials: "include",
@@ -62,6 +70,21 @@ export async function saveByok(body: {
     );
   }
   return (await r.json()) as ByokSaveResponse;
+}
+
+export async function testByok(): Promise<ByokTestResponse> {
+  const r = await fetch(`${API_BASE}/api/user/byok/test`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!r.ok) {
+    const detail = await r
+      .json()
+      .then((b) => (b as { detail?: string })?.detail)
+      .catch(() => undefined);
+    throw new Error(detail ?? `LLM connection test failed: HTTP ${r.status}`);
+  }
+  return (await r.json()) as ByokTestResponse;
 }
 
 export async function deleteByok(): Promise<void> {

@@ -202,14 +202,19 @@ async def _run_propose_work(
         lessons, tried = [], []
 
     llm_client = await get_llm_client(user_id=user_id)
-    raw_proposals = await propose_factors(
-        llm_client, diagnostic, n=n, lessons=lessons, tried_expressions=tried,
-    )
-    if not raw_proposals:
-        return {"evaluated": 0, "proposed": 0, "dormant": False}
-    return await _evaluate_and_record(
-        pool, raw_proposals, diagnostic, llm_client=llm_client, source="llm"
-    )
+    try:
+        raw_proposals = await propose_factors(
+            llm_client, diagnostic, n=n, lessons=lessons, tried_expressions=tried,
+        )
+        if not raw_proposals:
+            return {"evaluated": 0, "proposed": 0, "dormant": False}
+        return await _evaluate_and_record(
+            pool, raw_proposals, diagnostic, llm_client=llm_client, source="llm"
+        )
+    finally:
+        close = getattr(llm_client, "close", None)
+        if close is not None:
+            await close()
 
 
 async def _evaluate_and_record(

@@ -7,6 +7,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Literal
 
+from alpha_agent.core.exceptions import LLMEmptyResponseError
+
 
 @dataclass(frozen=True)
 class Message:
@@ -66,6 +68,10 @@ class LLMClient(ABC):
         )
         if resp.content:
             yield resp.content
+            return
+        raise LLMEmptyResponseError(
+            f"{resp.model} completed without user-visible text"
+        )
 
     @abstractmethod
     async def is_available(self) -> bool:

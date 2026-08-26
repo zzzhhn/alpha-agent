@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import AsyncIterator
 
 from alpha_agent.api.byok import _build_byok_client
+from alpha_agent.core.exceptions import LLMEmptyResponseError
 from alpha_agent.llm.base import Message
 
 
@@ -88,6 +89,10 @@ async def stream_persona(
                 continue
             accumulated += chunk
             yield {"type": "explanation", "delta": chunk}
+        if not accumulated.strip():
+            raise LLMEmptyResponseError(
+                "persona generation completed without user-visible text"
+            )
         # Only persist after a successful stream — partial / aborted
         # responses must not pollute the cache.
         if cache_enabled and accumulated.strip():

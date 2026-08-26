@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from alpha_agent.core.exceptions import LLMEmptyResponseError
 from alpha_agent.llm.base import LLMClient, LLMResponse, Message
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 _UA = "claude-cli/1.0.0 (external, cli)"
 _ANTHROPIC_VERSION = "2023-06-01"
+_MIN_OUTPUT_BUDGET = 4096
+_RETRY_OUTPUT_BUDGET = 8192
 
 
 class KimiClient(LLMClient):
@@ -69,30 +72,52 @@ class KimiClient(LLMClient):
             if m.role in ("user", "assistant")
         ]
 
-        payload: dict[str, object] = {
-            "model": self._model,
-            "messages": convo,
-            "max_tokens": max_tokens,
-        }
-        if system_prompts:
-            payload["system"] = "\n\n".join(system_prompts)
+        first_budget = max(max_tokens, _MIN_OUTPUT_BUDGET)
+        budgets = [first_budget]
+        if first_budget < _RETRY_OUTPUT_BUDGET:
+            budgets.append(_RETRY_OUTPUT_BUDGET)
 
-        response = await self._client.post("/messages", json=payload)
-        response.raise_for_status()
-        data = response.json()
+        last_usage: dict = {}
+        last_stop_reason: str | None = None
+        for attempt, budget in enumerate(budgets, start=1):
+            payload: dict[str, object] = {
+                "model": self._model,
+                "messages": convo,
+                "max_tokens": budget,
+            }
+            if system_prompts:
+                payload["system"] = "\n\n".join(system_prompts)
 
-        text_parts = [
-            block.get("text", "")
-            for block in data.get("content", [])
-            if block.get("type") == "text"
-        ]
-        usage = data.get("usage", {})
+            response = await self._client.post("/messages", json=payload)
+            response.raise_for_status()
+            data = response.json()
+            text_parts = [
+                block.get("text", "")
+                for block in data.get("content", [])
+                if block.get("type") == "text"
+            ]
+            content = "".join(text_parts).strip()
+            last_usage = data.get("usage", {})
+            last_stop_reason = data.get("stop_reason")
+            if content:
+                return LLMResponse(
+                    content=content,
+                    model=data.get("model", self._model),
+                    prompt_tokens=last_usage.get("input_tokens", 0),
+                    completion_tokens=last_usage.get("output_tokens", 0),
+                )
+            logger.warning(
+                "Kimi returned no visible text (attempt=%s budget=%s stop=%s output_tokens=%s)",
+                attempt,
+                budget,
+                last_stop_reason,
+                last_usage.get("output_tokens", 0),
+            )
 
-        return LLMResponse(
-            content="".join(text_parts),
-            model=data.get("model", self._model),
-            prompt_tokens=usage.get("input_tokens", 0),
-            completion_tokens=usage.get("output_tokens", 0),
+        raise LLMEmptyResponseError(
+            "Kimi completed without user-visible text after adaptive retry "
+            f"(stop_reason={last_stop_reason}, "
+            f"output_tokens={last_usage.get('output_tokens', 0)})"
         )
 
     async def stream_chat(
@@ -121,6 +146,33 @@ class KimiClient(LLMClient):
             for m in messages
             if m.role in ("user", "assistant")
         ]
+        first_budget = max(max_tokens, _MIN_OUTPUT_BUDGET)
+        budgets = [first_budget]
+        if first_budget < _RETRY_OUTPUT_BUDGET:
+            budgets.append(_RETRY_OUTPUT_BUDGET)
+
+        for attempt, budget in enumerate(budgets, start=1):
+            emitted = False
+            async for text in self._stream_once(convo, system_prompts, budget):
+                emitted = True
+                yield text
+            if emitted:
+                return
+            logger.warning(
+                "Kimi stream returned no visible text (attempt=%s budget=%s)",
+                attempt,
+                budget,
+            )
+        raise LLMEmptyResponseError(
+            "Kimi stream completed without user-visible text after adaptive retry"
+        )
+
+    async def _stream_once(
+        self,
+        convo: list[dict[str, str]],
+        system_prompts: list[str],
+        max_tokens: int,
+    ) -> AsyncIterator[str]:
         payload: dict[str, object] = {
             "model": self._model,
             "messages": convo,

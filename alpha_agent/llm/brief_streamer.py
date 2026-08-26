@@ -29,6 +29,7 @@ from typing import AsyncIterator
 # Importing it (rather than re-deriving provider routing here) is what keeps
 # this module from drifting out of sync again.
 from alpha_agent.api.byok import _build_byok_client
+from alpha_agent.core.exceptions import LLMEmptyResponseError
 from alpha_agent.llm.base import Message
 
 
@@ -242,6 +243,10 @@ async def stream_brief(
             accumulated += chunk
             for ev in splitter.feed(chunk):
                 yield ev
+        if not accumulated.strip():
+            raise LLMEmptyResponseError(
+                "brief generation completed without user-visible text"
+            )
         for ev in splitter.flush():
             yield ev
         # Only persist after a successful stream — partial / aborted

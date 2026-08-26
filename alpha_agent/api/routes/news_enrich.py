@@ -23,7 +23,11 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from alpha_agent.api.byok import _build_byok_client, get_llm_client
+from alpha_agent.api.byok import (
+    _build_byok_client,
+    fetch_user_llm_credential,
+    managed_llm_client,
+)
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.api.sse import SSE_HEADERS, sse_format
 from alpha_agent.auth.crypto_box import CryptoError, decrypt
@@ -47,7 +51,7 @@ class EnrichResponse(BaseModel):
 async def enrich(
     ticker: str = Path(min_length=1, max_length=10),
     lang: str = Query("en", pattern="^(en|zh)$"),
-    llm: LLMClient = Depends(get_llm_client),
+    llm: LLMClient = Depends(managed_llm_client),
 ) -> EnrichResponse:
     """Run the BYOK LLM enrichment over un-processed news_items for `ticker`.
 
@@ -91,11 +95,7 @@ async def enrich_stream(
     ticker = ticker.upper()
     pool = await get_db_pool()
 
-    byok = await pool.fetchrow(
-        "SELECT provider, ciphertext, nonce, model, base_url "
-        "FROM user_byok WHERE user_id = $1 LIMIT 1",
-        user_id,
-    )
+    byok = await fetch_user_llm_credential(pool, user_id)
     if byok is None:
         raise HTTPException(
             status_code=400, detail="No BYOK key set; visit /settings to add one"
