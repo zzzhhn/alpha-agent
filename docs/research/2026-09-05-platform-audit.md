@@ -80,9 +80,15 @@ PostgreSQL 的普通 VACUUM 主要让内部页可复用，不承诺立刻缩小�
 
 Next.js 15.5.25 构建已完成。最终 `npm audit`（全部依赖及仅生产依赖）均为 0 条已知漏洞；邮件发送仅做本地 stream transport 校验，没有向外发送邮件。
 
-状态：迁移及生产发布进行中，最终结果见下方追加记录。
+生产交付已完成，主变更为 [PR #36](https://github.com/zzzhhn/alpha-agent/pull/36)。GitHub Linux CI 共 1,118 项通过，3 项按项目配置未运行。前后端生产部署均 Ready，线上 137 条 API 路径完整、25 个路由组无加载失败。生产前端 bundle 已核对使用同源健康请求和新状态提示；浏览器已确认 NVDA 的固定六轴与缺测标签。
 
-证据文件：`2026-09-05-platform-audit-before.json`、`2026-09-05-platform-public-route-audit.json`。生成器：`scripts/audit_platform.py`，只做 GET 和只读聚合查询。
+V048 已应用，迁移前后数据库物理大小从 281,870,336 降至 260,726,784 字节，释放 21,143,552 字节，约 20.2 MiB。分钟行情 178,103 行全部保留。信号健康接口本次抽测从 3.871 秒降至 0.711 秒；这是单次观测，不是 p95 承诺。AAPL 冷启动仍出现 18.69 秒的慢请求，不能宣称所有接口延迟已彻底解决。
+
+推荐通过 GitHub Actions 的新 `publish_recommendation` 单独恢复入口补发，无需重新抓行情或执行 LLM。运行 [33959648120](https://github.com/zzzhhn/alpha-agent/actions/runs/33959648120) 成功，RUN #59 对应 2026-09-04，207 个合格候选，价格覆盖 100%，健康门槛通过。随后线上查询确认 `stale=false`、`tradable=true`，任务链整体为 `healthy`。
+
+后端 Preview 在 Vercel integration 资源分配阶段失败，尚未进入构建；Production 使用已有数据库，部署成功。Neon 当前有 10 条分支，9 条归档。本轮没有擅自删除这些旧预览数据，最旧分支的清理已单独征询用户。
+
+证据文件：`2026-09-05-platform-audit-before.json`、`2026-09-05-platform-public-route-audit.json`、`2026-09-05-platform-audit-after.json`。after 文件采集于推荐补发之前，补发结论由上方 Actions 记录和后续生产 GET 支撑。生成器：`scripts/audit_platform.py`，只做 GET 和只读聚合查询。
 
 ## 后续观察
 

@@ -201,6 +201,18 @@ Custom chart SVGs are visualization assets, not action icons.
   chart-text floor. The registry separates live specimens, registered route
   assets, and source-only legacy implementations.
 
+Stock attribution uses the six fixed dimensions from `DIMENSION_GROUPS`, with
+API-provided cross-sectional scores shared with letter grades. Missing values
+keep their axis, have a distinct missing label, and do not close a filled
+polygon through a synthetic zero. Exact values are keyboard-accessible below
+the graphic. Factor-mode controls affect the raw attribution table; the radar
+keeps the server snapshot's grading basis.
+
+The topbar and sidebar share `SystemHealthProvider` and display observed
+database/pipeline health. Automatic polling pauses in hidden tabs. Global
+mutation controls reflect the administrator role returned by `/api/user/me`;
+the authoritative permission check always remains server-side.
+
 ## 5. Operating patterns
 
 ### 5.1 Async lifecycle
