@@ -8,6 +8,8 @@ import { TmPagination } from "@/components/tm/TmPagination";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmStatePane, type TmState } from "@/components/tm/TmStatePane";
 import { TmChip } from "@/components/tm/TmSubbar";
+import { TmServiceStatus } from "@/components/tm/TmServiceStatus";
+import GradeStrip, { GradeStripHeader } from "@/components/picks/GradeStrip";
 import {
   TmTable,
   TmTableBody,
@@ -66,6 +68,13 @@ function DataSpecimens({ locale }: { readonly locale: Locale }) {
           <TmKpi label={zh ? "数据新鲜度" : "Freshness"} value="18m" sub="last verified" tone="warn" />
           <TmKpi label={zh ? "失败项" : "Failed gates"} value="1 / 5" sub="coverage" tone="neg" />
         </TmKpiGrid>
+      </TmPane>
+
+      <TmPane title={zh ? "数据显示 · 维度评级" : "Data display · Dimension grades"} bodyClassName="space-y-3 p-4">
+        <GradeStripHeader locale={locale} />
+        <GradeStrip locale={locale} grades={{ Momentum: "A+", Technical: "A", Sentiment: "B", Catalyst: "C+", Insider: "D", Flow: "F" }} />
+        <GradeStrip locale={locale} grades={{ Momentum: "C", Technical: "—", Sentiment: "C+", Catalyst: "B", Insider: "A", Flow: "D" }} />
+        <p className="text-xs text-tm-muted">{zh ? "与今日推荐共用 GradeStrip。中性评级与缺测符号也保持可读，不降低文字透明度。" : "Uses the production GradeStrip. Neutral grades and missing markers remain readable without faded text."}</p>
       </TmPane>
 
       <TmPane title={t(locale, "reference.pane.dataTable")} meta={zh ? "选择、排序与分页语义统一" : "shared selection, sorting, and paging grammar"}>
@@ -141,6 +150,10 @@ function FeedbackSpecimens({ locale }: { readonly locale: Locale }) {
     },
   };
   return (
+    <div>
+    <TmPane title={zh ? "状态与恢复 · 服务状态" : "Status and recovery · Service health"} bodyClassName="flex flex-wrap gap-6 p-4">
+      {(["checking", "healthy", "degraded", "unavailable"] as const).map((value) => <TmServiceStatus key={value} state={value} locale={locale} />)}
+    </TmPane>
     <TmPane title={t(locale, "reference.pane.feedbackState")} meta={zh ? "稳定几何 + 局部恢复" : "stable geometry + local recovery"} bodyClassName="p-4">
       <div className="mb-4 flex flex-wrap gap-1.5">
         {STATES.map((value) => (
@@ -154,11 +167,12 @@ function FeedbackSpecimens({ locale }: { readonly locale: Locale }) {
         title={copy[state].title}
         description={copy[state].description}
         action={state === "loading" ? undefined : {
-          label: state === "unauthorized" ? (zh ? "前往登录" : "Sign in") : (zh ? "重试此面板" : "Retry this pane"),
+          label: zh ? "切换到加载示例" : "Show loading example",
           onClick: () => setState("loading"),
           variant: state === "unauthorized" ? "primary" : "secondary",
         }}
       />
     </TmPane>
+    </div>
   );
 }

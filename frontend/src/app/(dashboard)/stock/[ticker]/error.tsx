@@ -37,7 +37,7 @@ export default function StockError({
 
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-      <div className="font-tm-mono text-[13px] font-semibold text-tm-fg">
+      <div className="font-tm-mono text-sm font-semibold text-tm-fg">
         {copy.title}
       </div>
       <p className="max-w-sm font-tm-mono text-xs leading-relaxed text-tm-muted">

@@ -24,7 +24,7 @@ const GRADE_TONE: Record<string, string> = {
   C: "text-tm-muted border-tm-rule bg-tm-bg-3",
   D: "text-tm-neg border-tm-neg/30 bg-tm-neg/5",
   F: "text-tm-neg border-tm-neg/40 bg-tm-neg/10",
-  "—": "text-tm-muted border-tm-rule bg-tm-bg-3 opacity-60",
+  "—": "text-tm-muted border-tm-rule bg-tm-bg-2",
 };
 
 const DIMENSION_LABELS: Record<string, Record<Locale, string>> = {

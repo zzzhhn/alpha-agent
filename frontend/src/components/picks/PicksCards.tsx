@@ -37,13 +37,13 @@ export default function PicksCards({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   {ranked ? <span className="font-tm-mono text-xs text-tm-muted">#{index + 1}</span> : null}
-                  <Link href={`/stock/${card.ticker}`} prefetch={false} className="font-tm-mono text-[15px] font-semibold text-tm-fg hover:text-tm-accent">{card.ticker}</Link>
+                  <Link href={`/stock/${card.ticker}`} prefetch={false} className="font-tm-mono text-base font-semibold text-tm-fg hover:text-tm-accent">{card.ticker}</Link>
                   <span className={`font-tm-mono text-xs font-semibold ${TONE[card.rating] ?? "text-tm-fg-2"}`}>{card.rating}</span>
                 </div>
                 {name ? <p className="mt-1 truncate text-xs text-tm-muted">{name}</p> : null}
               </div>
               <div className="text-right font-tm-mono tabular-nums">
-                <div className="text-[13px] text-tm-fg">{score === null ? "—" : `${score >= 0 ? "+" : ""}${score.toFixed(2)}`}</div>
+                <div className="text-sm text-tm-fg">{score === null ? "—" : `${score >= 0 ? "+" : ""}${score.toFixed(2)}`}</div>
                 <div className="mt-1 text-xs text-tm-muted">{card.latest_price == null ? (locale === "zh" ? "收盘价未知" : "Close unavailable") : `$${card.latest_price.toFixed(2)}`}</div>
               </div>
             </div>

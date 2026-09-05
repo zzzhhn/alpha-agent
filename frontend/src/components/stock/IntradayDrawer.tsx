@@ -409,7 +409,7 @@ export default function IntradayDrawer({
                       </span>
                     ) : null}
                   </div>
-                  <div className="text-[13px] leading-snug text-tm-fg transition-colors group-hover:text-tm-accent">
+                  <div className="text-sm leading-snug text-tm-fg transition-colors group-hover:text-tm-accent">
                     {e.headline}
                   </div>
                 </>

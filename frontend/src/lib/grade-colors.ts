@@ -18,18 +18,18 @@
 // heatmap "disappears" except where there's signal.
 const GRADE_CHIP: Record<string, string> = {
   "A+": "bg-tm-pos text-tm-bg font-semibold",
-  A: "bg-tm-pos/45 text-tm-pos font-semibold",
-  "A-": "bg-tm-pos/30 text-tm-pos",
-  B: "bg-tm-pos/20 text-tm-pos",
+  A: "bg-tm-pos-soft text-tm-pos font-semibold",
+  "A-": "bg-tm-pos-soft text-tm-pos",
+  B: "bg-tm-pos-soft text-tm-pos",
   // Neutral majority recedes: no background, faint text. Quiet field.
-  "C+": "text-tm-muted/45",
-  C: "text-tm-muted/35",
+  "C+": "text-tm-fg-2",
+  C: "text-tm-muted",
   // Weakness draws attention back — red blocks against the quiet field.
-  D: "bg-tm-neg/30 text-tm-neg",
+  D: "bg-tm-neg-soft text-tm-neg",
   F: "bg-tm-neg text-tm-bg font-semibold",
 };
 
-const EMPTY_CHIP = "text-tm-muted/25";
+const EMPTY_CHIP = "text-tm-muted";
 
 /** className for a single grade chip. Unknown / "—" grades render faint. */
 export function gradeChipClass(grade: string): string {

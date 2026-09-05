@@ -47,12 +47,12 @@ export function DesignSystemReference() {
         statuses={[
           {
             label: t(locale, "reference.status.coverage"),
-            value: zh ? "全量登记中" : "Full registry",
-            tone: "positive",
+            value: zh ? "规范与例外可追踪" : "Standards and exceptions tracked",
+            tone: "default",
           },
           {
             label: t(locale, "reference.status.version"),
-            value: "2026.08.3",
+            value: "2026.09.1",
           },
           {
             label: t(locale, "reference.status.theme"),
@@ -62,9 +62,9 @@ export function DesignSystemReference() {
       />
 
       <TmSubbar>
-        <TmSubbarKV label="MODE" value={zh ? "生产组件" : "PRODUCTION ASSETS"} />
+        <TmSubbarKV label={zh ? "模式" : "Mode"} value={zh ? "生产组件" : "Production assets"} />
         <TmSubbarSep />
-        <TmSubbarKV label="DENSITY" value="DESKTOP / COMPACT" />
+        <TmSubbarKV label={zh ? "密度" : "Density"} value={zh ? "桌面 / 紧凑" : "Desktop / Compact"} />
         <TmSubbarSpacer />
         <TmStatusPill tone="warn">{t(locale, "reference.copy.sample")}</TmStatusPill>
       </TmSubbar>

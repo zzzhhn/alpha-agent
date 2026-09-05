@@ -142,7 +142,7 @@ function IcTooltip(props: {
   const anns = annByTs.get(row._ts) ?? [];
 
   return (
-    <div className="rounded border border-tm-rule bg-tm-bg-2 px-2.5 py-2 font-tm-mono text-xs text-tm-fg shadow-lg shadow-black/30">
+    <div className="rounded-[2px] border border-tm-rule bg-tm-bg-2 px-2.5 py-2 font-tm-mono text-xs text-tm-fg shadow-[var(--tm-shadow-floating)]">
       <div className="mb-1 text-tm-muted">{row.date}</div>
       {anns.length === 0 ? (
         <div className="text-xs text-tm-muted">

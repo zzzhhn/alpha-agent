@@ -2,6 +2,10 @@
 
 Status: implementation source of truth for reusable frontend assets
 
+Standardization revision: 2026.09.1. Tokens, chart ramps, overlays, notification
+views and service status are shared with the living reference. The token audit
+checks all 20 current tokens and 56 theme/foreground/background contrast pairs.
+
 Applies to: every Alpha Agent frontend route, including dashboard workbenches,
 reference pages, authentication flows, overlays, charts, loading states, and
 responsive navigation.
@@ -73,6 +77,17 @@ Only semantic `--tm-*` tokens are valid inside production workstation assets.
 | warning | `--tm-warn` | incomplete, stale, review required |
 | negative | `--tm-neg` | failed, blocked, destructive |
 | informational | `--tm-info` | neutral system information |
+| overlay scrim | `--tm-scrim` | theme-aware modal backdrop |
+| floating elevation | `--tm-shadow-floating` | tooltips, menus, notifications, tours |
+| modal elevation | `--tm-shadow-modal` | dialogs and drawers |
+
+The soft variants `--tm-pos-soft`, `--tm-warn-soft`, and `--tm-neg-soft`
+are registered alongside their foreground colors. Visible text must not use
+reduced-opacity versions of the muted token. All base/raised/hover and semantic
+soft surface text pairs are audited at a minimum 4.5:1 contrast ratio.
+
+Heatmaps use `tmHeatmapColor()` from chartTokens, with a bounded semantic tint
+and ordinary foreground text. Literal HSL/RGB palettes are not a chart exception.
 
 Color is never the only state carrier. Every semantic color is paired with a
 text label, icon, or explicit status phrase.
@@ -90,6 +105,13 @@ text label, icon, or explicit status phrase.
 | label | `font-tm-mono` | 12 px | 600, uppercase, 0.06 em tracking |
 | caption | `font-sans` | 12 px | secondary help, never below body size |
 | KPI value | `font-tm-mono` | 18 px | tabular numbers |
+| emphasized body / data | existing body or mono family | 14 px | verdicts and priority values |
+| compact heading | existing sans or mono family | 16 px | compact section/entity context |
+| featured entity / value | existing sans or mono family | 24 px | stock symbols and primary counts |
+
+The allowed text scale is 12, 14, 16, 18, 24, and 28px. Former 12.5/13/15/17/
+20/22/26px local choices are mapped to these roles. Body, controls, and captions
+retain the 12px minimum; emphasized reading content can use 14px.
 
 Do not introduce another arbitrary pixel size. A new role requires a catalog
 change and a reference-page specimen before production use.
@@ -274,6 +296,25 @@ It uses the real locale and theme providers and contains:
    between action icons and custom visualization graphics.
 7. **Visualizations**: real production radar plus trend, distribution, heatmap,
    drawdown, legend, tooltip, empty-frame, and textual-summary contracts.
+
+The radar, monthly returns heatmap, drawdown chart and equity-comparison chart
+are live shared specimens, loaded on the chart tab. Other registered charts are
+business-specific consumers of the same color/type contract; they are not
+claimed to have complete reference state specimens yet. Source-only chart files
+remain explicitly distinguished from route-mounted assets.
+
+`ReportDeepModal` consumes `TmDialog` for focus trapping, Escape, restoration,
+scrim and elevation. Its 1080px maximum width is a report-specific layout override.
+`ToastView` is the actual production notification view used by the reference;
+its actions use TM buttons and its locale comes from the same provider.
+`TmServiceStatus` renders all four health states in both production chrome and
+the reference. driver.js remains a controlled tour integration with token-only
+CSS adaptation, rather than a replacement modal/control library.
+
+Raw-control exceptions now contain only SegmentedTabs' internal button. The
+old toast exception is removed. Existing native-title compatibility entries
+retain their no-growth boundary. Run `npm run audit:design-system` to check
+primitive adoption, route language, token registration and contrast together.
 8. **Overlays**: tooltip placement, focus rules, dialog, drawer, and modal
    recovery behavior.
 9. **Operating patterns**: list selection, sorting, filtering, pagination,

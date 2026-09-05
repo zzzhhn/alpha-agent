@@ -447,7 +447,7 @@ export default function AlertWorkbench() {
                         ) : null}
                       </div>
                       <div>
-                        <p className="font-mono text-[20px] font-semibold">{item.ticker}</p>
+                        <p className="font-mono text-2xl font-semibold">{item.ticker}</p>
                         <p className="mt-2 text-xs text-tm-muted">{alertTypeLabel(item, locale)}</p>
                         <p className="mt-1 text-xs text-tm-muted">{item.source_count} {zh ? "个来源" : "source(s)"}</p>
                       </div>
@@ -467,7 +467,7 @@ export default function AlertWorkbench() {
                         <p className="text-xs text-tm-fg-2">
                           {item.state.status === "resolved" ? (zh ? "已处理" : "Resolved") : item.state.status === "snoozed" ? (zh ? "已暂缓" : "Snoozed") : (zh ? "待处理" : "Open")}
                         </p>
-                        <p className="mt-2 font-mono text-[17px] text-tm-fg">{item.triage_score}</p>
+                        <p className="mt-2 font-mono text-lg text-tm-fg">{item.triage_score}</p>
                         <p className="mt-1 text-xs text-tm-muted">{zh ? "分诊分数" : "Triage"}</p>
                       </div>
                     </TmRowButton>

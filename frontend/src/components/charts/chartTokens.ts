@@ -28,7 +28,16 @@ export const TM_CHART_TYPOGRAPHY = {
   label: 12,
   legend: 12,
   tooltip: 12,
+  svgLabel: 14,
 } as const;
+
+/** Diverging surface ramp. Keep text on the same accessible semantic palette. */
+export function tmHeatmapColor(value: number, limit = 0.1): string {
+  if (!Number.isFinite(value)) return TM_CHART_CSS.surface;
+  const intensity = Math.min(Math.abs(value) / limit, 1) * 20;
+  const color = value < 0 ? TM_CHART_CSS.negative : TM_CHART_CSS.positive;
+  return `color-mix(in srgb, ${color} ${intensity}%, ${TM_CHART_CSS.surface})`;
+}
 
 export type TmChartPalette = {
   readonly [Key in keyof typeof TM_CHART_CSS]: string;

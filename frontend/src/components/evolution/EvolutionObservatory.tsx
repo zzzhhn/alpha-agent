@@ -189,7 +189,7 @@ export default function EvolutionObservatory({
               IC {selectedIc == null ? "—" : `${selectedIc >= 0 ? "+" : ""}${selectedIc.toFixed(3)}`}
             </span>
           </div>
-          <h2 className="mt-4 text-[20px] font-semibold">{selected ? getSignalDisplayLabel(selected, locale) : (zh ? "没有可选信号" : "No signal selected")}</h2>
+          <h2 className="mt-4 text-2xl font-semibold">{selected ? getSignalDisplayLabel(selected, locale) : (zh ? "没有可选信号" : "No signal selected")}</h2>
           <div className="mt-3 grid grid-cols-3 gap-px border border-tm-rule bg-tm-rule text-center text-xs">
             {[
               [zh ? "线上 LIVE" : "LIVE", live?.weight],
@@ -198,7 +198,7 @@ export default function EvolutionObservatory({
             ].map(([label, value]) => (
               <div key={String(label)} className="bg-tm-bg px-1 py-3">
                 <p className="text-tm-muted">{label}</p>
-                <p className="mt-1 font-mono text-[15px] text-tm-fg">{typeof value === "number" ? value.toFixed(4) : "—"}</p>
+                <p className="mt-1 font-mono text-base text-tm-fg">{typeof value === "number" ? value.toFixed(4) : "—"}</p>
               </div>
             ))}
           </div>
@@ -234,7 +234,7 @@ export default function EvolutionObservatory({
         ].map(([label, count], index) => (
           <div key={String(label)} className={`relative flex min-h-[88px] flex-col items-center justify-center border bg-tm-bg ${index === 2 && Number(count) > 0 ? "border-tm-warn" : "border-tm-rule"}`}>
             <p className="text-tm-muted">{label}</p>
-            <p className={`mt-2 font-mono text-[22px] ${index === 2 && Number(count) > 0 ? "text-tm-warn" : "text-tm-fg"}`}>{count}</p>
+            <p className={`mt-2 font-mono text-2xl ${index === 2 && Number(count) > 0 ? "text-tm-warn" : "text-tm-fg"}`}>{count}</p>
             {index < 4 ? <ArrowRight className="absolute -right-5 top-9 z-10 h-4 w-4 bg-tm-bg text-tm-muted" /> : null}
           </div>
         ))}

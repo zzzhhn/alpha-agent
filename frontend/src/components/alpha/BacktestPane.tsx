@@ -64,7 +64,7 @@ export function BacktestPane({ state, data, errorMessage, onRetry }: Props) {
       ) : data ? (
         <>
           <div className={`border-l-2 px-3 py-2 ${failedGates > 0 ? "border-tm-warn bg-tm-warn/5" : "border-tm-pos bg-tm-pos/5"}`}>
-            <p className={`text-[13px] font-semibold ${failedGates > 0 ? "text-tm-warn" : "text-tm-pos"}`}>
+            <p className={`text-sm font-semibold ${failedGates > 0 ? "text-tm-warn" : "text-tm-pos"}`}>
               {failedGates > 0 ? (zh ? `${failedGates} 项门槛需要反证` : `${failedGates} gates need counter-evidence`) : (zh ? "关键门槛通过" : "Key gates pass")}
             </p>
             <p className="mt-1 text-xs text-tm-muted">{zh ? "判决使用样本外区间，不以综合分掩盖失败项。" : "Verdict uses OOS evidence and never hides a failed gate in a composite score."}</p>

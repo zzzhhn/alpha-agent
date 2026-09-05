@@ -6,7 +6,6 @@ const ROOT = path.resolve("src");
 const CONTROL_TAGS = new Set(["button", "input", "select", "textarea"]);
 const CONTROL_EXCEPTIONS = new Map([
   ["components/ui/SegmentedTabs.tsx", "canonical ARIA tab implementation"],
-  ["components/ui/toast/Toast.tsx", "toast infrastructure controls"],
 ]);
 const TABLE_EXCEPTIONS = new Map([
   ["components/backtest/TmMonthlyReturnsHeatmap.tsx", "semantic year-by-month heatmap matrix"],
@@ -69,6 +68,10 @@ const REQUIRED_MIGRATION_IDS = [
   "workbench-composition",
   "native-title-budget",
   "native-control-internals",
+  "semantic-elevation",
+  "heatmap-ramp",
+  "service-health",
+  "notification-view",
 ];
 const INLINE_VISUALIZATION_KEYS = new Map([
   ["app/(dashboard)/factors/page.tsx", "app/factors inline Recharts"],
@@ -147,8 +150,7 @@ for (const file of collectCssFiles(ROOT)) {
 const unexpectedControls = rawControls.filter(({ rel, tag }) => {
   const reason = CONTROL_EXCEPTIONS.get(rel);
   if (!reason) return true;
-  return rel !== "components/ui/SegmentedTabs.tsx"
-    && rel !== "components/ui/toast/Toast.tsx";
+  return rel !== "components/ui/SegmentedTabs.tsx";
 });
 const unexpectedTables = nativeTables.filter(({ rel }) => !TABLE_EXCEPTIONS.has(rel));
 const missingIcons = [...productionIcons].filter((name) => !referenceIcons.has(name)).sort();

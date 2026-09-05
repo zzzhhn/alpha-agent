@@ -43,7 +43,7 @@ export function TmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6 sm:p-10"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--tm-scrim)] p-6 sm:p-10"
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
       }}
@@ -56,7 +56,7 @@ export function TmDialog({
         aria-describedby={description === undefined ? undefined : descriptionId}
         tabIndex={-1}
         className={clsx(
-          "flex max-h-[84vh] w-full max-w-[1040px] flex-col border border-tm-rule-2 bg-tm-bg shadow-2xl outline-none",
+          "flex max-h-[84vh] w-full max-w-[1040px] flex-col border border-tm-rule-2 bg-tm-bg shadow-[var(--tm-shadow-modal)] outline-none",
           className,
         )}
       >

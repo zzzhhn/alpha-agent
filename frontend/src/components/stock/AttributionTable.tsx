@@ -242,7 +242,7 @@ export default function AttributionTable({
               title={rowTooltip}
               className={clsx(
                 "border-b border-tm-rule",
-                isDropped ? "opacity-40" : "",
+                isDropped ? "bg-tm-bg-2 text-tm-muted" : "",
               )}
             >
               <TmTableCell className="px-2 py-1 text-tm-fg">

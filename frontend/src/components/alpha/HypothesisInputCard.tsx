@@ -114,7 +114,7 @@ export function HypothesisInputCard(p: Props) {
           </TmButton>
 
           {historyOpen && (
-            <div className="absolute right-0 top-full z-10 mt-1 max-h-[400px] w-[380px] overflow-y-auto rounded-[2px] border border-tm-rule bg-tm-bg-2 shadow-lg">
+            <div className="absolute right-0 top-full z-10 mt-1 max-h-[400px] w-[380px] overflow-y-auto rounded-[2px] border border-tm-rule bg-tm-bg-2 shadow-[var(--tm-shadow-floating)]">
               {p.history.length === 0 ? (
                 <div className="px-3 py-4 font-tm-mono text-xs text-tm-muted">
                   {t(locale, "alpha.historyEmpty" as Parameters<typeof t>[1])}
@@ -162,7 +162,7 @@ export function HypothesisInputCard(p: Props) {
           placeholder={t(locale, "alpha.placeholder" as Parameters<typeof t>[1])}
           aria-label={t(locale, "alpha.input.title" as Parameters<typeof t>[1])}
           rows={2}
-          textareaClassName="min-h-[72px] bg-tm-bg px-4 py-3 text-[15px] leading-6"
+          textareaClassName="min-h-[72px] bg-tm-bg px-4 py-3 text-base leading-6"
           disabled={p.disabled}
         />
         <div className="grid min-h-[72px] grid-rows-2 gap-2">

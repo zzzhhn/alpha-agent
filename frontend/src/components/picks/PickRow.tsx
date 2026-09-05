@@ -150,7 +150,7 @@ export default function PickRow({
       <TmTableCell numeric className="text-xs text-tm-muted">
         {rank ?? "—"}
       </TmTableCell>
-      <TmTableRowHeader className="text-[13px] font-semibold">
+      <TmTableRowHeader className="text-sm font-semibold">
         {watched ? (
           <WatchlistStar className="mr-1 inline-block h-2.5 w-2.5 align-middle text-tm-accent" />
         ) : null}
@@ -202,7 +202,7 @@ export default function PickRow({
           {card.rating}
         </span>
       </TmTableCell>
-      <TmTableCell className="text-[13px]">
+      <TmTableCell className="text-sm">
         {(() => {
           const sug = getSuggestion(card.rating, hit, locale);
           const tone =

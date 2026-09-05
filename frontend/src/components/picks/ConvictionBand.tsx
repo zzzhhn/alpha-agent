@@ -85,7 +85,7 @@ export default function ConvictionBand({
               className="flex flex-col gap-2.5 border border-tm-rule bg-tm-bg-2 p-3.5 transition-colors hover:border-tm-accent hover:bg-tm-bg-3"
             >
               <div className="flex items-baseline justify-between">
-                <span className="font-tm-mono text-[22px] font-bold text-tm-fg">
+                <span className="font-tm-mono text-2xl font-bold text-tm-fg">
                   {card.ticker}
                 </span>
                 <span className="font-tm-mono text-base tabular-nums text-tm-accent">
@@ -93,7 +93,7 @@ export default function ConvictionBand({
                   {composite.toFixed(2)}σ
                 </span>
               </div>
-              <div className="min-h-[2.25rem] font-tm-sans text-[12.5px] leading-snug text-tm-fg-2">
+              <div className="min-h-[2.25rem] font-tm-sans text-sm leading-snug text-tm-fg-2">
                 {drivers.length > 0 ? (
                   <>
                     <span className="text-tm-pos">↑ </span>

@@ -19,7 +19,7 @@
   margin: 0;
   padding: 14px 16px;
   position: fixed;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--tm-shadow-floating);
 }
 
 .driver-popover-title {

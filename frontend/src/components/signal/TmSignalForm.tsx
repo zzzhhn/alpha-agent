@@ -244,7 +244,7 @@ function LoadExampleMenu({
       </TmButton>
 
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 max-h-[360px] w-[320px] overflow-y-auto border border-tm-rule bg-tm-bg-2 shadow-lg">
+        <div className="absolute left-0 top-full z-20 mt-1 max-h-[360px] w-[320px] overflow-y-auto border border-tm-rule bg-tm-bg-2 shadow-[var(--tm-shadow-floating)]">
           {groups.map((g) => (
             <ExampleMenuSection
               key={g.tier}
