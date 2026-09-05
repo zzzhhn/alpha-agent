@@ -21,6 +21,7 @@ import {
   type MiningBriefing,
 } from "@/lib/api/factor-lab";
 import { TmScreen } from "@/components/tm/TmPane";
+import { AdminAccessNote } from "@/components/layout/SystemHealth";
 import EvolutionObservatory from "@/components/evolution/EvolutionObservatory";
 import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
@@ -127,6 +128,7 @@ export default async function EvolutionPage() {
 
   return (
     <TmScreen>
+      <AdminAccessNote />
       <EvolutionObservatory
         locale={locale}
         health={health}

@@ -11,7 +11,7 @@
     "audit:design-system": "node scripts/audit-design-system.mjs && node scripts/audit-route-design-language.mjs"
   },
   "dependencies": {
-    "@auth/pg-adapter": "^1.11.2",
+    "@auth/pg-adapter": "1.11.3",
     "@headlessui/react": "^2.2.10",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^5.2.2",
@@ -21,9 +21,9 @@
     "jose": "^6.2.3",
     "lightweight-charts": "^4.2.3",
     "lucide-react": "^1.14.0",
-    "next": "14.2.35",
-    "next-auth": "^5.0.0-beta.31",
-    "nodemailer": "^7.0.13",
+    "next": "15.5.25",
+    "next-auth": "5.0.0-beta.32",
+    "nodemailer": "10.0.0",
     "pg": "^8.20.0",
     "react": "^18",
     "react-dom": "^18",
@@ -42,10 +42,16 @@
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^8",
-    "eslint-config-next": "14.2.35",
-    "postcss": "^8",
+    "eslint-config-next": "15.5.25",
+    "postcss": "^8.5.23",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vitest": "^4.1.6"
+  },
+  "overrides": {
+    "@auth/core": { "nodemailer": "$nodemailer" },
+    "next-auth": { "nodemailer": "$nodemailer" },
+    "postcss": "$postcss",
+    "nanoid": "^3.3.18"
   }
 }

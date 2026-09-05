@@ -32,10 +32,8 @@ _initialized = False
 
 
 def _ensure_initialized(app: FastAPI) -> None:
-    global _initialized
-    if _initialized:
+    if getattr(app.state, "initialized", False):
         return
-    _initialized = True
     settings = get_settings()
     app.state.settings = settings
     app.state.cache = _cache
@@ -71,6 +69,7 @@ def _ensure_initialized(app: FastAPI) -> None:
         "AlphaCore init (lazy): provider=%s platform_llm=%s",
         settings.llm_provider, "ok" if app.state.llm else "absent (BYOK-only)",
     )
+    app.state.initialized = True
 
 
 async def _run_startup_healthcheck(app: FastAPI) -> None:

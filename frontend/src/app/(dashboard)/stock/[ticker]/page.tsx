@@ -23,10 +23,10 @@ import { notFound } from "next/navigation";
 export default async function StockPage({
   params,
 }: {
-  params: { ticker: string };
+  params: Promise<{ ticker: string }>;
 }) {
   try {
-    const ticker = params.ticker.toUpperCase();
+    const ticker = (await params).ticker.toUpperCase();
     // Six-month event window for the price chart. Computed once server-
     // side so the RSC fetch is deterministic and Next Data Cache can key
     // off these exact strings across visits.

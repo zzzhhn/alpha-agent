@@ -10,7 +10,7 @@ from __future__ import annotations
 import hmac
 import os
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 from alpha_agent.auth.jwt_verify import JwtError, verify_jwt
 
@@ -65,3 +65,15 @@ async def require_user(authorization: str | None = Header(default=None)) -> int:
         raise HTTPException(
             status_code=401, detail="token 'sub' claim is not a valid user_id"
         ) from e
+
+
+def is_admin(user_id: int) -> bool:
+    """Administrator identities are deployment configuration, never JWT claims."""
+    allowed = {s.strip() for s in os.getenv("ALPHACORE_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    return str(user_id) in allowed
+
+
+async def require_admin(user_id: int = Depends(require_user)) -> int:
+    if not is_admin(user_id):
+        raise HTTPException(403, "This operation requires the platform administrator")
+    return user_id

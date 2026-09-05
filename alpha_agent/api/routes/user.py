@@ -20,7 +20,7 @@ from alpha_agent.api.byok import (
 )
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.crypto_box import CryptoError, encrypt
-from alpha_agent.auth.dependencies import require_user
+from alpha_agent.auth.dependencies import is_admin, require_user
 from alpha_agent.llm.base import LLMClient, Message
 
 router = APIRouter(prefix="/api/user", tags=["user"])
@@ -31,6 +31,7 @@ class MeResponse(BaseModel):
     email: str
     created_at: str
     has_byok: bool
+    is_admin: bool = False
 
 
 class ByokSaveRequest(BaseModel):
@@ -82,6 +83,7 @@ async def get_me(user_id: int = Depends(require_user)) -> MeResponse:
         email=row["email"],
         created_at=row["created_at"].isoformat(),
         has_byok=bool(has_byok),
+        is_admin=is_admin(user_id),
     )
 
 
@@ -338,23 +340,26 @@ async def settings_rollback(
         )
     target = change["old_value"]
 
+    credential = await fetch_user_llm_credential(pool, user_id)
+    if credential is None:
+        raise HTTPException(404, "no LLM credential to restore")
+
     # Apply the rollback to the actual settings table. For now only
     # byok.* fields are rollback-safe; weight-override rollback wires in
     # at B9.1 when the weight UI ships.
     if field == "byok.provider":
-        await pool.execute(
-            "UPDATE user_byok SET provider = $1 WHERE user_id = $2",
-            target, user_id,
+        raise HTTPException(
+            400, "Provider changes require saving the matching API key in Settings",
         )
     elif field == "byok.model":
         await pool.execute(
-            "UPDATE user_byok SET model = $1 WHERE user_id = $2",
-            target, user_id,
+            "UPDATE user_byok SET model = $1 WHERE user_id = $2 AND provider = $3",
+            target, user_id, credential["provider"],
         )
     elif field == "byok.base_url":
         await pool.execute(
-            "UPDATE user_byok SET base_url = $1 WHERE user_id = $2",
-            target, user_id,
+            "UPDATE user_byok SET base_url = $1 WHERE user_id = $2 AND provider = $3",
+            target, user_id, credential["provider"],
         )
 
     # Journal the rollback as its own row (preserves append-only audit

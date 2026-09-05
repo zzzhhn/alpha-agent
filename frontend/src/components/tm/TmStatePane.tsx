@@ -135,7 +135,7 @@ export function TmStatePane({
         </p>
 
         {description !== undefined && description !== null && (
-          <p id={descriptionId} className="max-w-none text-xs leading-5 text-tm-muted lg:whitespace-nowrap">
+          <p id={descriptionId} className="max-w-full break-words text-xs leading-5 text-tm-muted">
             {description}
           </p>
         )}

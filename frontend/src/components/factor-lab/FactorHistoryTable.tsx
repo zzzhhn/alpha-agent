@@ -1,4 +1,5 @@
 "use client";
+import { useAdminAccess } from "@/components/layout/SystemHealth";
 
 import { useState } from "react";
 import { Clipboard, Check } from "lucide-react";
@@ -121,6 +122,7 @@ export function FactorHistoryTable({
   proposals: FactorProposal[];
 }) {
   const router = useRouter();
+  const isAdmin = useAdminAccess();
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
 
@@ -226,7 +228,7 @@ export function FactorHistoryTable({
                       <TmButton
                         variant="secondary"
                         size="xs"
-                        disabled={isRowPending}
+                        disabled={!isAdmin || isRowPending}
                         onClick={() => handleRollback(p.id)}
                         loading={isRowPending}
                         className="text-xs leading-[16px]"

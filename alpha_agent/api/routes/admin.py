@@ -24,7 +24,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from alpha_agent.auth.dependencies import require_user
+from alpha_agent.auth.dependencies import require_admin
 from alpha_agent.config_store import DEFAULTS, set_config
 
 from alpha_agent.api.dependencies import get_db_pool
@@ -80,7 +80,7 @@ async def _cooldown_active(job: str) -> tuple[bool, datetime | None]:
 @router.post("/refresh", response_model=RefreshResponse)
 async def trigger_refresh(
     body: RefreshRequest,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
 ) -> RefreshResponse:
     gh_token = os.environ.get("GH_PAT")
     if not gh_token:
@@ -214,7 +214,7 @@ async def get_config_knobs() -> dict:
 @router.post("/config")
 async def set_config_knob(
     body: ConfigSetRequest,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
 ) -> dict:
     """Upsert a single engine_config knob + journal the change.
 
@@ -228,7 +228,7 @@ async def set_config_knob(
 
 
 @router.get("/cache_stats")
-async def cache_stats_endpoint(user_id: int = Depends(require_user)) -> dict:
+async def cache_stats_endpoint(user_id: int = Depends(require_admin)) -> dict:
     """B3 (2026-05-19) LLM cache observability — per-user rows + bytes +
     last-write timestamp. Auth-gated so a public deploy never leaks
     other users' cache pressure to a probing endpoint. A purge knob is

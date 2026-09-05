@@ -112,6 +112,12 @@ async def record_research_run(
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # The existence check alone is not atomic under READ COMMITTED.
+            # Serialize publishers for this date/type until their transaction ends.
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                f"research_run:{run_meta.run_type}:{run_meta.scheduled_for_date}",
+            )
             if run_meta.status == "complete" and not allow_correction:
                 exists = await conn.fetchval(
                     """

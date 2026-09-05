@@ -33,6 +33,8 @@ def client_with_db(applied_db, monkeypatch):  # noqa: F811
     next test's create_app() starts clean.
     """
     monkeypatch.setenv("DATABASE_URL", applied_db)
+    # Test principal 1 is the configured administrator; production defaults deny.
+    monkeypatch.setenv("ALPHACORE_ADMIN_USER_IDS", "1")
 
     # Reset module-level singleton so this test's DSN is used.
     import alpha_agent.storage.postgres as _pg

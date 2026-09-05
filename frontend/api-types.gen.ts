@@ -3760,6 +3760,13 @@ export interface components {
             dimension_grades: {
                 [key: string]: string;
             };
+            /**
+             * Dimension Scores
+             * @default {}
+             */
+            dimension_scores: {
+                [key: string]: number | null;
+            };
             /** Gex Info */
             gex_info?: {
                 [key: string]: unknown;

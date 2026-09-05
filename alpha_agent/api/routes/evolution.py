@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from alpha_agent.api.dependencies import get_db_pool
-from alpha_agent.auth.dependencies import require_user
+from alpha_agent.auth.dependencies import require_admin
 from alpha_agent.config_store import set_config
 
 router = APIRouter(prefix="/api/evolution", tags=["evolution"])
@@ -83,7 +83,7 @@ async def ic_annotations(
 @router.post("/_compute_ic_annotations")
 async def compute_ic_annotations_endpoint(
     window_days: int = Query(30, ge=1, le=365),
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
 ) -> dict[str, Any]:
     """One-time/admin trigger to (re)compute IC change annotations from
     signal_ic_history. Idempotent. Cron wiring is a follow-up; for now this
@@ -194,12 +194,29 @@ async def changes(
         "ORDER BY changed_at DESC LIMIT $1",
         limit,
     )
+    contexts = [(r["id"], _signal_from_value(r["new_value"]), r["changed_at"]) for r in rows]
+    contexts = [c for c in contexts if c[1] is not None]
+    around = {}
+    if contexts:
+        metric_rows = await pool.fetch("""
+            SELECT c.id,
+                   avg(h.ic) FILTER (WHERE h.computed_at < c.at) AS before,
+                   avg(h.ic) FILTER (WHERE h.computed_at >= c.at) AS after
+            FROM unnest($1::bigint[], $2::text[], $3::timestamptz[]) AS c(id, signal, at)
+            LEFT JOIN signal_ic_history h ON h.signal_name=c.signal AND h.horizon_days=5
+              AND h.computed_at >= c.at - INTERVAL '7 days'
+              AND h.computed_at < c.at + INTERVAL '7 days'
+            GROUP BY c.id
+        """, [c[0] for c in contexts], [c[1] for c in contexts], [c[2] for c in contexts])
+        around = {r["id"]: r for r in metric_rows}
     out = []
     for r in rows:
         sig = _signal_from_value(r["new_value"])
         ic_before = ic_after = None
-        if sig:
-            ic_before, ic_after = await _signal_ic_around(pool, sig, r["changed_at"])
+        metrics = around.get(r["id"])
+        if metrics:
+            ic_before = float(metrics["before"]) if metrics["before"] is not None else None
+            ic_after = float(metrics["after"]) if metrics["after"] is not None else None
         out.append(
             {
                 "id": r["id"],
@@ -247,7 +264,7 @@ async def proposals() -> dict[str, Any]:
 @router.post("/proposals/{proposal_id}/approve")
 async def approve(
     proposal_id: int,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
 ) -> dict[str, Any]:
     """Apply the proposed knob change and mark the proposal approved."""
     pool = await get_db_pool()
@@ -269,7 +286,7 @@ async def approve(
 @router.post("/proposals/{proposal_id}/reject")
 async def reject(
     proposal_id: int,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
 ) -> dict[str, Any]:
     """Mark the proposal rejected without applying any config change."""
     pool = await get_db_pool()
@@ -288,7 +305,7 @@ async def reject(
 @router.post("/proposals/{proposal_id}/rollback")
 async def rollback(
     proposal_id: int,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
 ) -> dict[str, Any]:
     """Re-apply the old_value of an approved proposal, journaling a rollback row."""
     pool = await get_db_pool()

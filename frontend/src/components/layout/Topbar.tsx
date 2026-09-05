@@ -25,6 +25,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "./LocaleProvider";
 import { t, type Locale } from "@/lib/i18n";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import { SystemHealthIndicator } from "./SystemHealth";
 
 type Theme = "dark" | "light";
 
@@ -77,11 +78,7 @@ export function Topbar() {
           <span className="hidden sm:inline">ALPHACORE.WORKSTATION</span>
         </span>
         <span className="hidden items-center gap-1.5 text-tm-muted md:flex">
-          <span
-            className="h-1.5 w-1.5 animate-tm-pulse bg-tm-accent"
-            aria-hidden="true"
-          />
-          {t(locale, "brand.systemOnline" as Parameters<typeof t>[1])}
+          <SystemHealthIndicator />
         </span>
       </div>
 

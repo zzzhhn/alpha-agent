@@ -8,11 +8,15 @@ export function useStock(ticker: string) {
 
   useEffect(() => {
     let alive = true;
+    setCard(null);
+    setStale(false);
+    setError(null);
     fetchStock(ticker)
       .then((r) => {
         if (!alive) return;
         setCard(r.card);
         setStale(r.stale);
+        setError(null);
       })
       .catch((e: Error) => {
         if (alive) setError(e);

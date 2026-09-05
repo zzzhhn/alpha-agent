@@ -1,4 +1,5 @@
 "use client";
+import { useAdminAccess } from "@/components/layout/SystemHealth";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -61,6 +62,7 @@ export function PendingProposalsSection({
   liveExpression,
 }: PendingProposalsSectionProps) {
   const { locale } = useLocale();
+  const isAdmin = useAdminAccess();
   const { toast } = useToast();
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -212,7 +214,7 @@ export function PendingProposalsSection({
                   variant="primary"
                   size="xs"
                   onClick={() => handleApprove(p)}
-                  disabled={state !== "idle"}
+                  disabled={!isAdmin || state !== "idle"}
                   loading={state === "approving"}
                 >
                   <span>{t(locale, "factorLab.pending.approve")}</span>
@@ -221,7 +223,7 @@ export function PendingProposalsSection({
                   variant="danger"
                   size="xs"
                   onClick={() => handleReject(p)}
-                  disabled={state !== "idle"}
+                  disabled={!isAdmin || state !== "idle"}
                   loading={state === "rejecting"}
                 >
                   <span>{t(locale, "factorLab.pending.reject")}</span>

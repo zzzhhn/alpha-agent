@@ -18,6 +18,7 @@ import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
 import ConvictionBand from "./ConvictionBand";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 import {
   TmSubbar,
   TmSubbarKV,
@@ -54,6 +55,7 @@ export default function PicksBrowser({
   const [data, setData] = useState<PicksData>(initialData);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
   // SHORT (12d/60d, default — short-line/intraday-aligned) vs LONG (252d/126d,
   // academic). Hook handles SSR-safe hydration + cross-tab + same-tab storage
   // event broadcast so AttributionTable's pill on Stock detail flips here.
@@ -112,9 +114,11 @@ export default function PicksBrowser({
         );
         if (reqId !== reqIdRef.current) return;
         setData(next);
-      } catch {
-        // Keep the last good data on a transient failure; a hard failure is
-        // caught by the route-level error.tsx.
+        setRequestError(null);
+      } catch (error) {
+        if (reqId === reqIdRef.current) {
+          setRequestError(error instanceof Error ? error.message : String(error));
+        }
       } finally {
         if (reqId === reqIdRef.current) setLoading(false);
       }
@@ -129,14 +133,14 @@ export default function PicksBrowser({
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
-      if (factorMode === "long" || side !== "long") {
+      if (factorMode === "long" || side !== "long" || initialData.stale) {
         runSearch(search, factorMode, side);
       }
       return;
     }
     const id = setTimeout(() => runSearch(search, factorMode, side), 300);
     return () => clearTimeout(id);
-  }, [search, factorMode, side, runSearch]);
+  }, [search, factorMode, side, runSearch, initialData.stale]);
 
   const onModeToggle = useCallback(() => {
     setFactorMode(factorMode === "short" ? "long" : "short");
@@ -363,6 +367,15 @@ export default function PicksBrowser({
       </TmSubbar>
 
       <>
+        {requestError ? (
+          <TmStatePane
+            state="error"
+            title={locale === "zh" ? "请求未成功，下方保留上次结果" : "Request failed; showing the previous result"}
+            description={requestError}
+            action={{ label: t(locale, "common.retry"), onClick: () => { void runSearch(search, factorMode, side); }, loading }}
+            className="!min-h-0 !py-3"
+          />
+        ) : null}
         {!searching && data.changes ? (
           <section className="border-b border-tm-rule bg-tm-bg px-4 py-3" aria-labelledby="changes-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">

@@ -461,20 +461,6 @@ async def _load_market_context(pool, tickers: list[str]) -> dict[str, dict]:
         return {}
     rows = await pool.fetch(
         """
-        WITH ranked_prices AS (
-            SELECT ticker, date, close,
-                   row_number() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-            FROM daily_prices
-            WHERE ticker = ANY($1::text[])
-        ), price_context AS (
-            SELECT ticker,
-                   max(close) FILTER (WHERE rn = 1) AS latest_price,
-                   max(date) FILTER (WHERE rn = 1) AS price_date,
-                   max(close) FILTER (WHERE rn = 2) AS previous_price
-            FROM ranked_prices
-            WHERE rn <= 2
-            GROUP BY ticker
-        )
         SELECT requested.ticker,
                profiles.name AS company_name,
                profiles.name_zh AS company_name_zh,
@@ -482,22 +468,28 @@ async def _load_market_context(pool, tickers: list[str]) -> dict[str, dict]:
                prices.price_date,
                prices.previous_price
         FROM unnest($1::text[]) AS requested(ticker)
-        LEFT JOIN price_context prices USING (ticker)
+        LEFT JOIN LATERAL (
+            SELECT (array_agg(close ORDER BY date DESC))[1] AS latest_price,
+                   max(date) AS price_date,
+                   (array_agg(close ORDER BY date DESC))[2] AS previous_price
+            FROM (SELECT close, date FROM daily_prices
+                  WHERE ticker=requested.ticker ORDER BY date DESC LIMIT 2) recent
+        ) prices ON true
         LEFT JOIN company_profiles profiles USING (ticker)
         """,
         tickers,
     )
     result: dict[str, dict] = {}
     for row in rows:
-        latest = row["latest_price"]
-        previous = row["previous_price"]
+        latest = _safe_float(row["latest_price"], 0.0)
+        previous = _safe_float(row["previous_price"], 0.0)
         change = None
-        if latest is not None and previous not in (None, 0):
-            change = (float(latest) / float(previous) - 1.0) * 100.0
+        if latest > 0 and previous > 0:
+            change = (latest / previous - 1.0) * 100.0
         result[row["ticker"]] = {
             "company_name": row["company_name"],
             "company_name_zh": row["company_name_zh"],
-            "latest_price": float(latest) if latest is not None else None,
+            "latest_price": latest if latest > 0 else None,
             "price_date": row["price_date"].isoformat() if row["price_date"] else None,
             "daily_change_pct": change,
         }

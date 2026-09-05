@@ -39,6 +39,7 @@ Dimension -> signal mapping (read alongside fusion.weights.DEFAULT_WEIGHTS):
 from __future__ import annotations
 
 from collections import defaultdict
+from math import isfinite
 from statistics import mean, pstdev
 from typing import Mapping, Sequence
 
@@ -94,7 +95,8 @@ def _signal_z_map(
     for entry in breakdown:
         name = entry.get("signal")
         z = entry.get("z")
-        if isinstance(name, str) and isinstance(z, (int, float)):
+        if (isinstance(name, str) and isinstance(z, (int, float))
+                and not isinstance(z, bool) and isfinite(z) and not entry.get("error")):
             out[name] = float(z)
     return out
 
@@ -148,18 +150,35 @@ def grade_dimensions(
 ) -> dict[str, str]:
     """Grade one ticker against universe thresholds. NO_GRADE when the dimension
     is not gradeable universe-wide, or this ticker has no live member present."""
+    scores = score_dimensions(breakdown, thresholds)
+    return {
+        dim: NO_GRADE if score is None else _z_to_letter(score)
+        for dim, score in scores.items()
+    }
+
+
+def score_dimensions(
+    breakdown: Sequence[Mapping[str, object]],
+    thresholds: Mapping[str, DimensionStat | None],
+) -> dict[str, float | None]:
+    """Return the six comparable cross-sectional dimension z-scores.
+
+    The stock radar must use the same aggregation and universe normalization as
+    the letter-grade ribbon. ``None`` means the dimension is genuinely not
+    comparable for this ticker, rather than a neutral zero reading.
+    """
     m = _signal_z_map(breakdown)
-    out: dict[str, str] = {}
+    out: dict[str, float | None] = {}
     for dim in DIMENSION_GROUPS:
         th = thresholds.get(dim)
         if th is None:
-            out[dim] = NO_GRADE
+            out[dim] = None
             continue
         live, mu, sd = th
         present = [m[s] for s in live if s in m]
         if not present:
-            out[dim] = NO_GRADE
+            out[dim] = None
             continue
         v = sum(present) / len(present)
-        out[dim] = _z_to_letter((v - mu) / sd)
+        out[dim] = (v - mu) / sd
     return out

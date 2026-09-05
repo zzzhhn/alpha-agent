@@ -27,6 +27,7 @@
 import { type ReactNode } from "react";
 import { MobileNav, Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { SystemHealthProvider } from "@/components/layout/SystemHealth";
 import { LocaleProvider } from "@/components/layout/LocaleProvider";
 import VersionWatcher from "@/components/layout/VersionWatcher";
 import { ToastProvider, ToastViewport } from "@/components/ui/toast";
@@ -43,6 +44,7 @@ export default async function DashboardLayout({
   return (
     <ToastProvider>
       <LocaleProvider initialLocale={locale}>
+        <SystemHealthProvider>
         <div className="flex h-screen flex-col bg-tm-bg text-tm-fg">
           <Topbar />
           <MobileNav />
@@ -56,6 +58,7 @@ export default async function DashboardLayout({
           </div>
         </div>
         <VersionWatcher />
+        </SystemHealthProvider>
       </LocaleProvider>
       <ToastViewport />
     </ToastProvider>

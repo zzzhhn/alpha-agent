@@ -6,10 +6,9 @@ quota that blew first, with storage already at 460/500 MB). `minute_bars` has
 had a prune since the first incident; `daily_signals_fast` and `news_items`
 never did — they grow until the DB is full.
 
-DELETE never extends the data file, so every prune here is safe to run even at
-the size limit: it is the operation that frees space. Reclaiming the space back
-to the filesystem still needs a VACUUM FULL, which needs temp room — see the
-Aug-1 runbook in docs/runbooks/.
+DELETE creates dead tuples and WAL. Autovacuum makes that space reusable;
+it does not guarantee an immediate reduction in billed or physical storage.
+Keep headroom for maintenance instead of waiting until the disk is full.
 """
 from __future__ import annotations
 
@@ -54,6 +53,8 @@ async def prune_daily_signals(
     """
     if table not in ("daily_signals_fast", "daily_signals_slow"):
         raise ValueError(f"unexpected table {table!r}")  # never interpolate free text
+    if days < DAILY_SIGNALS_RETENTION_DAYS:
+        raise ValueError("Signal retention must preserve at least 30 days of raw evidence")
 
     materialized_through: Optional[object] = await pool.fetchval(
         "SELECT max(date) FROM consistency_outcomes"
@@ -64,7 +65,9 @@ async def prune_daily_signals(
     status = await pool.execute(
         f"DELETE FROM {table} "  # noqa: S608 — table is whitelisted above
         "WHERE date < (current_date - make_interval(days => $1))::date "
-        "  AND date <= $2",
+        "  AND date <= $2 "
+        f" AND EXISTS (SELECT 1 FROM consistency_outcomes c WHERE c.ticker={table}.ticker "
+        f" AND c.date={table}.date)",
         days,
         materialized_through,
     )

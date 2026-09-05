@@ -153,11 +153,11 @@ export default function StockCardLayout({
         <RichThesis key={card.ticker} ticker={card.ticker} />
         <section>
           <h2 className="text-lg font-semibold mb-3 text-tm-fg">{t(locale, "stock_layout.signal_attribution")}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            <div className="md:col-span-4">
+          <div className="grid grid-cols-1 2xl:grid-cols-12 gap-4">
+            <div className="2xl:col-span-5">
               <AttributionRadar card={card} />
             </div>
-            <div className="md:col-span-8 min-w-0">
+            <div className="2xl:col-span-7 min-w-0">
               <AttributionTable card={card} healthMap={healthMap} />
             </div>
           </div>

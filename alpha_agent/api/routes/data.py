@@ -19,7 +19,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
+from alpha_agent.api.cache_headers import set_public_cache
 from pydantic import BaseModel
 
 from alpha_agent.factor_engine.factor_backtest import (
@@ -255,7 +256,7 @@ def _attach_signatures(operators: list[dict]) -> list[dict]:
 
 
 @router.get("/sectors")
-def list_sectors() -> dict:
+def list_sectors(response: Response) -> dict:
     """Return the canonical list of sector strings present in the active panel.
 
     Used by:
@@ -269,6 +270,7 @@ def list_sectors() -> dict:
         raise HTTPException(503, f"factor_engine import failed: {exc}") from exc
 
     panel = _load_panel()
+    set_public_cache(response, s_maxage=300, swr=60)
     if panel.sector is None:
         return {"sectors": [], "panel_has_sector": False}
 

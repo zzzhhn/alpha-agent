@@ -56,8 +56,8 @@ async def test_never_prunes_past_the_materializer(applied_db):
         remaining = {
             r["date"] for r in await pool.fetch("SELECT date FROM daily_signals_fast")
         }
-        # 400d is older than the window AND materialized-through => gone.
-        assert date.today() - timedelta(days=400) not in remaining
+        # A global maximum does not prove this specific date was materialized.
+        assert date.today() - timedelta(days=400) in remaining
         # 300d is past the window but NOT materialized yet => kept.
         assert date.today() - timedelta(days=300) in remaining
         # 100d likewise un-materialized => kept.

@@ -37,6 +37,7 @@ const FE_VERSION = process.env.VERCEL ? hashFrontendSource() : "dev";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingRoot: process.cwd(),
   // Bake the frontend content hash into the client bundle so VersionWatcher can
   // compare the loaded version against the live one (/api/fe/version) and prompt
   // a refresh only when the FRONTEND actually shipped a new version.

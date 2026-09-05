@@ -28,7 +28,7 @@ from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.backtest.confidence_calibration import load_active_calibration
 from alpha_agent.fusion.attribution import top_drivers, top_drags
-from alpha_agent.fusion.grades import grade_dimensions
+from alpha_agent.fusion.grades import grade_dimensions, score_dimensions
 from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.llm.base import LLMClient, Message
 from alpha_agent.signals.yf_helpers import (
@@ -87,6 +87,10 @@ class FullCard(BaseModel):
     # Flow) each receive an A+ to F grade so the user reads SeekingAlpha-
     # style at-a-glance without monthly fundamental ingest.
     dimension_grades: dict[str, str] = {}
+    # Same six dimensions as dimension_grades, but as cross-sectionally
+    # standardized z-scores for the fixed-axis attribution radar. None means
+    # unavailable / not comparable, never a synthetic neutral zero.
+    dimension_scores: dict[str, float | None] = {}
 
 
 class StockResponse(BaseModel):
@@ -169,6 +173,7 @@ async def get_stock(
         tier_flip_today=sig.get("tier_flip_today", False),
         gex_info=sig.get("gex_info"),
         dimension_grades=grade_dimensions(sig["breakdown"], dim_thresholds),
+        dimension_scores=score_dimensions(sig["breakdown"], dim_thresholds),
     )
     return StockResponse(card=card, stale=stale)
 

@@ -24,7 +24,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
-from alpha_agent.auth.dependencies import require_user
+from alpha_agent.auth.dependencies import require_admin, require_user
 from alpha_agent.config_store import refresh_config, set_config
 from alpha_agent.core.factor_ast import refresh_allowed_ops
 from alpha_agent.evolution.correlation_gate import (
@@ -575,7 +575,7 @@ async def get_propose_job(
 
 @router.post("/_apply_migrations")
 async def post_apply_migrations(
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
 ) -> dict:
     """One-time admin trigger to apply pending DB migrations (V017+).
 
@@ -597,7 +597,7 @@ async def post_apply_migrations(
 async def post_live_expression(
     request: Request,
     body: dict = Body(default_factory=dict),
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
     pool=Depends(get_db_pool),
 ) -> dict:
     """Manually set the live factor expression (admin gate).
@@ -660,7 +660,7 @@ async def post_live_expression(
 
 @router.post("/_demo_seed")
 async def post_demo_seed(
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
     pool=Depends(get_db_pool),
 ) -> dict:
     """Insert 3 demo pending proposals so PendingProposalsSection has visible
@@ -844,7 +844,7 @@ async def list_proposals(
 @router.post("/proposals/{proposal_id}/approve")
 async def approve_proposal(
     proposal_id: int,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
     pool=Depends(get_db_pool),
 ) -> dict:
     """Approve a pending proposal:
@@ -895,7 +895,7 @@ async def approve_proposal(
 @router.post("/proposals/{proposal_id}/reject")
 async def reject_proposal(
     proposal_id: int,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
     pool=Depends(get_db_pool),
 ) -> dict:
     """Mark the proposal rejected. 404 on missing/decided rows (mirror the
@@ -912,7 +912,7 @@ async def reject_proposal(
 @router.post("/proposals/{proposal_id}/rollback")
 async def rollback_proposal(
     proposal_id: int,
-    user_id: int = Depends(require_user),
+    user_id: int = Depends(require_admin),
     pool=Depends(get_db_pool),
 ) -> dict:
     """Revert factor.custom_expression to its pre-approval value, sourced from
