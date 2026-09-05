@@ -1,0 +1,2709 @@
+{
+  "observed_at": "2026-09-05T09:57:26.849881+00:00",
+  "base": "https://alpha-api.bobbyzhong.com",
+  "api_routes": {
+    "/api/v1/system/health": [
+      "get"
+    ],
+    "/api/v1/system/config": [
+      "get"
+    ],
+    "/api/v1/services/health": [
+      "get"
+    ],
+    "/api/v1/pipelines/latency": [
+      "get"
+    ],
+    "/api/v1/metrics/throughput": [
+      "get"
+    ],
+    "/api/v1/market/state": [
+      "get"
+    ],
+    "/api/v1/market/indicators/{ticker}": [
+      "get"
+    ],
+    "/api/v1/inference/predict": [
+      "get"
+    ],
+    "/api/v1/inference/models": [
+      "get"
+    ],
+    "/api/v1/features/state": [
+      "get"
+    ],
+    "/api/v1/features/stats/{ticker}": [
+      "get"
+    ],
+    "/api/v1/alpha/signals": [
+      "get"
+    ],
+    "/api/v1/alpha/factors": [
+      "get"
+    ],
+    "/api/v1/alpha/factors/summary": [
+      "get"
+    ],
+    "/api/v1/portfolio/positions": [
+      "get"
+    ],
+    "/api/v1/portfolio/risk": [
+      "get"
+    ],
+    "/api/v1/gateway/status": [
+      "get"
+    ],
+    "/api/v1/gateway/rules": [
+      "get"
+    ],
+    "/api/v1/dashboard/summary": [
+      "get"
+    ],
+    "/api/dashboard": [
+      "get"
+    ],
+    "/api/v1/data/quality/{ticker}": [
+      "get"
+    ],
+    "/api/system": [
+      "get"
+    ],
+    "/api/v1/alpha/translate": [
+      "post"
+    ],
+    "/api/v1/factor/explain_ast": [
+      "post"
+    ],
+    "/api/v1/factor/backtest": [
+      "post"
+    ],
+    "/api/v1/factors/library": [
+      "get"
+    ],
+    "/api/v1/factor/backtest/export": [
+      "post"
+    ],
+    "/api/v1/data/universe": [
+      "get"
+    ],
+    "/api/v1/data/operands": [
+      "get"
+    ],
+    "/api/v1/data/sectors": [
+      "get"
+    ],
+    "/api/v1/data/coverage": [
+      "get"
+    ],
+    "/api/v1/signal/today": [
+      "post"
+    ],
+    "/api/v1/signal/ic_timeseries": [
+      "post"
+    ],
+    "/api/v1/signal/exposure": [
+      "post"
+    ],
+    "/api/v1/screener/run": [
+      "post"
+    ],
+    "/api/v1/zoo/correlation": [
+      "post"
+    ],
+    "/api/picks/lean": [
+      "get"
+    ],
+    "/api/picks/scoreboard": [
+      "get"
+    ],
+    "/api/picks/edge": [
+      "get"
+    ],
+    "/api/stock/{ticker}": [
+      "get"
+    ],
+    "/api/stock/{ticker}/events": [
+      "get"
+    ],
+    "/api/stock/{ticker}/explain_range": [
+      "post"
+    ],
+    "/api/stock/{ticker}/persona/{persona_name}/explain": [
+      "post"
+    ],
+    "/api/stock/{ticker}/persona/{persona_name}/explain/stream": [
+      "post"
+    ],
+    "/api/stock/{ticker}/news-day-summary/stream": [
+      "post"
+    ],
+    "/api/stock/personas": [
+      "get"
+    ],
+    "/api/stock/{ticker}/ohlcv": [
+      "get"
+    ],
+    "/api/stock/{ticker}/profile": [
+      "get"
+    ],
+    "/api/stock/{ticker}/minute_bars": [
+      "get"
+    ],
+    "/api/brief/{ticker}": [
+      "post"
+    ],
+    "/api/brief/{ticker}/stream": [
+      "post"
+    ],
+    "/api/watchlist": [
+      "get",
+      "post"
+    ],
+    "/api/_health": [
+      "get"
+    ],
+    "/api/_health/signals": [
+      "get"
+    ],
+    "/api/_health/dag": [
+      "get"
+    ],
+    "/api/_health/cron": [
+      "get"
+    ],
+    "/api/_health/routers": [
+      "get"
+    ],
+    "/api/_health/news_freshness": [
+      "get"
+    ],
+    "/api/_health/data_sources": [
+      "get"
+    ],
+    "/api/cron/auth_check": [
+      "get"
+    ],
+    "/api/cron/slow_daily": [
+      "get",
+      "post"
+    ],
+    "/api/cron/fast_intraday": [
+      "get",
+      "post"
+    ],
+    "/api/cron/publish_recommendation": [
+      "get",
+      "post"
+    ],
+    "/api/cron/alert_dispatcher": [
+      "get",
+      "post"
+    ],
+    "/api/cron/l2_cycle": [
+      "get",
+      "post"
+    ],
+    "/api/cron/news_per_ticker": [
+      "get",
+      "post"
+    ],
+    "/api/cron/news_macro": [
+      "get",
+      "post"
+    ],
+    "/api/cron/minute_bars": [
+      "get",
+      "post"
+    ],
+    "/api/cron/paper_fill": [
+      "get",
+      "post"
+    ],
+    "/api/cron/daily_prices": [
+      "get",
+      "post"
+    ],
+    "/api/cron/methodology_proposer": [
+      "get",
+      "post"
+    ],
+    "/api/cron/run_propose_jobs": [
+      "get",
+      "post"
+    ],
+    "/api/cron/daily_factor_loop": [
+      "get",
+      "post"
+    ],
+    "/api/cron/compute_ic_annotations": [
+      "get",
+      "post"
+    ],
+    "/api/admin/refresh": [
+      "post"
+    ],
+    "/api/admin/last_refresh": [
+      "get"
+    ],
+    "/api/admin/config": [
+      "get",
+      "post"
+    ],
+    "/api/admin/cache_stats": [
+      "get"
+    ],
+    "/api/alerts/recent": [
+      "get"
+    ],
+    "/api/alerts/inbox": [
+      "get"
+    ],
+    "/api/alerts/{alert_id}/state": [
+      "post"
+    ],
+    "/api/user/me": [
+      "get"
+    ],
+    "/api/user/byok": [
+      "post",
+      "get",
+      "delete"
+    ],
+    "/api/user/byok/test": [
+      "post"
+    ],
+    "/api/user/account/delete": [
+      "post"
+    ],
+    "/api/user/account/export": [
+      "get"
+    ],
+    "/api/user/settings/history": [
+      "get"
+    ],
+    "/api/user/settings/rollback/{change_id}": [
+      "post"
+    ],
+    "/api/macro_context": [
+      "get"
+    ],
+    "/api/news/enrich/{ticker}": [
+      "post"
+    ],
+    "/api/news/enrich/{ticker}/stream": [
+      "post"
+    ],
+    "/api/cron/ic_backtest_monthly": [
+      "post"
+    ],
+    "/api/evolution/ic_trend": [
+      "get"
+    ],
+    "/api/evolution/ic_annotations": [
+      "get"
+    ],
+    "/api/evolution/_compute_ic_annotations": [
+      "post"
+    ],
+    "/api/evolution/weights": [
+      "get"
+    ],
+    "/api/evolution/calibration": [
+      "get"
+    ],
+    "/api/evolution/changes": [
+      "get"
+    ],
+    "/api/evolution/proposals": [
+      "get"
+    ],
+    "/api/evolution/proposals/{proposal_id}/approve": [
+      "post"
+    ],
+    "/api/evolution/proposals/{proposal_id}/reject": [
+      "post"
+    ],
+    "/api/evolution/proposals/{proposal_id}/rollback": [
+      "post"
+    ],
+    "/api/factor-lab/diagnostic": [
+      "get"
+    ],
+    "/api/factor-lab/lessons": [
+      "get"
+    ],
+    "/api/factor-lab/briefing": [
+      "get"
+    ],
+    "/api/factor-lab/propose": [
+      "post"
+    ],
+    "/api/factor-lab/jobs/{job_id}": [
+      "get"
+    ],
+    "/api/factor-lab/_apply_migrations": [
+      "post"
+    ],
+    "/api/factor-lab/live-expression": [
+      "post"
+    ],
+    "/api/factor-lab/_demo_seed": [
+      "post"
+    ],
+    "/api/factor-lab/proposals": [
+      "get"
+    ],
+    "/api/factor-lab/proposals/{proposal_id}/approve": [
+      "post"
+    ],
+    "/api/factor-lab/proposals/{proposal_id}/reject": [
+      "post"
+    ],
+    "/api/factor-lab/proposals/{proposal_id}/rollback": [
+      "post"
+    ],
+    "/api/brain/credentials": [
+      "get",
+      "post"
+    ],
+    "/api/brain/credentials/test": [
+      "post"
+    ],
+    "/api/brain/mine": [
+      "post"
+    ],
+    "/api/brain/runs": [
+      "get"
+    ],
+    "/api/brain/runs/{run_id}/candidates": [
+      "get"
+    ],
+    "/api/brain/mine/status": [
+      "get"
+    ],
+    "/api/brain/alphas": [
+      "get"
+    ],
+    "/api/brain/alphas/{row_id}/pnl": [
+      "get"
+    ],
+    "/api/brain/alphas/{row_id}/yearly": [
+      "get"
+    ],
+    "/api/brain/alphas/{row_id}/submit": [
+      "post"
+    ],
+    "/api/paper/account": [
+      "get"
+    ],
+    "/api/paper/order": [
+      "post"
+    ],
+    "/api/paper/orders": [
+      "get"
+    ],
+    "/api/paper/order/{order_id}": [
+      "delete"
+    ],
+    "/api/paper/equity-curve": [
+      "get"
+    ],
+    "/api/paper/reset": [
+      "post"
+    ],
+    "/api/paper/attribution": [
+      "get"
+    ],
+    "/api/l2/summary": [
+      "get"
+    ],
+    "/api/health": [
+      "get"
+    ],
+    "/api/healthz/ast": [
+      "get"
+    ],
+    "/api/healthz/sandbox": [
+      "get"
+    ],
+    "/api/_debug/load-errors": [
+      "get"
+    ],
+    "/api/_debug/routes": [
+      "get"
+    ]
+  },
+  "http": [
+    {
+      "path": "/api/_health",
+      "status": 200,
+      "seconds": 0.464,
+      "bytes": 168,
+      "keys": [
+        "tunnel",
+        "db",
+        "last_slow_cron",
+        "last_fast_cron",
+        "last_dispatcher",
+        "db_error"
+      ],
+      "health": {
+        "tunnel": "ok",
+        "db": "ok",
+        "last_slow_cron": "2026-09-04T17:11:12.295722+00:00",
+        "last_fast_cron": "2026-09-05T00:39:42.366354+00:00",
+        "last_dispatcher": null,
+        "db_error": null
+      }
+    },
+    {
+      "path": "/api/_health/routers",
+      "status": 200,
+      "seconds": 0.822,
+      "bytes": 1206,
+      "keys": [
+        "total",
+        "loaded",
+        "failed",
+        "routers"
+      ],
+      "health": {
+        "total": 25,
+        "loaded": 25,
+        "failed": 0,
+        "routers": [
+          {
+            "name": "serverless",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "system",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "interactive",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "data",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "signal",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "screener",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "zoo",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "picks",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "basket_edge",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "stock",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "brief",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "watchlist",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "m2_health",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "cron_routes",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "admin",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "alerts",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "user",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "macro_context",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "news_enrich",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "ic_backtest",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "evolution",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "factor_lab",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "brain",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "paper",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "l2",
+            "loaded": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/_health/signals",
+      "status": 200,
+      "seconds": 0.711,
+      "bytes": 3905,
+      "keys": [
+        "signals"
+      ],
+      "health": {
+        "signals": [
+          {
+            "name": "factor",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": -0.02177,
+            "live_ic_60d": -0.02177,
+            "live_ic_90d": -0.02177,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.38782533962767474,
+            "ir_30d": -1.1240246216527015,
+            "n_obs_30d": 81
+          },
+          {
+            "name": "technicals",
+            "last_success": "2026-09-04T21:38:54.322948+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.05399,
+            "live_ic_60d": 0.05399,
+            "live_ic_90d": 0.05399,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.9068714568155437,
+            "ir_30d": -2.628363188215942,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "rsrs",
+            "last_success": "2026-09-04T21:38:54.322948+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.0224,
+            "live_ic_60d": 0.0224,
+            "live_ic_90d": 0.0224,
+            "weight_current": 0.0075,
+            "tier": "green",
+            "icir_30d": 0.3327972516899253,
+            "ir_30d": 0.9645380708670275,
+            "n_obs_30d": 46
+          },
+          {
+            "name": "analyst",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": -0.03392,
+            "live_ic_60d": -0.03392,
+            "live_ic_90d": -0.03392,
+            "weight_current": 0.2017,
+            "tier": "unknown",
+            "icir_30d": 0.8504784159036943,
+            "ir_30d": 2.4649206278725653,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "earnings",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.05584,
+            "live_ic_60d": 0.05584,
+            "live_ic_90d": 0.05584,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": 0.17305266897282995,
+            "ir_30d": 0.5015542846037773,
+            "n_obs_30d": 73
+          },
+          {
+            "name": "news",
+            "last_success": "2026-09-05T00:41:39.391956+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.00329,
+            "live_ic_60d": 0.00329,
+            "live_ic_90d": 0.00329,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.7872882254142058,
+            "ir_30d": -2.2817780564632346,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "insider",
+            "last_success": "2026-09-05T00:41:39.391956+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.02572,
+            "live_ic_60d": 0.02572,
+            "live_ic_90d": 0.02572,
+            "weight_current": 0.0691,
+            "tier": "green",
+            "icir_30d": 0.4874175833339899,
+            "ir_30d": 1.4126703665620068,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "options",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01371,
+            "live_ic_60d": 0.01371,
+            "live_ic_90d": 0.01371,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.9500576631828963,
+            "ir_30d": -2.7535287055575406,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "premarket",
+            "last_success": null,
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0691,
+            "tier": "yellow",
+            "icir_30d": 0.2364723384687548,
+            "ir_30d": 0.6853619493606303,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "macro",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0691,
+            "tier": "yellow",
+            "icir_30d": 0.2364723384687548,
+            "ir_30d": 0.6853619493606303,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "calendar",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0691,
+            "tier": "yellow",
+            "icir_30d": 0.2364723384687548,
+            "ir_30d": 0.6853619493606303,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "political_impact",
+            "last_success": null,
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": 0.08294852074276404,
+            "ir_30d": 0.24040765292450064,
+            "n_obs_30d": 72
+          },
+          {
+            "name": "geopolitical_impact",
+            "last_success": null,
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": null,
+            "live_ic_60d": null,
+            "live_ic_90d": null,
+            "weight_current": null,
+            "tier": "insufficient_data",
+            "icir_30d": null,
+            "ir_30d": null,
+            "n_obs_30d": 0
+          },
+          {
+            "name": "supply_chain",
+            "last_success": "2026-09-05T00:35:56.643421+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": -0.08435,
+            "live_ic_60d": -0.08435,
+            "live_ic_90d": -0.08435,
+            "weight_current": 0.0075,
+            "tier": "unknown",
+            "icir_30d": -0.8383627959388339,
+            "ir_30d": -2.4298062251876758,
+            "n_obs_30d": 48
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/_health/cron",
+      "status": 200,
+      "seconds": 0.458,
+      "bytes": 1316,
+      "keys": [
+        "cron"
+      ],
+      "health": {
+        "cron": {
+          "slow_daily": [
+            {
+              "started_at": "2026-09-04T17:11:12.295722+00:00",
+              "finished_at": "2026-09-04T17:12:38.257255+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-04T17:09:12.930299+00:00",
+              "finished_at": "2026-09-04T17:10:41.998069+00:00",
+              "ok": false,
+              "error_count": 2
+            },
+            {
+              "started_at": "2026-09-04T17:07:11.658352+00:00",
+              "finished_at": "2026-09-04T17:08:42.589229+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-04T17:05:07.453043+00:00",
+              "finished_at": "2026-09-04T17:06:41.376709+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-04T17:03:05.788659+00:00",
+              "finished_at": "2026-09-04T17:04:37.088229+00:00",
+              "ok": true,
+              "error_count": 0
+            }
+          ],
+          "fast_intraday": [
+            {
+              "started_at": "2026-09-05T00:39:42.366354+00:00",
+              "finished_at": "2026-09-05T00:41:39.899354+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:37:18.673405+00:00",
+              "finished_at": "2026-09-05T00:39:12.049608+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:34:52.355432+00:00",
+              "finished_at": "2026-09-05T00:36:48.268074+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:32:25.140263+00:00",
+              "finished_at": "2026-09-05T00:34:22.067391+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:29:57.196426+00:00",
+              "finished_at": "2026-09-05T00:31:54.707381+00:00",
+              "ok": true,
+              "error_count": 0
+            }
+          ],
+          "alert_dispatcher": []
+        }
+      }
+    },
+    {
+      "path": "/api/_health/dag",
+      "status": 200,
+      "seconds": 0.45,
+      "bytes": 1205,
+      "keys": [
+        "overall",
+        "nodes"
+      ],
+      "health": {
+        "overall": "degraded",
+        "nodes": [
+          {
+            "name": "daily_prices",
+            "status": "healthy",
+            "last_observed_at": "2026-09-04T23:35:43.969015+00:00",
+            "age_hours": 10.36,
+            "expected_within_hours": 30,
+            "error_count": 0,
+            "observed_runs": 8,
+            "required_runs": 8
+          },
+          {
+            "name": "fast_intraday",
+            "status": "healthy",
+            "last_observed_at": "2026-09-05T00:41:39.899354+00:00",
+            "age_hours": 9.26,
+            "expected_within_hours": 30,
+            "error_count": 0,
+            "observed_runs": 6,
+            "required_runs": 6
+          },
+          {
+            "name": "recommendation_publish",
+            "status": "stale",
+            "last_observed_at": "2026-09-04T00:44:28.627109+00:00",
+            "age_hours": 33.22,
+            "expected_within_hours": 30,
+            "error_count": 0,
+            "observed_runs": 1,
+            "required_runs": 1
+          },
+          {
+            "name": "l2_cycle",
+            "status": "healthy",
+            "last_observed_at": "2026-09-05T01:25:06.807759+00:00",
+            "age_hours": 8.54,
+            "expected_within_hours": 48,
+            "error_count": 0,
+            "observed_runs": 2,
+            "required_runs": 1
+          },
+          {
+            "name": "paper_fill",
+            "status": "healthy",
+            "last_observed_at": "2026-09-05T01:00:32.112844+00:00",
+            "age_hours": 8.95,
+            "expected_within_hours": 48,
+            "error_count": 0,
+            "observed_runs": 2,
+            "required_runs": 1
+          },
+          {
+            "name": "ic_backtest_monthly",
+            "status": "healthy",
+            "last_observed_at": "2026-09-04T23:36:06.022288+00:00",
+            "age_hours": 10.36,
+            "expected_within_hours": 840,
+            "error_count": 0,
+            "observed_runs": 27,
+            "required_runs": 1
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/_health/data_sources",
+      "status": 200,
+      "seconds": 0.567,
+      "bytes": 327,
+      "keys": [
+        "sources"
+      ],
+      "health": {
+        "sources": {
+          "finnhub": {
+            "rows": 549,
+            "last_fetched_at": "2026-09-04T15:12:07.708907+00:00"
+          },
+          "edgar": {
+            "rows": 534,
+            "last_fetched_at": "2026-09-04T15:19:39.635978+00:00"
+          },
+          "news": {
+            "rows": 13374,
+            "last_fetched_at": "2026-09-04T21:04:58.443494+00:00"
+          },
+          "yfinance": {
+            "rows": 442,
+            "last_fetched_at": "2026-09-05T00:41:39.890963+00:00"
+          },
+          "fred": null
+        }
+      }
+    },
+    {
+      "path": "/api/picks/lean?limit=5",
+      "status": 200,
+      "seconds": 1.042,
+      "bytes": 7475,
+      "keys": [
+        "picks",
+        "as_of",
+        "stale",
+        "canonical",
+        "ranked",
+        "tradable",
+        "run",
+        "changes"
+      ]
+    },
+    {
+      "path": "/api/stock/NVDA",
+      "status": 200,
+      "seconds": 0.197,
+      "bytes": 15359,
+      "keys": [
+        "card",
+        "stale"
+      ],
+      "signals": [
+        "factor",
+        "technicals",
+        "rsrs",
+        "analyst",
+        "earnings",
+        "news",
+        "insider",
+        "options",
+        "premarket",
+        "macro",
+        "calendar",
+        "political_impact",
+        "geopolitical_impact",
+        "supply_chain"
+      ],
+      "partial": false
+    },
+    {
+      "path": "/api/stock/AAPL",
+      "status": 200,
+      "seconds": 18.69,
+      "bytes": 15289,
+      "keys": [
+        "card",
+        "stale"
+      ],
+      "signals": [
+        "factor",
+        "technicals",
+        "rsrs",
+        "analyst",
+        "earnings",
+        "news",
+        "insider",
+        "options",
+        "premarket",
+        "macro",
+        "calendar",
+        "political_impact",
+        "geopolitical_impact",
+        "supply_chain"
+      ],
+      "partial": false
+    },
+    {
+      "path": "/api/evolution/ic_trend",
+      "status": 200,
+      "seconds": 0.455,
+      "bytes": 22453,
+      "keys": [
+        "window_days",
+        "horizon_days",
+        "series"
+      ]
+    },
+    {
+      "path": "/api/evolution/weights",
+      "status": 200,
+      "seconds": 0.447,
+      "bytes": 11719,
+      "keys": [
+        "weights"
+      ]
+    },
+    {
+      "path": "/api/evolution/changes?limit=5",
+      "status": 200,
+      "seconds": 0.475,
+      "bytes": 1380,
+      "keys": [
+        "changes"
+      ]
+    },
+    {
+      "path": "/api/evolution/proposals",
+      "status": 200,
+      "seconds": 0.563,
+      "bytes": 16,
+      "keys": [
+        "proposals"
+      ]
+    },
+    {
+      "path": "/api/alerts/recent?limit=5",
+      "status": 200,
+      "seconds": 0.599,
+      "bytes": 735,
+      "keys": [
+        "alerts"
+      ]
+    },
+    {
+      "path": "/api/brain/runs?limit=5",
+      "status": 401,
+      "seconds": 0.573,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/v1/data/operands",
+      "status": 200,
+      "seconds": 0.465,
+      "bytes": 45306,
+      "keys": [
+        "operators",
+        "operands",
+        "tier_summary"
+      ]
+    },
+    {
+      "path": "/api/v1/data/sectors",
+      "status": 200,
+      "seconds": 4.322,
+      "bytes": 229,
+      "keys": [
+        "sectors",
+        "panel_has_sector"
+      ]
+    },
+    {
+      "path": "/api/v1/data/universe",
+      "status": 200,
+      "seconds": 0.455,
+      "bytes": 12796,
+      "keys": [
+        "universes"
+      ]
+    },
+    {
+      "path": "/api/v1/data/coverage",
+      "status": 200,
+      "seconds": 0.474,
+      "bytes": 29627,
+      "keys": [
+        "universe_id",
+        "n_tickers",
+        "n_days",
+        "start_date",
+        "end_date",
+        "ohlcv_total_cells",
+        "ohlcv_missing_cells",
+        "ohlcv_coverage_pct",
+        "field_coverage",
+        "ticker_coverage"
+      ]
+    },
+    {
+      "path": "/api/v1/factors/library",
+      "status": 200,
+      "seconds": 0.444,
+      "bytes": 6907,
+      "keys": [
+        "horizon_max",
+        "category",
+        "count",
+        "seeds"
+      ]
+    },
+    {
+      "path": "/api/l2/summary",
+      "status": 200,
+      "seconds": 0.559,
+      "bytes": 2920,
+      "keys": [
+        "status",
+        "strategy_id",
+        "strategy_name",
+        "strategy_version",
+        "periods",
+        "net_return",
+        "spy_return",
+        "rsp_return",
+        "beta_spy",
+        "max_drawdown",
+        "mean_turnover",
+        "cost_sensitivity",
+        "exceptions",
+        "latest_signal_date",
+        "latest_positions",
+        "series",
+        "sector_exposure",
+        "continuous_account",
+        "strategic_continuous_account"
+      ]
+    },
+    {
+      "path": "/api/user/me",
+      "status": 401,
+      "seconds": 0.438,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/paper/account",
+      "status": 401,
+      "seconds": 0.54,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/alerts/inbox",
+      "status": 401,
+      "seconds": 0.456,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/factor-lab/briefing",
+      "status": 200,
+      "seconds": 0.532,
+      "bytes": 8252,
+      "keys": [
+        "validated",
+        "flagged",
+        "failure_insights"
+      ]
+    },
+    {
+      "path": "/api/evolution/calibration",
+      "status": 200,
+      "seconds": 0.82,
+      "bytes": 105630,
+      "keys": [
+        "as_of",
+        "n_pairs",
+        "applied",
+        "isotonic_map",
+        "buckets"
+      ]
+    }
+  ],
+  "database": {
+    "size": {
+      "seconds": 0.62,
+      "rows": [
+        {
+          "database_bytes": 260726784
+        }
+      ]
+    },
+    "tables": {
+      "seconds": 1.202,
+      "rows": [
+        {
+          "relname": "daily_signals_slow",
+          "n_live_tup": 52871,
+          "n_dead_tup": 837,
+          "seq_scan": 11120,
+          "idx_scan": 206988,
+          "total_bytes": 76677120,
+          "heap_bytes": 74809344,
+          "index_bytes": 1810432,
+          "last_autovacuum": "2026-08-30 13:33:59.434232+00:00",
+          "last_autoanalyze": "2026-08-28 23:11:04.452995+00:00"
+        },
+        {
+          "relname": "daily_signals_fast",
+          "n_live_tup": 5529,
+          "n_dead_tup": 399,
+          "seq_scan": 9877,
+          "idx_scan": 606361,
+          "total_bytes": 37437440,
+          "heap_bytes": 2269184,
+          "index_bytes": 327680,
+          "last_autovacuum": "2026-09-04 00:44:45.968432+00:00",
+          "last_autoanalyze": "2026-09-05 00:39:16.760973+00:00"
+        },
+        {
+          "relname": "news_items",
+          "n_live_tup": 13374,
+          "n_dead_tup": 2256,
+          "seq_scan": 191,
+          "idx_scan": 355663,
+          "total_bytes": 36929536,
+          "heap_bytes": 28827648,
+          "index_bytes": 7962624,
+          "last_autovacuum": "2026-09-01 21:27:24.708268+00:00",
+          "last_autoanalyze": "2026-09-04 20:47:02.462034+00:00"
+        },
+        {
+          "relname": "minute_bars",
+          "n_live_tup": 178103,
+          "n_dead_tup": 0,
+          "seq_scan": 645,
+          "idx_scan": 126770801,
+          "total_bytes": 36028416,
+          "heap_bytes": 24346624,
+          "index_bytes": 11640832,
+          "last_autovacuum": "2026-09-04 20:48:00.802217+00:00",
+          "last_autoanalyze": "2026-09-04 20:48:00.939927+00:00"
+        },
+        {
+          "relname": "rating_snapshot",
+          "n_live_tup": 30089,
+          "n_dead_tup": 163,
+          "seq_scan": 5,
+          "idx_scan": 891,
+          "total_bytes": 34029568,
+          "heap_bytes": 30392320,
+          "index_bytes": 3596288,
+          "last_autovacuum": "2026-08-25 23:32:05.027267+00:00",
+          "last_autoanalyze": "2026-09-04 00:44:47.007164+00:00"
+        },
+        {
+          "relname": "daily_prices",
+          "n_live_tup": 72077,
+          "n_dead_tup": 10768,
+          "seq_scan": 4784,
+          "idx_scan": 352614,
+          "total_bytes": 6496256,
+          "heap_bytes": 4055040,
+          "index_bytes": 2400256,
+          "last_autovacuum": "2026-08-04 22:52:43.860074+00:00",
+          "last_autoanalyze": "2026-09-02 23:42:25.000180+00:00"
+        },
+        {
+          "relname": "macro_events",
+          "n_live_tup": 2277,
+          "n_dead_tup": 0,
+          "seq_scan": 3107,
+          "idx_scan": 182836,
+          "total_bytes": 4743168,
+          "heap_bytes": 2809856,
+          "index_bytes": 573440,
+          "last_autovacuum": "2026-07-05 16:43:05.228261+00:00",
+          "last_autoanalyze": "2026-09-02 07:01:06.633168+00:00"
+        },
+        {
+          "relname": "alert_queue",
+          "n_live_tup": 12232,
+          "n_dead_tup": 0,
+          "seq_scan": 60,
+          "idx_scan": 20319,
+          "total_bytes": 3694592,
+          "heap_bytes": 2072576,
+          "index_bytes": 1581056,
+          "last_autovacuum": "2026-07-17 19:03:26.986381+00:00",
+          "last_autoanalyze": "2026-08-28 06:27:42.538090+00:00"
+        },
+        {
+          "relname": "cron_runs",
+          "n_live_tup": 11254,
+          "n_dead_tup": 0,
+          "seq_scan": 1131,
+          "idx_scan": 2180,
+          "total_bytes": 2940928,
+          "heap_bytes": 1826816,
+          "index_bytes": 1073152,
+          "last_autovacuum": "2026-07-23 18:52:53.291036+00:00",
+          "last_autoanalyze": "2026-09-04 15:53:51.533902+00:00"
+        },
+        {
+          "relname": "brain_alphas",
+          "n_live_tup": 1232,
+          "n_dead_tup": 191,
+          "seq_scan": 3406,
+          "idx_scan": 3612,
+          "total_bytes": 2007040,
+          "heap_bytes": 1392640,
+          "index_bytes": 507904,
+          "last_autovacuum": "2026-08-26 09:37:28.795127+00:00",
+          "last_autoanalyze": "2026-09-03 13:15:34.598606+00:00"
+        },
+        {
+          "relname": "company_profiles",
+          "n_live_tup": 537,
+          "n_dead_tup": 89,
+          "seq_scan": 292,
+          "idx_scan": 3198,
+          "total_bytes": 1622016,
+          "heap_bytes": 974848,
+          "index_bytes": 40960,
+          "last_autovacuum": "2026-05-31 16:14:13.354622+00:00",
+          "last_autoanalyze": "2026-05-31 17:28:16.529154+00:00"
+        },
+        {
+          "relname": "confidence_calibration",
+          "n_live_tup": 75,
+          "n_dead_tup": 0,
+          "seq_scan": 2,
+          "idx_scan": 1964,
+          "total_bytes": 1556480,
+          "heap_bytes": 106496,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": "2026-08-04 22:56:43.916232+00:00"
+        },
+        {
+          "relname": "consistency_outcomes",
+          "n_live_tup": 14367,
+          "n_dead_tup": 0,
+          "seq_scan": 329,
+          "idx_scan": 340544,
+          "total_bytes": 1523712,
+          "heap_bytes": 802816,
+          "index_bytes": 679936,
+          "last_autovacuum": "2026-09-04 23:36:32.871552+00:00",
+          "last_autoanalyze": "2026-09-04 23:36:32.883716+00:00"
+        },
+        {
+          "relname": "brain_run_candidates",
+          "n_live_tup": 412,
+          "n_dead_tup": 120,
+          "seq_scan": 43,
+          "idx_scan": 1011,
+          "total_bytes": 1245184,
+          "heap_bytes": 778240,
+          "index_bytes": 270336,
+          "last_autovacuum": "2026-08-30 13:43:57.356432+00:00",
+          "last_autoanalyze": "2026-09-03 12:42:59.209460+00:00"
+        },
+        {
+          "relname": "signal_ic_history",
+          "n_live_tup": 3686,
+          "n_dead_tup": 0,
+          "seq_scan": 9359,
+          "idx_scan": 13281,
+          "total_bytes": 663552,
+          "heap_bytes": 270336,
+          "index_bytes": 352256,
+          "last_autovacuum": "2026-08-14 22:15:35.105182+00:00",
+          "last_autoanalyze": "2026-09-01 08:57:25.128124+00:00"
+        },
+        {
+          "relname": "error_log",
+          "n_live_tup": 1295,
+          "n_dead_tup": 0,
+          "seq_scan": 6,
+          "idx_scan": 8792,
+          "total_bytes": 524288,
+          "heap_bytes": 229376,
+          "index_bytes": 253952,
+          "last_autovacuum": "2026-07-20 21:17:06.796979+00:00",
+          "last_autoanalyze": "2026-07-21 15:56:11.214157+00:00"
+        },
+        {
+          "relname": "l2_order",
+          "n_live_tup": 1084,
+          "n_dead_tup": 0,
+          "seq_scan": 684,
+          "idx_scan": 1964,
+          "total_bytes": 409600,
+          "heap_bytes": 196608,
+          "index_bytes": 172032,
+          "last_autovacuum": "2026-09-01 02:03:49.434001+00:00",
+          "last_autoanalyze": "2026-09-01 02:03:49.453475+00:00"
+        },
+        {
+          "relname": "factor_lessons",
+          "n_live_tup": 423,
+          "n_dead_tup": 0,
+          "seq_scan": 378,
+          "idx_scan": 321,
+          "total_bytes": 237568,
+          "heap_bytes": 122880,
+          "index_bytes": 81920,
+          "last_autovacuum": null,
+          "last_autoanalyze": "2026-09-03 12:05:12.854055+00:00"
+        },
+        {
+          "relname": "factor_proposals",
+          "n_live_tup": 115,
+          "n_dead_tup": 7,
+          "seq_scan": 707,
+          "idx_scan": 985,
+          "total_bytes": 172032,
+          "heap_bytes": 106496,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": "2026-08-16 07:40:46.669379+00:00"
+        },
+        {
+          "relname": "brain_runs",
+          "n_live_tup": 101,
+          "n_dead_tup": 39,
+          "seq_scan": 1936,
+          "idx_scan": 808,
+          "total_bytes": 155648,
+          "heap_bytes": 32768,
+          "index_bytes": 81920,
+          "last_autovacuum": "2026-08-19 08:48:58.306045+00:00",
+          "last_autoanalyze": "2026-09-04 12:38:55.701447+00:00"
+        },
+        {
+          "relname": "earnings_finnhub",
+          "n_live_tup": 549,
+          "n_dead_tup": 146,
+          "seq_scan": 5575,
+          "idx_scan": 35078,
+          "total_bytes": 147456,
+          "heap_bytes": 73728,
+          "index_bytes": 32768,
+          "last_autovacuum": "2026-09-02 15:21:09.795324+00:00",
+          "last_autoanalyze": "2026-09-04 15:11:13.511612+00:00"
+        },
+        {
+          "relname": "factor_runs",
+          "n_live_tup": 11,
+          "n_dead_tup": 0,
+          "seq_scan": 3,
+          "idx_scan": 12,
+          "total_bytes": 139264,
+          "heap_bytes": 8192,
+          "index_bytes": 49152,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "llm_cache",
+          "n_live_tup": 20,
+          "n_dead_tup": 0,
+          "seq_scan": 8,
+          "idx_scan": 43,
+          "total_bytes": 106496,
+          "heap_bytes": 24576,
+          "index_bytes": 49152,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "insider_form4",
+          "n_live_tup": 534,
+          "n_dead_tup": 83,
+          "seq_scan": 5600,
+          "idx_scan": 35627,
+          "total_bytes": 106496,
+          "heap_bytes": 40960,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": "2026-09-04 15:20:13.605013+00:00"
+        },
+        {
+          "relname": "metric_change_annotation",
+          "n_live_tup": 101,
+          "n_dead_tup": 19,
+          "seq_scan": 405,
+          "idx_scan": 5919,
+          "total_bytes": 106496,
+          "heap_bytes": 16384,
+          "index_bytes": 49152,
+          "last_autovacuum": "2026-07-16 15:51:21.447961+00:00",
+          "last_autoanalyze": "2026-09-04 17:14:03.566402+00:00"
+        },
+        {
+          "relname": "user_watchlist",
+          "n_live_tup": 7,
+          "n_dead_tup": 0,
+          "seq_scan": 968,
+          "idx_scan": 9,
+          "total_bytes": 98304,
+          "heap_bytes": 8192,
+          "index_bytes": 49152,
+          "last_autovacuum": "2026-08-25 09:11:36.405389+00:00",
+          "last_autoanalyze": "2026-08-25 09:11:36.410870+00:00"
+        },
+        {
+          "relname": "research_run",
+          "n_live_tup": 57,
+          "n_dead_tup": 1,
+          "seq_scan": 4009,
+          "idx_scan": 28774,
+          "total_bytes": 98304,
+          "heap_bytes": 32768,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": "2026-08-27 04:22:24.183833+00:00"
+        },
+        {
+          "relname": "l2_position",
+          "n_live_tup": 141,
+          "n_dead_tup": 0,
+          "seq_scan": 31,
+          "idx_scan": 271,
+          "total_bytes": 81920,
+          "heap_bytes": 24576,
+          "index_bytes": 16384,
+          "last_autovacuum": "2026-08-25 23:59:35.909698+00:00",
+          "last_autoanalyze": "2026-08-25 23:59:35.917660+00:00"
+        },
+        {
+          "relname": "factor_propose_jobs",
+          "n_live_tup": 14,
+          "n_dead_tup": 5,
+          "seq_scan": 810,
+          "idx_scan": 411,
+          "total_bytes": 81920,
+          "heap_bytes": 16384,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "l2_equity_daily",
+          "n_live_tup": 13,
+          "n_dead_tup": 28,
+          "seq_scan": 71,
+          "idx_scan": 244,
+          "total_bytes": 73728,
+          "heap_bytes": 8192,
+          "index_bytes": 32768,
+          "last_autovacuum": "2026-08-04 01:07:18.556791+00:00",
+          "last_autoanalyze": "2026-09-04 01:22:18.242326+00:00"
+        },
+        {
+          "relname": "signal_weight_current",
+          "n_live_tup": 57,
+          "n_dead_tup": 23,
+          "seq_scan": 13717,
+          "idx_scan": 12742,
+          "total_bytes": 73728,
+          "heap_bytes": 16384,
+          "index_bytes": 16384,
+          "last_autovacuum": "2026-09-02 00:45:40.393692+00:00",
+          "last_autoanalyze": "2026-09-05 00:35:16.654021+00:00"
+        },
+        {
+          "relname": "accounts",
+          "n_live_tup": 1,
+          "n_dead_tup": 0,
+          "seq_scan": 3,
+          "idx_scan": 8,
+          "total_bytes": 65536,
+          "heap_bytes": 8192,
+          "index_bytes": 49152,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "supply_chain_scorecard",
+          "n_live_tup": 10,
+          "n_dead_tup": 6,
+          "seq_scan": 4356,
+          "idx_scan": 21,
+          "total_bytes": 65536,
+          "heap_bytes": 16384,
+          "index_bytes": 16384,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "users",
+          "n_live_tup": 2,
+          "n_dead_tup": 0,
+          "seq_scan": 4,
+          "idx_scan": 201,
+          "total_bytes": 65536,
+          "heap_bytes": 8192,
+          "index_bytes": 49152,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "config_change_log",
+          "n_live_tup": 33,
+          "n_dead_tup": 0,
+          "seq_scan": 790,
+          "idx_scan": 732,
+          "total_bytes": 57344,
+          "heap_bytes": 8192,
+          "index_bytes": 40960,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "factors",
+          "n_live_tup": 3,
+          "n_dead_tup": 9,
+          "seq_scan": 7,
+          "idx_scan": 44,
+          "total_bytes": 49152,
+          "heap_bytes": 8192,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "extended_operators",
+          "n_live_tup": 1,
+          "n_dead_tup": 0,
+          "seq_scan": 5944,
+          "idx_scan": 1,
+          "total_bytes": 49152,
+          "heap_bytes": 8192,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "user_byok",
+          "n_live_tup": 2,
+          "n_dead_tup": 3,
+          "seq_scan": 185,
+          "idx_scan": 1090,
+          "total_bytes": 49152,
+          "heap_bytes": 8192,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "l2_strategy",
+          "n_live_tup": 3,
+          "n_dead_tup": 8,
+          "seq_scan": 837,
+          "idx_scan": 839,
+          "total_bytes": 49152,
+          "heap_bytes": 8192,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": "2026-09-05 01:25:23.704435+00:00"
+        },
+        {
+          "relname": "sim_account",
+          "n_live_tup": 1,
+          "n_dead_tup": 1,
+          "seq_scan": 2,
+          "idx_scan": 218,
+          "total_bytes": 40960,
+          "heap_bytes": 8192,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "sim_order",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "seq_scan": 5,
+          "idx_scan": 363,
+          "total_bytes": 40960,
+          "heap_bytes": 0,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "sim_position",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "seq_scan": 5,
+          "idx_scan": 138,
+          "total_bytes": 40960,
+          "heap_bytes": 0,
+          "index_bytes": 32768,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "verification_token",
+          "n_live_tup": 0,
+          "n_dead_tup": 2,
+          "seq_scan": 1,
+          "idx_scan": 4,
+          "total_bytes": 32768,
+          "heap_bytes": 8192,
+          "index_bytes": 16384,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "schema_migrations",
+          "n_live_tup": 48,
+          "n_dead_tup": 0,
+          "seq_scan": 201,
+          "idx_scan": 4,
+          "total_bytes": 32768,
+          "heap_bytes": 8192,
+          "index_bytes": 16384,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "engine_config",
+          "n_live_tup": 1,
+          "n_dead_tup": 8,
+          "seq_scan": 6930,
+          "idx_scan": 19,
+          "total_bytes": 32768,
+          "heap_bytes": 8192,
+          "index_bytes": 16384,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "password_reset_codes",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "seq_scan": 2,
+          "idx_scan": 0,
+          "total_bytes": 24576,
+          "heap_bytes": 0,
+          "index_bytes": 16384,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "sim_equity_daily",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "seq_scan": 4,
+          "idx_scan": 33,
+          "total_bytes": 24576,
+          "heap_bytes": 0,
+          "index_bytes": 24576,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "alert_triage_state",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "seq_scan": 2,
+          "idx_scan": 8,
+          "total_bytes": 24576,
+          "heap_bytes": 0,
+          "index_bytes": 16384,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "l2_account",
+          "n_live_tup": 2,
+          "n_dead_tup": 4,
+          "seq_scan": 25,
+          "idx_scan": 144,
+          "total_bytes": 24576,
+          "heap_bytes": 8192,
+          "index_bytes": 16384,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "user_preferences",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "seq_scan": 1,
+          "idx_scan": 0,
+          "total_bytes": 16384,
+          "heap_bytes": 0,
+          "index_bytes": 8192,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        },
+        {
+          "relname": "auth_rate_limit",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "seq_scan": 1,
+          "idx_scan": 0,
+          "total_bytes": 16384,
+          "heap_bytes": 0,
+          "index_bytes": 8192,
+          "last_autovacuum": null,
+          "last_autoanalyze": null
+        }
+      ]
+    },
+    "indexes": {
+      "seconds": 0.778,
+      "rows": [
+        {
+          "tablename": "accounts",
+          "indexname": "accounts_pkey",
+          "indexdef": "CREATE UNIQUE INDEX accounts_pkey ON public.accounts USING btree (id)"
+        },
+        {
+          "tablename": "accounts",
+          "indexname": "accounts_provider_providerAccountId_key",
+          "indexdef": "CREATE UNIQUE INDEX \"accounts_provider_providerAccountId_key\" ON public.accounts USING btree (provider, \"providerAccountId\")"
+        },
+        {
+          "tablename": "accounts",
+          "indexname": "idx_accounts_user",
+          "indexdef": "CREATE INDEX idx_accounts_user ON public.accounts USING btree (\"userId\")"
+        },
+        {
+          "tablename": "alert_queue",
+          "indexname": "alert_queue_pkey",
+          "indexdef": "CREATE UNIQUE INDEX alert_queue_pkey ON public.alert_queue USING btree (id)"
+        },
+        {
+          "tablename": "alert_queue",
+          "indexname": "alert_queue_ticker_type_dedup_bucket_key",
+          "indexdef": "CREATE UNIQUE INDEX alert_queue_ticker_type_dedup_bucket_key ON public.alert_queue USING btree (ticker, type, dedup_bucket)"
+        },
+        {
+          "tablename": "alert_queue",
+          "indexname": "idx_alert_queue_pending",
+          "indexdef": "CREATE INDEX idx_alert_queue_pending ON public.alert_queue USING btree (dispatched, created_at) WHERE (dispatched = false)"
+        },
+        {
+          "tablename": "alert_triage_state",
+          "indexname": "alert_triage_state_pkey",
+          "indexdef": "CREATE UNIQUE INDEX alert_triage_state_pkey ON public.alert_triage_state USING btree (user_id, alert_id)"
+        },
+        {
+          "tablename": "alert_triage_state",
+          "indexname": "idx_alert_triage_user_open",
+          "indexdef": "CREATE INDEX idx_alert_triage_user_open ON public.alert_triage_state USING btree (user_id, status, updated_at DESC) WHERE (status = ANY (ARRAY['open'::text, 'snoozed'::text]))"
+        },
+        {
+          "tablename": "auth_rate_limit",
+          "indexname": "auth_rate_limit_pkey",
+          "indexdef": "CREATE UNIQUE INDEX auth_rate_limit_pkey ON public.auth_rate_limit USING btree (bucket_key, window_start)"
+        },
+        {
+          "tablename": "brain_alphas",
+          "indexname": "brain_alphas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX brain_alphas_pkey ON public.brain_alphas USING btree (id)"
+        },
+        {
+          "tablename": "brain_alphas",
+          "indexname": "idx_brain_alphas_batch",
+          "indexdef": "CREATE INDEX idx_brain_alphas_batch ON public.brain_alphas USING btree (user_id, batch_started_at DESC)"
+        },
+        {
+          "tablename": "brain_alphas",
+          "indexname": "idx_brain_alphas_outcome",
+          "indexdef": "CREATE INDEX idx_brain_alphas_outcome ON public.brain_alphas USING btree (user_id, outcome)"
+        },
+        {
+          "tablename": "brain_alphas",
+          "indexname": "idx_brain_alphas_research_context",
+          "indexdef": "CREATE INDEX idx_brain_alphas_research_context ON public.brain_alphas USING btree (((research_evidence ->> 'context_key'::text))) WHERE (research_evidence IS NOT NULL)"
+        },
+        {
+          "tablename": "brain_alphas",
+          "indexname": "idx_brain_alphas_self_corr_pending",
+          "indexdef": "CREATE INDEX idx_brain_alphas_self_corr_pending ON public.brain_alphas USING btree (user_id, created_at DESC) WHERE ((self_correlation IS NULL) AND (alpha_id IS NOT NULL))"
+        },
+        {
+          "tablename": "brain_alphas",
+          "indexname": "idx_brain_alphas_user",
+          "indexdef": "CREATE INDEX idx_brain_alphas_user ON public.brain_alphas USING btree (user_id, created_at DESC)"
+        },
+        {
+          "tablename": "brain_alphas",
+          "indexname": "idx_brain_alphas_user_run",
+          "indexdef": "CREATE INDEX idx_brain_alphas_user_run ON public.brain_alphas USING btree (user_id, run_id, created_at DESC, id DESC)"
+        },
+        {
+          "tablename": "brain_run_candidates",
+          "indexname": "brain_run_candidates_pkey",
+          "indexdef": "CREATE UNIQUE INDEX brain_run_candidates_pkey ON public.brain_run_candidates USING btree (id)"
+        },
+        {
+          "tablename": "brain_run_candidates",
+          "indexname": "brain_run_candidates_run_id_expression_key",
+          "indexdef": "CREATE UNIQUE INDEX brain_run_candidates_run_id_expression_key ON public.brain_run_candidates USING btree (run_id, expression)"
+        },
+        {
+          "tablename": "brain_run_candidates",
+          "indexname": "idx_brain_run_candidates_run_ordinal",
+          "indexdef": "CREATE INDEX idx_brain_run_candidates_run_ordinal ON public.brain_run_candidates USING btree (run_id, ordinal, id)"
+        },
+        {
+          "tablename": "brain_run_candidates",
+          "indexname": "idx_brain_run_candidates_run_selected",
+          "indexdef": "CREATE INDEX idx_brain_run_candidates_run_selected ON public.brain_run_candidates USING btree (run_id, selected, ordinal)"
+        },
+        {
+          "tablename": "brain_run_candidates",
+          "indexname": "idx_brain_run_candidates_run_status",
+          "indexdef": "CREATE INDEX idx_brain_run_candidates_run_status ON public.brain_run_candidates USING btree (run_id, status, ordinal)"
+        },
+        {
+          "tablename": "brain_runs",
+          "indexname": "brain_runs_pkey",
+          "indexdef": "CREATE UNIQUE INDEX brain_runs_pkey ON public.brain_runs USING btree (id)"
+        },
+        {
+          "tablename": "brain_runs",
+          "indexname": "brain_runs_user_id_source_legacy_batch_started_at_key",
+          "indexdef": "CREATE UNIQUE INDEX brain_runs_user_id_source_legacy_batch_started_at_key ON public.brain_runs USING btree (user_id, source, legacy_batch_started_at)"
+        },
+        {
+          "tablename": "brain_runs",
+          "indexname": "idx_brain_runs_parent",
+          "indexdef": "CREATE INDEX idx_brain_runs_parent ON public.brain_runs USING btree (parent_run_id) WHERE (parent_run_id IS NOT NULL)"
+        },
+        {
+          "tablename": "brain_runs",
+          "indexname": "idx_brain_runs_user_created",
+          "indexdef": "CREATE INDEX idx_brain_runs_user_created ON public.brain_runs USING btree (user_id, created_at DESC, id DESC)"
+        },
+        {
+          "tablename": "brain_runs",
+          "indexname": "idx_brain_runs_user_status",
+          "indexdef": "CREATE INDEX idx_brain_runs_user_status ON public.brain_runs USING btree (user_id, status, created_at DESC)"
+        },
+        {
+          "tablename": "company_profiles",
+          "indexname": "company_profiles_pkey",
+          "indexdef": "CREATE UNIQUE INDEX company_profiles_pkey ON public.company_profiles USING btree (ticker)"
+        },
+        {
+          "tablename": "confidence_calibration",
+          "indexname": "confidence_calibration_pkey",
+          "indexdef": "CREATE UNIQUE INDEX confidence_calibration_pkey ON public.confidence_calibration USING btree (id)"
+        },
+        {
+          "tablename": "confidence_calibration",
+          "indexname": "idx_confidence_calibration_as_of",
+          "indexdef": "CREATE INDEX idx_confidence_calibration_as_of ON public.confidence_calibration USING btree (as_of DESC)"
+        },
+        {
+          "tablename": "config_change_log",
+          "indexname": "config_change_log_pkey",
+          "indexdef": "CREATE UNIQUE INDEX config_change_log_pkey ON public.config_change_log USING btree (id)"
+        },
+        {
+          "tablename": "config_change_log",
+          "indexname": "idx_config_change_log_status",
+          "indexdef": "CREATE INDEX idx_config_change_log_status ON public.config_change_log USING btree (status) WHERE (status = 'pending'::text)"
+        },
+        {
+          "tablename": "config_change_log",
+          "indexname": "idx_config_change_log_user_changed",
+          "indexdef": "CREATE INDEX idx_config_change_log_user_changed ON public.config_change_log USING btree (user_id, changed_at DESC)"
+        },
+        {
+          "tablename": "consistency_outcomes",
+          "indexname": "consistency_outcomes_pkey",
+          "indexdef": "CREATE UNIQUE INDEX consistency_outcomes_pkey ON public.consistency_outcomes USING btree (ticker, date)"
+        },
+        {
+          "tablename": "consistency_outcomes",
+          "indexname": "idx_consistency_outcomes_date",
+          "indexdef": "CREATE INDEX idx_consistency_outcomes_date ON public.consistency_outcomes USING btree (date)"
+        },
+        {
+          "tablename": "cron_runs",
+          "indexname": "cron_runs_pkey",
+          "indexdef": "CREATE UNIQUE INDEX cron_runs_pkey ON public.cron_runs USING btree (id)"
+        },
+        {
+          "tablename": "cron_runs",
+          "indexname": "idx_cron_runs_recent",
+          "indexdef": "CREATE INDEX idx_cron_runs_recent ON public.cron_runs USING btree (cron_name, started_at DESC)"
+        },
+        {
+          "tablename": "daily_prices",
+          "indexname": "daily_prices_pkey",
+          "indexdef": "CREATE UNIQUE INDEX daily_prices_pkey ON public.daily_prices USING btree (ticker, date)"
+        },
+        {
+          "tablename": "daily_signals_fast",
+          "indexname": "daily_signals_fast_pkey",
+          "indexdef": "CREATE UNIQUE INDEX daily_signals_fast_pkey ON public.daily_signals_fast USING btree (ticker, date)"
+        },
+        {
+          "tablename": "daily_signals_slow",
+          "indexname": "daily_signals_slow_pkey",
+          "indexdef": "CREATE UNIQUE INDEX daily_signals_slow_pkey ON public.daily_signals_slow USING btree (ticker, date)"
+        },
+        {
+          "tablename": "earnings_finnhub",
+          "indexname": "earnings_finnhub_pkey",
+          "indexdef": "CREATE UNIQUE INDEX earnings_finnhub_pkey ON public.earnings_finnhub USING btree (ticker)"
+        },
+        {
+          "tablename": "engine_config",
+          "indexname": "engine_config_pkey",
+          "indexdef": "CREATE UNIQUE INDEX engine_config_pkey ON public.engine_config USING btree (key)"
+        },
+        {
+          "tablename": "error_log",
+          "indexname": "error_log_pkey",
+          "indexdef": "CREATE UNIQUE INDEX error_log_pkey ON public.error_log USING btree (id)"
+        },
+        {
+          "tablename": "error_log",
+          "indexname": "idx_error_log_component",
+          "indexdef": "CREATE INDEX idx_error_log_component ON public.error_log USING btree (component, ts DESC)"
+        },
+        {
+          "tablename": "error_log",
+          "indexname": "idx_error_log_recent",
+          "indexdef": "CREATE INDEX idx_error_log_recent ON public.error_log USING btree (ts DESC)"
+        },
+        {
+          "tablename": "extended_operators",
+          "indexname": "extended_operators_pkey",
+          "indexdef": "CREATE UNIQUE INDEX extended_operators_pkey ON public.extended_operators USING btree (name)"
+        },
+        {
+          "tablename": "extended_operators",
+          "indexname": "idx_extended_operators_registered_at",
+          "indexdef": "CREATE INDEX idx_extended_operators_registered_at ON public.extended_operators USING btree (registered_at DESC)"
+        },
+        {
+          "tablename": "factor_lessons",
+          "indexname": "factor_lessons_pkey",
+          "indexdef": "CREATE UNIQUE INDEX factor_lessons_pkey ON public.factor_lessons USING btree (id)"
+        },
+        {
+          "tablename": "factor_lessons",
+          "indexname": "idx_factor_lessons_created",
+          "indexdef": "CREATE INDEX idx_factor_lessons_created ON public.factor_lessons USING btree (created_at DESC)"
+        },
+        {
+          "tablename": "factor_lessons",
+          "indexname": "idx_factor_lessons_expression",
+          "indexdef": "CREATE INDEX idx_factor_lessons_expression ON public.factor_lessons USING btree (expression)"
+        },
+        {
+          "tablename": "factor_proposals",
+          "indexname": "factor_proposals_pkey",
+          "indexdef": "CREATE UNIQUE INDEX factor_proposals_pkey ON public.factor_proposals USING btree (id)"
+        },
+        {
+          "tablename": "factor_proposals",
+          "indexname": "idx_factor_proposals_status_created",
+          "indexdef": "CREATE INDEX idx_factor_proposals_status_created ON public.factor_proposals USING btree (status, created_at DESC)"
+        },
+        {
+          "tablename": "factor_propose_jobs",
+          "indexname": "factor_propose_jobs_pkey",
+          "indexdef": "CREATE UNIQUE INDEX factor_propose_jobs_pkey ON public.factor_propose_jobs USING btree (id)"
+        },
+        {
+          "tablename": "factor_propose_jobs",
+          "indexname": "idx_factor_propose_jobs_user_created",
+          "indexdef": "CREATE INDEX idx_factor_propose_jobs_user_created ON public.factor_propose_jobs USING btree (user_id, created_at DESC)"
+        },
+        {
+          "tablename": "factor_runs",
+          "indexname": "factor_runs_pkey",
+          "indexdef": "CREATE UNIQUE INDEX factor_runs_pkey ON public.factor_runs USING btree (id)"
+        },
+        {
+          "tablename": "factor_runs",
+          "indexname": "ix_factor_runs_factor_id",
+          "indexdef": "CREATE INDEX ix_factor_runs_factor_id ON public.factor_runs USING btree (factor_id)"
+        },
+        {
+          "tablename": "factor_runs",
+          "indexname": "ix_factor_runs_ran_at",
+          "indexdef": "CREATE INDEX ix_factor_runs_ran_at ON public.factor_runs USING btree (ran_at)"
+        },
+        {
+          "tablename": "factors",
+          "indexname": "factors_pkey",
+          "indexdef": "CREATE UNIQUE INDEX factors_pkey ON public.factors USING btree (id)"
+        },
+        {
+          "tablename": "factors",
+          "indexname": "ix_factors_ast_hash",
+          "indexdef": "CREATE UNIQUE INDEX ix_factors_ast_hash ON public.factors USING btree (ast_hash)"
+        },
+        {
+          "tablename": "insider_form4",
+          "indexname": "insider_form4_pkey",
+          "indexdef": "CREATE UNIQUE INDEX insider_form4_pkey ON public.insider_form4 USING btree (ticker)"
+        },
+        {
+          "tablename": "l2_account",
+          "indexname": "l2_account_pkey",
+          "indexdef": "CREATE UNIQUE INDEX l2_account_pkey ON public.l2_account USING btree (strategy_id)"
+        },
+        {
+          "tablename": "l2_equity_daily",
+          "indexname": "l2_equity_daily_pkey",
+          "indexdef": "CREATE UNIQUE INDEX l2_equity_daily_pkey ON public.l2_equity_daily USING btree (id)"
+        },
+        {
+          "tablename": "l2_equity_daily",
+          "indexname": "l2_equity_daily_strategy_id_as_of_date_key",
+          "indexdef": "CREATE UNIQUE INDEX l2_equity_daily_strategy_id_as_of_date_key ON public.l2_equity_daily USING btree (strategy_id, as_of_date)"
+        },
+        {
+          "tablename": "l2_order",
+          "indexname": "idx_l2_order_pending_continuous",
+          "indexdef": "CREATE INDEX idx_l2_order_pending_continuous ON public.l2_order USING btree (strategy_id, signal_date) WHERE (status = 'pending'::text)"
+        },
+        {
+          "tablename": "l2_order",
+          "indexname": "idx_l2_order_strategy_date",
+          "indexdef": "CREATE INDEX idx_l2_order_strategy_date ON public.l2_order USING btree (strategy_id, signal_date)"
+        },
+        {
+          "tablename": "l2_order",
+          "indexname": "l2_order_pkey",
+          "indexdef": "CREATE UNIQUE INDEX l2_order_pkey ON public.l2_order USING btree (id)"
+        },
+        {
+          "tablename": "l2_order",
+          "indexname": "l2_order_strategy_id_signal_date_ticker_key",
+          "indexdef": "CREATE UNIQUE INDEX l2_order_strategy_id_signal_date_ticker_key ON public.l2_order USING btree (strategy_id, signal_date, ticker)"
+        },
+        {
+          "tablename": "l2_position",
+          "indexname": "l2_position_pkey",
+          "indexdef": "CREATE UNIQUE INDEX l2_position_pkey ON public.l2_position USING btree (strategy_id, ticker)"
+        },
+        {
+          "tablename": "l2_strategy",
+          "indexname": "l2_strategy_name_version_key",
+          "indexdef": "CREATE UNIQUE INDEX l2_strategy_name_version_key ON public.l2_strategy USING btree (name, version)"
+        },
+        {
+          "tablename": "l2_strategy",
+          "indexname": "l2_strategy_pkey",
+          "indexdef": "CREATE UNIQUE INDEX l2_strategy_pkey ON public.l2_strategy USING btree (id)"
+        },
+        {
+          "tablename": "llm_cache",
+          "indexname": "idx_llm_cache_expires",
+          "indexdef": "CREATE INDEX idx_llm_cache_expires ON public.llm_cache USING btree (expires_at)"
+        },
+        {
+          "tablename": "llm_cache",
+          "indexname": "idx_llm_cache_user_created",
+          "indexdef": "CREATE INDEX idx_llm_cache_user_created ON public.llm_cache USING btree (user_id, created_at DESC)"
+        },
+        {
+          "tablename": "llm_cache",
+          "indexname": "llm_cache_pkey",
+          "indexdef": "CREATE UNIQUE INDEX llm_cache_pkey ON public.llm_cache USING btree (hash, user_id)"
+        },
+        {
+          "tablename": "macro_events",
+          "indexname": "macro_events_dedup_hash_key",
+          "indexdef": "CREATE UNIQUE INDEX macro_events_dedup_hash_key ON public.macro_events USING btree (dedup_hash)"
+        },
+        {
+          "tablename": "macro_events",
+          "indexname": "macro_events_llm_pending_idx",
+          "indexdef": "CREATE INDEX macro_events_llm_pending_idx ON public.macro_events USING btree (llm_processed_at) WHERE (llm_processed_at IS NULL)"
+        },
+        {
+          "tablename": "macro_events",
+          "indexname": "macro_events_pkey",
+          "indexdef": "CREATE UNIQUE INDEX macro_events_pkey ON public.macro_events USING btree (id)"
+        },
+        {
+          "tablename": "macro_events",
+          "indexname": "macro_events_published_idx",
+          "indexdef": "CREATE INDEX macro_events_published_idx ON public.macro_events USING btree (published_at DESC)"
+        },
+        {
+          "tablename": "macro_events",
+          "indexname": "macro_events_tickers_gin_idx",
+          "indexdef": "CREATE INDEX macro_events_tickers_gin_idx ON public.macro_events USING gin (tickers_extracted)"
+        },
+        {
+          "tablename": "metric_change_annotation",
+          "indexname": "idx_metric_change_annotation_lookup",
+          "indexdef": "CREATE INDEX idx_metric_change_annotation_lookup ON public.metric_change_annotation USING btree (metric_type, window_days, as_of DESC)"
+        },
+        {
+          "tablename": "metric_change_annotation",
+          "indexname": "metric_change_annotation_metric_type_metric_key_window_days_key",
+          "indexdef": "CREATE UNIQUE INDEX metric_change_annotation_metric_type_metric_key_window_days_key ON public.metric_change_annotation USING btree (metric_type, metric_key, window_days, as_of)"
+        },
+        {
+          "tablename": "metric_change_annotation",
+          "indexname": "metric_change_annotation_pkey",
+          "indexdef": "CREATE UNIQUE INDEX metric_change_annotation_pkey ON public.metric_change_annotation USING btree (id)"
+        },
+        {
+          "tablename": "minute_bars",
+          "indexname": "minute_bars_pkey",
+          "indexdef": "CREATE UNIQUE INDEX minute_bars_pkey ON public.minute_bars USING btree (ticker, ts)"
+        },
+        {
+          "tablename": "news_items",
+          "indexname": "news_items_dedup_hash_key",
+          "indexdef": "CREATE UNIQUE INDEX news_items_dedup_hash_key ON public.news_items USING btree (dedup_hash)"
+        },
+        {
+          "tablename": "news_items",
+          "indexname": "news_items_llm_pending_idx",
+          "indexdef": "CREATE INDEX news_items_llm_pending_idx ON public.news_items USING btree (llm_processed_at) WHERE (llm_processed_at IS NULL)"
+        },
+        {
+          "tablename": "news_items",
+          "indexname": "news_items_pkey",
+          "indexdef": "CREATE UNIQUE INDEX news_items_pkey ON public.news_items USING btree (id)"
+        },
+        {
+          "tablename": "news_items",
+          "indexname": "news_items_source_published_idx",
+          "indexdef": "CREATE INDEX news_items_source_published_idx ON public.news_items USING btree (source, published_at DESC)"
+        },
+        {
+          "tablename": "news_items",
+          "indexname": "news_items_ticker_published_idx",
+          "indexdef": "CREATE INDEX news_items_ticker_published_idx ON public.news_items USING btree (ticker, published_at DESC)"
+        },
+        {
+          "tablename": "password_reset_codes",
+          "indexname": "idx_password_reset_codes_email",
+          "indexdef": "CREATE INDEX idx_password_reset_codes_email ON public.password_reset_codes USING btree (email)"
+        },
+        {
+          "tablename": "password_reset_codes",
+          "indexname": "password_reset_codes_pkey",
+          "indexdef": "CREATE UNIQUE INDEX password_reset_codes_pkey ON public.password_reset_codes USING btree (id)"
+        },
+        {
+          "tablename": "rating_snapshot",
+          "indexname": "idx_rating_snapshot_run",
+          "indexdef": "CREATE INDEX idx_rating_snapshot_run ON public.rating_snapshot USING btree (run_id)"
+        },
+        {
+          "tablename": "rating_snapshot",
+          "indexname": "idx_rating_snapshot_ticker",
+          "indexdef": "CREATE INDEX idx_rating_snapshot_ticker ON public.rating_snapshot USING btree (ticker, run_id)"
+        },
+        {
+          "tablename": "rating_snapshot",
+          "indexname": "rating_snapshot_pkey",
+          "indexdef": "CREATE UNIQUE INDEX rating_snapshot_pkey ON public.rating_snapshot USING btree (id)"
+        },
+        {
+          "tablename": "rating_snapshot",
+          "indexname": "rating_snapshot_run_id_ticker_key",
+          "indexdef": "CREATE UNIQUE INDEX rating_snapshot_run_id_ticker_key ON public.rating_snapshot USING btree (run_id, ticker)"
+        },
+        {
+          "tablename": "research_run",
+          "indexname": "idx_research_run_canonical",
+          "indexdef": "CREATE INDEX idx_research_run_canonical ON public.research_run USING btree (scheduled_for_date, run_type, status, finished_at DESC)"
+        },
+        {
+          "tablename": "research_run",
+          "indexname": "research_run_pkey",
+          "indexdef": "CREATE UNIQUE INDEX research_run_pkey ON public.research_run USING btree (id)"
+        },
+        {
+          "tablename": "schema_migrations",
+          "indexname": "schema_migrations_pkey",
+          "indexdef": "CREATE UNIQUE INDEX schema_migrations_pkey ON public.schema_migrations USING btree (version)"
+        },
+        {
+          "tablename": "signal_ic_history",
+          "indexname": "idx_signal_ic_history_signal_computed",
+          "indexdef": "CREATE INDEX idx_signal_ic_history_signal_computed ON public.signal_ic_history USING btree (signal_name, computed_at DESC)"
+        },
+        {
+          "tablename": "signal_ic_history",
+          "indexname": "signal_ic_history_pkey",
+          "indexdef": "CREATE UNIQUE INDEX signal_ic_history_pkey ON public.signal_ic_history USING btree (signal_name, window_days, horizon_days, computed_at)"
+        },
+        {
+          "tablename": "signal_weight_current",
+          "indexname": "signal_weight_current_pkey",
+          "indexdef": "CREATE UNIQUE INDEX signal_weight_current_pkey ON public.signal_weight_current USING btree (signal_name, status)"
+        },
+        {
+          "tablename": "sim_account",
+          "indexname": "sim_account_pkey",
+          "indexdef": "CREATE UNIQUE INDEX sim_account_pkey ON public.sim_account USING btree (id)"
+        },
+        {
+          "tablename": "sim_account",
+          "indexname": "sim_account_user_id_key",
+          "indexdef": "CREATE UNIQUE INDEX sim_account_user_id_key ON public.sim_account USING btree (user_id)"
+        },
+        {
+          "tablename": "sim_equity_daily",
+          "indexname": "idx_sim_equity_daily_account",
+          "indexdef": "CREATE INDEX idx_sim_equity_daily_account ON public.sim_equity_daily USING btree (account_id, as_of_date DESC)"
+        },
+        {
+          "tablename": "sim_equity_daily",
+          "indexname": "sim_equity_daily_account_cohort_date_key",
+          "indexdef": "CREATE UNIQUE INDEX sim_equity_daily_account_cohort_date_key ON public.sim_equity_daily USING btree (account_id, cohort_id, as_of_date)"
+        },
+        {
+          "tablename": "sim_equity_daily",
+          "indexname": "sim_equity_daily_pkey",
+          "indexdef": "CREATE UNIQUE INDEX sim_equity_daily_pkey ON public.sim_equity_daily USING btree (id)"
+        },
+        {
+          "tablename": "sim_order",
+          "indexname": "idx_sim_order_account_cohort_status",
+          "indexdef": "CREATE INDEX idx_sim_order_account_cohort_status ON public.sim_order USING btree (account_id, cohort_id, status)"
+        },
+        {
+          "tablename": "sim_order",
+          "indexname": "idx_sim_order_account_status",
+          "indexdef": "CREATE INDEX idx_sim_order_account_status ON public.sim_order USING btree (account_id, status, signal_date)"
+        },
+        {
+          "tablename": "sim_order",
+          "indexname": "idx_sim_order_ticker_pending",
+          "indexdef": "CREATE INDEX idx_sim_order_ticker_pending ON public.sim_order USING btree (ticker, status) WHERE (status = 'pending'::text)"
+        },
+        {
+          "tablename": "sim_order",
+          "indexname": "sim_order_pkey",
+          "indexdef": "CREATE UNIQUE INDEX sim_order_pkey ON public.sim_order USING btree (id)"
+        },
+        {
+          "tablename": "sim_position",
+          "indexname": "idx_sim_position_account",
+          "indexdef": "CREATE INDEX idx_sim_position_account ON public.sim_position USING btree (account_id) WHERE (qty > 0)"
+        },
+        {
+          "tablename": "sim_position",
+          "indexname": "idx_sim_position_account_cohort",
+          "indexdef": "CREATE INDEX idx_sim_position_account_cohort ON public.sim_position USING btree (account_id, cohort_id) WHERE (qty > 0)"
+        },
+        {
+          "tablename": "sim_position",
+          "indexname": "sim_position_account_cohort_ticker_key",
+          "indexdef": "CREATE UNIQUE INDEX sim_position_account_cohort_ticker_key ON public.sim_position USING btree (account_id, cohort_id, ticker)"
+        },
+        {
+          "tablename": "sim_position",
+          "indexname": "sim_position_pkey",
+          "indexdef": "CREATE UNIQUE INDEX sim_position_pkey ON public.sim_position USING btree (id)"
+        },
+        {
+          "tablename": "supply_chain_scorecard",
+          "indexname": "supply_chain_scorecard_pkey",
+          "indexdef": "CREATE UNIQUE INDEX supply_chain_scorecard_pkey ON public.supply_chain_scorecard USING btree (ticker)"
+        },
+        {
+          "tablename": "user_byok",
+          "indexname": "idx_user_byok_user",
+          "indexdef": "CREATE INDEX idx_user_byok_user ON public.user_byok USING btree (user_id)"
+        },
+        {
+          "tablename": "user_byok",
+          "indexname": "user_byok_pkey",
+          "indexdef": "CREATE UNIQUE INDEX user_byok_pkey ON public.user_byok USING btree (user_id, provider)"
+        },
+        {
+          "tablename": "user_preferences",
+          "indexname": "user_preferences_pkey",
+          "indexdef": "CREATE UNIQUE INDEX user_preferences_pkey ON public.user_preferences USING btree (user_id)"
+        },
+        {
+          "tablename": "user_watchlist",
+          "indexname": "idx_user_watchlist_user",
+          "indexdef": "CREATE INDEX idx_user_watchlist_user ON public.user_watchlist USING btree (user_id)"
+        },
+        {
+          "tablename": "user_watchlist",
+          "indexname": "user_watchlist_pkey",
+          "indexdef": "CREATE UNIQUE INDEX user_watchlist_pkey ON public.user_watchlist USING btree (id)"
+        },
+        {
+          "tablename": "user_watchlist",
+          "indexname": "user_watchlist_user_id_ticker_key",
+          "indexdef": "CREATE UNIQUE INDEX user_watchlist_user_id_ticker_key ON public.user_watchlist USING btree (user_id, ticker)"
+        },
+        {
+          "tablename": "users",
+          "indexname": "idx_users_email",
+          "indexdef": "CREATE INDEX idx_users_email ON public.users USING btree (email)"
+        },
+        {
+          "tablename": "users",
+          "indexname": "users_email_key",
+          "indexdef": "CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)"
+        },
+        {
+          "tablename": "users",
+          "indexname": "users_pkey",
+          "indexdef": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+        },
+        {
+          "tablename": "verification_token",
+          "indexname": "verification_token_pkey",
+          "indexdef": "CREATE UNIQUE INDEX verification_token_pkey ON public.verification_token USING btree (identifier, token)"
+        }
+      ]
+    },
+    "migrations": {
+      "seconds": 0.513,
+      "rows": [
+        {
+          "version": "V001__initial_schema"
+        },
+        {
+          "version": "V002__phase4_users"
+        },
+        {
+          "version": "V003__phase4b_multi_auth"
+        },
+        {
+          "version": "V004__news_pipeline"
+        },
+        {
+          "version": "V005__signal_ic_and_minute_bars"
+        },
+        {
+          "version": "V006__impact_direction_buckets"
+        },
+        {
+          "version": "V007__news_reasoning_text"
+        },
+        {
+          "version": "V008__llm_cache"
+        },
+        {
+          "version": "V009__config_change_log"
+        },
+        {
+          "version": "V010__company_profiles"
+        },
+        {
+          "version": "V011__daily_prices"
+        },
+        {
+          "version": "V012__adaptive_weight_shadow"
+        },
+        {
+          "version": "V013__confidence_calibration"
+        },
+        {
+          "version": "V014__engine_config"
+        },
+        {
+          "version": "V015__proposal_columns"
+        },
+        {
+          "version": "V016__factor_proposals"
+        },
+        {
+          "version": "V017__factor_propose_jobs"
+        },
+        {
+          "version": "V018__metric_change_annotation"
+        },
+        {
+          "version": "V019__company_name_zh"
+        },
+        {
+          "version": "V020__insider_form4"
+        },
+        {
+          "version": "V021__earnings_finnhub"
+        },
+        {
+          "version": "V022__supply_chain_scorecard"
+        },
+        {
+          "version": "V023__ic_history_horizon"
+        },
+        {
+          "version": "V024__product_ledger"
+        },
+        {
+          "version": "V025__run_health"
+        },
+        {
+          "version": "V026__l2_paper_trading"
+        },
+        {
+          "version": "V027__factor_lessons"
+        },
+        {
+          "version": "V028__brain_alphas"
+        },
+        {
+          "version": "V029__brain_alpha_returns_margin"
+        },
+        {
+          "version": "V030__brain_alpha_grade"
+        },
+        {
+          "version": "V031__brain_grade_backfill"
+        },
+        {
+          "version": "V032__brain_self_corr_adjusted"
+        },
+        {
+          "version": "V033__brain_fail_checks_retried"
+        },
+        {
+          "version": "V034__brain_batch"
+        },
+        {
+          "version": "V035__consistency_outcomes"
+        },
+        {
+          "version": "V036__sim_paper_trading"
+        },
+        {
+          "version": "V037__brain_blend_parents"
+        },
+        {
+          "version": "V038__sim_order_pick_attribution"
+        },
+        {
+          "version": "V039__paper_p1_provenance_and_cohorts"
+        },
+        {
+          "version": "V040__dual_policy_continuous_l2"
+        },
+        {
+          "version": "V041__alert_triage_state"
+        },
+        {
+          "version": "V042__brain_runs"
+        },
+        {
+          "version": "V043__brain_run_planning"
+        },
+        {
+          "version": "V044__sanitize_brain_dispatch_errors"
+        },
+        {
+          "version": "V045__brain_self_corr_status"
+        },
+        {
+          "version": "V046__brain_research_evidence"
+        },
+        {
+          "version": "V047__brain_run_candidates"
+        },
+        {
+          "version": "V048__bounded_storage_and_lookup"
+        }
+      ]
+    },
+    "connections": {
+      "seconds": 0.586,
+      "rows": [
+        {
+          "state": "active",
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "count": 2
+        }
+      ]
+    },
+    "signal_coverage": {
+      "seconds": 0.57,
+      "rows": [
+        {
+          "source": "fast",
+          "rows": 5526,
+          "tickers": 442,
+          "min": "2026-08-05",
+          "max": "2026-09-05"
+        },
+        {
+          "source": "slow",
+          "rows": 53776,
+          "tickers": 558,
+          "min": "2026-05-10",
+          "max": "2026-09-04"
+        }
+      ]
+    },
+    "expired_cache": {
+      "seconds": 0.626,
+      "rows": [
+        {
+          "rows": 20,
+          "expired": 20
+        }
+      ]
+    },
+    "log_counts": {
+      "seconds": 0.515,
+      "rows": [
+        {
+          "source": "error_log",
+          "rows": 1295,
+          "oldest": "2026-05-10 15:05:38.413300+00:00",
+          "newest": "2026-09-04 17:10:41.986670+00:00"
+        },
+        {
+          "source": "cron_runs",
+          "rows": 11254,
+          "oldest": "2026-05-10 15:05:38.306001+00:00",
+          "newest": "2026-09-05 06:51:43.212594+00:00"
+        }
+      ]
+    }
+  }
+}

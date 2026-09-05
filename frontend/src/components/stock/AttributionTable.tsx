@@ -100,8 +100,8 @@ export default function AttributionTable({
   const modeLongLabel = locale === "zh" ? "长线" : "Long";
   const modeTip =
     locale === "zh"
-      ? "切换因子档的时间维度。短线 12d/60d 跟其他短窗口信号同步;长线 252d/126d 是学术经典。同步影响 Picks 排序 + 雷达图。"
-      : "Toggle the factor signal's time horizon. Short (12d/60d) aligns with the other short-window legs; Long (252d/126d) is the academic standard. Syncs across Picks ranking + Radar.";
+      ? "切换此表的因子观测周期：短线 12d/60d，长线 252d/126d。今日推荐同步切换对应策略；六维雷达保留快照评级口径，不随此开关变化。"
+      : "Switch the factor observation in this table: short 12d/60d or long 252d/126d. Picks uses the corresponding policy. The six-dimension radar keeps the snapshot's grading basis.";
 
   // Honest empty-state for the Rank IC / ICIR / IR columns. signal_ic_history
   // is populated by the IC backtest engine; until that pipeline has

@@ -64,6 +64,7 @@ on:
         options:
           - slow_daily
           - fast_intraday
+          - publish_recommendation
           - fast_tech
           - fast_mid
           - fast_slow
@@ -86,6 +87,24 @@ env:
   CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
 jobs:
+  publish_recommendation:
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'publish_recommendation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Publish already-computed recommendation snapshot
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          HTTP=$(curl -sS --max-time 290 -o /tmp/publish.json -w '%{http_code}' \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" \
+            --get --data-urlencode "request_id=${REQUEST_ID:-$GITHUB_RUN_ID}" \
+            "$BACKEND_BASE/api/cron/publish_recommendation")
+          cat /tmp/publish.json
+          test "$HTTP" = 200
+          python3 -c "import json,sys; sys.exit(0 if json.load(open('/tmp/publish.json')).get('ok') else 1)"
+
   # fast_intraday runs first when both are dispatched, so picks-page data
   # (the user-visible product surface) gets refreshed before the bulk slow
   # refresh tail. Each is independent at the data layer.
