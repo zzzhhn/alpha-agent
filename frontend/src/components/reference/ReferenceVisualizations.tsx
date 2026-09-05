@@ -8,12 +8,12 @@ import {
 } from "@/components/tm/TmTable";
 
 const RADAR_VALUES = [
-  { zh: "因子", en: "Factor", positive: 2.2, negative: 0, raw: 2.2 },
+  { zh: "动量", en: "Momentum", positive: 2.2, negative: 0, raw: 2.2 },
   { zh: "技术", en: "Technical", positive: 0.8, negative: 0, raw: 0.8 },
-  { zh: "新闻", en: "News", positive: 0, negative: 1.1, raw: -1.1 },
-  { zh: "内部人", en: "Insider", positive: 0.5, negative: 0, raw: 0.5 },
-  { zh: "期权", en: "Options", positive: 1.7, negative: 0, raw: 1.7 },
-  { zh: "宏观", en: "Macro", positive: 0, negative: 0.7, raw: -0.7 },
+  { zh: "情绪", en: "Sentiment", positive: 0, negative: 1.1, raw: -1.1 },
+  { zh: "催化", en: "Catalyst", positive: 1.7, negative: 0, raw: 1.7 },
+  { zh: "内部", en: "Insider", positive: 0, negative: 0, raw: null },
+  { zh: "资金流", en: "Flow", positive: 0, negative: 0.7, raw: -0.7 },
 ] as const;
 
 type CoverageStatus = "live" | "registered" | "source-only";
@@ -79,8 +79,9 @@ export function ReferenceVisualizations({ locale }: { readonly locale: Locale })
             data={radarData}
             positiveLabel={zh ? "偏多" : "Bullish"}
             negativeLabel={zh ? "偏空" : "Bearish"}
+            unavailableLabel={zh ? "暂无可比数据" : "Not comparable"}
             ariaLabel={zh ? "六维股票信号归因示例" : "Six-axis stock signal attribution example"}
-            summary={zh ? "示例归因：正向由因子与期权驱动，新闻和宏观为负向。" : "Sample attribution: factor and options lead; news and macro detract."}
+            summary={zh ? "示例：固定六维，内部维度缺测时保留轴，以虚线和缺测标签区分中性零值。" : "Example: six fixed axes. Missing Insider data keeps its axis and is distinguished from a neutral zero."}
           />
         </TmPane>
 

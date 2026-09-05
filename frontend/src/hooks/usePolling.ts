@@ -29,35 +29,54 @@ export function usePolling<T>({
     null
   );
   const fetcherRef = useRef(fetcher);
+  const generation = useRef(0);
+  const inFlight = useRef<Promise<void> | null>(null);
   fetcherRef.current = fetcher;
 
-  const refetch = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const result = await fetcherRef.current();
-      setData(result);
-      setError(null);
-      setLastUpdated(new Date().toISOString());
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Unknown error";
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
+  const refetch = useCallback(() => {
+    if (inFlight.current) return inFlight.current;
+    const current = generation.current;
+    const request = (async () => {
+      try {
+        setIsLoading(true);
+        const result = await fetcherRef.current();
+        if (current !== generation.current) return;
+        setData(result);
+        setError(null);
+        setLastUpdated(new Date().toISOString());
+      } catch (err) {
+        if (current === generation.current) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
+      } finally {
+        if (current === generation.current) setIsLoading(false);
+      }
+    })();
+    inFlight.current = request;
+    void request.finally(() => {
+      if (inFlight.current === request) inFlight.current = null;
+    });
+    return request;
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) { setIsLoading(false); return; }
 
-    refetch();
+    const pollVisible = () => {
+      if (document.visibilityState === "visible") void refetch();
+    };
+    pollVisible();
+    document.addEventListener("visibilitychange", pollVisible);
 
-    intervalRef.current = setInterval(refetch, intervalMs);
+    intervalRef.current = setInterval(pollVisible, intervalMs);
 
     return () => {
       if (intervalRef.current !== null) {
         clearInterval(intervalRef.current);
       }
+      generation.current += 1;
+      inFlight.current = null;
+      document.removeEventListener("visibilitychange", pollVisible);
     };
   }, [enabled, intervalMs, refetch]);
 

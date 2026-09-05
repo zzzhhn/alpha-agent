@@ -1,4 +1,5 @@
 "use client";
+import { useAdminAccess } from "@/components/layout/SystemHealth";
 
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
@@ -142,6 +143,7 @@ export function ProposalsTable({
   locale: Locale;
 }) {
   const router = useRouter();
+  const isAdmin = useAdminAccess();
   // Track which proposal id is currently awaiting a mutation (null = none)
   const [pendingId, setPendingId] = useState<number | null>(null);
   // Per-row error messages
@@ -250,7 +252,7 @@ export function ProposalsTable({
                       <TmButton
                         variant="primary"
                         size="xs"
-                        disabled={isRowPending}
+                        disabled={!isAdmin || isRowPending}
                         onClick={() => handleAction(p.id, "approve")}
                         className="text-xs leading-[16px]"
                       >
@@ -259,7 +261,7 @@ export function ProposalsTable({
                       <TmButton
                         variant="danger"
                         size="xs"
-                        disabled={isRowPending}
+                        disabled={!isAdmin || isRowPending}
                         onClick={() => handleAction(p.id, "reject")}
                         className="text-xs leading-[16px]"
                       >

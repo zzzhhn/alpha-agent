@@ -7,13 +7,14 @@ daily-level handling in caller modules.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 import yfinance as yf
 
 
-_PERIOD = "7d"      # yfinance 1m bar max retention
+_PERIOD = "1d"      # Only download the cache window we retain.
 _INTERVAL = "1m"
 
 # DB-side retention for the minute_bars rolling cache. Tightened from 7 to 2
@@ -49,10 +50,14 @@ async def prune_minute_bars(pool) -> str:
 
 
 async def pull_and_store_minute_bars(pool, ticker: str) -> int:
-    """Pull last 7 days of 1m bars for ticker, upsert into minute_bars.
+    """Pull retained 1m bars without reinserting already-expired history.
     Returns number of rows upserted. Idempotent via ON CONFLICT."""
-    df = _yf_history(ticker)
+    df = await asyncio.to_thread(_yf_history, ticker)
     if df is None or df.empty:
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(days=MINUTE_BARS_RETENTION_DAYS)
+    df = df.loc[pd.to_datetime(df.index, utc=True) >= cutoff]
+    if df.empty:
         return 0
     rows = [
         (
@@ -75,6 +80,10 @@ async def pull_and_store_minute_bars(pool, ticker: str) -> int:
             open = EXCLUDED.open, high = EXCLUDED.high,
             low  = EXCLUDED.low,  close = EXCLUDED.close,
             volume = EXCLUDED.volume, fetched_at = now()
+        WHERE (minute_bars.open, minute_bars.high, minute_bars.low,
+               minute_bars.close, minute_bars.volume)
+          IS DISTINCT FROM (EXCLUDED.open, EXCLUDED.high, EXCLUDED.low,
+                            EXCLUDED.close, EXCLUDED.volume)
         """,
         rows,
     )

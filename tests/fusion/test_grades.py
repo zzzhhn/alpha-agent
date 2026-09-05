@@ -5,6 +5,7 @@ from alpha_agent.fusion.grades import (
     NO_GRADE,
     compute_dimension_thresholds,
     grade_dimensions,
+    score_dimensions,
 )
 
 
@@ -86,3 +87,14 @@ def test_missing_member_for_ticker_shows_no_grade():
     # This ticker has no technicals entry -> "—" even though Technical is
     # gradeable universe-wide.
     assert grade_dimensions(_bd(factor=1.0), th)["Technical"] == NO_GRADE
+
+
+def test_dimension_scores_share_grade_normalization_and_preserve_missing():
+    universe = [_bd(factor=float(i), technicals=float(i * 2)) for i in range(50)]
+    th = compute_dimension_thresholds(universe)
+    scores = score_dimensions(_bd(factor=49.0), th)
+
+    assert scores["Momentum"] is not None
+    assert scores["Momentum"] >= 1.5
+    assert grade_dimensions(_bd(factor=49.0), th)["Momentum"] == "A+"
+    assert scores["Technical"] is None

@@ -28,21 +28,26 @@ from alpha_agent.fusion.grades import compute_dimension_thresholds
 # over slow (same dedup as the picks route), with NO limit or search filter.
 _UNIVERSE_SQL = """
 WITH fast_latest AS (
-    SELECT DISTINCT ON (ticker) ticker, breakdown
+    SELECT DISTINCT ON (ticker) ticker, breakdown, fetched_at
     FROM daily_signals_fast
     WHERE composite IS NOT NULL AND composite = composite
     ORDER BY ticker, date DESC, fetched_at DESC
 ),
 slow_latest AS (
-    SELECT DISTINCT ON (ticker) ticker, breakdown
+    SELECT DISTINCT ON (ticker) ticker, breakdown, fetched_at
     FROM daily_signals_slow
     WHERE composite_partial IS NOT NULL AND composite_partial = composite_partial
     ORDER BY ticker, date DESC, fetched_at DESC
 )
-SELECT breakdown FROM fast_latest
-UNION ALL
-SELECT s.breakdown FROM slow_latest s
-WHERE NOT EXISTS (SELECT 1 FROM fast_latest f WHERE f.ticker = s.ticker)
+SELECT jsonb_build_object('breakdown', (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('signal', e->'signal', 'z', e->'z', 'error', e->'error')), '[]'::jsonb)
+    FROM jsonb_array_elements(COALESCE(latest.breakdown->'breakdown', '[]'::jsonb)) e
+)) AS breakdown
+FROM (
+    SELECT DISTINCT ON (ticker) ticker, breakdown FROM (
+        SELECT * FROM fast_latest UNION ALL SELECT * FROM slow_latest
+    ) combined ORDER BY ticker, fetched_at DESC
+) latest
 """
 
 _TTL_SECONDS = 600.0

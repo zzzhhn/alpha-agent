@@ -7,7 +7,7 @@ import type { paths } from "../../../api-types.gen";
 // server-component fetches. Auth-gated endpoints are only called client-side.
 const API_BASE =
   typeof window === "undefined"
-    ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app"
+    ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-api.bobbyzhong.com"
     : "";
 
 // Backend may use the standard envelope { code, message } OR FastAPI's default
@@ -38,6 +38,7 @@ export class ApiException extends Error {
  *   fetchPicks(50, undefined, undefined, { revalidate: 60, tags: ["picks-lean"] })
  */
 export interface ApiGetOptions {
+  timeoutMs?: number;
   // Seconds before the cached entry is considered stale. `false` = cache
   // forever (until tag-based revalidation). Omit to opt out of caching.
   revalidate?: number | false;
@@ -51,6 +52,7 @@ export async function apiGet<T>(path: string, opts?: ApiGetOptions): Promise<T> 
   };
   const init: NextFetchInit = {
     headers: { "content-type": "application/json" },
+    signal: AbortSignal.timeout(opts?.timeoutMs ?? 30_000),
   };
   if (opts?.revalidate !== undefined || opts?.tags) {
     // Server-side cache opt-in. `cache` field omitted because it is

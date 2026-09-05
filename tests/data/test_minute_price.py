@@ -23,9 +23,7 @@ async def pool(applied_db):
 # Base timestamp a few days back so the seeded bars stay inside
 # get_bars_for_event's 30-day coverage window regardless of the wall-clock date
 # the suite runs on (a hardcoded date silently aged out of the window).
-_BASE_TS = (datetime.now(UTC) - timedelta(days=3)).replace(
-    hour=14, minute=30, second=0, microsecond=0
-)
+_BASE_TS = (datetime.now(UTC) - timedelta(hours=2)).replace(second=0, microsecond=0)
 
 
 def _fake_df():

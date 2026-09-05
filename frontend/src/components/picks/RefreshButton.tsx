@@ -12,6 +12,7 @@ import { triggerRefresh, fetchLastRefresh } from "@/lib/api/admin";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmButton } from "@/components/tm/TmButton";
+import { useAdminAccess } from "@/components/layout/SystemHealth";
 import {
   clearDispatch,
   DISPATCH_EVENT,
@@ -78,6 +79,7 @@ function DispatchProgress({
 }
 
 export default function RefreshButton() {
+  const isAdmin = useAdminAccess();
   const { locale } = useLocale();
   const [toast, setToast] = useState<ToastState>({ kind: "idle" });
   const [lastRun, setLastRun] = useState<string | null>(null);
@@ -297,8 +299,8 @@ export default function RefreshButton() {
           variant="secondary"
           size="sm"
           onClick={onClick}
-          disabled={pending || inFlight}
-          title={inFlight ? t(locale, "picks.refresh.inflight_tip") : undefined}
+          disabled={!isAdmin || pending || inFlight}
+          title={!isAdmin ? (locale === "zh" ? "数据按计划更新，手动刷新仅限管理员" : "Data updates on schedule. Manual refresh requires the administrator.") : inFlight ? t(locale, "picks.refresh.inflight_tip") : undefined}
           loading={pending}
           loadingLabel={t(locale, "picks.refresh.pending")}
           className="rounded-[2px]"

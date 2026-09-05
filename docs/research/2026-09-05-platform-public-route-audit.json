@@ -1,0 +1,1260 @@
+{
+  "observed_at": "2026-09-05T09:39:11.323228+00:00",
+  "base": "https://alpha-api.bobbyzhong.com",
+  "api_routes": {
+    "/api/v1/system/health": [
+      "get"
+    ],
+    "/api/v1/system/config": [
+      "get"
+    ],
+    "/api/v1/services/health": [
+      "get"
+    ],
+    "/api/v1/pipelines/latency": [
+      "get"
+    ],
+    "/api/v1/metrics/throughput": [
+      "get"
+    ],
+    "/api/v1/market/state": [
+      "get"
+    ],
+    "/api/v1/market/indicators/{ticker}": [
+      "get"
+    ],
+    "/api/v1/inference/predict": [
+      "get"
+    ],
+    "/api/v1/inference/models": [
+      "get"
+    ],
+    "/api/v1/features/state": [
+      "get"
+    ],
+    "/api/v1/features/stats/{ticker}": [
+      "get"
+    ],
+    "/api/v1/alpha/signals": [
+      "get"
+    ],
+    "/api/v1/alpha/factors": [
+      "get"
+    ],
+    "/api/v1/alpha/factors/summary": [
+      "get"
+    ],
+    "/api/v1/portfolio/positions": [
+      "get"
+    ],
+    "/api/v1/portfolio/risk": [
+      "get"
+    ],
+    "/api/v1/gateway/status": [
+      "get"
+    ],
+    "/api/v1/gateway/rules": [
+      "get"
+    ],
+    "/api/v1/dashboard/summary": [
+      "get"
+    ],
+    "/api/dashboard": [
+      "get"
+    ],
+    "/api/v1/data/quality/{ticker}": [
+      "get"
+    ],
+    "/api/system": [
+      "get"
+    ],
+    "/api/v1/alpha/translate": [
+      "post"
+    ],
+    "/api/v1/factor/explain_ast": [
+      "post"
+    ],
+    "/api/v1/factor/backtest": [
+      "post"
+    ],
+    "/api/v1/factors/library": [
+      "get"
+    ],
+    "/api/v1/factor/backtest/export": [
+      "post"
+    ],
+    "/api/v1/data/universe": [
+      "get"
+    ],
+    "/api/v1/data/operands": [
+      "get"
+    ],
+    "/api/v1/data/sectors": [
+      "get"
+    ],
+    "/api/v1/data/coverage": [
+      "get"
+    ],
+    "/api/v1/signal/today": [
+      "post"
+    ],
+    "/api/v1/signal/ic_timeseries": [
+      "post"
+    ],
+    "/api/v1/signal/exposure": [
+      "post"
+    ],
+    "/api/v1/screener/run": [
+      "post"
+    ],
+    "/api/v1/zoo/correlation": [
+      "post"
+    ],
+    "/api/picks/lean": [
+      "get"
+    ],
+    "/api/picks/scoreboard": [
+      "get"
+    ],
+    "/api/picks/edge": [
+      "get"
+    ],
+    "/api/stock/{ticker}": [
+      "get"
+    ],
+    "/api/stock/{ticker}/events": [
+      "get"
+    ],
+    "/api/stock/{ticker}/explain_range": [
+      "post"
+    ],
+    "/api/stock/{ticker}/persona/{persona_name}/explain": [
+      "post"
+    ],
+    "/api/stock/{ticker}/persona/{persona_name}/explain/stream": [
+      "post"
+    ],
+    "/api/stock/{ticker}/news-day-summary/stream": [
+      "post"
+    ],
+    "/api/stock/personas": [
+      "get"
+    ],
+    "/api/stock/{ticker}/ohlcv": [
+      "get"
+    ],
+    "/api/stock/{ticker}/profile": [
+      "get"
+    ],
+    "/api/stock/{ticker}/minute_bars": [
+      "get"
+    ],
+    "/api/brief/{ticker}": [
+      "post"
+    ],
+    "/api/brief/{ticker}/stream": [
+      "post"
+    ],
+    "/api/watchlist": [
+      "get",
+      "post"
+    ],
+    "/api/_health": [
+      "get"
+    ],
+    "/api/_health/signals": [
+      "get"
+    ],
+    "/api/_health/dag": [
+      "get"
+    ],
+    "/api/_health/cron": [
+      "get"
+    ],
+    "/api/_health/routers": [
+      "get"
+    ],
+    "/api/_health/news_freshness": [
+      "get"
+    ],
+    "/api/_health/data_sources": [
+      "get"
+    ],
+    "/api/cron/auth_check": [
+      "get"
+    ],
+    "/api/cron/slow_daily": [
+      "get",
+      "post"
+    ],
+    "/api/cron/fast_intraday": [
+      "get",
+      "post"
+    ],
+    "/api/cron/publish_recommendation": [
+      "get",
+      "post"
+    ],
+    "/api/cron/alert_dispatcher": [
+      "get",
+      "post"
+    ],
+    "/api/cron/l2_cycle": [
+      "get",
+      "post"
+    ],
+    "/api/cron/news_per_ticker": [
+      "get",
+      "post"
+    ],
+    "/api/cron/news_macro": [
+      "get",
+      "post"
+    ],
+    "/api/cron/minute_bars": [
+      "get",
+      "post"
+    ],
+    "/api/cron/paper_fill": [
+      "get",
+      "post"
+    ],
+    "/api/cron/daily_prices": [
+      "get",
+      "post"
+    ],
+    "/api/cron/methodology_proposer": [
+      "get",
+      "post"
+    ],
+    "/api/cron/run_propose_jobs": [
+      "get",
+      "post"
+    ],
+    "/api/cron/daily_factor_loop": [
+      "get",
+      "post"
+    ],
+    "/api/cron/compute_ic_annotations": [
+      "get",
+      "post"
+    ],
+    "/api/admin/refresh": [
+      "post"
+    ],
+    "/api/admin/last_refresh": [
+      "get"
+    ],
+    "/api/admin/config": [
+      "get",
+      "post"
+    ],
+    "/api/admin/cache_stats": [
+      "get"
+    ],
+    "/api/alerts/recent": [
+      "get"
+    ],
+    "/api/alerts/inbox": [
+      "get"
+    ],
+    "/api/alerts/{alert_id}/state": [
+      "post"
+    ],
+    "/api/user/me": [
+      "get"
+    ],
+    "/api/user/byok": [
+      "post",
+      "get",
+      "delete"
+    ],
+    "/api/user/byok/test": [
+      "post"
+    ],
+    "/api/user/account/delete": [
+      "post"
+    ],
+    "/api/user/account/export": [
+      "get"
+    ],
+    "/api/user/settings/history": [
+      "get"
+    ],
+    "/api/user/settings/rollback/{change_id}": [
+      "post"
+    ],
+    "/api/macro_context": [
+      "get"
+    ],
+    "/api/news/enrich/{ticker}": [
+      "post"
+    ],
+    "/api/news/enrich/{ticker}/stream": [
+      "post"
+    ],
+    "/api/cron/ic_backtest_monthly": [
+      "post"
+    ],
+    "/api/evolution/ic_trend": [
+      "get"
+    ],
+    "/api/evolution/ic_annotations": [
+      "get"
+    ],
+    "/api/evolution/_compute_ic_annotations": [
+      "post"
+    ],
+    "/api/evolution/weights": [
+      "get"
+    ],
+    "/api/evolution/calibration": [
+      "get"
+    ],
+    "/api/evolution/changes": [
+      "get"
+    ],
+    "/api/evolution/proposals": [
+      "get"
+    ],
+    "/api/evolution/proposals/{proposal_id}/approve": [
+      "post"
+    ],
+    "/api/evolution/proposals/{proposal_id}/reject": [
+      "post"
+    ],
+    "/api/evolution/proposals/{proposal_id}/rollback": [
+      "post"
+    ],
+    "/api/factor-lab/diagnostic": [
+      "get"
+    ],
+    "/api/factor-lab/lessons": [
+      "get"
+    ],
+    "/api/factor-lab/briefing": [
+      "get"
+    ],
+    "/api/factor-lab/propose": [
+      "post"
+    ],
+    "/api/factor-lab/jobs/{job_id}": [
+      "get"
+    ],
+    "/api/factor-lab/_apply_migrations": [
+      "post"
+    ],
+    "/api/factor-lab/live-expression": [
+      "post"
+    ],
+    "/api/factor-lab/_demo_seed": [
+      "post"
+    ],
+    "/api/factor-lab/proposals": [
+      "get"
+    ],
+    "/api/factor-lab/proposals/{proposal_id}/approve": [
+      "post"
+    ],
+    "/api/factor-lab/proposals/{proposal_id}/reject": [
+      "post"
+    ],
+    "/api/factor-lab/proposals/{proposal_id}/rollback": [
+      "post"
+    ],
+    "/api/brain/credentials": [
+      "get",
+      "post"
+    ],
+    "/api/brain/credentials/test": [
+      "post"
+    ],
+    "/api/brain/mine": [
+      "post"
+    ],
+    "/api/brain/runs": [
+      "get"
+    ],
+    "/api/brain/runs/{run_id}/candidates": [
+      "get"
+    ],
+    "/api/brain/mine/status": [
+      "get"
+    ],
+    "/api/brain/alphas": [
+      "get"
+    ],
+    "/api/brain/alphas/{row_id}/pnl": [
+      "get"
+    ],
+    "/api/brain/alphas/{row_id}/yearly": [
+      "get"
+    ],
+    "/api/brain/alphas/{row_id}/submit": [
+      "post"
+    ],
+    "/api/paper/account": [
+      "get"
+    ],
+    "/api/paper/order": [
+      "post"
+    ],
+    "/api/paper/orders": [
+      "get"
+    ],
+    "/api/paper/order/{order_id}": [
+      "delete"
+    ],
+    "/api/paper/equity-curve": [
+      "get"
+    ],
+    "/api/paper/reset": [
+      "post"
+    ],
+    "/api/paper/attribution": [
+      "get"
+    ],
+    "/api/l2/summary": [
+      "get"
+    ],
+    "/api/health": [
+      "get"
+    ],
+    "/api/healthz/ast": [
+      "get"
+    ],
+    "/api/healthz/sandbox": [
+      "get"
+    ],
+    "/api/_debug/load-errors": [
+      "get"
+    ],
+    "/api/_debug/routes": [
+      "get"
+    ]
+  },
+  "http": [
+    {
+      "path": "/api/_health",
+      "status": 200,
+      "seconds": 1.093,
+      "bytes": 168,
+      "keys": [
+        "tunnel",
+        "db",
+        "last_slow_cron",
+        "last_fast_cron",
+        "last_dispatcher",
+        "db_error"
+      ],
+      "health": {
+        "tunnel": "ok",
+        "db": "ok",
+        "last_slow_cron": "2026-09-04T17:11:12.295722+00:00",
+        "last_fast_cron": "2026-09-05T00:39:42.366354+00:00",
+        "last_dispatcher": null,
+        "db_error": null
+      }
+    },
+    {
+      "path": "/api/_health/routers",
+      "status": 200,
+      "seconds": 0.765,
+      "bytes": 1206,
+      "keys": [
+        "total",
+        "loaded",
+        "failed",
+        "routers"
+      ],
+      "health": {
+        "total": 25,
+        "loaded": 25,
+        "failed": 0,
+        "routers": [
+          {
+            "name": "serverless",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "system",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "interactive",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "data",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "signal",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "screener",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "zoo",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "picks",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "basket_edge",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "stock",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "brief",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "watchlist",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "m2_health",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "cron_routes",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "admin",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "alerts",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "user",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "macro_context",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "news_enrich",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "ic_backtest",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "evolution",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "factor_lab",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "brain",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "paper",
+            "loaded": true,
+            "error": null
+          },
+          {
+            "name": "l2",
+            "loaded": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/_health/signals",
+      "status": 200,
+      "seconds": 2.948,
+      "bytes": 3906,
+      "keys": [
+        "signals"
+      ],
+      "health": {
+        "signals": [
+          {
+            "name": "factor",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": -0.02177,
+            "live_ic_60d": -0.02177,
+            "live_ic_90d": -0.02177,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.3878253396276749,
+            "ir_30d": -1.124024621652702,
+            "n_obs_30d": 81
+          },
+          {
+            "name": "technicals",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.05399,
+            "live_ic_60d": 0.05399,
+            "live_ic_90d": 0.05399,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.9068714568155437,
+            "ir_30d": -2.628363188215942,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "rsrs",
+            "last_success": "2026-09-04T21:38:54.323361+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.0224,
+            "live_ic_60d": 0.0224,
+            "live_ic_90d": 0.0224,
+            "weight_current": 0.0075,
+            "tier": "green",
+            "icir_30d": 0.3327972516899253,
+            "ir_30d": 0.9645380708670275,
+            "n_obs_30d": 46
+          },
+          {
+            "name": "analyst",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": -0.03392,
+            "live_ic_60d": -0.03392,
+            "live_ic_90d": -0.03392,
+            "weight_current": 0.2017,
+            "tier": "unknown",
+            "icir_30d": 0.8504784159036944,
+            "ir_30d": 2.4649206278725657,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "earnings",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.05584,
+            "live_ic_60d": 0.05584,
+            "live_ic_90d": 0.05584,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": 0.17305266897282995,
+            "ir_30d": 0.5015542846037773,
+            "n_obs_30d": 73
+          },
+          {
+            "name": "news",
+            "last_success": "2026-09-05T00:41:39.391956+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.00329,
+            "live_ic_60d": 0.00329,
+            "live_ic_90d": 0.00329,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.7872882254142058,
+            "ir_30d": -2.2817780564632346,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "insider",
+            "last_success": "2026-09-05T00:41:39.391956+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.02572,
+            "live_ic_60d": 0.02572,
+            "live_ic_90d": 0.02572,
+            "weight_current": 0.0691,
+            "tier": "green",
+            "icir_30d": 0.4874175833339898,
+            "ir_30d": 1.4126703665620066,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "options",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01371,
+            "live_ic_60d": 0.01371,
+            "live_ic_90d": 0.01371,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": -0.9500576631828963,
+            "ir_30d": -2.7535287055575406,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "premarket",
+            "last_success": null,
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0691,
+            "tier": "yellow",
+            "icir_30d": 0.23647233846875482,
+            "ir_30d": 0.6853619493606304,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "macro",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0691,
+            "tier": "yellow",
+            "icir_30d": 0.23647233846875482,
+            "ir_30d": 0.6853619493606304,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "calendar",
+            "last_success": "2026-09-05T00:41:39.890963+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0691,
+            "tier": "yellow",
+            "icir_30d": 0.23647233846875482,
+            "ir_30d": 0.6853619493606304,
+            "n_obs_30d": 80
+          },
+          {
+            "name": "political_impact",
+            "last_success": null,
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": 0.01643,
+            "live_ic_60d": 0.01643,
+            "live_ic_90d": 0.01643,
+            "weight_current": 0.0,
+            "tier": "red",
+            "icir_30d": 0.08294852074276404,
+            "ir_30d": 0.24040765292450064,
+            "n_obs_30d": 72
+          },
+          {
+            "name": "geopolitical_impact",
+            "last_success": null,
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": null,
+            "live_ic_60d": null,
+            "live_ic_90d": null,
+            "weight_current": null,
+            "tier": "insufficient_data",
+            "icir_30d": null,
+            "ir_30d": null,
+            "n_obs_30d": 0
+          },
+          {
+            "name": "supply_chain",
+            "last_success": "2026-09-05T00:35:56.643421+00:00",
+            "last_error": null,
+            "error_count_24h": 0,
+            "live_ic_30d": -0.08435,
+            "live_ic_60d": -0.08435,
+            "live_ic_90d": -0.08435,
+            "weight_current": 0.0075,
+            "tier": "unknown",
+            "icir_30d": -0.8383627959388337,
+            "ir_30d": -2.4298062251876753,
+            "n_obs_30d": 48
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/_health/cron",
+      "status": 200,
+      "seconds": 0.377,
+      "bytes": 1316,
+      "keys": [
+        "cron"
+      ],
+      "health": {
+        "cron": {
+          "slow_daily": [
+            {
+              "started_at": "2026-09-04T17:11:12.295722+00:00",
+              "finished_at": "2026-09-04T17:12:38.257255+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-04T17:09:12.930299+00:00",
+              "finished_at": "2026-09-04T17:10:41.998069+00:00",
+              "ok": false,
+              "error_count": 2
+            },
+            {
+              "started_at": "2026-09-04T17:07:11.658352+00:00",
+              "finished_at": "2026-09-04T17:08:42.589229+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-04T17:05:07.453043+00:00",
+              "finished_at": "2026-09-04T17:06:41.376709+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-04T17:03:05.788659+00:00",
+              "finished_at": "2026-09-04T17:04:37.088229+00:00",
+              "ok": true,
+              "error_count": 0
+            }
+          ],
+          "fast_intraday": [
+            {
+              "started_at": "2026-09-05T00:39:42.366354+00:00",
+              "finished_at": "2026-09-05T00:41:39.899354+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:37:18.673405+00:00",
+              "finished_at": "2026-09-05T00:39:12.049608+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:34:52.355432+00:00",
+              "finished_at": "2026-09-05T00:36:48.268074+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:32:25.140263+00:00",
+              "finished_at": "2026-09-05T00:34:22.067391+00:00",
+              "ok": true,
+              "error_count": 0
+            },
+            {
+              "started_at": "2026-09-05T00:29:57.196426+00:00",
+              "finished_at": "2026-09-05T00:31:54.707381+00:00",
+              "ok": true,
+              "error_count": 0
+            }
+          ],
+          "alert_dispatcher": []
+        }
+      }
+    },
+    {
+      "path": "/api/_health/dag",
+      "status": 200,
+      "seconds": 0.605,
+      "bytes": 1205,
+      "keys": [
+        "overall",
+        "nodes"
+      ],
+      "health": {
+        "overall": "degraded",
+        "nodes": [
+          {
+            "name": "daily_prices",
+            "status": "healthy",
+            "last_observed_at": "2026-09-04T23:35:43.969015+00:00",
+            "age_hours": 10.06,
+            "expected_within_hours": 30,
+            "error_count": 0,
+            "observed_runs": 8,
+            "required_runs": 8
+          },
+          {
+            "name": "fast_intraday",
+            "status": "healthy",
+            "last_observed_at": "2026-09-05T00:41:39.899354+00:00",
+            "age_hours": 8.96,
+            "expected_within_hours": 30,
+            "error_count": 0,
+            "observed_runs": 6,
+            "required_runs": 6
+          },
+          {
+            "name": "recommendation_publish",
+            "status": "stale",
+            "last_observed_at": "2026-09-04T00:44:28.627109+00:00",
+            "age_hours": 32.91,
+            "expected_within_hours": 30,
+            "error_count": 0,
+            "observed_runs": 1,
+            "required_runs": 1
+          },
+          {
+            "name": "l2_cycle",
+            "status": "healthy",
+            "last_observed_at": "2026-09-05T01:25:06.807759+00:00",
+            "age_hours": 8.24,
+            "expected_within_hours": 48,
+            "error_count": 0,
+            "observed_runs": 2,
+            "required_runs": 1
+          },
+          {
+            "name": "paper_fill",
+            "status": "healthy",
+            "last_observed_at": "2026-09-05T01:00:32.112844+00:00",
+            "age_hours": 8.65,
+            "expected_within_hours": 48,
+            "error_count": 0,
+            "observed_runs": 2,
+            "required_runs": 1
+          },
+          {
+            "name": "ic_backtest_monthly",
+            "status": "healthy",
+            "last_observed_at": "2026-09-04T23:36:06.022288+00:00",
+            "age_hours": 10.05,
+            "expected_within_hours": 840,
+            "error_count": 0,
+            "observed_runs": 27,
+            "required_runs": 1
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/_health/data_sources",
+      "status": 200,
+      "seconds": 0.516,
+      "bytes": 327,
+      "keys": [
+        "sources"
+      ],
+      "health": {
+        "sources": {
+          "finnhub": {
+            "rows": 549,
+            "last_fetched_at": "2026-09-04T15:12:07.708907+00:00"
+          },
+          "edgar": {
+            "rows": 534,
+            "last_fetched_at": "2026-09-04T15:19:39.635978+00:00"
+          },
+          "news": {
+            "rows": 13374,
+            "last_fetched_at": "2026-09-04T21:04:58.443494+00:00"
+          },
+          "yfinance": {
+            "rows": 442,
+            "last_fetched_at": "2026-09-05T00:41:39.890963+00:00"
+          },
+          "fred": null
+        }
+      }
+    },
+    {
+      "path": "/api/picks/lean?limit=5",
+      "status": 200,
+      "seconds": 0.461,
+      "bytes": 7475,
+      "keys": [
+        "picks",
+        "as_of",
+        "stale",
+        "canonical",
+        "ranked",
+        "tradable",
+        "run",
+        "changes"
+      ]
+    },
+    {
+      "path": "/api/stock/NVDA",
+      "status": 200,
+      "seconds": 1.153,
+      "bytes": 15172,
+      "keys": [
+        "card",
+        "stale"
+      ],
+      "signals": [
+        "factor",
+        "technicals",
+        "rsrs",
+        "analyst",
+        "earnings",
+        "news",
+        "insider",
+        "options",
+        "premarket",
+        "macro",
+        "calendar",
+        "political_impact",
+        "geopolitical_impact",
+        "supply_chain"
+      ],
+      "partial": false
+    },
+    {
+      "path": "/api/stock/AAPL",
+      "status": 200,
+      "seconds": 0.492,
+      "bytes": 15102,
+      "keys": [
+        "card",
+        "stale"
+      ],
+      "signals": [
+        "factor",
+        "technicals",
+        "rsrs",
+        "analyst",
+        "earnings",
+        "news",
+        "insider",
+        "options",
+        "premarket",
+        "macro",
+        "calendar",
+        "political_impact",
+        "geopolitical_impact",
+        "supply_chain"
+      ],
+      "partial": false
+    },
+    {
+      "path": "/api/evolution/ic_trend",
+      "status": 200,
+      "seconds": 0.336,
+      "bytes": 22453,
+      "keys": [
+        "window_days",
+        "horizon_days",
+        "series"
+      ]
+    },
+    {
+      "path": "/api/evolution/weights",
+      "status": 200,
+      "seconds": 0.346,
+      "bytes": 11719,
+      "keys": [
+        "weights"
+      ]
+    },
+    {
+      "path": "/api/evolution/changes?limit=5",
+      "status": 200,
+      "seconds": 0.363,
+      "bytes": 1380,
+      "keys": [
+        "changes"
+      ]
+    },
+    {
+      "path": "/api/evolution/proposals",
+      "status": 200,
+      "seconds": 0.372,
+      "bytes": 16,
+      "keys": [
+        "proposals"
+      ]
+    },
+    {
+      "path": "/api/alerts/recent?limit=5",
+      "status": 200,
+      "seconds": 0.452,
+      "bytes": 735,
+      "keys": [
+        "alerts"
+      ]
+    },
+    {
+      "path": "/api/brain/runs?limit=5",
+      "status": 401,
+      "seconds": 0.431,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/v1/data/operands",
+      "status": 200,
+      "seconds": 0.342,
+      "bytes": 45306,
+      "keys": [
+        "operators",
+        "operands",
+        "tier_summary"
+      ]
+    },
+    {
+      "path": "/api/v1/data/sectors",
+      "status": 200,
+      "seconds": 22.59,
+      "bytes": 229,
+      "keys": [
+        "sectors",
+        "panel_has_sector"
+      ]
+    },
+    {
+      "path": "/api/v1/data/universe",
+      "status": 200,
+      "seconds": 3.71,
+      "bytes": 12796,
+      "keys": [
+        "universes"
+      ]
+    },
+    {
+      "path": "/api/v1/data/coverage",
+      "status": 200,
+      "seconds": 0.341,
+      "bytes": 29627,
+      "keys": [
+        "universe_id",
+        "n_tickers",
+        "n_days",
+        "start_date",
+        "end_date",
+        "ohlcv_total_cells",
+        "ohlcv_missing_cells",
+        "ohlcv_coverage_pct",
+        "field_coverage",
+        "ticker_coverage"
+      ]
+    },
+    {
+      "path": "/api/v1/factors/library",
+      "status": 200,
+      "seconds": 0.315,
+      "bytes": 6907,
+      "keys": [
+        "horizon_max",
+        "category",
+        "count",
+        "seeds"
+      ]
+    },
+    {
+      "path": "/api/l2/summary",
+      "status": 200,
+      "seconds": 0.457,
+      "bytes": 2920,
+      "keys": [
+        "status",
+        "strategy_id",
+        "strategy_name",
+        "strategy_version",
+        "periods",
+        "net_return",
+        "spy_return",
+        "rsp_return",
+        "beta_spy",
+        "max_drawdown",
+        "mean_turnover",
+        "cost_sensitivity",
+        "exceptions",
+        "latest_signal_date",
+        "latest_positions",
+        "series",
+        "sector_exposure",
+        "continuous_account",
+        "strategic_continuous_account"
+      ]
+    },
+    {
+      "path": "/api/user/me",
+      "status": 401,
+      "seconds": 0.315,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/paper/account",
+      "status": 401,
+      "seconds": 0.311,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/alerts/inbox",
+      "status": 401,
+      "seconds": 0.299,
+      "bytes": 54,
+      "keys": [
+        "detail"
+      ]
+    },
+    {
+      "path": "/api/factor-lab/briefing",
+      "status": 200,
+      "seconds": 0.627,
+      "bytes": 8252,
+      "keys": [
+        "validated",
+        "flagged",
+        "failure_insights"
+      ]
+    },
+    {
+      "path": "/api/evolution/calibration",
+      "status": 200,
+      "seconds": 0.341,
+      "bytes": 105630,
+      "keys": [
+        "as_of",
+        "n_pairs",
+        "applied",
+        "isotonic_map",
+        "buckets"
+      ]
+    }
+  ]
+}

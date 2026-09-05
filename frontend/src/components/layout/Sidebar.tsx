@@ -30,6 +30,7 @@ import clsx from "clsx";
 import { useLocale } from "./LocaleProvider";
 import { t } from "@/lib/i18n";
 import SidebarAuthSlot from "./SidebarAuthSlot";
+import { SystemHealthIndicator } from "./SystemHealth";
 
 interface NavItem {
   readonly id: string;
@@ -142,11 +143,7 @@ export function Sidebar() {
       </div>
 
       <div className="mt-auto flex items-center gap-1.5 border-t border-tm-rule px-3 py-2 text-xs text-tm-muted">
-        <span
-          className="h-1.5 w-1.5 animate-tm-pulse bg-tm-accent"
-          aria-hidden="true"
-        />
-        {t(locale, "brand.systemOnline" as Parameters<typeof t>[1])}
+        <SystemHealthIndicator />
       </div>
 
       <SidebarAuthSlot />

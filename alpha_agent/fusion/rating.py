@@ -120,7 +120,7 @@ def compute_confidence(zs: Iterable[float]) -> float:
     if arr.size == 0:
         return 0.0
     # NaN-safe variance: skip NaN z values rather than poisoning the result.
-    arr = arr[~np.isnan(arr)]
+    arr = arr[np.isfinite(arr)]
     if arr.size == 0:
         return 0.0
     var = float(np.var(arr))

@@ -11,6 +11,8 @@ does not prevent health-check from answering.  Spec §5.7.
 """
 from __future__ import annotations
 
+import asyncio
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -83,33 +85,32 @@ async def _compute_signal_metrics(
     (health_signals) attaches these to SignalStatus alongside the legacy
     live_ic_* fields without breaking the schema.
     """
-    import math as _math
-
-    import numpy as _np
-
     rows = await pool.fetch(
         "SELECT ic FROM signal_ic_history "
         "WHERE signal_name = $1 AND window_days = $2 AND horizon_days = 5 "
         "ORDER BY computed_at DESC LIMIT 90",
         name, window_days,
     )
+    return _metrics_from_rows(rows, window_days)
+
+
+def _metrics_from_rows(rows, window_days: int) -> dict[str, Any]:
+    from statistics import mean, stdev
+
     if not rows:
         return {"ic_latest": None, "icir": None, "ir": None, "n_obs": 0}
-    ics = [float(r["ic"]) for r in rows if r["ic"] is not None]
+    ics = [float(r["ic"]) for r in rows
+           if r["ic"] is not None and math.isfinite(float(r["ic"]))]
     ic_latest = ics[0] if ics else None
     n_obs = len(ics)
     if n_obs < 2:
         return {"ic_latest": ic_latest, "icir": None, "ir": None, "n_obs": n_obs}
-    arr = _np.asarray(ics, dtype=float)
-    arr = arr[~_np.isnan(arr)]
-    if arr.size < 2:
-        return {"ic_latest": ic_latest, "icir": None, "ir": None, "n_obs": n_obs}
-    mu = float(_np.mean(arr))
-    sd = float(_np.std(arr, ddof=1))
+    mu = mean(ics)
+    sd = stdev(ics)
     if sd <= 1e-9:
         return {"ic_latest": ic_latest, "icir": None, "ir": None, "n_obs": n_obs}
     icir = mu / sd
-    ir = icir * _math.sqrt(252.0 / float(window_days))
+    ir = icir * math.sqrt(252.0 / float(window_days))
     return {"ic_latest": ic_latest, "icir": icir, "ir": ir, "n_obs": n_obs}
 
 
@@ -175,60 +176,63 @@ async def health_signals() -> HealthSignalsResponse:
       unknown            = mixed state not matching above (catch-all)
     """
     pool = await get_db_pool()
-    success_rows = await pool.fetch(
-        """
+    success_query = """
+        WITH latest AS (
+            SELECT DISTINCT ON (ticker) ticker, breakdown, fetched_at
+            FROM (
+                SELECT ticker, breakdown, fetched_at FROM daily_signals_fast
+                UNION ALL
+                SELECT ticker, breakdown, fetched_at FROM daily_signals_slow
+            ) all_signals ORDER BY ticker, fetched_at DESC
+        )
         SELECT item->>'signal' AS signal_name, MAX(fetched_at) AS last_success
-        FROM daily_signals_fast
+        FROM latest
         CROSS JOIN LATERAL jsonb_array_elements(
             COALESCE(breakdown->'breakdown', '[]'::jsonb)
         ) AS item
-        WHERE COALESCE(item->>'error', '') = ''
+        WHERE COALESCE(item->>'error', '') = '' AND item->>'z' IS NOT NULL
         GROUP BY item->>'signal'
         """
+    # Four bounded queries instead of six serial lookups per signal (85 total).
+    success_rows, error_rows, ic_rows, weight_rows = await asyncio.gather(
+        pool.fetch(success_query),
+        pool.fetch("""
+            SELECT component, (array_agg(err_message ORDER BY ts DESC))[1] AS last_error,
+                   count(*) FILTER (WHERE ts > now() - INTERVAL '24 hours') AS error_count
+            FROM error_log WHERE component = ANY($1::text[]) GROUP BY component
+        """, [f"signals.{name}" for name in _SIGNAL_NAMES]),
+        pool.fetch("""
+            SELECT names.name AS signal_name, windows.days AS window_days, h.ic
+            FROM unnest($1::text[]) AS names(name)
+            CROSS JOIN (VALUES (30), (60), (90)) AS windows(days)
+            CROSS JOIN LATERAL (
+                SELECT ic, computed_at FROM signal_ic_history
+                WHERE signal_name = names.name AND window_days = windows.days
+                  AND horizon_days = 5
+                ORDER BY computed_at DESC
+                LIMIT CASE WHEN windows.days = 30 THEN 90 ELSE 1 END
+            ) h ORDER BY names.name, windows.days, h.computed_at DESC
+        """, _SIGNAL_NAMES),
+        pool.fetch("SELECT signal_name, weight, reason FROM signal_weight_current WHERE status='live'"),
     )
     last_success_by_signal = {
         row["signal_name"]: row["last_success"] for row in success_rows
     }
+    errors = {row["component"]: row for row in error_rows}
+    weights_by_signal = {row["signal_name"]: row for row in weight_rows}
+    history: dict[tuple[str, int], list] = {}
+    for row in ic_rows:
+        history.setdefault((row["signal_name"], row["window_days"]), []).append(row)
     out: list[SignalStatus] = []
     for name in _SIGNAL_NAMES:
         comp = f"signals.{name}"
-        last_err = await pool.fetchrow(
-            "SELECT ts, err_message FROM error_log "
-            "WHERE component = $1 ORDER BY ts DESC LIMIT 1",
-            comp,
-        )
-        count_24h: int = await pool.fetchval(
-            "SELECT COUNT(*) FROM error_log "
-            "WHERE component = $1 AND ts > now() - INTERVAL '24 hours'",
-            comp,
-        ) or 0
-
-        # B1: pull last 90 IC observations for the 30d window in one
-        # round-trip; derive latest IC + ICIR + IR + n_obs from the same
-        # time series (saves 1 SQL call vs the legacy 3-fetchval shape).
-        # 60d / 90d windows remain single-fetchval for backwards compat.
-        metrics_30d = await _compute_signal_metrics(pool, name, 30)
+        last_err = errors.get(comp)
+        count_24h = int(last_err["error_count"]) if last_err else 0
+        metrics_30d = _metrics_from_rows(history.get((name, 30), []), 30)
         ic_30d = metrics_30d["ic_latest"]
-        ic_60d_raw = await pool.fetchval(
-            "SELECT ic FROM signal_ic_history "
-            "WHERE signal_name = $1 AND window_days = 60 AND horizon_days = 5 "
-            "ORDER BY computed_at DESC LIMIT 1",
-            name,
-        )
-        ic_90d_raw = await pool.fetchval(
-            "SELECT ic FROM signal_ic_history "
-            "WHERE signal_name = $1 AND window_days = 90 AND horizon_days = 5 "
-            "ORDER BY computed_at DESC LIMIT 1",
-            name,
-        )
-        ic_60d = float(ic_60d_raw) if ic_60d_raw is not None else None
-        ic_90d = float(ic_90d_raw) if ic_90d_raw is not None else None
-
-        weight_row = await pool.fetchrow(
-            "SELECT weight, reason FROM signal_weight_current "
-            "WHERE signal_name = $1 AND status = 'live'",
-            name,
-        )
+        ic_60d = _metrics_from_rows(history.get((name, 60), []), 60)["ic_latest"]
+        ic_90d = _metrics_from_rows(history.get((name, 90), []), 90)["ic_latest"]
+        weight_row = weights_by_signal.get(name)
         weight_current = (
             float(weight_row["weight"]) if weight_row is not None else None
         )
@@ -266,7 +270,7 @@ async def health_signals() -> HealthSignalsResponse:
                     if last_success_by_signal.get(name)
                     else None
                 ),
-                last_error=(last_err["err_message"] if last_err else None),
+                last_error=(last_err["last_error"] if last_err else None),
                 error_count_24h=count_24h,
                 live_ic_30d=ic_30d,
                 live_ic_60d=ic_60d,

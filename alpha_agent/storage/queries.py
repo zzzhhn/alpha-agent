@@ -474,13 +474,14 @@ async def upsert_daily_close(
     (yfinance gap rows) so the IC engine's return ratio never divides by
     zero. None is annotated explicitly because yfinance history rows can
     carry a missing Close."""
-    if close is None or close <= 0:
+    if close is None or not math.isfinite(close) or close <= 0:
         return
     await pool.execute(
         """
         INSERT INTO daily_prices (ticker, date, close)
         VALUES ($1, $2::text::date, $3)
         ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+        WHERE daily_prices.close IS DISTINCT FROM EXCLUDED.close
         """,
         ticker.upper(), date, float(close),
     )

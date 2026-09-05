@@ -84,6 +84,9 @@ export interface RatingCard {
   // Sentiment / Catalyst / Insider / Flow), each A+ to F derived from
   // breakdown z-scores. Empty dimensions render as "—".
   dimension_grades?: Record<string, string>;
+  // Same fixed dimensions as dimension_grades, expressed as comparable
+  // cross-sectional z-scores. null means unavailable, not a neutral zero.
+  dimension_scores?: Record<string, number | null>;
   // Descriptive per-ticker 1-day direction agreement: whether the predicted
   // tier matched the next trading day's move over trailing windows. Each value
   // is a fraction in [0,1] or null = insufficient realized history (UI shows

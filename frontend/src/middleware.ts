@@ -42,7 +42,7 @@ export default auth(async (req) => {
   // Page routes: redirect unauthenticated visitors away from protected
   // prefixes with a callbackUrl bounce-back.
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
-  if (isProtected && !req.auth) {
+  if (isProtected && !req.auth?.user?.id) {
     const signinUrl = new URL("/signin", req.nextUrl.origin);
     signinUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(signinUrl);

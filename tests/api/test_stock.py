@@ -32,6 +32,9 @@ async def test_stock_returns_full_card(client_with_db, applied_db):
     body = r.json()
     assert body["card"]["ticker"] == "AAPL"
     assert body["card"]["rating"] == "OW"
+    assert set(body["card"]["dimension_scores"]) == {
+        "Momentum", "Technical", "Sentiment", "Catalyst", "Insider", "Flow",
+    }
 
 
 async def test_stock_unknown_ticker_returns_404(client_with_db):

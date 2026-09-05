@@ -73,6 +73,7 @@ def _reset_db_pool():
         p = postgres._pool
         postgres._pool = None
         postgres._pool_dsn = None
+        postgres._pool_lock = None
         if p is not None:
             try:
                 p.terminate()

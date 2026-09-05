@@ -1,4 +1,5 @@
 "use client";
+import { useAdminAccess } from "@/components/layout/SystemHealth";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,6 +31,7 @@ export function LiveExpressionPanel({
   deployedAgoDays,
 }: LiveExpressionPanelProps) {
   const router = useRouter();
+  const isAdmin = useAdminAccess();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(expression);
   const [saving, setSaving] = useState(false);
@@ -86,6 +88,7 @@ export function LiveExpressionPanel({
             variant="secondary"
             size="xs"
             onClick={() => setEditing(true)}
+            disabled={!isAdmin}
             aria-label={t(locale, "factorLab.decision.editLive")}
           >
             <Pencil className="h-3 w-3" strokeWidth={1.75} />
