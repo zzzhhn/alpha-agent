@@ -84,7 +84,7 @@ function Row({
         <span className="font-tm-mono text-[12px] text-tm-fg">{src.name}</span>
       </Cell>
       <Cell>
-        <span className="text-[13px] text-tm-fg-2">{t(locale, src.feedsKey)}</span>
+        <span className="text-sm text-tm-fg-2">{t(locale, src.feedsKey)}</span>
       </Cell>
       <Cell>
         <span className="font-tm-mono text-xs text-tm-accent">{src.signal}</span>

@@ -28,7 +28,7 @@ export function Metric({
       <span className="font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
         {label}
       </span>
-      <span className={`font-tm-mono text-[15px] font-semibold tabular-nums ${tone}`}>
+      <span className={`font-tm-mono text-base font-semibold tabular-nums ${tone}`}>
         {value}
       </span>
     </div>

@@ -14,9 +14,13 @@ const COLORS = [
   ["交互强调", "Accent", "bg-tm-accent", "--tm-accent"],
   ["交互强调背景", "Accent soft", "bg-tm-accent-soft", "--tm-accent-soft"],
   ["正向结果", "Positive", "bg-tm-pos", "--tm-pos"],
+  ["正向结果背景", "Positive soft", "bg-tm-pos-soft", "--tm-pos-soft"],
   ["警告", "Warning", "bg-tm-warn", "--tm-warn"],
+  ["警告背景", "Warning soft", "bg-tm-warn-soft", "--tm-warn-soft"],
   ["负向结果", "Negative", "bg-tm-neg", "--tm-neg"],
+  ["负向结果背景", "Negative soft", "bg-tm-neg-soft", "--tm-neg-soft"],
   ["信息", "Information", "bg-tm-info", "--tm-info"],
+  ["浮层遮罩", "Modal scrim", "bg-[var(--tm-scrim)]", "--tm-scrim"],
 ] as const;
 
 const SPACING = [4, 8, 12, 16, 24, 32] as const;
@@ -28,7 +32,7 @@ export function ReferenceFoundations({ locale }: { readonly locale: Locale }) {
       <TmPane
         title={t(locale, "reference.pane.foundationColor")}
         meta={zh ? "语义色，不直接写 hex" : "semantic tokens, no component hex"}
-        bodyClassName="grid grid-cols-2 gap-px bg-tm-rule p-px sm:grid-cols-4 xl:grid-cols-7"
+        bodyClassName="grid grid-cols-2 gap-px bg-tm-rule p-px sm:grid-cols-3 xl:grid-cols-6"
       >
         {COLORS.map(([zhLabel, enLabel, colorClass, token]) => (
           <div key={token} className="min-w-0 bg-tm-bg px-3 py-3">
@@ -66,6 +70,18 @@ export function ReferenceFoundations({ locale }: { readonly locale: Locale }) {
               STATUS · UPDATED 08:32 UTC
             </span>
           </TypeRow>
+          <TypeRow label={zh ? "强调正文 / 数据" : "Emphasized body / data"}>
+            <span className="text-sm text-tm-fg">{zh ? "需要优先阅读的结论与数值" : "Priority evidence and values"} · 14px</span>
+          </TypeRow>
+          <TypeRow label={zh ? "紧凑标题" : "Compact heading"}>
+            <span className="text-base font-semibold text-tm-fg">{zh ? "持仓上下文" : "Position context"} · 16px</span>
+          </TypeRow>
+          <TypeRow label={zh ? "关键指标" : "KPI value"}>
+            <span className="font-tm-mono text-lg text-tm-fg">1.84 · 18px</span>
+          </TypeRow>
+          <TypeRow label={zh ? "重点对象 / 数值" : "Featured entity / value"}>
+            <span className="font-tm-mono text-2xl text-tm-fg">NVDA · 24px</span>
+          </TypeRow>
         </TmPane>
 
         <TmPane title={t(locale, "reference.pane.foundationGeometry")} bodyClassName="p-4">
@@ -88,6 +104,14 @@ export function ReferenceFoundations({ locale }: { readonly locale: Locale }) {
                 {height}
               </div>
             ))}
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-4 text-xs text-tm-fg-2">
+            <div className="border border-tm-rule bg-tm-bg-2 p-3 shadow-[var(--tm-shadow-floating)]">
+              {zh ? "提示与通知阴影" : "Floating shadow"}<code className="block break-all">--tm-shadow-floating</code>
+            </div>
+            <div className="border border-tm-rule bg-tm-bg-2 p-3 shadow-[var(--tm-shadow-modal)]">
+              {zh ? "对话框与抽屉阴影" : "Modal shadow"}<code className="block break-all">--tm-shadow-modal</code>
+            </div>
           </div>
         </TmPane>
       </TmCols2>

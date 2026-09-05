@@ -131,7 +131,7 @@ export function ReportVerdictHero({
                 <span className="font-tm-mono text-xs font-semibold tracking-[0.14em] text-tm-muted">
                   {tk("report.hero.recoLabel")}
                 </span>
-                <p className="max-w-3xl text-[13px] leading-snug text-tm-fg">
+                <p className="max-w-3xl text-sm leading-snug text-tm-fg">
                   {tk(reco.recoKey)}
                 </p>
               </div>
@@ -164,7 +164,7 @@ export function ReportVerdictHero({
             <span className="bg-tm-accent px-1.5 py-0.5 font-tm-mono text-xs font-bold tracking-[0.16em] text-tm-bg">
               {tk("report.hero.factorTag")}
             </span>
-            <p className="text-[13px] leading-snug text-tm-fg-2">
+            <p className="text-sm leading-snug text-tm-fg-2">
               {tk("report.hero.pickPrompt")}
             </p>
           </div>

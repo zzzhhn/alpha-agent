@@ -171,7 +171,7 @@ export default function SimOrderForm({
         {fixedTicker && (
           <div>
             <span className={FIELD_LABEL}>{t(locale, "sim.workspace.selected")}</span>
-            <span className="font-tm-mono text-[15px] font-bold text-tm-fg">{fixedTicker}</span>
+            <span className="font-tm-mono text-base font-bold text-tm-fg">{fixedTicker}</span>
             {typeof latestPrice === "number" ? (
               <span className="ml-2 font-tm-mono text-xs tabular-nums text-tm-fg-2">
                 ${latestPrice.toFixed(2)}

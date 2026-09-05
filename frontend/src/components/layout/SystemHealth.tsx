@@ -5,8 +5,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { apiGet } from "@/lib/api/client";
 import { usePolling } from "@/hooks/usePolling";
 import { useLocale } from "./LocaleProvider";
+import { TmServiceStatus, type ServiceState } from "@/components/tm/TmServiceStatus";
 
-type HealthState = "checking" | "healthy" | "degraded" | "unavailable";
+type HealthState = ServiceState;
 const HealthContext = createContext<HealthState>("checking");
 const AdminContext = createContext(false);
 export const useAdminAccess = () => useContext(AdminContext);
@@ -49,17 +50,9 @@ export function AdminAccessNote() {
 export function SystemHealthIndicator() {
   const state = useContext(HealthContext);
   const { locale } = useLocale();
-  const labels = {
-    checking: locale === "zh" ? "检查运行状态" : "Checking status",
-    healthy: locale === "zh" ? "系统运行正常" : "System healthy",
-    degraded: locale === "zh" ? "部分数据待恢复" : "Data pipeline degraded",
-    unavailable: locale === "zh" ? "服务连接异常" : "Service unavailable",
-  };
-  const tones = { checking: "bg-tm-muted", healthy: "bg-tm-pos", degraded: "bg-tm-warn", unavailable: "bg-tm-neg" };
   return (
     <Link href="/data" prefetch={false} className="inline-flex items-center gap-1.5 text-xs text-tm-muted hover:text-tm-fg">
-      <span aria-hidden="true" className={`h-1.5 w-1.5 ${tones[state]}`} />
-      <span role="status">{labels[state]}</span>
+      <TmServiceStatus state={state} locale={locale} />
     </Link>
   );
 }

@@ -1,4 +1,5 @@
 import { t, type Locale } from "@/lib/i18n";
+import dynamic from "next/dynamic";
 import { TM_CHART_CSS } from "@/components/charts";
 import { TmRadarChart, type TmRadarDatum } from "@/components/charts/TmRadarChart";
 import { TmCols2, TmPane } from "@/components/tm/TmPane";
@@ -6,6 +7,12 @@ import {
   TmTable, TmTableBody, TmTableCell, TmTableFrame, TmTableHead,
   TmTableHeaderCell, TmTableRow, TmTableRowHeader,
 } from "@/components/tm/TmTable";
+
+const TmMonthlyReturnsHeatmap = dynamic(() => import("@/components/backtest/TmMonthlyReturnsHeatmap").then((m) => m.TmMonthlyReturnsHeatmap));
+const TmDrawdownChart = dynamic(() => import("@/components/backtest/TmDrawdownChart").then((m) => m.TmDrawdownChart));
+const TmCompareEquityChart = dynamic(() => import("@/components/charts/TmCompareEquityChart").then((m) => m.TmCompareEquityChart));
+const SAMPLE_EQUITY = [100, 103, 101, 97, 102, 105].map((value, i) => ({ date: `2026-08-${String(10 + i).padStart(2, "0")}`, value }));
+const SAMPLE_MONTHS = [0.012, -0.035, 0, 0.064, -0.08, 0.11].map((value, i) => ({ year: 2026, month: i + 1, return: value, n_days: 21 }));
 
 const RADAR_VALUES = [
   { zh: "动量", en: "Momentum", positive: 2.2, negative: 0, raw: 2.2 },
@@ -35,10 +42,10 @@ const COVERAGE: readonly CoverageItem[] = [
   { zh: "换手分布", en: "Turnover distribution", component: "backtest/TurnoverProfilePane", route: "backtest", status: "registered" },
   { zh: "滚动验证", en: "Walk-forward IC", component: "backtest/WalkforwardPane", route: "backtest", status: "registered" },
   { zh: "盈亏分布", en: "Win/loss histogram", component: "backtest/WinLossDistributionPane", route: "backtest", status: "registered" },
-  { zh: "水下回撤", en: "Underwater drawdown", component: "backtest/TmDrawdownChart", route: "report", status: "registered" },
-  { zh: "月度热力图", en: "Monthly heatmap", component: "backtest/TmMonthlyReturnsHeatmap", route: "report", status: "registered" },
+  { zh: "水下回撤", en: "Underwater drawdown", component: "backtest/TmDrawdownChart", route: "report, reference", status: "live" },
+  { zh: "月度热力图", en: "Monthly heatmap", component: "backtest/TmMonthlyReturnsHeatmap", route: "report, reference", status: "live" },
   { zh: "因子收益", en: "Factor PnL", component: "charts/FactorPnLChart", route: "report", status: "registered" },
-  { zh: "净值对比", en: "Equity comparison", component: "charts/TmCompareEquityChart", route: "report", status: "registered" },
+  { zh: "净值对比", en: "Equity comparison", component: "charts/TmCompareEquityChart", route: "report, reference", status: "live" },
   { zh: "IC 时序", en: "IC timeseries", component: "signal/TmICTimeseriesChart", route: "report", status: "registered" },
   { zh: "暴露分解", en: "Exposure breakdown", component: "signal/TmExposureChart", route: "report", status: "registered" },
   { zh: "滚动相关性", en: "Rolling correlation", component: "app/report inline Recharts", route: "report", status: "registered" },
@@ -96,6 +103,20 @@ export function ReferenceVisualizations({ locale }: { readonly locale: Locale })
           <ChartFamily kind="drawdown" label={zh ? "回撤与风险" : "Drawdown and risk"} />
         </TmPane>
       </TmCols2>
+
+      <TmPane title={zh ? "图表 · 真实组件样例" : "Visualizations · Production specimens"}
+        meta={zh ? "确定性示例数据，不代表投资表现" : "Deterministic sample data, not investment performance"}>
+        <TmMonthlyReturnsHeatmap data={SAMPLE_MONTHS} />
+        <TmCols2>
+          <TmDrawdownChart equityCurve={SAMPLE_EQUITY} />
+          <div className="p-4">
+            <TmCompareEquityChart factor1Name={zh ? "策略示例 A" : "Sample A"} factor1={SAMPLE_EQUITY}
+              factor2Name={zh ? "策略示例 B" : "Sample B"} factor2={SAMPLE_EQUITY.map((p) => ({ ...p, value: 100 + (p.value - 100) * 0.5 }))}
+              benchmark={SAMPLE_EQUITY.map((p, i) => ({ ...p, value: 100 + i }))} benchmarkTicker={zh ? "基准示例" : "Sample benchmark"} height={260} />
+            <p className="text-xs text-tm-muted">{zh ? "与报告页共用净值对比组件，保留图例与精确数值提示。" : "The report's equity comparison component, including legends and value tooltips."}</p>
+          </div>
+        </TmCols2>
+      </TmPane>
 
       <TmPane
         title={t(locale, "reference.pane.visualCoverage")}

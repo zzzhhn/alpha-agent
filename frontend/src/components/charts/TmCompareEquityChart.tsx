@@ -75,7 +75,7 @@ export function TmCompareEquityChart({
 
   return (
     <div className="w-full px-1 pb-2 pt-2" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 400, height }}>
         <LineChart data={data} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
           <XAxis

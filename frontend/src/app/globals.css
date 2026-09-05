@@ -306,6 +306,9 @@ h2 {
      emerald drives actions, leaf green communicates validated performance. */
   --tm-pos: #9fdf6c;
   --tm-pos-soft: rgba(159, 223, 108, 0.12);
+  --tm-scrim: rgba(0, 0, 0, 0.70);
+  --tm-shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.30);
+  --tm-shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.40);
 }
 
 [data-theme="light"] {
@@ -317,21 +320,24 @@ h2 {
   --tm-bg-3: #e8dfd0;
   --tm-fg: #211f1a;            /* warm near-black, was cool blue-black #161a20 */
   --tm-fg-2: #4b463d;
-  --tm-muted: #6e675b;        /* warm gray, ~4.4:1 on the cream bg (kept AA) */
+  --tm-muted: #675f54;        /* readable on base, raised, and hover surfaces */
   --tm-rule: #cbbfad;
   --tm-rule-2: #aa9b86;
   /* P1-5: #0c8a4f green was ~3.5:1 on the cream bg — below WCAG AA (4.5:1)
      for normal text. #0a7344 is ~5.3:1 on cream / ~5.9:1 on white while
      staying unmistakably green, preserving the research-paper palette. */
-  --tm-accent: #0a7344;
-  --tm-accent-soft: rgba(10, 115, 68, 0.10);
-  --tm-warn: #b06a06;
-  --tm-warn-soft: rgba(176, 106, 6, 0.10);
+  --tm-accent: #096f41;
+  --tm-accent-soft: rgba(9, 111, 65, 0.10);
+  --tm-warn: #8c5206;
+  --tm-warn-soft: rgba(140, 82, 6, 0.10);
   --tm-neg: #b91c1c;
   --tm-neg-soft: rgba(185, 28, 28, 0.10);
-  --tm-info: #1e63cc;
-  --tm-pos: #34762a;
-  --tm-pos-soft: rgba(52, 118, 42, 0.10);
+  --tm-info: #1b5bbb;
+  --tm-pos: #2f6e26;
+  --tm-pos-soft: rgba(47, 110, 38, 0.10);
+  --tm-scrim: rgba(33, 31, 26, 0.55);
+  --tm-shadow-floating: 0 4px 16px rgba(33, 31, 26, 0.12);
+  --tm-shadow-modal: 0 16px 48px rgba(33, 31, 26, 0.20);
 }
 
 /* Keyframes shared with the workstation chrome — single definition so

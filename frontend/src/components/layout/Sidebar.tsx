@@ -159,7 +159,7 @@ export function MobileNav() {
       <summary className="cursor-pointer list-none px-3 py-2 font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-accent">
         {t(locale, "nav.mobile_menu")}
       </summary>
-      <nav className="absolute inset-x-0 top-full grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto border-b border-tm-rule bg-tm-bg p-3 shadow-lg" aria-label={t(locale, "nav.mobile_menu")}>
+      <nav className="absolute inset-x-0 top-full grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto border-b border-tm-rule bg-tm-bg p-3 shadow-[var(--tm-shadow-floating)]" aria-label={t(locale, "nav.mobile_menu")}>
         {NAV_GROUPS.map((group) => (
           <div key={group.titleKey}>
             <div className="mb-1 font-tm-mono text-xs uppercase tracking-[0.1em] text-tm-muted">

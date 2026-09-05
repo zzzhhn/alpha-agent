@@ -58,7 +58,7 @@ export function TmDrawer({
   return createPortal(
     <div
       className={clsx(
-        "fixed inset-0 z-[60] flex bg-black/70",
+        "fixed inset-0 z-[60] flex bg-[var(--tm-scrim)]",
         side === "right" ? "justify-end" : "justify-start",
       )}
       onMouseDown={(event) => {
@@ -73,7 +73,7 @@ export function TmDrawer({
         aria-describedby={description === undefined ? undefined : descriptionId}
         tabIndex={-1}
         className={clsx(
-          "flex h-full max-w-[calc(100vw-24px)] flex-col bg-tm-bg shadow-2xl outline-none",
+          "flex h-full max-w-[calc(100vw-24px)] flex-col bg-tm-bg shadow-[var(--tm-shadow-modal)] outline-none",
           WIDTHS[width],
           side === "right" ? "border-l border-tm-rule-2" : "border-r border-tm-rule-2",
           className,

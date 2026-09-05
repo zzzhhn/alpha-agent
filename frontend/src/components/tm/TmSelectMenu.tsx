@@ -223,7 +223,7 @@ export function TmSelectMenu({
                 }
               }}
               className={clsx(
-                "z-[80] max-h-72 overflow-y-auto border border-tm-rule-2 bg-tm-bg-2 py-0.5 font-tm-mono text-xs text-tm-fg shadow-xl outline-none focus-visible:ring-1 focus-visible:ring-tm-accent",
+                "z-[80] max-h-72 overflow-y-auto border border-tm-rule-2 bg-tm-bg-2 py-0.5 font-tm-mono text-xs text-tm-fg shadow-[var(--tm-shadow-floating)] outline-none focus-visible:ring-1 focus-visible:ring-tm-accent",
                 menuClassName,
               )}
             >

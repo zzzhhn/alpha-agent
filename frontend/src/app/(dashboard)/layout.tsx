@@ -58,9 +58,9 @@ export default async function DashboardLayout({
           </div>
         </div>
         <VersionWatcher />
+        <ToastViewport />
         </SystemHealthProvider>
       </LocaleProvider>
-      <ToastViewport />
     </ToastProvider>
   );
 }

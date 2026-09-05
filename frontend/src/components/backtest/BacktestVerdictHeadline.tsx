@@ -133,7 +133,7 @@ export function BacktestVerdictHeadline({
         </span>
       </div>
 
-      <p className="mt-1.5 max-w-3xl text-[13px] leading-snug text-tm-fg">
+      <p className="mt-1.5 max-w-3xl text-sm leading-snug text-tm-fg">
         {msg}
       </p>
 

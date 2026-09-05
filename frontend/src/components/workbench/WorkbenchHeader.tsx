@@ -35,7 +35,7 @@ export function WorkbenchHeader({
           </p>
         ) : null}
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <h1 className="font-tm-serif text-[26px] font-semibold tracking-[-0.025em] text-tm-fg lg:text-[28px]">
+          <h1 className="font-tm-serif text-[28px] font-semibold tracking-[-0.025em] text-tm-fg">
             {title}
           </h1>
           <p className="text-[12px] text-tm-muted">{subtitle}</p>

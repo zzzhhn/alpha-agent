@@ -61,23 +61,16 @@ export function LocaleProvider({ children, initialLocale }: LocaleProviderProps)
 
   const setLocale: Dispatch<SetStateAction<Locale>> = useCallback(
     (action) => {
-      setLocaleState((prev) => {
-        const next = typeof action === "function" ? action(prev) : action;
-        if (next !== prev) {
-          setLocaleToStorage(next);
-          // Re-render server components too. getServerLocale() reads the cookie
-          // we just wrote, so SSR-localized text (decision card, mining journal,
-          // section headers) follows the toggle live instead of staying frozen
-          // in the page-load language until a manual reload. Safe here: this is a
-          // deliberate, user-initiated refresh long after hydration — not the
-          // #422 hydration self-heal that was removed. initialLocale already
-          // matches SSR, so the refreshed tree stays consistent with this state.
-          router.refresh();
-        }
-        return next;
-      });
+      const next = typeof action === "function" ? action(locale) : action;
+      if (next !== locale) {
+        setLocaleState(next);
+        setLocaleToStorage(next);
+        // Persist before refreshing SSR text. Router side effects must not run
+        // inside a React state updater, which can execute during rendering.
+        router.refresh();
+      }
     },
-    [router]
+    [locale, router]
   );
 
   return (

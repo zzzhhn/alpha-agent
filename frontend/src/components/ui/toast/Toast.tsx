@@ -3,6 +3,8 @@
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 import { useContext } from "react";
 import { ToastContext, type ToastItem } from "./ToastProvider";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
+import { useLocale } from "@/components/layout/LocaleProvider";
 
 // Tokens used: tm-pos, tm-neg, tm-rule, tm-bg-2, tm-fg, tm-fg-2, tm-accent
 // (tm-card and tm-line from spec do not exist; mapped to tm-bg-2 and tm-rule)
@@ -34,32 +36,32 @@ const _styles = {
 export function Toast({ item }: { item: ToastItem }) {
   const ctx = useContext(ToastContext);
   if (!ctx) return null;
+  return <ToastView item={item} onDismiss={() => ctx.dismiss(item.id)} />;
+}
+
+export function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
+  const { locale } = useLocale();
   const style = _styles[item.kind];
   return (
     <div
       role={item.kind === "error" ? "alert" : "status"}
-      className={`flex min-w-[280px] max-w-[480px] items-start gap-3 rounded border ${style.border} ${style.bg} px-3 py-2 shadow-sm`}
+      className={`flex w-full max-w-[480px] items-start gap-3 rounded-[2px] border ${style.border} bg-tm-bg-2 px-3 py-2 shadow-[var(--tm-shadow-floating)]`}
     >
       <div className="mt-0.5">{style.icon}</div>
-      <div className="flex-1 text-sm text-tm-fg">{item.message}</div>
+      <div className="min-w-0 flex-1 break-words text-xs leading-5 text-tm-fg">{item.message}</div>
       {item.action && (
-        <button
+        <TmButton variant="ghost" size="xs"
           onClick={() => {
             item.action!.onClick();
-            ctx.dismiss(item.id);
+            onDismiss();
           }}
-          className="text-sm font-semibold text-tm-accent hover:underline"
+          className="shrink-0"
         >
           {item.action.label}
-        </button>
+        </TmButton>
       )}
-      <button
-        onClick={() => ctx.dismiss(item.id)}
-        aria-label="Dismiss"
-        className="text-tm-fg-2 hover:text-tm-fg"
-      >
-        <X className="h-3.5 w-3.5" strokeWidth={1.75} />
-      </button>
+      <TmIconButton onClick={onDismiss} label={locale === "zh" ? "关闭通知" : "Dismiss notification"}
+        size="xs" icon={<X className="h-3.5 w-3.5" strokeWidth={1.75} />} />
     </div>
   );
 }

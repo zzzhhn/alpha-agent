@@ -8,11 +8,15 @@ import { TmTooltip } from "@/components/tm/TmTooltip";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmDialog } from "@/components/tm/TmDialog";
 import { TmDrawer } from "@/components/tm/TmDrawer";
+import { ToastView } from "@/components/ui/toast/Toast";
+import { useToast } from "@/components/ui/toast";
 
 export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
   const zh = locale === "zh";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { toast } = useToast();
+  const [dismissed, setDismissed] = useState<string[]>([]);
   return (
     <div>
       <TmPane
@@ -61,7 +65,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
           open={dialogOpen}
           onClose={() => setDialogOpen(false)}
           closeLabel={zh ? "关闭对话框" : "Close dialog"}
-          eyebrow="DIALOG.SAMPLE"
+          eyebrow={zh ? "对话框示例" : "Dialog sample"}
           title={zh ? "确认研究上下文" : "Confirm research context"}
           description={zh ? "示例内容，不代表真实账户或市场状态。" : "Sample content, not live account or market state."}
           className="min-h-[360px] !max-w-[1120px]"
@@ -84,7 +88,7 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           closeLabel={zh ? "关闭抽屉" : "Close drawer"}
-          eyebrow="DRAWER.SAMPLE"
+          eyebrow={zh ? "抽屉示例" : "Drawer sample"}
           title={zh ? "创建模拟订单" : "Create paper order"}
           description={
             zh
@@ -100,6 +104,20 @@ export function ReferenceSurfaces({ locale }: { readonly locale: Locale }) {
             </div>
           </div>
         </TmDrawer>
+      </TmPane>
+      <TmPane title={zh ? "浮层 · 通知" : "Surfaces · Notifications"} bodyClassName="space-y-3 p-4">
+        {(["success", "error", "info"] as const).filter((kind) => !dismissed.includes(kind)).map((kind) => <ToastView key={kind}
+          item={{ id: `sample-${kind}`, kind, duration: 0, message: zh ? ({ success: "示例：更改已保存。", error: "示例：请求失败，请重试。", info: "示例：新数据已就绪。" })[kind] : ({ success: "Sample: changes saved.", error: "Sample: request failed. Retry.", info: "Sample: new data is ready." })[kind] }}
+          onDismiss={() => setDismissed((previous) => [...previous, kind])} />)}
+        {dismissed.length > 0 ? <TmButton variant="ghost" onClick={() => setDismissed([])}>{zh ? "恢复通知样例" : "Restore notification samples"}</TmButton> : null}
+        <TmButton variant="secondary" onClick={() => toast.success(zh ? "这是实际生产通知组件的交互示例。" : "This is the real production notification.", { duration: 0 })}>
+          {zh ? "触发通知示例" : "Show notification example"}
+        </TmButton>
+      </TmPane>
+      <TmPane title={zh ? "浮层 · 受控集成" : "Surfaces · Controlled integrations"} bodyClassName="p-4">
+        <p className="text-xs leading-5 text-tm-fg-2">{zh
+          ? "模拟仓引导由 driver.js 管理目标定位，以 paper-tour-theme.css 适配语义色、字号、圆角与阴影。版本更新提示保留刷新与稍后处理操作，使用统一通知表面。它们是登记的集成方式，不是第二套调色板。"
+          : "The paper tour uses driver.js for target positioning and paper-tour-theme.css for semantic color, type, radius, and shadow. Version notices keep refresh/defer actions on the shared notification surface. These are registered integrations, not alternate palettes."}</p>
       </TmPane>
     </div>
   );

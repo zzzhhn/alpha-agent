@@ -59,13 +59,13 @@ export function TmDrawdownChart({
   return (
     <TmPane
       title="DRAWDOWN.UNDERWATER"
-      meta={`worst ${minDD.toFixed(2)}% · ${data.length} sessions`}
+      meta={locale === "zh" ? `最大回撤 ${minDD.toFixed(2)}% · ${data.length} 个交易日` : `worst ${minDD.toFixed(2)}% · ${data.length} sessions`}
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.drawdown.subtitle")}
       </p>
       <div className="h-[220px] w-full px-1 pb-2 pt-2">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 400, height: 220 }}>
           <AreaChart
             data={data}
             margin={{ top: 6, right: 16, left: 0, bottom: 0 }}

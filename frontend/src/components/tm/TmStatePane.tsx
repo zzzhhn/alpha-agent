@@ -121,7 +121,7 @@ export function TmStatePane({
           <span
             aria-hidden="true"
             className={clsx(
-              "flex h-6 w-6 items-center justify-center border text-[13px] font-semibold leading-none rounded-[2px]",
+              "flex h-6 w-6 items-center justify-center border text-sm font-semibold leading-none rounded-[2px]",
               style.markerClassName,
               style.markerBorderClassName,
             )}

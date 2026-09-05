@@ -70,7 +70,7 @@ function HorizonCell({ h }: { h: HorizonEdge }) {
         ) : (
           <>
             <span
-              className={`font-tm-mono text-[13px] font-semibold tabular-nums ${spreadToneClass(
+              className={`font-tm-mono text-sm font-semibold tabular-nums ${spreadToneClass(
                 h.long_short_spread,
               )}`}
             >
@@ -340,7 +340,7 @@ export default function BasketEdgeStrip() {
       <Link
         href="/paper"
         prefetch={false}
-        className="flex w-full shrink-0 items-center justify-center gap-2 border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-[13px] font-semibold uppercase tracking-wide text-tm-bg transition-opacity hover:opacity-90 sm:ml-auto sm:w-auto"
+        className="flex w-full shrink-0 items-center justify-center gap-2 border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-sm font-semibold uppercase tracking-wide text-tm-bg transition-opacity hover:opacity-90 sm:ml-auto sm:w-auto"
       >
         <Wallet className="h-4 w-4" strokeWidth={1.75} />
         {t(locale, "sim.open_btn")}

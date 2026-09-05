@@ -1,6 +1,6 @@
 "use client";
 
-import { TM_CHART_CSS } from "./chartTokens";
+import { TM_CHART_CSS, TM_CHART_TYPOGRAPHY } from "./chartTokens";
 import { TmTooltip } from "@/components/tm/TmTooltip";
 
 export type TmRadarDatum = {
@@ -49,7 +49,7 @@ export function TmRadarChart({
               <line x1={180} y1={140} x2={end[0]} y2={end[1]} stroke={TM_CHART_CSS.gridStrong}
                 strokeDasharray={datum.raw === null ? "3 4" : undefined} />
               <text x={label[0]} y={label[1]} textAnchor="middle" dominantBaseline="middle"
-                fill={datum.raw === null ? TM_CHART_CSS.muted : TM_CHART_CSS.foreground} fontSize={14}>
+                fill={datum.raw === null ? TM_CHART_CSS.muted : TM_CHART_CSS.foreground} fontSize={TM_CHART_TYPOGRAPHY.svgLabel}>
                 {datum.label}{datum.raw === null ? " *" : ""}
               </text>
             </g>
@@ -71,7 +71,7 @@ export function TmRadarChart({
             })}
           </g>
         ))}
-        <text x={188} y={133} fill={TM_CHART_CSS.muted} fontSize={14}>0</text>
+        <text x={188} y={133} fill={TM_CHART_CSS.muted} fontSize={TM_CHART_TYPOGRAPHY.svgLabel}>0</text>
       </svg>
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
         {series.map((s) => <span key={s.key} className="inline-flex items-center gap-1.5">

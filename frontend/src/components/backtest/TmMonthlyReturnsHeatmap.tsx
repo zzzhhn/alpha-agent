@@ -8,10 +8,8 @@
  * flatten everything else. Year totals shown in the right-most column
  * (compounded, not summed).
  *
- * Reuses the same hsl ramp logic from the legacy version — colors are
- * picked to read on both light and dark workstation backgrounds (the
- * tm tokens themselves don't extend into a 2D ramp, so hsl literals
- * are kept here).
+ * Uses the canonical diverging heatmap ramp, with readable foreground text
+ * on both themes. The +/- sign and legend supplement the semantic colors.
  */
 
 import { TmPane } from "@/components/tm/TmPane";
@@ -19,25 +17,12 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { MonthlyReturn } from "@/lib/types";
 import { TmTooltip } from "@/components/tm/TmTooltip";
+import { TM_CHART_CSS, tmHeatmapColor } from "@/components/charts/chartTokens";
 
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
-
-function colorFor(ret: number): string {
-  if (!isFinite(ret)) return "transparent";
-  const clipped = Math.max(-0.1, Math.min(0.1, ret));
-  const intensity = Math.abs(clipped) / 0.1;
-  const lightness = 90 - 30 * intensity;
-  if (clipped >= 0) return `hsl(142, 70%, ${lightness}%)`;
-  return `hsl(0, 70%, ${lightness}%)`;
-}
-
-function textColorFor(ret: number): string {
-  if (Math.abs(ret) > 0.05) return "rgb(20, 30, 40)";
-  return "var(--tm-fg)";
-}
 
 export function TmMonthlyReturnsHeatmap({
   data,
@@ -67,7 +52,7 @@ export function TmMonthlyReturnsHeatmap({
   return (
     <TmPane
       title="MONTHLY.RETURNS"
-      meta={`${years.length} YEAR${years.length === 1 ? "" : "S"} · compounded`}
+      meta={locale === "zh" ? `${years.length} 年 · 复利收益` : `${years.length} years · compounded`}
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
         {t(locale, "backtest.monthly.subtitle")}
@@ -85,12 +70,12 @@ export function TmMonthlyReturnsHeatmap({
               <th className="sticky left-0 z-10 bg-tm-bg px-2 py-1 text-left text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
                 {t(locale, "backtest.monthly.year")}
               </th>
-              {MONTH_LABELS.map((m) => (
+              {MONTH_LABELS.map((m, index) => (
                 <th
                   key={m}
                   className="px-1 py-1 text-center text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted"
                 >
-                  {m}
+                  {locale === "zh" ? `${index + 1}月` : m}
                 </th>
               ))}
               <th className="px-2 py-1 text-right text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
@@ -130,8 +115,8 @@ export function TmMonthlyReturnsHeatmap({
                         key={idx}
                         className="px-1 py-1 text-center text-xs font-medium"
                         style={{
-                          background: colorFor(m.return),
-                          color: textColorFor(m.return),
+                          background: tmHeatmapColor(m.return),
+                          color: TM_CHART_CSS.foreground,
                         }}
                       >
                         <TmTooltip

@@ -82,7 +82,7 @@ export default function VersionWatcher() {
 
   return (
     <div className="fixed bottom-4 right-4 z-50 max-w-sm">
-      <div className="flex items-start gap-3 rounded-lg border border-tm-accent/50 bg-tm-bg-2 px-4 py-3 shadow-lg shadow-black/30">
+      <div className="flex items-start gap-3 rounded-[2px] border border-tm-rule-2 bg-tm-bg-2 px-4 py-3 shadow-[var(--tm-shadow-floating)]">
         <RefreshCw
           className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-tm-accent [animation-duration:3s]"
           strokeWidth={1.75}
