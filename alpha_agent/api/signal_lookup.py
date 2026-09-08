@@ -112,7 +112,15 @@ async def fetch_latest_signal(
         -- intraday fast set keeps a stale fast row; preferring it would shadow
         -- a fresher daily slow row (the 2026-06-01 misaligned-timestamp bug).
         -- Take whichever row is genuinely newest; partial flag stays correct.
-        SELECT * FROM (
+        -- Keep raw observations inside breakdown (including strategic z_long),
+        -- but do not transfer unrelated research payloads from the envelope.
+        SELECT ticker, score, rating, confidence, fetched_at, partial,
+               jsonb_build_object(
+                   'breakdown', COALESCE(breakdown->'breakdown', '[]'::jsonb),
+                   'tier_flip_today', breakdown->'tier_flip_today',
+                   'gex_info', breakdown->'gex_info'
+               ) AS breakdown
+        FROM (
             SELECT * FROM fast_row
             UNION ALL
             SELECT * FROM slow_row

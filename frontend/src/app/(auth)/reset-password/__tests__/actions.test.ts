@@ -11,7 +11,7 @@ const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
 
 vi.mock("pg", () => {
   function Pool() {
-    return { query: mockQuery };
+    return { query: mockQuery, on: vi.fn() };
   }
   return { Pool };
 });

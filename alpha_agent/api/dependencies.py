@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import os
 
-import asyncpg
-
+from alpha_agent.api.db_pool import APIConnectionPool
 from alpha_agent.storage.postgres import get_pool
 
 
-async def get_db_pool() -> asyncpg.Pool:
+async def get_db_pool() -> APIConnectionPool:
     """Return the module-level singleton pool, creating it on first call.
 
     Reads DATABASE_URL from the environment at call time so test fixtures
@@ -22,4 +21,4 @@ async def get_db_pool() -> asyncpg.Pool:
     request is dispatched.
     """
     dsn = os.environ["DATABASE_URL"]
-    return await get_pool(dsn)
+    return APIConnectionPool(await get_pool(dsn))

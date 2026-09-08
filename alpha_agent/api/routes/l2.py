@@ -20,9 +20,11 @@ _study_cache = TTLCache(default_ttl=600)
 @router.get("/turnover-study")
 async def turnover_study(sleeve: Literal["tactical", "strategic"] = "strategic") -> dict:
     """Bounded on-demand replay, no writes, new market downloads or LLM calls."""
-    cached = _study_cache.get(sleeve)
-    if cached is not None:
-        return cached
+    # Only shared, read-only strategy evidence; private plans never enter this cache.
+    return await _study_cache.get_or_load(sleeve, lambda: _build_turnover_study(sleeve))
+
+
+async def _build_turnover_study(sleeve: str) -> dict:
     pool = await get_db_pool()
     name = "canonical_top50_continuous" + ("_strategic" if sleeve == "strategic" else "")
     strategy = await pool.fetchrow("SELECT id,params_json FROM l2_strategy WHERE name=$1 ORDER BY version DESC LIMIT 1", name)
@@ -67,7 +69,6 @@ async def turnover_study(sleeve: Literal["tactical", "strategic"] = "strategic")
         "limitations": ["retrospective_not_forward", "monthly_uses_first_available_recorded_target",
                         "fractional_shares", "no_dividends_taxes_or_cash_interest", "no_claim_of_statistical_significance"],
     }
-    _study_cache.set(sleeve, result)
     return result
 
 

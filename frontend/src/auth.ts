@@ -15,14 +15,14 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import PostgresAdapter from "@auth/pg-adapter";
-import { Pool } from "pg";
+import { getAuthPool } from "./lib/db/pool";
 import { z } from "zod";
 import { authConfig } from "./auth.config";
 import { verifyPassword } from "./lib/auth/password";
 
 // Reused by BOTH the pg-adapter (linkAccount / getUserByAccount for Google)
 // and the Credentials authorize() callback's user lookup.
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = getAuthPool();
 
 // authorize() input contract. Parsing here means a malformed submission
 // returns null (generic failure) instead of throwing.

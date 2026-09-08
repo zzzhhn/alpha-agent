@@ -6,13 +6,13 @@
 // PLAINTEXT code via Resend SMTP. ALWAYS returns the same ok:true response
 // regardless of whether the email belongs to a real user (no enumeration).
 import { randomInt } from "crypto";
-import { Pool } from "pg";
+import { getAuthPool } from "@/lib/db/pool";
 import { z } from "zod";
 import nodemailer from "nodemailer";
 import { hashPassword } from "@/lib/auth/password";
 import { checkRateLimit } from "@/lib/auth/rate-limit";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = getAuthPool();
 
 const forgotSchema = z.object({ email: z.string().email() });
 
