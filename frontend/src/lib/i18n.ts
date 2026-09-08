@@ -472,6 +472,7 @@ const translations = {
     "lifecycle.methodology": "方法论 Methodology",
     "lifecycle.settings": "设置 Settings",
     "lifecycle.reference": "设计系统 Design System",
+    "lifecycle.guide": "使用手册 Guide",
     "lifecycle.stub.title": "W2 即将上线",
     "lifecycle.stub.body": "此阶段的交互面板将在 W2 落地。当前可访问的仅为导航骨架。",
 
@@ -1891,6 +1892,7 @@ const translations = {
     "lifecycle.methodology": "Methodology",
     "lifecycle.settings": "Settings",
     "lifecycle.reference": "Design System",
+    "lifecycle.guide": "User Guide",
     "lifecycle.stub.title": "Coming in W2",
 
     /* Screener (D2 of v3) */
