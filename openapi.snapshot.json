@@ -580,6 +580,163 @@
         "title": "BriefResponse",
         "type": "object"
       },
+      "ByokGetResponse": {
+        "properties": {
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "encrypted_at": {
+            "title": "Encrypted At",
+            "type": "string"
+          },
+          "last4": {
+            "title": "Last4",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "last4",
+          "model",
+          "base_url",
+          "encrypted_at",
+          "last_used_at"
+        ],
+        "title": "ByokGetResponse",
+        "type": "object"
+      },
+      "ByokSaveRequest": {
+        "properties": {
+          "api_key": {
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "pattern": "^(openai|anthropic|kimi|ollama)$",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key"
+        ],
+        "title": "ByokSaveRequest",
+        "type": "object"
+      },
+      "ByokSaveResponse": {
+        "properties": {
+          "encrypted_at": {
+            "title": "Encrypted At",
+            "type": "string"
+          },
+          "last4": {
+            "title": "Last4",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "last4",
+          "encrypted_at"
+        ],
+        "title": "ByokSaveResponse",
+        "type": "object"
+      },
+      "ByokTestResponse": {
+        "properties": {
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "latency_ms",
+          "prompt_tokens",
+          "completion_tokens"
+        ],
+        "title": "ByokTestResponse",
+        "type": "object"
+      },
       "CapBucket": {
         "properties": {
           "bucket": {
@@ -1959,6 +2116,28 @@
         "title": "HealthSignalsResponse",
         "type": "object"
       },
+      "HoldingInput": {
+        "additionalProperties": false,
+        "properties": {
+          "ticker": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}$",
+            "title": "Ticker",
+            "type": "string"
+          },
+          "weight_pct": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Weight Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "weight_pct"
+        ],
+        "title": "HoldingInput",
+        "type": "object"
+      },
       "HorizonEdge": {
         "properties": {
           "horizon": {
@@ -2278,6 +2457,66 @@
           "summary"
         ],
         "title": "ICTimeseriesResponse",
+        "type": "object"
+      },
+      "InvestmentProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "drawdown_review_pct": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 80.0,
+            "title": "Drawdown Review Pct",
+            "type": "number"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingInput"
+            },
+            "maxItems": 100,
+            "title": "Holdings",
+            "type": "array"
+          },
+          "holdings_as_of": {
+            "format": "date",
+            "title": "Holdings As Of",
+            "type": "string"
+          },
+          "horizon_months": {
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Horizon Months",
+            "type": "integer"
+          },
+          "max_position_pct": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Max Position Pct",
+            "type": "number"
+          },
+          "max_sector_pct": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Max Sector Pct",
+            "type": "number"
+          },
+          "review_frequency": {
+            "enum": [
+              "weekly",
+              "monthly"
+            ],
+            "title": "Review Frequency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "horizon_months",
+          "drawdown_review_pct",
+          "review_frequency",
+          "max_position_pct",
+          "max_sector_pct",
+          "holdings_as_of"
+        ],
+        "title": "InvestmentProfile",
         "type": "object"
       },
       "LeanCard": {
@@ -2621,6 +2860,39 @@
           "items"
         ],
         "title": "MacroContextResponse",
+        "type": "object"
+      },
+      "MeResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "has_byok": {
+            "title": "Has Byok",
+            "type": "boolean"
+          },
+          "is_admin": {
+            "default": false,
+            "title": "Is Admin",
+            "type": "boolean"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "created_at",
+          "has_byok"
+        ],
+        "title": "MeResponse",
         "type": "object"
       },
       "MinuteBar": {
@@ -4383,6 +4655,72 @@
           "bear"
         ],
         "title": "Thesis",
+        "type": "object"
+      },
+      "ThesisInput": {
+        "additionalProperties": false,
+        "description": "User-authored reasoning, not an inferred recommendation or trade order.",
+        "properties": {
+          "counterevidence": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Counterevidence",
+            "type": "string"
+          },
+          "invalidation": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Invalidation",
+            "type": "string"
+          },
+          "next_review": {
+            "format": "date",
+            "title": "Next Review",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source_notes": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Source Notes",
+            "type": "string"
+          },
+          "status": {
+            "default": "watch",
+            "enum": [
+              "watch",
+              "review",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "ticker": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}$",
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "rationale",
+          "counterevidence",
+          "invalidation",
+          "source_notes",
+          "next_review"
+        ],
+        "title": "ThesisInput",
         "type": "object"
       },
       "TickerAttribution": {
@@ -10034,6 +10372,56 @@
         "summary": "Healthz Sandbox"
       }
     },
+    "/api/l2/evidence": {
+      "get": {
+        "description": "One policy, one continuous book. Never substitute legacy research P&L.",
+        "operationId": "l2_evidence_api_l2_evidence_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sleeve",
+            "required": false,
+            "schema": {
+              "default": "strategic",
+              "enum": [
+                "tactical",
+                "strategic"
+              ],
+              "title": "Sleeve",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response L2 Evidence Api L2 Evidence Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "L2 Evidence",
+        "tags": [
+          "l2"
+        ]
+      }
+    },
     "/api/l2/summary": {
       "get": {
         "description": "Cost, benchmark, risk and exception evidence from the frozen L2 book.",
@@ -10053,6 +10441,56 @@
           }
         },
         "summary": "L2 Summary",
+        "tags": [
+          "l2"
+        ]
+      }
+    },
+    "/api/l2/turnover-study": {
+      "get": {
+        "description": "Bounded on-demand replay, no writes, new market downloads or LLM calls.",
+        "operationId": "turnover_study_api_l2_turnover_study_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sleeve",
+            "required": false,
+            "schema": {
+              "default": "strategic",
+              "enum": [
+                "tactical",
+                "strategic"
+              ],
+              "title": "Sleeve",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Turnover Study Api L2 Turnover Study Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Turnover Study",
         "tags": [
           "l2"
         ]
@@ -11500,6 +11938,723 @@
         "summary": "System Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/user/account/delete": {
+      "post": {
+        "operationId": "delete_account_api_user_account_delete_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Account",
+        "tags": [
+          "user"
+        ]
+      }
+    },
+    "/api/user/account/export": {
+      "get": {
+        "operationId": "export_account_api_user_account_export_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export Account Api User Account Export Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Account",
+        "tags": [
+          "user"
+        ]
+      }
+    },
+    "/api/user/byok": {
+      "delete": {
+        "operationId": "delete_byok_api_user_byok_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Byok",
+        "tags": [
+          "user"
+        ]
+      },
+      "get": {
+        "operationId": "get_byok_api_user_byok_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ByokGetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Byok",
+        "tags": [
+          "user"
+        ]
+      },
+      "post": {
+        "operationId": "save_byok_api_user_byok_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ByokSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ByokSaveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Byok",
+        "tags": [
+          "user"
+        ]
+      }
+    },
+    "/api/user/byok/test": {
+      "post": {
+        "description": "Exercise the configured provider without coupling health to factor JSON.",
+        "operationId": "test_byok_api_user_byok_test_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ByokTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Byok",
+        "tags": [
+          "user"
+        ]
+      }
+    },
+    "/api/user/investment/profile": {
+      "get": {
+        "operationId": "get_profile_api_user_investment_profile_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Profile",
+        "tags": [
+          "user",
+          "user"
+        ]
+      },
+      "post": {
+        "operationId": "save_profile_api_user_investment_profile_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvestmentProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Profile",
+        "tags": [
+          "user",
+          "user"
+        ]
+      }
+    },
+    "/api/user/investment/review": {
+      "get": {
+        "operationId": "get_review_api_user_investment_review_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review",
+        "tags": [
+          "user",
+          "user"
+        ]
+      }
+    },
+    "/api/user/investment/theses": {
+      "get": {
+        "operationId": "get_theses_api_user_investment_theses_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Theses",
+        "tags": [
+          "user",
+          "user"
+        ]
+      },
+      "post": {
+        "operationId": "save_thesis_api_user_investment_theses_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThesisInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Thesis",
+        "tags": [
+          "user",
+          "user"
+        ]
+      }
+    },
+    "/api/user/me": {
+      "get": {
+        "operationId": "get_me_api_user_me_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Me",
+        "tags": [
+          "user"
+        ]
+      }
+    },
+    "/api/user/settings/history": {
+      "get": {
+        "description": "Recent config edits for the authenticated user, newest first.\nDrives the diff card UI in /settings (mirrors AlertList.tsx pattern).",
+        "operationId": "settings_history_api_user_settings_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Settings History Api User Settings History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings History",
+        "tags": [
+          "user"
+        ]
+      }
+    },
+    "/api/user/settings/rollback/{change_id}": {
+      "post": {
+        "description": "Re-apply the `old_value` of a historical change as a new write,\njournaled as source='rollback' with rollback_of=change_id pointing\nback at the original row.\n\nRestricted to ROLLBACK_SAFE_FIELDS \u2014 secret material (BYOK\nciphertext) is never round-tripped through this path. To rotate a\nkey, the user must re-enter it via /settings/byok manually.",
+        "operationId": "settings_rollback_api_user_settings_rollback__change_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_id",
+            "required": true,
+            "schema": {
+              "title": "Change Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Settings Rollback Api User Settings Rollback  Change Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings Rollback",
+        "tags": [
+          "user"
         ]
       }
     },

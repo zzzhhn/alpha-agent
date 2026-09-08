@@ -1687,6 +1687,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/l2/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * L2 Evidence
+         * @description One policy, one continuous book. Never substitute legacy research P&L.
+         */
+        get: operations["l2_evidence_api_l2_evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/l2/summary": {
         parameters: {
             query?: never;
@@ -1699,6 +1719,26 @@ export interface paths {
          * @description Cost, benchmark, risk and exception evidence from the frozen L2 book.
          */
         get: operations["l2_summary_api_l2_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/l2/turnover-study": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Turnover Study
+         * @description Bounded on-demand replay, no writes, new market downloads or LLM calls.
+         */
+        get: operations["turnover_study_api_l2_turnover_study_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2282,6 +2322,196 @@ export interface paths {
         get: operations["system_health_api_system_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/account/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete Account */
+        post: operations["delete_account_api_user_account_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/account/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Account */
+        get: operations["export_account_api_user_account_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/byok": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Byok */
+        get: operations["get_byok_api_user_byok_get"];
+        put?: never;
+        /** Save Byok */
+        post: operations["save_byok_api_user_byok_post"];
+        /** Delete Byok */
+        delete: operations["delete_byok_api_user_byok_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/byok/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Byok
+         * @description Exercise the configured provider without coupling health to factor JSON.
+         */
+        post: operations["test_byok_api_user_byok_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/investment/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Profile */
+        get: operations["get_profile_api_user_investment_profile_get"];
+        put?: never;
+        /** Save Profile */
+        post: operations["save_profile_api_user_investment_profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/investment/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Review */
+        get: operations["get_review_api_user_investment_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/investment/theses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Theses */
+        get: operations["get_theses_api_user_investment_theses_get"];
+        put?: never;
+        /** Save Thesis */
+        post: operations["save_thesis_api_user_investment_theses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Me */
+        get: operations["get_me_api_user_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/settings/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Settings History
+         * @description Recent config edits for the authenticated user, newest first.
+         *     Drives the diff card UI in /settings (mirrors AlertList.tsx pattern).
+         */
+        get: operations["settings_history_api_user_settings_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user/settings/rollback/{change_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Settings Rollback
+         * @description Re-apply the `old_value` of a historical change as a new write,
+         *     journaled as source='rollback' with rollback_of=change_id pointing
+         *     back at the original row.
+         *
+         *     Restricted to ROLLBACK_SAFE_FIELDS — secret material (BYOK
+         *     ciphertext) is never round-tripped through this path. To rotate a
+         *     key, the user must re-enter it via /settings/byok manually.
+         */
+        post: operations["settings_rollback_api_user_settings_rollback__change_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3237,6 +3467,54 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** ByokGetResponse */
+        ByokGetResponse: {
+            /** Base Url */
+            base_url: string | null;
+            /** Encrypted At */
+            encrypted_at: string;
+            /** Last4 */
+            last4: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Model */
+            model: string | null;
+            /** Provider */
+            provider: string;
+        };
+        /** ByokSaveRequest */
+        ByokSaveRequest: {
+            /** Api Key */
+            api_key: string;
+            /** Base Url */
+            base_url?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Provider */
+            provider: string;
+        };
+        /** ByokSaveResponse */
+        ByokSaveResponse: {
+            /** Encrypted At */
+            encrypted_at: string;
+            /** Last4 */
+            last4: string;
+            /** Provider */
+            provider: string;
+        };
+        /** ByokTestResponse */
+        ByokTestResponse: {
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Model */
+            model: string;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Provider */
+            provider: string;
+        };
         /** CapBucket */
         CapBucket: {
             /** Bucket */
@@ -3820,6 +4098,13 @@ export interface components {
             /** Signals */
             signals: components["schemas"]["SignalStatus"][];
         };
+        /** HoldingInput */
+        HoldingInput: {
+            /** Ticker */
+            ticker: string;
+            /** Weight Pct */
+            weight_pct: number;
+        };
         /** HorizonEdge */
         HorizonEdge: {
             /** Horizon */
@@ -3934,6 +4219,29 @@ export interface components {
              * @default false
              */
             survivorship_corrected: boolean;
+        };
+        /** InvestmentProfile */
+        InvestmentProfile: {
+            /** Drawdown Review Pct */
+            drawdown_review_pct: number;
+            /** Holdings */
+            holdings?: components["schemas"]["HoldingInput"][];
+            /**
+             * Holdings As Of
+             * Format: date
+             */
+            holdings_as_of: string;
+            /** Horizon Months */
+            horizon_months: number;
+            /** Max Position Pct */
+            max_position_pct: number;
+            /** Max Sector Pct */
+            max_sector_pct: number;
+            /**
+             * Review Frequency
+             * @enum {string}
+             */
+            review_frequency: "weekly" | "monthly";
         };
         /**
          * LeanCard
@@ -4068,6 +4376,22 @@ export interface components {
         MacroContextResponse: {
             /** Items */
             items: components["schemas"]["MacroContextItem"][];
+        };
+        /** MeResponse */
+        MeResponse: {
+            /** Created At */
+            created_at: string;
+            /** Email */
+            email: string;
+            /** Has Byok */
+            has_byok: boolean;
+            /**
+             * Is Admin
+             * @default false
+             */
+            is_admin: boolean;
+            /** User Id */
+            user_id: number;
         };
         /** MinuteBar */
         MinuteBar: {
@@ -4712,6 +5036,38 @@ export interface components {
             bear: string[];
             /** Bull */
             bull: string[];
+        };
+        /**
+         * ThesisInput
+         * @description User-authored reasoning, not an inferred recommendation or trade order.
+         */
+        ThesisInput: {
+            /** Counterevidence */
+            counterevidence: string;
+            /** Invalidation */
+            invalidation: string;
+            /**
+             * Next Review
+             * Format: date
+             */
+            next_review: string;
+            /** Rationale */
+            rationale: string;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Source Notes */
+            source_notes: string;
+            /**
+             * Status
+             * @default watch
+             * @enum {string}
+             */
+            status: "watch" | "review" | "closed";
+            /** Ticker */
+            ticker: string;
         };
         /** TickerAttribution */
         TickerAttribution: {
@@ -7818,6 +8174,39 @@ export interface operations {
             };
         };
     };
+    l2_evidence_api_l2_evidence_get: {
+        parameters: {
+            query?: {
+                sleeve?: "tactical" | "strategic";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     l2_summary_api_l2_summary_get: {
         parameters: {
             query?: never;
@@ -7836,6 +8225,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    turnover_study_api_l2_turnover_study_get: {
+        parameters: {
+            query?: {
+                sleeve?: "tactical" | "strategic";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8614,6 +9036,458 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    delete_account_api_user_account_delete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_account_api_user_account_export_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_byok_api_user_byok_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokGetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_byok_api_user_byok_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ByokSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_byok_api_user_byok_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_byok_api_user_byok_test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ByokTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_profile_api_user_investment_profile_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_profile_api_user_investment_profile_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvestmentProfile"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_api_user_investment_review_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_theses_api_user_investment_theses_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_thesis_api_user_investment_theses_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThesisInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_me_api_user_me_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_history_api_user_settings_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_rollback_api_user_settings_rollback__change_id__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                change_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

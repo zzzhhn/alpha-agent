@@ -18,6 +18,7 @@ from datetime import date
 
 from alpha_agent.backtest import l2
 from alpha_agent.backtest import l2_continuous
+from alpha_agent.market_session import latest_completed_xnys_session, next_xnys_session
 
 CANONICAL_STRATEGY = "canonical_top50"
 DEFAULT_REBALANCE_DAYS = 5
@@ -134,8 +135,8 @@ async def run_continuous_driver(
     if account is None:
         return {"generated": 0, "filled": 0, "unfilled": 0, "pending": 0}
 
-    # Fill only intents written by an earlier invocation.  The fill engine also
-    # enforces fill_date > generated wall date as a second causal guard.
+    # Fill only persisted intents, using the intended exchange session, not
+    # the first available row (which could skip a missing market-data day).
     pending_dates = await pool.fetch(
         "SELECT DISTINCT signal_date FROM l2_order "
         "WHERE strategy_id=$1 AND status='pending' ORDER BY signal_date",
@@ -143,8 +144,8 @@ async def run_continuous_driver(
     )
     filled = unfilled = 0
     for row in pending_dates:
-        fill_date = _next_price_date(trading, row["signal_date"])
-        if fill_date is None:
+        fill_date = next_xnys_session(row["signal_date"])
+        if fill_date > latest_completed_xnys_session() or fill_date not in trading:
             continue
         # A rebalance mutates orders, positions, cash and the equity curve.  Keep
         # those writes atomic so a server interruption cannot leave a partial
@@ -173,8 +174,12 @@ async def run_continuous_driver(
         strategy_id,
     )
     generated = 0
-    for row in rows:
+    # A recovery invocation must not create a historical ladder of targets
+    # after those targets' execution prices are already known.
+    for row in rows[-1:]:
         signal_date = row["scheduled_for_date"]
+        if next_xnys_session(signal_date) <= latest_completed_xnys_session():
+            continue
         if last_signal is not None and _trading_days_between(
             trading, last_signal, signal_date
         ) < rebalance_days:

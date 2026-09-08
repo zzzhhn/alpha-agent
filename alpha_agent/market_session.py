@@ -38,3 +38,20 @@ def is_xnys_session(value: date) -> bool:
         return calendar.date_to_session(value, direction="none").date() == value
     except ValueError:
         return False
+
+
+def next_xnys_session(value: date) -> date:
+    calendar = _xnys_calendar()
+    session = calendar.date_to_session(value, direction="previous")
+    return calendar.next_session(session).date()
+
+
+def xnys_close(value: date) -> datetime:
+    """Actual UTC close, including DST and shortened sessions."""
+    calendar = _xnys_calendar()
+    session = calendar.date_to_session(value, direction="none")
+    return calendar.session_close(session).to_pydatetime()
+
+
+def xnys_sessions(start: date, end: date) -> list[date]:
+    return [session.date() for session in _xnys_calendar().sessions_in_range(start, end)]

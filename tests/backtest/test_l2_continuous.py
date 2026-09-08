@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from alpha_agent.backtest import l2_continuous
+from alpha_agent.market_session import next_xnys_session, xnys_close
 from alpha_agent.storage.postgres import close_pool, get_pool
 from alpha_agent.storage.product_ledger import RatingSnapshot, RunMeta, record_research_run
 
@@ -41,9 +42,9 @@ async def _price(pool, ticker: str, market_date: date, close: float) -> None:
 @pytest.mark.asyncio
 async def test_continuous_book_persists_share_deltas_cash_and_costs(pool):
     signal_1 = date.today()
-    fill_1 = signal_1 + timedelta(days=1)
+    fill_1 = next_xnys_session(signal_1)
     signal_2 = signal_1 + timedelta(days=5)
-    fill_2 = signal_2 + timedelta(days=1)
+    fill_2 = next_xnys_session(signal_2)
     run_1 = await _run(pool, signal_1, "AAA")
     strategy_id = await l2_continuous.ensure_book(pool, start_after_run_id=0)
 
@@ -116,6 +117,44 @@ async def test_default_book_boundary_prevents_historical_backfill(pool):
     assert await l2_continuous.generate_target_intent(
         pool, strategy_id=strategy_id, run_id=run_id
     ) == 0
+
+
+@pytest.mark.asyncio
+async def test_same_utc_day_intent_before_us_close_executes(pool):
+    signal = date(2026, 8, 31)
+    fill = date(2026, 9, 1)
+    rid = await _run(pool, signal, "AAA")
+    sid = await l2_continuous.ensure_book(pool, start_after_run_id=0)
+    await l2_continuous.generate_target_intent(pool, strategy_id=sid, run_id=rid)
+    await pool.execute("UPDATE l2_order SET generated_at=$1 WHERE strategy_id=$2",
+                       datetime(2026, 9, 1, 2, tzinfo=UTC), sid)
+    await _price(pool, "AAA", fill, 100)
+    result = await l2_continuous.fill_target_intent(pool, strategy_id=sid, signal_date=signal, fill_date=fill)
+    assert result["filled"] == 1
+    assert await pool.fetchval("SELECT last_fill_date FROM l2_account WHERE strategy_id=$1", sid) == fill
+
+
+@pytest.mark.asyncio
+async def test_after_close_intent_and_retrograde_order_are_terminal(pool):
+    signal = date(2026, 8, 31)
+    fill = date(2026, 9, 1)
+    rid = await _run(pool, signal, "AAA")
+    sid = await l2_continuous.ensure_book(pool, start_after_run_id=0)
+    await l2_continuous.generate_target_intent(pool, strategy_id=sid, run_id=rid)
+    await pool.execute("UPDATE l2_order SET generated_at=$1 WHERE strategy_id=$2", xnys_close(fill), sid)
+    result = await l2_continuous.fill_target_intent(pool, strategy_id=sid, signal_date=signal, fill_date=fill)
+    assert result["reason"] == "intent_after_execution_close"
+    assert result["unfilled"] == 1
+    assert await pool.fetchval("SELECT nav FROM l2_account WHERE strategy_id=$1", sid) == 1_000_000
+    await pool.execute("UPDATE l2_order SET status='pending' WHERE strategy_id=$1", sid)
+    await pool.execute("UPDATE l2_account SET last_fill_date=$1 WHERE strategy_id=$2", fill, sid)
+    result = await l2_continuous.fill_target_intent(pool, strategy_id=sid, signal_date=signal, fill_date=fill)
+    assert result["reason"] == "superseded_by_account_progress"
+
+
+def test_exchange_close_handles_holidays_and_early_close():
+    assert next_xnys_session(date(2026, 9, 4)) == date(2026, 9, 8)
+    assert xnys_close(date(2026, 11, 27)).hour == 18
 
 
 @pytest.mark.asyncio

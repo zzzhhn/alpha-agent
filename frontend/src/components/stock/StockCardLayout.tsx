@@ -19,6 +19,7 @@ import ActionBox from "./ActionBox";
 import CompanyProfile from "./CompanyProfile";
 import LeanThesis from "./LeanThesis";
 import RichThesis from "./RichThesis";
+import InvestmentNotebook from "@/components/picks/InvestmentNotebook";
 import AttributionRadar from "./AttributionRadar";
 import AttributionTable from "./AttributionTable";
 import PriceChart from "./PriceChart";
@@ -151,6 +152,7 @@ export default function StockCardLayout({
         {/* key, useState carries over and the stale brief from the prior */}
         {/* ticker renders briefly under the new ticker's heading. */}
         <RichThesis key={card.ticker} ticker={card.ticker} />
+        <InvestmentNotebook key={`notebook-${card.ticker}`} ticker={card.ticker} />
         <section>
           <h2 className="text-lg font-semibold mb-3 text-tm-fg">{t(locale, "stock_layout.signal_attribution")}</h2>
           <div className="grid grid-cols-1 2xl:grid-cols-12 gap-4">
