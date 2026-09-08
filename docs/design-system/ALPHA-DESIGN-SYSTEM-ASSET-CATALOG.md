@@ -2,6 +2,13 @@
 
 Status: implementation source of truth for reusable frontend assets
 
+Personal investment workspace adoption (2026-09-08): `InvestmentProfile`,
+`InvestmentNotebook`, `InvestmentEvidence` and `TurnoverStudy` compose the
+existing TmPane, TmField, TmButton and TmTable assets on `/picks` and `/stock`.
+They add no independent token or control family. Research replay, continuous
+account evidence and private user inputs remain visibly separate. Missing data
+is never presented as a zero return or a positive investment verdict.
+
 Standardization revision: 2026.09.1. Tokens, chart ramps, overlays, notification
 views and service status are shared with the living reference. The token audit
 checks all 20 current tokens and 56 theme/foreground/background contrast pairs.

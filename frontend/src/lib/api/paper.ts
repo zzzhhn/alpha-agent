@@ -113,7 +113,8 @@ export interface ResetResponse {
 }
 
 export interface ContinuousL2Account {
-  readonly status: "awaiting_forward_run" | "active";
+  readonly status: "awaiting_forward_run" | "active" | "execution_delayed";
+  readonly overdue_orders?: number;
   readonly accounting: "continuous_share_delta";
   readonly nav: number;
   readonly cash: number;

@@ -19,11 +19,14 @@ from alpha_agent.api.byok import (
     managed_llm_client,
 )
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.api.routes.investment import router as investment_router
 from alpha_agent.auth.crypto_box import CryptoError, encrypt
 from alpha_agent.auth.dependencies import is_admin, require_user
 from alpha_agent.llm.base import LLMClient, Message
 
 router = APIRouter(prefix="/api/user", tags=["user"])
+
+router.include_router(investment_router)
 
 
 class MeResponse(BaseModel):

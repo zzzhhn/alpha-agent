@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime
 
 from alpha_agent.backtest.l2 import DEFAULT_PARAMS, select_holdings
 from alpha_agent.fusion.policy import get_policy
+from alpha_agent.market_session import next_xnys_session, xnys_close
 from alpha_agent.storage.product_ledger import get_run_snapshots
 
 STRATEGY_VERSION = 2
@@ -180,14 +181,25 @@ async def fill_target_intent(
     )
     if not pending:
         return {"filled": 0, "unfilled": 0, "turnover": 0.0}
-    # Never consume a price that was already historical when the target intent
-    # was written.  Wall-date comparison is conservative and observable.
-    if any(fill_date <= order["generated_at"].date() for order in pending):
-        return {"filled": 0, "unfilled": 0, "turnover": 0.0, "deferred": True}
-
     account = await pool.fetchrow(
         "SELECT * FROM l2_account WHERE strategy_id=$1", strategy_id
     )
+    # Midnight UTC is not the US market close. An intent written at 02:00 UTC
+    # can legitimately precede the same date's 20:00 UTC close.
+    reason = None
+    if account["last_fill_date"] and fill_date <= account["last_fill_date"]:
+        reason = "superseded_by_account_progress"
+    elif fill_date != next_xnys_session(signal_date):
+        reason = "missed_execution_session"
+    elif any(order["generated_at"] >= xnys_close(fill_date) for order in pending):
+        reason = "intent_after_execution_close"
+    if reason:
+        await pool.execute(
+            "UPDATE l2_order SET status='unfilled', exit_reason=$3 "
+            "WHERE strategy_id=$1 AND signal_date=$2 AND status='pending'",
+            strategy_id, signal_date, reason,
+        )
+        return {"filled": 0, "unfilled": len(pending), "turnover": 0.0, "reason": reason}
     positions_rows = await pool.fetch(
         "SELECT * FROM l2_position WHERE strategy_id=$1", strategy_id
     )
@@ -198,7 +210,9 @@ async def fill_target_intent(
         fill_date,
         tickers,
     )
-    prices = {row["ticker"]: float(row["close"]) for row in price_rows}
+    prices = {row["ticker"]: float(row["close"]) for row in price_rows
+              if row["close"] is not None and math.isfinite(float(row["close"]))
+              and float(row["close"]) > 0}
     cash = float(account["cash"])
     previous_nav = float(account["nav"])
     nav_before = cash + sum(
@@ -284,6 +298,10 @@ async def fill_target_intent(
         )
         filled += 1
 
+    # Mark held names even when today's target could not execute for a name.
+    for ticker, pos in positions.items():
+        if ticker in prices:
+            pos["last_price"] = prices[ticker]
     market_value = sum(int(pos["qty"]) * float(pos.get("last_price") or 0.0) for pos in positions.values())
     nav = cash + market_value
     period_return = nav / previous_nav - 1.0 if previous_nav else 0.0

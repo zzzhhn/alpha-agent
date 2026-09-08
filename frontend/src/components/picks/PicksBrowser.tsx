@@ -16,6 +16,9 @@ import PicksTable from "./PicksTable";
 import { fetchPaperAccount } from "@/lib/api/paper";
 import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
+import InvestmentEvidence from "./InvestmentEvidence";
+import InvestmentProfile from "./InvestmentProfile";
+import InvestmentNotebook from "./InvestmentNotebook";
 import ConvictionBand from "./ConvictionBand";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmStatePane } from "@/components/tm/TmStatePane";
@@ -67,6 +70,7 @@ export default function PicksBrowser({
   const [side, setSide] = useState<PicksSide>("long");
   const [simPositions, setSimPositions] = useState<ReadonlyMap<string, number>>(new Map());
   const [paperCash] = useState(0);
+  const [showResearch, setShowResearch] = useState(false);
 
   // Paper trading is now the standalone /paper route (V2), not an in-page
   // modal, so this is the sole source of the "held qty" badge on each pick
@@ -398,7 +402,15 @@ export default function PicksBrowser({
         {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
             basket, not single-name direction. Pinned above the picks table.
             Its Paper Trading entry now links to /paper (V2: no longer a modal). */}
-        <BasketEdgeStrip />
+        <InvestmentProfile />
+        <InvestmentNotebook />
+        <InvestmentEvidence sleeve={data.run?.sleeve === "strategic" ? "strategic" : "tactical"} policyId={data.run?.policy_id} />
+        <div className="px-4 py-2">
+          <TmButton variant="secondary" aria-expanded={showResearch} onClick={() => setShowResearch(v => !v)}>
+            {locale === "zh" ? "辅助研究指标（非当前策略跟随收益）" : "Research diagnostics (not this policy's following return)"}
+          </TmButton>
+        </div>
+        {showResearch ? <BasketEdgeStrip /> : null}
 
           <div className="flex justify-end px-4 pt-3">
             <RefreshButton />

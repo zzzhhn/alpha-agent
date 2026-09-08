@@ -27,6 +27,8 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
     : 0;
   return (
     <div className="border-t border-tm-rule px-3 py-3">
+      <p className="mb-3 text-xs text-tm-warn">{locale === "zh" ? `战术账本估值截至 ${continuous?.last_fill_date ?? "—"}；战略账本估值截至 ${strategic?.last_fill_date ?? "—"}。以下不是实时市值，历史回测与连续账户不可混作同一条收益。` : `Tactical valued through ${continuous?.last_fill_date ?? "—"}; strategic through ${strategic?.last_fill_date ?? "—"}. Not live market values; legacy and continuous books are distinct.`}</p>
+      {[continuous, strategic].some(a => a?.status === "execution_delayed") ? <p className="mb-3 text-xs text-tm-neg">{locale === "zh" ? "连续账户存在延迟订单，执行记录不完整，请勿按正常跟随收益解读。" : "Continuous accounts have delayed orders; the execution record is incomplete."}</p> : null}
       <div className="mb-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2">
         <div className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">{locale === "zh" ? "连续份额级验证账户" : "Continuous share-level validation book"}</div>
         {continuous ? (
@@ -38,7 +40,7 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
           </div>
         ) : <p className="mt-2 font-tm-mono text-xs text-tm-muted">{locale === "zh" ? "等待迁移后初始化，只从部署后的新推荐开始，绝不回填已知历史价格。" : "Awaiting initialization. It starts only from a new post-deployment recommendation and never backfills already-known prices."}</p>}
         {continuous?.status === "awaiting_forward_run" ? <p className="mt-2 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `已建立前瞻边界 RUN #${continuous.start_after_run_id}，等待下一份完整推荐。` : `Forward boundary is RUN #${continuous.start_after_run_id}; waiting for the next complete recommendation.`}</p> : null}
-        {strategic ? <p className="mt-2 border-t border-tm-rule pt-2 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `战略 60 日独立账户：${strategic.status === "active" ? `${strategic.positions} 个持仓，收益 ${pct(strategic.cumulative_return)}` : `已在 RUN #${strategic.start_after_run_id} 建立边界，等待同政策新快照`}` : `Strategic 60d independent book: ${strategic.status === "active" ? `${strategic.positions} positions, ${pct(strategic.cumulative_return)}` : `forward boundary at RUN #${strategic.start_after_run_id}`}`}</p> : null}
+        {strategic ? <p className="mt-2 border-t border-tm-rule pt-2 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `战略 60 日独立账户：${strategic.last_fill_date ? `${strategic.positions} 个持仓，收益 ${pct(strategic.cumulative_return)}` : `已在 RUN #${strategic.start_after_run_id} 建立边界，等待同政策新快照`}` : `Strategic 60d independent book: ${strategic.last_fill_date ? `${strategic.positions} positions, ${pct(strategic.cumulative_return)}` : `forward boundary at RUN #${strategic.start_after_run_id}`}`}</p> : null}
       </div>
       {summary.status !== "ready" ? <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "sim.l2.accumulating")}</p> : <>
       <div className="mb-2 font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
