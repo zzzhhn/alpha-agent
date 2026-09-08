@@ -21,8 +21,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from alpha_agent.core.types import RouterHealth
+from alpha_agent.api.performance import install_performance
 
 app = FastAPI(title="AlphaCore Dashboard API", version="1.0.0")
+install_performance(app)
 
 app.add_middleware(
     CORSMiddleware,

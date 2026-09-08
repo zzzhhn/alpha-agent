@@ -9,12 +9,12 @@
 // This is the project's first "use server" file; D1 and D2 follow the same
 // shape (a module-level pg Pool, zod parse, structured result return, no
 // thrown errors crossing the action boundary).
-import { Pool } from "pg";
+import { getAuthPool } from "@/lib/db/pool";
 import { z } from "zod";
 import { hashPassword } from "@/lib/auth/password";
 import { checkRateLimit } from "@/lib/auth/rate-limit";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = getAuthPool();
 
 // password 8-32 chars; confirmPassword must match. The .refine runs after
 // the field checks so a short password reports "invalid" without a confusing

@@ -16,7 +16,7 @@ const { mockQuery, mockCheckRateLimit } = vi.hoisted(() => ({
 // Pool is used as `new Pool(...)` so we provide a real class constructor.
 vi.mock("pg", () => {
   function Pool() {
-    return { query: mockQuery };
+    return { query: mockQuery, on: vi.fn() };
   }
   return { Pool };
 });

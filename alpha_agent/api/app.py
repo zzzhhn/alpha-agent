@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from alpha_agent.api.cache import TTLCache
+from alpha_agent.api.performance import install_performance
 from alpha_agent.config import get_settings
 from alpha_agent.core.exceptions import ProviderUnavailableError
 from alpha_agent.core.factor_ast import refresh_allowed_ops
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=_lifespan if not SERVERLESS else None,
     )
+    install_performance(application)
 
     # In serverless mode, initialize state eagerly at import time
     # (lifespan doesn't fire on Vercel)

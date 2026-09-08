@@ -614,7 +614,11 @@ async def build_lean_view(
             ) u
             ORDER BY ticker, fetched_at DESC
         )
-        SELECT ticker, score, rating, confidence, breakdown,
+        SELECT ticker, score, rating, confidence,
+               jsonb_build_object(
+                   'breakdown', COALESCE(breakdown->'breakdown', '[]'::jsonb),
+                   'tier_flip_today', breakdown->'tier_flip_today'
+               ) AS breakdown,
                fetched_at, partial
         FROM combined
         WHERE ($2::text IS NULL OR ticker ILIKE '%' || $2 || '%')

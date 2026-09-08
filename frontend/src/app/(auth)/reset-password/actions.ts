@@ -6,11 +6,11 @@
 // row for the email -> verifyPassword(code, row.code_hash) -> on match,
 // UPDATE users.password_hash + flip used=true. Distinct errors for
 // wrong / expired / used so the user knows whether to re-request.
-import { Pool } from "pg";
+import { getAuthPool } from "@/lib/db/pool";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = getAuthPool();
 
 const resetSchema = z.object({
   email: z.string().email(),

@@ -15,7 +15,7 @@ const { mockQuery, mockSendMail, mockCheckRateLimit } = vi.hoisted(() => ({
 
 vi.mock("pg", () => {
   function Pool() {
-    return { query: mockQuery };
+    return { query: mockQuery, on: vi.fn() };
   }
   return { Pool };
 });
