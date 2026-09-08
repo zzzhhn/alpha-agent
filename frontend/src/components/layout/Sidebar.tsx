@@ -78,6 +78,7 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
   {
     titleKey: "nav.group.reference",
     items: [
+      { id: "guide", href: "/guide", labelKey: "lifecycle.guide" },
       { id: "data", href: "/data", labelKey: "lifecycle.data" },
       { id: "methodology", href: "/methodology", labelKey: "lifecycle.methodology" },
       { id: "reference", href: "/reference", labelKey: "lifecycle.reference" },
