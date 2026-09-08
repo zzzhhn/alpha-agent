@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from alpha_agent.api.db_pool import APIConnectionPool
-from alpha_agent.api.performance import PerformanceMiddleware
+from alpha_agent.api.performance import install_performance
 from alpha_agent.storage.postgres import DBUnavailable
 
 
@@ -36,7 +36,7 @@ async def test_cancellation_releases_connection_and_does_not_retry_write():
 
 def test_timing_headers_without_sql_or_parameters():
     app = FastAPI()
-    app.add_middleware(PerformanceMiddleware)
+    install_performance(app)
 
     @app.get("/sample/{ticker}")
     async def endpoint(ticker: str):
@@ -49,3 +49,18 @@ def test_timing_headers_without_sql_or_parameters():
     assert "db_query;dur=" in response.headers["server-timing"]
     assert "PRIVATE" not in response.headers["server-timing"]
     assert "SECRET" not in response.headers["server-timing"]
+
+
+def test_busy_response_is_retryable_not_cacheable():
+    app = FastAPI()
+    install_performance(app)
+
+    @app.get("/busy")
+    async def endpoint():
+        raise DBUnavailable("internal connection details")
+
+    response = TestClient(app).get("/busy")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "DB_UNAVAILABLE"}
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["retry-after"] == "2"

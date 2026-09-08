@@ -6,6 +6,9 @@ import time
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+from fastapi.responses import JSONResponse
+from alpha_agent.storage.postgres import DBUnavailable
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,6 +20,18 @@ class DBTiming:
 
 
 db_timing: ContextVar[DBTiming | None] = ContextVar("db_timing", default=None)
+
+
+def install_performance(app):
+    """Shared by local factory and the independent Vercel entry point."""
+    app.add_middleware(PerformanceMiddleware)
+
+    @app.exception_handler(DBUnavailable)
+    async def database_busy(_request, _exc):
+        return JSONResponse(
+            status_code=503, content={"detail": "DB_UNAVAILABLE"},
+            headers={"Retry-After": "2", "Cache-Control": "no-store"},
+        )
 
 
 class PerformanceMiddleware:
