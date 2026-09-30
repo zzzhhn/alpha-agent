@@ -29,7 +29,8 @@ logs/*.md
 # Status tracking
 status.json
 .coverage
-worker/.wrangler/
+# Wrangler (Cloudflare) local state at any depth; its cache holds account details.
+.wrangler/
 .vercel
 .worktrees/
 alpha_agent/data/factor_db.sqlite
