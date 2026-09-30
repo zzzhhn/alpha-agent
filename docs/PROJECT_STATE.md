@@ -48,9 +48,9 @@
 ### P1
 
 3. **`vercel.json` 里的 `slow_daily` Cron 不分片。** Vercel Cron 调用时不带 `limit` / `offset`，处理函数会对全部 558 只股票单次计算。按 `cron-shards.yml` 注释里的实测速度（80 只约 120 秒），全量约需 14 分钟，远超 300 秒上限；`api/cron/slow_daily.py` 的注释也写明全量只适用于 Pro 套餐的 800 秒上限。它和 GitHub Actions 的分片 `slow_daily` 在工作日同一时刻（13:30）重复运行，周末也照跑。这很可能每天产生一次跑满 300 秒的超时调用，**尚未用 Vercel 日志证实**。
-4. **Cloudflare 缓存文件被提交。** `.wrangler/cache/wrangler-account.json`（2026-04-13 提交）包含 Cloudflare 账户 ID 与账户显示名，`.gitignore` 只覆盖了 `worker/.wrangler/`。从当前树移除后，历史里仍然存在。
-5. **仓库根目录有与代码无关的文件。** 蓝图 docx/pdf（8 个，所有者决定暂时保留）、`_tmp_*` 解包目录（4 个）、`.skill` 包（2 个）、面向旧 AutoDL 服务器的一次性脚本 `patch_backend.py`、两个静态 HTML，以及 `frontend/.env.local.bak`。`frontend/.env.production` 只含公开的后端地址，`next build` 会读取它，应保留。
-6. **没有 LICENSE 文件。** `README.md` 写的是 MIT，但仓库里没有许可证文件，GitHub 也识别不到许可证。
+4. **Cloudflare 缓存文件被提交。** `.wrangler/cache/wrangler-account.json`（2026-04-13 提交）包含 Cloudflare 账户 ID 与账户显示名，`.gitignore` 只覆盖了 `worker/.wrangler/`。对应 PR：#43（放宽忽略规则并停止跟踪）。从当前树移除后，历史里仍然存在。
+5. **仓库根目录有与代码无关的文件。** 蓝图 docx/pdf（8 个，所有者决定暂时保留）、`_tmp_*` 解包目录（4 个）、`.skill` 包（2 个）、面向旧 AutoDL 服务器的一次性脚本 `patch_backend.py`、两个静态 HTML，以及 `frontend/.env.local.bak`。`frontend/.env.production` 只含公开的后端地址，`next build` 会读取它，应保留。对应 PR：#44，删除已证明冗余的两个 v1.1 解包目录、`patch_backend.py` 和 `frontend/.env.local.bak`；两个 v2.0 解包目录与对应 docx 不一致，暂时保留。
+6. **没有 LICENSE 文件。** `README.md` 写的是 MIT，但仓库里没有许可证文件，GitHub 也识别不到许可证。对应 PR：#45。
 
 ### P2
 
