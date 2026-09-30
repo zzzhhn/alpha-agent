@@ -4,7 +4,7 @@
 
 ## 结论
 
-生产环境自 2026-09-27 起被 Vercel 停用，前后端都返回 `HTTP 402`。代码自 2026-09-08（`3f09f0e`，PR #41）起没有变化。数据库在停用之后仍能连接，问题在 Vercel 一侧。恢复需要所有者先在 Vercel 查看用量与账单，代码改动无法解除停用。
+生产环境自 2026-09-27 起被 Vercel 停用，前后端都返回 `HTTP 402`。停用是账户级的，新的预览部署同样被拒（`Account is blocked`）。代码自 2026-09-08（`3f09f0e`，PR #41）起没有变化。数据库在停用之后仍能连接，问题在 Vercel 一侧。恢复需要所有者先在 Vercel 查看用量与账单，代码改动无法解除停用。
 
 ## 线上状态
 
@@ -15,7 +15,8 @@
 | 停用开始时间 | 2026-09-27 01:09Z 之后，最迟 07:55Z | 01:09Z `propose-job-runner` 成功；07:55Z `cron-shards` 运行 `36304615154` 的响应体为 `DEPLOYMENT_DISABLED` |
 | Neon 数据库 | 2026-09-28 16:34Z 仍可连接 | 当时 `brain-mining-loop` 成功，该流程直连数据库并执行迁移 |
 | 最近一次生产部署 | `main` 的 `3f09f0e`（2026-09-08） | PR #41 的发布记录，未在 Vercel 控制台复核 |
-| 停用原因 | **待验证** | 假设是 Hobby 套餐的函数用量超限，需要在 Vercel 的 Usage 与 Billing 页面确认 |
+| Vercel 账户 | 账户级封禁 | 2026-09-30 新开 PR 上，`alpha-agent` 与 `frontend` 两个项目的预览部署检查都报 `Account is blocked` |
+| 停用原因 | **待验证** | 假设是 Hobby 套餐的用量超限，需要在 Vercel 的 Usage 与 Billing 页面确认。按 Vercel 的说明，政策类封禁会给账户邮箱发邮件说明原因 |
 
 两个域名的响应头都是 `server: Vercel`，没有 Cloudflare 的 `cf-ray`，说明请求不经过 Cloudflare 代理，`worker/` 里的 Worker 不在当前链路上。
 
@@ -60,7 +61,7 @@
 
 ## 恢复检查单
 
-1. 所有者在 Vercel 查看两个项目的 Usage 与 Billing，确认停用原因，决定升级、等计费周期重置，还是先降负载（例如处理问题 3）。
+1. 所有者先在账户邮箱里找 Vercel 关于封禁的邮件，再到 Vercel 查看 Usage 与 Billing，确认停用原因，决定升级、等计费周期重置、联系 Vercel 支持，还是先降负载（例如处理问题 3）。参考：[Why has my account or deployment been paused?](https://vercel.com/kb/guide/why-is-my-account-deployment-blocked)。在此之前，所有 PR 上的 Vercel 预览检查都会失败，这不代表 PR 本身有问题。
 2. 恢复后只读核验：后端 `/api/_health` 的 `db` 为 `ok`、`db_error` 为 `null`；`/api/_health/routers` 全部加载；前端首页和 `/api/auth/session` 正常。
 3. 用 `docs/runbooks/2026-08-01-neon-quota-recovery.md` 第 2 步的查询看一次库大小，再让定时任务照常运行。
 4. 观察下一轮调度的 `cron-shards`、`propose-job-runner`、`daily-factor-loop` 是否转绿。不为此手动触发生产任务，除非所有者同意。
