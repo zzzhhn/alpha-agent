@@ -1,6 +1,20 @@
 name: cron-preflight
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Read-only check, or one bounded recovery action (no schedule)'
+        type: choice
+        default: check
+        options: [check, daily_prices, fast_intraday, publish_recommendation, run_propose_jobs, daily_factor_loop]
+      limit:
+        description: 'Ticker count: prices 1-75, signals 1-40'
+        type: number
+        default: 5
+      offset:
+        description: 'Start offset in the endpoint universe (0-600)'
+        type: number
+        default: 0
   workflow_call:
     inputs:
       trigger_event:
@@ -29,3 +43,23 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           TRIGGER_EVENT: ${{ inputs.trigger_event || github.event_name }}
         run: python3 scripts/cron_preflight.py
+  recovery:
+    needs: check
+    if: github.event_name == 'workflow_dispatch' && inputs.operation != 'check' && needs.check.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    concurrency:
+      group: alpha-bounded-recovery
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: One bounded recovery action, without retries
+        env:
+          BACKEND_BASE: https://alpha-api.bobbyzhong.com
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          RECOVERY_OPERATION: ${{ inputs.operation }}
+          RECOVERY_LIMIT: ${{ inputs.limit }}
+          RECOVERY_OFFSET: ${{ inputs.offset }}
+        run: python3 scripts/cron_recovery.py
