@@ -51,8 +51,13 @@ jobs:
             echo "Dry run: would pause $TARGET_NAME" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh api --method PUT "repos/$GH_REPO/actions/workflows/$TARGET_NAME.yml/disable"
           STATE=$(gh api "repos/$GH_REPO/actions/workflows/$TARGET_NAME.yml" --jq .state)
+          # GitHub rejects disabling an already inactive workflow with 403.
+          # A manual pause racing this guard is already the desired outcome.
+          if [ "$STATE" = active ]; then
+            gh api --method PUT "repos/$GH_REPO/actions/workflows/$TARGET_NAME.yml/disable"
+            STATE=$(gh api "repos/$GH_REPO/actions/workflows/$TARGET_NAME.yml" --jq .state)
+          fi
           test "$STATE" = disabled_manually
           echo "## Paused: $TARGET_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "State verified: $STATE. Source run: ${SOURCE_RUN:-manual operator smoke}." >> "$GITHUB_STEP_SUMMARY"

@@ -73,6 +73,8 @@ scheduled attempts stop. It does not change email preferences, erase failure
 history, automatically retry, or automatically re-enable anything. Known quota
 pauses still skip work through preflight rather than tripping the breaker.
 
-The manual guard dispatch defaults to dry-run. To verify GitHub-token permission
-without manufacturing a failed business run, target a workflow that is already
-paused with `dry_run=false`, then read back its state before restoring it.
+The manual guard dispatch defaults to dry-run. An already-paused target is a
+successful no-op; GitHub rejects an unconditional second disable with 403.
+After a workflow's recovery gates pass, an explicit active-to-paused manual
+dispatch can verify the write permission without manufacturing a failed business
+run. Read back the state, then explicitly restore the workflow.
