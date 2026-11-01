@@ -44,7 +44,12 @@ def result_ok(operation: str, body: dict) -> bool:
     if operation == "run_propose_jobs":
         return all(job.get("status") == "done" for job in body.get("jobs", []))
     if operation == "daily_factor_loop":
-        return not any((body.get(arm) or {}).get("error") for arm in ("ga", "llm"))
+        for arm in ("ga", "llm"):
+            result = body.get(arm) or {}
+            rejects = (result.get("_diag") or {}).get("rejects", [])
+            if result.get("error") or any(r.get("reason") == "fold_kernel_exception" for r in rejects):
+                return False
+        return True
     return True
 
 

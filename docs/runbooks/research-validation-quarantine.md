@@ -7,6 +7,9 @@ The 2026-11-01 production recovery canary for `daily_factor_loop` returned HTTP
 payload contained repeated `fold_kernel_exception` errors for missing `sector`,
 including the baseline expression. Zero reported Sharpe is not reliable evidence
 of a bad factor here: the evaluation inputs were invalid.
+The manual recovery checker now also rejects nested `fold_kernel_exception`
+diagnostics, not only top-level HTTP/arm errors. The original green wrapper is
+retained as historical evidence, not re-labelled a healthy business execution.
 
 The actual call chain is `cron_daily_factor_loop -> _run_ga_work ->
 _evaluate_and_record -> evaluate_factor_candidate`. The LLM factor proposer
