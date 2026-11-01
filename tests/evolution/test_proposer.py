@@ -51,10 +51,12 @@ async def pool(applied_db):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_dormant_when_history_too_short(pool):
+async def test_dormant_when_baseline_is_invalid(pool, monkeypatch):
     """With fewer days than needed for MIN_FOLDS folds, run_proposer returns
     the dormant sentinel and writes zero pending rows."""
     from alpha_agent.evolution.proposer import run_proposer
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("alpha_agent.evolution.proposer.evaluate_candidate", AsyncMock(return_value=None))
 
     base = date(2024, 1, 2)
     tickers = [f"T{i:02d}" for i in range(12)]

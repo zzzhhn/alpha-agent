@@ -66,5 +66,32 @@ or the recommendation signal/ledger pipelines use this synthetic construction.
    Separate historical descriptive hit rates from out-of-sample, executable
    returns; neither a healthy pipeline nor an accepted proposal proves profit.
 
-No replacement validator or profitable strategy is claimed by the recovery
-release. This document records an open correctness task, not completed research.
+## Remediation, 2026-11-01
+
+The replacement `research_panel.py` now shares the main backtest's real OHLCV,
+SPY, sector metadata, membership and filing-date fundamentals. It bounds the
+research window to 504 sessions and loads once per run. Current bundled data
+ends **2026-04-30**, explicitly historical, not current-market verification.
+Missing PIT/membership data is a hard invalid evaluation, never a synthetic fill.
+
+GA searches only the chronological development prefix. Three later contiguous
+blocks retain their actual dates, with five-session gaps. The kernel is run on
+the intact chronological panel; no train/test row stacking. Missing operands,
+degenerate folds and kernel failures cannot become numeric-zero evidence. The
+baseline must be valid before candidates can be admitted. Costs are 10 bps per
+side plus 100 annual bps short borrow assumptions, not measured broker quotes.
+The historical holdout is reused between research runs; it is not an independent
+live forward test or proof of profitability. Sector classifications are snapshots
+and the main kernel's cross-sectional membership limitations remain relevant.
+
+The methodology adapter no longer pretends rating/IC knobs affect the factor
+kernel and no longer mutates the live config cache. Its weekly schedule remains
+quarantined, outside the requested two-runner restoration.
+
+Recovery gates: manual `research_validation` (read-only known-expression and
+baseline canary), then the real daily loop, then the propose runner. Workflow
+success now checks the response's business `ok`, not just HTTP 200. Restore each
+only after its deployed-path checks. The circuit breaker remains enabled.
+
+Reference: [QuantConnect research guide](https://www.quantconnect.com/docs/v2/writing-algorithms/key-concepts/research-guide)
+for temporal separation, point-in-time inputs and survivorship limitations.

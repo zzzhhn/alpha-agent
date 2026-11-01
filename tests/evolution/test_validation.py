@@ -67,7 +67,7 @@ async def pool(applied_db):
 
 
 @pytest.mark.asyncio
-async def test_evaluate_candidate_returns_none_when_history_too_short(pool):
+async def test_rejects_config_not_represented_by_kernel(pool):
     """Fewer days than needed for MIN_FOLDS folds -> returns None (dormant-when-starved)."""
     base = date(2024, 1, 2)
     tickers = [f"T{i:02d}" for i in range(12)]
@@ -79,8 +79,9 @@ async def test_evaluate_candidate_returns_none_when_history_too_short(pool):
         new_value=0.20,
         rationale="test delta",
     )
-    result = await evaluate_candidate(pool, delta)
-    assert result is None
+    from alpha_agent.evolution.research_panel import InvalidEvaluation
+    with pytest.raises(InvalidEvaluation, match="unsupported_config_delta"):
+        await evaluate_candidate(pool, delta)
 
 
 @pytest.mark.asyncio
@@ -102,8 +103,8 @@ async def test_evaluate_candidate_returns_result_with_enough_history(pool):
     cache_snapshot = dict(config_store._CACHE)
 
     delta = ConfigDelta(
-        key="rating.no_trade_band",
-        new_value=0.20,
+        key="factor.mode",
+        new_value="short",
         rationale="test delta",
     )
     result = await evaluate_candidate(pool, delta)

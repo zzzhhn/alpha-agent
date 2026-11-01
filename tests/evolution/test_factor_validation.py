@@ -53,9 +53,13 @@ async def _seed_daily_prices(pool, n_tickers=12, n_days=120, seed=42):
 
 
 @pytest.mark.asyncio
-async def test_returns_none_when_history_below_min_folds(pool, runner):
+async def test_returns_none_when_history_below_min_folds(pool, runner, monkeypatch):
     """Dormant-when-starved: too little history -> None."""
     proposal = RawProposal(expression="rank(ts_mean(returns, 12))", new_operators=[])
+    from alpha_agent.evolution import research_panel
+    def unavailable():
+        raise research_panel.InvalidEvaluation("history_too_short")
+    monkeypatch.setattr(research_panel, "load_research_context", unavailable)
     result = await evaluate_factor_candidate(pool, runner, proposal)
     assert result is None
 

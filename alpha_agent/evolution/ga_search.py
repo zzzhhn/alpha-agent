@@ -37,7 +37,7 @@ def composite_fitness(metrics) -> float:
 
 
 def make_kernel_fitness(
-    panel, *, direction: str = "long_short", n_trials: int = 1
+    panel, *, direction: str = "long_short", n_trials: int = 1, trial_counter=None,
 ) -> Callable[[str], float]:
     """Build a memoized expr -> fitness function over a fixed panel. Validates
     the expression against the real grammar first (so degenerate / invalid
@@ -47,12 +47,15 @@ def make_kernel_fitness(
     from alpha_agent.core.types import FactorSpec
     from alpha_agent.factor_engine.kernel import KernelParams, run_kernel
 
-    params = KernelParams(direction=direction, n_trials=n_trials)
+    params = KernelParams(direction=direction, n_trials=n_trials,
+                          transaction_cost_bps=10, short_borrow_bps=100)
     cache: dict[str, float] = {}
 
     def fitness(expr: str) -> float:
         if expr in cache:
             return cache[expr]
+        if trial_counter is not None:
+            trial_counter["attempted"] = trial_counter.get("attempted", 0) + 1
         score = float("-inf")
         try:
             tree = expression_to_tree(expr)
@@ -120,6 +123,8 @@ def evolve(
     def evaluate(trees: list) -> list:
         scored = []
         for t in trees:
+            if deadline is not None and now() > deadline:
+                break
             expr = ga_dsl.tree_to_expression(t)
             s = fitness_fn(expr)
             if s > best.get(expr, float("-inf")):
@@ -130,6 +135,8 @@ def evolve(
 
     ranked = evaluate(pop)
     for _ in range(generations):
+        if not ranked:
+            break
         if deadline is not None and now() > deadline:
             break
         nxt = [row[0] for row in ranked[:elitism]]
@@ -161,6 +168,8 @@ def run_ga_search(
     direction: str = "long_short",
     n_trials: int = 1,
     vocab: ga_dsl.Vocab = ga_dsl.DEFAULT_VOCAB,
+    panel=None,
+    trial_counter=None,
 ) -> list[str]:
     """End-to-end: load the panel, breed candidates, return the top-K expression
     strings for downstream DSR-gated validation. `seed_exprs` (e.g. the current
@@ -170,8 +179,9 @@ def run_ga_search(
     from alpha_agent.core.factor_ast import expression_to_tree
     from alpha_agent.factor_engine.factor_backtest import _load_panel
 
-    panel = _load_panel()
-    fitness = make_kernel_fitness(panel, direction=direction, n_trials=n_trials)
+    panel = panel if panel is not None else _load_panel()
+    fitness = make_kernel_fitness(panel, direction=direction, n_trials=n_trials,
+                                  trial_counter=trial_counter)
     rng = random.Random(rng_seed)
 
     seeds: list[dict] = []

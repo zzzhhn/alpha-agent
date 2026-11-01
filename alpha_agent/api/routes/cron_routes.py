@@ -811,6 +811,8 @@ async def cron_run_propose_jobs() -> dict[str, Any]:
             result = await _run_propose_work(
                 pool, job["user_id"], job["n"], diagnostic
             )
+            if result.get("ok") is False:
+                raise RuntimeError(f"invalid_evaluation: {result.get('_diag')}")
             await propose_jobs.mark_done(pool, job_id, result)
             drained.append(
                 {
@@ -824,11 +826,42 @@ async def cron_run_propose_jobs() -> dict[str, Any]:
             err = f"{type(exc).__name__}: {exc}"
             await propose_jobs.mark_failed(pool, job_id, err)
             drained.append({"job_id": job_id, "status": "failed", "error": err})
-    return {"ok": True, "drained": len(drained), "jobs": drained}
+    return {"ok": all(j["status"] == "done" for j in drained),
+            "drained": len(drained), "jobs": drained}
 
 
 # GA search wall-clock inside the daily loop, under the Vercel function budget.
-_GA_BUDGET_S = 90.0
+_GA_BUDGET_S = 45.0
+
+
+@router.post("/research_validation")
+async def research_validation() -> dict[str, Any]:
+    """Read-only real-kernel canary. No LLM spend, proposals or config mutation."""
+    import asyncio
+    from alpha_agent.config_store import refresh_config
+    from alpha_agent.evolution.diagnostics import compute_diagnostic
+    from alpha_agent.evolution.factor_validation import evaluate_factor_candidate
+    from alpha_agent.evolution.llm_factor_proposer import RawProposal
+    from alpha_agent.evolution.research_panel import load_research_context
+    from alpha_agent.evolution.sandbox import SandboxRunner
+
+    pool = await get_pool(os.environ["DATABASE_URL"])
+    await refresh_config(pool)
+    diagnostic = await compute_diagnostic(pool)
+    context = await asyncio.to_thread(load_research_context)
+    runner = SandboxRunner()
+    rejects, results = [], []
+    try:
+        for expr in dict.fromkeys([diagnostic.current_expression, "rank(ts_mean(returns, 20))"]):
+            result = await evaluate_factor_candidate(
+                pool, runner, RawProposal(expression=expr), rejects, context=context)
+            results.append({"expression": expr, "valid": result is not None,
+                            "sharpes": result.sharpes if result else None,
+                            "ic_oos": result.ic_oos if result else None})
+    finally:
+        runner.close()
+    return {"ok": all(r["valid"] for r in results), "validation": context.evidence(),
+            "results": results, "rejects": rejects, "writes": 0}
 
 
 @router.post("/daily_factor_loop")
@@ -870,13 +903,18 @@ async def cron_daily_factor_loop() -> dict[str, Any]:
 
     ga_prop = (out.get("ga") or {}).get("proposed", 0)
     llm_prop = (out.get("llm") or {}).get("proposed", 0)
+    errors = [arm for arm in (out.get("ga", {}), out.get("llm", {}))
+              if arm.get("error") or arm.get("ok") is False]
+    out["ok"] = not errors
     await pool.execute(
         "INSERT INTO cron_runs "
         "(cron_name, started_at, finished_at, ok, error_count, details) "
-        "VALUES ($1, $2, now(), true, 0, $3::jsonb)",
+        "VALUES ($1, $2, now(), $4, $5, $3::jsonb)",
         "daily_factor_loop",
         started_at,
-        json.dumps({"ga_proposed": ga_prop, "llm_proposed": llm_prop}),
+        json.dumps({"ga_proposed": ga_prop, "llm_proposed": llm_prop,
+                    "errors": errors, "validation": (out.get("ga") or {}).get("validation")}),
+        not errors, len(errors),
     )
     return out
 

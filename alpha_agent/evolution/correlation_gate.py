@@ -174,7 +174,7 @@ class SelfCorrelationGate:
     candidate against them. Instantiate per propose round (saved factors don't
     change mid-round), call .check(expression) per surviving candidate."""
 
-    def __init__(self, existing: list[tuple[str, str]], budget_s: float = 40.0):
+    def __init__(self, existing: list[tuple[str, str]], budget_s: float = 40.0, *, panel=None):
         """existing: list of (name, expression) for the already-saved factors
         to guard against. Empty → the gate is a no-op (never loads the panel).
 
@@ -194,7 +194,7 @@ class SelfCorrelationGate:
         try:
             from alpha_agent.factor_engine.factor_backtest import _load_panel
 
-            self._panel = _load_panel()
+            self._panel = panel if panel is not None else _load_panel()
         except Exception:  # noqa: BLE001 - no panel → gate is a no-op
             return
         self._fwd = np.full_like(self._panel.close, np.nan)

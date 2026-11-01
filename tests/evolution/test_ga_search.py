@@ -71,14 +71,13 @@ def test_evolve_respects_wall_clock_budget():
         calls["n"] += 1
         return _reward_vwap(expr)
 
-    # Clock jumps past the deadline immediately, so no generation runs — only the
-    # initial population is scored (pop_size calls), not pop_size*(gens+1).
+    # The budget also bounds the initial population, not just later generations.
     ticks = iter([0.0] + [100.0] * 50)
     gs.evolve(
         random.Random(1), [], counting_fitness,
         pop_size=12, generations=10, budget_s=1.0, clock=lambda: next(ticks),
     )
-    assert calls["n"] == 12
+    assert calls["n"] == 0
 
 
 # ── full panel-backed search (slow: needs the parquet + kernel) ───────────

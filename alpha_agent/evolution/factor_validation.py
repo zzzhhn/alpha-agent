@@ -16,18 +16,14 @@ import ast
 import sys
 from dataclasses import dataclass
 
-import numpy as np
-
 from alpha_agent.evolution.llm_factor_proposer import RawProposal
 from alpha_agent.evolution.sandbox import (
-    CannedTestResult,
     SandboxError,
     SandboxRunner,
     run_canned_tests,
 )
 from alpha_agent.evolution.validation import (
-    MIN_FOLDS,
-    purged_fold_indices,
+    MIN_FOLDS as MIN_FOLDS,
 )
 
 
@@ -129,230 +125,38 @@ async def evaluate_factor_candidate(
     runner: SandboxRunner,
     proposal: RawProposal,
     out_rejects: list | None = None,
+    *,
+    context=None,
 ) -> FactorCandidateResult | None:
-    """Run canned tests on every new operator (reject candidate on any fail),
-    then purged WF OOS folds with sandbox-dispatched new ops.
+    """Validate against one real chronological panel; invalid is never zero."""
+    import asyncio
+    from alpha_agent.evolution.research_panel import (
+        InvalidEvaluation, load_research_context, score_expression,
+    )
 
-    Returns None on dormant-when-starved OR any canned-test failure.
-
-    Panel-load + fold loop mirrors alpha_agent/evolution/validation.py
-    evaluate_candidate lines 83-273 exactly, replacing the _CACHE delta
-    override with extra_ops=extra_ops passed to run_kernel.
-    """
-    from alpha_agent.core.types import FactorSpec
-    from alpha_agent.factor_engine.factor_backtest import _Panel
-    from alpha_agent.factor_engine.kernel import KernelParams, run_kernel, spearman_ic
-
-    # ------------------------------------------------------------------ #
-    # 1. Canned tests on every new operator (fast rejection path)
-    # ------------------------------------------------------------------ #
-    op_test_results: list[dict] = []
+    op_test_results = []
     for op in proposal.new_operators:
-        result: CannedTestResult = run_canned_tests(
-            runner,
-            op_code=op["python_impl"],
-            op_name=op["name"],
-            signature=op.get("signature", "(x: ndarray) -> ndarray"),
-        )
-        op_test_results.append({
-            "name": op["name"],
-            "passed": result.passed,
-            "tests": result.tests,
-        })
+        result = run_canned_tests(runner, op_code=op["python_impl"], op_name=op["name"],
+                                 signature=op.get("signature", "(x: ndarray) -> ndarray"))
+        op_test_results.append({"name": op["name"], "passed": result.passed, "tests": result.tests})
         if not result.passed:
-            _emit_reject(
-                proposal.expression,
-                "canned_test_failed",
-                out_rejects=out_rejects,
-                op_name=op["name"],
-                tests=result.tests,
-            )
-            return None  # reject candidate immediately; any canned-test failure disqualifies
-
-    extra_ops = _build_sandbox_dispatch(runner, proposal.new_operators)
-
-    # ------------------------------------------------------------------ #
-    # 2. Load close history from daily_prices (mirrors validation.py:95-124)
-    # ------------------------------------------------------------------ #
-    rows = await pool.fetch(
-        "SELECT ticker, date, close FROM daily_prices ORDER BY date, ticker"
-    )
-    if not rows:
-        _emit_reject(proposal.expression, "daily_prices_empty", out_rejects=out_rejects)
+            _emit_reject(proposal.expression, "canned_test_failed",
+                         out_rejects=out_rejects, op_name=op["name"])
+            return None
+    try:
+        context = context or await asyncio.to_thread(load_research_context)
+        extra_ops = _build_sandbox_dispatch(runner, proposal.new_operators)
+        sharpes, ic, _ = await asyncio.to_thread(
+            score_expression, context, proposal.expression, extra_ops=extra_ops)
+    except InvalidEvaluation as exc:
+        _emit_reject(proposal.expression, exc.reason, out_rejects=out_rejects,
+                     status="invalid_evaluation", detail=str(exc))
         return None
-
-    tickers_set: list[str] = sorted({r["ticker"] for r in rows})
-    dates_set: list[str] = sorted({str(r["date"]) for r in rows})
-    N = len(tickers_set)
-    T = len(dates_set)
-
-    ticker_idx = {t: i for i, t in enumerate(tickers_set)}
-    date_idx = {d: i for i, d in enumerate(dates_set)}
-
-    close_arr = np.full((T, N), np.nan)
-    for r in rows:
-        ti = ticker_idx[r["ticker"]]
-        di = date_idx[str(r["date"])]
-        close_arr[di, ti] = float(r["close"])
-
-    # Drop tickers with all-NaN close
-    valid_cols = ~np.all(np.isnan(close_arr), axis=0)
-    close_arr = close_arr[:, valid_cols]
-    tickers_arr = [t for t, v in zip(tickers_set, valid_cols) if v]
-    N = close_arr.shape[1]
-
-    if N < 10:
-        _emit_reject(
-            proposal.expression,
-            "too_few_tickers",
-            out_rejects=out_rejects,
-            n=N,
-            min=10,
-        )
+    except Exception as exc:
+        _emit_reject(proposal.expression, "evaluation_exception", out_rejects=out_rejects,
+                     status="invalid_evaluation", detail=f"{type(exc).__name__}: {exc}")
         return None
-
-    # ------------------------------------------------------------------ #
-    # 3. Decide fold geometry; return None when history is too short
-    #    (mirrors validation.py:128-145)
-    # ------------------------------------------------------------------ #
-    n_folds = MIN_FOLDS
-    if T // n_folds < _MIN_ROWS_PER_FOLD:
-        _emit_reject(
-            proposal.expression,
-            "history_too_short",
-            out_rejects=out_rejects,
-            T=T,
-            need_min=n_folds * _MIN_ROWS_PER_FOLD,
-        )
-        return None
-
-    folds = purged_fold_indices(n=T, n_folds=n_folds, embargo=_EMBARGO)
-
-    usable_folds = [
-        (train_idx, test_idx)
-        for train_idx, test_idx in folds
-        if len(test_idx) >= _MIN_ROWS_PER_FOLD and len(train_idx) >= _MIN_ROWS_PER_FOLD
-    ]
-
-    if len(usable_folds) < MIN_FOLDS:
-        _emit_reject(
-            proposal.expression,
-            "usable_folds_short",
-            out_rejects=out_rejects,
-            usable=len(usable_folds),
-            need=MIN_FOLDS,
-            total=len(folds),
-        )
-        return None
-
-    # ------------------------------------------------------------------ #
-    # 4. Build FactorSpec from the proposal expression
-    # ------------------------------------------------------------------ #
-    spec = FactorSpec(
-        name="factor_candidate",
-        hypothesis="Phase 3c candidate evaluation",
-        expression=proposal.expression,
-        operators_used=[],
-        lookback=60,
-        universe="SP500",
-        justification="Automated LLM factor proposal OOS evaluation.",
-    )
-
-    params = KernelParams(direction="long_short", n_trials=1)
-
-    # ------------------------------------------------------------------ #
-    # 5. Score each fold (mirrors validation.py:180-256)
-    # ------------------------------------------------------------------ #
-    fold_sharpes: list[float] = []
-    fold_ics: list[float] = []
-
-    rng = np.random.default_rng(seed=0)
-
-    for train_idx, test_idx in usable_folds:
-        # Stack train rows first, then test rows, so the kernel's train_ratio
-        # boundary lands exactly on the train/test seam (see validation.py:194).
-        sub_close = np.vstack([close_arr[train_idx, :], close_arr[test_idx, :]])
-        sub_T = sub_close.shape[0]
-
-        sub_open = sub_close * (1.0 + rng.normal(0.0, 0.001, size=sub_close.shape))
-        sub_high = np.maximum(sub_open, sub_close) * 1.001
-        sub_low = np.minimum(sub_open, sub_close) * 0.999
-        sub_vol = np.full(sub_close.shape, 1_000_000.0)
-        sub_dates = np.array(
-            [f"2024-{(i % 12) + 1:02d}-{(i % 28) + 1:02d}" for i in range(sub_T)]
-        )
-        sub_tickers = tuple(tickers_arr)
-        bench = np.cumprod(1.0 + rng.normal(0.0003, 0.005, size=sub_T)) * 100.0
-
-        panel = _Panel(
-            dates=sub_dates,
-            tickers=sub_tickers,
-            close=sub_close,
-            open_=sub_open,
-            high=sub_high,
-            low=sub_low,
-            volume=sub_vol,
-            benchmark_close=bench,
-        )
-
-        n_train = len(train_idx)
-        n_test = len(test_idx)
-        train_ratio = float(n_train) / float(n_train + n_test)
-
-        fold_params = KernelParams(
-            direction=params.direction,
-            top_pct=params.top_pct,
-            bottom_pct=params.bottom_pct,
-            train_ratio=train_ratio,
-            n_trials=params.n_trials,
-        )
-
-        try:
-            kr = run_kernel(panel, spec, fold_params, extra_ops=extra_ops)
-        except Exception as fold_exc:  # noqa: BLE001 - structured emit below
-            # A single fold failure (degenerate matrix, sandbox error, etc.)
-            # must not abort the whole evaluation. Surface as zero metrics so
-            # the deflated Sharpe reflects the degraded evidence. Emit reason
-            # to stderr so 0-Sharpe folds become diagnosable rather than
-            # silently degrading the candidate's deflated Sharpe to zero.
-            _emit_reject(
-                proposal.expression,
-                "fold_kernel_exception",
-                out_rejects=out_rejects,
-                exc_type=type(fold_exc).__name__,
-                exc_msg=str(fold_exc)[:200],
-            )
-            fold_sharpes.append(0.0)
-            fold_ics.append(0.0)
-            continue
-
-        fold_sharpes.append(float(kr.test_metrics.sharpe))
-
-        # OOS IC: mean Spearman IC over the test slice rows
-        # (mirrors validation.py:249-256)
-        test_start = kr.train_end
-        ic_vals: list[float] = []
-        for t in range(test_start, sub_T):
-            ic = spearman_ic(kr.factor[t], kr.fwd_returns[t])
-            if not np.isnan(ic):
-                ic_vals.append(ic)
-        fold_ics.append(float(np.mean(ic_vals)) if ic_vals else 0.0)
-
-    if len(fold_sharpes) < MIN_FOLDS:
-        _emit_reject(
-            proposal.expression,
-            "fold_sharpes_short",
-            out_rejects=out_rejects,
-            got=len(fold_sharpes),
-            need=MIN_FOLDS,
-        )
-        return None
-
-    return FactorCandidateResult(
-        expression=proposal.expression,
-        new_operators=list(proposal.new_operators),
-        sharpes=fold_sharpes,
-        ic_oos=float(np.mean(fold_ics)),
-        n_folds=len(fold_sharpes),
-        operator_test_results=op_test_results,
-    )
+    return FactorCandidateResult(expression=proposal.expression,
+                                 new_operators=list(proposal.new_operators),
+                                 sharpes=sharpes, ic_oos=ic, n_folds=len(sharpes),
+                                 operator_test_results=op_test_results)

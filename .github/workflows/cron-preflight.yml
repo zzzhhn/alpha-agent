@@ -6,7 +6,7 @@ on:
         description: 'Read-only check, or one bounded recovery action (no schedule)'
         type: choice
         default: check
-        options: [check, daily_prices, fast_intraday, publish_recommendation, run_propose_jobs, daily_factor_loop]
+        options: [check, daily_prices, fast_intraday, publish_recommendation, research_validation, run_propose_jobs, daily_factor_loop, l2_cycle]
       limit:
         description: 'Ticker count: prices 1-75, signals 1-40'
         type: number
