@@ -44,8 +44,8 @@ export default function ConvictionBand({
       : { title: "MODEL LEADERS", agreement: "signal agreement", drivers: "drivers" };
 
   return (
-    <div className="px-4 pt-3">
-      <div className="mb-2.5 font-tm-mono text-xs tracking-[0.12em] text-tm-accent">
+    <div className="px-4 py-3">
+      <div className="mb-2 font-tm-mono text-xs tracking-[0.12em] text-tm-accent">
         ★ {copy.title}
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -82,7 +82,7 @@ export default function ConvictionBand({
             <Link
               key={card.ticker + i}
               href={`/stock/${card.ticker}`}
-              className="flex flex-col gap-2.5 border border-tm-rule bg-tm-bg-2 p-3.5 transition-colors hover:border-tm-accent hover:bg-tm-bg-3"
+              className="flex flex-col gap-2 border border-tm-rule bg-tm-bg-2 p-3 transition-colors hover:border-tm-accent hover:bg-tm-bg-3"
             >
               <div className="flex items-baseline justify-between">
                 <span className="font-tm-mono text-2xl font-bold text-tm-fg">
@@ -93,7 +93,7 @@ export default function ConvictionBand({
                   {composite.toFixed(2)}σ
                 </span>
               </div>
-              <div className="min-h-[2.25rem] font-tm-sans text-sm leading-snug text-tm-fg-2">
+              <div className="font-tm-sans text-sm leading-5 text-tm-fg-2">
                 {drivers.length > 0 ? (
                   <>
                     <span className="text-tm-pos">↑ </span>

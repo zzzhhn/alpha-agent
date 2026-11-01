@@ -10,7 +10,7 @@ import { TmInput, TmSelect, TmTextarea } from "@/components/tm/TmField";
 type Entry = { ticker: string; rationale: string; counterevidence: string; invalidation: string; source_notes: string; next_review: string; status: string; revision: number; updated_at?: string; review_due?: boolean };
 const blank = (ticker = ""): Entry => ({ ticker, rationale: "", counterevidence: "", invalidation: "", source_notes: "", next_review: "", status: "watch", revision: 0 });
 
-export default function InvestmentNotebook({ ticker }: { ticker?: string }) {
+export default function InvestmentNotebook({ ticker, compact = false }: { ticker?: string; compact?: boolean }) {
   const { locale } = useLocale(); const zh = locale === "zh";
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]); const [draft, setDraft] = useState<Entry>(blank(ticker));
@@ -37,10 +37,12 @@ export default function InvestmentNotebook({ ticker }: { ticker?: string }) {
       setDraft(entry); setEntries(old => [...old.filter(e => e.ticker !== entry.ticker), entry]); setSaved(true);
     } catch(e) { fail(e); } finally { setBusy(false); }
   };
-  return <TmPane title={zh ? "投资理由与复查记录" : "Investment thesis and review"} bodyClassName="gap-3 p-4">
+  const toggle = <TmButton variant="secondary" size={compact ? "sm" : undefined} loading={busy} aria-expanded={open} aria-label={zh ? "打开或收起研究记录" : "Open or collapse research notebook"} onClick={() => open ? setOpen(false) : void load()}>{open ? (zh ? "收起" : "Collapse") : (zh ? "打开研究记录" : "Open notebook")}</TmButton>;
+  return <TmPane title={zh ? "投资理由与复查记录" : "Investment thesis and review"} meta={compact ? toggle : undefined} bodyClassName={compact && !open ? undefined : "gap-3 p-4"}>
+    {!compact || open ? <>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-xs text-tm-muted">{zh ? "为什么关注，什么证据会让你改变判断？先记下来，允许继续观察、不操作。" : "Why follow this stock, and what would change your mind? Record it; watching without trading is valid."}</p>
-      <TmButton variant="secondary" loading={busy} aria-expanded={open} onClick={() => open ? setOpen(false) : void load()}>{open ? (zh ? "收起" : "Collapse") : (zh ? "打开研究记录" : "Open notebook")}</TmButton>
+      {!compact ? toggle : null}
     </div>
     {open ? <>
       {error ? <div role="alert" className="flex flex-wrap items-center gap-3 text-xs text-tm-neg">{error}<TmButton variant="secondary" onClick={() => void load()}>{zh ? "重新加载" : "Reload"}</TmButton></div> : null}
@@ -64,6 +66,7 @@ export default function InvestmentNotebook({ ticker }: { ticker?: string }) {
         </div>
         <p className="text-xs text-tm-muted">{zh ? "这是你填写的观点，不是已验证的事实。日期到期会在队列内提示，但不自动监测事件、发通知或止损；当前仅保留每个股票的最新记录。" : "User-authored views, not verified facts. Due dates appear in the queue; no event monitoring, notifications or stop orders. Only the latest record per ticker is retained."}</p>
       </> : null}
+    </> : null}
     </> : null}
   </TmPane>;
 }

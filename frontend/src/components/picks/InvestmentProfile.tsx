@@ -10,7 +10,7 @@ import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
 type Profile = { horizon_months: number; drawdown_review_pct: number; review_frequency: "weekly" | "monthly"; max_position_pct: number; max_sector_pct: number; holdings_as_of: string; holdings: { ticker: string; weight_pct: number }[] };
 type Review = { status: string; warnings?: { code: string; subject: string; actual_pct: number; limit_pct: number }[]; unknown_sector_tickers?: string[]; unallocated_pct?: number; holdings_age_days?: number };
 
-export default function InvestmentProfile() {
+export default function InvestmentProfile({ compact = false }: { compact?: boolean }) {
   const { locale } = useLocale(); const zh = locale === "zh";
   const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false);
   const [error, setError] = useState(""); const [signin, setSignin] = useState(false);
@@ -45,10 +45,12 @@ export default function InvestmentProfile() {
     } catch(e) { fail(e); } finally { setLoading(false); }
   };
   const update = (setter: (v: string) => void) => (v: string) => { setter(v); setDirty(true); setReview(null); };
-  return <TmPane title={zh ? "我的投资计划" : "My investment plan"} bodyClassName="gap-3 p-4">
+  const toggle = <TmButton variant="secondary" size={compact ? "sm" : undefined} loading={loading} aria-expanded={open} aria-label={zh ? "查看或收起投资计划" : "View or collapse investment plan"} onClick={() => open ? setOpen(false) : void load()}>{open ? (zh ? "收起" : "Collapse") : (zh ? "查看与编辑" : "View / edit")}</TmButton>;
+  return <TmPane title={zh ? "我的投资计划" : "My investment plan"} meta={compact ? toggle : undefined} bodyClassName={compact && !open ? undefined : "gap-3 p-4"}>
+    {!compact || open ? <>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-xs text-tm-muted">{zh ? "先明确期限与现有持仓，再讨论候选。未填写时不生成个性化仓位。" : "Start with your horizon and holdings. No personalized allocation without a profile."}</p>
-      <TmButton variant="secondary" loading={loading} aria-expanded={open} onClick={() => open ? setOpen(false) : void load()}>{open ? (zh ? "收起" : "Collapse") : (zh ? "查看与编辑" : "View / edit")}</TmButton>
+      {!compact ? toggle : null}
     </div>
     {open ? <>
       <div className="grid gap-4 md:grid-cols-3">
@@ -69,6 +71,7 @@ export default function InvestmentProfile() {
         {review.warnings?.length ? review.warnings.map(w => <p key={w.code + w.subject} className="text-tm-warn">{w.subject}：{w.actual_pct.toFixed(1)}% &gt; {w.limit_pct}% · {zh ? (w.code === "position_limit" ? "超过自设单股上限，请复查" : "超过自设行业上限，请复查") : "Above your cap; review required"}</p>) : <p>{zh ? "已知持仓未超过自设集中度上限。这不等于组合安全或应该买入。" : "Known holdings are within your caps. This does not establish safety or a reason to buy."}</p>}
         <p className="text-tm-muted">{zh ? "行业未知或暂不可核验" : "Unknown sector"}：{review.unknown_sector_tickers?.join(", ") || "—"}。{zh ? "不包含 ETF 穿透与持仓相关性分析。" : "ETF look-through and correlation are not included."}</p>
       </div> : null}
+    </> : null}
     </> : null}
   </TmPane>;
 }

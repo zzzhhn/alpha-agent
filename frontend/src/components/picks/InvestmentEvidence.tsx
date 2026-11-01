@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/api/client";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmPane } from "@/components/tm/TmPane";
-import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
+import { TmButton, TmDisclosureButton, TmLinkButton } from "@/components/tm/TmButton";
 import { TmTable } from "@/components/tm/TmTable";
 import TurnoverStudy from "./TurnoverStudy";
 import RecommendationNavChart, { type RecommendationNavPoint } from "@/components/charts/RecommendationNavChart";
@@ -23,12 +23,13 @@ type Evidence = {
 };
 const pct = (n: number | null | undefined) => n == null ? "—" : `${(100 * n).toFixed(2)}%`;
 
-export default function InvestmentEvidence({ sleeve, policyId, showStudy = true }: { sleeve: "tactical" | "strategic"; policyId?: string | null; showStudy?: boolean }) {
+export default function InvestmentEvidence({ sleeve, policyId, showStudy = true, compact = false }: { sleeve: "tactical" | "strategic"; policyId?: string | null; showStudy?: boolean; compact?: boolean }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [result, setResult] = useState<Evidence | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     let active = true;
     setResult(null); setError(false);
@@ -39,7 +40,15 @@ export default function InvestmentEvidence({ sleeve, policyId, showStudy = true 
   const data = result?.sleeve === sleeve ? result : null;
   const mismatch = !!data?.policy_id && !!policyId && data.policy_id !== policyId;
   const comparison = !mismatch ? data?.comparison : null;
-  return <TmPane title={zh ? "跟随这套策略，结果怎样？" : "What happens when this policy is followed?"}
+  const summary = error ? (zh ? "证据暂不可用，可展开重试" : "Evidence unavailable; expand to retry")
+    : !data ? (zh ? "正在读取策略账本…" : "Loading policy book…")
+    : data.status === "identity_quarantined" ? (zh ? "旧账本已隔离，收益不可用" : "Book quarantined; returns unavailable")
+    : mismatch ? (zh ? "策略版本不匹配，收益已隐藏" : "Policy mismatch; returns hidden")
+    : data.overdue_orders ? (zh ? `${data.overdue_orders} 笔订单延迟，需核验` : `${data.overdue_orders} overdue orders; review needed`)
+    : data.status === "history_gaps" ? (zh ? "历史有缺测，不能视作完整收益" : "History has gaps; returns are incomplete")
+    : !comparison ? (zh ? "估值记录不足，暂无可比收益" : "Too few valuations to compare returns")
+    : (zh ? `扣费后 ${pct(comparison.strategy)} · SPY ${pct(comparison.spy)} · RSP ${pct(comparison.rsp)}` : `Net ${pct(comparison.strategy)} · SPY ${pct(comparison.spy)} · RSP ${pct(comparison.rsp)}`);
+  const content = <TmPane title={zh ? "跟随这套策略，结果怎样？" : "What happens when this policy is followed?"}
     meta={zh ? "做多验证账户，收益优势尚未证实" : "Long-only validation book; edge unproven"} bodyClassName="gap-3 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-tm-muted">
       <span>{sleeve === "strategic" ? (zh ? "战略 60 日" : "Strategic 60d") : (zh ? "战术 5 日" : "Tactical 5d")} · {data?.policy_id ?? policyId ?? "—"}</span>
@@ -80,4 +89,8 @@ export default function InvestmentEvidence({ sleeve, policyId, showStudy = true 
         {showStudy ? <TurnoverStudy key={sleeve} sleeve={sleeve} /> : null}
       </>}
   </TmPane>;
+  return compact ? <>
+    <TmDisclosureButton expanded={expanded} onClick={() => setExpanded(v => !v)} aria-controls="picks-evidence-details" label={zh ? "策略跟随验证" : "Policy-following evidence"} meta={<span role="status">{summary}</span>} className="!h-auto min-h-8 flex-wrap py-2" />
+    <div id="picks-evidence-details" hidden={!expanded}>{expanded ? content : null}</div>
+  </> : content;
 }

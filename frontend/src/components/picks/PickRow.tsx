@@ -34,7 +34,7 @@ export default function PickRow({
   hiddenDims,
   freshestAsOf,
   simPositions,
-  cash = 0,
+  cash,
   onOrderPlaced,
   ordersDisabled = false,
 }: {
@@ -141,7 +141,7 @@ export default function PickRow({
   const heldQty = simPositions?.get(card.ticker) ?? 0;
 
   return (
-    <TmTableRow className="h-11">
+    <TmTableRow className="h-11 [&>td]:py-2 [&>th]:py-2">
       <TmTableCell numeric className="text-xs text-tm-muted">
         {rank ?? "—"}
       </TmTableCell>
@@ -211,7 +211,7 @@ export default function PickRow({
           // marker that explains the near-coin-flip 5d calibrated confidence on hover.
           return sug.caution ? (
             <HoverTip content={t(locale, "picks_table.sug_caution_tip")} placement="bottom">
-              <span className={clsx("font-semibold opacity-60", tone)}>{sug.label}</span>
+              <span className={clsx("font-semibold", tone)}>{sug.label}</span>
               <span className="ml-0.5 cursor-help text-tm-warn">⚠</span>
             </HoverTip>
           ) : (
@@ -219,7 +219,7 @@ export default function PickRow({
           );
         })()}
       </TmTableCell>
-      <TmTableCell numeric textAlign="right" className="text-xs">
+      <TmTableCell numeric textAlign="right" className="text-sm">
         {sign}
         {composite.toFixed(2)}
         <span className="text-tm-muted">σ</span>
@@ -248,17 +248,12 @@ export default function PickRow({
           }
           placement="bottom"
         >
-          <span className="grid grid-cols-4 gap-x-1.5 text-right cursor-help">
-            {consVals.map((c) => (
-              <span key={c.label} className="text-xs text-tm-muted">
-                {c.label}
-              </span>
-            ))}
+          <span className="grid grid-cols-4 gap-x-3 text-right cursor-help">
             {consVals.map((c) => (
               <span
                 key={c.label + "_v"}
                 className={clsx(
-                  "tabular-nums",
+                  "min-w-14 tabular-nums",
                   c.pct === null
                     ? "text-tm-muted"
                     : c.pct >= 55
@@ -268,7 +263,8 @@ export default function PickRow({
                         : "text-tm-fg-2",
                 )}
               >
-                <span className="block">{c.pct === null ? "—" : `${c.pct}%`}</span>
+                <span className="sr-only">{c.label}：</span>
+                <span className="block text-sm">{c.pct === null ? "—" : `${c.pct}%`}</span>
                 <span className="block whitespace-nowrap text-xs text-tm-muted">{c.sampleLabel}</span>
               </span>
             ))}
