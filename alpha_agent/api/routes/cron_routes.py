@@ -770,7 +770,7 @@ async def cron_methodology_proposer() -> dict[str, Any]:
 # getting hard-killed mid-run and leaving a job stuck 'running'. Only checked
 # BETWEEN jobs, so a single in-flight job still runs to its natural length;
 # this just stops the runner from starting a fresh job too late.
-_RUN_PROPOSE_BUDGET_S = 230.0
+_RUN_PROPOSE_BUDGET_S = 270.0
 
 
 @router.post("/run_propose_jobs")
@@ -799,7 +799,7 @@ async def cron_run_propose_jobs() -> dict[str, Any]:
     pool = await get_pool(os.environ["DATABASE_URL"])
     deadline = time.monotonic() + _RUN_PROPOSE_BUDGET_S
     drained: list[dict[str, Any]] = []
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline - 90:
         job = await propose_jobs.claim_oldest_queued(pool)
         if job is None:
             break
@@ -809,7 +809,7 @@ async def cron_run_propose_jobs() -> dict[str, Any]:
             await refresh_config(pool)
             diagnostic = await compute_diagnostic(pool)
             result = await _run_propose_work(
-                pool, job["user_id"], job["n"], diagnostic
+                pool, job["user_id"], job["n"], diagnostic, deadline=deadline,
             )
             if result.get("ok") is False:
                 raise RuntimeError(f"invalid_evaluation: {result.get('_diag')}")
@@ -881,6 +881,7 @@ async def cron_daily_factor_loop() -> dict[str, Any]:
 
     pool = await get_pool(os.environ["DATABASE_URL"])
     started_at = datetime.now(UTC)
+    deadline = time.monotonic() + 270
     await refresh_config(pool)
     diagnostic = await compute_diagnostic(pool)
     out: dict[str, Any] = {"ok": True}
@@ -895,11 +896,14 @@ async def cron_daily_factor_loop() -> dict[str, Any]:
     system_uid = os.environ.get("SYSTEM_USER_ID")
     if system_uid:
         try:
-            out["llm"] = await _run_propose_work(pool, int(system_uid), 5, diagnostic)
+            from alpha_agent.auth.dependencies import is_admin
+            if not is_admin(int(system_uid)):
+                raise ValueError("SYSTEM_USER_ID must identify an authorized administrator")
+            out["llm"] = await _run_propose_work(pool, int(system_uid), 5, diagnostic, deadline=deadline)
         except Exception as exc:  # noqa: BLE001 — surface, don't crash the loop
             out["llm"] = {"error": f"{type(exc).__name__}: {exc}"}
     else:
-        out["llm"] = {"skipped": "no SYSTEM_USER_ID"}
+        out["llm"] = {"ok": False, "error": "SYSTEM_USER_ID missing; LLM research did not run"}
 
     ga_prop = (out.get("ga") or {}).get("proposed", 0)
     llm_prop = (out.get("llm") or {}).get("proposed", 0)
@@ -913,6 +917,7 @@ async def cron_daily_factor_loop() -> dict[str, Any]:
         "daily_factor_loop",
         started_at,
         json.dumps({"ga_proposed": ga_prop, "llm_proposed": llm_prop,
+                    "llm": (out.get("llm") or {}).get("llm"),
                     "errors": errors, "validation": (out.get("ga") or {}).get("validation")}),
         not errors, len(errors),
     )

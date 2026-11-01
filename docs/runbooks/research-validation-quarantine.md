@@ -1,5 +1,9 @@
 # Research validation quarantine
 
+Latest follow-up: [current-data refresh, LLM identity and PARA quarantine](research-refresh-and-security-identity.md).
+The April 30 dataset and missing `SYSTEM_USER_ID` observations below are historical
+incident receipts, not the final repaired state.
+
 ## Discovery and scope
 
 The 2026-11-01 production recovery canary for `daily_factor_loop` returned HTTP

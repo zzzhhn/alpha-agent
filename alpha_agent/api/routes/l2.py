@@ -31,6 +31,11 @@ async def _build_turnover_study(sleeve: str) -> dict:
     strategy = await pool.fetchrow("SELECT id,params_json FROM l2_strategy WHERE name=$1 ORDER BY version DESC LIMIT 1", name)
     if strategy is None:
         return {"status": "insufficient_history", "sleeve": sleeve}
+    from alpha_agent.data.security_identity import book_identity_issues
+    issues = await book_identity_issues(pool, int(strategy["id"]))
+    if issues:
+        return {"status": "identity_quarantined", "sleeve": sleeve,
+                "identity_issues": issues, "results": []}
     params = json.loads(strategy["params_json"])
     end = latest_completed_xnys_session()
     orders = await pool.fetch(
@@ -82,6 +87,11 @@ async def l2_evidence(sleeve: Literal["tactical", "strategic"] = "strategic") ->
     if account is None:
         return {"status": "not_initialized", "sleeve": sleeve, "series": []}
     sid = account["strategy_id"]
+    if account["status"] == "identity_quarantined":
+        return {"status": "identity_quarantined", "sleeve": sleeve, "account": account,
+                "series": [], "comparison": None, "windows": {},
+                "identity_issues": account["identity_issues"], "evidence_status": "invalid",
+                "as_of": account["last_valuation_date"], "personalized": False}
     params_raw = await pool.fetchval("SELECT params_json FROM l2_strategy WHERE id=$1", sid)
     params = json.loads(params_raw) if isinstance(params_raw, str) else (params_raw or {})
     rows = await pool.fetch(
@@ -163,12 +173,15 @@ async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | N
         return None
     nav = float(row["nav"])
     initial = float(row["initial_cash"])
+    from alpha_agent.data.security_identity import book_identity_issues
+    issues = await book_identity_issues(pool, int(row["strategy_id"]))
     due = int(await pool.fetchval(
         "SELECT count(*) FROM l2_order WHERE strategy_id=$1 AND status='pending' AND signal_date<$2",
         int(row["strategy_id"]), latest_completed_xnys_session(),
     ) or 0)
     return {
-        "status": "execution_delayed" if due else "active" if row["last_fill_date"] else "awaiting_forward_run",
+        "status": "identity_quarantined" if issues else "execution_delayed" if due else "active" if row["last_fill_date"] else "awaiting_forward_run",
+        "identity_issues": issues,
         "overdue_orders": due,
         "strategy_id": int(row["strategy_id"]),
         "strategy_version": int(row["version"]),
@@ -176,7 +189,7 @@ async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | N
         "initial_cash": initial,
         "nav": nav,
         "cash": float(row["cash"]),
-        "cumulative_return": nav / initial - 1.0 if initial else None,
+        "cumulative_return": nav / initial - 1.0 if initial and not issues else None,
         "positions": int(row["positions"] or 0),
         "pending_orders": int(row["pending"] or 0),
         "transaction_costs": float(row["costs"] or 0.0),
@@ -248,6 +261,12 @@ async def l2_summary() -> dict[str, Any]:
         }
 
     strategy_id = int(strategy["id"])
+    from alpha_agent.data.security_identity import book_identity_issues
+    issues = await book_identity_issues(pool, strategy_id)
+    if issues:
+        return {"status": "identity_quarantined", "series": [], "sector_exposure": [],
+                "identity_issues": issues, "continuous_account": continuous,
+                "strategic_continuous_account": strategic_continuous}
     equity = await pool.fetch(
         "SELECT as_of_date, gross_return, net_return, benchmark_return, "
         "rsp_return, turnover, n_positions, stale_count, missing_count, cost_bps "

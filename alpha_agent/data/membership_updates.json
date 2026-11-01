@@ -1,0 +1,20 @@
+[
+  {
+    "date": "2026-09-21",
+    "add": ["BE", "P", "ILMN"],
+    "remove": ["TAP", "TTD", "BLDR"],
+    "source": "https://press.spglobal.com/2026-09-04-Bloom-Energy,-Illumina,-and-Everpure-Set-to-Join-S-P-500-Others-to-Join-S-P-100,-S-P-MidCap-400,-and-S-P-SmallCap-600"
+  },
+  {
+    "date": "2026-10-01",
+    "add": ["VYLR"],
+    "remove": [],
+    "source": "https://press.spglobal.com/2026-10-01-Vylor-Added-to-the-S-P-500-Twilio-Set-to-Join-S-P-500-Others-to-Join-S-P-MidCap-400-and-S-P-SmallCap-600"
+  },
+  {
+    "date": "2026-10-06",
+    "add": ["TWLO"],
+    "remove": ["CTVA", "WBD"],
+    "source": "https://press.spglobal.com/2026-10-01-Vylor-Added-to-the-S-P-500-Twilio-Set-to-Join-S-P-500-Others-to-Join-S-P-MidCap-400-and-S-P-SmallCap-600"
+  }
+]

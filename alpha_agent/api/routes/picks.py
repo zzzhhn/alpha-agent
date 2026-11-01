@@ -205,9 +205,10 @@ def _strategic_projection(raw_breakdown) -> dict:
 
 
 def _top_policy_rows(rows, *, mode: str, policy_id: str, top_n: int = 50) -> dict[str, dict]:
+    from alpha_agent.data.security_identity import valid_research_symbol
     result: dict[str, dict] = {}
     for row in rows:
-        if not row["eligible"]:
+        if not row["eligible"] or not valid_research_symbol(row["ticker"]):
             continue
         payload = _json_object(row["user_visible_payload_json"])
         if mode == "long":
@@ -306,7 +307,9 @@ async def _build_canonical_view(
         await get_run_snapshots(pool, int(previous_run["id"]))
         if previous_run is not None else []
     )
-    eligible = [row for row in snapshots if row["eligible"] and row["rank"] is not None]
+    from alpha_agent.data.security_identity import valid_research_symbol
+    eligible = [row for row in snapshots if row["eligible"] and row["rank"] is not None
+                and valid_research_symbol(row["ticker"])]
     cards: list[LeanCard] = []
     mode_supported = True
     market_date: date = run["scheduled_for_date"]

@@ -404,6 +404,10 @@ def _load_pit_fundamentals(
         # as "known". Subtract 1 to land on the last such row.
         idx = np.searchsorted(filing_dates, panel_dates_dt, side="right") - 1
         valid = idx >= 0
+        # Quarterly statements are not fresh indefinitely. Never carry a dead
+        # issuer's final filing into the present, or fill missing publications.
+        ages = panel_dates_dt - filing_dates[np.maximum(idx, 0)]
+        valid &= ages <= np.timedelta64(200, "D")
         if not valid.any():
             continue
         for f in fundamental_fields:
@@ -444,6 +448,7 @@ def _load_panel() -> _Panel:
         wide = (
             df.pivot(index="date", columns="ticker", values=field)
             .sort_index()
+            .reindex(index=dates_series)
             .reindex(columns=list(universe))
         )
         return wide.to_numpy(dtype=np.float64)
@@ -457,7 +462,7 @@ def _load_panel() -> _Panel:
     # Lets run_factor_backtest swap in RSP via benchmark_ticker arg without
     # re-pivoting the parquet.
     benchmark_alts = {
-        bt: df[df["ticker"] == bt].sort_values("date")["close"].to_numpy(dtype=np.float64)
+        bt: df[df["ticker"] == bt].set_index("date")["close"].reindex(dates_series).to_numpy(dtype=np.float64)
         for bt in available_benchmarks
     }
 

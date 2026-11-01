@@ -31,7 +31,7 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
       {[continuous, strategic].some(a => a?.status === "execution_delayed") ? <p className="mb-3 text-xs text-tm-neg">{locale === "zh" ? "连续账户存在延迟订单，执行记录不完整，请勿按正常跟随收益解读。" : "Continuous accounts have delayed orders; the execution record is incomplete."}</p> : null}
       <div className="mb-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2">
         <div className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">{locale === "zh" ? "连续份额级验证账户" : "Continuous share-level validation book"}</div>
-        {continuous ? (
+        {continuous?.status === "identity_quarantined" ? <p role="status" className="mt-2 text-xs text-tm-warn">{locale === "zh" ? "战术旧账本因 PARA 证券身份错误已隔离，停止执行，历史收益不再作为有效绩效展示。" : "The old tactical book is quarantined for a PARA issuer mismatch. Execution is stopped; historical returns are not valid performance evidence."}</p> : continuous ? (
           <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Metric label="NAV" value={`$${Math.round(continuous.nav).toLocaleString("en-US")}`} />
             <Metric label={locale === "zh" ? "累计收益" : "Cumulative"} value={pct(continuous.cumulative_return)} />
@@ -42,7 +42,7 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
         {continuous?.status === "awaiting_forward_run" ? <p className="mt-2 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `已建立前瞻边界 RUN #${continuous.start_after_run_id}，等待下一份完整推荐。` : `Forward boundary is RUN #${continuous.start_after_run_id}; waiting for the next complete recommendation.`}</p> : null}
         {strategic ? <p className="mt-2 border-t border-tm-rule pt-2 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `战略 60 日独立账户：${strategic.last_fill_date ? `${strategic.positions} 个持仓，收益 ${pct(strategic.cumulative_return)}` : `已在 RUN #${strategic.start_after_run_id} 建立边界，等待同政策新快照`}` : `Strategic 60d independent book: ${strategic.last_fill_date ? `${strategic.positions} positions, ${pct(strategic.cumulative_return)}` : `forward boundary at RUN #${strategic.start_after_run_id}`}`}</p> : null}
       </div>
-      {summary.status !== "ready" ? <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "sim.l2.accumulating")}</p> : <>
+      {summary.status === "identity_quarantined" ? <p className="text-xs text-tm-warn">{locale === "zh" ? "旧版 L2 历史实验也受 PARA 身份错误影响，已隔离，不再与有效验证账户比较。" : "The legacy L2 experiment is also quarantined for the PARA identity mismatch and is excluded from performance comparisons."}</p> : summary.status !== "ready" ? <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "sim.l2.accumulating")}</p> : <>
       <div className="mb-2 font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
         {t(locale, "sim.l2.title")} · {summary.periods ?? 0} {t(locale, "sim.l2.periods")}
       </div>

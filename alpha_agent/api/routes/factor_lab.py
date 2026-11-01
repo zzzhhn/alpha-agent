@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -185,7 +186,7 @@ async def get_briefing(pool=Depends(get_db_pool)) -> dict:
 
 
 async def _run_propose_work(
-    pool, user_id: int, n: int, diagnostic
+    pool, user_id: int, n: int, diagnostic, *, deadline: float | None = None,
 ) -> dict:
     """LLM arm of the miner: load the experiment-journal memory, ask the LLM for
     n candidates, then hand them to the shared evaluate/gate/record core.
@@ -195,6 +196,7 @@ async def _run_propose_work(
     rationale references the same baseline the threshold is computed against.
     Raises asyncio.TimeoutError / ValueError on LLM-layer failure; the runner
     endpoint maps those onto the job row's failed state."""
+    deadline = deadline or time.monotonic() + 265
     context = await asyncio.to_thread(load_research_context)
     # Reject a broken baseline BEFORE buying an LLM response.
     await asyncio.to_thread(score_expression, context, diagnostic.current_expression)
@@ -207,7 +209,9 @@ async def _run_propose_work(
         logger.warning("factor_lessons load failed; proposing without memory: %s", e)
         lessons, tried = [], []
 
+    from alpha_agent.core.factor_ast import get_allowed_ops
     lessons = [
+        "Available operators: " + ", ".join(sorted(get_allowed_ops())),
         "Available research operands (coverage >=60%): " + ", ".join(
             k for k, v in context.coverage.items() if v >= 0.6),
         f"Historical dataset ends {context.panel.dates[-1]}; not live validation. "
@@ -217,15 +221,22 @@ async def _run_propose_work(
 
     llm_client = await get_llm_client(user_id=user_id)
     try:
+        generated_at = time.monotonic()
         raw_proposals = await propose_factors(
             llm_client, diagnostic, n=n, lessons=lessons, tried_expressions=tried,
+            deadline=deadline - 45,
         )
         if not raw_proposals:
-            return {"evaluated": 0, "proposed": 0, "dormant": False}
-        return await _evaluate_and_record(
+            raise ValueError("LLM returned no usable proposals")
+        generation_seconds = round(time.monotonic() - generated_at, 2)
+        result = await _evaluate_and_record(
             pool, raw_proposals, diagnostic, llm_client=llm_client, source="llm",
-            context=context,
+            context=context, deadline=deadline,
         )
+        result.update({"source": "llm", "llm": {"generated": len(raw_proposals),
+                       "generation_seconds": generation_seconds,
+                       "model": getattr(llm_client, "_model", getattr(llm_client, "model", None))}})
+        return result
     finally:
         close = getattr(llm_client, "close", None)
         if close is not None:
@@ -234,7 +245,7 @@ async def _run_propose_work(
 
 async def _evaluate_and_record(
     pool, raw_proposals, diagnostic, *, llm_client=None, source: str = "llm",
-    context=None, n_trials: int | None = None,
+    context=None, n_trials: int | None = None, deadline: float | None = None,
 ) -> dict:
     """Shared validation core for BOTH the LLM proposer (source='llm') and the
     GA search (source='ga'): evaluate each candidate (canned tests + purged
@@ -266,6 +277,8 @@ async def _evaluate_and_record(
         # 1. Evaluate each candidate (canned tests + purged WF)
         results = []
         for proposal in raw_proposals:
+            if deadline and time.monotonic() >= deadline - 10:
+                raise TimeoutError("Candidate validation exhausted its shared request budget")
             r = await evaluate_factor_candidate(
                 pool, runner, proposal, out_rejects=rejects, context=context,
             )
@@ -359,7 +372,8 @@ async def _evaluate_and_record(
                 # flags look-good-but-risky. It never blocks (human is the final
                 # gate); assess_candidate returns None on any failure.
                 skeptic_json = None
-                if llm_client is not None and skeptic_used < _SKEPTIC_MAX:
+                review_time = min(60, deadline - time.monotonic() - 10) if deadline else 60
+                if llm_client is not None and skeptic_used < _SKEPTIC_MAX and review_time >= 20:
                     verdict = await assess_candidate(
                         llm_client,
                         r.expression,
@@ -370,6 +384,7 @@ async def _evaluate_and_record(
                             "self_correlation": self_corr,
                             "self_correlation_with": corr_with,
                         },
+                        timeout_s=review_time,
                     )
                     skeptic_used += 1
                     skeptic_json = verdict.to_jsonable() if verdict else None
@@ -393,6 +408,7 @@ async def _evaluate_and_record(
                         "self_correlation": self_corr,
                         "self_correlation_with": corr_with,
                         "skeptic": skeptic_json,
+                        "skeptic_status": "completed" if skeptic_json else "not_completed",
                     }),
                     json.dumps(diagnostic.to_jsonable()),
                 )

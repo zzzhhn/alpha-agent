@@ -1,0 +1,60 @@
+{
+  "market_data_through": "2026-10-30",
+  "market_source": "Alpaca SIP",
+  "adjustment": "all",
+  "symbol_mapping": "disabled; PARA history capped 2025-08-06",
+  "rows": 413670,
+  "tickers": 570,
+  "membership_as_of": "2026-10-06",
+  "membership_source": "https://raw.githubusercontent.com/fja05680/sp500/master/S%26P%20500%20Historical%20Components%20%26%20Changes%20(Updated).csv",
+  "current_membership_coverage": 0.9980119284294234,
+  "missing_current_symbols": [
+    "PSKY"
+  ],
+  "fundamentals_checked_through": "2026-10-30",
+  "fundamentals_source": "SEC companyfacts after existing Compustat history",
+  "new_fundamental_snapshots": 1051,
+  "fresh_issuers": 521,
+  "fundamentals_failures": [],
+  "publication_rule": "actual filing date plus one calendar day",
+  "fundamental_limitations": [
+    "SEC GAAP net income, not adjusted earnings",
+    "annual/YTD flows not substituted for quarters",
+    "sector metadata remains a snapshot"
+  ],
+  "membership_supplements": [
+    {
+      "date": "2026-09-21",
+      "add": [
+        "BE",
+        "P",
+        "ILMN"
+      ],
+      "remove": [
+        "TAP",
+        "TTD",
+        "BLDR"
+      ],
+      "source": "https://press.spglobal.com/2026-09-04-Bloom-Energy,-Illumina,-and-Everpure-Set-to-Join-S-P-500-Others-to-Join-S-P-100,-S-P-MidCap-400,-and-S-P-SmallCap-600"
+    },
+    {
+      "date": "2026-10-01",
+      "add": [
+        "VYLR"
+      ],
+      "remove": [],
+      "source": "https://press.spglobal.com/2026-10-01-Vylor-Added-to-the-S-P-500-Twilio-Set-to-Join-S-P-500-Others-to-Join-S-P-MidCap-400-and-S-P-SmallCap-600"
+    },
+    {
+      "date": "2026-10-06",
+      "add": [
+        "TWLO"
+      ],
+      "remove": [
+        "CTVA",
+        "WBD"
+      ],
+      "source": "https://press.spglobal.com/2026-10-01-Vylor-Added-to-the-S-P-500-Twilio-Set-to-Join-S-P-500-Others-to-Join-S-P-MidCap-400-and-S-P-SmallCap-600"
+    }
+  ]
+}

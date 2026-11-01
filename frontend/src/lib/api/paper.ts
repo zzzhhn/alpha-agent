@@ -113,7 +113,7 @@ export interface ResetResponse {
 }
 
 export interface ContinuousL2Account {
-  readonly status: "awaiting_forward_run" | "active" | "execution_delayed";
+  readonly status: "awaiting_forward_run" | "active" | "execution_delayed" | "identity_quarantined";
   readonly overdue_orders?: number;
   readonly accounting: "continuous_share_delta";
   readonly nav: number;
@@ -129,7 +129,7 @@ export interface ContinuousL2Account {
 }
 
 export interface L2Summary {
-  readonly status: "empty" | "accumulating" | "ready";
+  readonly status: "empty" | "accumulating" | "ready" | "identity_quarantined";
   readonly periods?: number;
   readonly net_return?: number;
   readonly spy_return?: number;
