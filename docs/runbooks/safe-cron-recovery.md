@@ -63,3 +63,16 @@ Publication checks the planned Top-240 plus watchlist, includes missing inputs
 in the coverage denominator, and requires eligible signals computed after the
 market session close. New prices cannot rehabilitate old signals. Partial runs
 remain forensic records, not new canonical recommendations.
+
+## Failure circuit breaker
+
+`cron-circuit-breaker` watches only the three named workflows on `main`. After
+an unexpected scheduled failure or timeout, it disables that specific workflow
+and verifies the disabled state. The first failure remains visible; later
+scheduled attempts stop. It does not change email preferences, erase failure
+history, automatically retry, or automatically re-enable anything. Known quota
+pauses still skip work through preflight rather than tripping the breaker.
+
+The manual guard dispatch defaults to dry-run. To verify GitHub-token permission
+without manufacturing a failed business run, target a workflow that is already
+paused with `dry_run=false`, then read back its state before restoring it.
