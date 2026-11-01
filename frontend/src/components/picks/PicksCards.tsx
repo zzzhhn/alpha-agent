@@ -5,6 +5,7 @@ import type { RatingCard } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { consistencyEvidence } from "@/lib/picks-evidence";
+import { TmButton } from "@/components/tm/TmButton";
 
 const TONE: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -18,10 +19,14 @@ export default function PicksCards({
   picks,
   ranked,
   ordersDisabled,
+  rankOffset = 0,
+  onEvidenceOpen,
 }: {
   readonly picks: readonly RatingCard[];
   readonly ranked: boolean;
   readonly ordersDisabled: boolean;
+  readonly rankOffset?: number;
+  readonly onEvidenceOpen: (card: RatingCard) => void;
 }) {
   const { locale } = useLocale();
   return (
@@ -36,7 +41,7 @@ export default function PicksCards({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  {ranked ? <span className="font-tm-mono text-xs text-tm-muted">#{index + 1}</span> : null}
+                  {ranked ? <span className="font-tm-mono text-xs text-tm-muted">#{rankOffset + index + 1}</span> : null}
                   <Link href={`/stock/${card.ticker}`} prefetch={false} className="font-tm-mono text-base font-semibold text-tm-fg hover:text-tm-accent">{card.ticker}</Link>
                   <span className={`font-tm-mono text-xs font-semibold ${TONE[card.rating] ?? "text-tm-fg-2"}`}>{card.rating}</span>
                 </div>
@@ -56,6 +61,7 @@ export default function PicksCards({
             <p className="min-h-5 text-xs leading-5 text-tm-fg-2">{drivers || (locale === "zh" ? "当前没有足够的有效驱动信号" : "Not enough active drivers")}</p>
             <div className="flex items-center justify-between gap-3">
               <span className="font-tm-mono text-xs text-tm-muted">{card.price_date ?? card.market_date ?? "—"}</span>
+              <TmButton variant="ghost" aria-haspopup="dialog" onClick={() => onEvidenceOpen(card)}>{locale === "zh" ? "证据说明" : "Evidence"}</TmButton>
               <Link
                 href={ordersDisabled ? `/stock/${card.ticker}` : `/paper?ticker=${card.ticker}`}
                 prefetch={false}

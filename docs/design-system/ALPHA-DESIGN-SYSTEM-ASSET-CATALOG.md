@@ -2,6 +2,13 @@
 
 Status: implementation source of truth for reusable frontend assets
 
+Picks browsing refinement (2026-11-01): bounded `TmTableFrame` with sticky
+headers and `TmPagination` (10/25/50) preserves full-set ranking and counts.
+Brief definitions remain tooltips; per-stock multi-window evidence uses
+`TmButton` → `TmDialog`, with `TmDisclosureButton` for the alternative HOLD
+basis. A local 160ms page-entry transition respects reduced motion, without
+animating values or hijacking scrolling. No new tokens, icons or dependencies.
+
 Personal investment workspace adoption (2026-09-08): `InvestmentProfile`,
 `InvestmentNotebook`, `InvestmentEvidence` and `TurnoverStudy` compose the
 existing TmPane, TmField, TmButton and TmTable assets on `/picks` and `/stock`.
