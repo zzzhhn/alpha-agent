@@ -1,14 +1,8 @@
-"""Phase 3c factor candidate validator.
+"""Shared real-data factor validator, including sandboxed proposed operators.
 
-Reuses Phase 2a's purged_fold_indices + the same daily_prices read path.
-New: routes proposal's lf_* operators through SandboxRunner via the kernel's
-extra_ops plumbing (T4 changes to scan/vectorized + kernel.py).
-
-Returns None when usable history yields fewer than MIN_FOLDS folds, OR when
-any new operator fails canned tests.
-
-Panel-load + fold loop ported from alpha_agent/evolution/validation.py
-evaluate_candidate (lines 83-273, Phase 2a implementation).
+Uses research_panel's intact historical timeline and explicit held-out ranges.
+Returns None plus a structured rejection on invalid input, operator or kernel
+evaluation. It never substitutes synthetic market data or zero metrics.
 """
 from __future__ import annotations
 
@@ -59,11 +53,6 @@ def _emit_reject(
         except Exception:  # noqa: BLE001 - collector must not block recovery
             pass
 
-_EMBARGO = 5       # must be >= forward horizon (_FWD_RET_DAYS in ic_engine)
-_N_FOLDS = 3       # matches MIN_FOLDS
-_MIN_ROWS_PER_FOLD = 15
-
-
 @dataclass(frozen=True)
 class FactorCandidateResult:
     expression: str
@@ -90,8 +79,8 @@ def _build_sandbox_dispatch(runner: SandboxRunner, ops: list[dict]) -> dict:
     binds positional args (from the DSL invocation) to the LLM function's
     parameter names, then routes via SandboxRunner.
 
-    SandboxError is turned into RuntimeError so the fold loop can treat it as
-    a degraded fold (catches Exception, records zero Sharpe/IC and continues).
+    SandboxError is turned into RuntimeError so validation rejects the result
+    as invalid instead of inventing a numeric score.
     """
     dispatch: dict = {}
     for op in ops:
