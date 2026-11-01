@@ -36,7 +36,7 @@ def recovery_path(operation: str, limit: int, offset: int, run_id: str) -> str:
 
 def result_ok(operation: str, body: dict) -> bool:
     if operation == "daily_prices":
-        return body.get("updated", 0) > 0 and not body.get("error_count") and not body.get("skipped_count")
+        return body.get("updated", 0) > 0 and not body.get("error_count")
     if body.get("ok") is not True or body.get("errors"):
         return False
     if operation == "fast_intraday":
@@ -77,6 +77,9 @@ def main() -> int:
     receipt = {"operation": operation, "http_status": status,
                "seconds": round(time.monotonic() - started, 2), "result": body}
     print(json.dumps(receipt))
+    if body.get("skipped_count"):
+        print("::warning::PARTIAL price coverage: unavailable tickers are listed above. "
+              "This request completed, but does not authorize snapshot publication or schedule recovery.")
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(summary).open("a") as stream:
             stream.write("## Bounded recovery\n\n```json\n" + json.dumps(receipt, indent=2)
