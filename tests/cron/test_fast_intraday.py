@@ -6,23 +6,15 @@ import asyncpg
 import pytest
 
 from alpha_agent.signals.base import SignalScore
+from alpha_agent.signals.registry import all_signal_names, module_path
 
 pytestmark = pytest.mark.asyncio
 
 
 def _patch_all_signals():
-    targets = [
-        "factor",
-        "technicals",
-        "analyst",
-        "earnings",
-        "news",
-        "insider",
-        "options",
-        "premarket",
-        "macro",
-        "calendar",
-    ]
+    # Match the runtime registry so new signals cannot leak live market data
+    # into a deterministic alert/weight test.
+    targets = all_signal_names()
 
     def _score(t, a, name):
         return SignalScore(
@@ -44,18 +36,19 @@ def _patch_all_signals():
 
     import importlib
 
-    patches = []
+    patches = [patch("alpha_agent.signals.gex.compute_gex", return_value=None)]
     for n in targets:
+        path = module_path(n)
         patches.append(
-            patch(f"alpha_agent.signals.{n}.fetch_signal", side_effect=make(n))
+            patch(f"{path}.fetch_signal", side_effect=make(n))
         )
         # Async-native signals (e.g. news, political_impact) are invoked by the
         # cron via `await mod.afetch_signal`, not the sync fetch_signal; patch
         # both or the real (empty-DB) async fetch leaks a z=0 into the composite.
-        mod = importlib.import_module(f"alpha_agent.signals.{n}")
+        mod = importlib.import_module(path)
         if hasattr(mod, "afetch_signal"):
             patches.append(
-                patch(f"alpha_agent.signals.{n}.afetch_signal", side_effect=amake(n))
+                patch(f"{path}.afetch_signal", side_effect=amake(n))
             )
     return patches
 

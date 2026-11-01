@@ -90,16 +90,18 @@ async def _fetch_live_outcomes(
         return []
     params: list = [tickers]
     date_clause = ""
+    source_date_clause = ""
     if after_date is not None:
         params.append(after_date)
         date_clause = "AND p.date > $2"
+        source_date_clause = "AND date > $2"
     rows = await pool.fetch(
         f"""
         WITH px AS (
             SELECT ticker, date, close,
                    LEAD(close) OVER (PARTITION BY ticker ORDER BY date) AS next_close
             FROM daily_prices
-            WHERE ticker = ANY($1::text[])
+            WHERE ticker = ANY($1::text[]) {source_date_clause}
         ),
         preds AS (
             SELECT DISTINCT ON (ticker, date) ticker, date, rating, score
@@ -107,12 +109,12 @@ async def _fetch_live_outcomes(
                 SELECT ticker, date, rating, composite AS score,
                        1 AS pri, fetched_at
                 FROM daily_signals_fast
-                WHERE ticker = ANY($1::text[])
+                WHERE ticker = ANY($1::text[]) {source_date_clause}
                 UNION ALL
                 SELECT ticker, date, NULL::text AS rating,
                        composite_partial AS score, 0 AS pri, fetched_at
                 FROM daily_signals_slow
-                WHERE ticker = ANY($1::text[])
+                WHERE ticker = ANY($1::text[]) {source_date_clause}
                   AND composite_partial IS NOT NULL
                   AND composite_partial = composite_partial
             ) u
@@ -145,14 +147,20 @@ async def _fetch_live_outcomes(
     return out
 
 
-async def materialize_outcomes(pool, *, full: bool = False) -> int:
+async def materialize_outcomes(
+    pool, *, full: bool = False, tickers: list[str] | None = None,
+) -> int:
     """Upsert realized directional outcomes into consistency_outcomes so the
     durable history survives any future prune of daily_signals_fast/slow. Called
     once for backfill (full=True) and daily by the daily_prices cron (full=False,
     which re-scans a short tail to catch late-realized predictions). Idempotent.
-    Returns the number of rows upserted."""
-    trows = await pool.fetch("SELECT DISTINCT ticker FROM daily_signals_slow")
-    tickers = [r["ticker"] for r in trows]
+    A price shard passes only its tickers, avoiding a full-market scan once per
+    shard. Returns the number of rows upserted."""
+    if tickers is None:
+        trows = await pool.fetch(
+            "SELECT ticker FROM daily_signals_slow UNION SELECT ticker FROM daily_signals_fast"
+        )
+        tickers = [r["ticker"] for r in trows]
     if not tickers:
         return 0
     after = None
@@ -212,7 +220,14 @@ async def compute_window_tallies(
     except Exception:  # noqa: BLE001 — table not yet created: pure-live fallback
         outcomes = []
         max_mat = None
-    outcomes += await _fetch_live_outcomes(pool, tickers, after_date=max_mat)
+    # Reconcile a short overlap: another ticker's newest materialized date
+    # cannot prove that every ticker's recent prices arrived. Deduplicate by
+    # the actual evidence key, keeping the recomputed tail authoritative.
+    after = max_mat - timedelta(days=10) if max_mat is not None else None
+    live = await _fetch_live_outcomes(pool, tickers, after_date=after)
+    merged = {(ticker, d): hit for ticker, d, hit in outcomes}
+    merged.update({(ticker, d): hit for ticker, d, hit in live})
+    outcomes = [(ticker, d, hit) for (ticker, d), hit in merged.items()]
 
     counts: dict[str, dict[str, list[int]]] = {
         t: {w: [0, 0] for w in _ORDER} for t in tickers
@@ -300,7 +315,10 @@ async def compute_hold_inclusive_consistency(
         for w in _HOLD_WINDOWS
     }
 
-    outcomes = await _fetch_live_outcomes(pool, tickers, hold_band=HOLD_FLAT_BAND)
+    outcomes = await _fetch_live_outcomes(
+        pool, tickers, hold_band=HOLD_FLAT_BAND,
+        after_date=min(cutoffs.values()) - timedelta(days=1),
+    )
 
     counts: dict[str, dict[str, list[int]]] = {
         t: {w: [0, 0] for w in _HOLD_WINDOWS} for t in tickers

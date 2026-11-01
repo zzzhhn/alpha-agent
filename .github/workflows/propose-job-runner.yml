@@ -28,8 +28,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    uses: ./.github/workflows/cron-preflight.yml
+    with:
+      trigger_event: ${{ github.event_name }}
+    secrets:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
   drain:
+    needs: [preflight]
+    if: needs.preflight.outputs.ready == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
       - name: Drain queued propose jobs
         env:
