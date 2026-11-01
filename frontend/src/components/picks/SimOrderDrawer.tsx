@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 interface Props {
   readonly ticker: string;
   readonly card: RatingCard;
-  readonly cash: number;
+  readonly cash?: number;
   readonly onClose: () => void;
   readonly onOrderPlaced: () => void;
 }

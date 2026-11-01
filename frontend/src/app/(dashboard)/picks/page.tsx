@@ -17,7 +17,7 @@ export default async function PicksPage() {
   });
 
   return (
-    <TmScreen>
+    <TmScreen className="[&>*]:shrink-0">
       <OnboardingBanner />
       <PicksBrowser initialData={initialData} />
     </TmScreen>

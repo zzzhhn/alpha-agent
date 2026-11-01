@@ -97,7 +97,12 @@ export default function PicksTable({
           </TmTableHeaderCell>
           <TmTableHeaderCell textAlign="right" className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_confidence_tip")} placement="bottom" width={280}>
-              <span className="cursor-help">{t(locale, "picks_table.col_confidence")}</span>
+              <span className="flex flex-col gap-2 cursor-help">
+                <span>{t(locale, "picks_table.col_confidence")}</span>
+                <span className="grid grid-cols-4 gap-x-3 text-right font-normal normal-case tracking-normal">
+                  {(["picks_table.cons_5d", "picks_table.cons_1m", "picks_table.cons_1y", "picks_table.cons_hist"] as const).map(key => <span key={key} className="min-w-14">{t(locale, key)}</span>)}
+                </span>
+              </span>
             </HoverTip>
           </TmTableHeaderCell>
           <TmTableHeaderCell className={HEADER_CLASS}>

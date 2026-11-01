@@ -28,7 +28,7 @@ import {
   TmSubbarSep,
   TmStatusPill,
 } from "@/components/tm/TmSubbar";
-import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
+import { TmButton, TmDisclosureButton, TmLinkButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
@@ -69,8 +69,10 @@ export default function PicksBrowser({
   // the long board.
   const [side, setSide] = useState<PicksSide>("long");
   const [simPositions, setSimPositions] = useState<ReadonlyMap<string, number>>(new Map());
-  const [paperCash] = useState(0);
+  const [paperCash, setPaperCash] = useState<number | undefined>();
   const [showResearch, setShowResearch] = useState(false);
+  const [showMethod, setShowMethod] = useState(false);
+  const [resultQuery, setResultQuery] = useState({ search: "", mode: "short", side: "long" });
 
   // Paper trading is now the standalone /paper route (V2), not an in-page
   // modal, so this is the sole source of the "held qty" badge on each pick
@@ -81,8 +83,10 @@ export default function PicksBrowser({
     try {
       const acct = await fetchPaperAccount();
       setSimPositions(new Map(acct.positions.map((p) => [p.ticker, p.qty])));
+      setPaperCash(acct.available_cash);
     } catch {
       // non-fatal — badge just stays at its last known state
+      setPaperCash(undefined);
     }
   }, []);
 
@@ -118,6 +122,7 @@ export default function PicksBrowser({
         );
         if (reqId !== reqIdRef.current) return;
         setData(next);
+        setResultQuery({ search: trimmed.toUpperCase(), mode, side: sideArg });
         setRequestError(null);
       } catch (error) {
         if (reqId === reqIdRef.current) {
@@ -219,6 +224,8 @@ export default function PicksBrowser({
     : 0;
 
   const searching = search.trim().length > 0;
+  const queryPending = loading || resultQuery.search !== search.trim().toUpperCase()
+    || resultQuery.mode !== factorMode || resultQuery.side !== side;
   const count = data.picks.length;
   const snapshotStale =
     count > 0 &&
@@ -233,19 +240,19 @@ export default function PicksBrowser({
     locale === "zh"
       ? {
           picks: "选股",
-          signals: searching ? `${count} 条匹配` : `${count} 条信号`,
+          signals: resultQuery.search ? `${count} 条匹配` : `${count} 条信号`,
           asOf: "数据时间",
           marketDate: "市场日",
           run: "快照",
           coverage: "覆盖率",
           stale: "推荐快照不可交易",
-          placeholder: "搜索 ticker（如 NVDA）",
+          placeholder: "搜索股票代码，如 NVDA",
           paneTitle: "候选明细",
           paneMeta: searching
             ? `“${search.trim().toUpperCase()}” 的搜索结果`
             : "真实信号优先，其后覆盖完整 universe（partial 行数据可能最旧 1 天）",
-          loading: "搜索中…",
-          empty: "没有匹配的 ticker",
+          loading: "正在更新候选…",
+          empty: "没有匹配的股票代码",
           modeLabel: "决策策略",
           modeShort: "战术 5 日",
           modeLong: "战略 60 日",
@@ -255,15 +262,15 @@ export default function PicksBrowser({
           sideLong: "做多榜",
           sideShort: "做空榜",
           sideTip:
-            "做多榜 = composite 最高的票(最强 conviction longs)。做空榜 = composite 最低的票(最弱 / UW/SELL tier),默认榜单看不到它们因为排在 universe 底部。点击切换。",
+            "做多榜按模型排名分从高到低排列；做空榜从低到高排列，展示偏空评级候选。排名与评级不是交易指令。点击切换方向。",
           metaLong:
-            "composite 最高优先(真实信号优先,partial 行数据可能最旧 1 天)",
+            "模型排名分由高到低 · 不完整信号单独标注",
           metaShort:
-            "composite 最低优先 — universe 底部的看空候选(UW/SELL),默认做多榜不显示",
+            "模型排名分由低到高 · 偏空候选 UW／SELL",
         }
       : {
           picks: "PICKS",
-          signals: searching ? `${count} matches` : `${count} signals`,
+          signals: resultQuery.search ? `${count} matches` : `${count} signals`,
           asOf: "AS OF",
           marketDate: "MARKET DATE",
           run: "RUN",
@@ -274,7 +281,7 @@ export default function PicksBrowser({
           paneMeta: searching
             ? `results for "${search.trim().toUpperCase()}"`
             : "real signals first, then the full universe (partial rows can be ~1d old)",
-          loading: "Searching...",
+          loading: "Updating candidates…",
           empty: "No matching ticker",
           modeLabel: "DECISION POLICY",
           modeShort: "Tactical 5d",
@@ -287,13 +294,13 @@ export default function PicksBrowser({
           sideTip:
             "Longs = the highest-composite names (strongest conviction). Shorts = the lowest-composite names (weakest / UW/SELL tier), which the default board never surfaces because they rank at the bottom of the universe. Click to toggle.",
           metaLong:
-            "highest composite first (real signals first; partial rows can be ~1d old)",
+            "Highest model rank first · partial signals are marked",
           metaShort:
-            "lowest composite first — the bottom-of-universe short candidates (UW/SELL) the long board hides",
+            "Lowest model rank first · bearish candidates UW / SELL",
         };
 
   const directionalCount = data.picks.filter((card) =>
-    side === "short" ? ["UW", "SELL"].includes(card.rating) : ["BUY", "OW"].includes(card.rating),
+    resultQuery.side === "short" ? ["UW", "SELL"].includes(card.rating) : ["BUY", "OW"].includes(card.rating),
   ).length;
 
   return (
@@ -301,20 +308,24 @@ export default function PicksBrowser({
       <WorkbenchHeader
         eyebrow={`01 · ${locale === "zh" ? "理解变化" : "UNDERSTAND CHANGES"}`}
         title={locale === "zh" ? "今日组合决策" : "Today’s Portfolio Decision"}
-        subtitle={locale === "zh" ? "先确认快照与策略，再查看候选及驱动。真正的交易动作在组合工作台完成。" : "Confirm the snapshot and policy, then inspect candidates and drivers before portfolio execution."}
+        subtitle={locale === "zh" ? "核对快照与驱动，再进入模拟仓验证。" : "Review the snapshot and drivers, then validate on paper."}
         statuses={[
           { label: locale === "zh" ? "数据时间" : "As of", value: asOf },
-          { label: locale === "zh" ? "快照" : "Snapshot", value: snapshotStale ? (locale === "zh" ? "过期" : "STALE") : (locale === "zh" ? "有效" : "CURRENT"), tone: snapshotStale ? "warning" : "positive" },
+          { label: locale === "zh" ? "快照" : "Snapshot", value: queryPending ? (locale === "zh" ? "待更新" : "UPDATING") : snapshotStale ? (locale === "zh" ? "过期" : "STALE") : (locale === "zh" ? "有效" : "CURRENT"), tone: snapshotStale || queryPending ? "warning" : "positive" },
           { label: locale === "zh" ? "方向" : "Side", value: side === "short" ? (locale === "zh" ? "做空" : "SHORT") : (locale === "zh" ? "做多" : "LONG") },
         ]}
         action={<TmLinkButton href="/paper" variant="primary" size="md">{locale === "zh" ? "02 · 打开组合工作台" : "02 · OPEN PORTFOLIO WORKSPACE"}</TmLinkButton>}
       />
       <section className="border-b border-tm-rule bg-tm-bg px-4" aria-label={locale === "zh" ? "策略说明" : "Policy note"}>
-        <p className="py-3 text-sm leading-6 text-tm-fg-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2">
+        <p className="text-sm leading-6 text-tm-fg-2">
           {locale === "zh"
-            ? `当前展示 ${data.picks.length} 只候选，其中 ${directionalCount} 只具有对应方向评级。排名不是交易指令，HOLD 表示观望。五日／一月列统计的是快照截至日之前的次日方向命中率，不是持有五日／一月的收益；缺失值下方显示有效样本数／最低要求。`
-            : `${data.picks.length} candidates shown; ${directionalCount} have a rating in the selected direction. Rank is not a trade instruction; HOLD means wait. The 5-session / 1-month columns measure next-day direction hits as of the snapshot, not returns over those holding periods. Missing rates show evaluated samples / minimum required.`}
+            ? `${data.picks.length} 只候选 · ${directionalCount} 只方向评级。排名不是交易指令，HOLD 表示观望。`
+            : `${data.picks.length} candidates · ${directionalCount} directional ratings. Rank is not an order; HOLD means wait.`}
         </p>
+        <TmButton variant="ghost" size="sm" aria-expanded={showMethod} aria-controls="picks-method" onClick={() => setShowMethod(v => !v)}>{locale === "zh" ? "统计口径" : "Metric definitions"}</TmButton>
+        </div>
+        {showMethod ? <p id="picks-method" className="border-t border-tm-rule py-3 text-sm leading-6 text-tm-fg-2">{locale === "zh" ? "五日／一月列统计的是快照截至日之前的次日方向命中率，不是持有五日／一月的收益。缺失值下方显示有效样本数／最低要求；不完整信号的更新时间以对应行提示为准。" : "Trailing windows measure next-day direction hits as of the snapshot, not holding-period returns. Missing rates show evaluated samples / minimum required. Partial signals may be older; check each row's date warning."}</p> : null}
         {factorMode === "long" ? (
           <p className="border border-tm-warn/40 bg-tm-warn/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-warn">
             {locale === "zh" ? "战略 60 日策略正在独立前瞻验证，未使用 5 日校准置信度，不应直接与战术榜单的置信度横向比较。" : "The strategic 60d policy is in independent forward validation. It does not use the 5d calibrated confidence and should not be compared as if both figures shared one basis."}
@@ -386,10 +397,10 @@ export default function PicksBrowser({
             title={locale === "zh" ? "请求未成功，下方保留上次结果" : "Request failed; showing the previous result"}
             description={requestError}
             action={{ label: t(locale, "common.retry"), onClick: () => { void runSearch(search, factorMode, side); }, loading }}
-            className="!min-h-0 !py-3"
+            className="shrink-0 !min-h-0 !py-3"
           />
         ) : null}
-        {!searching && data.changes ? (
+        {!searching && !queryPending && data.changes ? (
           <section className="border-b border-tm-rule bg-tm-bg px-4 py-3" aria-labelledby="changes-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="changes-heading" className="font-tm-mono text-xs font-semibold uppercase tracking-[0.08em] text-tm-fg">
@@ -408,32 +419,25 @@ export default function PicksBrowser({
             )}
           </section>
         ) : null}
-        {/* BASKET.EDGE strip — the engine's honest edge is the ranked long-short
-            basket, not single-name direction. Pinned above the picks table.
-            Its Paper Trading entry now links to /paper (V2: no longer a modal). */}
-        <InvestmentProfile />
-        <InvestmentNotebook />
-        <InvestmentEvidence sleeve={data.run?.sleeve === "strategic" ? "strategic" : "tactical"} policyId={data.run?.policy_id} />
-        <div className="px-4 py-2">
-          <TmButton variant="secondary" aria-expanded={showResearch} onClick={() => setShowResearch(v => !v)}>
-            {locale === "zh" ? "辅助研究指标（非当前策略跟随收益）" : "Research diagnostics (not this policy's following return)"}
-          </TmButton>
-        </div>
-        {showResearch ? <BasketEdgeStrip /> : null}
-
-          <div className="flex justify-end px-4 pt-3">
-            <RefreshButton />
-          </div>
+        {/* Keep personal context and policy evidence reachable without
+            placing closed panel bodies ahead of the candidate table. */}
+        <InvestmentProfile compact />
+        <InvestmentNotebook compact />
+        <InvestmentEvidence compact sleeve={data.run?.sleeve === "strategic" ? "strategic" : "tactical"} policyId={data.run?.policy_id} />
 
           {/* ★ Highest-Conviction hero band — top-3 of the current board as
               decision-first cards (ALPHACORE design). Hidden during an active
               search, where the result set is a lookup, not a conviction ranking. */}
-          {!searching && !snapshotStale ? <ConvictionBand picks={data.picks} /> : null}
+          {!searching && !snapshotStale && !queryPending ? <ConvictionBand picks={data.picks} /> : null}
 
           <TmPane
             title={copy.paneTitle}
             meta={
-              searching
+              queryPending
+                ? (locale === "zh"
+                  ? `仍显示${resultQuery.mode === "short" ? copy.modeShort : copy.modeLong} · ${resultQuery.side === "long" ? copy.sideLong : copy.sideShort}；新条件未就绪`
+                  : `Still showing ${resultQuery.mode === "short" ? copy.modeShort : copy.modeLong} · ${resultQuery.side === "long" ? copy.sideLong : copy.sideShort}; update pending`)
+                : searching
                 ? copy.paneMeta
                 : side === "short"
                   ? copy.metaShort
@@ -477,7 +481,8 @@ export default function PicksBrowser({
                 {t(locale, "picks.stale_freeze_banner")}
               </div>
             ) : null}
-            <div className="flex items-center gap-2 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+            <div className="flex flex-wrap items-center gap-3">
               <TmInput
                 aria-label={copy.placeholder}
                 value={search}
@@ -485,19 +490,26 @@ export default function PicksBrowser({
                 placeholder={copy.placeholder}
                 maxLength={12}
                 fieldSize="sm"
-                className="w-56"
+                className="w-64 max-w-full"
                 inputClassName="rounded-[2px]"
               />
-              {loading ? (
-                <span className="font-tm-mono text-xs text-tm-muted">
-                  {copy.loading}
+              {searching ? <TmButton variant="ghost" size="sm" onClick={() => setSearch("")}>{locale === "zh" ? "清除搜索" : "Clear search"}</TmButton> : null}
+              {queryPending ? (
+                <span role="status" className="font-tm-mono text-xs text-tm-muted">
+                  {requestError ? (locale === "zh" ? "更新未完成，请重试" : "Update incomplete; retry") : copy.loading}
                 </span>
               ) : null}
             </div>
-            {count === 0 && searching ? (
+            <RefreshButton />
+            </div>
+            {count === 0 && queryPending ? (
+              <TmStatePane state={requestError ? "empty" : "loading"} title={requestError ? (locale === "zh" ? "尚未取得新结果，请重试" : "No new result yet; please retry") : copy.loading} />
+            ) : count === 0 && searching ? (
               <div className="px-3 py-6 font-tm-mono text-xs text-tm-muted">
                 {copy.empty}
               </div>
+            ) : count === 0 ? (
+              <TmStatePane state="empty" title={locale === "zh" ? "当前快照暂无可用候选" : "No candidates in this snapshot"} />
             ) : (
               <PicksTable
                 picks={data.picks}
@@ -506,10 +518,12 @@ export default function PicksBrowser({
                 cash={paperCash}
                 onOrderPlaced={loadSimPositions}
                 ranked={data.ranked && !searching}
-                ordersDisabled={snapshotStale || !data.tradable || searching}
+                ordersDisabled={snapshotStale || !data.tradable || searching || queryPending || !!requestError}
               />
             )}
           </TmPane>
+          <TmDisclosureButton expanded={showResearch} aria-controls="picks-research" onClick={() => setShowResearch(v => !v)} label={locale === "zh" ? "辅助研究指标" : "Research diagnostics"} meta={locale === "zh" ? "非当前策略跟随收益" : "Not this policy's following return"} />
+          {showResearch ? <div id="picks-research"><BasketEdgeStrip /></div> : null}
         </>
     </>
   );
