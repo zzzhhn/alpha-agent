@@ -87,8 +87,15 @@ env:
   CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
 jobs:
+  preflight:
+    uses: ./.github/workflows/cron-preflight.yml
+    with:
+      trigger_event: ${{ github.event_name }}
+    secrets:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
   publish_recommendation:
-    if: github.event_name == 'workflow_dispatch' && inputs.job == 'publish_recommendation'
+    needs: [preflight]
+    if: needs.preflight.outputs.ready == 'true' && (github.event_name == 'workflow_dispatch' && inputs.job == 'publish_recommendation')
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -109,10 +116,13 @@ jobs:
   # (the user-visible product surface) gets refreshed before the bulk slow
   # refresh tail. Each is independent at the data layer.
   fast_intraday:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '0 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.job == 'fast_intraday' || inputs.job == 'both'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -159,9 +169,12 @@ jobs:
 
   # ─── Tier: technicals only, every 15min, all 557 + watchlist ───────────
   fast_tech:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '30 15,19 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_tech')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
@@ -197,8 +210,11 @@ jobs:
 
   # ─── Tier: options + analyst + premarket, hourly at :05 ─────────────────
   fast_mid:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_mid')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -236,8 +252,11 @@ jobs:
 
   # ─── Tier: news + insider, every 4h at :10 ──────────────────────────────
   fast_slow:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_slow')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -277,9 +296,9 @@ jobs:
     # `needs` + `always()` lets slow_daily run after fast_intraday when both are
     # dispatched (sequential), while still triggering on its own schedule when
     # fast_intraday is skipped.
-    needs: [fast_intraday]
+    needs: [preflight, fast_intraday]
     if: |
-      always() && (
+      always() && needs.preflight.outputs.ready == 'true' && (
         github.event.schedule == '30 13 * * 1-5' ||
         (github.event_name == 'workflow_dispatch' &&
          (inputs.job == 'slow_daily' || inputs.job == 'both'))
@@ -334,9 +353,12 @@ jobs:
           fi
 
   news_per_ticker:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '0 15,19 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'news_per_ticker')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -354,10 +376,13 @@ jobs:
           done
 
   news_macro:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '0 12,16,20 * * 1-5' ||
       github.event.schedule == '0 2 * * *' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'news_macro')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -370,9 +395,12 @@ jobs:
           [ "$HTTP" = "200" ] || exit 1
 
   l2_cycle:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '45 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'l2_cycle')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -386,9 +414,12 @@ jobs:
           [ "$HTTP" = "200" ] || exit 1
 
   minute_bars_puller:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '15 18 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'minute_bars_puller')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -406,9 +437,12 @@ jobs:
           done
 
   ic_backtest_monthly:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '0 4 1 * *' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'ic_backtest_monthly')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -427,9 +461,12 @@ jobs:
   # current (the run has a skip-recent-1hr guard, so a daily cadence on top
   # of the monthly job is safe and idempotent).
   daily_prices_puller:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '0 22 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'daily_prices_puller')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -465,9 +502,12 @@ jobs:
           [ "$HTTP" = "200" ] || exit 1
 
   methodology_proposer:
+    needs: [preflight]
     if: |
+      needs.preflight.outputs.ready == 'true' && (
       github.event.schedule == '30 22 * * 1' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'methodology_proposer')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

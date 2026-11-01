@@ -292,6 +292,10 @@ export default function PicksBrowser({
             "lowest composite first — the bottom-of-universe short candidates (UW/SELL) the long board hides",
         };
 
+  const directionalCount = data.picks.filter((card) =>
+    side === "short" ? ["UW", "SELL"].includes(card.rating) : ["BUY", "OW"].includes(card.rating),
+  ).length;
+
   return (
     <>
       <WorkbenchHeader
@@ -306,6 +310,11 @@ export default function PicksBrowser({
         action={<TmLinkButton href="/paper" variant="primary" size="md">{locale === "zh" ? "02 · 打开组合工作台" : "02 · OPEN PORTFOLIO WORKSPACE"}</TmLinkButton>}
       />
       <section className="border-b border-tm-rule bg-tm-bg px-4" aria-label={locale === "zh" ? "策略说明" : "Policy note"}>
+        <p className="py-3 text-sm leading-6 text-tm-fg-2">
+          {locale === "zh"
+            ? `当前展示 ${data.picks.length} 只候选，其中 ${directionalCount} 只具有对应方向评级。排名不是交易指令，HOLD 表示观望。五日／一月列统计的是快照截至日之前的次日方向命中率，不是持有五日／一月的收益；缺失值下方显示有效样本数／最低要求。`
+            : `${data.picks.length} candidates shown; ${directionalCount} have a rating in the selected direction. Rank is not a trade instruction; HOLD means wait. The 5-session / 1-month columns measure next-day direction hits as of the snapshot, not returns over those holding periods. Missing rates show evaluated samples / minimum required.`}
+        </p>
         {factorMode === "long" ? (
           <p className="border border-tm-warn/40 bg-tm-warn/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-warn">
             {locale === "zh" ? "战略 60 日策略正在独立前瞻验证，未使用 5 日校准置信度，不应直接与战术榜单的置信度横向比较。" : "The strategic 60d policy is in independent forward validation. It does not use the 5d calibrated confidence and should not be compared as if both figures shared one basis."}

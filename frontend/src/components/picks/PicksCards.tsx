@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { RatingCard } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
+import { consistencyEvidence } from "@/lib/picks-evidence";
 
 const TONE: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -27,8 +28,7 @@ export default function PicksCards({
     <div className="divide-y divide-tm-rule" role="list">
       {picks.map((card, index) => {
         const score = typeof card.composite_score === "number" ? card.composite_score : null;
-        const d5Agreement = typeof card.consistency?.d5 === "number" ? card.consistency.d5 : null;
-        const d5Samples = typeof card.consistency_n?.d5 === "number" ? card.consistency_n.d5 : null;
+        const d5 = consistencyEvidence(card, "d5", locale);
         const drivers = (card.top_drivers ?? []).slice(0, 2).map((name) => getSignalDisplayLabel(name, locale)).join(" · ");
         const name = locale === "zh" ? card.company_name_zh || card.company_name : card.company_name;
         return (
@@ -49,9 +49,10 @@ export default function PicksCards({
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs">
               <div><span className="text-tm-muted">{locale === "zh" ? "信号一致性" : "Signal agreement"}</span><div className="mt-1 text-tm-fg-2">{card.agreement == null ? "—" : `${Math.round(card.agreement * 100)}%`}</div></div>
-              <div><span className="text-tm-muted">{locale === "zh" ? "1日方向一致度" : "1D direction agreement"}</span><div className="mt-1 text-tm-fg-2">{d5Agreement === null ? "—" : `${Math.round(d5Agreement * 100)}%${d5Samples === null ? "" : ` · n=${d5Samples}`}`}</div></div>
+              <div><span className="text-tm-muted">{locale === "zh" ? "近 5 日的次日命中率" : "Next-day hits, last 5 sessions"}</span><div className="mt-1 text-tm-fg-2">{d5.pct === null ? "—" : `${d5.pct}%`} · {d5.sampleLabel}</div></div>
               <div><span className="text-tm-muted">{locale === "zh" ? "5日校准置信度" : "5D calibrated confidence"}</span><div className="mt-1 text-tm-fg-2">{card.confidence == null ? "—" : `${Math.round(card.confidence * 100)}%`}</div></div>
             </div>
+            {d5.pct === null ? <p className="text-xs leading-5 text-tm-muted">{d5.reason}</p> : null}
             <p className="min-h-5 text-xs leading-5 text-tm-fg-2">{drivers || (locale === "zh" ? "当前没有足够的有效驱动信号" : "Not enough active drivers")}</p>
             <div className="flex items-center justify-between gap-3">
               <span className="font-tm-mono text-xs text-tm-muted">{card.price_date ?? card.market_date ?? "—"}</span>

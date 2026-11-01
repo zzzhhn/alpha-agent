@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { RatingCard } from "@/lib/api/picks";
 import clsx from "clsx";
+import { consistencyEvidence } from "@/lib/picks-evidence";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import { HoverTip } from "@/components/ui/HoverTip";
 import GradeStrip from "./GradeStrip";
@@ -97,16 +98,10 @@ export default function PickRow({
   ] as const;
   // Mirrors backend MIN_SAMPLES (backtest/consistency.py): below this many
   // realized predictions the window shows a dash instead of a rate.
-  const CONS_MIN: Record<string, number> = { d5: 3, m1: 10, y1: 120, hist: 5 };
   const consVals = CONS_WINDOWS.map((w) => {
-    const v = card.consistency?.[w.key];
-    const ok = typeof v === "number" && isFinite(v);
-    const n = card.consistency_n?.[w.key];
     return {
       label: t(locale, w.labelKey),
-      pct: ok ? Math.round(v * 100) : null,
-      n: typeof n === "number" ? n : null,
-      min: CONS_MIN[w.key],
+      ...consistencyEvidence(card, w.key, locale),
     };
   });
   // Per-window sample summary for the tooltip: "5日 4/3✓ · 1月 8/10 · …" reads
@@ -234,6 +229,7 @@ export default function PickRow({
           className="justify-end"
           content={
             t(locale, "picks_table.consistency_tooltip") +
+            "\n" + consVals.map((c) => `${c.label}: ${c.reason}`).join("\n") +
             (consSamples
               ? " · " + t(locale, "picks_table.cons_samples_label") + " " + consSamples
               : "") +
@@ -272,7 +268,8 @@ export default function PickRow({
                         : "text-tm-fg-2",
                 )}
               >
-                {c.pct === null ? "—" : `${c.pct}%`}
+                <span className="block">{c.pct === null ? "—" : `${c.pct}%`}</span>
+                <span className="block whitespace-nowrap text-xs text-tm-muted">{c.sampleLabel}</span>
               </span>
             ))}
           </span>

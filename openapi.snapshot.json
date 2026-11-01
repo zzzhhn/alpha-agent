@@ -8781,6 +8781,52 @@
         ]
       }
     },
+    "/api/cron/preflight": {
+      "get": {
+        "description": "Authenticated read-only check. Does not ingest, prune, trade or call LLMs.",
+        "operationId": "cron_preflight_api_cron_preflight_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "type": "string" },
+                { "type": "null" }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Preflight Api Cron Preflight Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron Preflight",
+        "tags": ["cron"]
+      }
+    },
     "/api/cron/publish_recommendation": {
       "get": {
         "description": "Publish one immutable recommendation only after every shard finished.",

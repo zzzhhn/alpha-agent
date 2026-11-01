@@ -38,6 +38,17 @@ async def cron_auth_check() -> dict[str, bool]:
     return {"ok": True}
 
 
+@router.get("/preflight")
+async def cron_preflight() -> dict[str, Any]:
+    """Authenticated read-only check. Does not ingest, prune, trade or call LLMs."""
+    from alpha_agent.api.dependencies import get_db_pool
+    from alpha_agent.data.capacity import read_capacity
+
+    pool = await get_db_pool()
+    capacity = await read_capacity(pool)
+    return {"ok": True, **capacity}
+
+
 @router.post("/slow_daily")
 @router.get("/slow_daily")
 async def slow_daily(

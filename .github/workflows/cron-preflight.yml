@@ -1,0 +1,31 @@
+name: cron-preflight
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      trigger_event:
+        required: true
+        type: string
+    secrets:
+      CRON_SECRET:
+        required: true
+    outputs:
+      ready:
+        value: ${{ jobs.check.outputs.ready }}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.preflight.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: preflight
+        name: Read-only service and storage smoke test
+        env:
+          BACKEND_BASE: https://alpha-api.bobbyzhong.com
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TRIGGER_EVENT: ${{ inputs.trigger_event || github.event_name }}
+        run: python3 scripts/cron_preflight.py

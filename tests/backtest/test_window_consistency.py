@@ -143,3 +143,23 @@ async def test_unknown_ticker_all_none(pool):
 @pytest.mark.asyncio
 async def test_empty_tickers_returns_empty(pool):
     assert await compute_window_consistency(pool, []) == {}
+
+
+@pytest.mark.asyncio
+async def test_recent_late_ticker_not_hidden_by_other_ticker_watermark(pool):
+    from alpha_agent.backtest.consistency import compute_window_tallies
+    base = date.today() - timedelta(days=12)
+    await _seed_prices(pool, "LATE", base, [100.0 + i for i in range(6)])
+    for i in range(4):
+        await _seed_pred(pool, "LATE", base + timedelta(days=i), "BUY")
+    # Another ticker advanced the old global watermark past LATE's outcomes.
+    await pool.execute(
+        "INSERT INTO consistency_outcomes(ticker,date,hit) VALUES ('EARLY',$1,true)",
+        base + timedelta(days=4),
+    )
+    # One overlapping materialized outcome must not be counted twice.
+    await pool.execute(
+        "INSERT INTO consistency_outcomes(ticker,date,hit) VALUES ('LATE',$1,true)", base,
+    )
+    tallies = await compute_window_tallies(pool, ["LATE", "EARLY"])
+    assert tallies["LATE"]["hist"] == (4, 4)
