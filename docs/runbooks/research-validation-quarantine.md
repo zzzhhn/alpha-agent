@@ -93,5 +93,16 @@ baseline canary), then the real daily loop, then the propose runner. Workflow
 success now checks the response's business `ok`, not just HTTP 200. Restore each
 only after its deployed-path checks. The circuit breaker remains enabled.
 
+Production receipts after PR #51: read-only validation run `41294821882`
+passed in 6.36 seconds with the actual baseline and a known expression, zero
+rejections/writes. Daily-loop run `41294880012` passed in 17.93 seconds, five
+candidates evaluated, three valid/pending and two explicitly invalid due to
+degenerate signal coverage. No automatic approval. The LLM arm correctly
+skipped because no `SYSTEM_USER_ID` is configured. Queue drain `41294944903`
+passed with no queued jobs; this proves runner availability, not a new LLM call.
+Both requested workflows were restored sequentially following those checks.
+One earlier manual probe (`41294707244`) was dispatched before the production
+switch completed and returned 404; it was not a recurring schedule failure.
+
 Reference: [QuantConnect research guide](https://www.quantconnect.com/docs/v2/writing-algorithms/key-concepts/research-guide)
 for temporal separation, point-in-time inputs and survivorship limitations.

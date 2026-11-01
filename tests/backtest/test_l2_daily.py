@@ -30,6 +30,11 @@ async def test_daily_marks_preserve_shares_cash_costs_and_idempotency(applied_db
         marks = await pool.fetch("SELECT * FROM l2_equity_daily WHERE strategy_id=$1 AND as_of_date>$2 ORDER BY as_of_date", sid, start)
         assert marks[0]["net_return"] == pytest.approx(0.00005)
         assert marks[1]["benchmark_return"] == pytest.approx(110/105-1)
+        # No quote on the next session: explicit stale mark, never a vanished holding.
+        stale = await mark_daily(pool, strategy_id=sid, through=date(2026,11,2))
+        assert stale["stale_marks"] == 1
+        assert stale["nav"] == pytest.approx(1000100)
+        assert await pool.fetchval("SELECT qty FROM l2_position WHERE strategy_id=$1", sid) == 10
     finally:
         await close_pool()
 
