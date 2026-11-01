@@ -151,7 +151,7 @@ async def l2_evidence(sleeve: Literal["tactical", "strategic"] = "strategic") ->
 async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | None:
     row = await pool.fetchrow(
         """
-        SELECT s.id AS strategy_id, s.version, a.initial_cash, a.cash, a.nav,
+        SELECT s.id AS strategy_id, s.version, s.params_json, a.initial_cash, a.cash, a.nav,
                a.start_after_run_id, a.last_fill_date,
                (SELECT max(as_of_date) FROM l2_equity_daily e WHERE e.strategy_id=s.id) AS last_valuation_date,
                (SELECT count(*) FROM l2_position p
@@ -173,6 +173,7 @@ async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | N
         return None
     nav = float(row["nav"])
     initial = float(row["initial_cash"])
+    params = json.loads(row["params_json"]) if isinstance(row["params_json"], str) else row["params_json"]
     from alpha_agent.data.security_identity import book_identity_issues
     issues = await book_identity_issues(pool, int(row["strategy_id"]))
     due = int(await pool.fetchval(
@@ -185,6 +186,9 @@ async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | N
         "overdue_orders": due,
         "strategy_id": int(row["strategy_id"]),
         "strategy_version": int(row["version"]),
+        "not_before_signal_date": params.get("not_before_signal_date"),
+        "replaces_strategy_id": params.get("replaces_strategy_id"),
+        "restart_reason": params.get("restart_reason"),
         "accounting": "continuous_share_delta",
         "initial_cash": initial,
         "nav": nav,

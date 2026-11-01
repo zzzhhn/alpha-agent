@@ -16,7 +16,7 @@ async def pool(applied_db):
     await close_pool()
 
 
-async def _run(pool, market_date: date, ticker: str) -> int:
+async def _run(pool, market_date: date, ticker: str, *, allow_correction: bool = False) -> int:
     return await record_research_run(
         pool,
         RunMeta(
@@ -27,6 +27,7 @@ async def _run(pool, market_date: date, ticker: str) -> int:
             weight_policy_id="static_v2_technicals_guardrail",
         ),
         [RatingSnapshot(ticker=ticker, tier="BUY", rank=1, eligible=True)],
+        allow_correction=allow_correction,
     )
 
 
@@ -172,3 +173,62 @@ async def test_tactical_and_strategic_books_are_separate_forward_accounts(pool):
     }
     assert params["canonical_top50_continuous"]["policy_id"] == "static_v2_technicals_guardrail"
     assert params["canonical_top50_continuous_strategic"]["policy_id"] == "strategic_v1_60d_frozen"
+
+
+@pytest.mark.asyncio
+async def test_tactical_restart_preserves_old_book_and_uses_new_session_boundary(pool, monkeypatch):
+    from alpha_agent.api.routes.l2 import _continuous_account
+    from alpha_agent.backtest.l2_driver import run_continuous_driver
+
+    class Clock(datetime):
+        current = datetime(2026, 11, 1, 12, tzinfo=UTC)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.current
+
+    monkeypatch.setattr(l2_continuous, "datetime", Clock)
+    prior_run = await _run(pool, date(2026, 10, 30), "AAA")
+    old = await pool.fetchval(
+        "INSERT INTO l2_strategy(name,version,params_json) "
+        "VALUES ('canonical_top50_continuous',2,'{}') RETURNING id")
+    await pool.execute(
+        "INSERT INTO l2_account(strategy_id,initial_cash,cash,nav,start_after_run_id) "
+        "VALUES ($1,1000000,250000,980000,0)", old)
+    await pool.execute(
+        "INSERT INTO l2_order(strategy_id,source_run_id,signal_date,ticker,target_weight,generated_at,status) "
+        "VALUES ($1,$2,'2026-09-15','PARA',0.02,now(),'filled')", old, prior_run)
+    await pool.execute(
+        "INSERT INTO l2_position(strategy_id,ticker,qty,avg_cost) VALUES ($1,'PARA',10,3)", old)
+    strategic = await l2_continuous.ensure_book(pool, sleeve="strategic")
+    old_before = dict(await pool.fetchrow("SELECT * FROM l2_account WHERE strategy_id=$1", old))
+    strategic_before = dict(await pool.fetchrow("SELECT * FROM l2_account WHERE strategy_id=$1", strategic))
+
+    fresh = await l2_continuous.ensure_book(pool)
+    assert fresh not in (old, strategic)
+    assert await l2_continuous.generate_target_intent(pool, strategy_id=fresh, run_id=prior_run) == 0
+    # A freshly published run for an OLD session is still not a forward signal.
+    repeated_old_day = await _run(pool, date(2026, 10, 30), "AAA", allow_correction=True)
+    assert await l2_continuous.generate_target_intent(pool, strategy_id=fresh, run_id=repeated_old_day) == 0
+    account = await _continuous_account(pool, strategy_name="canonical_top50_continuous")
+    assert account["strategy_id"] == fresh
+    assert account["strategy_version"] == 3
+    assert account["status"] == "awaiting_forward_run"
+    assert account["not_before_signal_date"] == "2026-11-02"
+    assert account["replaces_strategy_id"] == old
+    assert account["positions"] == account["pending_orders"] == 0
+    assert account["cash"] == account["nav"] == 1_000_000
+
+    future_run = await _run(pool, date(2026, 11, 2), "AAA")
+    assert await l2_continuous.generate_target_intent(pool, strategy_id=fresh, run_id=future_run) == 1
+    assert next_xnys_session(date(2026, 11, 2)) == date(2026, 11, 3)
+    Clock.current = datetime(2026, 11, 4, 12, tzinfo=UTC)
+    assert await l2_continuous.ensure_book(pool) == fresh
+    assert await l2_continuous.ensure_book(pool, sleeve="strategic") == strategic
+    after = await _continuous_account(pool, strategy_name="canonical_top50_continuous")
+    assert after["not_before_signal_date"] == "2026-11-02"
+    assert after["start_after_run_id"] == prior_run
+    assert dict(await pool.fetchrow("SELECT * FROM l2_account WHERE strategy_id=$1", old)) == old_before
+    assert dict(await pool.fetchrow("SELECT * FROM l2_account WHERE strategy_id=$1", strategic)) == strategic_before
+    assert await pool.fetchval("SELECT qty FROM l2_position WHERE strategy_id=$1 AND ticker='PARA'", old) == 10
+    assert (await run_continuous_driver(pool, strategy_id=old))["status"] == "identity_quarantined"

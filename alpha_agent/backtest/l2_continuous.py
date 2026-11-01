@@ -19,6 +19,7 @@ from alpha_agent.market_session import next_xnys_session, xnys_close
 from alpha_agent.storage.product_ledger import get_run_snapshots
 
 STRATEGY_VERSION = 2
+TACTICAL_STRATEGY_VERSION = 3  # Owner-authorized clean restart after PARA quarantine.
 INITIAL_CASH = 1_000_000.0
 
 
@@ -43,17 +44,36 @@ async def ensure_book(
         "policy_id": policy.policy_id,
         "initial_cash": initial_cash,
     }
+    version = TACTICAL_STRATEGY_VERSION if sleeve == "tactical" else STRATEGY_VERSION
+    if sleeve == "tactical":
+        predecessor = await pool.fetchval(
+            "SELECT id FROM l2_strategy WHERE name=$1 AND version<$2 "
+            "ORDER BY version DESC LIMIT 1", strategy_name, version,
+        )
+        if predecessor is not None:
+            params.update({
+                "replaces_strategy_id": int(predecessor),
+                "restart_reason": "para_identity_quarantine",
+                "not_before_signal_date": next_xnys_session(datetime.now(UTC).date()).isoformat(),
+            })
     strategy_id = await pool.fetchval(
         """
         INSERT INTO l2_strategy (name, version, params_json)
         VALUES ($1, $2, $3::jsonb)
-        ON CONFLICT (name, version) DO UPDATE SET params_json=EXCLUDED.params_json
+        ON CONFLICT (name, version) DO NOTHING
         RETURNING id
         """,
         strategy_name,
-        STRATEGY_VERSION,
+        version,
         json.dumps(params),
     )
+    if strategy_id is None:
+        # Book rules and activation date are immutable. Repeated cron calls
+        # must not move the forward boundary or rewrite the strategic account.
+        strategy_id = await pool.fetchval(
+            "SELECT id FROM l2_strategy WHERE name=$1 AND version=$2",
+            strategy_name, version,
+        )
     boundary = start_after_run_id
     if boundary is None:
         boundary = int(await pool.fetchval(
@@ -102,6 +122,8 @@ async def generate_target_intent(pool, *, strategy_id: int, run_id: int) -> int:
         "SELECT params_json FROM l2_strategy WHERE id=$1", strategy_id
     )
     params = {**DEFAULT_PARAMS, **(json.loads(params_raw) if params_raw else {})}
+    if params.get("not_before_signal_date") and signal_date < date.fromisoformat(params["not_before_signal_date"]):
+        return 0
     snapshots = await get_run_snapshots(pool, run_id)
     sleeve = str(params.get("sleeve") or "tactical")
     if sleeve == "strategic":
