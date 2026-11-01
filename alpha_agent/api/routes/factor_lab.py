@@ -33,6 +33,9 @@ from alpha_agent.evolution.correlation_gate import (
 )
 from alpha_agent.evolution.diagnostics import compute_diagnostic
 from alpha_agent.evolution.factor_validation import evaluate_factor_candidate
+from alpha_agent.evolution.research_panel import (
+    load_research_context, score_expression, slice_panel,
+)
 from alpha_agent.evolution.llm_factor_proposer import RawProposal, propose_factors
 from alpha_agent.evolution.sandbox import SandboxRunner
 from alpha_agent.evolution.skeptic import assess_candidate
@@ -192,6 +195,9 @@ async def _run_propose_work(
     rationale references the same baseline the threshold is computed against.
     Raises asyncio.TimeoutError / ValueError on LLM-layer failure; the runner
     endpoint maps those onto the job row's failed state."""
+    context = await asyncio.to_thread(load_research_context)
+    # Reject a broken baseline BEFORE buying an LLM response.
+    await asyncio.to_thread(score_expression, context, diagnostic.current_expression)
     # Phase A: inject recent lessons + already-tried expressions so the proposer
     # stops repeating rejects. Best-effort — a memory read must not block a run.
     try:
@@ -201,6 +207,14 @@ async def _run_propose_work(
         logger.warning("factor_lessons load failed; proposing without memory: %s", e)
         lessons, tried = [], []
 
+    lessons = [
+        "Available research operands (coverage >=60%): " + ", ".join(
+            k for k, v in context.coverage.items() if v >= 0.6),
+        f"Historical dataset ends {context.panel.dates[-1]}; not live validation. "
+        "Use only causal operators (no future access or full-time-series normalization).",
+        *lessons,
+    ]
+
     llm_client = await get_llm_client(user_id=user_id)
     try:
         raw_proposals = await propose_factors(
@@ -209,7 +223,8 @@ async def _run_propose_work(
         if not raw_proposals:
             return {"evaluated": 0, "proposed": 0, "dormant": False}
         return await _evaluate_and_record(
-            pool, raw_proposals, diagnostic, llm_client=llm_client, source="llm"
+            pool, raw_proposals, diagnostic, llm_client=llm_client, source="llm",
+            context=context,
         )
     finally:
         close = getattr(llm_client, "close", None)
@@ -218,7 +233,8 @@ async def _run_propose_work(
 
 
 async def _evaluate_and_record(
-    pool, raw_proposals, diagnostic, *, llm_client=None, source: str = "llm"
+    pool, raw_proposals, diagnostic, *, llm_client=None, source: str = "llm",
+    context=None, n_trials: int | None = None,
 ) -> dict:
     """Shared validation core for BOTH the LLM proposer (source='llm') and the
     GA search (source='ga'): evaluate each candidate (canned tests + purged
@@ -236,34 +252,33 @@ async def _evaluate_and_record(
     # dormant}` (44 bytes) and the user sees "0/5 proposed" with no signal.
     rejects: list = []
     try:
+        context = context or await asyncio.to_thread(load_research_context)
+        validation = context.evidence()
+        baseline = await evaluate_factor_candidate(
+            pool, runner,
+            RawProposal(expression=diagnostic.current_expression, new_operators=[]),
+            out_rejects=rejects, context=context,
+        )
+        if baseline is None:
+            return {"ok": False, "status": "invalid_evaluation", "evaluated": 0,
+                    "proposed": 0, "dormant": True, "validation": validation,
+                    "_diag": {"rejects": rejects, "baseline_rejected": True}}
         # 1. Evaluate each candidate (canned tests + purged WF)
         results = []
         for proposal in raw_proposals:
             r = await evaluate_factor_candidate(
-                pool, runner, proposal, out_rejects=rejects
+                pool, runner, proposal, out_rejects=rejects, context=context,
             )
             if r is not None:
                 results.append(r)
         if not results:
             return {
+                "ok": not any(r["reason"] in ("kernel_exception", "evaluation_exception") for r in rejects),
+                "status": "no_valid_candidates", "validated": 0, "validation": validation,
                 "evaluated": len(raw_proposals),
                 "proposed": 0,
                 "dormant": False,
                 "_diag": {"rejects": rejects},
-            }
-
-        # 2. Baseline: re-evaluate current expression for comparison.
-        baseline = await evaluate_factor_candidate(
-            pool, runner,
-            RawProposal(expression=diagnostic.current_expression, new_operators=[]),
-            out_rejects=rejects,
-        )
-        if baseline is None:
-            return {
-                "evaluated": len(raw_proposals),
-                "proposed": 0,
-                "dormant": True,
-                "_diag": {"rejects": rejects, "baseline_rejected": True},
             }
 
         # 3. DSR-lite deflation: keep only survivors that beat baseline AND
@@ -297,7 +312,7 @@ async def _evaluate_and_record(
                 except Exception as e:  # noqa: BLE001 - gate is auxiliary
                     logger.warning("list_factors for self-corr gate failed: %s", e)
                     saved = []
-                _corr_gate = SelfCorrelationGate(saved)
+                _corr_gate = SelfCorrelationGate(saved, panel=context.panel)
             return _corr_gate.check(expression)
         # Per-candidate decision trail returned in the response body so the
         # client can see why each candidate did/didn't make it. More reliable
@@ -306,7 +321,8 @@ async def _evaluate_and_record(
         diag_candidates: list[dict] = []
         for r in sorted(results, key=lambda r: -float(np.mean(r.sharpes))):
             r_mean = float(np.mean(r.sharpes))
-            defl = deflated_sharpe_lite(r_mean, all_means, len(raw_proposals))
+            trial_count = max(n_trials or 0, len(raw_proposals))
+            defl = deflated_sharpe_lite(r_mean, all_means, trial_count)
             passes_mean = r_mean > base_mean * _BASE_RATIO
             passes_defl = defl > _DSR_THRESHOLD
             accepted = passes_mean and passes_defl
@@ -370,7 +386,8 @@ async def _evaluate_and_record(
                         "deflated_sharpe": defl,
                         "baseline_sharpe": base_mean,
                         "n_folds": r.n_folds,
-                        "n_trials": len(raw_proposals),
+                        "n_trials": trial_count,
+                        "validation": validation,
                         "llm_rationale": rationale,
                         "operator_test_results": r.operator_test_results,
                         "self_correlation": self_corr,
@@ -419,6 +436,8 @@ async def _evaluate_and_record(
                 logger.warning("factor_lessons record (rejected) failed: %s", e)
 
         return {
+            "ok": not any(r["reason"] in ("kernel_exception", "evaluation_exception") for r in rejects),
+            "status": "completed", "validated": len(results), "validation": validation,
             "evaluated": len(raw_proposals),
             "proposed": proposed_count,
             "dormant": False,
@@ -435,8 +454,8 @@ async def _evaluate_and_record(
 
 
 async def _run_ga_work(
-    pool, diagnostic, *, pop_size: int = 24, generations: int = 6,
-    top_k: int = 5, budget_s: float = 90.0, llm_client=None,
+    pool, diagnostic, *, pop_size: int = 12, generations: int = 3,
+    top_k: int = 5, budget_s: float = 45.0, llm_client=None,
 ) -> dict:
     """GA arm of the miner (Phase C generator + Phase D loop): breed candidates
     with the non-LLM genetic search — seeded with the current live expression —
@@ -444,17 +463,28 @@ async def _run_ga_work(
     core the LLM arm uses. Needs no LLM key, so it runs autonomously; the CPU-
     bound search (kernel evals) is offloaded off the event loop with to_thread."""
     from alpha_agent.evolution.ga_search import ga_candidates
+    from alpha_agent.evolution.ga_dsl import Vocab, NUMERIC_FIELDS, GROUP_FIELDS
 
+    context = await asyncio.to_thread(load_research_context)
+    await asyncio.to_thread(score_expression, context, diagnostic.current_expression)
+    vocab = Vocab(fields=tuple(f for f in NUMERIC_FIELDS if context.coverage.get(f, 0) >= 0.6),
+                  groups=tuple(f for f in GROUP_FIELDS if context.coverage.get(f, 0) >= 0.6))
+    trials = {}
     seed = [diagnostic.current_expression] if diagnostic.current_expression else []
     raw = await asyncio.to_thread(
         ga_candidates,
         pop_size=pop_size, generations=generations, top_k=top_k,
         budget_s=budget_s, seed_exprs=seed,
+        panel=slice_panel(context.panel, 0, context.search_end - 5),
+        vocab=vocab, trial_counter=trials,
     )
     if not raw:
-        return {"evaluated": 0, "proposed": 0, "dormant": False, "source": "ga"}
+        return {"ok": True, "status": "no_valid_candidates", "evaluated": 0,
+                "proposed": 0, "dormant": False, "source": "ga",
+                "validation": context.evidence()}
     result = await _evaluate_and_record(
-        pool, raw, diagnostic, llm_client=llm_client, source="ga"
+        pool, raw, diagnostic, llm_client=llm_client, source="ga", context=context,
+        n_trials=trials.get("attempted", len(raw)),
     )
     result["source"] = "ga"
     return result

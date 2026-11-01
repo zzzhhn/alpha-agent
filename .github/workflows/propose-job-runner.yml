@@ -56,3 +56,4 @@ jobs:
             echo "::error::propose runner returned HTTP $HTTP"
             exit 1
           fi
+          jq -e '.ok == true' /tmp/propose.json >/dev/null

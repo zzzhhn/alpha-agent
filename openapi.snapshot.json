@@ -8792,8 +8792,12 @@
             "required": false,
             "schema": {
               "anyOf": [
-                { "type": "string" },
-                { "type": "null" }
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ],
               "title": "Authorization"
             }
@@ -8824,7 +8828,9 @@
           }
         },
         "summary": "Cron Preflight",
-        "tags": ["cron"]
+        "tags": [
+          "cron"
+        ]
       }
     },
     "/api/cron/publish_recommendation": {
@@ -8958,6 +8964,58 @@
           }
         },
         "summary": "Publish Recommendation",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/research_validation": {
+      "post": {
+        "description": "Read-only real-kernel canary. No LLM spend, proposals or config mutation.",
+        "operationId": "research_validation_api_cron_research_validation_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Research Validation Api Cron Research Validation Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Research Validation",
         "tags": [
           "cron"
         ]

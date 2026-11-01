@@ -29,7 +29,7 @@ _SHARPES = {
 }
 
 
-async def _fake_eval(pool, runner, proposal, out_rejects=None):
+async def _fake_eval(pool, runner, proposal, out_rejects=None, *, context=None):
     sharpes = _SHARPES.get(proposal.expression)
     if sharpes is None:
         return None
@@ -49,7 +49,7 @@ class _DummyRunner:
 
 
 class _DummyGate:
-    def __init__(self, saved):
+    def __init__(self, saved, **kwargs):
         pass
 
     def check(self, expression):

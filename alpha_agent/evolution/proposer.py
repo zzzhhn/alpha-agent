@@ -45,15 +45,17 @@ async def run_proposer(pool, user_id: int = 0) -> dict:
     """
     await refresh_config(pool)
     current = {k: get_config(k, DEFAULTS[k]) for k in DEFAULTS}
-
-    base = await evaluate_candidate(pool, _identity_delta(current))
+    import asyncio
+    from alpha_agent.evolution.research_panel import load_research_context
+    context = await asyncio.to_thread(load_research_context)
+    base = await evaluate_candidate(pool, _identity_delta(current), context=context)
     if base is None:
         return {"evaluated": 0, "proposed": 0, "dormant": True}
 
-    candidates = enumerate_candidates(current)
+    candidates = [c for c in enumerate_candidates(current) if c.key == "factor.mode"]
     results = []
     for c in candidates:
-        r = await evaluate_candidate(pool, c)
+        r = await evaluate_candidate(pool, c, context=context)
         if r is not None:
             results.append(r)
 
@@ -75,7 +77,8 @@ async def run_proposer(pool, user_id: int = 0) -> dict:
             await _write_pending(pool, current, r, defl, n_trials, user_id)
             proposed += 1
 
-    return {"evaluated": len(results), "proposed": proposed, "dormant": False}
+    return {"evaluated": len(results), "proposed": proposed, "dormant": False,
+            "validation": context.evidence(), "unsupported_config_deltas_skipped": True}
 
 
 async def _write_pending(

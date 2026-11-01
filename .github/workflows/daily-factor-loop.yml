@@ -44,3 +44,4 @@ jobs:
             echo "::error::daily factor loop returned HTTP $HTTP"
             exit 1
           fi
+          jq -e '.ok == true' /tmp/loop.json >/dev/null

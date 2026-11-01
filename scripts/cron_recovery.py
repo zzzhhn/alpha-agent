@@ -29,7 +29,7 @@ def recovery_path(operation: str, limit: int, offset: int, run_id: str) -> str:
         return operation + "?" + urlencode(params)
     if operation == "publish_recommendation":
         return operation + "?" + urlencode({"request_id": f"recovery-{run_id}"})
-    if operation in ("run_propose_jobs", "daily_factor_loop"):
+    if operation in ("research_validation", "run_propose_jobs", "daily_factor_loop", "l2_cycle"):
         return operation
     raise ValueError("Operation outside recovery scope")
 
@@ -47,7 +47,7 @@ def result_ok(operation: str, body: dict) -> bool:
         for arm in ("ga", "llm"):
             result = body.get(arm) or {}
             rejects = (result.get("_diag") or {}).get("rejects", [])
-            if result.get("error") or any(r.get("reason") == "fold_kernel_exception" for r in rejects):
+            if result.get("error") or result.get("ok") is False or any(r.get("reason") == "fold_kernel_exception" for r in rejects):
                 return False
         return True
     return True
