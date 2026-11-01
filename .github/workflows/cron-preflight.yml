@@ -45,7 +45,7 @@ jobs:
         run: python3 scripts/cron_preflight.py
   recovery:
     needs: check
-    if: github.event_name == 'workflow_dispatch' && inputs.operation != 'check' && needs.check.outputs.ready == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation && inputs.operation != 'check' && needs.check.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     concurrency:
