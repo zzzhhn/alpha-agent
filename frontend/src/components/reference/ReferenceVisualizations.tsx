@@ -56,6 +56,7 @@ const COVERAGE: readonly CoverageItem[] = [
   { zh: "BRAIN 收益", en: "BRAIN PnL", component: "brain/BrainPnLChart", route: "brain", status: "registered" },
   { zh: "因子烟雾测试", en: "Alpha smoke equity", component: "alpha/SmokePane", route: "alpha", status: "registered" },
   { zh: "模拟仓净值", en: "Paper equity", component: "picks/paper/PaperCurvePane", route: "paper", status: "registered" },
+  { zh: "推荐扣费净值", en: "Net recommendation NAV", component: "charts/RecommendationNavChart", route: "picks, paper", status: "registered" },
   { zh: "旧版净值面板", en: "Legacy equity pane", component: "backtest/EquityCurvePane", route: "source-only", status: "source-only" },
   { zh: "旧版回撤面板", en: "Legacy drawdown pane", component: "backtest/DrawdownPane", route: "source-only", status: "source-only" },
   { zh: "旧版 IC 时序", en: "Legacy IC timeseries", component: "signal/ICTimeseriesChart", route: "source-only", status: "source-only" },

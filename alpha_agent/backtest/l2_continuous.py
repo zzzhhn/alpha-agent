@@ -184,11 +184,15 @@ async def fill_target_intent(
     account = await pool.fetchrow(
         "SELECT * FROM l2_account WHERE strategy_id=$1", strategy_id
     )
+    previous_mark = await pool.fetchval(
+        "SELECT max(as_of_date) FROM l2_equity_daily WHERE strategy_id=$1", strategy_id)
     # Midnight UTC is not the US market close. An intent written at 02:00 UTC
     # can legitimately precede the same date's 20:00 UTC close.
     reason = None
     if account["last_fill_date"] and fill_date <= account["last_fill_date"]:
         reason = "superseded_by_account_progress"
+    elif previous_mark and fill_date <= previous_mark:
+        reason = "execution_precedes_latest_valuation"
     elif fill_date != next_xnys_session(signal_date):
         reason = "missed_execution_session"
     elif any(order["generated_at"] >= xnys_close(fill_date) for order in pending):
@@ -306,8 +310,8 @@ async def fill_target_intent(
     nav = cash + market_value
     period_return = nav / previous_nav - 1.0 if previous_nav else 0.0
     turnover = gross_traded / previous_nav if previous_nav else 0.0
-    benchmark_return = await _benchmark_period(pool, "SPY", account["last_fill_date"], fill_date)
-    rsp_return = await _benchmark_period(pool, "RSP", account["last_fill_date"], fill_date)
+    benchmark_return = await _benchmark_period(pool, "SPY", previous_mark, fill_date)
+    rsp_return = await _benchmark_period(pool, "RSP", previous_mark, fill_date)
     await pool.execute(
         "UPDATE l2_account SET cash=$2, nav=$3, last_fill_date=$4, updated_at=now() WHERE strategy_id=$1",
         strategy_id, cash, nav, fill_date,
@@ -333,6 +337,10 @@ async def fill_target_intent(
         float(pending[0]["cost_bps"] or 0.0), nav, cash, market_value,
         nav / float(account["initial_cash"]) - 1.0,
     )
+    await pool.execute(
+        "UPDATE l2_equity_daily SET stale_count=$3 WHERE strategy_id=$1 AND as_of_date=$2",
+        strategy_id, fill_date,
+        sum(1 for ticker, p in positions.items() if int(p["qty"]) > 0 and ticker not in prices))
     return {"filled": filled, "unfilled": unfilled, "turnover": turnover, "nav": nav, "fees": fees}
 
 

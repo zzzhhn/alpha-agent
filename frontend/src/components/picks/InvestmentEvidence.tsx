@@ -5,20 +5,25 @@ import { apiGet } from "@/lib/api/client";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
+import { TmTable } from "@/components/tm/TmTable";
 import TurnoverStudy from "./TurnoverStudy";
+import RecommendationNavChart, { type RecommendationNavPoint } from "@/components/charts/RecommendationNavChart";
 
 type Evidence = {
   status: string; sleeve: string; policy_id?: string; as_of?: string;
   valuation_current?: boolean; overdue_orders?: number;
   cost_bps_per_side?: number; top_n?: number;
   observations?: number; observed_max_drawdown?: number; mean_rebalance_turnover?: number | null;
+  series?: RecommendationNavPoint[];
+  missing_sessions?: number; stale_sessions?: number;
+  windows?: Record<string, { status: string; net_return: number | null; spy_return: number | null; rsp_return: number | null }>;
   exceptions?: { reason: string; count: number }[];
   account?: { cumulative_return: number | null; pending_orders: number; transaction_costs: number };
   comparison?: { from: string; to: string; strategy: number; spy: number | null; rsp: number | null; cash_no_interest: number } | null;
 };
 const pct = (n: number | null | undefined) => n == null ? "—" : `${(100 * n).toFixed(2)}%`;
 
-export default function InvestmentEvidence({ sleeve, policyId }: { sleeve: "tactical" | "strategic"; policyId?: string | null }) {
+export default function InvestmentEvidence({ sleeve, policyId, showStudy = true }: { sleeve: "tactical" | "strategic"; policyId?: string | null; showStudy?: boolean }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [result, setResult] = useState<Evidence | null>(null);
@@ -51,15 +56,27 @@ export default function InvestmentEvidence({ sleeve, policyId }: { sleeve: "tact
           {[[zh ? "同区间策略净收益" : "Matched-period net return", pct(comparison?.strategy)], ["SPY", pct(comparison?.spy)], ["RSP", pct(comparison?.rsp)], [zh ? "现金，不计利息" : "Cash, no interest", comparison ? "0.00%" : "—"]].map(([label,value]) => <div key={label}><div className="text-xs text-tm-muted">{label}</div><div className="mt-1 font-tm-mono text-lg text-tm-fg">{value}</div></div>)}
         </div>
         <p className="text-xs text-tm-muted">{comparison ? `${comparison.from} → ${comparison.to}` : (zh ? "等待至少两次账本估值，暂不比较。" : "Awaiting two book valuations before comparison.")} · {zh ? "账本估值截至" : "Book valued through"} {data.as_of ?? "—"}{!data.valuation_current ? (zh ? "，不是今日市值。" : "; not today's market value.") : ""}</p>
+        <RecommendationNavChart series={data.series ?? []} zh={zh} />
+        <div className="overflow-x-auto">
+          <TmTable className="text-left">
+            <caption className="py-2 text-left text-tm-muted">{zh ? "近期实际持仓收益，不是预测准确率" : "Recent held-portfolio returns, not prediction accuracy"}</caption>
+            <thead className="text-tm-muted"><tr>{[zh ? "窗口" : "Window", zh ? "策略扣费后" : "Net strategy", "SPY", "RSP"].map(label => <th key={label} className="border-b border-tm-rule py-2 pr-4 font-normal">{label}</th>)}</tr></thead>
+            <tbody>{[5, 21].map(n => { const w = data.windows?.[String(n)]; return <tr key={n}>
+              <th className="py-2 pr-4 font-normal">{n} {zh ? "交易日" : "sessions"}</th>
+              {w?.status === "ready" ? [w.net_return, w.spy_return, w.rsp_return].map((v, i) => <td key={i} className="py-2 pr-4">{pct(v)}</td>) : <td colSpan={3} className="py-2 text-tm-muted">{zh ? "完整日估值不足，继续积累；缺价不会记成零收益。" : "Not enough complete daily marks; missing quotes are not zero returns."}</td>}
+            </tr>; })}</tbody>
+          </TmTable>
+        </div>
         <div className="grid gap-3 border-t border-tm-rule pt-3 text-xs md:grid-cols-3">
           <p>{zh ? "估值记录，非独立样本" : "Valuations, not independent trials"}：{data.observations ?? 0}</p>
-          <p>{zh ? "已观测回撤，仅调仓日" : "Observed drawdown, rebalance dates only"}：{data.observations ? pct(data.observed_max_drawdown) : "—"}</p>
+          <p>{zh ? "已观测最大回撤" : "Observed maximum drawdown"}：{data.observations ? pct(data.observed_max_drawdown) : "—"}</p>
           <p>{zh ? "平均调仓换手（双边）" : "Mean rebalance turnover (two-way)"}：{pct(data.mean_rebalance_turnover)}</p>
         </div>
-        <p className="text-xs text-tm-muted">{zh ? `账户自起点收益（含首次建仓成本）：${pct(data.account?.cumulative_return)}；累计交易成本 $${data.account?.transaction_costs?.toFixed(2) ?? "—"}。上方横向比较从首次成交收盘开始，不包含首次建仓成本。` : `Account return including initial entry costs: ${pct(data.account?.cumulative_return)}; cumulative costs $${data.account?.transaction_costs?.toFixed(2) ?? "—"}. Cross-strategy comparison starts at the first executed close and excludes initial entry costs.`}</p>
+        <p className="text-xs text-tm-muted">{zh ? `累计交易成本 $${data.account?.transaction_costs?.toFixed(2) ?? "—"}。策略包含首次建仓和后续交易成本；SPY / RSP 同日起买入持有，扣除相同单边假设的建仓成本。` : `Cumulative costs $${data.account?.transaction_costs?.toFixed(2) ?? "—"}. Strategy includes entry and later trading costs. SPY / RSP buy-and-hold starts on the same date, charging the same assumed entry cost.`}</p>
+        {!!(data.missing_sessions || data.stale_sessions) && <p className="text-xs text-tm-warn">{zh ? `历史缺测 ${data.missing_sessions ?? 0} 日，缺价估值 ${data.stale_sessions ?? 0} 日。补记已有持仓市值不等于补做当时未执行的调仓；历史断档期间的回撤可能被低估。` : `${data.missing_sessions ?? 0} missing sessions; ${data.stale_sessions ?? 0} stale marks. Revaluing existing shares does not recreate missed trades; drawdown during historical gaps may be understated.`}</p>}
         <p className="text-xs text-tm-warn">{zh ? "当前支持的结论：继续观察，不因榜单变化自动交易。降低频率不保证提高收益，需要独立对照。" : "Supported action: observe; do not automatically trade ranking changes. Lower frequency does not guarantee better returns; compare independently."}</p>
-        <p className="text-xs text-tm-muted">{zh ? `当前规则：Top ${data.top_n ?? "—"}，按周检查调仓；信号周期不等于强制持有天数。每边假设成本 ${data.cost_bps_per_side ?? "—"} bps。仅调仓日估值，未完整计入分红、税费及现金利息。` : `Current rules: Top ${data.top_n ?? "—"}, weekly rebalance checks. Signal horizon is not a mandatory holding period. ${data.cost_bps_per_side ?? "—"} bps per side. Rebalance-date valuations; dividends, taxes and cash interest are not fully included.`}</p>
-        <TurnoverStudy key={sleeve} sleeve={sleeve} />
+        <p className="text-xs text-tm-muted">{zh ? `当前规则：Top ${data.top_n ?? "—"}，按周检查调仓，每个交易日收盘估值。每边假设综合成本 ${data.cost_bps_per_side ?? "—"} bps，不是券商报价。使用行情源复权收盘价，未逐笔处理公司行动、税费和现金利息，不是实盘成交净值。` : `Top ${data.top_n ?? "—"}, weekly rebalance checks, daily close marks. Assumed all-in cost ${data.cost_bps_per_side ?? "—"} bps per side, not a broker quote. Uses provider-adjusted closes, without a full corporate-action ledger, taxes or cash interest. Not live brokerage performance.`}</p>
+        {showStudy ? <TurnoverStudy key={sleeve} sleeve={sleeve} /> : null}
       </>}
   </TmPane>;
 }

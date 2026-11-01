@@ -27,7 +27,7 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
     : 0;
   return (
     <div className="border-t border-tm-rule px-3 py-3">
-      <p className="mb-3 text-xs text-tm-warn">{locale === "zh" ? `战术账本估值截至 ${continuous?.last_fill_date ?? "—"}；战略账本估值截至 ${strategic?.last_fill_date ?? "—"}。以下不是实时市值，历史回测与连续账户不可混作同一条收益。` : `Tactical valued through ${continuous?.last_fill_date ?? "—"}; strategic through ${strategic?.last_fill_date ?? "—"}. Not live market values; legacy and continuous books are distinct.`}</p>
+      <p className="mb-3 text-xs text-tm-warn">{locale === "zh" ? `战术账本估值截至 ${continuous?.last_valuation_date ?? "—"}；战略账本估值截至 ${strategic?.last_valuation_date ?? "—"}。以下不是实时市值，历史回测与连续账户不可混作同一条收益。` : `Tactical valued through ${continuous?.last_valuation_date ?? "—"}; strategic through ${strategic?.last_valuation_date ?? "—"}. Not live market values; legacy and continuous books are distinct.`}</p>
       {[continuous, strategic].some(a => a?.status === "execution_delayed") ? <p className="mb-3 text-xs text-tm-neg">{locale === "zh" ? "连续账户存在延迟订单，执行记录不完整，请勿按正常跟随收益解读。" : "Continuous accounts have delayed orders; the execution record is incomplete."}</p> : null}
       <div className="mb-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2">
         <div className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">{locale === "zh" ? "连续份额级验证账户" : "Continuous share-level validation book"}</div>
