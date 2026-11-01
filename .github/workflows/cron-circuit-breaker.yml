@@ -1,0 +1,59 @@
+name: cron-circuit-breaker
+
+# Quota pauses are handled by preflight. An unexpected scheduled failure gets
+# one normal failure notification, then this guard stops that workflow's next
+# scheduled attempts. Recovery remains an explicit operator action.
+on:
+  workflow_run:
+    workflows: [cron-shards, propose-job-runner, daily-factor-loop]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      workflow:
+        description: 'Workflow to pause (manual smoke may target an already paused workflow)'
+        type: choice
+        default: propose-job-runner
+        options: [cron-shards, propose-job-runner, daily-factor-loop]
+      dry_run:
+        description: 'Only report the selected workflow; do not change its state'
+        type: boolean
+        default: true
+
+permissions:
+  actions: write
+
+jobs:
+  pause:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'schedule' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       contains(fromJSON('["failure", "timed_out"]'), github.event.workflow_run.conclusion))
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # No checkout, artifacts, user code, external secrets, or deployment work.
+      - name: Pause only the affected scheduled workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_NAME: ${{ inputs.workflow || github.event.workflow_run.name }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          SOURCE_RUN: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          case "$TARGET_NAME" in
+            cron-shards|propose-job-runner|daily-factor-loop) ;;
+            *) echo "Target outside the recovery allowlist"; exit 1 ;;
+          esac
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run: would pause $TARGET_NAME" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh api --method PUT "repos/$GH_REPO/actions/workflows/$TARGET_NAME.yml/disable"
+          STATE=$(gh api "repos/$GH_REPO/actions/workflows/$TARGET_NAME.yml" --jq .state)
+          test "$STATE" = disabled_manually
+          echo "## Paused: $TARGET_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "State verified: $STATE. Source run: ${SOURCE_RUN:-manual operator smoke}." >> "$GITHUB_STEP_SUMMARY"
+          echo "No automatic retry or re-enable. Diagnose, run bounded recovery, then explicitly restore." >> "$GITHUB_STEP_SUMMARY"
