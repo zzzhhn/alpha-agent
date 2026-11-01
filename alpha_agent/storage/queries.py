@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 import sys
+from datetime import date as Date
 from typing import Any
 
 import asyncpg
@@ -376,7 +377,7 @@ async def load_all_supply_chain_scorecard(
 
 
 async def get_priority_universe(
-    pool: asyncpg.Pool, top_n: int, offset: int = 0
+    pool: asyncpg.Pool, top_n: int, offset: int = 0, *, before_date: Date | None = None
 ) -> list[str]:
     """Tickers ordered by conviction (|latest composite| DESC) for the intraday
     fast refresh, so the high-signal names the picks page actually surfaces stay
@@ -384,7 +385,9 @@ async def get_priority_universe(
     e.g. WDC, a top pick, perpetually stale). Both tails (most bullish AND most
     bearish) score high under abs(). Tickers without a composite yet are
     appended in universe order so coverage still walks the whole universe over
-    successive offsets. Sliced [offset:offset+top_n]."""
+    successive offsets. Sliced [offset:offset+top_n]. Full daily refreshes use
+    before_date to rank from prior-day rows, so writes by earlier shards cannot
+    reorder later shards. Intraday callers retain live prioritization."""
     from alpha_agent.universe import SP500_UNIVERSE
 
     rows = await pool.fetch(
@@ -393,6 +396,7 @@ async def get_priority_universe(
             SELECT DISTINCT ON (ticker) ticker, composite AS score, fetched_at
             FROM daily_signals_fast
             WHERE composite IS NOT NULL AND composite = composite
+              AND ($1::date IS NULL OR date < $1)
             ORDER BY ticker, date DESC, fetched_at DESC
         ),
         slow_latest AS (
@@ -400,6 +404,7 @@ async def get_priority_universe(
             FROM daily_signals_slow
             WHERE composite_partial IS NOT NULL
               AND composite_partial = composite_partial
+              AND ($1::date IS NULL OR date < $1)
             ORDER BY ticker, date DESC, fetched_at DESC
         ),
         combined AS (
@@ -411,8 +416,9 @@ async def get_priority_universe(
                 SELECT ticker, score, fetched_at FROM slow_latest
             ) u ORDER BY ticker, fetched_at DESC
         )
-        SELECT ticker FROM combined ORDER BY abs(score) DESC
-        """
+        SELECT ticker FROM combined ORDER BY abs(score) DESC, ticker
+        """,
+        before_date,
     )
     ranked = [r["ticker"] for r in rows]
     seen = set(ranked)

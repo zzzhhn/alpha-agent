@@ -32,3 +32,34 @@ failures. Unrelated workflows and direct API callers are not covered by this gat
 
 Do not automatically delete history to satisfy the capacity check. Do not
 increase pool sizes or budgets merely to make the gate green.
+
+## Bounded manual recovery
+
+The manual `cron-preflight` dispatch defaults to read-only `check`. Its optional
+recovery job is never scheduled or executed by reusable-workflow callers.
+It rechecks capacity immediately before one request, has no automatic retries,
+and keeps the cron credential inside GitHub Actions.
+
+```sh
+gh workflow run cron-preflight.yml --ref main \
+  -f operation=daily_prices -f limit=5 -f offset=0
+```
+
+Prices use a three-month window and a maximum of 75 tickers per call. Start
+with five; verify actual dates and capacity before increasing the slice. A
+positive `updated` count includes existing-row upserts and is not a freshness
+check. Missing feeds are explicitly `PARTIAL`; HTTP/database errors or zero
+writes fail the manual action. Review both the response and actual DB coverage.
+
+Other manual actions are `fast_intraday` (at most 40 plus watchlist additions),
+`publish_recommendation`, `run_propose_jobs`, and `daily_factor_loop`. Inspect
+queues before invoking a runner. They use the production handler's time budget.
+Do not dispatch multiple recovery jobs concurrently.
+
+Full signal refreshes and publication share the same prior-UTC-day ranking,
+with deterministic ticker tie-breaking. Complete the six 40-name shards within
+one UTC day; a recovery crossing midnight must recompute/revalidate the scope.
+Publication checks the planned Top-240 plus watchlist, includes missing inputs
+in the coverage denominator, and requires eligible signals computed after the
+market session close. New prices cannot rehabilitate old signals. Partial runs
+remain forensic records, not new canonical recommendations.

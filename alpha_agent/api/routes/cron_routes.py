@@ -95,7 +95,7 @@ async def publish_recommendation(
     pool = await get_pool(os.environ["DATABASE_URL"])
     started_at = datetime.now(UTC)
     try:
-        run_id = await record_daily_close(pool, started_at=started_at)
+        run_id = await record_daily_close(pool, started_at=started_at, require_full_universe=True)
     except Exception as exc:
         await pool.execute(
             """

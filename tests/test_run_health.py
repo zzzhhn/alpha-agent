@@ -90,3 +90,25 @@ def test_price_coverage_gate_rejects_partially_updated_universe():
     )
     res = evaluate_gates(snaps, benchmark_fresh=True)
     assert any(r.startswith("insufficient_price_coverage") for r in res.reasons)
+
+
+def test_missing_planned_candidates_do_not_disappear_from_coverage():
+    result = evaluate_gates(_snaps(20), benchmark_fresh=True, expected_candidate_count=240)
+    assert not result.passed
+    assert result.metrics["input_coverage"] == 20 / 240
+    assert any(reason.startswith("insufficient_input_coverage") for reason in result.reasons)
+
+
+def test_current_prices_do_not_make_old_signals_eligible():
+    from alpha_agent.api.routes.picks import LeanCard
+    from alpha_agent.ledger import _snapshot_from_card
+
+    card = LeanCard(ticker="AAPL", rating="BUY", confidence=None, composite_score=1,
+                    as_of="2026-09-24T23:00:00+00:00", price_date="2026-10-30",
+                    top_drivers=[], top_drags=[])
+    snapshot = _snapshot_from_card(card, 1, market_date=date(2026, 10, 30), long_card=None)
+    assert not snapshot.eligible
+    assert snapshot.rank is None
+    assert snapshot.eligibility_reason == "stale_signals"
+    fresh = card.model_copy(update={"as_of": "2026-10-30T23:00:00+00:00"})
+    assert _snapshot_from_card(fresh, 1, market_date=date(2026, 10, 30), long_card=None).eligible

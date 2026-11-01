@@ -52,6 +52,7 @@ def evaluate_gates(
     expected_market_date: date | None = None,
     min_eligible: int = MIN_ELIGIBLE,
     min_price_coverage: float = MIN_PRICE_COVERAGE,
+    expected_candidate_count: int | None = None,
 ) -> GateResult:
     """Score a run. Returns the gated status + reasons + metrics.
 
@@ -89,6 +90,14 @@ def evaluate_gates(
         reasons.append(
             f"insufficient_price_coverage:{price_coverage:.3f}<{min_price_coverage:.3f}"
         )
+    input_coverage = (
+        eligible_count / expected_candidate_count if expected_candidate_count else 0.0
+    )
+    if expected_candidate_count is not None and input_coverage < min_price_coverage:
+        reasons.append(
+            f"insufficient_input_coverage:{input_coverage:.3f}<{min_price_coverage:.3f}"
+        )
+    stale_signal_count = sum(s.eligibility_reason == "stale_signals" for s in snapshots)
 
     passed = not reasons
     metrics = {
@@ -101,6 +110,9 @@ def evaluate_gates(
         ),
         "price_coverage": price_coverage,
         "price_candidate_count": len(price_candidates),
+        "stale_signal_count": stale_signal_count,
+        "expected_candidate_count": expected_candidate_count,
+        "input_coverage": input_coverage if expected_candidate_count is not None else None,
     }
     return GateResult(
         passed=passed,
