@@ -70,7 +70,7 @@ def _build_prompt(expression: str, evidence: dict) -> str:
 
 
 async def assess_candidate(
-    llm_client: LLMClient, expression: str, evidence: dict
+    llm_client: LLMClient, expression: str, evidence: dict, *, timeout_s: float = _WALL_CLOCK_S,
 ) -> SkepticVerdict | None:
     """One skeptic round-trip. Returns None (skip, don't block) on timeout,
     empty content, or unparseable output."""
@@ -81,7 +81,7 @@ async def assess_candidate(
                 messages=[Message(role="user", content=prompt)],
                 max_tokens=_OUTPUT_TOKEN_CAP,
             ),
-            timeout=_WALL_CLOCK_S,
+            timeout=timeout_s,
         )
     except Exception as e:  # noqa: BLE001 - skeptic must never block a propose
         _log.warning("skeptic assess chat failed: %s", e)

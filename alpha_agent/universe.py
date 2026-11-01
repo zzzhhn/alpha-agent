@@ -12,6 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from alpha_agent.data.membership import load_membership_history
+from alpha_agent.data.security_identity import valid_research_symbol
 
 _PANEL_PATH = Path(__file__).parent / "data" / "factor_universe_sp500_v3.parquet"
 
@@ -34,8 +36,13 @@ def _load_sp500() -> list[str]:
             "HD", "DIS", "BAC", "XOM", "PFE",
         ] + [f"T{i:03d}" for i in range(80)]
     else:
-        df = pd.read_parquet(_PANEL_PATH, columns=["ticker"])
-        base = sorted(df["ticker"].unique().tolist())
+        history = load_membership_history()
+        if history:
+            base = sorted(history[-1][1])
+        else:
+            df = pd.read_parquet(_PANEL_PATH, columns=["ticker"])
+            base = sorted(df["ticker"].unique().tolist())
+    base = [t for t in base if valid_research_symbol(t)]
     seen = set(base)
     return base + [t for t in _EXTRA_TICKERS if t not in seen]
 

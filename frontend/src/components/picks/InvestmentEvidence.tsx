@@ -47,6 +47,7 @@ export default function InvestmentEvidence({ sleeve, policyId, showStudy = true 
     </div>
     {error ? <div role="alert" className="flex items-center gap-3 text-xs text-tm-warn">{zh ? "绩效证据暂不可用，不能据此判断收益。" : "Performance evidence unavailable; returns cannot be assessed."}<TmButton variant="secondary" onClick={() => setRetry(n => n + 1)}>{zh ? "重试" : "Retry"}</TmButton></div>
       : !data ? <p role="status" className="text-xs text-tm-muted">{zh ? "正在读取对应策略账本…" : "Loading this policy's book…"}</p>
+      : data.status === "identity_quarantined" ? <p role="status" className="text-xs text-tm-warn">{zh ? "旧账本已隔离：PARA 代码被另一家公司重新使用，历史成交混入了错误证券。已停止继续模拟成交，并隐藏无效收益；原始记录保留供核查，不会直接改成 PSKY 或补造价格。" : "Book quarantined: PARA was reused by an unrelated issuer, contaminating historical fills. Further simulated execution is stopped and invalid returns are hidden. Original records remain intact; no automatic PSKY substitution or invented prices."}</p>
       : mismatch ? <p className="text-xs text-tm-warn">{zh ? "推荐与验证账户的策略版本不同，已隐藏不匹配的收益。" : "Recommendation and book policy versions differ. Unmatched returns hidden."}</p>
       : <>
         <p className="text-xs text-tm-warn">{data.overdue_orders ? (zh ? `执行延迟：${data.overdue_orders} 笔订单待核验，不宜作为正常运行的投资记录。` : `Execution delayed: ${data.overdue_orders} orders require review.`)

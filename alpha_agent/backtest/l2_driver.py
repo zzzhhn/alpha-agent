@@ -81,6 +81,11 @@ async def run_driver(
 ) -> dict:
     """Advance the book: generate+fill every due rebalance batch, then mark each
     completed holding period. Idempotent. Returns a run summary."""
+    from alpha_agent.data.security_identity import book_identity_issues
+    issues = await book_identity_issues(pool, strategy_id)
+    if issues:
+        return {"rebalances": 0, "generated": 0, "filled": 0, "equity_points": 0,
+                "status": "identity_quarantined", "identity_issues": issues}
     runs = await _complete_runs(pool)
     run_by_date = {d: rid for d, rid in runs}
     run_dates = [d for d, _ in runs]
@@ -127,6 +132,11 @@ async def run_continuous_driver(
     pool, *, strategy_id: int, rebalance_days: int = DEFAULT_REBALANCE_DAYS
 ) -> dict:
     """Advance the forward-only cash-and-shares book without legacy backfill."""
+    from alpha_agent.data.security_identity import book_identity_issues
+    issues = await book_identity_issues(pool, strategy_id)
+    if issues:
+        return {"generated": 0, "filled": 0, "unfilled": 0,
+                "status": "identity_quarantined", "identity_issues": issues}
     trading = await _trading_dates(pool)
     account = await pool.fetchrow(
         "SELECT start_after_run_id FROM l2_account WHERE strategy_id=$1",

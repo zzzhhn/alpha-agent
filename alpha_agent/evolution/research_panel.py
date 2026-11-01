@@ -6,6 +6,8 @@ Never synthesize unavailable operands or splice dates to construct OOS folds.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, replace
+import json
+from pathlib import Path
 
 import numpy as np
 
@@ -42,6 +44,8 @@ class ResearchContext:
     coverage: dict[str, float]
 
     def evidence(self) -> dict:
+        path = Path(__file__).resolve().parents[1] / "data/research_dataset.json"
+        manifest = json.loads(path.read_text()) if path.exists() else {}
         return {
             "validator": VERSION,
             "source": "bundled_real_ohlcv_with_filing_date_fundamentals",
@@ -50,11 +54,13 @@ class ResearchContext:
             "search_end": str(self.panel.dates[self.search_end - 1]),
             "tickers": len(self.panel.tickers),
             "sessions": len(self.panel.dates),
+            "dataset": manifest,
             "folds": [{"start": str(self.panel.dates[a]), "end": str(self.panel.dates[b - 1])}
                       for a, b in self.folds],
             "cost_bps_per_side": 10,
             "borrow_bps_per_year": 100,
             "limitations": ["historical_dataset_not_live", "sector_classification_snapshot",
+                            "fundamentals_expire_after_200_days", "adjusted_prices_not_point_in_time_vintages",
                             "reused_holdout_not_independent_forward_test",
                             "daily_vwap_is_typical_price_proxy"],
         }

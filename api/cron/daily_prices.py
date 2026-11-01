@@ -21,6 +21,7 @@ from typing import Any
 from alpha_agent.signals.yf_helpers import get_ticker
 from alpha_agent.storage.postgres import get_pool
 from alpha_agent.storage.queries import upsert_daily_close
+from alpha_agent.data.security_identity import valid_research_symbol
 
 
 async def handler(
@@ -33,7 +34,7 @@ async def handler(
     rows = await pool.fetch(
         "SELECT DISTINCT ticker FROM daily_signals_slow ORDER BY ticker"
     )
-    tickers = [r["ticker"] for r in rows]
+    tickers = [r["ticker"] for r in rows if valid_research_symbol(r["ticker"])]
     start = offset if offset is not None else 0
     end = (start + limit) if limit else len(tickers)
     n = 0

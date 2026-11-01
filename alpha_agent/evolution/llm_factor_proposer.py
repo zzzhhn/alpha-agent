@@ -4,7 +4,7 @@ returns a list of RawProposal. Pure async function; no DB, no sandbox, no HTTP.
 Hard caps:
   n up to 8 per call (clamp to [1, 8]).
   max_tokens 8000 (room for n=5 proposals + operator code).
-  Wall-clock 60 s on the LLM call.
+  Wall-clock up to 240 s, sharing the caller's remaining request budget.
 
 Server-side validation:
   - Top-level JSON must have proposals: list.
@@ -21,6 +21,7 @@ import json
 import logging
 import re
 import sys
+import time
 from dataclasses import dataclass, field
 
 from alpha_agent.evolution.diagnostics import Diagnostic
@@ -187,6 +188,7 @@ async def propose_factors(
     n: int = 5,
     lessons: list[str] | None = None,
     tried_expressions: list[str] | None = None,
+    deadline: float | None = None,
 ) -> list[RawProposal]:
     """Run one LLM round-trip with at most one structured retry on JSON parse
     failure. Raises ValueError on the second failure so the caller can return
@@ -202,12 +204,16 @@ async def propose_factors(
     msgs = [Message(role="user", content=prompt)]
     last_err: Exception | None = None
     last_preview: str = ""
+    deadline = deadline or time.monotonic() + _WALL_CLOCK_S
     for attempt in range(2):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("LLM generation exhausted its shared request budget")
         resp = None
         try:
             resp = await asyncio.wait_for(
                 llm_client.chat(messages=msgs, max_tokens=_OUTPUT_TOKEN_CAP),
-                timeout=_WALL_CLOCK_S,
+                timeout=min(_WALL_CLOCK_S, remaining),
             )
             # Capture upstream signature even on success-path failure: empty
             # content is a known silent-failure mode from Kimi-for-Coding

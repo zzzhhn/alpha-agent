@@ -46,7 +46,8 @@ def select_holdings(
     """Pick the book from a run's snapshots: eligible names, BUY/OW preferred,
     then by rank; take top_n; equal-weight across the selected (cash fills any
     shortfall vs top_n, so a full top_n book is each name at 1/top_n)."""
-    eligible = [s for s in snapshots if s["eligible"]]
+    from alpha_agent.data.security_identity import valid_research_symbol
+    eligible = [s for s in snapshots if s["eligible"] and valid_research_symbol(s["ticker"])]
 
     def _key(s):
         pref = 0 if (s["tier"] in _PREFERRED_TIERS) else 1
