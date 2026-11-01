@@ -138,3 +138,39 @@ async def test_empty_view_is_partial_non_tradable(pool):
     assert run_id is not None
     assert await get_run_snapshots(pool, run_id) == []
     assert await get_canonical_run(pool, date.today()) is None
+
+
+async def test_planned_missing_names_are_recorded_and_block_publication(pool, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    await _seed(pool, _many(20))
+    planned = [f"T{i:03d}" for i in range(25)]
+    monkeypatch.setattr("alpha_agent.storage.queries.get_priority_universe",
+                        AsyncMock(return_value=planned))
+    run_id = await record_daily_close(pool, require_full_universe=True)
+    row = await pool.fetchrow("SELECT status, health_json FROM research_run WHERE id=$1", run_id)
+    assert row["status"] == "partial"
+    health = json.loads(row["health_json"])
+    assert health["metrics"]["expected_candidate_count"] == 25
+    assert health["metrics"]["input_coverage"] == 0.8
+    snapshots = await get_run_snapshots(pool, run_id)
+    assert sum(s["eligibility_reason"] == "missing_input" for s in snapshots) == 5
+
+
+async def test_daily_priority_order_ignores_current_day_shard_writes(pool):
+    from datetime import UTC, datetime, timedelta
+
+    from alpha_agent.storage.queries import get_priority_universe
+
+    today = datetime.now(UTC).date()
+    for ticker, score in [("AAA", 3), ("BBB", 2), ("CCC", 1)]:
+        await pool.execute(
+            "INSERT INTO daily_signals_fast (ticker,date,composite,rating,confidence,breakdown) "
+            "VALUES ($1,$2,$3,'BUY',0.8,'{}'::jsonb)", ticker, today - timedelta(days=1), score,
+        )
+    assert await get_priority_universe(pool, 3, before_date=today) == ["AAA", "BBB", "CCC"]
+    await pool.execute(
+        "INSERT INTO daily_signals_fast (ticker,date,composite,rating,confidence,breakdown) "
+        "VALUES ('AAA',$1,0.01,'HOLD',0.8,'{}'::jsonb)", today,
+    )
+    assert await get_priority_universe(pool, 2, offset=1, before_date=today) == ["BBB", "CCC"]

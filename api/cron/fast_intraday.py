@@ -195,7 +195,8 @@ async def _run_handler(
     # WDC (idx 532) perpetually stale. Full-universe daily coverage still comes
     # from slow_daily; this just decides who gets the frequent intraday refresh.
     base_universe = await get_priority_universe(
-        pool, top_n=limit if limit else 100, offset=offset or 0
+        pool, top_n=limit if limit else 100, offset=offset or 0,
+        before_date=now.date() if tier == "full" else None,
     )
     # offset=0 shard unions in every user's watchlist tickers so a starred
     # ticker gets intraday coverage even when not in the head of the ranking.

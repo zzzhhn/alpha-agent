@@ -17,7 +17,7 @@ import subprocess
 from datetime import UTC, date, datetime
 
 from alpha_agent.api.routes.picks import LeanCard, build_lean_view
-from alpha_agent.market_session import latest_completed_xnys_session
+from alpha_agent.market_session import latest_completed_xnys_session, xnys_close
 from alpha_agent.storage.product_ledger import (
     LedgerConflict,
     RatingSnapshot,
@@ -49,6 +49,17 @@ def code_version() -> str | None:
         return None
 
 
+def _signal_is_fresh(card: LeanCard, market_date: date | None) -> bool:
+    """Daily-close research requires signals computed after that session closed."""
+    if market_date is None:
+        return False
+    try:
+        computed = datetime.fromisoformat(card.as_of)
+    except (ValueError, TypeError):
+        return False
+    return computed.tzinfo is not None and computed >= xnys_close(market_date)
+
+
 def _snapshot_from_card(
     card: LeanCard,
     rank: int | None,
@@ -64,6 +75,7 @@ def _snapshot_from_card(
         not card.partial
         and market_date is not None
         and card.price_date == market_date.isoformat()
+        and _signal_is_fresh(card, market_date)
     )
     payload = card.model_dump()
     if long_card is not None:
@@ -80,6 +92,8 @@ def _snapshot_from_card(
             if eligible
             else "partial_signals"
             if card.partial
+            else "stale_signals"
+            if not _signal_is_fresh(card, market_date)
             else "price_not_on_market_date"
         ),
         user_visible_payload=payload,
@@ -102,6 +116,7 @@ async def record_daily_close(
     min_eligible: int | None = None,
     allow_correction: bool = False,
     on_conflict: str = "skip",
+    require_full_universe: bool = False,
 ) -> int | None:
     """Snapshot the canonical default picks view into the ledger, GATED.
 
@@ -136,6 +151,20 @@ async def record_daily_close(
     cards, as_of, _stale = short_view
     long_cards, _long_as_of, _long_stale = long_view
 
+    expected_tickers: set[str] | None = None
+    if require_full_universe:
+        from alpha_agent.storage.queries import get_priority_universe
+
+        # Same stable prior-day ranking as all six full-refresh shards. Count
+        # missing/dead feeds in the denominator, not just surviving view rows.
+        expected_tickers = set(await get_priority_universe(
+            pool, top_n=240, before_date=started.date(),
+        ))
+        expected_tickers.update(
+            row["ticker"] for row in await pool.fetch("SELECT DISTINCT ticker FROM user_watchlist")
+        )
+        cards = [card for card in cards if card.ticker in expected_tickers]
+
     # The market date is data-derived, never the server's UTC calendar date.
     # A Saturday manual run therefore belongs to Friday, and a signal refresh
     # on stale prices is recorded as partial rather than published as "today".
@@ -149,6 +178,7 @@ async def record_daily_close(
             not card.partial
             and market_date is not None
             and card.price_date == market_date.isoformat()
+            and _signal_is_fresh(card, market_date)
         ):
             eligible_rank += 1
             rank: int | None = eligible_rank
@@ -163,6 +193,13 @@ async def record_daily_close(
             )
         )
 
+    if expected_tickers is not None:
+        present = {snapshot.ticker for snapshot in snapshots}
+        snapshots.extend(
+            RatingSnapshot(ticker=ticker, eligible=False, eligibility_reason="missing_input")
+            for ticker in sorted(expected_tickers - present)
+        )
+
     # Gate the run. The benchmark check is the only DB-dependent gate input.
     bench_fresh = await benchmark_is_fresh(pool, market_date=market_date)
     gate = evaluate_gates(
@@ -171,6 +208,7 @@ async def record_daily_close(
         market_date=market_date,
         expected_market_date=expected_market_date,
         min_eligible=min_eligible if min_eligible is not None else MIN_ELIGIBLE,
+        expected_candidate_count=len(expected_tickers) if expected_tickers is not None else None,
     )
     # 'complete' default => the gates decide; an explicit terminal status wins.
     effective_status = gate.status if status == "complete" else status
