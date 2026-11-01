@@ -513,6 +513,7 @@ export default function PicksBrowser({
             ) : (
               <PicksTable
                 picks={data.picks}
+                pending={queryPending}
                 isWatched={isWatched}
                 simPositions={simPositions}
                 cash={paperCash}

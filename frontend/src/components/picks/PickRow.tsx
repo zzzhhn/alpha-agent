@@ -36,6 +36,7 @@ export default function PickRow({
   simPositions,
   cash,
   onOrderPlaced,
+  onEvidenceOpen,
   ordersDisabled = false,
 }: {
   rank: number | null;
@@ -50,6 +51,7 @@ export default function PickRow({
   simPositions?: ReadonlyMap<string, number>;  // ticker → qty currently held
   cash?: number;
   onOrderPlaced?: () => void;
+  onEvidenceOpen: (card: RatingCard) => void;
   ordersDisabled?: boolean;
 }) {
   // Days this row's data lags the freshest row in the list (0 if within ~20h).
@@ -69,22 +71,7 @@ export default function PickRow({
     typeof card.confidence === "number" && isFinite(card.confidence)
       ? card.confidence
       : 0;
-  // agreement is the conviction headline; fall back to the calibrated value
-  // only on legacy rows that predate the field so the bar is never blank.
-  const agr =
-    typeof card.agreement === "number" &&
-    isFinite(card.agreement) &&
-    card.agreement > 0
-      ? card.agreement
-      : hit;
   const sign = composite >= 0 ? "+" : "";
-
-  // agreement = 1/(1+variance) of the signal z's (fusion/rating.py): the
-  // conviction headline (how aligned the signals are). hit = 5d calibrated
-  // directional confidence. Both are secondary context in the 1d agreement
-  // cell's tooltip; the visible windows remain descriptive next-day evidence.
-  const agrPct = Math.round(agr * 100);
-  const hitPct = Math.round(hit * 100);
 
   // Descriptive 1-day direction agreement: predicted tier vs next-day actual
   // move over trailing windows. null -> "—" (insufficient realized history).
@@ -104,31 +91,6 @@ export default function PickRow({
       ...consistencyEvidence(card, w.key, locale),
     };
   });
-  // Per-window sample summary for the tooltip: "5日 4/3✓ · 1月 8/10 · …" reads
-  // as evaluated/required; a dashed window shows how far it is from enough.
-  const consSamples = consVals
-    .map((c) =>
-      c.n === null
-        ? null
-        : `${c.label} n=${c.n}${c.pct === null ? `/${c.min}` : ""}`,
-    )
-    .filter(Boolean)
-    .join(" · ");
-
-  // HOLD-inclusive 口径 (2026-07-26): a second reading where a HOLD prediction
-  // counts as a hit inside the flat band, surfaced as an extra tooltip line.
-  // Only d5/m1 are ever non-null on the backend (y1/hist structurally
-  // unavailable, see alpha_agent/backtest/consistency.py) — reuse the same
-  // dash rendering as the primary row for null.
-  const HOLD_WINDOWS = [
-    { key: "d5", labelKey: "picks_table.cons_5d" },
-    { key: "m1", labelKey: "picks_table.cons_1m" },
-  ] as const;
-  const consHoldStr = HOLD_WINDOWS.map((w) => {
-    const v = card.consistency_hold?.[w.key];
-    const pct = typeof v === "number" && isFinite(v) ? Math.round(v * 100) : null;
-    return `${t(locale, w.labelKey)} ${pct === null ? "—" : `${pct}%`}`;
-  }).join(" · ");
 
   const drivers = (card.top_drivers ?? [])
     .slice(0, 3)
@@ -225,30 +187,14 @@ export default function PickRow({
         <span className="text-tm-muted">σ</span>
       </TmTableCell>
       <TmTableCell numeric textAlign="right" className="text-xs">
-        <HoverTip
-          className="justify-end"
-          content={
-            t(locale, "picks_table.consistency_tooltip") +
-            "\n" + consVals.map((c) => `${c.label}: ${c.reason}`).join("\n") +
-            (consSamples
-              ? " · " + t(locale, "picks_table.cons_samples_label") + " " + consSamples
-              : "") +
-            " · " +
-            t(locale, "picks_table.agreement_label") +
-            " " +
-            agrPct +
-            "% · " +
-            t(locale, "picks_table.confidence_5d_label") +
-            " " +
-            hitPct +
-            "%" +
-            "\n" +
-            t(locale, "picks_table.cons_hold_label") +
-            consHoldStr
-          }
-          placement="bottom"
+        <TmButton
+          variant="ghost"
+          className="!h-auto !p-0 !font-normal !tracking-normal hover:bg-tm-bg-3"
+          aria-label={`${card.ticker}：${locale === "zh" ? "查看历史方向证据" : "View historical direction evidence"}`}
+          aria-haspopup="dialog"
+          onClick={() => onEvidenceOpen(card)}
         >
-          <span className="grid grid-cols-4 gap-x-3 text-right cursor-help">
+          <span className="grid grid-cols-4 gap-x-3 text-right">
             {consVals.map((c) => (
               <span
                 key={c.label + "_v"}
@@ -264,12 +210,12 @@ export default function PickRow({
                 )}
               >
                 <span className="sr-only">{c.label}：</span>
-                <span className="block text-sm">{c.pct === null ? "—" : `${c.pct}%`}</span>
+                <span className="block text-sm underline decoration-dotted underline-offset-4">{c.pct === null ? "—" : `${c.pct}%`}</span>
                 <span className="block whitespace-nowrap text-xs text-tm-muted">{c.sampleLabel}</span>
               </span>
             ))}
           </span>
-        </HoverTip>
+        </TmButton>
       </TmTableCell>
       <TmTableCell>
         <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} hidden={hiddenDims} />
