@@ -124,6 +124,7 @@ export interface ContinuousL2Account {
   readonly transaction_costs: number;
   readonly latest_turnover: number | null;
   readonly last_fill_date: string | null;
+  readonly last_valuation_date?: string | null;
   readonly start_after_run_id: number;
 }
 

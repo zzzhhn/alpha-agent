@@ -57,7 +57,7 @@ The 2026-08-24 inventory covered all files under `frontend/src`.
 | Tooltips | two components plus native `title` attributes | one accessible tooltip contract |
 | Overlays | dialogs and drawers share one modal focus contract | `TmDialog`, `TmDrawer`, and `useTmModalFocus` |
 | Icons | 49 Lucide glyphs plus 12 registered text-glyph exceptions | `/reference` icon registry, glyph boundary, and icon-use contract |
-| Charts | 25 detected route/component visualization assets plus graph-like micro-primitives | full route registry, source-only status, `chartTokens`, `TM_CHART_TYPOGRAPHY`, and resolved canvas palette |
+| Charts | Production visualization assets plus graph-like micro-primitives, including `RecommendationNavChart` | full route registry, source-only status, `chartTokens`, `TM_CHART_TYPOGRAPHY`, and resolved canvas palette |
 
 These counts are a migration baseline, not a target to preserve. A raw native
 element is allowed only when the canonical primitive cannot express required

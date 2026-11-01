@@ -11,6 +11,7 @@ from fastapi import APIRouter
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.backtest.investment_shadow import replay_targets
+from alpha_agent.backtest.l2_performance import performance_series
 from alpha_agent.market_session import latest_completed_xnys_session, next_xnys_session, xnys_close, xnys_sessions
 
 router = APIRouter(prefix="/api/l2", tags=["l2"])
@@ -85,8 +86,19 @@ async def l2_evidence(sleeve: Literal["tactical", "strategic"] = "strategic") ->
     params = json.loads(params_raw) if isinstance(params_raw, str) else (params_raw or {})
     rows = await pool.fetch(
         "SELECT as_of_date,nav,net_return,benchmark_return,rsp_return,missing_count "
-        ",turnover FROM l2_equity_daily WHERE strategy_id=$1 ORDER BY as_of_date", sid,
+        ",turnover,stale_count FROM l2_equity_daily WHERE strategy_id=$1 ORDER BY as_of_date LIMIT 5001", sid,
     )
+    if len(rows) > 5000:
+        return {"status": "history_limit", "sleeve": sleeve, "series": []}
+    benchmark_rows = await pool.fetch(
+        "SELECT ticker,date,close FROM daily_prices WHERE ticker=ANY($1::text[]) "
+        "AND date BETWEEN $2 AND $3", ["SPY", "RSP"],
+        rows[0]["as_of_date"] if rows else latest_completed_xnys_session(),
+        rows[-1]["as_of_date"] if rows else latest_completed_xnys_session())
+    performance = performance_series(
+        rows, initial_cash=account["initial_cash"], cost_bps=float(params.get("cost_bps", 10)),
+        prices={(r["date"], r["ticker"]): float(r["close"]) for r in benchmark_rows
+                if r["close"] and math.isfinite(r["close"]) and r["close"] > 0})
     exceptions = await pool.fetch(
         "SELECT exit_reason,count(*) AS n FROM l2_order "
         "WHERE strategy_id=$1 AND status='unfilled' GROUP BY exit_reason", sid,
@@ -94,38 +106,23 @@ async def l2_evidence(sleeve: Literal["tactical", "strategic"] = "strategic") ->
     latest_market = latest_completed_xnys_session()
     overdue = account["overdue_orders"]
     missing = sum(int(r["missing_count"] or 0) for r in rows)
-    status = ("execution_delayed" if overdue else "history_gaps" if exceptions or missing
+    status = ("execution_delayed" if overdue else "history_gaps"
+              if exceptions or missing or performance.get("missing_sessions") or performance.get("stale_sessions")
               else "forward_validation" if rows else "accumulating")
-    # Compare all alternatives from the first executed close, with identical
-    # endpoints. Missing benchmark intervals invalidate that comparison.
-    comparison_rows = rows[1:]
-    base_nav = float(rows[0]["nav"]) if rows and rows[0]["nav"] else None
-    comparison = None
-    if base_nav and len(rows) > 1 and rows[-1]["nav"] is not None:
-        comparison = {
-            "from": rows[0]["as_of_date"].isoformat(),
-            "to": rows[-1]["as_of_date"].isoformat(),
-            "strategy": float(rows[-1]["nav"]) / base_nav - 1,
-            "spy": (_compound([r["benchmark_return"] for r in comparison_rows])
-                    if all(r["benchmark_return"] is not None for r in comparison_rows) else None),
-            "rsp": (_compound([r["rsp_return"] for r in comparison_rows])
-                    if all(r["rsp_return"] is not None for r in comparison_rows) else None),
-            "cash_no_interest": 0.0,
-        }
     return {
         "status": status, "sleeve": sleeve, "account": account,
         "policy_id": params.get("policy_id"), "execution": params.get("execution"),
         "top_n": params.get("top_n"), "cost_bps_per_side": params.get("cost_bps"),
         "rebalance": params.get("rebalance"),
-        "as_of": account["last_fill_date"], "expected_market_date": latest_market.isoformat(),
-        "valuation_current": account["last_fill_date"] == latest_market.isoformat(),
+        "as_of": account["last_valuation_date"], "expected_market_date": latest_market.isoformat(),
+        "valuation_current": account["last_valuation_date"] == latest_market.isoformat(),
         "overdue_orders": overdue,
         "exceptions": [{"reason": r["exit_reason"], "count": int(r["n"])} for r in exceptions],
         "missing_marks": missing,
         "observations": len(rows),
-        "sample_unit": "rebalance_valuation_not_independent_trials",
-        "observed_max_drawdown": _max_drawdown([r["net_return"] for r in rows]),
-        "mean_rebalance_turnover": (sum(float(r["turnover"] or 0) for r in rows) / len(rows)) if rows else None,
+        "sample_unit": "daily_valuation_not_independent_trials",
+        "mean_rebalance_turnover": (sum(float(r["turnover"] or 0) for r in rows) /
+                                    max(1, sum(bool(r["turnover"]) for r in rows))) if rows else None,
         "decision": "observe_without_new_trade",
         "research_protocol": {
             "status": "available_on_demand", "live_policy_changed": False,
@@ -133,11 +130,11 @@ async def l2_evidence(sleeve: Literal["tactical", "strategic"] = "strategic") ->
             "required_metrics": ["net_return", "drawdown", "turnover", "sector_exposure", "benchmark_excess"],
             "promotion": "new_version_after_out_of_sample_review",
         },
-        "comparison": comparison,
-        "series": [{"date": r["as_of_date"].isoformat(), "nav": float(r["nav"]) if r["nav"] is not None else None} for r in rows],
+        **performance,
         "evidence_status": "unproven", "personalized": False,
-        "limitations": ["rebalance_date_valuations_only", "simulation_not_broker_fills",
-                        "no_dividend_tax_or_cash_interest_adjustment"],
+        "limitations": ["daily_marks_existing_shares_not_retroactive_trades", "simulation_not_broker_fills",
+                        "adjusted_close_feed_not_corporate_action_ledger", "no_tax_or_cash_interest",
+                        "historic_missing_execution_is_not_repaired_by_valuation"],
     }
 
 
@@ -146,6 +143,7 @@ async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | N
         """
         SELECT s.id AS strategy_id, s.version, a.initial_cash, a.cash, a.nav,
                a.start_after_run_id, a.last_fill_date,
+               (SELECT max(as_of_date) FROM l2_equity_daily e WHERE e.strategy_id=s.id) AS last_valuation_date,
                (SELECT count(*) FROM l2_position p
                 WHERE p.strategy_id=s.id AND p.qty>0) AS positions,
                (SELECT count(*) FROM l2_order o
@@ -186,6 +184,7 @@ async def _continuous_account(pool, *, strategy_name: str) -> dict[str, Any] | N
             float(row["latest_turnover"]) if row["latest_turnover"] is not None else None
         ),
         "last_fill_date": row["last_fill_date"].isoformat() if row["last_fill_date"] else None,
+        "last_valuation_date": row["last_valuation_date"].isoformat() if row["last_valuation_date"] else None,
         "start_after_run_id": int(row["start_after_run_id"]),
     }
 

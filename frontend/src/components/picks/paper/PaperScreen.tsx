@@ -37,6 +37,7 @@ import PaperCurvePane from "./PaperCurvePane";
 import PaperSourceSummary from "./PaperSourceSummary";
 import PaperOrdersPane from "./PaperOrdersPane";
 import PaperL2Evidence from "./PaperL2Evidence";
+import RecommendationPerformance from "../RecommendationPerformance";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -251,6 +252,7 @@ export default function PaperScreen() {
         </TmPane>
       </div>
 
+      <RecommendationPerformance />
       <TmPane title={t(locale, "sim.workspace.recent_orders")} meta={t(locale, "sim.workspace.disclosure")}>
         {resourceErrors.orders ? <SectionError detail={resourceErrors.orders} onRetry={() => void loadAll(false)} /> : null}
         {!resourceErrors.orders ? <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus={resourceErrors.attribution ? "unavailable" : "ready"} showAttribution={false} /> : null}

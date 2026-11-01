@@ -14,7 +14,7 @@ generate/fill/mark are each idempotent). A daily cron calls run_driver().
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from alpha_agent.backtest import l2
 from alpha_agent.backtest import l2_continuous
@@ -143,10 +143,15 @@ async def run_continuous_driver(
         strategy_id,
     )
     filled = unfilled = 0
+    from alpha_agent.backtest.l2_daily import mark_daily
     for row in pending_dates:
         fill_date = next_xnys_session(row["signal_date"])
         if fill_date > latest_completed_xnys_session() or fill_date not in trading:
             continue
+        marked = await mark_daily(pool, strategy_id=strategy_id, through=fill_date - timedelta(days=1))
+        if marked.get("caught_up") is False:
+            return {"generated": 0, "filled": filled, "unfilled": unfilled,
+                    "status": "catching_up_daily_marks", "valuation": marked}
         # A rebalance mutates orders, positions, cash and the equity curve.  Keep
         # those writes atomic so a server interruption cannot leave a partial
         # portfolio transition behind.
@@ -194,9 +199,12 @@ async def run_continuous_driver(
         "SELECT count(*) FROM l2_order WHERE strategy_id=$1 AND status='pending'",
         strategy_id,
     ) or 0)
+    valuation = await mark_daily(pool, strategy_id=strategy_id,
+                                 through=latest_completed_xnys_session())
     return {
         "generated": generated,
         "filled": filled,
         "unfilled": unfilled,
         "pending": pending,
+        "valuation": valuation,
     }
