@@ -50,8 +50,8 @@ on:
     # NOTE: news_llm_enrich cron removed 2026-05-17. BYOK architecture
     # means cron has no user-context to source an LLM key. Enrichment
     # moved to read-time path triggered by user with their own key.
-    # Research proposal generation is non-critical and weekly, not daily.
-    - cron: '30 22 * * 1'
+    # Methodology proposal scheduling is quarantined until its legacy
+    # synthetic-input validator is replaced. See research-validation-quarantine.md.
     # L2 runs only after the 23:00 complete signal run and atomic publish.
     - cron: '45 23 * * 1-5'
   workflow_dispatch:
@@ -505,19 +505,16 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '30 22 * * 1' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'methodology_proposer')
       )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: run Phase 2a methodology proposer (single shot)
+      - name: Explain research-validation quarantine (no execution)
         run: |
-          HTTP=$(curl -s --max-time 290 -o /tmp/shot.json -w "%{http_code}" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            -X POST "$BACKEND_BASE/api/cron/methodology_proposer")
-          cat /tmp/shot.json | head -c 400; echo
-          [ "$HTTP" = "200" ] || exit 1
+          echo "::warning::PAUSED: methodology validation uses synthetic auxiliary inputs; no research work executed."
+          echo "## PAUSED: research validation requires real inputs" >> "$GITHUB_STEP_SUMMARY"
+          echo "No proposal generation or strategy change executed. See docs/runbooks/research-validation-quarantine.md." >> "$GITHUB_STEP_SUMMARY"
 
 # news_llm_enrich job removed 2026-05-17 (BYOK architecture - enrich
 # moved to read-time path triggered by user with their own LLM key).
