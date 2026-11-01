@@ -10,7 +10,9 @@ import {
 import clsx from "clsx";
 
 export function TmTableFrame({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={clsx("min-w-0 overflow-x-auto", className)} {...rest} />;
+  // Keep absolutely positioned sr-only captions/labels in this scroll frame.
+  // Otherwise they can extend the document beyond the dashboard's own scroller.
+  return <div className={clsx("relative min-w-0 overflow-x-auto", className)} {...rest} />;
 }
 
 interface TmTableProps extends TableHTMLAttributes<HTMLTableElement> {
