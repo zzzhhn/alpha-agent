@@ -23,7 +23,7 @@ type Evidence = {
 };
 const pct = (n: number | null | undefined) => n == null ? "—" : `${(100 * n).toFixed(2)}%`;
 
-export default function InvestmentEvidence({ sleeve, policyId, showStudy = true, compact = false }: { sleeve: "tactical" | "strategic"; policyId?: string | null; showStudy?: boolean; compact?: boolean }) {
+export default function InvestmentEvidence({ sleeve, policyId, showStudy = true, compact = false, showPaperLink = true }: { sleeve: "tactical" | "strategic"; policyId?: string | null; showStudy?: boolean; compact?: boolean; showPaperLink?: boolean }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [result, setResult] = useState<Evidence | null>(null);
@@ -52,7 +52,7 @@ export default function InvestmentEvidence({ sleeve, policyId, showStudy = true,
     meta={zh ? "做多验证账户，收益优势尚未证实" : "Long-only validation book; edge unproven"} bodyClassName="gap-3 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-tm-muted">
       <span>{sleeve === "strategic" ? (zh ? "战略 60 日" : "Strategic 60d") : (zh ? "战术 5 日" : "Tactical 5d")} · {data?.policy_id ?? policyId ?? "—"}</span>
-      <TmLinkButton href="/paper">{zh ? "打开模拟仓" : "Open paper account"}</TmLinkButton>
+      {showPaperLink ? <TmLinkButton href="/paper">{zh ? "打开模拟仓" : "Open paper account"}</TmLinkButton> : null}
     </div>
     {error ? <div role="alert" className="flex items-center gap-3 text-xs text-tm-warn">{zh ? "绩效证据暂不可用，不能据此判断收益。" : "Performance evidence unavailable; returns cannot be assessed."}<TmButton variant="secondary" onClick={() => setRetry(n => n + 1)}>{zh ? "重试" : "Retry"}</TmButton></div>
       : !data ? <p role="status" className="text-xs text-tm-muted">{zh ? "正在读取对应策略账本…" : "Loading this policy's book…"}</p>

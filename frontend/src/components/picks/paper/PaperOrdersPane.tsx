@@ -4,6 +4,8 @@
 // honest disclaimer (3rd of its 3 required placements).
 import type { TickerAttribution, OrderOut } from "@/lib/api/paper";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { useState } from "react";
+import { TmPagination } from "@/components/tm/TmPagination";
 import { t, type Locale } from "@/lib/i18n";
 import { StatusChip, Disclaimer, TwoStepConfirm } from "./PaperUi";
 import PaperAttributionTable from "./PaperAttributionTable";
@@ -39,12 +41,17 @@ export default function PaperOrdersPane({
   readonly showDisclaimer?: boolean;
 }) {
   const { locale } = useLocale();
+  const zh = locale === "zh";
+  const [pageSize, setPageSize] = useState(5);
+  const [paging, setPaging] = useState({ source: orders, page: 1 });
+  const page = paging.source === orders ? Math.min(paging.page, Math.max(1, Math.ceil(orders.length / pageSize))) : 1;
+  const visibleOrders = orders.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="flex flex-col gap-5 px-3 py-3">
       <TmTableFrame>
         {orders.length === 0 ? (
-          <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "common.noData")}</p>
+          <p className="py-2 text-sm text-tm-muted">{zh ? "尚无模拟订单。提交后的订单会在这里显示待成交、成交或失败原因。" : "No paper orders yet. Submitted orders will show their execution status or failure reason here."}</p>
         ) : (
           <TmTable density="compact" caption={t(locale, "sim.orders.title")} className="text-left">
             <TmTableHead>
@@ -57,13 +64,14 @@ export default function PaperOrdersPane({
               </TmTableRow>
             </TmTableHead>
             <TmTableBody>
-              {orders.map((o) => (
+              {visibleOrders.map((o) => (
                 <OrderRow key={o.id} order={o} locale={locale} onCancel={onCancel} />
               ))}
             </TmTableBody>
           </TmTable>
         )}
       </TmTableFrame>
+      {orders.length > 5 ? <TmPagination page={page} pageSize={pageSize} totalItems={orders.length} pageSizeOptions={[5, 10, 20]} onPageChange={next => setPaging({ source: orders, page: next })} onPageSizeChange={next => {setPageSize(next);setPaging({ source: orders, page: 1 });}} labels={{navigation:zh ? "订单分页" : "Order pagination",previous:zh ? "上一页" : "Previous",previousAriaLabel:zh ? "上一页订单" : "Previous orders",next:zh ? "下一页" : "Next",nextAriaLabel:zh ? "下一页订单" : "Next orders",page:(current,count) => `${current} / ${count}`,pageSize:zh ? "每页" : "Per page",total:total => zh ? `本次已载入 ${total} 笔订单` : `${total} loaded orders`}} /> : null}
 
       {showAttribution ? <div>
         <div className="mb-2 border-b border-tm-rule pb-1.5 font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">

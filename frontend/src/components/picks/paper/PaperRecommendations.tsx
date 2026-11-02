@@ -6,6 +6,7 @@ import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { TmButton } from "@/components/tm/TmButton";
+import { HoverTip } from "@/components/ui/HoverTip";
 import {
   TmTable,
   TmTableBody,
@@ -93,7 +94,7 @@ export default function PaperRecommendations({
               </div>
               <div className="min-w-0 truncate text-xs text-tm-muted">{rationale || "—"}</div>
               <TmButton variant="secondary" className="px-2 py-1" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
-                {t(locale, "sim.workspace.follow")}
+                {selected ? (locale === "zh" ? "已选择" : "Selected") : (locale === "zh" ? "选择" : "Select")}
               </TmButton>
             </article>
           );
@@ -107,8 +108,8 @@ export default function PaperRecommendations({
       >
         <TmTableHead>
           <TmTableRow>
-            {[t(locale, "sim.workspace.company_ticker"), t(locale, "sim.form.side_label"), t(locale, "sim.workspace.latest_close"), t(locale, "sim.workspace.day_change"), t(locale, "sim.workspace.confidence_5d"), t(locale, "sim.workspace.rationale"), ""].map((label) => (
-              <TmTableHeaderCell key={label || "action"}>{label}</TmTableHeaderCell>
+            {[t(locale, "sim.workspace.company_ticker"), locale === "zh" ? "评级" : "Rating", t(locale, "sim.workspace.latest_close"), t(locale, "sim.workspace.day_change"), t(locale, "sim.workspace.confidence_5d"), t(locale, "sim.workspace.rationale"), ""].map((label) => (
+              <TmTableHeaderCell key={label || "action"} className={!label ? "sticky right-0 z-10 bg-tm-bg-2" : undefined}>{label || <span className="sr-only">{locale === "zh" ? "操作" : "Action"}</span>}</TmTableHeaderCell>
             ))}
           </TmTableRow>
         </TmTableHead>
@@ -129,9 +130,9 @@ export default function PaperRecommendations({
                 selected={selected}
                 className={selected ? "outline outline-1 -outline-offset-1 outline-tm-accent" : undefined}
               >
-                <TmTableRowHeader className="font-normal">
-                  <div className="text-[12px] text-tm-fg">{company ?? pick.ticker}</div>
-                  <div className="font-tm-mono text-xs font-semibold text-tm-accent">{pick.ticker}</div>
+                <TmTableRowHeader className="!py-3 font-normal">
+                  <div className="font-tm-mono text-sm font-semibold text-tm-accent">{pick.ticker}</div>
+                  <HoverTip content={company ?? pick.ticker} className="max-w-48" width={240}><span className="truncate text-xs text-tm-muted">{company ?? pick.ticker}</span></HoverTip>
                 </TmTableRowHeader>
                 <TmTableCell className={clsx("text-xs font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</TmTableCell>
                 <TmTableCell numeric className="text-xs text-tm-fg-2">
@@ -146,9 +147,9 @@ export default function PaperRecommendations({
                   {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
                 </TmTableCell>
                 <TmTableCell className="max-w-48 text-xs leading-4 text-tm-muted">{rationale || "—"}</TmTableCell>
-                <TmTableCell className="text-right">
+                <TmTableCell className="sticky right-0 border-l border-tm-rule bg-tm-bg-2 text-right">
                   <TmButton variant="secondary" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
-                    {t(locale, "sim.workspace.follow")}
+                    {selected ? (locale === "zh" ? "已选择" : "Selected") : (locale === "zh" ? "选择" : "Select")}
                   </TmButton>
                 </TmTableCell>
               </TmTableRow>

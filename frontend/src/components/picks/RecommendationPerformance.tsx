@@ -15,7 +15,7 @@ export default function RecommendationPerformance() {
       items={[{ key: "tactical", label: zh ? "战术推荐净值" : "Tactical NAV" },
         { key: "strategic", label: zh ? "战略推荐净值" : "Strategic NAV" }]} />
     <div role="tabpanel" id={`recommendation-nav-panel-${sleeve}`} aria-labelledby={`recommendation-nav-tab-${sleeve}`}>
-      <InvestmentEvidence key={sleeve} sleeve={sleeve} showStudy={false} />
+      <InvestmentEvidence key={sleeve} sleeve={sleeve} showStudy={false} showPaperLink={false} />
     </div>
   </section>;
 }

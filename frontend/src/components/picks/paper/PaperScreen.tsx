@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { CircleHelp, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchPicks,
   type RatingCard,
@@ -25,7 +24,7 @@ import {
   type L2Summary,
 } from "@/lib/api/paper";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
-import { TmButton, TmIconButton } from "@/components/tm/TmButton";
+import { TmButton, TmDisclosureButton, TmLinkButton } from "@/components/tm/TmButton";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { isPicksSnapshotStale } from "@/lib/picks-freshness";
@@ -56,15 +55,21 @@ export default function PaperScreen() {
   const [picksServerStale, setPicksServerStale] = useState(false);
   const [picksTradable, setPicksTradable] = useState(false);
   const [picksRun, setPicksRun] = useState<RecommendationRunState | null>(null);
-  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [selectedTicker, setSelectedTicker] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [paperError, setPaperError] = useState<string | null>(null);
   const [resourceErrors, setResourceErrors] = useState<Partial<Record<"picks" | "account" | "orders" | "curve" | "attribution" | "l2", string>>>({});
   const [guideOpen, setGuideOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [researchOpen, setResearchOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const orderTicket = useRef<HTMLDivElement>(null);
 
   const loadAll = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
+    setRefreshing(true);
     setPaperError(null);
     const [picksResult, accountResult, ordersResult, curveResult, attributionResult, l2Result] = await Promise.allSettled([
       fetchPicks(5),
@@ -106,6 +111,7 @@ export default function PaperScreen() {
     else nextErrors.l2 = reason(l2Result.reason);
     setResourceErrors(nextErrors);
     setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -117,21 +123,16 @@ export default function PaperScreen() {
     (!picksTradable || isPicksSnapshotStale(picksAsOf, picksServerStale));
 
   useEffect(() => {
-    if (picks.length === 0) {
-      setSelectedTicker(null);
-      return;
-    }
+    if (picks.length === 0) return;
     if (picksFrozen) {
       setSelectedTicker(null);
       return;
     }
-    if (!selectedTicker || !picks.some((pick) => pick.ticker === selectedTicker)) {
+    if (selectedTicker === undefined) {
       setSelectedTicker(
-        requestedTicker && picks.some((pick) => pick.ticker === requestedTicker)
-          ? requestedTicker
-          : picks[0].ticker,
+        requestedTicker ? picks.find(pick => pick.ticker === requestedTicker)?.ticker ?? null : picks[0].ticker,
       );
-    }
+    } else if (selectedTicker && !picks.some(pick => pick.ticker === selectedTicker)) setSelectedTicker(null);
   }, [picks, picksFrozen, requestedTicker, selectedTicker]);
 
   const selectedPick = useMemo(
@@ -149,78 +150,65 @@ export default function PaperScreen() {
   }
 
   const totalReturn = account?.total_return_pct ?? 0;
+  const zh = locale === "zh";
+  const accountUnavailable = authRequired || !!resourceErrors.account || !account;
+  const showOrderTicket = () => {
+    orderTicket.current?.scrollIntoView({ block: "center" });
+    orderTicket.current?.focus({ preventScroll: true });
+  };
 
   return (
     <TmScreen className="overflow-y-auto">
       <WorkbenchHeader
         eyebrow={locale === "zh" ? "每日工作流 · 组合执行" : "Daily workflow · Portfolio execution"}
-        title={t(locale, "sim.page_title")}
-        subtitle={locale === "zh" ? "先核验推荐来源与账户状态，再进行可追踪的模拟下单。" : "Verify recommendation provenance and account state before traceable simulated execution."}
+        title={zh ? t(locale, "sim.page_title") : "Paper trading"}
+        subtitle={zh ? "选择推荐、提交模拟单，再回看持仓与收益。" : "Select a recommendation, place a paper order, then review positions and returns."}
         statuses={[
-          { label: locale === "zh" ? "账户状态" : "Account", value: authRequired ? (locale === "zh" ? "需登录" : "SIGN IN") : account ? (locale === "zh" ? "就绪" : "READY") : loading ? (locale === "zh" ? "读取中" : "LOADING") : (locale === "zh" ? "不可用" : "UNAVAILABLE"), tone: authRequired ? "warning" : account ? "positive" : paperError ? "negative" : "warning" },
-          { label: locale === "zh" ? "持仓数" : "Positions", value: String(account?.positions.length ?? 0) },
+          { label: zh ? "账户状态" : "Account", value: loading ? (zh ? "读取中" : "Loading") : authRequired ? (zh ? "需登录" : "Sign in") : paperError ? (zh ? "待重试" : "Retry needed") : account ? (zh ? "就绪" : "Ready") : "—", tone: paperError ? "negative" : account ? "positive" : "warning" },
+          { label: zh ? "持仓 / 待成交" : "Positions / pending", value: accountUnavailable ? "—" : `${account.positions.length} / ${account.pending_orders}` },
           { label: locale === "zh" ? "推荐来源" : "Pick source", value: picksRun ? `RUN #${picksRun.run_id}` : "—", tone: picksFrozen ? "warning" : picksRun ? "positive" : "default" },
         ]}
+        action={<TmButton variant="secondary" loading={refreshing} loadingLabel={zh ? "更新中" : "Updating"} onClick={() => void loadAll(false)}>{zh ? "刷新账户" : "Refresh account"}</TmButton>}
       />
       <TmPane
-        title={locale === "zh" ? "账户概览" : "ACCOUNT.OVERVIEW"}
+        title={locale === "zh" ? "账户概览" : "Account overview"}
         meta={
-          <span className="flex items-center gap-2">
-            <span>{t(locale, "sim.workspace.disclosure")}</span>
-            <TmIconButton
-              label={t(locale, "sim.workspace.guide_title")}
-              size="xs"
-              className="h-auto w-auto p-0"
-              onClick={() => setGuideOpen((open) => !open)}
-              icon={<CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />}
-            />
-          </span>
+          <TmButton variant="ghost" aria-expanded={guideOpen} aria-controls="paper-account-help" onClick={() => setGuideOpen(open => !open)}>{zh ? "账户与规则" : "Account & rules"}</TmButton>
         }
       >
-        <div className="grid grid-cols-1 gap-3 px-3 py-2.5 sm:grid-cols-[minmax(14rem,1fr)_minmax(0,2fr)_auto] sm:items-center">
-          <div className="min-w-0">
-            <div className="font-tm-mono text-[12px] text-tm-fg">{t(locale, "sim.workspace.subtitle")}</div>
-            <div className="mt-1 flex items-center gap-2 font-tm-mono text-xs uppercase tracking-wide text-tm-muted">
-              <span>01 {t(locale, "sim.workspace.guide_step1")}</span><span>→</span>
-              <span>02 {t(locale, "sim.workspace.guide_step2")}</span><span>→</span>
-              <span>03 {t(locale, "sim.workspace.guide_step3")}</span>
-            </div>
-          </div>
-          <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-            <Metric label={t(locale, "sim.account.nav")} value={account ? `$${FMT.format(account.portfolio_value)}` : "—"} tone={totalReturn >= 0 ? "text-tm-pos" : "text-tm-neg"} />
-            <Metric label={t(locale, "sim.account.cash")} value={account ? `$${FMT.format(account.cash)}` : "—"} />
-            <Metric label={t(locale, "sim.account.unrealized")} value={account ? `${account.unrealized_pnl >= 0 ? "+" : "-"}$${FMT.format(Math.abs(account.unrealized_pnl))}` : "—"} tone={(account?.unrealized_pnl ?? 0) >= 0 ? "text-tm-pos" : "text-tm-neg"} />
-            <Metric label={t(locale, "sim.workspace.total_return")} value={account ? `${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(2)}%` : "—"} tone={totalReturn >= 0 ? "text-tm-pos" : "text-tm-neg"} />
-          </div>
-          {account ? <div className="justify-self-start sm:justify-self-end"><TwoStepConfirm idleLabel={t(locale, "sim.reset_btn")} warnText={t(locale, "sim.reset_confirm")} doneText={t(locale, "sim.reset_done")} onConfirm={handleReset} /></div> : null}
+        <div className="grid grid-cols-2 gap-4 px-6 py-4 sm:grid-cols-4">
+          <Metric label={t(locale, "sim.account.nav")} value={!accountUnavailable ? `$${FMT.format(account.portfolio_value)}` : "—"} />
+          <Metric label={t(locale, "sim.account.cash")} value={!accountUnavailable ? `$${FMT.format(account.available_cash)}` : "—"} />
+          <Metric label={t(locale, "sim.account.unrealized")} value={!accountUnavailable ? `${account.unrealized_pnl > 0 ? "+" : account.unrealized_pnl < 0 ? "-" : ""}$${FMT.format(Math.abs(account.unrealized_pnl))}` : "—"} tone={accountUnavailable || !account.unrealized_pnl ? "text-tm-fg" : account.unrealized_pnl > 0 ? "text-tm-pos" : "text-tm-neg"} />
+          <Metric label={t(locale, "sim.workspace.total_return")} value={!accountUnavailable ? `${totalReturn > 0 ? "+" : ""}${totalReturn.toFixed(2)}%` : "—"} tone={accountUnavailable || !totalReturn ? "text-tm-fg" : totalReturn > 0 ? "text-tm-pos" : "text-tm-neg"} />
         </div>
         {guideOpen ? (
-          <div className="relative border-t border-tm-rule bg-tm-bg-2 px-3 py-2 pr-10 font-tm-mono text-xs leading-5 text-tm-muted">
-            {t(locale, "sim.tour.step2_desc")} {t(locale, "sim.workspace.source_note")}
-            <TmIconButton label={t(locale, "sim.close")} className="absolute right-2 top-1.5" onClick={() => setGuideOpen(false)} icon={<X className="h-3.5 w-3.5" />} />
+          <div id="paper-account-help" className="flex flex-wrap items-center justify-between gap-4 border-t border-tm-rule px-6 py-3 text-xs leading-5 text-tm-muted">
+            <div><p>{t(locale, "sim.workspace.disclosure")}</p><p>{t(locale, "sim.workspace.source_note")}</p>{!accountUnavailable && account.reserved_cash > 0 ? <p>{zh ? "待成交订单预留现金" : "Cash reserved for pending orders"} ${FMT.format(account.reserved_cash)}</p> : null}</div>
+            {!accountUnavailable ? <TwoStepConfirm idleLabel={t(locale, "sim.reset_btn")} warnText={t(locale, "sim.reset_confirm")} doneText={t(locale, "sim.reset_done")} onConfirm={handleReset} /> : null}
           </div>
         ) : null}
       </TmPane>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
         <TmPane
-          standalone
-          title={t(locale, "sim.workspace.today_picks")}
+          className="min-w-0 lg:border-r lg:border-tm-rule"
+          title={zh ? "今日推荐 · 选择标的" : "Today's picks · Select a ticker"}
           meta={
-            picksRun
-              ? `${picksRun.market_date} · RUN #${picksRun.run_id}`
-              : picks[0]?.price_date ?? "—"
+            <span className="flex flex-wrap items-center gap-3"><span>{picksRun ? `${picksRun.market_date} · RUN #${picksRun.run_id}` : "—"}</span><TmLinkButton href="/picks">{zh ? "全部推荐" : "All picks"}</TmLinkButton></span>
           }
         >
           {resourceErrors.picks ? <SectionError detail={resourceErrors.picks} onRetry={() => void loadAll(false)} /> : null}
           {picksFrozen ? <FrozenRecommendations /> : null}
-          {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker} actionable={!picksFrozen} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
+          {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker ?? null} actionable={!picksFrozen && !refreshing && !resourceErrors.picks} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
         </TmPane>
-        <TmPane standalone title={selectedPick ? `${t(locale, "sim.workspace.order_title")} · ${selectedPick.ticker}` : t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelectedTicker(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
-          <div className="px-3 py-3">
-            {picksFrozen ? <FrozenRecommendations /> : authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : selectedPick && account ? (
+        <TmPane className="min-w-0" title={t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelectedTicker(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
+          <div ref={orderTicket} tabIndex={-1} aria-label={zh ? "模拟下单区" : "Paper order ticket"} className="px-4 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-tm-accent">
+            {loading ? <Loading /> : picksFrozen ? <FrozenRecommendations /> : authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : paperError ? <PaperError detail={paperError} /> : selectedPick && account ? (
               <SimOrderForm
                 key={selectedPick.ticker}
+                layout="ticket"
+                disabled={refreshing || !!resourceErrors.picks}
                 fixedTicker={selectedPick.ticker}
                 locale={locale}
                 onPlaced={() => { void loadAll(false); }}
@@ -234,29 +222,31 @@ export default function PaperScreen() {
                 targetWeight={0.02}
                 initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
               />
-            ) : paperError ? <PaperError detail={paperError} /> : <p className="font-tm-mono text-xs text-tm-muted">{t(locale, "sim.workspace.no_picks")}</p>}
+            ) : <p className="py-6 text-sm leading-6 text-tm-muted">{requestedTicker && !picks.some(p => p.ticker === requestedTicker) ? (zh ? `${requestedTicker} 不在当前推荐列表中，请从左侧重新选择。` : `${requestedTicker} is not in this shortlist. Choose a ticker on the left.`) : (zh ? "从左侧选择一个标的，核对数量后再提交模拟单。" : "Choose a ticker on the left, then review the quantity before submitting.")}</p>}
           </div>
         </TmPane>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
-        <TmPane standalone title={t(locale, "sim.workspace.positions")}>
-          {resourceErrors.account ? <SectionError detail={resourceErrors.account} onRetry={() => void loadAll(false)} /> : resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : null}
-          {authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : !resourceErrors.account && !resourceErrors.attribution ? <PaperPositionsWithSource positions={account?.positions ?? []} attribution={attribution} /> : null}
+        <TmPane className="min-w-0 lg:border-r lg:border-tm-rule" title={t(locale, "sim.workspace.positions")} meta={accountUnavailable ? "—" : `${account.positions.length} ${zh ? "个标的" : "positions"}`}>
+          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.account ? <SectionError detail={resourceErrors.account} onRetry={() => void loadAll(false)} /> : account ? <>
+            {resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : null}
+            <PaperPositionsWithSource positions={account.positions} attribution={attribution} attributionAvailable={!resourceErrors.attribution} pendingOrders={account.pending_orders} onChoose={showOrderTicket} />
+          </> : null}
         </TmPane>
-        <TmPane standalone title={t(locale, "sim.workspace.performance")}>
-          {resourceErrors.curve ? <SectionError detail={resourceErrors.curve} onRetry={() => void loadAll(false)} /> : null}
-          {!resourceErrors.curve ? <PaperCurvePane curve={curve} compact showDisclaimer={false} /> : null}
-          {resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : <PaperSourceSummary rows={attribution} />}
-          {resourceErrors.l2 ? <SectionError detail={resourceErrors.l2} onRetry={() => void loadAll(false)} /> : <PaperL2Evidence summary={l2Summary} />}
+        <TmPane className="min-w-0" title={zh ? "我的模拟净值" : "My paper equity"} meta={curve?.base_date ?? (zh ? "按日估值" : "Daily marks")}>
+          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.curve ? <SectionError detail={resourceErrors.curve} onRetry={() => void loadAll(false)} /> : <PaperCurvePane curve={curve} compact showDisclaimer={false} />}
+          {!loading && !authRequired ? <><TmDisclosureButton expanded={sourceOpen} onClick={() => setSourceOpen(v => !v)} aria-controls="paper-source-details" label={t(locale, "sim.workspace.source_record")} />{sourceOpen ? <div id="paper-source-details">{resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : <PaperSourceSummary rows={attribution} />}</div> : null}</> : null}
         </TmPane>
       </div>
 
-      <RecommendationPerformance />
-      <TmPane title={t(locale, "sim.workspace.recent_orders")} meta={t(locale, "sim.workspace.disclosure")}>
-        {resourceErrors.orders ? <SectionError detail={resourceErrors.orders} onRetry={() => void loadAll(false)} /> : null}
-        {!resourceErrors.orders ? <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus={resourceErrors.attribution ? "unavailable" : "ready"} showAttribution={false} /> : null}
+      <TmPane title={t(locale, "sim.workspace.recent_orders")} meta={zh ? "最近 20 笔 · 市价单下一交易日收盘撮合" : "Latest 20 · Market orders fill at the next session's close"}>
+        {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.orders ? <SectionError detail={resourceErrors.orders} onRetry={() => void loadAll(false)} /> : <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus={resourceErrors.attribution ? "unavailable" : "ready"} showAttribution={false} showDisclaimer={false} />}
       </TmPane>
+      <div>
+        <TmDisclosureButton expanded={researchOpen} onClick={() => setResearchOpen(v => !v)} aria-controls="paper-system-evidence" label={zh ? "系统策略验证" : "System policy validation"} meta={zh ? "独立研究账户，不计入我的收益" : "Independent research books, excluded from my returns"} />
+        {researchOpen ? <div id="paper-system-evidence"><RecommendationPerformance /><TmDisclosureButton expanded={ledgerOpen} onClick={() => setLedgerOpen(v => !v)} aria-controls="paper-ledger-details" label={zh ? "账本状态与历史异常" : "Book status & historical exceptions"} />{ledgerOpen ? <div id="paper-ledger-details">{resourceErrors.l2 ? <SectionError detail={resourceErrors.l2} onRetry={() => void loadAll(false)} /> : <PaperL2Evidence summary={l2Summary} />}</div> : null}</div> : null}
+      </div>
     </TmScreen>
   );
 }

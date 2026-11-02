@@ -19,21 +19,28 @@ import { TmStatePane } from "@/components/tm/TmStatePane";
 function sourceLabel(source: TickerAttribution["source_type"] | undefined, locale: "zh" | "en") {
   if (source === "pick") return t(locale, "sim.workspace.source_pick");
   if (source === "mixed") return t(locale, "sim.workspace.source_mixed");
-  return t(locale, "sim.workspace.source_manual");
+  if (source === "manual") return t(locale, "sim.workspace.source_manual");
+  return locale === "zh" ? "来源待确认" : "Source unavailable";
 }
 
 export default function PaperPositionsWithSource({
   positions,
   attribution,
+  attributionAvailable = true,
+  pendingOrders = 0,
+  onChoose,
 }: {
   readonly positions: readonly PositionOut[];
   readonly attribution: readonly TickerAttribution[];
+  readonly attributionAvailable?: boolean;
+  readonly pendingOrders?: number;
+  readonly onChoose?: () => void;
 }) {
   const { locale } = useLocale();
-  const sourceByTicker = new Map(attribution.map((row) => [row.ticker, row]));
+  const sourceByTicker = new Map((attributionAvailable ? attribution : []).map((row) => [row.ticker, row]));
 
   if (positions.length === 0) {
-    return <TmStatePane state="empty" title={t(locale, "sim.overview.empty_hint")} className="m-3 min-h-[120px] rounded-none" />;
+    return <TmStatePane state="empty" title={locale === "zh" ? "尚未建立持仓" : "No positions yet"} description={pendingOrders > 0 ? (locale === "zh" ? `${pendingOrders} 笔订单待成交；下单成功不等于已经持有。` : `${pendingOrders} orders await execution. Submission is not a fill.`) : (locale === "zh" ? "从上方选择推荐并提交模拟单，成交后将在这里显示持仓与来源。" : "Select a recommendation above. Positions and provenance appear after the order fills.")} action={onChoose ? {label:locale === "zh" ? "查看下单区" : "View order ticket",onClick:onChoose,variant:"secondary"} : undefined} className="!min-h-[180px] rounded-none border-0 !bg-transparent" />;
   }
 
   const headers = [

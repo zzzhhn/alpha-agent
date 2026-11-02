@@ -2,6 +2,13 @@
 
 Status: implementation source of truth for reusable frontend assets
 
+Paper workspace refinement (2026-11-02, review slice): existing TM panes keep
+the recommendation/order pair and separate personal evidence from system books.
+The shared order form adds an opt-in ticket layout; other consumers stay compact.
+Orders use TmPagination, empty/loading states retain unknown data, and independent
+research books use TmDisclosureButton. No new tokens, icons or dependencies.
+Picks page transitions now fade only, with no positional motion.
+
 Picks browsing refinement (2026-11-01): bounded `TmTableFrame` with sticky
 headers and `TmPagination` (10/25/50) preserves full-set ranking and counts.
 Brief definitions remain tooltips; per-stock multi-window evidence uses
