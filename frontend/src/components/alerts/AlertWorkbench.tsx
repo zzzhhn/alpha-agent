@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BellRing,
@@ -121,6 +121,8 @@ export default function AlertWorkbench() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 5;
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const inspectorRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,6 +190,15 @@ export default function AlertWorkbench() {
   const currentPage = Math.min(page, Math.max(1, Math.ceil(visible.length / pageSize)));
   const pageItems = useMemo(() => visible.slice((currentPage - 1) * pageSize, currentPage * pageSize), [visible, currentPage]);
   const selected = selectedAlert(pageItems, selectedId);
+
+  useEffect(() => {
+    // Each new slice starts at its first row, without moving the page itself.
+    listScrollRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [currentPage, queue, search, severityFilter, relevanceFilter]);
+
+  useEffect(() => {
+    inspectorRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [selected?.id]);
 
   useEffect(() => {
     setSelectedId(selected?.id ?? null);
@@ -371,7 +382,7 @@ export default function AlertWorkbench() {
               <TmInput aria-label={zh ? "搜索警报" : "Search alerts"} placeholder={zh ? "搜索标的或变化" : "Search ticker or change"} value={search} onChange={value=>{setSearch(value);setPage(1);}} className="w-56 max-w-full" />
             </div>
             <div className="flex min-h-7 shrink-0 items-center justify-between gap-3 border-b border-tm-rule px-4 text-xs text-tm-muted"><span>{zh ? "按决策优先级排序" : "Ranked by decision priority"}</span><span>{zh ? "选择一条，右侧查看与处理" : "Select to inspect and act"}</span></div>
-            <div className="alerts-list-scroll">
+            <div ref={listScrollRef} className="alerts-list-scroll">
             {error && data ? (
               <div role="alert" className="flex items-center justify-between gap-3 border-b border-tm-neg/50 bg-tm-neg/5 px-4 py-2 text-xs">
                 <span className="text-tm-neg">{zh ? "刷新失败，显示上次可用队列。" : "Refresh failed; showing the last available queue."}</span>
@@ -450,7 +461,7 @@ export default function AlertWorkbench() {
             <TmPagination page={currentPage} pageSize={pageSize} totalItems={visible.length} pageSizeOptions={[5]} onPageChange={setPage} onPageSizeChange={()=>{}} disabled={!data || authRequired} labels={{navigation:zh ? "警报分页" : "Alert pagination",previous:zh ? "上一页" : "Previous",previousAriaLabel:zh ? "上一页警报" : "Previous alerts",next:zh ? "下一页" : "Next",nextAriaLabel:zh ? "下一页警报" : "Next alerts",page:(current,total)=>`${current} / ${total}`,pageSize:zh ? "每页" : "Per page",total:total=>zh ? `共 ${total} 条 · 每页 5 条` : `${total} alerts · 5 per page`}} className="shrink-0" />
           </section>
 
-          <aside id="alert-inspector" className="alerts-inspector min-w-0 bg-tm-bg-2" aria-label={zh ? "警报详情" : "Alert details"}>
+          <aside ref={inspectorRef} id="alert-inspector" className="alerts-inspector min-w-0 bg-tm-bg-2" aria-label={zh ? "警报详情" : "Alert details"}>
             {!selected ? (
               <div className="flex h-full items-center justify-center p-6 text-center text-xs text-tm-muted">
                 {zh ? "选择一条警报查看证据和关联对象。" : "Select an alert to inspect its evidence and linked objects."}
