@@ -1,0 +1,16 @@
+.alpha-workbench { height: auto; min-height: 100%; }
+.alpha-workbench > * { flex-shrink: 0; }
+.alpha-composer { display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+.alpha-thesis { min-width: 0; padding: 20px 24px; }
+.alpha-validation { margin: 0; border: 0; border-left: 1px solid var(--tm-rule); padding: 20px 24px; background: var(--tm-bg-2); }
+.alpha-evidence > section[data-state="waiting"] { min-height: 144px; }
+.alpha-number input { height: 100%; border: 0; padding: 0; box-shadow: none; }
+.alpha-number > div:focus-within { border-color: var(--tm-accent); box-shadow: 0 0 0 2px var(--tm-accent-soft); }
+@media (max-width: 1279px) {
+  .alpha-composer { grid-template-columns: minmax(0, 1fr) 340px; }
+}
+@media (max-width: 959px) {
+  .alpha-composer { grid-template-columns: minmax(0, 1fr); }
+  .alpha-validation { border-left: 0; border-top: 1px solid var(--tm-rule); }
+  .alpha-thesis, .alpha-validation { padding: 16px; }
+}

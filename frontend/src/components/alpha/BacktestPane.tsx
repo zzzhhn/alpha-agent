@@ -37,7 +37,7 @@ export function BacktestPane({ state, data, errorMessage, onRetry }: Props) {
   const failedGates = gates.filter((gate) => !gate.pass).length;
 
   return (
-    <section className="flex min-h-[260px] flex-col gap-3 border border-tm-rule bg-tm-bg-2 p-4">
+    <section data-state={state} className="flex min-h-[260px] min-w-0 flex-col gap-3 border border-tm-rule bg-tm-bg-2 p-4">
       <h3 className="font-tm-mono text-xs font-semibold uppercase tracking-[0.08em] text-tm-accent">
         {t(locale, "alpha.pane.backtest" as Parameters<typeof t>[1])}
       </h3>

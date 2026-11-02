@@ -19,6 +19,7 @@ import { useToast } from "@/components/ui/toast";
 import { addToZoo, isInZoo, removeFromZoo } from "@/lib/factor-zoo";
 import { getFavorites, getRecent } from "@/lib/hypothesis-history";
 import type { FactorUniverse, HypothesisHistoryEntry } from "@/lib/types";
+import "@/components/alpha/alpha-workbench.css";
 
 export default function AlphaPage() {
   const { locale } = useLocale();
@@ -169,7 +170,7 @@ export default function AlphaPage() {
   }, [translate, chain.state, toast, locale]);
 
   return (
-    <TmScreen className="min-h-[calc(100vh-36px)]">
+    <TmScreen className="alpha-workbench">
       <AlphaResearchContext state={chain.state} universe={universe} onOpenBacktest={handleOpenBacktest} />
       <HypothesisInputCard
         text={text}
@@ -197,7 +198,7 @@ export default function AlphaPage() {
       />
       <section className="border-b border-tm-rule px-6 py-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-tm-mono text-[12px] font-semibold tracking-[0.08em] text-tm-fg">
+          <h2 className="text-sm font-semibold text-tm-fg">
             <span className="mr-2 text-tm-accent">③</span>{locale === "zh" ? "表达式、证据与反证" : "Expression, evidence, and counter-evidence"}
           </h2>
           <span className="text-xs text-tm-muted">{locale === "zh" ? "详细诊断按需展开" : "Detailed diagnostics expand on demand"}</span>
