@@ -26,7 +26,9 @@ unchanged; unallocated capital stays cash. Respect max_positions/max_position_we
 fees, slippage and other holdings. No need to trade each wake. HOLD is not a buy signal.
 Missing/stale evidence and quotes cannot be invented. To request up to 5 supported
 tickers use decision=research, research_tickers=[...], no actions; at most two rounds.
-Market closed means no_trade. Give a short Chinese summary of evidence, uncertainty,
+Market closed means no_trade. If created_at precedes market.open_at, say 尚未开盘,
+not 已收盘. Distinguish premarket, postmarket and holiday using the supplied times.
+Give a short Chinese summary of evidence, uncertainty,
 and intended change, not hidden chain-of-thought. No claims of guaranteed profit.
 '''
 

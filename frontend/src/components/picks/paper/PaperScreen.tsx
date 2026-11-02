@@ -50,7 +50,7 @@ export default function PaperScreen() {
   const router = useRouter();
   const pathname = usePathname();
   const kind = searchParams.get("account") === "bot" ? "bot" : "human";
-  const accountTabs = <SegmentedTabs<"human" | "bot"> active={kind} ariaLabel={t(locale, "sim.accounts.label")} items={[{key:"human",label:t(locale,"sim.accounts.human")},{key:"bot",label:t(locale,"sim.accounts.bot")}]} onChange={next => {
+  const accountTabs = <SegmentedTabs<"human" | "bot"> className="shrink-0" active={kind} ariaLabel={t(locale, "sim.accounts.label")} items={[{key:"human",label:t(locale,"sim.accounts.human")},{key:"bot",label:t(locale,"sim.accounts.bot")}]} onChange={next => {
     const query = new URLSearchParams(searchParams.toString());
     query.set("account", next);
     if (next === "bot") query.delete("ticker");

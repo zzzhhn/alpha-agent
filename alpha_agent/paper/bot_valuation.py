@@ -209,6 +209,16 @@ async def refresh_marks(
             spy = cache.get((session['session_date'], 'SPY'), {})
             benchmark = effective_mark(spy, instant)
             benchmark_close = benchmark['price'] if benchmark['quality'] in {'fresh', 'session_close'} else None
+            created_at = account.get('created_at')
+            if created_at is not None and as_utc(created_at) > as_utc(session['close_at']):
+                # Before this account's first market session, an older SPY
+                # close cannot date a portfolio history that did not exist.
+                return {'account_id': account_id, 'session_date': session['session_date'],
+                        'portfolio_value': summary['portfolio_value'],
+                        'valuation_quality': summary['valuation_quality'],
+                        'valued_at': instant.isoformat(), 'benchmark_close': None,
+                        'benchmark_quality': 'before_account_creation',
+                        'sample_written': False, 'errors': errors}
             await conn.execute(
                 'INSERT INTO sim_equity_daily (account_id,cohort_id,as_of_date,portfolio_value,cash,'
                 'unrealized_pnl,realized_pnl,benchmark_close,valuation_quality,valued_at) '

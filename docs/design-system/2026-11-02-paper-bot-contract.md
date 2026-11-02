@@ -1,6 +1,6 @@
 # 模拟仓机器人：接口、数据与 UI 实现约定
 
-2026-11-02 · 设计稿，非已发布 API。主需求见 [PRD](../PRD-paper-investment-bot.md)。
+2026-11-02 · 已实施首版的设计约定；下表仍包括未来外部接入的建议端点，实际发布路径以 OpenAPI 为准。主需求见 [PRD](../PRD-paper-investment-bot.md)，验证见[交付记录](2026-11-02-paper-bot-delivery.md)。
 
 ## 1. 服务边界
 

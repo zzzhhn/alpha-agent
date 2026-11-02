@@ -87,6 +87,16 @@ async def test_refresh_uses_raw_marks_and_cash_reread_without_network_locks(monk
     assert all('daily_prices' not in sql for sql in book.queries)
 
 
+async def test_new_premarket_account_never_backdates_nav(monkeypatch):
+    book = Book()
+    book.account['created_at'] = datetime(2026, 11, 2, 12, tzinfo=UTC)
+    monkeypatch.setattr(valuation, 'fetch_bars', AsyncMock(return_value=[]))
+    result = await valuation.refresh_marks(book, 22, datetime(2026, 11, 2, 12, 10, tzinfo=UTC))
+    assert result['sample_written'] is False
+    assert result['benchmark_quality'] == 'before_account_creation'
+    assert book.snapshot is None
+
+
 async def test_missing_mark_is_null_nav_not_cost_or_cash_proxy(monkeypatch):
     book = Book()
     monkeypatch.setattr(valuation, 'fetch_bars', AsyncMock(return_value=[]))

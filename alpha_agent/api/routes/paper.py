@@ -745,7 +745,7 @@ async def _read_equity_curve(
 
     rows = await pool.fetch(
         "SELECT as_of_date, portfolio_value, benchmark_close, valuation_quality, valued_at FROM sim_equity_daily "
-        "WHERE account_id=$1 AND cohort_id=$2 ORDER BY as_of_date ASC",
+        "WHERE account_id=$1 AND cohort_id=$2 AND valuation_quality IS DISTINCT FROM 'pre_account_invalid' ORDER BY as_of_date ASC",
         account_id,
         cohort_id,
     )
