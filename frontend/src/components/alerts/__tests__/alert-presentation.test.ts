@@ -6,6 +6,9 @@ import {
   evidenceRows,
   queueFor,
   relevanceLabel,
+  selectedAlert,
+  confidenceLabel,
+  workflowLabel,
 } from "../alertPresentation";
 
 function alert(overrides: Partial<AlertInboxItem> = {}): AlertInboxItem {
@@ -44,6 +47,18 @@ function alert(overrides: Partial<AlertInboxItem> = {}): AlertInboxItem {
 }
 
 describe("alert presentation", () => {
+  it("never keeps a hidden alert selected after filtering or paging", () => {
+    expect(selectedAlert([], 1)).toBeNull();
+    expect(selectedAlert([alert({id:6})], 1)?.id).toBe(6);
+    expect(selectedAlert([alert({id:6}),alert({id:7})], 7)?.id).toBe(7);
+  });
+
+  it("localizes confidence, workflow and known evidence without inventing values", () => {
+    expect(confidenceLabel("low","zh")).toBe("低");
+    expect(workflowLabel("open","zh")).toBe("待处理");
+    expect(evidenceRows(alert({payload:{n_24h:39,unknown_field:"raw"}}),"zh")).toEqual([["24 小时新闻数","39"],["unknown_field","raw"]]);
+  });
+
   it("routes ranked alerts into decision queues", () => {
     expect(queueFor(alert())).toBe("needs_action");
     expect(queueFor(alert({ triage_score: 30 }))).toBe("watch");
