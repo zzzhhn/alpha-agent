@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 数据分页、范围和总数 | [Carbon Data table](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines)、[Pagination](https://www.carbondesignsystem.com/building-blocks/core/components/pagination/guidelines) | 复用 TmPagination，默认 10 条，提供 25/50；全局排名跨页连续，搜索/快照改变回第一页。 |
 | 短 tooltip，长说明点击打开 | [Carbon Tooltip](https://carbondesignsystem.com/components/tooltip/usage/) | 移除整块数值上的长 hover；用既有 TmDialog 展示四窗口、样本门槛和口径。重要缺数继续留在行内。 |
-| 有功能目的的进入/退出 | [Fluent Motion](https://fluent2.microsoft.design/motion) | 翻页采用 160ms 的小幅位移淡入，仅提示列表切换；尊重 prefers-reduced-motion。 |
+| 有功能目的的进入/退出 | [Fluent Motion](https://fluent2.microsoft.design/motion) | 初版小幅位移已被用户否决，后续已改为纯淡入；尊重 prefers-reduced-motion，不再把位移方案作为当前基线。 |
 | 列表弹簧入场和滑动选择 | [React Bits Animated List](https://reactbits.dev/components/animated-list) | 只采纳保持浏览方位的思路，拒绝金融数据逐行弹跳、数值补间、滚动劫持与新动画依赖。 |
 
 ## 实施与验收

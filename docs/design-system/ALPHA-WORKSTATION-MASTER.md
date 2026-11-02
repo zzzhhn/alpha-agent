@@ -21,7 +21,7 @@ AlphaCore is a decision workstation, not a generic dashboard. Each screen must l
 3. What is the one primary action?
 4. What evidence, risk, and history support that action?
 
-The generated reference images define desktop geometry and information hierarchy. Live implementation must preserve real API data and honest empty, loading, stale, and error states. It must never invent a successful result merely to resemble a populated reference.
+The current approved production page is the baseline for in-place refinement. Generated references define geometry only when the current request explicitly asks for that reference; they do not override later user-approved changes. Preserve real API data and honest empty, loading, stale, and error states. Never invent a successful result merely to resemble a populated reference.
 
 ## 2. Requirement boundary
 
@@ -42,7 +42,7 @@ The generated reference images define desktop geometry and information hierarchy
 | Pane padding | 16 px default, 12 px for dense tables |
 | Rules | 1 px `--tm-rule`; stronger divisions use `--tm-rule-2` |
 | Radius | 0 to 2 px. Do not use consumer-card rounding |
-| Row density | 32 to 44 px for queues, tables, and ledgers |
+| Row density | 32 to 44 px for single-line tables; multi-line alert summaries use about 84 px with five-row pagination |
 | Primary action | One filled `--tm-accent` action per screen |
 | Secondary actions | Outline or text actions; refresh must not compete with the primary action |
 | Form controls | Use the canonical TM field family, including `TmRange` and rich-option `TmSelectMenu`; do not add route-local native styling |
@@ -69,7 +69,7 @@ Every page follows this order:
 5. Comparison, funnel, or diagnostic summaries.
 6. Visible decision ledger.
 
-Async panes keep their geometry in all states. Loading uses a skeleton inside the pane. Empty explains the next action. Error contains the error and retry in the affected pane. A single failed request must not erase unrelated controls, queue navigation, or history.
+Async panes keep useful geometry while requests are in flight. Pre-run panes may be compact, non-animated placeholders rather than full-height empty result boxes. Loading uses a skeleton inside the pane. Empty explains the next action. Error contains the error and retry in the affected pane. A single failed request must not erase unrelated controls, queue navigation, or history.
 
 ## 6. Page geometry
 
@@ -78,8 +78,8 @@ Async panes keep their geometry in all states. Loading uses a skeleton inside th
 Reference: `proposed-factors-native.png`.
 
 - Header: research stage, universe, and truthful data/engine state.
-- Hypothesis composer: wide thesis field with compact validation controls and one green “translate and backtest” action.
-- Verdict: four equal metrics for IC, Sharpe, drawdown, and evidence completeness.
+- Hypothesis composer: thesis input and actions beside a six-field validation panel, using existing TM controls and one green “translate and backtest” action. Examples and history remain beside the input; rerun appears after translation.
+- Verdict: compact truthful pre-run strip; four metrics for IC, Sharpe, drawdown, and evidence completeness when running or showing results.
 - Evidence row: three equal columns for expression/data lineage, IS/OOS validation, and falsification/risk gates.
 - Ledger: visible dense recent-experiments table at the bottom of the first workbench flow.
 - Required provenance indicators: input fields, lookback, lag/PIT status when returned by the service. Never fabricate PIT compliance.
@@ -100,14 +100,15 @@ Reference: `proposed-backtest-native.png`.
 
 Reference: `proposed-alerts-native.png`.
 
-- Decision strip summarizes today’s change count, affected holdings, candidates, and queue size.
-- Main triage grid is three columns at desktop widths from 1280 px upward, target ratio `0.9fr 2.2fr 1.25fr`.
+- Decision strip summarizes pending review, affected holdings, candidates, and the loaded queue size. Only label events as today's changes if event timestamps support that claim; fetch time is not source freshness.
+- Main triage grid is three columns at desktop widths from 1280 px upward: 184 px filter rail, flexible inbox, 400 px inspector.
 - Left: queue categories plus severity, source, and relevance filters.
 - Center: dense ranked alerts with age, source, evidence strength, affected exposure, and disposition.
+- Show five rows per page and keep pagination outside the list scroller. Counts refer to the loaded response, not an implied complete database history. Search/filter changes reset the page; details belong to the current visible slice. Empty results clear the inspector.
 - Right: selected alert evidence, portfolio impact, and state-changing actions.
 - Resolve, snooze, or mark-reviewed is the primary action. Opening research context is secondary.
 - API error remains inside the queue/data pane. Header, filters, inspector shell, retry, and audit ledger remain available.
-- Audit ledger is visible and can expand beyond the latest three records.
+- Audit entry stays visible and opens a bounded history region on demand. It represents the loaded records' latest states, not a complete immutable audit log.
 
 ### 6.4 Evolution Monitor, `/evolution`
 
@@ -210,7 +211,7 @@ Before merging any of the four pages, check:
 
 ## 10. Visual acceptance
 
-For each route, capture a 1672 × 941 screenshot in dark Chinese locale and compare it to the native reference. Acceptance requires:
+For in-place refinement, capture the actual before/after page at the same desktop dimensions, locale, theme, data and interaction state. Generated-reference geometry targets below apply only to an explicitly requested reference reproduction, not to every small refinement. Acceptance requires:
 
 - page sections appear in the same order;
 - primary grid ratios differ by no more than 5 percentage points;
@@ -218,3 +219,19 @@ For each route, capture a 1672 × 941 screenshot in dark Chinese locale and comp
 - the primary action, decision strip, evidence inspector, and ledger are all visible or structurally preserved;
 - no horizontal overflow, clipped labels, hydration errors, or page-level error replacement;
 - live data and state transitions still pass focused tests and production-path checks before deployment.
+
+### 10.1 Bounded-workspace review pass
+
+This extends the existing acceptance contract, not a second design system. The
+[session error-analysis catalog](2026-11-03-frontend-error-analysis.md) records
+the user corrections, verified causes and remaining evidence limits.
+
+1. Name the keep/refine/replace boundary. Existing-product refinement does not authorize new branding, navigation or a new page archetype.
+2. Inspect first page, another page, last page, empty filter and one selected detail with realistic content. Verify root/main/local scroll ownership and bottom boundary, not only the first screenshot. Preserve total counts and access to all loaded items.
+3. Use hover for short definitions, dialog/drawer for extended evidence. Missing data and next recovery action remain discoverable without reading a giant tooltip. Controls and long labels must fit both locales.
+4. Preserve selection, focus, parameters and entity context across transitions. For this workstation, page changes use short opacity-only transitions with reduced-motion support, no positional entry or animated numeric values.
+5. Validate actual state semantics: source versus fetch time, not requested versus unavailable, no result versus zero, loaded subset versus full history. Do not mask gaps to make a screenshot look finished.
+6. Report implementation, browser verification, user visual acceptance and production release separately. After authorized release, inspect the two affected production paths; reuse focused checks instead of repeating full audits or expanding to unrelated modules.
+
+Future incidents of these same families extend the linked catalog. Do not add
+duplicate always-loaded AGENTS rules or new skills for each instance.
