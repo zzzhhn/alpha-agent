@@ -38,7 +38,12 @@ export default function PaperBotScreen({ accountTabs }: { readonly accountTabs: 
   },[]);
   useEffect(()=>{const state=request.current;void load();return ()=>{state.version++;};},[load]);
   if (account && !error) return <BotWorkspace key={account.account_id} summary={account} accountTabs={accountTabs} />;
-  return <TmScreen className="overflow-y-auto"><WorkbenchHeader title={t(locale,"sim.bot.title")} subtitle={t(locale,"sim.bot.subtitle")} action={<TmButton variant="secondary" loading={loading} onClick={()=>void load()}>{t(locale,"sim.bot.refresh")}</TmButton>} />{accountTabs}
+  // The account name is unknown during discovery; don't flash a different title.
+  const title = account?.name || (loading ? <>
+    <span aria-hidden="true" className="inline-block h-[1em] w-[5em] align-middle bg-tm-bg-3" />
+    <span className="sr-only">{t(locale,"common.loading")}</span>
+  </> : t(locale,"sim.bot.title"));
+  return <TmScreen className="overflow-y-auto"><WorkbenchHeader title={title} subtitle={t(locale,"sim.bot.subtitle")} action={<TmButton variant="secondary" loading={loading} onClick={()=>void load()}>{t(locale,"sim.bot.refresh")}</TmButton>} />{accountTabs}
     {loading || error ? <PaperBotState loading={loading} error={error} onRetry={()=>void load()} /> : <TmStatePane state="empty" title={t(locale,"sim.bot.empty")} description={t(locale,"sim.bot.empty_hint")} action={{label:t(locale,"sim.bot.create"),onClick:()=>setCreating(true),variant:"primary"}} className="m-4" />}
     {creating ? <PaperBotConfigDrawer open onClose={()=>{setCreating(false);void load();}} account={null} config={null} onSaved={setAccount} /> : null}
   </TmScreen>;

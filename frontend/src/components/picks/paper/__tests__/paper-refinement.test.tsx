@@ -6,8 +6,18 @@ import PaperSourceSummary from "../PaperSourceSummary";
 import PaperOrdersPane from "../PaperOrdersPane";
 import PaperCurvePane from "../PaperCurvePane";
 import SimOrderForm from "../../SimOrderForm";
+import PaperBotScreen from "../PaperBotScreen";
 
 describe("paper workspace refinement", () => {
+  it("reserves the bot title while its account name is loading", () => {
+    const html = renderToStaticMarkup(<PaperBotScreen accountTabs={<div>账户切换</div>} />);
+    const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? "";
+    expect(heading).toContain('aria-hidden="true"');
+    expect(heading).toContain("加载中");
+    expect(heading).not.toContain("机器人模拟投资");
+    expect(html).toContain("账户切换");
+  });
+
   it("keeps confirmed positions visible when attribution is unavailable", () => {
     const html = renderToStaticMarkup(<PaperPositionsWithSource positions={[{ticker:"AAPL",qty:10,avg_cost:100,current_price:110,unrealized_pnl:100,unrealized_pct:10}]} attribution={[]} attributionAvailable={false} />);
     expect(html).toContain("AAPL");
