@@ -40,6 +40,8 @@ interface Props {
   readonly portfolioValue?: number | null;
   readonly targetWeight?: number;
   readonly initialSide?: "buy" | "sell";
+  readonly layout?: "compact" | "ticket";
+  readonly disabled?: boolean;
 }
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -84,6 +86,8 @@ export default function SimOrderForm({
   portfolioValue,
   targetWeight = 0.02,
   initialSide = "buy",
+  layout = "compact",
+  disabled = false,
 }: Props) {
   const [ticker, setTicker] = useState(fixedTicker ?? "");
   const [side, setSide] = useState<"buy" | "sell">(initialSide);
@@ -125,6 +129,7 @@ export default function SimOrderForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (disabled || submitting) return;
     setError(null);
     setPlaced(false);
     const effectiveTicker = (fixedTicker ?? ticker).trim().toUpperCase();
@@ -156,7 +161,7 @@ export default function SimOrderForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       {/* Controls row — packs horizontally, wraps in the narrow drawer */}
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+      <div className={layout === "ticket" ? "grid grid-cols-2 items-start gap-4" : "flex flex-wrap items-end gap-x-5 gap-y-3"}>
         {!fixedTicker && (
           <TmInput
             label={t(locale, "sim.form.ticker_label")}
@@ -169,9 +174,11 @@ export default function SimOrderForm({
           />
         )}
         {fixedTicker && (
-          <div>
+          <div className={layout === "ticket" ? "col-span-2 flex items-baseline justify-between gap-3 border-b border-tm-rule pb-3" : undefined}>
+            <div>
             <span className={FIELD_LABEL}>{t(locale, "sim.workspace.selected")}</span>
-            <span className="font-tm-mono text-base font-bold text-tm-fg">{fixedTicker}</span>
+            <span className={`font-tm-mono font-semibold text-tm-fg ${layout === "ticket" ? "text-2xl" : "text-base"}`}>{fixedTicker}</span>
+            </div>
             {typeof latestPrice === "number" ? (
               <span className="ml-2 font-tm-mono text-xs tabular-nums text-tm-fg-2">
                 ${latestPrice.toFixed(2)}
@@ -213,9 +220,9 @@ export default function SimOrderForm({
             value={qty}
             onChange={setQty}
             fieldSize="sm"
-            className="w-24"
+            className={layout === "ticket" ? "w-full max-w-44" : "w-24"}
           />
-          {fixedTicker ? <p className="mt-1 max-w-44 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `默认按组合净值的 ${(targetWeight * 100).toFixed(0)}% 估算，可手动调整` : `Suggested at ${(targetWeight * 100).toFixed(0)}% of portfolio NAV; editable`}</p> : null}
+          {fixedTicker && layout === "compact" ? <p className="mt-1 max-w-44 font-tm-mono text-xs leading-4 text-tm-muted">{locale === "zh" ? `默认按组合净值的 ${(targetWeight * 100).toFixed(0)}% 估算，可手动调整` : `Suggested at ${(targetWeight * 100).toFixed(0)}% of portfolio NAV; editable`}</p> : null}
         </div>
         {orderType === "limit" && (
           <div>
@@ -233,6 +240,7 @@ export default function SimOrderForm({
           </div>
         )}
       </div>
+      {fixedTicker && layout === "ticket" ? <p className="text-xs leading-5 text-tm-muted">{locale === "zh" ? `数量按净值的 ${(targetWeight * 100).toFixed(0)}% 预填，可调整；提交后等待下一交易日撮合。` : `Quantity is prefilled at ${(targetWeight * 100).toFixed(0)}% of NAV and is editable. Orders await next-session execution.`}</p> : null}
 
       {/* Footer: buying power + estimate on the left, one primary action right */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-tm-rule pt-3">
@@ -246,7 +254,7 @@ export default function SimOrderForm({
             </>
           )}
         </div>
-        <TmButton type="submit" disabled={submitting}>
+        <TmButton type="submit" disabled={submitting || disabled} className={layout === "ticket" ? "ml-auto" : undefined}>
           {submitting ? t(locale, "sim.form.submitting") : t(locale, "sim.place_order")}
         </TmButton>
       </div>

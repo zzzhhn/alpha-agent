@@ -33,7 +33,7 @@ export default function PaperSourceSummary({ rows }: { readonly rows: readonly T
         {groups.map((group) => (
           <div key={group.source} className="px-3 py-2.5">
             <div className="font-tm-mono text-xs uppercase tracking-wide text-tm-muted">{label[group.source]}</div>
-            <div className={`mt-1 font-tm-mono text-[16px] font-semibold tabular-nums ${group.pnl >= 0 ? "text-tm-pos" : "text-tm-neg"}`}>{money(group.pnl)}</div>
+            <div className={`mt-1 font-tm-mono text-[16px] font-semibold tabular-nums ${!group.count || !group.pnl ? "text-tm-fg-2" : group.pnl > 0 ? "text-tm-pos" : "text-tm-neg"}`}>{group.count ? money(group.pnl) : "—"}</div>
             <div className="mt-0.5 font-tm-mono text-xs text-tm-muted">{t(locale, "sim.workspace.tracked_tickers")} {group.count}</div>
           </div>
         ))}
