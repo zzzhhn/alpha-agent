@@ -3,9 +3,22 @@ import type {
   AlertInboxItem,
   AlertRelevance,
   AlertSeverity,
+  AlertWorkflowStatus,
 } from "@/lib/api/alertsFeed";
 
 export type AlertQueue = "needs_action" | "watch" | "record" | "resolved";
+
+export function confidenceLabel(value: AlertInboxItem["confidence"], locale: Locale): string {
+  return { high: locale === "zh" ? "高" : "High", medium: locale === "zh" ? "中" : "Medium", low: locale === "zh" ? "低" : "Low" }[value];
+}
+
+export function workflowLabel(value: AlertWorkflowStatus, locale: Locale): string {
+  return { open: locale === "zh" ? "待处理" : "Open", snoozed: locale === "zh" ? "已暂缓" : "Snoozed", resolved: locale === "zh" ? "已处理" : "Resolved" }[value];
+}
+
+export function selectedAlert(items: readonly AlertInboxItem[], id: number | null): AlertInboxItem | null {
+  return items.find(item => item.id === id) ?? items[0] ?? null;
+}
 
 function facts(item: AlertInboxItem): Record<string, unknown> {
   return item.payload && !Array.isArray(item.payload) ? item.payload : {};
@@ -119,10 +132,17 @@ export function relativeTime(iso: string, locale: Locale): string {
   return locale === "zh" ? `${days} 天前` : `${days}d ago`;
 }
 
-export function evidenceRows(item: AlertInboxItem): Array<[string, string]> {
+export function evidenceRows(item: AlertInboxItem, locale?: Locale): Array<[string, string]> {
   const payload = facts(item);
+  const labels: Record<string, string> = locale === "zh" ? {
+    n_24h: "24 小时新闻数", delta: "评分变化", from: "原评级", to: "新评级",
+    gap_sigma: "跳空幅度（σ）", iv_percentile: "IV 百分位", ticker: "标的",
+  } : locale === "en" ? {
+    n_24h: "24h news count", delta: "Score change", from: "Previous rating", to: "New rating",
+    gap_sigma: "Gap (σ)", iv_percentile: "IV percentile", ticker: "Ticker",
+  } : {};
   return Object.entries(payload)
     .filter(([, value]) => value != null && typeof value !== "object")
     .slice(0, 8)
-    .map(([key, value]) => [key, String(value)]);
+    .map(([key, value]) => [labels[key] ?? key, String(value)]);
 }
