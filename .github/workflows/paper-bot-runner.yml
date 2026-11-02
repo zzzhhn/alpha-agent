@@ -3,7 +3,7 @@ name: paper-bot-runner
 on:
   workflow_dispatch:
     inputs:
-      operation:
+      bot_operation:
         type: choice
         default: run
         options: [run, market_probe]
@@ -39,5 +39,5 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           BOT_SCHEDULE: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
-          BOT_OPERATION: ${{ inputs.operation || 'run' }}
+          BOT_OPERATION: ${{ inputs.bot_operation || 'run' }}
         run: python3 scripts/run_paper_bot_worker.py
