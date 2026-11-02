@@ -155,17 +155,10 @@ export function BacktestVerdictBar({
   // 1. idle
   if (runState.kind === "idle") {
     return (
-      <DecisionStrip
-        headline={locale === "zh" ? "等待验证" : "Awaiting validation"}
-        description={locale === "zh" ? "运行一次回测后，在同一条决策带比较收益、风险和可交易性。" : "Run once to compare return, risk, and tradability in one decision strip."}
-        metrics={[
-          { label: t(locale, "backtest.metric.sharpe"), value: "—", detail: locale === "zh" ? "样本外" : "Out of sample" },
-          { label: t(locale, "backtest.metric.maxDd"), value: "—", detail: locale === "zh" ? "等待路径" : "Awaiting path" },
-          { label: t(locale, "backtest.metric.ic"), value: "—", detail: locale === "zh" ? "等待检验" : "Awaiting test" },
-          { label: t(locale, "backtest.metric.turnover"), value: "—", detail: locale === "zh" ? "包含成本" : "Cost-aware" },
-          { label: t(locale, "backtest.metric.annReturn"), value: "—", detail: locale === "zh" ? "不做推测" : "Not estimated" },
-        ]}
-      />
+      <section className="flex flex-wrap items-center justify-between gap-3 border-b border-tm-rule px-6 py-3">
+        <div className="flex items-baseline gap-3"><span className="text-sm font-semibold text-tm-fg">{locale === "zh" ? "等待验证" : "Awaiting validation"}</span><span className="text-xs text-tm-muted">{locale === "zh" ? "确认参数后运行，先看证据，再作判断。" : "Confirm the setup, run, then review the evidence."}</span></div>
+        <span className="font-tm-mono text-xs text-tm-muted">Sharpe · IC · {locale === "zh" ? "回撤 · 换手 · 收益" : "Drawdown · Turnover · Return"}</span>
+      </section>
     );
   }
 

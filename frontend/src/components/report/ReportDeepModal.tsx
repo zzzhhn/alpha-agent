@@ -30,22 +30,21 @@ export function ReportDeepModal({
 
   return (
     <>
-      {/* Floating action button — always reachable while a report is open */}
-      <TmButton
-        onClick={onOpen}
-        size="md"
-        variant="secondary"
-        className="fixed bottom-6 right-6 z-[55] px-4 shadow-[var(--tm-shadow-floating)]"
-      >
-        <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-        {tk("report.deep.fab")}
-      </TmButton>
+      <div className="report-chrome flex flex-wrap items-center justify-between gap-3 border-t border-tm-rule px-4 py-3">
+        <p className="font-tm-mono text-xs text-tm-muted">{locale === "zh" ? "风险、收益分解、持仓与 IC 证据" : "Risk, return breakdown, holdings and IC evidence"}</p>
+        <TmButton onClick={onOpen} size="md" variant="secondary" aria-haspopup="dialog">
+          <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
+          {tk("report.deep.fab")}
+        </TmButton>
+      </div>
 
       <TmDialog open={open} onClose={onClose} title={tk("report.deep.title")}
         description={tk("report.deep.meta")} closeLabel={locale === "zh" ? "关闭深度报告" : "Close detailed report"}
         className="!max-w-[1080px]" bodyClassName="flex flex-col gap-4">
         {children}
       </TmDialog>
+      {/* Closed dialogs do not exist in the DOM. Retain every diagnostic in print. */}
+      <div className="hidden print:block">{children}</div>
     </>
   );
 }

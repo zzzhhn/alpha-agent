@@ -70,9 +70,6 @@ function deriveCategory(raw: FactorBacktestResponse): VerdictCategory {
   }
 }
 
-function fmtSharpe(v: number | null | undefined): string {
-  return v == null || !Number.isFinite(v) ? "—" : (v >= 0 ? "+" : "") + v.toFixed(2);
-}
 function fmtP(v: number | null | undefined): string {
   return v == null || !Number.isFinite(v) ? "—" : v.toFixed(3);
 }
@@ -113,40 +110,27 @@ export function BacktestVerdictHeadline({
   const label = tk(`backtest.verdict.${category}.label`);
   const msg = tk(`backtest.verdict.${category}.msg`);
 
-  const testSharpe = raw.test_metrics?.sharpe;
   const alphaP = raw.alpha_pvalue;
   const beta = raw.beta_market;
   const decay = raw.oos_decay;
 
   return (
     <section
-      className={`border border-l-[3px] border-tm-rule ${tone.bar} ${tone.bg} px-4 py-3`}
+      className="min-w-0 font-normal"
     >
       <div className="flex flex-wrap items-center gap-2.5">
-        <span className="font-tm-mono text-xs font-semibold tracking-[0.16em] text-tm-muted">
-          {tk("backtest.verdict.heading")}
-        </span>
         <span
-          className={`border px-2 py-0.5 font-tm-mono text-xs font-bold tracking-[0.04em] ${tone.badge}`}
+          className={`font-tm-mono text-sm font-semibold ${tone.badge}`}
         >
           {label}
         </span>
       </div>
 
-      <p className="mt-1.5 max-w-3xl text-sm leading-snug text-tm-fg">
+      <p className="mt-1.5 max-w-3xl text-xs leading-5 text-tm-fg-2">
         {msg}
       </p>
 
-      <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-xs">
-        <Kpi
-          label={tk("backtest.verdict.kpiTestSharpe")}
-          value={fmtSharpe(testSharpe)}
-          valueClass={
-            testSharpe != null && testSharpe >= 1
-              ? "text-tm-pos"
-              : "text-tm-fg"
-          }
-        />
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-tm-mono text-xs">
         <Kpi
           label={tk("backtest.verdict.kpiAlphaP")}
           value={fmtP(alphaP)}

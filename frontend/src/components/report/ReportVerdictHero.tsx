@@ -1,43 +1,8 @@
 "use client";
 
 import { useLocale } from "@/components/layout/LocaleProvider";
-import { t } from "@/lib/i18n";
 import { classifyFactorTier } from "@/lib/factor-tier";
-import type { ZooEntry } from "@/lib/factor-zoo";
 import type { FactorBacktestResponse } from "@/lib/types";
-import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
-
-/**
- * ReportVerdictHero (ALPHACORE design, report block lines 553-567) — the
- * decision-first header that sits ABOVE the report picker. It answers, at a
- * glance and before the long tear sheet: which factor is loaded, is it a real
- * factor, and is it worth producing a research report?
- *
- * The right side carries a "switch factor" dropdown of saved Zoo factors:
- * picking one regenerates the whole report for that factor. With nothing
- * loaded yet, the dropdown is the entry point — pick a factor to start.
- *
- * Verdict + recommendation are DERIVED from the loaded backtest's own stats
- * (overfit_flag + classifyFactorTier on α-p / β), never hand-labelled.
- */
-
-type Tone = "pos" | "info" | "warn" | "bad" | "muted";
-
-const TONE_BADGE: Record<Tone, string> = {
-  pos: "border-tm-pos text-tm-pos",
-  info: "border-tm-accent text-tm-accent",
-  warn: "border-tm-warn text-tm-warn",
-  bad: "border-tm-neg text-tm-neg",
-  muted: "border-tm-rule-2 text-tm-muted",
-};
-
-const RECO_GLYPH: Record<Tone, string> = {
-  pos: "✓", // ✓
-  info: "✓",
-  warn: "△", // △
-  bad: "✗", // ✗
-  muted: "—", // —
-};
 
 interface HeroFactor {
   readonly name: string;
@@ -45,146 +10,36 @@ interface HeroFactor {
   readonly backtest: FactorBacktestResponse;
 }
 
-function deriveReco(bt: FactorBacktestResponse): {
-  readonly tone: Tone;
-  readonly tierLabel: string;
-  readonly recoKey: string;
-} {
-  const decay = bt.oos_decay;
-  const overfit =
-    bt.overfit_flag === true ||
-    (decay != null && Number.isFinite(decay) && decay > 0.5);
-  const tier = classifyFactorTier(bt.alpha_pvalue, bt.beta_market);
-
-  if (overfit) {
-    return { tone: "bad", tierLabel: "OVERFIT", recoKey: "report.hero.recoSkip" };
-  }
-  switch (tier.label) {
-    case "PURE ALPHA":
-      return { tone: "pos", tierLabel: tier.label, recoKey: "report.hero.recoWorth" };
-    case "LEVERED ALPHA":
-      return { tone: "info", tierLabel: tier.label, recoKey: "report.hero.recoWorth" };
-    case "MARGINAL":
-      return { tone: "warn", tierLabel: tier.label, recoKey: "report.hero.recoBorderline" };
-    case "NOISE":
-      return { tone: "bad", tierLabel: tier.label, recoKey: "report.hero.recoSkip" };
-    default:
-      return { tone: "muted", tierLabel: "—", recoKey: "report.hero.recoUnknown" };
-  }
+function fmt(value: number | null | undefined, digits: number, signed = false): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return (signed && value >= 0 ? "+" : "") + value.toFixed(digits);
 }
 
-function fmt(v: number | null | undefined, digits: number, signed = false): string {
-  if (v == null || !Number.isFinite(v)) return "—";
-  return (signed && v >= 0 ? "+" : "") + v.toFixed(digits);
-}
-
-export function ReportVerdictHero({
-  primary,
-  zoo,
-  onSwitch,
-  running,
-}: {
-  readonly primary: HeroFactor | null;
-  readonly zoo: readonly ZooEntry[];
-  readonly onSwitch: (entry: ZooEntry) => void;
-  readonly running: boolean;
-}) {
+/** Only the completed run supplies a verdict. Source fixtures never populate this strip. */
+export function ReportVerdictHero({ primary, running }: { readonly primary: HeroFactor | null; readonly running: boolean }) {
   const { locale } = useLocale();
-  const tk = (k: string) => t(locale, k as Parameters<typeof t>[1]);
-
-  const reco = primary ? deriveReco(primary.backtest) : null;
-
-  function handleSwitch(value: string) {
-    const entry = zoo.find((z) => z.name === value);
-    if (entry) onSwitch(entry);
-  }
-
+  const zh = locale === "zh";
+  if (!primary) return null;
+  const bt = primary.backtest;
+  const overfit = bt.overfit_flag || (bt.oos_decay != null && Number.isFinite(bt.oos_decay) && bt.oos_decay > 0.5);
+  const tier = classifyFactorTier(bt.alpha_pvalue, bt.beta_market);
+  const labels: Record<string, string> = { "PURE ALPHA": "低市场暴露 Alpha", "LEVERED ALPHA": "带市场暴露 Alpha", "MARGINAL": "边际证据", "NOISE": "未见显著 Alpha", "UNKNOWN": "证据不足" };
+  const verdict = overfit ? (zh ? "过拟合风险" : "Overfit risk") : zh ? (labels[tier.label] ?? "证据不足") : tier.label;
+  const tone = overfit || tier.label === "NOISE" ? "text-tm-neg" : tier.label === "MARGINAL" ? "text-tm-warn" : tier.label === "PURE ALPHA" || tier.label === "LEVERED ALPHA" ? "text-tm-pos" : "text-tm-muted";
+  const reading = overfit ? (zh ? "样本外表现衰减，需复核后再作判断。" : "Out-of-sample performance decayed. Review before drawing a conclusion.") : tier.label === "NOISE" ? (zh ? "本次样本内未达到 Alpha 显著性门槛，收益不等于有效证据。" : "Alpha is not significant in this sample. A positive return alone is not sufficient evidence.") : tier.label === "MARGINAL" ? (zh ? "统计证据偏弱，结合回撤、成本和样本范围复核。" : "Statistical evidence is marginal. Review drawdown, costs and sample scope.") : tier.label === "PURE ALPHA" || tier.label === "LEVERED ALPHA" ? (zh ? "通过本次 Alpha 显著性检查，不代表未来收益或可直接交易。" : "Passes this run’s alpha significance check, not a forecast or trading approval.") : (zh ? "风险归因数据不足，暂不作有效性判断。" : "Insufficient risk-attribution evidence for an effectiveness verdict.");
   return (
-    <section className="flex flex-wrap items-start justify-between gap-4 border border-l-[3px] border-tm-accent bg-tm-accent-soft px-4 py-3.5">
-      {/* Left — factor identity + verdict + recommendation */}
-      <div className="min-w-0 flex-1">
-        {primary && reco ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="bg-tm-accent px-1.5 py-0.5 font-tm-mono text-xs font-bold tracking-[0.16em] text-tm-bg">
-                {tk("report.hero.factorTag")}
-              </span>
-              <span className="font-tm-mono text-base font-bold text-tm-fg">
-                {primary.name}
-              </span>
-              <span
-                className={`border px-2 py-px font-tm-mono text-xs font-bold tracking-[0.04em] ${TONE_BADGE[reco.tone]}`}
-              >
-                ★ {reco.tierLabel}
-              </span>
-            </div>
-            <code className="mt-1.5 block break-all font-tm-mono text-xs text-tm-accent">
-              {primary.expression}
-            </code>
-
-            {/* Recommendation: is this worth a research report? */}
-            <div className="mt-2 flex items-start gap-2">
-              <span className={`mt-px font-tm-mono text-sm ${TONE_BADGE[reco.tone].split(" ")[1]}`}>
-                {RECO_GLYPH[reco.tone]}
-              </span>
-              <div className="min-w-0">
-                <span className="font-tm-mono text-xs font-semibold tracking-[0.14em] text-tm-muted">
-                  {tk("report.hero.recoLabel")}
-                </span>
-                <p className="max-w-3xl text-sm leading-snug text-tm-fg">
-                  {tk(reco.recoKey)}
-                </p>
-              </div>
-            </div>
-
-            {/* Key numbers */}
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-xs text-tm-muted">
-              <span className="inline-flex items-baseline gap-1">
-                {tk("report.hero.kpiSharpe")}
-                <span className="font-mono tabular-nums text-tm-fg">
-                  {fmt(primary.backtest.test_metrics?.sharpe, 2, true)}
-                </span>
-              </span>
-              <span className="inline-flex items-baseline gap-1">
-                {tk("report.hero.kpiAlphaP")}
-                <span className="font-mono tabular-nums text-tm-fg">
-                  {fmt(primary.backtest.alpha_pvalue, 3)}
-                </span>
-              </span>
-              <span className="inline-flex items-baseline gap-1">
-                {tk("report.hero.kpiBeta")}
-                <span className="font-mono tabular-nums text-tm-fg">
-                  {fmt(primary.backtest.beta_market, 2, true)}
-                </span>
-              </span>
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="bg-tm-accent px-1.5 py-0.5 font-tm-mono text-xs font-bold tracking-[0.16em] text-tm-bg">
-              {tk("report.hero.factorTag")}
-            </span>
-            <p className="text-sm leading-snug text-tm-fg-2">
-              {tk("report.hero.pickPrompt")}
-            </p>
-          </div>
-        )}
+    <section className="grid min-w-0 gap-4 border-l-[3px] border-l-tm-rule-2 bg-tm-bg-2/40 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_auto]" aria-label={zh ? "本次报告结论" : "Current report verdict"}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="font-tm-mono text-xs text-tm-muted">{zh ? "本次结论" : "Run verdict"}</span>
+          <h2 className={"font-tm-serif text-[18px] " + tone}>{verdict}</h2>
+          {running && <span className="font-tm-mono text-xs text-tm-warn">{zh ? "上次完成的报告" : "Previous completed report"}</span>}
+        </div>
+        <p className="mt-1 text-xs leading-5 text-tm-fg-2">{reading}</p>
       </div>
-
-      {/* Right — switch-factor dropdown */}
-      <label className="flex shrink-0 items-center gap-2 font-tm-mono text-xs text-tm-muted">
-        {tk("report.hero.switch")}
-        <TmSelectMenu
-          value={primary?.name ?? ""}
-          onChange={handleSwitch}
-          ariaLabel={tk("report.hero.switch")}
-          placeholder={tk("report.compare2.pick")}
-          options={zoo.map((z) => ({ value: z.name, label: z.name }))}
-          disabled={running || zoo.length === 0}
-          size="md"
-          buttonClassName="text-tm-fg"
-        />
-      </label>
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 font-tm-mono text-xs">
+        {[{ label: zh ? "样本外夏普" : "OOS Sharpe", value: fmt(bt.test_metrics?.sharpe, 2, true) }, { label: zh ? "Alpha p 值" : "Alpha p-value", value: fmt(bt.alpha_pvalue, 3) }, { label: zh ? "市场 Beta" : "Market beta", value: fmt(bt.beta_market, 2, true) }].map(({ label, value }) => <div key={label}><dt className="text-tm-muted">{label}</dt><dd className="mt-1 text-base tabular-nums text-tm-fg">{value}</dd></div>)}
+      </dl>
     </section>
   );
 }

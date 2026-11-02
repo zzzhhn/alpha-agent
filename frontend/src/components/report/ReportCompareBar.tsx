@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import type { ZooEntry } from "@/lib/factor-zoo";
+import type { FactorExample } from "@/components/alpha/FactorExamples";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 
@@ -15,14 +16,20 @@ import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
  */
 export function ReportCompareBar({
   zoo,
+  examples,
+  primaryExpression,
   compareName,
   onCompare,
+  onCompareExample,
   onClear,
   running,
 }: {
   readonly zoo: readonly ZooEntry[];
+  readonly examples: readonly FactorExample[];
+  readonly primaryExpression: string;
   readonly compareName: string | null;
   readonly onCompare: (entry: ZooEntry) => void;
+  readonly onCompareExample: (entry: FactorExample) => void;
   readonly onClear: () => void;
   readonly running: boolean;
 }) {
@@ -31,41 +38,35 @@ export function ReportCompareBar({
   const [staged, setStaged] = useState<string>("");
 
   function handleGenerate() {
-    const entry = zoo.find((z) => z.name === staged);
+    const example = examples.find((entry) => `example:${entry.name}` === staged && entry.expression !== primaryExpression);
+    if (example) { onCompareExample(example); return; }
+    const entry = zoo.find((entry) => `zoo:${entry.id}` === staged && entry.expression !== primaryExpression);
     if (entry) onCompare(entry);
   }
 
-  return (
-    <section className="border border-tm-rule bg-tm-bg-2">
-      <div className="flex items-start justify-between gap-3 border-b border-tm-rule px-3.5 py-2.5">
-        <div className="min-w-0">
-          <div className="font-tm-mono text-xs font-semibold tracking-[0.1em] text-tm-accent">
-            {tk("report.compare2.title")}
-          </div>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-tm-muted">
-            {tk("report.compare2.subtitle")}
-          </p>
-        </div>
-        <TmButton
-          onClick={handleGenerate}
-          disabled={running || !staged}
-          className="shrink-0"
-        >
-          {tk("report.compare2.generate")}
-        </TmButton>
-      </div>
+  const options = [
+    ...examples.filter((entry) => entry.expression !== primaryExpression).map((entry) => ({ value: `example:${entry.name}`, label: entry.name, meta: locale === "zh" ? "历史示例" : "Historical example" })),
+    ...zoo.filter((entry) => entry.expression !== primaryExpression).map((entry) => ({ value: `zoo:${entry.id}`, label: entry.name, meta: locale === "zh" ? "因子库" : "Saved factor" })),
+  ];
 
-      <div className="flex flex-wrap items-center gap-2.5 px-3.5 py-2.5">
+  return (
+    <section className="report-chrome border-b border-tm-rule bg-tm-bg-2">
+      <div className="flex flex-wrap items-center gap-2.5 px-4 py-3">
         <TmSelectMenu
           value={staged}
           onChange={setStaged}
           ariaLabel={tk("report.compare2.pick")}
           placeholder={tk("report.compare2.pick")}
-          options={zoo.map((z) => ({ value: z.name, label: z.name }))}
-          disabled={running || zoo.length === 0}
+          options={options}
+          disabled={running || options.length === 0}
           size="md"
-          buttonClassName="min-w-[240px] text-tm-accent"
+          className="min-w-0 max-w-full"
+          buttonClassName="w-full max-w-[360px] text-tm-fg"
         />
+
+        <TmButton variant="secondary" onClick={handleGenerate} disabled={running || !options.some((option) => option.value === staged)}>
+          {locale === "zh" ? "生成对比" : "Generate comparison"}
+        </TmButton>
 
         {compareName ? (
           <span className="inline-flex items-center gap-2 font-tm-mono text-xs text-tm-fg-2">
@@ -86,6 +87,7 @@ export function ReportCompareBar({
           </span>
         )}
       </div>
+      <p className="px-4 pb-3 font-tm-mono text-xs text-tm-muted">{locale === "zh" ? "使用当前报告的参数快照，另行计算第二个因子；不会使用尚未运行的草稿参数。" : "Computes the second factor with the current report’s settings, not unrun draft settings."}</p>
     </section>
   );
 }

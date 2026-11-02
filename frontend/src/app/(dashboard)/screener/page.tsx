@@ -1,31 +1,6 @@
 "use client";
 
-/**
- * Screener page — workstation port v2 (Stage 3 · 6/9, density rework).
- *
- * Ships 7 density improvements over v1:
- *
- *   1. SECTORS as a chip multi-select (was free-text). Pulls live GICS-1
- *      list from /data/sectors at mount; selection state is a Set.
- *   2. Quick-preset chips on cap inputs (10B / 100B / 1T), as_of_date
- *      (today / -7d / -30d / -90d), and lookback (30 / 60 / 120 / 252).
- *   3. RECS.SECTORS / RECS.CAPMIX panes (TmCols2): horizontal bars
- *      breaking down top-N by sector and by cap quintile.
- *   4. CONCENTRATION pill in subbar — surfaces max-sector share so a
- *      "60% of top 20 are Tech" basket gets called out as sector beta
- *      rather than alpha.
- *   5. AGGREGATE.CONTRIBUTION pane — across the entire top-N basket,
- *      sum |contribution| by factor; the dominant factor jumps out as
- *      the longest bar. Helps detect "top 20 was driven by 1 factor".
- *   6. DIAGNOSTICS rows gain inline divergent IC bar + n_eligible
- *      proportion bar. Same data, visual weight.
- *   7. RESULTS KPI grid expands 4 → 6: adds N_UNIVERSE + ELIG_RATE
- *      (n_eligible / n_universe) so the eligibility funnel ratio is
- *      legible at a glance.
- *
- * Behavior preserved: PREFILL_KEY handoff, runScreener payload shape,
- * CSV export, expand-one-at-a-time, all existing inputs.
- */
+/** In-place workstation refinement. Zoo handoff and API contracts stay intact. */
 
 import {
   Fragment,
@@ -71,6 +46,7 @@ import {
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
+import { isClassifiedScreenerSector, screenerDraftKey, screenerSectorLabel } from "./screener-state";
 
 const PREFILL_KEY = "alphacore.screener.prefill.v1";
 const CONCENTRATION_THRESHOLD = 0.5; // ≥50% of top N in one sector → warn
@@ -110,8 +86,14 @@ export default function ScreenerPage() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScreenerResponse | null>(null);
+  const [resultDraftKey, setResultDraftKey] = useState<string | null>(null);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [universeSize, setUniverseSize] = useState<number | null>(null);
+  const draftKey = screenerDraftKey({
+    selections, selectedSectors, excludeInput, minCap, maxCap,
+    lookback, topN, combineMethod, asOfDate, neutralize,
+  });
+  const draftChanged = result !== null && resultDraftKey !== draftKey;
 
   // Initial Zoo load + sectors fetch + universe count + handoff prefill.
   useEffect(() => {
@@ -145,10 +127,7 @@ export default function ScreenerPage() {
     void (async () => {
       const [s, u] = await Promise.all([fetchSectors(), fetchUniverses()]);
       if (s.data) {
-        setAvailableSectors(s.data.sectors.filter((sector) => {
-          const normalized = sector.trim().toLowerCase();
-          return normalized.length > 0 && !["unknown", "unclassified", "n/a", "na", "未知", "未分类"].includes(normalized);
-        }));
+        setAvailableSectors(s.data.sectors.filter(isClassifiedScreenerSector));
       }
       if (u.data && u.data.universes.length > 0) {
         setUniverseSize(u.data.universes[0].ticker_count);
@@ -240,6 +219,8 @@ export default function ScreenerPage() {
       setError(res.error ?? "unknown error");
     } else {
       setResult(res.data);
+      setResultDraftKey(draftKey);
+      setExpandedTicker(null);
     }
     setRunning(false);
   }
@@ -290,7 +271,7 @@ export default function ScreenerPage() {
       <WorkbenchHeader
         eyebrow={locale === "zh" ? "研究 · 组合构建" : "Research · portfolio construction"}
         title={locale === "zh" ? "选股 Screener" : "Stock Screener"}
-        subtitle={locale === "zh" ? "先选择可解释的因子，再审查股票池、集中度与可交易性" : "Select interpretable factors, then review universe, concentration, and tradability"}
+        subtitle={locale === "zh" ? "构建组合，审查排名与集中度" : "Build a basket. Review ranks and concentration."}
         statuses={[
           { label: locale === "zh" ? "因子库" : "Zoo", value: String(zoo.length) },
           { label: locale === "zh" ? "已选择" : "Selected", value: String(selections.length), tone: selections.length ? "positive" : "warning" },
@@ -299,28 +280,38 @@ export default function ScreenerPage() {
         ]}
       />
       <DecisionStrip
-        headline={error ? (locale === "zh" ? "本次选股失败，请检查参数后重试" : "Screening failed; review parameters and retry") : result ? (locale === "zh" ? `已形成 ${result.recommendations.length} 只候选股的可审查清单` : `${result.recommendations.length} candidates are ready for review`) : (locale === "zh" ? "选择因子并定义股票池，生成候选清单" : "Choose factors and define the universe to generate candidates")}
-        description={concentrationWarn && aggregates ? (locale === "zh" ? `${aggregates.maxSectorLabel} 占 ${(aggregates.maxSectorShare * 100).toFixed(0)}%，需要审查行业集中风险。` : `${aggregates.maxSectorLabel} is ${(aggregates.maxSectorShare * 100).toFixed(0)}% of the basket; review sector concentration.`) : (locale === "zh" ? "系统不会把未分类行业作为可选筛选条件，缺失分类仍会在结果中如实标记。" : "Unclassified sectors are not selectable filters and remain explicit in results.")}
+        headline={running ? (locale === "zh" ? "正在筛选候选股" : "Screening candidates") : error ? (locale === "zh" ? "本次选股失败，可调整后重试" : "Screening failed; review and retry") : draftChanged ? (locale === "zh" ? "参数已修改，等待重新选股" : "Configuration changed; rerun to apply") : result ? (locale === "zh" ? `${result.recommendations.length} 只候选股待审查` : `${result.recommendations.length} candidates to review`) : (locale === "zh" ? "从因子组合，找到候选股票" : "From factor signals to a candidate basket")}
+        description={draftChanged || (running && result) ? (locale === "zh" ? "下方仍为上次成功结果；本次成功后更新。" : "Results below belong to the last successful screen and update after success.") : concentrationWarn && aggregates ? (locale === "zh" ? `${screenerSectorLabel(aggregates.maxSectorLabel, locale)}占 ${(aggregates.maxSectorShare * 100).toFixed(0)}%，请审查行业集中风险。` : `${screenerSectorLabel(aggregates.maxSectorLabel, locale)} is ${(aggregates.maxSectorShare * 100).toFixed(0)}% of the basket; review concentration.`) : !result ? (locale === "zh" ? "选择因子，设置股票池后运行。" : "Select factors, configure the universe, then run.") : undefined}
         metrics={[
-          { label: locale === "zh" ? "已选因子" : "Selected", value: selections.length, detail: locale === "zh" ? `共 ${zoo.length} 个可用` : `${zoo.length} available`, tone: selections.length ? "positive" : "warning" },
-          { label: "TOP N", value: topN, detail: locale === "zh" ? "目标候选数" : "target candidates" },
-          { label: locale === "zh" ? "合格股票" : "Eligible", value: result?.metadata.n_eligible_tickers ?? "—", detail: locale === "zh" ? "过滤后股票池" : "post-filter universe" },
-          { label: locale === "zh" ? "最大行业占比" : "Max sector", value: aggregates ? `${(aggregates.maxSectorShare * 100).toFixed(0)}%` : "—", detail: aggregates?.maxSectorLabel, tone: concentrationWarn ? "warning" : "default" },
+          { label: locale === "zh" ? "目标候选数" : "Target size", value: topN, detail: locale === "zh" ? "当前配置" : "current configuration" },
+          { label: locale === "zh" ? "合格股票" : "Eligible", value: result?.metadata.n_eligible_tickers ?? "—", detail: locale === "zh" ? "上次成功筛选" : "last successful screen" },
+          { label: locale === "zh" ? "最大行业占比" : "Max sector", value: aggregates && result?.recommendations.length ? `${(aggregates.maxSectorShare * 100).toFixed(0)}%` : "—", detail: aggregates ? screenerSectorLabel(aggregates.maxSectorLabel, locale) : undefined, tone: concentrationWarn ? "warning" : "default" },
         ]}
-        action={<TmButton variant="primary" onClick={run} disabled={running || selections.length === 0} className="h-11 px-5">{running ? t(locale, "screener.running") : t(locale, "screener.run")}</TmButton>}
+        action={<TmButton variant="primary" onClick={run} loading={running} loadingLabel={t(locale, "screener.running")} disabled={selections.length === 0} className="h-11 px-5">{t(locale, "screener.run")}</TmButton>}
       />
 
       {error && (
-        <TmPane title="ERROR" meta="screener run failed">
-          <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-neg">
+        <TmPane title={locale === "zh" ? "选股失败" : "Screening failed"} meta={locale === "zh" ? "配置已保留" : "Configuration preserved"}>
+          <p role="alert" className="px-3 py-2.5 font-tm-mono text-xs text-tm-neg">
             {error}
           </p>
         </TmPane>
       )}
 
-      <div className="grid grid-cols-[minmax(0,1.45fr)_minmax(380px,0.8fr)] gap-px bg-tm-rule">
+      <div className="grid grid-cols-1 items-start bg-tm-bg xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+        <div className="min-w-0 border-b border-tm-rule xl:border-b-0 xl:border-r">
         <FactorPickerPane zoo={zoo} selectedById={selectedById} onToggle={toggleFactor} onUpdate={updateSelection} showWeights={combineMethod === "user_weighted"} />
-        <div className="grid min-w-0 gap-px bg-tm-rule">
+        <CombineParamsPane
+          lookback={lookback}
+          onLookback={setLookback}
+          topN={topN}
+          onTopN={setTopN}
+          combineMethod={combineMethod}
+          onCombineMethod={setCombineMethod}
+          neutralize={neutralize}
+          onNeutralize={setNeutralize}
+        />
+        </div>
         <UniverseFilterPane
           availableSectors={availableSectors}
           selectedSectors={selectedSectors}
@@ -332,24 +323,14 @@ export default function ScreenerPage() {
           onMinCap={setMinCap}
           maxCap={maxCap}
           onMaxCap={setMaxCap}
-        />
-        <CombineParamsPane
-          lookback={lookback}
-          onLookback={setLookback}
-          topN={topN}
-          onTopN={setTopN}
-          combineMethod={combineMethod}
-          onCombineMethod={setCombineMethod}
           asOfDate={asOfDate}
           onAsOfDate={setAsOfDate}
-          neutralize={neutralize}
-          onNeutralize={setNeutralize}
         />
-        </div>
       </div>
 
       {result && aggregates && (
         <ResultsPane
+          key={resultDraftKey}
           result={result}
           universeSize={universeSize}
           expandedTicker={expandedTicker}
@@ -387,11 +368,17 @@ export default function ScreenerPage() {
         />
       )}
 
-      {!result && !running && (
-        <TmPane title={locale === "zh" ? "开始选股" : "GET STARTED"} meta={locale === "zh" ? "操作提示" : "HINT"}>
-          <p className="px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
-            {t(locale, "screener.subtitle")}
-          </p>
+      {!result && (
+        <TmPane title={locale === "zh" ? "候选清单" : "Candidate basket"} meta={running ? (locale === "zh" ? "运行中" : "Running") : (locale === "zh" ? "尚未运行" : "Not run")}>
+          <div className="grid min-h-[132px] items-center gap-4 px-4 py-5 md:grid-cols-[1.1fr_1fr]" role="status" aria-busy={running}>
+            <div>
+              <p className="text-base font-semibold text-tm-fg">{running ? (locale === "zh" ? "正在计算因子排名" : "Calculating factor ranks") : (locale === "zh" ? "候选股将在这里呈现" : "Your candidate basket appears here")}</p>
+              <p className="mt-2 max-w-md font-tm-mono text-xs leading-5 text-tm-muted">{running ? (locale === "zh" ? "筛选完成后可检查综合排名、行业结构与因子贡献。" : "When complete, review ranks, sector exposure, and factor contributions.") : selections.length ? (locale === "zh" ? "已选因子。检查配置后运行选股，综合分不代表预期收益。" : "Factors selected. Review the configuration and run; rank scores are not expected returns.") : (locale === "zh" ? "先勾选一个或多个因子，再运行选股。" : "Choose one or more factors before running the screen.")}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 border-l border-tm-rule pl-4 font-tm-mono text-xs text-tm-muted">
+              {(locale === "zh" ? ["综合排名", "行业分布", "因子贡献"] : ["Rank", "Sector mix", "Contributions"]).map((label) => <div key={label}><span>{label}</span><div aria-hidden="true" className={`mt-3 h-1.5 bg-tm-bg-3 ${running ? "animate-pulse motion-reduce:animate-none" : ""}`} /></div>)}
+            </div>
+          </div>
         </TmPane>
       )}
     </TmScreen>
@@ -512,7 +499,7 @@ function FactorPickerPane({
   // selected and the SELECTED count is unaffected.
   const [facQuery, setFacQuery] = useState("");
   const [facPage, setFacPage] = useState(0);
-  const FAC_PAGE_SIZE = 8;
+  const FAC_PAGE_SIZE = 5;
   const filteredZoo = useMemo(() => {
     const needle = facQuery.trim().toLowerCase();
     if (!needle) return zoo;
@@ -535,7 +522,7 @@ function FactorPickerPane({
 
   if (zoo.length === 0) {
     return (
-      <TmPane title={locale === "zh" ? "因子选择" : "SCREENER.FACTORS"} meta={locale === "zh" ? "因子库为空" : "ZOO EMPTY"}>
+      <TmPane title={locale === "zh" ? "因子选择" : "Factor selection"} meta={locale === "zh" ? "因子库为空" : "Zoo empty"}>
         <p className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
           {t(locale, "screener.factors.empty")}
         </p>
@@ -545,14 +532,10 @@ function FactorPickerPane({
 
   return (
     <TmPane
-      title={locale === "zh" ? "因子选择" : "SCREENER.FACTORS"}
+      title={locale === "zh" ? "因子选择" : "Factor selection"}
       meta={locale === "zh" ? `已选 ${selectedCount} / ${zoo.length}` : `${selectedCount} / ${zoo.length} SELECTED`}
     >
-      <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
-        {t(locale, "screener.factors.subtitle")}
-      </p>
       <div className="flex items-center gap-2 border-b border-tm-rule px-3 py-2">
-        <span className="font-tm-mono text-xs text-tm-muted">⌕</span>
         <TmInput
           value={facQuery}
           onChange={(value) => {
@@ -569,26 +552,23 @@ function FactorPickerPane({
           {filteredZoo.length} / {zoo.length}
         </span>
       </div>
-      <TmTableFrame>
+      <TmTableFrame className="max-h-[340px] overflow-y-auto">
         <TmTable
           density="standard"
           caption={locale === "zh" ? "因子选择" : "Screener factors"}
-          className="min-w-[860px] text-left text-xs"
+          className="table-fixed text-left text-xs"
         >
           <TmTableHead>
             <TmTableRow>
-              <TmTableHeaderCell className="w-9 px-3.5 py-2 font-medium">·</TmTableHeaderCell>
+              <TmTableHeaderCell className="w-10 px-2 py-2 font-medium"><span className="sr-only">{locale === "zh" ? "选择" : "Select"}</span></TmTableHeaderCell>
               <TmTableHeaderCell className="px-3 py-2 font-medium">
                 {t(locale, "screener.factors.colName")}
               </TmTableHeaderCell>
-              <TmTableHeaderCell className="px-3 py-2 font-medium">
-                {t(locale, "zoo.colExpr")}
-              </TmTableHeaderCell>
-              <TmTableHeaderCell textAlign="right" className="px-3.5 py-2 font-medium">
+              <TmTableHeaderCell textAlign="right" className="w-20 px-3 py-2 font-medium">
                 {t(locale, "screener.factors.colDirection")}
               </TmTableHeaderCell>
               {showWeights && (
-                <TmTableHeaderCell textAlign="right" className="px-3 py-2 font-medium">
+                <TmTableHeaderCell textAlign="right" className="w-24 px-3 py-2 font-medium">
                   {t(locale, "screener.factors.colWeight")}
                 </TmTableHeaderCell>
               )}
@@ -606,31 +586,22 @@ function FactorPickerPane({
                   onClick={() => onToggle(e)}
                   className="cursor-pointer"
                 >
-                  <TmTableCell className="px-3.5 py-2.5">
-                    <span
-                      aria-hidden="true"
-                      className={`inline-block h-3.5 w-3.5 border ${
-                        isSelected
-                          ? "border-tm-accent bg-tm-accent"
-                          : "border-tm-rule bg-transparent"
-                      }`}
+                  <TmTableCell className="px-2 py-2.5">
+                    <TmIconButton
+                      label={locale === "zh" ? `${isSelected ? "取消选择" : "选择"} ${e.name}` : `${isSelected ? "Deselect" : "Select"} ${e.name}`}
+                      aria-pressed={isSelected}
+                      icon={<span aria-hidden="true" className={`flex h-4 w-4 items-center justify-center border ${isSelected ? "border-tm-accent bg-tm-accent text-tm-bg" : "border-tm-rule-2"}`}>{isSelected ? "✓" : ""}</span>}
+                      onClick={(event) => { event.stopPropagation(); onToggle(e); }}
                     />
                   </TmTableCell>
                   <TmTableRowHeader
-                    className={`whitespace-nowrap px-3 py-2.5 ${
+                    className={`px-3 py-2.5 ${
                       isSelected ? "text-tm-accent" : "text-tm-fg"
                     }`}
                   >
-                    {e.name}
+                    <span className="block break-words font-semibold">{e.name}</span>
+                    <code className="mt-1 block break-all text-xs font-normal leading-5 text-tm-muted">{e.expression}</code>
                   </TmTableRowHeader>
-                  <TmTableCell className="px-3 py-2.5">
-                    <span
-                      className="block max-w-[520px] truncate text-xs text-tm-accent"
-                      title={e.expression}
-                    >
-                      {e.expression}
-                    </span>
-                  </TmTableCell>
                   <TmTableCell textAlign="right" className="px-3.5 py-2.5">
                     <ScreenerDirBadge direction={dir} />
                   </TmTableCell>
@@ -647,7 +618,7 @@ function FactorPickerPane({
                           step={0.1}
                           value={sel.weight}
                           onChange={(value) => onUpdate(e.id, { weight: value })}
-                          aria-label={`${e.name} weight`}
+                          aria-label={locale === "zh" ? `${e.name} 权重` : `${e.name} weight`}
                           fieldSize="sm"
                           className="w-20"
                           inputClassName="text-right"
@@ -663,6 +634,7 @@ function FactorPickerPane({
           </TmTableBody>
         </TmTable>
       </TmTableFrame>
+      {filteredZoo.length === 0 && <p className="px-4 py-5 font-tm-mono text-xs text-tm-muted">{locale === "zh" ? "没有匹配因子，请修改搜索词。已选因子仍保留。" : "No matching factors. Try another search; selected factors remain selected."}</p>}
       {facPageCount > 1 ? (
         <TmPagination
           page={facPage + 1}
@@ -737,6 +709,8 @@ function UniverseFilterPane({
   onMinCap,
   maxCap,
   onMaxCap,
+  asOfDate,
+  onAsOfDate,
 }: {
   readonly availableSectors: readonly string[];
   readonly selectedSectors: ReadonlySet<string>;
@@ -748,6 +722,8 @@ function UniverseFilterPane({
   readonly onMinCap: (v: string) => void;
   readonly maxCap: string;
   readonly onMaxCap: (v: string) => void;
+  readonly asOfDate: string;
+  readonly onAsOfDate: (v: string) => void;
 }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
@@ -757,9 +733,9 @@ function UniverseFilterPane({
   const sectorAvail = availableSectors.filter((s) => !selectedSectors.has(s));
   const sectorMeta =
     availableSectors.length === 0
-      ? "loading…"
+      ? (zh ? "行业列表未就绪" : "Sector list unavailable")
       : sectorTags.length > 0
-        ? `${sectorTags.length} / ${availableSectors.length} GICS-1`
+        ? (zh ? `已选 ${sectorTags.length} / ${availableSectors.length} 个行业` : `${sectorTags.length} / ${availableSectors.length} sectors`)
         : zh
           ? "全部行业"
           : "all sectors";
@@ -781,8 +757,8 @@ function UniverseFilterPane({
     ),
   );
   function addTicker() {
-    const tk = tickerAdd.trim().toUpperCase();
-    if (tk && !excluded.includes(tk)) onExclude([...excluded, tk].join(", "));
+    const tickers = tickerAdd.split(/[,，\s]+/).map((ticker) => ticker.trim().toUpperCase()).filter(Boolean);
+    if (tickers.length) onExclude([...new Set([...excluded, ...tickers])].join(", "));
     setTickerAdd("");
   }
   function removeTicker(tk: string) {
@@ -790,13 +766,13 @@ function UniverseFilterPane({
   }
 
   return (
-    <TmPane title={zh ? "股票池筛选" : "UNIVERSE.FILTER"} meta={sectorMeta}>
-      <div className="flex flex-col gap-4 px-3.5 py-3.5">
+    <TmPane title={zh ? "股票池与数据" : "Universe & data"} meta={sectorMeta}>
+      <div className="flex flex-col gap-4 px-4 py-4">
         {/* Sectors — add via dropdown, selected shown as accent tags */}
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="font-tm-mono text-xs text-tm-muted">
-              {zh ? "行业（留空 = 全部）" : "Sectors (blank = all)"}
+              {zh ? "行业" : "Sectors"}
             </span>
             {sectorTags.length > 0 && (
               <TmButton
@@ -809,7 +785,7 @@ function UniverseFilterPane({
               </TmButton>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex max-h-36 flex-wrap items-center gap-2 overflow-y-auto">
             <TmSelectMenu
               value=""
               onChange={onToggleSector}
@@ -817,13 +793,13 @@ function UniverseFilterPane({
               placeholder={
                 availableSectors.length === 0
                   ? zh
-                    ? "加载行业…"
-                    : "loading…"
+                    ? "行业列表未就绪"
+                    : "Sector list unavailable"
                   : zh
                     ? "+ 添加行业…"
                     : "+ Add sector…"
               }
-              options={sectorAvail.map((sector) => ({ value: sector, label: sector }))}
+              options={sectorAvail.map((sector) => ({ value: sector, label: screenerSectorLabel(sector, locale) }))}
               disabled={availableSectors.length === 0}
               size="md"
               buttonClassName="text-tm-accent"
@@ -833,9 +809,9 @@ function UniverseFilterPane({
                 key={s}
                 className="inline-flex items-center gap-1.5 border border-tm-accent bg-tm-accent-soft px-2 py-1 font-tm-mono text-xs text-tm-accent"
               >
-                {s}
+                {screenerSectorLabel(s, locale)}
                 <TmIconButton
-                  label={zh ? `移除行业 ${s}` : `Remove sector ${s}`}
+                  label={zh ? `移除行业 ${screenerSectorLabel(s, locale)}` : `Remove sector ${s}`}
                   icon="✕"
                   onClick={() => onToggleSector(s)}
                   className="text-tm-muted hover:text-tm-fg"
@@ -855,7 +831,7 @@ function UniverseFilterPane({
           <div className="mb-2 font-tm-mono text-xs text-tm-muted">
             {zh ? "排除标的（逗号分隔）" : "Exclude tickers (comma-sep)"}
           </div>
-          <div className="flex min-h-[26px] flex-wrap items-center gap-2">
+          {excluded.length > 0 && <div className="flex max-h-24 flex-wrap items-center gap-2 overflow-y-auto">
             {excluded.map((tk) => (
               <span
                 key={tk}
@@ -870,13 +846,8 @@ function UniverseFilterPane({
                 />
               </span>
             ))}
-            {excluded.length === 0 && (
-              <span className="font-tm-mono text-xs text-tm-muted">
-                {zh ? "未排除任何标的" : "none excluded"}
-              </span>
-            )}
-          </div>
-          <div className="mt-2 flex gap-2">
+          </div>}
+          <div className={`${excluded.length ? "mt-2 " : ""}flex gap-2`}>
             <TmInput
               value={tickerAdd}
               onChange={setTickerAdd}
@@ -886,7 +857,7 @@ function UniverseFilterPane({
                   addTicker();
                 }
               }}
-              placeholder={zh ? "输入代码，如 TSLA" : "Ticker, e.g. TSLA"}
+              placeholder={zh ? "如 TSLA, AAPL" : "e.g. TSLA, AAPL"}
               aria-label={zh ? "输入要排除的股票代码" : "Ticker to exclude"}
               fieldSize="sm"
               className="min-w-0 flex-1"
@@ -896,6 +867,7 @@ function UniverseFilterPane({
               onClick={addTicker}
               variant="secondary"
               size="sm"
+              disabled={!tickerAdd.trim()}
               className="font-tm-mono text-xs"
             >
               {zh ? "排除" : "Exclude"}
@@ -904,7 +876,7 @@ function UniverseFilterPane({
         </div>
 
         {/* Cap inputs with preset chips */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <CapInputWithPresets
             label={t(locale, "screener.universe.minCap")}
             value={minCap}
@@ -919,6 +891,9 @@ function UniverseFilterPane({
             presets={capPresets}
             placeholder="3000000000000"
           />
+        </div>
+        <div className="border-t border-tm-rule pt-4">
+          <AsOfWithPresets value={asOfDate} onChange={onAsOfDate} label={t(locale, "screener.params.asOf")} hint={t(locale, "screener.params.asofHint")} />
         </div>
       </div>
     </TmPane>
@@ -948,9 +923,6 @@ function CapInputWithPresets({
         type="number"
       />
       <div className="flex flex-wrap items-center gap-1">
-        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-          preset
-        </span>
         {presets.map((p) => (
           <TmChip
             key={p.value}
@@ -974,8 +946,6 @@ function CombineParamsPane({
   onTopN,
   combineMethod,
   onCombineMethod,
-  asOfDate,
-  onAsOfDate,
   neutralize,
   onNeutralize,
 }: {
@@ -985,8 +955,6 @@ function CombineParamsPane({
   readonly onTopN: (v: number) => void;
   readonly combineMethod: CombineMethod;
   readonly onCombineMethod: (v: CombineMethod) => void;
-  readonly asOfDate: string;
-  readonly onAsOfDate: (v: string) => void;
   readonly neutralize: "none" | "sector";
   readonly onNeutralize: (v: "none" | "sector") => void;
 }) {
@@ -1001,16 +969,16 @@ function CombineParamsPane({
   const topNPresets = [10, 20, 50, 100];
 
   return (
-    <TmPane title={locale === "zh" ? "组合参数" : "COMBINE.PARAMS"} meta={locale === "zh" ? "4 个控制项" : "4 KNOBS"}>
-      <div className="flex flex-col gap-3 px-3 py-3">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <TmPane title={locale === "zh" ? "组合参数" : "Combination"} className="border-t border-tm-rule">
+      <div className="flex flex-col gap-4 px-4 py-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SliderWithPresets
             label={t(locale, "screener.params.lookback")}
             min={10}
             max={252}
             step={10}
             value={lookback}
-            unit="d"
+            unit={locale === "zh" ? "天" : "d"}
             onChange={onLookback}
             presets={lookbackPresets}
           />
@@ -1024,42 +992,30 @@ function CombineParamsPane({
             presets={topNPresets}
           />
         </div>
-        <div>
-          <span className="mb-1 block font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
-            {t(locale, "screener.params.combine")}
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {methods.map((m) => (
-              <TmChip
-                key={m.value}
-                on={combineMethod === m.value}
-                onClick={() => onCombineMethod(m.value)}
-              >
-                {t(locale, m.labelKey as Parameters<typeof t>[1])}
-              </TmChip>
-            ))}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="min-w-0">
+            <span className="mb-1.5 block font-tm-mono text-xs font-semibold text-tm-muted">{t(locale, "screener.params.combine")}</span>
+            <TmSelectMenu
+              value={combineMethod}
+              onChange={(value) => onCombineMethod(value as CombineMethod)}
+              ariaLabel={t(locale, "screener.params.combine")}
+              options={methods.map((method) => ({ value: method.value, label: t(locale, method.labelKey as Parameters<typeof t>[1]) }))}
+              className="w-full"
+              buttonClassName="w-full"
+            />
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1.5 block font-tm-mono text-xs font-semibold text-tm-muted">{t(locale, "backtest.form.neutralize")}</span>
+            <TmSelectMenu
+              value={neutralize}
+              onChange={(value) => onNeutralize(value as "none" | "sector")}
+              ariaLabel={t(locale, "backtest.form.neutralize")}
+              options={(["none", "sector"] as const).map((method) => ({ value: method, label: t(locale, `backtest.form.neutralize.${method}`) }))}
+              className="w-full"
+              buttonClassName="w-full"
+            />
           </div>
         </div>
-        <div>
-          <span className="mb-1 block font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
-            {t(locale, "backtest.form.neutralize")}
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(["none", "sector"] as const).map((m) => (
-              <TmChip
-                key={m}
-                on={neutralize === m}
-                onClick={() => onNeutralize(m)}
-              >
-                {t(locale, `backtest.form.neutralize.${m}`)}
-              </TmChip>
-            ))}
-            <span className="ml-2 font-tm-mono text-xs text-tm-muted">
-              {t(locale, "backtest.form.neutralizeHint")}
-            </span>
-          </div>
-        </div>
-        <AsOfWithPresets value={asOfDate} onChange={onAsOfDate} label={t(locale, "screener.params.asOf")} hint={t(locale, "screener.params.asofHint")} />
       </div>
     </TmPane>
   );
@@ -1096,9 +1052,6 @@ function SliderWithPresets({
         formatValue={(current) => `${current}${unit}`}
       />
       <div className="flex flex-wrap items-center gap-1">
-        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-          preset
-        </span>
         {presets.map((p) => (
           <TmChip key={p} on={value === p} onClick={() => onChange(p)}>
             {p}
@@ -1121,6 +1074,7 @@ function AsOfWithPresets({
   readonly label: string;
   readonly hint: string;
 }) {
+  const { locale } = useLocale();
   // Compute preset dates relative to today. "today" sends empty (panel
   // last day) so we don't ship a date the panel might not cover.
   function offsetDate(daysBack: number): string {
@@ -1129,10 +1083,10 @@ function AsOfWithPresets({
     return d.toISOString().slice(0, 10);
   }
   const presets: { label: string; value: string }[] = [
-    { label: "today", value: "" },
-    { label: "-7d", value: offsetDate(7) },
-    { label: "-30d", value: offsetDate(30) },
-    { label: "-90d", value: offsetDate(90) },
+    { label: locale === "zh" ? "最新可用" : "Latest available", value: "" },
+    { label: locale === "zh" ? "7 天前" : "−7d", value: offsetDate(7) },
+    { label: locale === "zh" ? "30 天前" : "−30d", value: offsetDate(30) },
+    { label: locale === "zh" ? "90 天前" : "−90d", value: offsetDate(90) },
   ];
   return (
     <div className="flex flex-col gap-1.5">
@@ -1144,9 +1098,6 @@ function AsOfWithPresets({
         hint={hint}
       />
       <div className="flex flex-wrap items-center gap-1">
-        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-          preset
-        </span>
         {presets.map((p) => (
           <TmChip key={p.label} on={value === p.value} onClick={() => onChange(p.value)}>
             {p.label}
@@ -1174,6 +1125,10 @@ function ResultsPane({
 }) {
   const { locale } = useLocale();
   const recs = result.recommendations;
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(recs.length / pageSize)));
+  const visibleRecs = recs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const { isWatched } = useWatchlist();
   const subtitle = t(locale, "screener.results.subtitle").replace(
     "{n}",
@@ -1183,8 +1138,8 @@ function ResultsPane({
   const meanComposite =
     composites.length > 0
       ? composites.reduce((a, b) => a + b, 0) / composites.length
-      : 0;
-  const topScore = composites[0] ?? 0;
+      : null;
+  const topScore = composites[0] ?? null;
   const eligible = result.metadata.n_eligible_tickers;
   const eligRate =
     universeSize && universeSize > 0 ? (eligible / universeSize) * 100 : null;
@@ -1215,14 +1170,14 @@ function ResultsPane({
         />
         <TmKpi
           label={<GlossaryTip term="TOP_SCORE">{locale === "zh" ? "最高综合分" : "TOP_SCORE"}</GlossaryTip>}
-          value={topScore.toFixed(3)}
-          tone={topScore > 0 ? "pos" : "neg"}
+          value={topScore?.toFixed(3) ?? "—"}
+          tone={topScore === null ? "default" : topScore > 0 ? "pos" : "neg"}
           sub={locale === "zh" ? "排名第 1" : "rank #1"}
         />
         <TmKpi
           label={<GlossaryTip term="AVG_SCORE">{locale === "zh" ? "平均综合分" : "AVG_SCORE"}</GlossaryTip>}
-          value={meanComposite.toFixed(3)}
-          tone={meanComposite > 0 ? "pos" : "neg"}
+          value={meanComposite?.toFixed(3) ?? "—"}
+          tone={meanComposite === null ? "default" : meanComposite > 0 ? "pos" : "neg"}
           sub={locale === "zh" ? `${recs.length} 只候选` : `${recs.length} basket`}
         />
         <TmKpi
@@ -1266,7 +1221,7 @@ function ResultsPane({
               {t(locale, "screener.results.colComposite")}
             </RHeader>
             <RHeader>·</RHeader>
-            {recs.map((r) => {
+            {visibleRecs.map((r) => {
               const isOpen = expandedTicker === r.ticker;
               return (
                 <Fragment key={r.ticker}>
@@ -1284,7 +1239,7 @@ function ResultsPane({
                     </span>
                   </RCell>
                   <RCell>
-                    <span className="text-tm-fg-2">{r.sector ?? "—"}</span>
+                    <span className="text-tm-fg-2">{screenerSectorLabel(r.sector, locale)}</span>
                   </RCell>
                   <RCell align="right">
                     <span className="tabular-nums text-tm-muted">
@@ -1301,7 +1256,8 @@ function ResultsPane({
                   </RCell>
                   <RCell align="right">
                     <TmIconButton
-                      label={isOpen ? `Collapse ${r.ticker}` : `Expand ${r.ticker}`}
+                      label={locale === "zh" ? `${isOpen ? "收起" : "展开"} ${r.ticker}` : `${isOpen ? "Collapse" : "Expand"} ${r.ticker}`}
+                      aria-expanded={isOpen}
                       icon={isOpen ? "▾" : "▸"}
                       onClick={() => onExpand(isOpen ? null : r.ticker)}
                       className="font-tm-mono text-tm-muted hover:text-tm-accent"
@@ -1323,6 +1279,26 @@ function ResultsPane({
             })}
           </div>
         </div>
+      )}
+      {recs.length > pageSize && (
+        <TmPagination
+          page={currentPage}
+          pageSize={pageSize}
+          totalItems={recs.length}
+          pageSizeOptions={[pageSize]}
+          labels={{
+            navigation: locale === "zh" ? "候选股分页" : "Candidate pagination",
+            previous: "←",
+            previousAriaLabel: locale === "zh" ? "上一页" : "Previous page",
+            next: "→",
+            nextAriaLabel: locale === "zh" ? "下一页" : "Next page",
+            page: (current, total) => locale === "zh" ? `第 ${current}/${total} 页` : `PAGE ${current}/${total}`,
+            pageSize: locale === "zh" ? "每页" : "Page size",
+            total: (total) => locale === "zh" ? `共 ${total} 只候选` : `${total} candidates`,
+          }}
+          onPageChange={(next) => { setPage(next); onExpand(null); }}
+          onPageSizeChange={() => { setPage(1); onExpand(null); }}
+        />
       )}
     </TmPane>
   );
@@ -1355,7 +1331,7 @@ function RCell({
 }) {
   return (
     <div
-      className={`flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs ${
+      className={`flex min-h-8 min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs ${
         align === "right" ? "justify-end" : ""
       }`}
     >
@@ -1460,7 +1436,7 @@ function RecsSectorsPane({
                 }}
               >
                 <span className={`truncate font-tm-mono text-xs ${tone}`}>
-                  {b.label}
+                  {screenerSectorLabel(b.label, locale)}
                 </span>
                 <div className="relative h-3 w-full bg-tm-bg-2">
                   <div

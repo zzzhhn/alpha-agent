@@ -88,13 +88,14 @@ Reference: `proposed-factors-native.png`.
 
 Reference: `proposed-backtest-native.png`.
 
-- Setup strip remains compact and does not consume the whole first fold.
+- Setup keeps a stable expression editor beside core controls. Cost, benchmark and daily-holdings opt-in remain visible in a compact summary; advanced inputs unmount when collapsed and all parameters freeze while running.
 - Verdict/comparison strip remains visible in idle, running, success, and error states.
 - Primary evidence grid is 2:1: equity/benchmark/drawdown on the left, validation gates on the right.
-- The empty state preserves this 2:1 shell with chart axes, validation rows, and next-step copy instead of a large blank panel.
+- The compact empty state preserves the evidence/gates relationship without an oversized empty chart or repeated metric dashes. Its five questions match the completed validation gate; unassessed is not a pass.
 - Comparison tray follows the evidence grid.
 - Diagnostic summaries show all groups as compact rows or accordions, with the most severe warning expanded.
 - Recent runs show at most five rows in the first view.
+- Editing parameters never relabels prior evidence as a new result. The previous run stays identified until a new run completes.
 
 ### 6.3 Alerts, `/alerts`
 
@@ -128,10 +129,20 @@ The repository does not contain a canonical generated Screener reference image. 
 
 - Header exposes factor-library size, selection count, data date, and point-in-time membership status.
 - Decision strip is the only home of the filled primary Run action. It summarizes selected factors, target count, eligible universe, and sector concentration.
-- Setup uses a desktop workbench grid: factor selection on the left, universe and combination controls on the right.
+- Setup uses a desktop workbench grid: bounded factor selection and combination controls on the left, universe and data date on the right. Do not stretch a short factor list to the full height of unrelated filters.
 - Backend placeholder sectors such as `Unknown`, `Unclassified`, or blank values are not selectable filter options. Missing classification remains explicit in results.
 - Chinese locale translates interface chrome and explanatory text. Conventional quant abbreviations may remain in English only when a hover and keyboard-focus definition is available.
 - Results distinguish source-universe size, eligible count, eligibility rate, rank score, basket mean, and combination method. A score is never described as expected return.
+- Factor selection shows five rows per page; results show ten. Search covers the full loaded factor library; CSV and aggregates retain the full result. Page changes close expanded row details. Sector translations change display only, never API or CSV values.
+
+### 6.5a Report, `/report`
+
+- The first screen is a report composer: name/expression and a single Generate action beside direction, neutralization, benchmark and cost. Historical examples and saved factors open in a searchable, five-row library dialog.
+- Loading a source stages a draft. Only Generate computes evidence, except the existing explicit report-prefill handoff. Historical fixture returns are not this run's results.
+- Completed reports lead with an evidence-based verdict, equity and run settings. Comparison and deep diagnostics open on demand; print retains the complete diagnostics.
+- Name, expression, parameters and generation time belong to the completed snapshot. Edited drafts are marked unverified; comparison and export use the original report's settings, including the 70/30 train/test split and 30% sleeves.
+
+Implementation and acceptance record: [2026-11-03 research workspace refinement](2026-11-03-research-workspaces-refinement.md).
 
 ### 6.6 Round-two recovery and density rules
 
