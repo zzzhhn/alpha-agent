@@ -38,4 +38,18 @@ describe("paper workspace refinement", () => {
     const html = renderToStaticMarkup(<SimOrderForm fixedTicker="TEST" locale="zh" layout="ticket" disabled availableCash={1000} onPlaced={() => {}} />);
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled/);
   });
+
+  it("keeps missing bot PnL unknown and identifies account-level provenance", () => {
+    const html = renderToStaticMarkup(<PaperPositionsWithSource accountKind="bot" positions={[{ticker:"TEST",qty:10,avg_cost:100,current_price:110,unrealized_pnl:null,unrealized_pct:null}]} attribution={[]} attributionAvailable={false} />);
+    expect(html).toContain("机器人账户");
+    expect(html).not.toContain("自主交易");
+    expect(html).not.toContain("+$0");
+  });
+
+  it("does not expose manual cancellation controls on bot orders", () => {
+    const order:OrderOut = {id:1,ticker:"TEST",side:"buy",order_type:"market",qty:1,limit_price:null,signal_date:"2026-10-30",fill_date:null,fill_price:null,status:"pending"};
+    const html = renderToStaticMarkup(<PaperOrdersPane botMode orders={[order]} onCancel={async()=>{}} attribution={[]} attributionStatus="unavailable" showAttribution={false} showDisclaimer={false} />);
+    expect(html).not.toMatch(/<button\b/);
+    expect(html).toContain("待成交");
+  });
 });

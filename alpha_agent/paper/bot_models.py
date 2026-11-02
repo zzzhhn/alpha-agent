@@ -1,0 +1,86 @@
+"""Small, provider-independent contracts for the simulated portfolio agent."""
+from __future__ import annotations
+
+import json
+import math
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class BotConfig(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    provider: Literal['kimi', 'openai', 'anthropic', 'ollama'] = 'kimi'
+    model: str = Field(default='', max_length=120)
+    instructions: str = Field(default='根据平台证据管理长期模拟组合；允许继续持有或保持现金。', max_length=2000)
+    schedule_enabled: bool = False
+    open_enabled: bool = True
+    close_enabled: bool = True
+    # First release uses two bounded scheduler windows, not arbitrary cron.
+    open_offset_minutes: Literal[30] = 30
+    close_offset_minutes: Literal[30] = 30
+    max_daily_runs: int = Field(default=6, ge=1, le=12)
+    max_positions: int = Field(default=8, ge=1, le=20)
+    max_position_weight: float = Field(default=0.25, gt=0, le=1, allow_inf_nan=False)
+    fee_bps: float = Field(default=10, ge=0, le=100, allow_inf_nan=False)
+    slippage_bps: float = Field(default=5, ge=0, le=100, allow_inf_nan=False)
+
+
+class BotAction(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    action_id: str = Field(min_length=1, max_length=40, pattern=r'^[a-zA-Z0-9_-]+$')
+    type: Literal['set_target_weight', 'cancel_order'] = 'set_target_weight'
+    instrument_id: str | None = None
+    target_weight: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    order_id: int | None = None
+    evidence_ids: list[str] = Field(default_factory=list, max_length=8)
+    reason: str = Field(default='', max_length=600)
+
+    @model_validator(mode='after')
+    def valid_action(self):
+        if self.type == 'set_target_weight' and (not self.instrument_id or self.target_weight is None):
+            raise ValueError('weight action requires instrument_id and target_weight')
+        if self.type == 'cancel_order' and not self.order_id:
+            raise ValueError('cancel action requires order_id')
+        return self
+
+
+class PositionNote(BaseModel):
+    ticker: str = Field(max_length=10, pattern=r'^[A-Z0-9.^-]+$')
+    note: str = Field(max_length=600)
+
+
+class BotDecision(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    context_id: str
+    decision: Literal['rebalance', 'no_trade', 'research']
+    summary: str = Field(max_length=1600)
+    actions: list[BotAction] = Field(default_factory=list, max_length=20)
+    position_notes: list[PositionNote] = Field(default_factory=list, max_length=20)
+    research_tickers: list[str] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode='after')
+    def coherent(self):
+        if self.decision != 'rebalance' and self.actions:
+            raise ValueError('only rebalance may contain actions')
+        if len({a.action_id for a in self.actions}) != len(self.actions):
+            raise ValueError('action_id must be unique')
+        ids = [a.instrument_id for a in self.actions if a.type == 'set_target_weight']
+        if len(set(ids)) != len(ids):
+            raise ValueError('one target per instrument')
+        weights = sum(a.target_weight or 0 for a in self.actions)
+        if not math.isfinite(weights) or weights > 1.000001:
+            raise ValueError('target weights exceed capital')
+        return self
+
+
+def parse_decision(text: str, context_id: str) -> BotDecision:
+    if len(text.encode()) > 24000:
+        raise ValueError('decision exceeds output budget')
+    value = text.strip()
+    if value.startswith('```'):
+        value = value.split('\n', 1)[1].rsplit('```', 1)[0].strip()
+    decision = BotDecision.model_validate(json.loads(value))
+    if decision.context_id != context_id:
+        raise ValueError('context_id mismatch')
+    return decision

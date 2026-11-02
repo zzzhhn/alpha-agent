@@ -17,11 +17,11 @@ export default function SimPositionRow({
 }) {
   // locale used for future localization of number formatting
   void locale;
-  const pnlPos = pos.unrealized_pnl >= 0;
-  const pctStr = pos.unrealized_pct >= 0
+  const pnlPos = pos.unrealized_pnl !== null && pos.unrealized_pnl >= 0;
+  const pctStr = pos.unrealized_pct === null ? "—" : pos.unrealized_pct >= 0
     ? `+${pos.unrealized_pct.toFixed(2)}%`
     : `${pos.unrealized_pct.toFixed(2)}%`;
-  const pnlStr = pos.unrealized_pnl >= 0
+  const pnlStr = pos.unrealized_pnl === null ? "—" : pos.unrealized_pnl >= 0
     ? `+$${pos.unrealized_pnl.toFixed(0)}`
     : `-$${Math.abs(pos.unrealized_pnl).toFixed(0)}`;
 
@@ -41,13 +41,13 @@ export default function SimPositionRow({
       </TmTableCell>
       <TmTableCell numeric textAlign="right" className={clsx(
         "text-xs font-semibold",
-        pnlPos ? "text-tm-pos" : "text-tm-neg",
+        pos.unrealized_pnl === null ? "text-tm-muted" : pnlPos ? "text-tm-pos" : "text-tm-neg",
       )}>
         {pnlStr}
       </TmTableCell>
       <TmTableCell numeric textAlign="right" className={clsx(
         "text-xs",
-        pnlPos ? "text-tm-pos" : "text-tm-neg",
+        pos.unrealized_pct === null ? "text-tm-muted" : pnlPos ? "text-tm-pos" : "text-tm-neg",
       )}>
         {pctStr}
       </TmTableCell>

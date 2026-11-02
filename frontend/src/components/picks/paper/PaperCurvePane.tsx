@@ -34,7 +34,9 @@ export default function PaperCurvePane({
   );
   return (
     <div className="flex flex-col gap-3 px-3 py-3">
-      {!curve || normalizedSeries.length === 0 ? (
+      {curve && curve.series.length > 0 && normalizedSeries.length === 0 ? (
+        <TmStatePane state="partial" title={t(locale,"sim.bot.missing_marks")} className="!min-h-[148px] border-0 !bg-transparent !px-0 !py-3" />
+      ) : !curve || normalizedSeries.length === 0 ? (
         <TmStatePane state="empty" title={locale === "zh" ? "等待首个净值记录" : "Awaiting the first equity mark"} description={locale === "zh" ? "目前还没有日终估值。记录产生后，会在同一起点比较个人模拟仓与 SPY；没有数据不代表零收益。" : "No daily valuations yet. Once recorded, your paper account and SPY are compared from a common start. Missing data is not a zero return."} className="!min-h-[148px] border-0 !bg-transparent !px-0 !py-3" />
       ) : (
         <div style={{ width: "100%", height: compact ? 210 : 300 }}>
@@ -46,6 +48,7 @@ export default function PaperCurvePane({
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line
+                connectNulls={false}
                 type="monotone"
                 dataKey="portfolio_index"
                 stroke="var(--tm-accent)"
@@ -53,6 +56,7 @@ export default function PaperCurvePane({
                 name={t(locale, "sim.account.nav")}
               />
               <Line
+                connectNulls={false}
                 type="monotone"
                 dataKey="benchmark_index"
                 stroke="var(--tm-muted)"
@@ -64,6 +68,7 @@ export default function PaperCurvePane({
           </ResponsiveContainer>
         </div>
       )}
+      {normalizedSeries.some(point=>point.portfolio_index === null || point.benchmark_index === null) ? <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.curve_gaps")}</p> : null}
       {showDisclaimer ? <Disclaimer /> : null}
     </div>
   );

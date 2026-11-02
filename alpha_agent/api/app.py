@@ -308,6 +308,10 @@ def create_app() -> FastAPI:
         from alpha_agent.api.routes.paper import router
         return router
 
+    def _import_paper_bot():
+        from alpha_agent.api.routes.paper_bot import router
+        return router
+
     def _import_l2():
         from alpha_agent.api.routes.l2 import router
         return router
@@ -332,6 +336,7 @@ def create_app() -> FastAPI:
     _load("alerts", _import_alerts)
     _load("brain", _import_brain)
     _load("paper", _import_paper)
+    _load("paper_bot", _import_paper_bot)
     _load("l2", _import_l2)
     _load("user", _import_user)
 

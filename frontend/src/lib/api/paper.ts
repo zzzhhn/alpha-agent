@@ -7,8 +7,10 @@ export interface PositionOut {
   readonly qty: number;
   readonly avg_cost: number;
   readonly current_price: number | null;
-  readonly unrealized_pnl: number;
-  readonly unrealized_pct: number;
+  readonly unrealized_pnl: number | null;
+  readonly unrealized_pct: number | null;
+  readonly price_quality?: string | null;
+  readonly mark_at?: string | null;
 }
 
 export interface AccountResponse {
@@ -17,13 +19,15 @@ export interface AccountResponse {
   readonly reserved_cash: number;
   readonly available_cash: number;
   readonly initial_cash: number;
-  readonly portfolio_value: number;
-  readonly total_return_pct: number;
-  readonly unrealized_pnl: number;
+  readonly portfolio_value: number | null;
+  readonly total_return_pct: number | null;
+  readonly unrealized_pnl: number | null;
   readonly realized_pnl: number;
   readonly positions: readonly PositionOut[];
   readonly pending_orders: number;
   readonly reset_count: number;
+  readonly valuation_quality?: string | null;
+  readonly valued_at?: string | null;
 }
 
 export interface PlaceOrderRequest {
@@ -72,6 +76,14 @@ export interface OrderOut {
   readonly fee_bps?: number;
   readonly transaction_cost?: number;
   readonly cohort_id?: number;
+  readonly bot_run_id?: string | null;
+  readonly execution_model?: string;
+  readonly accepted_at?: string | null;
+  readonly expires_at?: string | null;
+  readonly filled_at?: string | null;
+  readonly reference_price?: number | null;
+  readonly slippage_bps?: number;
+  readonly execution_evidence?: Readonly<Record<string, unknown>> | null;
 }
 
 // Per-ticker attribution rollup (V038). Field names/shape confirmed against
@@ -79,7 +91,7 @@ export interface OrderOut {
 export interface TickerAttribution {
   readonly ticker: string;
   readonly realized_pnl: number;
-  readonly unrealized_pnl: number;
+  readonly unrealized_pnl: number | null;
   readonly pick_linked_trades: number;
   readonly self_directed_trades: number;
   readonly latest_pick_date: string | null;
@@ -97,8 +109,10 @@ export interface OrderListResponse {
 
 export interface EquityPoint {
   readonly date: string;
-  readonly portfolio_value: number;
-  readonly benchmark_index: number;
+  readonly portfolio_value: number | null;
+  readonly benchmark_index: number | null;
+  readonly valuation_quality?: string | null;
+  readonly valued_at?: string | null;
 }
 
 export interface EquityCurveResponse {
@@ -164,15 +178,15 @@ export class PaperApiError extends Error {
   }
 }
 
-async function paperFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function paperFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, {
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
     cache: "no-store",
   });
   if (!r.ok) {
-    const body = await r.json().catch(() => ({})) as { detail?: string };
-    throw new PaperApiError(body.detail ?? `HTTP ${r.status}`, r.status);
+    const body = await r.json().catch(() => ({})) as { detail?: unknown };
+    throw new PaperApiError(typeof body.detail === "string" ? body.detail : `HTTP ${r.status}`, r.status);
   }
   return r.json() as Promise<T>;
 }

@@ -954,6 +954,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/paper_bot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Worker */
+        post: operations["worker_api_cron_paper_bot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/paper_bot/market_probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Market Probe
+         * @description One public-symbol availability sample, not a trade or blanket SLA.
+         */
+        post: operations["market_probe_api_cron_paper_bot_market_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/paper_fill": {
         parameters: {
             query?: never;
@@ -1024,6 +1061,26 @@ export interface paths {
          * @description Publish one immutable recommendation only after every shard finished.
          */
         post: operations["publish_recommendation_api_cron_publish_recommendation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/research_validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Research Validation
+         * @description Read-only real-kernel canary. No LLM spend, proposals or config mutation.
+         */
+        post: operations["research_validation_api_cron_research_validation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1858,6 +1915,196 @@ export interface paths {
         get: operations["get_account_api_paper_account_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Accounts */
+        get: operations["list_accounts_api_paper_accounts_get"];
+        put?: never;
+        /** Add Bot Account */
+        post: operations["add_bot_account_api_paper_accounts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Scoped Account */
+        get: operations["get_scoped_account_api_paper_accounts__account_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scoped Attribution */
+        get: operations["scoped_attribution_api_paper_accounts__account_id__attribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/bot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Config */
+        get: operations["get_config_api_paper_accounts__account_id__bot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Config */
+        patch: operations["patch_config_api_paper_accounts__account_id__bot_patch"];
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capabilities */
+        get: operations["capabilities_api_paper_accounts__account_id__capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Context */
+        get: operations["context_api_paper_accounts__account_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/equity-curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scoped Equity Curve */
+        get: operations["scoped_equity_curve_api_paper_accounts__account_id__equity_curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Scoped Orders */
+        get: operations["list_scoped_orders_api_paper_accounts__account_id__orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["runs_api_paper_accounts__account_id__runs_get"];
+        put?: never;
+        /** Wake */
+        post: operations["wake_api_paper_accounts__account_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Detail */
+        get: operations["run_detail_api_paper_accounts__account_id__runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/runs/{run_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop */
+        post: operations["stop_api_paper_accounts__account_id__runs__run_id__stop_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3289,6 +3536,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountListResponse */
+        AccountListResponse: {
+            /** Accounts */
+            accounts: components["schemas"]["AccountSummary"][];
+        };
         /** AccountResponse */
         AccountResponse: {
             /** Account Id */
@@ -3302,7 +3554,7 @@ export interface components {
             /** Pending Orders */
             pending_orders: number;
             /** Portfolio Value */
-            portfolio_value: number;
+            portfolio_value: number | null;
             /** Positions */
             positions: components["schemas"]["PositionOut"][];
             /** Realized Pnl */
@@ -3312,9 +3564,29 @@ export interface components {
             /** Reset Count */
             reset_count: number;
             /** Total Return Pct */
-            total_return_pct: number;
+            total_return_pct: number | null;
             /** Unrealized Pnl */
-            unrealized_pnl: number;
+            unrealized_pnl: number | null;
+            /** Valuation Quality */
+            valuation_quality?: string | null;
+            /** Valued At */
+            valued_at?: string | null;
+        };
+        /** AccountSummary */
+        AccountSummary: {
+            /** Account Id */
+            account_id: number;
+            /** Initial Cash */
+            initial_cash: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "human" | "bot";
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
         };
         /** Alert */
         Alert: {
@@ -3672,6 +3944,13 @@ export interface components {
             /** Universe Id */
             universe_id: string;
         };
+        /** CreateBotAccountRequest */
+        CreateBotAccountRequest: {
+            /** Initial Cash */
+            initial_cash: number;
+            /** Name */
+            name: string;
+        };
         /** EnrichResponse */
         EnrichResponse: {
             /** Enriched */
@@ -3691,11 +3970,15 @@ export interface components {
         /** EquityPoint */
         EquityPoint: {
             /** Benchmark Index */
-            benchmark_index: number;
+            benchmark_index: number | null;
             /** Date */
             date: string;
             /** Portfolio Value */
-            portfolio_value: number;
+            portfolio_value: number | null;
+            /** Valuation Quality */
+            valuation_quality?: string | null;
+            /** Valued At */
+            valued_at?: string | null;
         };
         /** ExplainAstRequest */
         ExplainAstRequest: {
@@ -4530,11 +4813,28 @@ export interface components {
         };
         /** OrderOut */
         OrderOut: {
+            /** Accepted At */
+            accepted_at?: string | null;
+            /** Bot Run Id */
+            bot_run_id?: string | null;
+            /** Cancel Requested At */
+            cancel_requested_at?: string | null;
             /**
              * Cohort Id
              * @default 0
              */
             cohort_id: number;
+            /** Execution Evidence */
+            execution_evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Execution Model
+             * @default daily_close_v1
+             */
+            execution_model: string;
+            /** Expires At */
+            expires_at?: string | null;
             /** Fail Reason */
             fail_reason?: string | null;
             /**
@@ -4546,6 +4846,8 @@ export interface components {
             fill_date: string | null;
             /** Fill Price */
             fill_price: number | null;
+            /** Filled At */
+            filled_at?: string | null;
             /** Id */
             id: number;
             /** Limit Price */
@@ -4558,6 +4860,8 @@ export interface components {
             pick_ticker?: string | null;
             /** Qty */
             qty: number;
+            /** Reference Price */
+            reference_price?: number | null;
             /**
              * Reserved Notional
              * @default 0
@@ -4567,6 +4871,11 @@ export interface components {
             side: string;
             /** Signal Date */
             signal_date: string;
+            /**
+             * Slippage Bps
+             * @default 0
+             */
+            slippage_bps: number;
             /** Source Payload Hash */
             source_payload_hash?: string | null;
             /** Source Policy Id */
@@ -4684,14 +4993,18 @@ export interface components {
             avg_cost: number;
             /** Current Price */
             current_price: number | null;
+            /** Mark At */
+            mark_at?: string | null;
+            /** Price Quality */
+            price_quality?: string | null;
             /** Qty */
             qty: number;
             /** Ticker */
             ticker: string;
             /** Unrealized Pct */
-            unrealized_pct: number;
+            unrealized_pct: number | null;
             /** Unrealized Pnl */
-            unrealized_pnl: number;
+            unrealized_pnl: number | null;
         };
         /** Recommendation */
         Recommendation: {
@@ -5104,7 +5417,7 @@ export interface components {
             /** Ticker */
             ticker: string;
             /** Unrealized Pnl */
-            unrealized_pnl: number;
+            unrealized_pnl: number | null;
         };
         /** TickerCoverage */
         TickerCoverage: {
@@ -7132,6 +7445,70 @@ export interface operations {
             };
         };
     };
+    worker_api_cron_paper_bot_post: {
+        parameters: {
+            query?: {
+                schedule?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    market_probe_api_cron_paper_bot_market_probe_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cron_paper_fill_api_cron_paper_fill_get: {
         parameters: {
             query?: never;
@@ -7271,6 +7648,39 @@ export interface operations {
             query?: {
                 request_id?: string | null;
             };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_validation_api_cron_research_validation_post: {
+        parameters: {
+            query?: never;
             header?: {
                 authorization?: string | null;
             };
@@ -8435,6 +8845,483 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_accounts_api_paper_accounts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_bot_account_api_paper_accounts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBotAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scoped_account_api_paper_accounts__account_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scoped_attribution_api_paper_accounts__account_id__attribution_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttributionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_config_api_paper_accounts__account_id__bot_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_config_api_paper_accounts__account_id__bot_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capabilities_api_paper_accounts__account_id__capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    context_api_paper_accounts__account_id__context_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scoped_equity_curve_api_paper_accounts__account_id__equity_curve_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquityCurveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scoped_orders_api_paper_accounts__account_id__orders_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runs_api_paper_accounts__account_id__runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    wake_api_paper_accounts__account_id__runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_detail_api_paper_accounts__account_id__runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_api_paper_accounts__account_id__runs__run_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

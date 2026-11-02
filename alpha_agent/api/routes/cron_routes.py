@@ -350,7 +350,7 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
             SELECT DISTINCT sp.ticker
             FROM sim_position sp
             JOIN sim_account sa ON sa.id=sp.account_id
-            WHERE sp.qty > 0 AND sp.cohort_id=sa.reset_count
+            WHERE sp.qty > 0 AND sp.cohort_id=sa.reset_count AND sa.kind='human'
         ),
         latest_prices AS (
             SELECT DISTINCT ON (dp.ticker) dp.ticker, dp.close
@@ -374,7 +374,7 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
             FROM sim_position sp
             JOIN sim_account sa ON sa.id=sp.account_id
             LEFT JOIN latest_prices lp ON lp.ticker = sp.ticker
-            WHERE sp.cohort_id=sa.reset_count
+            WHERE sp.cohort_id=sa.reset_count AND sa.kind='human'
             GROUP BY sp.account_id
         ),
         spy AS (
@@ -391,6 +391,7 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
         FROM sim_account sa
         LEFT JOIN position_agg pa ON pa.account_id = sa.id
         LEFT JOIN spy ON TRUE
+        WHERE sa.kind='human'
         """
     )
     if not rows:
@@ -441,7 +442,8 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
         pending_orders = await conn.fetch(
             "SELECT so.* FROM sim_order so "
             "JOIN sim_account sa ON sa.id=so.account_id "
-            "WHERE so.status='pending' AND so.cohort_id=sa.reset_count AND EXISTS ("
+            "WHERE so.status='pending' AND so.cohort_id=sa.reset_count "
+            "AND sa.kind='human' AND so.execution_model='daily_close_v1' AND EXISTS ("
             "  SELECT 1 FROM daily_prices dp "
             "  WHERE dp.ticker=so.ticker AND dp.date>so.signal_date"
             ") "
@@ -452,8 +454,10 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
 
     if not pending_orders:
         async with pool.acquire() as conn:
+            await _write_paper_equity_snapshots(conn, today)
             remaining_pending = await conn.fetchval(
-                "SELECT COUNT(*) FROM sim_order WHERE status='pending'"
+                "SELECT COUNT(*) FROM sim_order so JOIN sim_account sa ON sa.id=so.account_id "
+                "WHERE so.status='pending' AND sa.kind='human' AND so.execution_model='daily_close_v1'"
             )
         return {
             "ok": True,
@@ -504,7 +508,9 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
             async with conn.transaction():
                 locked_order = await conn.fetchrow(
                     "SELECT * FROM sim_order "
-                    "WHERE id=$1 AND status='pending' FOR UPDATE SKIP LOCKED",
+                    "WHERE id=$1 AND status='pending' AND execution_model='daily_close_v1' "
+                    "AND EXISTS (SELECT 1 FROM sim_account sa WHERE sa.id=sim_order.account_id "
+                    "AND sa.kind='human') FOR UPDATE SKIP LOCKED",
                     order["id"],
                 )
                 if locked_order is None:
@@ -523,7 +529,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                 qty = locked_order["qty"]
                 account_id = locked_order["account_id"]
                 account = await conn.fetchrow(
-                    "SELECT cash, reset_count FROM sim_account WHERE id=$1 FOR UPDATE",
+                    "SELECT cash, reset_count FROM sim_account WHERE id=$1 AND kind='human' FOR UPDATE",
                     account_id,
                 )
                 if account is None or int(account["reset_count"] or 0) != int(
@@ -634,7 +640,8 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
     async with pool.acquire() as conn:
         await _write_paper_equity_snapshots(conn, today)
         remaining_pending = await conn.fetchval(
-            "SELECT COUNT(*) FROM sim_order WHERE status='pending'"
+            "SELECT COUNT(*) FROM sim_order so JOIN sim_account sa ON sa.id=so.account_id "
+            "WHERE so.status='pending' AND sa.kind='human' AND so.execution_model='daily_close_v1'"
         )
 
     return {
@@ -651,7 +658,9 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
 async def _run_paper_fill(dsn: str) -> dict[str, Any]:
     """Run one non-blocking, bounded fill batch with a database-owned lease."""
     pool = await get_pool(dsn)
-    today = datetime.now(UTC).date()
+    from alpha_agent.market_session import latest_completed_xnys_session
+
+    today = latest_completed_xnys_session(datetime.now(UTC))
     async with pool.acquire() as lock_conn:
         acquired = await lock_conn.fetchval(
             "SELECT pg_try_advisory_lock(hashtext($1))",
@@ -688,6 +697,11 @@ async def cron_paper_fill() -> dict[str, Any]:
     started_at = datetime.now(UTC)
     try:
         result = await _run_paper_fill(dsn)
+        # The legacy fill lease is released before any provider I/O. Bot
+        # marks/snapshots run independently of whether human orders existed.
+        from alpha_agent.paper.bot_valuation import refresh_daily_valuations
+
+        result['bot_valuation'] = await refresh_daily_valuations(await get_pool(dsn))
     except Exception as exc:
         err = f"{type(exc).__name__}: {exc}"
         pool = await get_pool(dsn)

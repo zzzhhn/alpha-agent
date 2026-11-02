@@ -6,6 +6,7 @@ import type { TickerAttribution, OrderOut } from "@/lib/api/paper";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useState } from "react";
 import { TmPagination } from "@/components/tm/TmPagination";
+import { TmButton } from "@/components/tm/TmButton";
 import { t, type Locale } from "@/lib/i18n";
 import { StatusChip, Disclaimer, TwoStepConfirm } from "./PaperUi";
 import PaperAttributionTable from "./PaperAttributionTable";
@@ -32,6 +33,8 @@ export default function PaperOrdersPane({
   attributionStatus,
   showAttribution = true,
   showDisclaimer = true,
+  botMode = false,
+  onInspectOrder,
 }: {
   readonly orders: readonly OrderOut[];
   readonly onCancel: (orderId: number) => Promise<void>;
@@ -39,6 +42,8 @@ export default function PaperOrdersPane({
   readonly attributionStatus: "loading" | "ready" | "unavailable";
   readonly showAttribution?: boolean;
   readonly showDisclaimer?: boolean;
+  readonly botMode?: boolean;
+  readonly onInspectOrder?: (order: OrderOut) => void;
 }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
@@ -51,7 +56,7 @@ export default function PaperOrdersPane({
     <div className="flex flex-col gap-5 px-3 py-3">
       <TmTableFrame>
         {orders.length === 0 ? (
-          <p className="py-2 text-sm text-tm-muted">{zh ? "尚无模拟订单。提交后的订单会在这里显示待成交、成交或失败原因。" : "No paper orders yet. Submitted orders will show their execution status or failure reason here."}</p>
+          <p className="py-2 text-sm text-tm-muted">{botMode ? t(locale, "sim.bot.orders_empty") : zh ? "尚无模拟订单。提交后的订单会在这里显示待成交、成交或失败原因。" : "No paper orders yet. Submitted orders will show their execution status or failure reason here."}</p>
         ) : (
           <TmTable density="compact" caption={t(locale, "sim.orders.title")} className="text-left">
             <TmTableHead>
@@ -61,11 +66,12 @@ export default function PaperOrdersPane({
                     {h}
                   </TmTableHeaderCell>
                 ))}
+                {botMode ? <TmTableHeaderCell>{t(locale, "sim.bot.fee")}</TmTableHeaderCell> : null}
               </TmTableRow>
             </TmTableHead>
             <TmTableBody>
               {visibleOrders.map((o) => (
-                <OrderRow key={o.id} order={o} locale={locale} onCancel={onCancel} />
+                <OrderRow key={o.id} order={o} locale={locale} onCancel={onCancel} botMode={botMode} onInspectOrder={onInspectOrder} />
               ))}
             </TmTableBody>
           </TmTable>
@@ -89,15 +95,21 @@ function OrderRow({
   order: o,
   locale,
   onCancel,
+  botMode,
+  onInspectOrder,
 }: {
   readonly order: OrderOut;
   readonly locale: Locale;
   readonly onCancel: (orderId: number) => Promise<void>;
+  readonly botMode: boolean;
+  readonly onInspectOrder?: (order: OrderOut) => void;
 }) {
   const statusLabel =
     o.status === "failed"
       ? t(locale, "sim.status.failed")
-      : t(locale, `sim.status.${o.status}` as "sim.status.pending");
+      : ["accepted", "pending_market_data", "expired", "rejected", "cancel_requested"].includes(o.status)
+        ? t(locale, `sim.bot.order.${o.status}` as "sim.bot.order.accepted")
+        : ["pending", "filled", "cancelled"].includes(o.status) ? t(locale, `sim.status.${o.status}` as "sim.status.pending") : (locale === "zh" ? "状态待确认" : "Status unavailable");
   return (
     <TmTableRow>
       <TmTableCell className="text-xs text-tm-muted">{o.signal_date}</TmTableCell>
@@ -133,7 +145,7 @@ function OrderRow({
               {o.fail_reason}
             </span>
           ) : null}
-          {o.status === "pending" ? (
+          {!botMode && o.status === "pending" ? (
             <TwoStepConfirm
               idleLabel={t(locale, "sim.cancel_btn")}
               warnText={t(locale, "sim.cancel_btn") + "?"}
@@ -143,6 +155,7 @@ function OrderRow({
           ) : null}
         </div>
       </TmTableCell>
+      {botMode ? <TmTableCell numeric>{o.transaction_cost == null ? t(locale, "sim.bot.fee_unknown") : `$${o.transaction_cost.toFixed(2)}`}{onInspectOrder ? <TmButton variant="ghost" size="xs" className="ml-2" onClick={()=>onInspectOrder(o)} aria-label={`${t(locale,"sim.bot.details")} ${o.ticker} #${o.id}`}>{t(locale,"sim.bot.details")}</TmButton> : null}</TmTableCell> : null}
     </TmTableRow>
   );
 }

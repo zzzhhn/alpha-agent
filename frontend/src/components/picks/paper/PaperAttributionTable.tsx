@@ -20,8 +20,8 @@ import {
 import { TmStatePane } from "@/components/tm/TmStatePane";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-const pnl = (n: number) => `${n >= 0 ? "+" : ""}$${FMT.format(Math.abs(n))}`;
-const pnlTone = (n: number) => (n >= 0 ? "text-tm-pos" : "text-tm-neg");
+const pnl = (n: number | null) => n === null ? "—" : `${n >= 0 ? "+" : ""}$${FMT.format(Math.abs(n))}`;
+const pnlTone = (n: number | null) => n === null ? "text-tm-muted" : (n >= 0 ? "text-tm-pos" : "text-tm-neg");
 
 const COLS: readonly TranslationKey[] = [
   "sim.attribution.col_ticker",

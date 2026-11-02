@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   fetchPicks,
   type RatingCard,
@@ -38,10 +38,28 @@ import PaperOrdersPane from "./PaperOrdersPane";
 import PaperL2Evidence from "./PaperL2Evidence";
 import RecommendationPerformance from "../RecommendationPerformance";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import PaperBotScreen from "./PaperBotScreen";
+import "./paper-bot.css";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 export default function PaperScreen() {
+  const { locale } = useLocale();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const kind = searchParams.get("account") === "bot" ? "bot" : "human";
+  const accountTabs = <SegmentedTabs<"human" | "bot"> active={kind} ariaLabel={t(locale, "sim.accounts.label")} items={[{key:"human",label:t(locale,"sim.accounts.human")},{key:"bot",label:t(locale,"sim.accounts.bot")}]} onChange={next => {
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("account", next);
+    if (next === "bot") query.delete("ticker");
+    router.replace(`${pathname}?${query}`, { scroll: false });
+  }} />;
+  return kind === "bot" ? <PaperBotScreen accountTabs={accountTabs} /> : <HumanPaperScreen accountTabs={accountTabs} />;
+}
+
+function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) {
   const { locale } = useLocale();
   const searchParams = useSearchParams();
   const requestedTicker = searchParams.get("ticker")?.trim().toUpperCase() ?? null;
@@ -149,7 +167,7 @@ export default function PaperScreen() {
     await loadAll(false);
   }
 
-  const totalReturn = account?.total_return_pct ?? 0;
+  const totalReturn = account?.total_return_pct;
   const zh = locale === "zh";
   const accountUnavailable = authRequired || !!resourceErrors.account || !account;
   const showOrderTicket = () => {
@@ -170,6 +188,7 @@ export default function PaperScreen() {
         ]}
         action={<TmButton variant="secondary" loading={refreshing} loadingLabel={zh ? "更新中" : "Updating"} onClick={() => void loadAll(false)}>{zh ? "刷新账户" : "Refresh account"}</TmButton>}
       />
+      {accountTabs}
       <TmPane
         title={locale === "zh" ? "账户概览" : "Account overview"}
         meta={
@@ -177,10 +196,10 @@ export default function PaperScreen() {
         }
       >
         <div className="grid grid-cols-2 gap-4 px-6 py-4 sm:grid-cols-4">
-          <Metric label={t(locale, "sim.account.nav")} value={!accountUnavailable ? `$${FMT.format(account.portfolio_value)}` : "—"} />
+          <Metric label={t(locale, "sim.account.nav")} value={!accountUnavailable && account.portfolio_value !== null ? `$${FMT.format(account.portfolio_value)}` : "—"} />
           <Metric label={t(locale, "sim.account.cash")} value={!accountUnavailable ? `$${FMT.format(account.available_cash)}` : "—"} />
-          <Metric label={t(locale, "sim.account.unrealized")} value={!accountUnavailable ? `${account.unrealized_pnl > 0 ? "+" : account.unrealized_pnl < 0 ? "-" : ""}$${FMT.format(Math.abs(account.unrealized_pnl))}` : "—"} tone={accountUnavailable || !account.unrealized_pnl ? "text-tm-fg" : account.unrealized_pnl > 0 ? "text-tm-pos" : "text-tm-neg"} />
-          <Metric label={t(locale, "sim.workspace.total_return")} value={!accountUnavailable ? `${totalReturn > 0 ? "+" : ""}${totalReturn.toFixed(2)}%` : "—"} tone={accountUnavailable || !totalReturn ? "text-tm-fg" : totalReturn > 0 ? "text-tm-pos" : "text-tm-neg"} />
+          <Metric label={t(locale, "sim.account.unrealized")} value={!accountUnavailable && account.unrealized_pnl !== null ? `${account.unrealized_pnl > 0 ? "+" : account.unrealized_pnl < 0 ? "-" : ""}$${FMT.format(Math.abs(account.unrealized_pnl))}` : "—"} tone={accountUnavailable || !account.unrealized_pnl ? "text-tm-fg" : account.unrealized_pnl > 0 ? "text-tm-pos" : "text-tm-neg"} />
+          <Metric label={t(locale, "sim.workspace.total_return")} value={!accountUnavailable && totalReturn != null ? `${totalReturn > 0 ? "+" : ""}${totalReturn.toFixed(2)}%` : "—"} tone={accountUnavailable || !totalReturn ? "text-tm-fg" : totalReturn > 0 ? "text-tm-pos" : "text-tm-neg"} />
         </div>
         {guideOpen ? (
           <div id="paper-account-help" className="flex flex-wrap items-center justify-between gap-4 border-t border-tm-rule px-6 py-3 text-xs leading-5 text-tm-muted">
@@ -218,7 +237,7 @@ export default function PaperScreen() {
                 latestPrice={selectedPick.latest_price}
                 priceDate={selectedPick.price_date}
                 availableCash={account.available_cash}
-                portfolioValue={account.portfolio_value}
+                portfolioValue={account.portfolio_value ?? undefined}
                 targetWeight={0.02}
                 initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
               />
