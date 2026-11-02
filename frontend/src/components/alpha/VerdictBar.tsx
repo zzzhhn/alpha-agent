@@ -40,16 +40,15 @@ export function VerdictBar({ state, metrics, thresholds, canSave, onSave, onReTr
 
   if (state.kind === "idle") {
     return (
-      <DecisionStrip
-        headline={<><span className="mr-2 text-tm-accent">②</span>{overall}</>}
-        description={t(locale, "alpha.verdict.idle" as Parameters<typeof t>[1])}
-        metrics={[
-          { label: "IC", value: "—", detail: zh ? "阈值在结果中显示" : "Threshold shown with result" },
-          { label: "Sharpe", value: "—", detail: zh ? "等待回测" : "Waiting for backtest" },
-          { label: "MaxDD", value: "—", detail: zh ? "等待回测" : "Waiting for backtest" },
-          { label: zh ? "证据完整度" : "Evidence", value: "0 / 3" },
-        ]}
-      />
+      <section className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-sm font-semibold"><span className="mr-2 text-tm-accent">②</span>{overall}</h2>
+          <span className="text-xs text-tm-muted">{t(locale, "alpha.verdict.idle" as Parameters<typeof t>[1])}</span>
+        </div>
+        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-tm-muted">
+          {["IC", "Sharpe", zh ? "最大回撤" : "Max drawdown"].map(label => <div key={label} className="flex gap-3"><dt>{label}</dt><dd className="font-tm-mono">—</dd></div>)}
+        </dl>
+      </section>
     );
   }
 

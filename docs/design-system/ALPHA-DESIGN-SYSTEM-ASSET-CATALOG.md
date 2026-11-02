@@ -2,6 +2,21 @@
 
 Status: implementation source of truth for reusable frontend assets
 
+Alpha workspace refinement (2026-11-03, review slice): existing hypothesis,
+validation, verdict and evidence components retain the workstation identity.
+Desktop composition groups input/actions beside a six-field validation panel;
+idle evidence uses compact non-loading placeholders. History and example access
+remain canonical TM controls, rerun appears after translation, and local number
+field styling removes the nested browser border while preserving focus feedback.
+No new dependency, icon, token, backend request or research threshold.
+
+Alert workspace refinement (2026-11-02, review slice): preserves the existing
+three-column inbox and TM primitives. Compact filters, five-row pagination,
+local search and a top-of-inspector action group keep triage in view. Selection
+is scoped to the visible page; stale source events and fetch time are distinct.
+Review history is disclosed on demand. Page motion is opacity-only, with reduced
+motion support. No new tokens, dependencies, polling or backend queries.
+
 Paper account switcher (2026-11-02): a scoped `SegmentedTabs` treatment uses
 44px targets and the existing accent/background pair for a filled active account.
 Inactive accounts retain a visible rule, accent-soft hover and keyboard focus.

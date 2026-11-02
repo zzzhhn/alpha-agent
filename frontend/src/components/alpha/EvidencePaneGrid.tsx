@@ -45,7 +45,7 @@ export function EvidencePaneGrid({
     state.kind === "backtest_error" ? state.message : null;
 
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+    <div className="alpha-evidence grid grid-cols-1 gap-3 lg:grid-cols-3">
       <SpecPane
         state={panes.spec}
         data={translate}
