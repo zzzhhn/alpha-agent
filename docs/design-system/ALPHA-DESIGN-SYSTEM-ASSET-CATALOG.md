@@ -2,6 +2,11 @@
 
 Status: implementation source of truth for reusable frontend assets
 
+Paper account switcher (2026-11-02): a scoped `SegmentedTabs` treatment uses
+44px targets and the existing accent/background pair for a filled active account.
+Inactive accounts retain a visible rule, accent-soft hover and keyboard focus.
+Only the human/bot account switcher changes; shared tabs and account logic stay intact.
+
 Persistent paper bot (2026-11-02): `/paper?account=bot` composes the existing
 SegmentedTabs, WorkbenchHeader, TmPane, TmDrawer, TmTable and TmPagination.
 Human account actions remain unchanged. Bot run state and order settlement state

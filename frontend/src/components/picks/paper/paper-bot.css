@@ -1,3 +1,43 @@
+.paper-account-tabs[role="tablist"] {
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.paper-account-tabs[role="tablist"] > [role="tab"] {
+  flex-shrink: 0;
+  justify-content: center;
+  min-width: 9.5rem;
+  height: 2.75rem;
+  padding-inline: 1.25rem;
+  border: 1px solid var(--tm-rule);
+  background: var(--tm-bg-2);
+  color: var(--tm-fg);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.paper-account-tabs[role="tablist"] > [role="tab"][aria-selected="true"] {
+  border-color: var(--tm-accent);
+  background: var(--tm-accent);
+  color: var(--tm-bg);
+}
+
+.paper-account-tabs [role="tab"]::after {
+  content: none;
+}
+
+.paper-account-tabs[role="tablist"] > [role="tab"][aria-selected="false"]:hover {
+  border-color: var(--tm-accent);
+  background: var(--tm-accent-soft);
+  color: var(--tm-accent);
+}
+
+.paper-account-tabs [role="tab"]:focus-visible {
+  outline: 2px solid var(--tm-accent);
+  outline-offset: 2px;
+}
+
 @keyframes paper-bot-appear {
   from { opacity: 0; }
   to { opacity: 1; }
