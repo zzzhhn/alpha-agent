@@ -1,0 +1,10 @@
+@keyframes paper-bot-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.paper-bot-appear { animation: paper-bot-appear 140ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-bot-appear { animation: none; }
+}

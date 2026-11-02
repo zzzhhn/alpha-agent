@@ -279,6 +279,16 @@ const MIGRATIONS: readonly MigrationItem[] = [
     status: "canonical",
     closure: { zh: "三种通知共用生产组件，关闭按钮随语言切换。", en: "Three notification variants share production code and localized dismiss actions." },
   },
+  {
+    id: "persistent-paper-bot",
+    category: { zh: "操作模式 · 持续机器人账户", en: "Pattern · persistent bot account" },
+    legacy: "human-only paper workspace",
+    canonical: "SegmentedTabs + TmPane + TmDrawer + TmPagination",
+    consumers: { zh: "模拟仓人类／机器人视图", en: "Human and bot paper portfolios" },
+    owner: { zh: "模拟仓工作区", en: "Paper workspace" },
+    status: "in-progress",
+    closure: { zh: "账户隔离、运行与订单分态；缺价不显示零收益。生产观察与视觉验收后固化。", en: "Isolate accounts, run and order states; never render missing marks as zero return. Production observation and visual acceptance remain." },
+  },
 ];
 
 export function ReferencePatterns({ locale }: { readonly locale: Locale }) {

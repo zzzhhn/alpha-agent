@@ -1,0 +1,43 @@
+name: paper-bot-runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        default: run
+        options: [run, market_probe]
+  schedule:
+    # A second small window catches delayed dispatch. The NYSE calendar
+    # filters ordinary vs half-day close; no every-minute polling.
+    - cron: '2,12 10 * * 1-5'
+      timezone: America/New_York
+    - cron: '32,42 12,15 * * 1-5'
+      timezone: America/New_York
+
+permissions:
+  contents: read
+concurrency:
+  group: paper-bot-runner
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    uses: ./.github/workflows/cron-preflight.yml
+    with:
+      trigger_event: ${{ github.event_name }}
+    secrets:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+  drain:
+    needs: [preflight]
+    if: needs.preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run bounded paper bot stages
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BOT_SCHEDULE: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
+          BOT_OPERATION: ${{ inputs.operation || 'run' }}
+        run: python3 scripts/run_paper_bot_worker.py

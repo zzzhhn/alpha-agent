@@ -29,17 +29,20 @@ export default function PaperPositionsWithSource({
   attributionAvailable = true,
   pendingOrders = 0,
   onChoose,
+  accountKind = "human",
 }: {
   readonly positions: readonly PositionOut[];
   readonly attribution: readonly TickerAttribution[];
   readonly attributionAvailable?: boolean;
   readonly pendingOrders?: number;
   readonly onChoose?: () => void;
+  readonly accountKind?: "human" | "bot";
 }) {
   const { locale } = useLocale();
   const sourceByTicker = new Map((attributionAvailable ? attribution : []).map((row) => [row.ticker, row]));
 
   if (positions.length === 0) {
+    if (accountKind === "bot") return <TmStatePane state="empty" title={t(locale, "sim.bot.positions_empty")} description={pendingOrders > 0 ? `${pendingOrders} ${t(locale, "sim.status.pending")}` : undefined} className="!min-h-[180px] rounded-none border-0 !bg-transparent" />;
     return <TmStatePane state="empty" title={locale === "zh" ? "尚未建立持仓" : "No positions yet"} description={pendingOrders > 0 ? (locale === "zh" ? `${pendingOrders} 笔订单待成交；下单成功不等于已经持有。` : `${pendingOrders} orders await execution. Submission is not a fill.`) : (locale === "zh" ? "从上方选择推荐并提交模拟单，成交后将在这里显示持仓与来源。" : "Select a recommendation above. Positions and provenance appear after the order fills.")} action={onChoose ? {label:locale === "zh" ? "查看下单区" : "View order ticket",onClick:onChoose,variant:"secondary"} : undefined} className="!min-h-[180px] rounded-none border-0 !bg-transparent" />;
   }
 
@@ -67,7 +70,8 @@ export default function PaperPositionsWithSource({
         <TmTableBody>
           {positions.map((position) => {
             const source = sourceByTicker.get(position.ticker);
-            const pnlPositive = position.unrealized_pnl >= 0;
+            const pnlPositive = position.unrealized_pnl !== null && position.unrealized_pnl >= 0;
+            const pnlKnown = position.unrealized_pnl !== null && position.unrealized_pct !== null && (position.current_price !== null || accountKind !== "bot");
             const currentValue = position.current_price === null
               ? null
               : position.current_price * position.qty;
@@ -77,12 +81,14 @@ export default function PaperPositionsWithSource({
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">{position.qty.toLocaleString()}</TmTableCell>
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">${position.avg_cost.toFixed(2)}</TmTableCell>
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">{currentValue === null ? "—" : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</TmTableCell>
-                <TmTableCell numeric textAlign="right" className={clsx("text-xs font-semibold", pnlPositive ? "text-tm-pos" : "text-tm-neg")}>{pnlPositive ? "+" : "-"}${Math.abs(position.unrealized_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="ml-1 font-normal">({position.unrealized_pct >= 0 ? "+" : ""}{position.unrealized_pct.toFixed(2)}%)</span></TmTableCell>
+                <TmTableCell numeric textAlign="right" className={clsx("text-xs font-semibold", !pnlKnown ? "text-tm-muted" : pnlPositive ? "text-tm-pos" : "text-tm-neg")}>
+                  {!pnlKnown || position.unrealized_pnl === null || position.unrealized_pct === null ? "—" : <>{pnlPositive ? "+" : "-"}${Math.abs(position.unrealized_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="ml-1 font-normal">({position.unrealized_pct >= 0 ? "+" : ""}{position.unrealized_pct.toFixed(2)}%)</span></>}
+                </TmTableCell>
                 <TmTableCell>
                   <span className={clsx(
                     "border px-1.5 py-0.5 font-tm-mono text-xs uppercase tracking-wide",
                     source?.source_type === "pick" ? "border-tm-accent text-tm-accent" : "border-tm-rule text-tm-fg-2",
-                  )}>{sourceLabel(source?.source_type, locale)}</span>
+                  )}>{accountKind === "bot" ? t(locale, "sim.bot.position_source") : sourceLabel(source?.source_type, locale)}</span>
                   {source?.latest_pick_date ? <span className="ml-2 font-tm-mono text-xs text-tm-muted">{source.latest_pick_date}</span> : null}
                 </TmTableCell>
               </TmTableRow>
@@ -91,7 +97,7 @@ export default function PaperPositionsWithSource({
         </TmTableBody>
       </TmTable>
       <p className="px-3 py-2 font-tm-mono text-xs leading-4 text-tm-muted">
-        {t(locale, "sim.workspace.source_note")}
+        {t(locale, accountKind === "bot" ? "sim.bot.account_source" : "sim.workspace.source_note")}
       </p>
     </TmTableFrame>
   );

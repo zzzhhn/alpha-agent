@@ -10,7 +10,7 @@ import json
 import os
 from datetime import UTC, date, datetime
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -18,19 +18,39 @@ from pydantic import BaseModel, Field
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_user
+from alpha_agent.paper.accounts import create_bot_account, resolve_account
 
 router = APIRouter(prefix="/api/paper", tags=["paper"])
 PAPER_FEE_BPS = 10.0
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
+class AccountSummary(BaseModel):
+    account_id: int
+    kind: Literal['human', 'bot']
+    name: str
+    status: str
+    initial_cash: float
+
+
+class AccountListResponse(BaseModel):
+    accounts: list[AccountSummary]
+
+
+class CreateBotAccountRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    initial_cash: float = Field(..., gt=0, allow_inf_nan=False)
+
+
 class PositionOut(BaseModel):
     ticker: str
     qty: int
     avg_cost: float
     current_price: float | None
-    unrealized_pnl: float
-    unrealized_pct: float
+    unrealized_pnl: float | None
+    unrealized_pct: float | None
+    price_quality: str | None = None
+    mark_at: str | None = None
 
 
 class AccountResponse(BaseModel):
@@ -39,13 +59,15 @@ class AccountResponse(BaseModel):
     reserved_cash: float
     available_cash: float
     initial_cash: float
-    portfolio_value: float
-    total_return_pct: float
-    unrealized_pnl: float
+    portfolio_value: float | None
+    total_return_pct: float | None
+    unrealized_pnl: float | None
     realized_pnl: float
     positions: list[PositionOut]
     pending_orders: int
     reset_count: int
+    valuation_quality: str | None = None
+    valued_at: str | None = None
 
 
 class PlaceOrderRequest(BaseModel):
@@ -89,6 +111,15 @@ class OrderOut(BaseModel):
     fee_bps: float = 0.0
     transaction_cost: float = 0.0
     cohort_id: int = 0
+    bot_run_id: str | None = None
+    execution_model: str = 'daily_close_v1'
+    accepted_at: str | None = None
+    expires_at: str | None = None
+    filled_at: str | None = None
+    cancel_requested_at: str | None = None
+    reference_price: float | None = None
+    slippage_bps: float = 0.0
+    execution_evidence: dict | None = None
 
 
 class OrderListResponse(BaseModel):
@@ -98,8 +129,10 @@ class OrderListResponse(BaseModel):
 
 class EquityPoint(BaseModel):
     date: str
-    portfolio_value: float
-    benchmark_index: float
+    portfolio_value: float | None
+    benchmark_index: float | None
+    valuation_quality: str | None = None
+    valued_at: str | None = None
 
 
 class EquityCurveResponse(BaseModel):
@@ -116,7 +149,7 @@ class ResetResponse(BaseModel):
 class TickerAttribution(BaseModel):
     ticker: str
     realized_pnl: float
-    unrealized_pnl: float
+    unrealized_pnl: float | None
     pick_linked_trades: int
     self_directed_trades: int
     latest_pick_date: str | None = None
@@ -130,17 +163,20 @@ class AttributionResponse(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 async def _get_or_create_account(pool: Any, user_id: int) -> dict[str, Any]:
-    """Return the sim_account row for user_id, creating it if absent."""
-    row = await pool.fetchrow(
-        "SELECT * FROM sim_account WHERE user_id = $1", user_id
+    """Compatibility name: legacy routes can resolve only the human account."""
+    return await resolve_account(pool, user_id)
+
+
+def _account_summary(account: dict[str, Any]) -> AccountSummary:
+    return AccountSummary(
+        account_id=account['id'], kind=account['kind'], name=account['name'],
+        status=account['status'], initial_cash=account['initial_cash'],
     )
-    if row is None:
-        row = await pool.fetchrow(
-            "INSERT INTO sim_account (user_id) VALUES ($1) RETURNING *", user_id
-        )
-    if row is None:
-        raise HTTPException(status_code=500, detail="failed to create sim account")
-    return dict(row)
+
+
+def _require_human(account: dict[str, Any]) -> None:
+    if account.get('kind', 'human') != 'human':
+        raise HTTPException(status_code=403, detail="manual changes require a human account")
 
 
 async def _current_closes(pool: Any, tickers: list[str]) -> dict[str, float]:
@@ -271,12 +307,47 @@ def _paper_signal_session(now: datetime | None = None) -> date:
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
+@router.get("/accounts", response_model=AccountListResponse)
+async def list_accounts(user_id: int = Depends(require_user)) -> AccountListResponse:
+    pool = await get_db_pool()
+    await resolve_account(pool, user_id)
+    rows = await pool.fetch(
+        "SELECT * FROM sim_account WHERE user_id=$1 "
+        "ORDER BY CASE kind WHEN 'human' THEN 0 ELSE 1 END, id",
+        user_id,
+    )
+    return AccountListResponse(accounts=[_account_summary(dict(row)) for row in rows])
+
+
+@router.post("/accounts", response_model=AccountSummary, status_code=201)
+async def add_bot_account(
+    body: CreateBotAccountRequest,
+    user_id: int = Depends(require_user),
+) -> AccountSummary:
+    pool = await get_db_pool()
+    account = await create_bot_account(pool, user_id, body.name, body.initial_cash)
+    return _account_summary(account)
+
+
+@router.get("/accounts/{account_id}", response_model=AccountResponse)
+async def get_scoped_account(
+    account_id: int,
+    user_id: int = Depends(require_user),
+) -> AccountResponse:
+    return await _read_account(await get_db_pool(), user_id, account_id)
+
+
 @router.get("/account", response_model=AccountResponse)
 async def get_account(
     user_id: int = Depends(require_user),
 ) -> AccountResponse:
-    pool = await get_db_pool()
-    account = await _get_or_create_account(pool, user_id)
+    return await _read_account(await get_db_pool(), user_id)
+
+
+async def _read_account(
+    pool: Any, user_id: int, account_id: int | None = None,
+) -> AccountResponse:
+    account = await resolve_account(pool, user_id, account_id)
     account_id: int = account["id"]
     cohort_id = int(account["reset_count"] or 0)
 
@@ -287,7 +358,15 @@ async def get_account(
     )
     positions = [row for row in position_rows if row["qty"] > 0]
     tickers = [r["ticker"] for r in positions]
-    closes = await _current_closes(pool, tickers)
+    is_bot = account.get('kind') == 'bot'
+    valuation = None
+    if is_bot:
+        from alpha_agent.paper.bot_valuation import summarize_marks
+
+        valuation = summarize_marks([dict(row) for row in positions], account['cash'], datetime.now(UTC))
+        closes = {ticker: mark['price'] for ticker, mark in valuation['marks'].items()}
+    else:
+        closes = await _current_closes(pool, tickers)
 
     total_unrealized = 0.0
     # Closed rows remain the durable realized-PnL ledger. Fetching all rows in
@@ -297,9 +376,11 @@ async def get_account(
     for p in positions:
         ticker = p["ticker"]
         current = closes.get(ticker)
-        unr = ((current - p["avg_cost"]) * p["qty"]) if current is not None else 0.0
-        unr_pct = ((current - p["avg_cost"]) / p["avg_cost"] * 100.0) if current and p["avg_cost"] else 0.0
-        total_unrealized += unr
+        missing_pnl = None if is_bot else 0.0
+        unr = ((current - p["avg_cost"]) * p["qty"]) if current is not None else missing_pnl
+        unr_pct = ((current - p["avg_cost"]) / p["avg_cost"] * 100.0) if current and p["avg_cost"] else missing_pnl
+        total_unrealized += unr or 0.0
+        mark = valuation['marks'][ticker] if valuation else None
         pos_out.append(PositionOut(
             ticker=ticker,
             qty=p["qty"],
@@ -307,15 +388,17 @@ async def get_account(
             current_price=current,
             unrealized_pnl=unr,
             unrealized_pct=unr_pct,
+            price_quality=mark['quality'] if mark else None,
+            mark_at=mark['as_of'].isoformat() if mark and mark['as_of'] else None,
         ))
 
     position_mkt_value = sum(
         closes.get(p["ticker"], p["avg_cost"]) * p["qty"] for p in positions
-    )
+    ) if not is_bot else 0.0
     cash = account["cash"]
-    portfolio_value = cash + position_mkt_value
+    portfolio_value = valuation['portfolio_value'] if valuation else cash + position_mkt_value
     initial_cash = account["initial_cash"]
-    total_return_pct = (portfolio_value - initial_cash) / initial_cash * 100.0
+    total_return_pct = (portfolio_value - initial_cash) / initial_cash * 100.0 if portfolio_value is not None else None
 
     pending_count = await pool.fetchval(
         "SELECT COUNT(*) FROM sim_order "
@@ -338,11 +421,13 @@ async def get_account(
         initial_cash=initial_cash,
         portfolio_value=portfolio_value,
         total_return_pct=total_return_pct,
-        unrealized_pnl=total_unrealized,
+        unrealized_pnl=valuation['unrealized_pnl'] if valuation else total_unrealized,
         realized_pnl=total_realized_pnl,
         positions=pos_out,
         pending_orders=int(pending_count),
         reset_count=account["reset_count"],
+        valuation_quality=valuation['valuation_quality'] if valuation else None,
+        valued_at=valuation['valued_at'].isoformat() if valuation and valuation['valued_at'] else None,
     )
 
 
@@ -363,10 +448,12 @@ async def place_order(
     async with pool.acquire() as conn:
         async with conn.transaction():
             account = await _get_or_create_account(conn, user_id)
+            _require_human(account)
             account_id = int(account["id"])
             account = dict(await conn.fetchrow(
-                "SELECT * FROM sim_account WHERE id=$1 FOR UPDATE",
-                account_id,
+                "SELECT * FROM sim_account WHERE id=$1 AND user_id=$2 "
+                "AND kind='human' FOR UPDATE",
+                account_id, user_id,
             ))
             cohort_id = int(account["reset_count"] or 0)
             source_run_id, source_policy_id, source_payload_hash = (
@@ -486,19 +573,62 @@ async def list_orders(
     offset: int = 0,
     user_id: int = Depends(require_user),
 ) -> OrderListResponse:
-    pool = await get_db_pool()
-    account = await _get_or_create_account(pool, user_id)
+    return await _read_orders(await get_db_pool(), user_id, status, limit, offset)
+
+
+@router.get("/accounts/{account_id}/orders", response_model=OrderListResponse)
+async def list_scoped_orders(
+    account_id: int,
+    status: str = "all",
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int = Depends(require_user),
+) -> OrderListResponse:
+    return await _read_orders(await get_db_pool(), user_id, status, limit, offset, account_id)
+
+
+def _small_execution_evidence(value: Any) -> dict | None:
+    if isinstance(value, str):
+        if len(value) > 16000:
+            return {'reason': 'evidence_too_large'}
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    if not isinstance(value, dict):
+        return None
+    output = {key: value[key] for key in (
+        'execution_model', 'session_date', 'status', 'reason', 'reference_price',
+        'fill_price', 'slippage_bps', 'filled_at', 'confirmed_at',
+    ) if key in value and isinstance(value[key], (str, int, float, bool, type(None)))}
+    if isinstance(value.get('bar'), dict):
+        output['bar'] = {key: value['bar'][key] for key in (
+            'start', 'end', 'source', 'fetched_at', 'open', 'close', 'price_basis',
+        ) if key in value['bar'] and isinstance(value['bar'][key], (str, int, float, type(None)))}
+    output = {key: item[:300] if isinstance(item, str) else item for key, item in output.items()}
+    if 'bar' in output:
+        output['bar'] = {key: item[:300] if isinstance(item, str) else item for key, item in output['bar'].items()}
+    return output
+
+
+async def _read_orders(
+    pool: Any, user_id: int, status: str = "all", limit: int = 50,
+    offset: int = 0, account_id: int | None = None,
+) -> OrderListResponse:
+    account = await resolve_account(pool, user_id, account_id)
     account_id: int = account["id"]
     cohort_id = int(account["reset_count"] or 0)
 
     valid_statuses = {"pending", "filled", "expired", "cancelled", "failed", "all"}
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"status must be one of {valid_statuses}")
+    if limit < 1 or offset < 0:
+        raise HTTPException(status_code=400, detail="limit must be positive and offset non-negative")
 
     if status == "all":
         rows = await pool.fetch(
             "SELECT * FROM sim_order WHERE account_id=$1 AND cohort_id=$2 "
-            "ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+            "ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4",
             account_id, cohort_id, min(limit, 200), offset,
         )
         total = await pool.fetchval(
@@ -508,7 +638,7 @@ async def list_orders(
     else:
         rows = await pool.fetch(
             "SELECT * FROM sim_order WHERE account_id=$1 AND cohort_id=$2 "
-            "AND status=$3 ORDER BY created_at DESC LIMIT $4 OFFSET $5",
+            "AND status=$3 ORDER BY created_at DESC, id DESC LIMIT $4 OFFSET $5",
             account_id, cohort_id, status, min(limit, 200), offset,
         )
         total = await pool.fetchval(
@@ -539,6 +669,15 @@ async def list_orders(
             fee_bps=float(r["fee_bps"] or 0.0),
             transaction_cost=float(r["transaction_cost"] or 0.0),
             cohort_id=int(r["cohort_id"] or 0),
+            bot_run_id=str(r['bot_run_id']) if r.get('bot_run_id') else None,
+            execution_model=r.get('execution_model') or 'daily_close_v1',
+            accepted_at=r['accepted_at'].isoformat() if r.get('accepted_at') else None,
+            expires_at=r['expires_at'].isoformat() if r.get('expires_at') else None,
+            filled_at=r['filled_at'].isoformat() if r.get('filled_at') else None,
+            cancel_requested_at=r['cancel_requested_at'].isoformat() if r.get('cancel_requested_at') else None,
+            reference_price=r.get('reference_price'),
+            slippage_bps=float(r.get('slippage_bps') or 0),
+            execution_evidence=_small_execution_evidence(r.get('execution_evidence')),
         )
         for r in rows
     ]
@@ -552,6 +691,7 @@ async def cancel_order(
 ) -> Response:
     pool = await get_db_pool()
     account = await _get_or_create_account(pool, user_id)
+    _require_human(account)
     account_id: int = account["id"]
     cohort_id = int(account["reset_count"] or 0)
 
@@ -585,13 +725,26 @@ async def cancel_order(
 async def equity_curve(
     user_id: int = Depends(require_user),
 ) -> EquityCurveResponse:
-    pool = await get_db_pool()
-    account = await _get_or_create_account(pool, user_id)
+    return await _read_equity_curve(await get_db_pool(), user_id)
+
+
+@router.get("/accounts/{account_id}/equity-curve", response_model=EquityCurveResponse)
+async def scoped_equity_curve(
+    account_id: int,
+    user_id: int = Depends(require_user),
+) -> EquityCurveResponse:
+    return await _read_equity_curve(await get_db_pool(), user_id, account_id)
+
+
+async def _read_equity_curve(
+    pool: Any, user_id: int, account_id: int | None = None,
+) -> EquityCurveResponse:
+    account = await resolve_account(pool, user_id, account_id)
     account_id: int = account["id"]
     cohort_id = int(account["reset_count"] or 0)
 
     rows = await pool.fetch(
-        "SELECT as_of_date, portfolio_value, benchmark_close FROM sim_equity_daily "
+        "SELECT as_of_date, portfolio_value, benchmark_close, valuation_quality, valued_at FROM sim_equity_daily "
         "WHERE account_id=$1 AND cohort_id=$2 ORDER BY as_of_date ASC",
         account_id,
         cohort_id,
@@ -599,7 +752,8 @@ async def equity_curve(
     if not rows:
         return EquityCurveResponse(series=[], base_date=None)
 
-    base_bench = rows[0]["benchmark_close"] or 1.0
+    is_bot = account.get('kind') == 'bot'
+    base_bench = rows[0]["benchmark_close"] or (None if is_bot else 1.0)
     series = [
         EquityPoint(
             date=r["as_of_date"].isoformat(),
@@ -607,8 +761,10 @@ async def equity_curve(
             benchmark_index=(
                 (r["benchmark_close"] / base_bench * 100.0)
                 if r["benchmark_close"] and base_bench
-                else 100.0
+                else None if is_bot else 100.0
             ),
+            valuation_quality=r.get('valuation_quality'),
+            valued_at=r['valued_at'].isoformat() if r.get('valued_at') else None,
         )
         for r in rows
     ]
@@ -623,10 +779,12 @@ async def reset_account(
     async with pool.acquire() as conn:
         async with conn.transaction():
             account = await _get_or_create_account(conn, user_id)
+            _require_human(account)
             account_id = int(account["id"])
             account = dict(await conn.fetchrow(
-                "SELECT * FROM sim_account WHERE id=$1 FOR UPDATE",
-                account_id,
+                "SELECT * FROM sim_account WHERE id=$1 AND user_id=$2 "
+                "AND kind='human' FOR UPDATE",
+                account_id, user_id,
             ))
             initial_cash = float(account["initial_cash"])
             old_cohort = int(account["reset_count"] or 0)
@@ -662,13 +820,26 @@ async def get_attribution(
     PnL remains ticker-level because sim_position stores one blended cost basis.
     `source_type` therefore describes provenance, not a fabricated PnL split.
     """
-    pool = await get_db_pool()
-    account = await _get_or_create_account(pool, user_id)
+    return await _read_attribution(await get_db_pool(), user_id)
+
+
+@router.get("/accounts/{account_id}/attribution", response_model=AttributionResponse)
+async def scoped_attribution(
+    account_id: int,
+    user_id: int = Depends(require_user),
+) -> AttributionResponse:
+    return await _read_attribution(await get_db_pool(), user_id, account_id)
+
+
+async def _read_attribution(
+    pool: Any, user_id: int, account_id: int | None = None,
+) -> AttributionResponse:
+    account = await resolve_account(pool, user_id, account_id)
     account_id: int = account["id"]
     cohort_id = int(account["reset_count"] or 0)
 
     positions = await pool.fetch(
-        "SELECT ticker, qty, avg_cost, realized_pnl FROM sim_position "
+        "SELECT ticker, qty, avg_cost, realized_pnl, mark_price, mark_at, price_quality FROM sim_position "
         "WHERE account_id=$1 AND cohort_id=$2",
         account_id,
         cohort_id,
@@ -692,7 +863,14 @@ async def get_attribution(
     all_tickers = set(pos_by_ticker) | set(counts_by_ticker)
 
     live_tickers = [t for t, p in pos_by_ticker.items() if p["qty"] > 0]
-    closes = await _current_closes(pool, live_tickers)
+    is_bot = account.get('kind') == 'bot'
+    if is_bot:
+        from alpha_agent.paper.bot_valuation import effective_mark
+
+        closes = {ticker: effective_mark(dict(pos_by_ticker[ticker]), datetime.now(UTC))['price']
+                  for ticker in live_tickers}
+    else:
+        closes = await _current_closes(pool, live_tickers)
 
     rows: list[TickerAttribution] = []
     for ticker in sorted(all_tickers):
@@ -703,6 +881,8 @@ async def get_attribution(
             current = closes.get(ticker)
             if current is not None:
                 unrealized = (current - pos["avg_cost"]) * pos["qty"]
+            elif is_bot:
+                unrealized = None
         counts = counts_by_ticker.get(ticker)
         pick_linked = int(counts["pick_linked"]) if counts else 0
         self_directed = int(counts["self_directed"]) if counts else 0

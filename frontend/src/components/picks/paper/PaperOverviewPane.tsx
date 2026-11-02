@@ -20,7 +20,7 @@ import {
 import { Metric, Disclaimer, TwoStepConfirm } from "./PaperUi";
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-const PCT = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+const PCT = (n: number | null) => n === null ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 
 const POS_HEADERS: Record<Locale, string[]> = {
   zh: ["代码", "数量", "均价", "现价", "盈亏", "盈亏%"],
@@ -48,14 +48,14 @@ export default function PaperOverviewPane({
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Metric
           label={t(locale, "sim.account.nav")}
-          value={`$${FMT.format(account.portfolio_value)}`}
-          tone={account.total_return_pct >= 0 ? "text-tm-pos" : "text-tm-neg"}
+          value={account.portfolio_value === null ? "—" : `$${FMT.format(account.portfolio_value)}`}
+          tone={account.total_return_pct === null ? "text-tm-fg" : account.total_return_pct >= 0 ? "text-tm-pos" : "text-tm-neg"}
         />
         <Metric label={t(locale, "sim.account.cash")} value={`$${FMT.format(account.cash)}`} />
         <Metric
           label={t(locale, "sim.account.unrealized")}
-          value={`${account.unrealized_pnl >= 0 ? "+" : ""}$${FMT.format(Math.abs(account.unrealized_pnl))}`}
-          tone={account.unrealized_pnl >= 0 ? "text-tm-pos" : "text-tm-neg"}
+          value={account.unrealized_pnl === null ? "—" : `${account.unrealized_pnl >= 0 ? "+" : ""}$${FMT.format(Math.abs(account.unrealized_pnl))}`}
+          tone={account.unrealized_pnl === null ? "text-tm-fg" : account.unrealized_pnl >= 0 ? "text-tm-pos" : "text-tm-neg"}
         />
         <Metric
           label={t(locale, "sim.account.realized")}

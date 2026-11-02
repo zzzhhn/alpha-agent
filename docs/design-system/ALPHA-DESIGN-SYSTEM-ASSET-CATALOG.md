@@ -2,6 +2,14 @@
 
 Status: implementation source of truth for reusable frontend assets
 
+Persistent paper bot (2026-11-02): `/paper?account=bot` composes the existing
+SegmentedTabs, WorkbenchHeader, TmPane, TmDrawer, TmTable and TmPagination.
+Human account actions remain unchanged. Bot run state and order settlement state
+are separate; missing raw-price marks create null NAV and chart gaps, not zero
+returns. Poll only active runs and pause hidden tabs. Local motion is 140ms opacity
+only, respecting reduced motion. The living migration ledger records this
+pattern pending production observation and user visual acceptance.
+
 Paper workspace refinement (2026-11-02, review slice): existing TM panes keep
 the recommendation/order pair and separate personal evidence from system books.
 The shared order form adds an opt-in ticket layout; other consumers stay compact.
