@@ -91,10 +91,9 @@ export function BacktestValidationGate({ currentRun, thresholds }: { readonly cu
           {checks.map((check) => {
             const Icon = check.status === "pass" ? CheckCircle2 : check.status === "fail" ? XCircle : check.status === "warn" ? AlertTriangle : HelpCircle;
             const tone = check.status === "pass" ? "text-tm-pos" : check.status === "fail" ? "text-tm-neg" : check.status === "warn" ? "text-tm-warn" : "text-tm-muted";
-            return <div key={check.key} className="grid min-h-[62px] grid-cols-[28px_minmax(145px,0.9fr)_minmax(185px,1.2fr)] items-center gap-3 px-4 py-2 text-xs">
+            return <div key={check.key} className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-x-3 px-4 py-3 text-xs">
               <span className="flex h-6 w-6 items-center justify-center border border-tm-rule"><Icon className={`h-3.5 w-3.5 ${tone}`} /></span>
-              <div><p className="text-tm-fg">{zh ? check.titleZh : check.titleEn}</p><p className={`mt-1 font-mono text-xs ${tone}`}>{check.value}</p></div>
-              <p className="leading-4 text-tm-muted">{zh ? check.detailZh : check.detailEn}</p>
+              <div><div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><p className="text-tm-fg">{zh ? check.titleZh : check.titleEn}</p><p className={`font-mono text-xs ${tone}`}>{check.value}</p></div><p className="mt-1.5 leading-5 text-tm-muted">{zh ? check.detailZh : check.detailEn}</p></div>
             </div>;
           })}
         </div>

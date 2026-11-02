@@ -59,6 +59,7 @@ import {
 import type { FactorUniverse } from "@/lib/types";
 import type { BacktestMode, BacktestParams, DirectionMode } from "./types";
 import { DEFAULT_PARAMS } from "./useBacktestSession";
+import styles from "./research-form.module.css";
 
 interface BacktestFormStickyProps {
   readonly params: BacktestParams;
@@ -178,10 +179,10 @@ export function BacktestFormSticky({
 
   return (
     <section
-      className="sticky top-0 z-30 border-b border-tm-rule bg-tm-bg-2"
+      className={`${styles.form} border-b border-tm-rule bg-tm-bg-2`}
       aria-label={t(locale, "backtest.form.title")}
     >
-      <div className="flex flex-col gap-3 px-6 py-3">
+      <fieldset disabled={isRunning} className="flex min-w-0 flex-col gap-3 border-0 px-6 py-4">
         {/* Row 0 — load a saved factor + surface that the form auto-saves */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Load from Zoo: pull a saved factor straight into the expression */}
@@ -192,7 +193,7 @@ export function BacktestFormSticky({
                 {t(locale, "backtest.loadZoo.label")}
               </span>
             )}
-            className="min-w-0 flex-row items-center gap-2"
+            className={styles.library}
             fieldSize="md"
             value=""
             onChange={(value) => {
@@ -227,22 +228,22 @@ export function BacktestFormSticky({
           </div>
         </div>
 
-        <div className="grid items-end gap-3 xl:grid-cols-[minmax(320px,1.35fr)_minmax(720px,2.65fr)]">
+        <div className="grid items-end gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <div>
             <TmTextarea
-              label={t(locale, "backtest.form.title")}
+              label={locale === "zh" ? "因子表达式" : "Factor expression"}
               value={params.expression}
               onChange={updateExpression}
               placeholder={t(locale, "backtest.form.exprPlaceholder")}
               spellCheck={false}
-              rows={1}
+              rows={3}
               id="backtest-expression"
               aria-invalid={hasValidationIssues || undefined}
               aria-describedby={
                 hasValidationIssues ? "backtest-unknown-ops" : undefined
               }
               className="min-w-0"
-              textareaClassName="h-8 min-h-8 w-full resize-y bg-tm-bg px-3 py-2 text-[12px] leading-relaxed text-tm-accent transition-[min-height,border-color] focus:min-h-[84px]"
+              textareaClassName="min-h-[92px] w-full resize-y bg-tm-bg px-3 py-3 text-[12px] leading-relaxed text-tm-accent"
             />
 
         {/* Inline validation — unknown ops/operands before backend 4xx.
@@ -296,10 +297,10 @@ export function BacktestFormSticky({
             the width with no dead gap, and the toggle + RUN action cluster sits
             flush at the trailing edge, bottom-aligned to the control baseline.
             Even, gap-free tiles instead of fixed-track bricks with a void. */}
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="grid grid-cols-3 items-end gap-3">
           <TmSelect
             label={t(locale, "backtest.form.direction")}
-            className="min-w-[160px] flex-1"
+            className="min-w-0"
             fieldSize="md"
             value={params.direction}
             onChange={(value) =>
@@ -307,13 +308,13 @@ export function BacktestFormSticky({
             }
             options={DIRECTION_OPTIONS.map((option) => ({
               value: option,
-              label: option.replace("_", " "),
+              label: locale === "zh" ? ({ long_short: "多空组合", long_only: "只做多", short_only: "只做空" }[option]) : option.replace("_", " "),
             }))}
           />
 
           <TmNumberInput
             label={t(locale, "backtest.form.topPct")}
-            className="min-w-[120px] flex-1"
+            className="min-w-0"
             fieldSize="md"
             value={params.topPct}
             min={1}
@@ -325,7 +326,7 @@ export function BacktestFormSticky({
 
           <TmSelect
             label={t(locale, "backtest.form.universe")}
-            className="min-w-[150px] flex-1"
+            className="min-w-0"
             fieldSize="md"
             value={params.universe === "custom" ? "SP500" : params.universe}
             onChange={(value) =>
@@ -339,7 +340,7 @@ export function BacktestFormSticky({
 
           {/* Toggle + RUN — trailing action cluster, bottom-aligned to the
               input baseline of the fields to its left. */}
-          <div className="flex items-end gap-2">
+          <div className="col-span-3 flex flex-wrap items-center justify-between gap-2">
             <TmButton
               variant="secondary"
               size="md"
@@ -353,9 +354,7 @@ export function BacktestFormSticky({
                 <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
               )}
               <span>
-                {advancedOpen
-                  ? t(locale, "backtest.action.advancedHide")
-                  : t(locale, "backtest.action.advancedShow")}
+                {locale === "zh" ? "成本与验证设置" : "Cost & validation"}
               </span>
             </TmButton>
 
@@ -365,7 +364,7 @@ export function BacktestFormSticky({
               onClick={onRun}
               disabled={runDisabled}
               loading={isRunning}
-              loadingLabel={t(locale, "backtest.verdict.running")}
+              loadingLabel={locale === "zh" ? "运行中…" : "Running…"}
               className="px-5 uppercase tracking-wider"
             >
               <Play className="h-3.5 w-3.5" strokeWidth={2} />
@@ -376,12 +375,13 @@ export function BacktestFormSticky({
         </div>
 
         {/* Row 3 — Advanced 6-field collapsible */}
-        <div
-          className={`grid overflow-hidden transition-[max-height,opacity] duration-200 ${
-            advancedOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
-          }`}
-          aria-hidden={!advancedOpen}
-        >
+        <div className="flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-xs text-tm-muted">
+          <span>{locale === "zh" ? "成本" : "Cost"} <strong className="font-normal text-tm-fg-2">{params.transactionCostBps} bps</strong></span>
+          <span>{locale === "zh" ? "基准" : "Benchmark"} <strong className="font-normal text-tm-fg-2">{params.benchmark}</strong></span>
+          <span>{params.neutralize ? (locale === "zh" ? "行业中性" : "Sector neutral") : (locale === "zh" ? "不中性化" : "No neutralization")}</span>
+          <span>{locale === "zh" ? "每日持仓明细" : "Daily holdings"} · {params.includeBreakdown ? (locale === "zh" ? "开启" : "On") : (locale === "zh" ? "关闭" : "Off")}</span>
+        </div>
+        {advancedOpen && <div>
           <div className="flex flex-wrap items-start gap-3 border-t border-tm-rule pt-3">
             <TmNumberInput
               label={t(locale, "backtest.form.bottomPct")}
@@ -491,8 +491,8 @@ export function BacktestFormSticky({
               />
             </TmFieldShell>
           </div>
-        </div>
-      </div>
+        </div>}
+      </fieldset>
     </section>
   );
 }

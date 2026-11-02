@@ -1,30 +1,6 @@
 "use client";
 
-/**
- * Report page — workstation port (Stage 3 · 8/9).
- *
- * Tear-sheet generator. Two slots: "primary" (the headline factor) and
- * "compare" (an optional second factor for side-by-side overlay).
- * Both slots run through fetchAll() which spawns runFactorBacktest +
- * signalToday + signalExposure in parallel.
- *
- * Layout: TmSubbar (factor name + universe + status pills + print
- * button) → REPORT.PICKER pane (config chips + example chips + zoo
- * chips + custom-input + compare chips) → COMPARE.OVERLAY pane (when
- * both slots filled) → primary tearsheet sequence (REPORT.COVER →
- * BACKTEST.KPI → EQUITY.UNDERWATER (FactorPnLChart wrapped) →
- * DRAWDOWN → MONTHLY → SIGNAL.TODAY → EXPOSURE) → compare tearsheet.
- *
- * Behavior preserved byte-for-byte: REPORT_PREFILL_KEY handoff from
- * /factors, ReportConfig propagation, fetchAll triple-fetch, print
- * via window.print(), example loadExample auto-runs with locale-
- * appropriate intuition, zoo-entry handoff, compare slot management.
- *
- * NOTE: this is the LAST page using legacy BacktestKpiStrip /
- * DrawdownChart / MonthlyReturnsHeatmap / TopBottomTable /
- * ExposureChart / CompareEquityChart imports. After this port lands,
- * the legacy components are dead code and can be removed in S5 polish.
- */
+/** Report composer → current-run verdict and equity → optional comparison / diagnostics. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -47,16 +23,14 @@ import {
   TmSubbarSep,
   TmSubbarSpacer,
   TmStatusPill,
-  TmChip,
 } from "@/components/tm/TmSubbar";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
-import { TmButton } from "@/components/tm/TmButton";
-import { TmNumberInput, TmInput, TmTextarea } from "@/components/tm/TmField";
+import { TmButton, TmDisclosureButton } from "@/components/tm/TmButton";
 import {
   FACTOR_EXAMPLES,
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
-import { FactorExampleList } from "@/components/alpha/FactorExampleList";
+import { ReportComposer, ReportEvidenceEmpty, reportDirectionLabel, isReportDraftDirty, type ReportConfig } from "@/components/report/ReportComposer";
 import { ReportVerdictHero } from "@/components/report/ReportVerdictHero";
 import { ReportCompareBar } from "@/components/report/ReportCompareBar";
 import { ReportDeepModal } from "@/components/report/ReportDeepModal";
@@ -115,6 +89,8 @@ interface FactorReport {
   readonly today: SignalTodayResponse;
   readonly exposure: ExposureResponse;
   readonly icTs: ICTimeseriesResponse;
+  readonly config: ReportConfig;
+  readonly generatedAt: string;
 }
 
 const REPORT_PREFILL_KEY = "alphacore.report.prefill.v1";
@@ -147,12 +123,7 @@ function persistDirection(dir: ReportDirection): void {
   }
 }
 
-export interface ReportConfig {
-  readonly direction: "long_short" | "long_only" | "short_only";
-  readonly neutralize: "none" | "sector";
-  readonly benchmarkTicker: "SPY" | "RSP";
-  readonly transactionCostBps: number;
-}
+export type { ReportConfig } from "@/components/report/ReportComposer";
 
 const DEFAULT_REPORT_CONFIG: ReportConfig = {
   direction: "long_short",
@@ -226,8 +197,11 @@ export default function ReportPage() {
   // its row in the list and the Run button; cleared once a report runs or
   // the user edits the expression by hand.
   const [stagedName, setStagedName] = useState<string | null>(null);
+  const [stagedZoo, setStagedZoo] = useState<ZooEntry | null>(null);
   // R3: the long-tail tear-sheet sections collapse into a floating-button modal.
   const [deepOpen, setDeepOpen] = useState(false);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [compareDetailsOpen, setCompareDetailsOpen] = useState(false);
 
   useEffect(() => {
     seedZooIfFirstRun();
@@ -254,34 +228,34 @@ export default function ReportPage() {
       hypothesis: string,
       slot: "primary" | "compare",
       intuitionForCover?: string,
+      requestedConfig: ReportConfig = config,
     ) => {
       setRunning(true);
       setError(null);
-      const [bt, td, ex, ic] = await fetchAll(name, expression, hypothesis, config);
-      if (
-        bt.error || td.error || ex.error || ic.error ||
-        !bt.data || !td.data || !ex.data || !ic.data
-      ) {
-        setError(bt.error ?? td.error ?? ex.error ?? ic.error ?? "unknown error");
+      try {
+        const [bt, td, ex, ic] = await fetchAll(name, expression, hypothesis, requestedConfig);
+        if (bt.error || td.error || ex.error || ic.error || !bt.data || !td.data || !ex.data || !ic.data) {
+          setError(bt.error ?? td.error ?? ex.error ?? ic.error ?? "Missing report evidence");
+          return;
+        }
+        const built: FactorReport = {
+          name, expression, intuition: intuitionForCover ?? hypothesis,
+          backtest: bt.data, today: td.data, exposure: ex.data, icTs: ic.data,
+          config: { ...requestedConfig }, generatedAt: new Date().toISOString(),
+        };
+        if (slot === "primary") {
+          setPrimary(built);
+          setCompare(null);
+          setStagedName(null);
+        } else {
+          setCompare(built);
+          setComparisonOpen(true);
+        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
         setRunning(false);
-        return;
       }
-      const built: FactorReport = {
-        name,
-        expression,
-        intuition: intuitionForCover ?? hypothesis,
-        backtest: bt.data,
-        today: td.data,
-        exposure: ex.data,
-        icTs: ic.data,
-      };
-      if (slot === "primary") {
-        setPrimary(built);
-        setCompare(null);
-      } else {
-        setCompare(built);
-      }
-      setRunning(false);
     },
     [config],
   );
@@ -311,20 +285,15 @@ export default function ReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // #4d: clicking an example STAGES it (loads its config into the form) but
-  // does NOT run a backtest. The user must click Run to execute. This loads
-  // the exact validated config the example was discovered under, identical
-  // to the previous wiring — only the auto-run is removed.
+  // Source selection loads a draft; only Generate computes evidence.
+  // Preserve the existing fixed 30% sleeves, not the fixtures' historical returns.
   const [stagedExample, setStagedExample] = useState<FactorExample | null>(null);
 
   function stageExample(example: FactorExample) {
     setFactorName(example.name);
     setExpr(example.expression);
-    const intu =
-      locale === "zh" ? example.intuitionZh : example.intuitionEn;
-    setIntuition(intu);
-    // v3: pull example's proven config too so the report matches the
-    // verdict the example was discovered under.
+    setIntuition(locale === "zh" ? example.hypothesisZh : example.hypothesisEn);
+    // Preserve this route's established direction / neutralization / benchmark wiring.
     setConfig((c) => ({
       direction: example.direction ?? c.direction,
       neutralize: example.neutralize ?? c.neutralize,
@@ -332,11 +301,11 @@ export default function ReportPage() {
       transactionCostBps: example.transactionCostBps ?? c.transactionCostBps,
     }));
     setStagedExample(example);
+    setStagedZoo(null);
     setStagedName(example.name);
   }
 
-  // #4d: explicit Run for the staged example. Uses the same generate() call
-  // the old auto-run used, so the applied config + cover text are identical.
+  // The source hypothesis is context, not a copied historical performance verdict.
   function runStaged() {
     const example = stagedExample;
     if (!example) return;
@@ -345,8 +314,17 @@ export default function ReportPage() {
       example.expression,
       locale === "zh" ? example.hypothesisZh : example.hypothesisEn,
       "primary",
-      locale === "zh" ? example.intuitionZh : example.intuitionEn,
+      locale === "zh" ? example.hypothesisZh : example.hypothesisEn,
     );
+  }
+
+  function stageZooEntry(entry: ZooEntry) {
+    setFactorName(entry.name);
+    setExpr(entry.expression);
+    setIntuition(entry.intuition ?? entry.hypothesis ?? "");
+    setStagedExample(null);
+    setStagedZoo(entry);
+    setStagedName(entry.name);
   }
 
   function loadZooEntry(e: ZooEntry, slot: "primary" | "compare") {
@@ -361,6 +339,7 @@ export default function ReportPage() {
       e.hypothesis ?? "",
       slot,
       e.intuition ?? e.hypothesis ?? "",
+      slot === "compare" && primary ? primary.config : config,
     );
   }
 
@@ -375,11 +354,13 @@ export default function ReportPage() {
     void generate(
       name,
       expr.trim(),
-      `tearsheet for ${name}`,
+      stagedZoo?.hypothesis || `tearsheet for ${name}`,
       "primary",
       intuition,
     );
   }
+
+  const draftDirty = isReportDraftDirty(factorName, expr, config, primary);
 
   return (
     <TmScreen>
@@ -388,28 +369,26 @@ export default function ReportPage() {
         title={locale === "zh" ? "报告" : "Report"}
         subtitle={locale === "zh" ? "把回测、风险和信号证据汇总为可复核的研究结论。" : "Consolidate backtest, risk, and signal evidence into a reviewable conclusion."}
         statuses={[
-          { label: locale === "zh" ? "主因子" : "Primary", value: primary?.name ?? factorName ?? "—" },
-          { label: locale === "zh" ? "生成状态" : "Generation", value: running ? (locale === "zh" ? "运行中" : "RUNNING") : error ? (locale === "zh" ? "失败" : "ERROR") : primary ? (locale === "zh" ? "已完成" : "READY") : (locale === "zh" ? "待配置" : "IDLE"), tone: error ? "negative" : running ? "warning" : primary ? "positive" : "default" },
+          { label: locale === "zh" ? "主因子" : "Primary", value: primary?.name || factorName || "—" },
+          { label: locale === "zh" ? "生成状态" : "Generation", value: running ? (locale === "zh" ? "运行中" : "RUNNING") : error ? (locale === "zh" ? "失败" : "ERROR") : draftDirty ? (locale === "zh" ? "草稿未验证" : "DRAFT NOT RUN") : primary ? (locale === "zh" ? "已完成" : "READY") : (locale === "zh" ? "待配置" : "IDLE"), tone: error ? "negative" : running || draftDirty ? "warning" : primary ? "positive" : "default" },
           { label: locale === "zh" ? "对比因子" : "Comparison", value: compare?.name ?? "—" },
         ]}
       />
-      <TmSubbar>
-        <span className="text-tm-muted">REPORT</span>
-        <TmSubbarSep />
+      {primary && <TmSubbar className="report-chrome">
         <TmSubbarKV
-          label="FACTOR"
-          value={primary?.name ?? factorName ?? "—"}
+          label={locale === "zh" ? "当前报告" : "Current report"}
+          value={primary.name}
         />
         {primary && (
           <>
             <TmSubbarSep />
             <TmSubbarKV
-              label="UNIVERSE"
+              label={locale === "zh" ? "标的数" : "Universe"}
               value={`${primary.today.universe_size}`}
             />
             <TmSubbarSep />
             <TmSubbarKV
-              label="SHARPE"
+              label={locale === "zh" ? "样本外夏普" : "OOS Sharpe"}
               value={primary.backtest.test_metrics.sharpe.toFixed(2)}
             />
           </>
@@ -417,13 +396,13 @@ export default function ReportPage() {
         {compare && (
           <>
             <TmSubbarSep />
-            <TmSubbarKV label="COMPARE" value={compare.name} />
+            <TmSubbarKV label={locale === "zh" ? "对比" : "Compare"} value={compare.name} />
           </>
         )}
         <TmSubbarSpacer />
         {primary?.backtest.overfit_flag && (
           <TmStatusPill tone="err">
-            OVERFIT · OOS DECAY{" "}
+            {locale === "zh" ? "过拟合 · 样本外衰减" : "Overfit · OOS decay"}{" "}
             {((primary.backtest.oos_decay ?? 0) * 100).toFixed(0)}%
           </TmStatusPill>
         )}
@@ -433,11 +412,11 @@ export default function ReportPage() {
           >
             {primary.backtest.survivorship_corrected
               ? `SP500-AS-OF · ${primary.backtest.membership_as_of ?? "—"}`
-              : "LEGACY"}
+              : locale === "zh" ? "旧版成分股口径" : "Legacy membership"}
           </TmStatusPill>
         )}
-        {running && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
-        {error && <TmStatusPill tone="err">ERROR</TmStatusPill>}
+        {running && <TmStatusPill tone="warn">{locale === "zh" ? "计算中 · 保留上次报告" : "Running · previous report retained"}</TmStatusPill>}
+        {error && <TmStatusPill tone="err">{locale === "zh" ? "本次失败 · 保留上次报告" : "Run failed · previous report retained"}</TmStatusPill>}
         {primary && (
           <TmButton
             variant="ghost"
@@ -452,7 +431,7 @@ export default function ReportPage() {
             variant="ghost"
             onClick={async () => {
               // B6 (2026-05-19): self-contained HTML tearsheet download.
-              // POST the live config to /backtest/export, get back a
+              // Export the displayed report's immutable inputs, not a new draft.
               // streamed HTML body, trigger browser save dialog. Works
               // offline once the user has Chart.js cached.
               const res = await fetch(
@@ -465,16 +444,19 @@ export default function ReportPage() {
                     spec: {
                       name: primary.name,
                       hypothesis: primary.name,
-                      expression: expr,
-                      operators_used: [...extractOps(expr)],
+                      expression: primary.expression,
+                      operators_used: [...extractOps(primary.expression)],
                       lookback: 12,
                       universe: "SP500",
                       justification: "tearsheet export",
                     },
-                    direction: config.direction,
-                    transaction_cost_bps: config.transactionCostBps,
-                    neutralize: config.neutralize,
-                    benchmark_ticker: config.benchmarkTicker,
+                    direction: primary.config.direction,
+                    train_ratio: 0.7,
+                    top_pct: 0.30,
+                    bottom_pct: 0.30,
+                    transaction_cost_bps: primary.config.transactionCostBps,
+                    neutralize: primary.config.neutralize,
+                    benchmark_ticker: primary.config.benchmarkTicker,
                     include_breakdown: false,
                   }),
                 },
@@ -496,39 +478,15 @@ export default function ReportPage() {
             {locale === "zh" ? "下载 HTML" : "Export HTML"}
           </TmButton>
         )}
-      </TmSubbar>
+      </TmSubbar>}
 
-      {/* R1 — decision-first verdict hero with a switch-factor dropdown,
-          above the picker. States the tier + whether a report is worthwhile. */}
-      <div className="px-4 pt-4">
-        <ReportVerdictHero
-          primary={primary}
-          zoo={zoo}
-          onSwitch={(e) => loadZooEntry(e, "primary")}
-          running={running}
-        />
-      </div>
-
-      {/* R2 — compare a second factor by dropdown + Generate (only once a
-          primary report exists to compare against). */}
-      {primary && (
-        <div className="px-4 pt-3">
-          <ReportCompareBar
-            zoo={zoo}
-            compareName={compare?.name ?? null}
-            onCompare={(e) => loadZooEntry(e, "compare")}
-            onClear={() => setCompare(null)}
-            running={running}
-          />
-        </div>
-      )}
-
-      <ReportPickerPane
+      <ReportComposer
         factorName={factorName}
         onFactorName={(v) => {
           setFactorName(v);
           // Hand-editing the name detaches from the staged example.
           setStagedExample(null);
+          setStagedZoo(null);
           setStagedName(null);
         }}
         expr={expr}
@@ -536,445 +494,85 @@ export default function ReportPage() {
           setExpr(v);
           // Hand-editing the expression detaches from the staged example.
           setStagedExample(null);
+          setStagedZoo(null);
           setStagedName(null);
+          setIntuition("");
         }}
         config={config}
         onConfig={setConfig}
         zoo={zoo}
-        primary={primary}
-        compare={compare}
         running={running}
-        stagedName={stagedName}
-        stageExample={stageExample}
-        runStaged={runStaged}
-        loadZooEntry={loadZooEntry}
-        runCustom={runCustom}
-        generate={generate}
-        clearCompare={() => setCompare(null)}
+        sourceName={stagedName}
+        onExample={stageExample}
+        onZoo={stageZooEntry}
+        onGenerate={stagedExample ? runStaged : runCustom}
       />
 
+      {draftDirty && <p role="status" className="report-chrome border-l-[3px] border-l-tm-warn bg-tm-bg-2 px-4 py-2 font-tm-mono text-xs leading-5 text-tm-warn">{locale === "zh" ? "草稿已改动，尚未验证。下方结论、图表与导出仍对应上次完成的报告；生成新报告后才会更新。" : "Draft changed and has not been evaluated. The verdict, charts and exports below still belong to the previous completed report until you generate again."}</p>}
+
       {error && (
-        <TmPane title="ERROR" meta="report generation failed">
-          <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-neg">
+        <TmPane title={locale === "zh" ? "报告生成失败" : "Report generation failed"} meta={locale === "zh" ? "输入与已有报告已保留" : "Inputs and previous evidence retained"}>
+          <p role="alert" className="px-4 py-3 font-tm-mono text-xs text-tm-neg">
             {error}
           </p>
         </TmPane>
       )}
 
-      {primary && compare && (
-        <TmPane
-          title="COMPARE.OVERLAY"
-          meta={`${primary.name} vs ${compare.name} vs ${primary.backtest.benchmark_ticker}`}
-        >
-          <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
-            {t(locale, "report.compare.subtitle")
-              .replace("{a}", primary.name)
-              .replace("{b}", compare.name)}
-          </p>
-          <TmCompareEquityChart
-            factor1Name={primary.name}
-            factor1={primary.backtest.equity_curve}
-            factor2Name={compare.name}
-            factor2={compare.backtest.equity_curve}
-            benchmark={primary.backtest.benchmark_curve}
-            benchmarkTicker={primary.backtest.benchmark_ticker}
-          />
-        </TmPane>
-      )}
+      {primary && <ReportVerdictHero primary={primary} running={running} />}
 
-      {/* v3 #4 — side-by-side metric table */}
-      {primary && compare && (
-        <CompareMetricsPane primary={primary} compare={compare} />
-      )}
-
-      {/* v3 #5 — rolling correlation between primary + compare daily returns */}
-      {primary && compare && (
-        <CompareCorrelationPane primary={primary} compare={compare} />
-      )}
-
-      {/* v3 #7 — ticker overlap (Jaccard + intersect names) */}
-      {primary && compare && (
-        <TickerOverlapPane primary={primary} compare={compare} />
-      )}
+      {!primary && <ReportEvidenceEmpty running={running} failed={Boolean(error)} hasDraft={Boolean(expr.trim())} />}
 
       {primary && (
-        <>
-          <article className="report-tearsheet flex flex-col">
-            <ReportCoverPane
-              r={primary}
-              expr={primary.expression}
-              factorName={primary.name}
-              intuition={primary.intuition}
-              config={config}
-            />
-            <TmBacktestKpiStrip result={primary.backtest} />
-            {/* v3 #1 — institutional risk metrics */}
-            <RiskMetricsPane report={primary} />
-            {/* v3 #2 — tail risk + streak diagnostics */}
-            <TailRiskPane report={primary} />
-            {/* v3 #6 — recent momentum vs benchmark */}
-            <RecentMomentumPane report={primary} />
-            <TmPane
-              title="EQUITY.CURVE"
-              meta={`${primary.backtest.equity_curve.length} sessions · vs ${primary.backtest.benchmark_ticker}`}
-            >
-              <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
-                {t(locale, "backtest.equity.subtitle")}
-              </p>
-              <div className="px-2 pb-2 pt-2">
-                <FactorPnLChart data={primary.backtest} height={260} />
-              </div>
+        <article className="report-tearsheet flex min-w-0 flex-col">
+          <div className="grid min-w-0 grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)]">
+            <TmPane title="EQUITY.CURVE" meta={primary.backtest.equity_curve.length + (locale === "zh" ? " 个交易日 · " : " sessions · ") + primary.backtest.benchmark_ticker} className="lg:border-r lg:border-tm-rule">
+              <div className="px-3 py-3"><FactorPnLChart data={primary.backtest} height={280} /></div>
             </TmPane>
+            <ReportCoverPane r={primary} expr={primary.expression} factorName={primary.name} intuition={primary.intuition} config={primary.config} />
+          </div>
+          <TmBacktestKpiStrip result={primary.backtest} />
+          <ReportDeepModal open={deepOpen} onOpen={() => setDeepOpen(true)} onClose={() => setDeepOpen(false)}>
+            <RiskMetricsPane report={primary} />
+            <TailRiskPane report={primary} />
+            <RecentMomentumPane report={primary} />
             <TmDrawdownChart equityCurve={primary.backtest.equity_curve} />
-          </article>
-
-          {/* R3 — deep / long-tail sections collapsed behind a floating button
-              so the main report stops scrolling forever. */}
-          <ReportDeepModal
-            open={deepOpen}
-            onOpen={() => setDeepOpen(true)}
-            onClose={() => setDeepOpen(false)}
-          >
-            {/* v3 #8 — recovery / underwater stats */}
             <RecoveryStatsPane equityCurve={primary.backtest.equity_curve} />
-            {/* v3 #3 — per-year breakdown table */}
             <YearlyBreakdownPane equityCurve={primary.backtest.equity_curve} />
-            {primary.backtest.monthly_returns &&
-              primary.backtest.monthly_returns.length > 0 && (
-                <TmMonthlyReturnsHeatmap
-                  data={primary.backtest.monthly_returns}
-                />
-              )}
+            {primary.backtest.monthly_returns && primary.backtest.monthly_returns.length > 0 && <TmMonthlyReturnsHeatmap data={primary.backtest.monthly_returns} />}
             <TmTopBottomTable today={primary.today} loading={false} />
             <TmICTimeseriesChart data={primary.icTs} loading={false} />
-            <TmExposureChart
-              data={primary.exposure}
-              topN={10}
-              loading={false}
-            />
+            <TmExposureChart data={primary.exposure} topN={10} loading={false} />
           </ReportDeepModal>
-        </>
-      )}
-
-      {compare && (
-        <article className="report-tearsheet flex flex-col">
-          <TmPane title="REPORT.COMPARE" meta="second factor tear sheet">
-            <p className="px-3 py-2 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-info">
-              {t(locale, "report.compare.secondLabel")}
-            </p>
-          </TmPane>
-          <ReportCoverPane
-            r={compare}
-            expr={compare.expression}
-            factorName={compare.name}
-            intuition={compare.intuition}
-            config={config}
-          />
-          <TmBacktestKpiStrip result={compare.backtest} />
-          <TmDrawdownChart equityCurve={compare.backtest.equity_curve} />
-          {compare.backtest.monthly_returns &&
-            compare.backtest.monthly_returns.length > 0 && (
-              <TmMonthlyReturnsHeatmap
-                data={compare.backtest.monthly_returns}
-              />
-            )}
-          <TmTopBottomTable today={compare.today} loading={false} />
-          <TmICTimeseriesChart data={compare.icTs} loading={false} />
-          <TmExposureChart
-            data={compare.exposure}
-            topN={10}
-            loading={false}
-          />
         </article>
       )}
 
-      {!primary && !running && (
-        <TmPane title="USAGE" meta="hint">
-          <p className="px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
-            {t(locale, "report.subtitle")}
-          </p>
-        </TmPane>
-      )}
+      {primary && <div className="min-w-0">
+        <TmDisclosureButton expanded={comparisonOpen} onClick={() => setComparisonOpen((open) => !open)} label={locale === "zh" ? "因子对比" : "Factor comparison"} meta={compare ? primary.name + " / " + compare.name : locale === "zh" ? "可选 · 单独计算第二个因子" : "Optional · computes a second factor"} className="report-chrome" aria-controls="report-comparison" />
+        <section id="report-comparison" className={comparisonOpen ? "min-w-0" : "hidden print:block"}>
+          <ReportCompareBar zoo={zoo} examples={FACTOR_EXAMPLES} primaryExpression={primary.expression} compareName={compare?.name ?? null} onCompare={(entry) => loadZooEntry(entry, "compare")} onCompareExample={(example) => void generate(example.name, example.expression, locale === "zh" ? example.hypothesisZh : example.hypothesisEn, "compare", locale === "zh" ? example.hypothesisZh : example.hypothesisEn, primary.config)} onClear={() => setCompare(null)} running={running} />
+          {compare && <>
+            <TmPane title="COMPARE.OVERLAY" meta={primary.name + " / " + compare.name + " · " + primary.backtest.benchmark_ticker}>
+              <TmCompareEquityChart factor1Name={primary.name} factor1={primary.backtest.equity_curve} factor2Name={compare.name} factor2={compare.backtest.equity_curve} benchmark={primary.backtest.benchmark_curve} benchmarkTicker={primary.backtest.benchmark_ticker} />
+            </TmPane>
+            <CompareMetricsPane primary={primary} compare={compare} />
+            <TmDisclosureButton expanded={compareDetailsOpen} onClick={() => setCompareDetailsOpen((open) => !open)} label={locale === "zh" ? "相关性、持仓重叠与第二份报告" : "Correlation, holdings overlap and second report"} className="report-chrome" aria-controls="report-comparison-details" />
+            <div id="report-comparison-details" className={compareDetailsOpen ? "min-w-0" : "hidden print:block"}>
+              <CompareCorrelationPane primary={primary} compare={compare} />
+              <TickerOverlapPane primary={primary} compare={compare} />
+              <article className="report-tearsheet flex min-w-0 flex-col">
+                <ReportCoverPane r={compare} expr={compare.expression} factorName={compare.name} intuition={compare.intuition} config={compare.config} />
+                <TmBacktestKpiStrip result={compare.backtest} />
+                <TmDrawdownChart equityCurve={compare.backtest.equity_curve} />
+                {compare.backtest.monthly_returns && compare.backtest.monthly_returns.length > 0 && <TmMonthlyReturnsHeatmap data={compare.backtest.monthly_returns} />}
+                <TmTopBottomTable today={compare.today} loading={false} />
+                <TmICTimeseriesChart data={compare.icTs} loading={false} />
+                <TmExposureChart data={compare.exposure} topN={10} loading={false} />
+              </article>
+            </div>
+          </>}
+        </section>
+      </div>}
     </TmScreen>
-  );
-}
-
-/* ── REPORT.PICKER pane ───────────────────────────────────────────── */
-
-function ReportPickerPane({
-  factorName,
-  onFactorName,
-  expr,
-  onExpr,
-  config,
-  onConfig,
-  zoo,
-  primary,
-  compare,
-  running,
-  stagedName,
-  stageExample,
-  runStaged,
-  loadZooEntry,
-  runCustom,
-  generate,
-  clearCompare,
-}: {
-  readonly factorName: string;
-  readonly onFactorName: (v: string) => void;
-  readonly expr: string;
-  readonly onExpr: (v: string) => void;
-  readonly config: ReportConfig;
-  readonly onConfig: (
-    fn: ReportConfig | ((c: ReportConfig) => ReportConfig),
-  ) => void;
-  readonly zoo: readonly ZooEntry[];
-  readonly primary: FactorReport | null;
-  readonly compare: FactorReport | null;
-  readonly running: boolean;
-  readonly stagedName: string | null;
-  readonly stageExample: (e: FactorExample) => void;
-  readonly runStaged: () => void;
-  readonly loadZooEntry: (e: ZooEntry, slot: "primary" | "compare") => void;
-  readonly runCustom: () => void;
-  readonly generate: (
-    name: string,
-    expression: string,
-    hypothesis: string,
-    slot: "primary" | "compare",
-    intuitionForCover?: string,
-  ) => void;
-  readonly clearCompare: () => void;
-}) {
-  const { locale } = useLocale();
-
-  return (
-    <TmPane
-      title="REPORT.PICKER"
-      meta={`${FACTOR_EXAMPLES.length} EXAMPLES · ${zoo.length} ZOO · ${primary ? "GENERATED" : "EMPTY"}`}
-    >
-      <div className="flex flex-col gap-3 px-3 py-3">
-        {/* Config chip rows: direction / neutralize / benchmark / cost */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <ConfigChipGroup
-            label="direction"
-            options={["long_short", "long_only", "short_only"]}
-            value={config.direction}
-            onChange={(v) => onConfig((c) => ({ ...c, direction: v as ReportConfig["direction"] }))}
-          />
-          <ConfigChipGroup
-            label={t(locale, "backtest.form.neutralize")}
-            options={["none", "sector"]}
-            value={config.neutralize}
-            onChange={(v) => onConfig((c) => ({ ...c, neutralize: v as "none" | "sector" }))}
-          />
-          <ConfigChipGroup
-            label={t(locale, "backtest.form.benchmark")}
-            options={["SPY", "RSP"]}
-            value={config.benchmarkTicker}
-            onChange={(v) => onConfig((c) => ({ ...c, benchmarkTicker: v as "SPY" | "RSP" }))}
-          />
-          <div className="flex items-center gap-2">
-            <span className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
-              cost bps
-            </span>
-            <TmNumberInput
-              min={0}
-              max={50}
-              step={1}
-              value={config.transactionCostBps}
-              onChange={(value) =>
-                onConfig((c) => ({ ...c, transactionCostBps: value }))
-              }
-              aria-label="cost bps"
-              fieldSize="sm"
-              className="w-14"
-              inputClassName="text-right"
-            />
-          </div>
-        </div>
-
-        {/* From examples — grouped scannable list (tier sections + filter).
-            #4d: a row click STAGES the example into the form; an explicit
-            Run executes the backtest. */}
-        <div className="border-t border-tm-rule pt-2.5">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-              {t(locale, "report.picker.fromExamples")}
-            </p>
-            <p className="font-tm-sans text-xs text-tm-muted">
-              {t(locale, "report.example.listHint")}
-            </p>
-          </div>
-          <FactorExampleList
-            examples={FACTOR_EXAMPLES}
-            disabled={running}
-            selectedName={stagedName}
-            onSelect={stageExample}
-          />
-          {/* Run gate: visible only once an example is staged. */}
-          {stagedName && (
-            <div className="mt-2 flex items-center justify-between gap-2 border-t border-tm-rule pt-2">
-              <span className="inline-flex items-center gap-1.5 font-tm-mono text-xs text-tm-muted">
-                <span className="rounded-sm border border-tm-accent/40 bg-tm-accent-soft px-1.5 py-px text-xs uppercase tracking-[0.06em] text-tm-accent">
-                  {t(locale, "report.picker.staged")}
-                </span>
-                <span className="font-tm-sans text-xs text-tm-fg-2">
-                  {stagedName}
-                </span>
-              </span>
-              <TmButton
-                variant="primary"
-                onClick={runStaged}
-                disabled={running}
-                title={t(locale, "report.picker.runStaged")}
-              >
-                {running
-                  ? t(locale, "report.picker.running")
-                  : t(locale, "report.picker.run")}
-              </TmButton>
-            </div>
-          )}
-        </div>
-
-        {/* From zoo */}
-        {zoo.length > 0 && (
-          <div className="border-t border-tm-rule pt-2.5">
-            <p className="mb-1.5 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-              {t(locale, "report.picker.fromZoo")}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {zoo.slice(0, 12).map((z) => (
-                <TmChip
-                  key={z.id}
-                  onClick={() => loadZooEntry(z, "primary")}
-                  disabled={running}
-                  title={z.expression}
-                >
-                  {z.name}
-                </TmChip>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Custom input */}
-        <div className="flex flex-col gap-2 border-t border-tm-rule pt-2.5">
-          <TmInput
-            value={factorName}
-            onChange={onFactorName}
-            placeholder={t(locale, "report.picker.namePlaceholder")}
-            aria-label={t(locale, "report.picker.namePlaceholder")}
-            className="w-full"
-            inputClassName="font-tm-mono text-xs"
-          />
-          <TmTextarea
-            value={expr}
-            onChange={onExpr}
-            placeholder={t(locale, "report.picker.exprPlaceholder")}
-            rows={2}
-            spellCheck={false}
-            aria-label={t(locale, "report.picker.exprPlaceholder")}
-            className="w-full"
-            textareaClassName="resize-none font-tm-mono text-xs leading-relaxed"
-          />
-          <div className="flex justify-end">
-            <TmButton
-              variant="primary"
-              onClick={runCustom}
-              disabled={running || expr.trim().length === 0}
-            >
-              {running
-                ? t(locale, "report.picker.running")
-                : t(locale, "report.picker.generate")}
-            </TmButton>
-          </div>
-        </div>
-
-        {/* Compare slot — appears once primary is set */}
-        {primary && (
-          <div className="border-t border-tm-rule pt-2.5">
-            <p className="mb-1 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-              {t(locale, "report.picker.compareTitle")}
-            </p>
-            <p className="mb-1.5 font-tm-mono text-xs text-tm-muted">
-              {t(locale, "report.picker.compareSubtitle")}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {FACTOR_EXAMPLES.filter(
-                (e) => e.expression !== primary.expression,
-              ).map((example) => (
-                <TmChip
-                  key={example.name}
-                  onClick={() =>
-                    generate(
-                      example.name,
-                      example.expression,
-                      locale === "zh"
-                        ? example.hypothesisZh
-                        : example.hypothesisEn,
-                      "compare",
-                      locale === "zh"
-                        ? example.intuitionZh
-                        : example.intuitionEn,
-                    )
-                  }
-                  disabled={running}
-                >
-                  + {example.name}
-                </TmChip>
-              ))}
-              {zoo
-                .filter((z) => z.expression !== primary.expression)
-                .slice(0, 6)
-                .map((z) => (
-                  <TmChip
-                    key={z.id}
-                    onClick={() => loadZooEntry(z, "compare")}
-                    disabled={running}
-                  >
-                    + {z.name}
-                  </TmChip>
-                ))}
-              {compare && (
-                <TmButton
-                  variant="ghost"
-                  onClick={clearCompare}
-                  className="h-6 px-2 text-xs"
-                >
-                  {t(locale, "report.picker.compareClear")}
-                </TmButton>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </TmPane>
-  );
-}
-
-function ConfigChipGroup({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  readonly label: string;
-  readonly options: readonly string[];
-  readonly value: string;
-  readonly onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
-        {label}
-      </span>
-      {options.map((o) => (
-        <TmChip key={o} on={value === o} onClick={() => onChange(o)}>
-          {o}
-        </TmChip>
-      ))}
-    </div>
   );
 }
 
@@ -997,76 +595,23 @@ function ReportCoverPane({
   const eq = r.backtest.equity_curve;
   const startDate = eq[0]?.date ?? "—";
   const endDate = eq[eq.length - 1]?.date ?? "—";
-  const totalRet =
-    eq.length > 0 ? eq[eq.length - 1].value / eq[0].value - 1 : 0;
-  const benchEq = r.backtest.benchmark_curve;
-  const benchRet =
-    benchEq.length > 0
-      ? benchEq[benchEq.length - 1].value / benchEq[0].value - 1
-      : 0;
-
+  const zh = locale === "zh";
+  const [hypothesisOpen, setHypothesisOpen] = useState(false);
+  const rows = [
+    { label: zh ? "样本区间" : "Sample window", value: startDate + " → " + endDate },
+    { label: zh ? "研究范围" : "Universe", value: "S&P 500 · " + r.today.universe_size + (zh ? " 个标的" : " tickers") },
+    { label: zh ? "方向 / 中性化" : "Direction / neutralization", value: reportDirectionLabel(config.direction, locale) + " / " + (config.neutralize === "sector" ? (zh ? "行业中性" : "Sector neutral") : (zh ? "不中性化" : "None")) },
+    { label: zh ? "基准 / 成本" : "Benchmark / cost", value: r.backtest.benchmark_ticker + " / " + config.transactionCostBps + " bps" },
+  ];
   return (
-    <TmPane
-      title="REPORT.COVER"
-      meta={`${factorName || r.backtest.factor_name} · ${r.today.universe_size} tickers`}
-    >
-      <div className="border-b border-tm-rule px-3 py-2.5">
-        <h2 className="font-tm-mono text-[14px] font-semibold uppercase tracking-[0.04em] text-tm-accent">
-          {factorName || r.backtest.factor_name}
-        </h2>
-        <code className="mt-1 block break-all font-tm-mono text-xs leading-relaxed text-tm-fg-2">
-          {expr}
-        </code>
+    <TmPane title={zh ? "报告依据" : "Report basis"} meta={zh ? "生成时参数" : "Run settings"}>
+      <div className="p-4">
+        <h2 className="font-tm-mono text-sm font-semibold text-tm-fg">{factorName || r.backtest.factor_name}</h2>
+        <code className="mt-2 block break-all font-tm-mono text-xs leading-5 text-tm-fg-2">{expr}</code>
+        <dl className="mt-3 font-tm-mono text-xs">{rows.map(({ label, value }) => <div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-tm-rule py-2"><dt className="text-tm-muted">{label}</dt><dd className="text-tm-fg-2">{value}</dd></div>)}</dl>
+        {intuition && <div className="mt-2"><TmDisclosureButton expanded={hypothesisOpen} onClick={() => setHypothesisOpen((open) => !open)} label={zh ? "来源假设（非本次结果）" : "Source hypothesis (not run evidence)"} className="report-chrome" /><p className={(hypothesisOpen ? "" : "hidden print:block ") + "pt-2 font-tm-mono text-xs leading-5 text-tm-fg-2"}>{intuition}</p></div>}
+        <p className="mt-3 border-t border-tm-rule pt-2 font-tm-mono text-xs text-tm-muted">{t(locale, "report.cover.generated")}: {new Date(r.generatedAt).toLocaleString(zh ? "zh-CN" : "en-US")}</p>
       </div>
-
-      <TmKpiGrid>
-        <TmKpi
-          label="UNIVERSE"
-          value={r.today.universe_size.toString()}
-          sub="SP500 panel"
-        />
-        <TmKpi
-          label="WINDOW"
-          value={`${eq.length}d`}
-          sub={`${startDate} → ${endDate}`}
-        />
-        <TmKpi
-          label="BENCHMARK"
-          value={r.backtest.benchmark_ticker}
-          sub={`${(benchRet * 100).toFixed(1)}% over slice`}
-        />
-        <TmKpi
-          label="DIRECTION"
-          value={config.direction}
-          sub={
-            config.neutralize === "sector"
-              ? "sector-neutral"
-              : "no neutralize"
-          }
-        />
-        <TmKpi
-          label="COST"
-          value={`${config.transactionCostBps}bps`}
-          sub="round-trip"
-        />
-        <TmKpi
-          label="TOTAL RET"
-          value={`${(totalRet * 100).toFixed(1)}%`}
-          tone={totalRet > benchRet ? "pos" : "neg"}
-          sub={`vs ${(benchRet * 100).toFixed(1)}% bench`}
-        />
-      </TmKpiGrid>
-
-      {intuition && (
-        <p className="border-t border-tm-rule px-3 py-2.5 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
-          {intuition}
-        </p>
-      )}
-
-      <p className="border-t border-tm-rule bg-tm-bg-2 px-3 py-1 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-        {t(locale, "report.cover.generated")}:{" "}
-        {new Date().toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}
-      </p>
     </TmPane>
   );
 }

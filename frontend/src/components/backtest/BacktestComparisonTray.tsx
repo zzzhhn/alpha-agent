@@ -45,8 +45,8 @@ export function BacktestComparisonTray({
   const { locale } = useLocale();
   const zh = locale === "zh";
   return (
-    <section className="mt-3 grid grid-cols-[140px_repeat(3,minmax(0,1fr))] gap-2" aria-label={zh ? "运行比较托盘" : "Run comparison tray"}>
-      <div className="flex items-center border border-tm-rule bg-tm-bg-2 px-4 text-xs font-semibold text-tm-fg-2">
+    <section className="mt-3 grid gap-2 lg:grid-cols-3" aria-label={zh ? "运行比较托盘" : "Run comparison tray"}>
+      <div className="flex items-center py-1 text-xs font-semibold text-tm-fg-2 lg:col-span-3">
         {zh ? "对比摘要" : "Comparison"}
       </div>
       <RunSummary run={current} label={zh ? "本次运行" : "Current run"} active />

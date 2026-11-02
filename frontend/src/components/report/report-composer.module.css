@@ -1,0 +1,11 @@
+/* TmNumberInput's wrapper owns the field border, not its nested native input. */
+.composer input[type="number"] {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.composer div:has(> input[type="number"]):focus-within {
+  border-color: var(--tm-accent);
+  outline: 1px solid var(--tm-accent);
+}

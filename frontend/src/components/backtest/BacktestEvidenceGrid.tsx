@@ -25,9 +25,9 @@ interface Props {
 
 export function BacktestEvidenceGrid({ runState, currentRun, thresholds }: Props) {
   return (
-    <div className="grid grid-cols-[minmax(680px,2fr)_minmax(360px,1fr)] gap-4">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(360px,1fr)]">
       <div className="min-w-0">
-        {currentRun ? <TmEquityDrawdownChart result={currentRun.raw} height={460} /> : null}
+        {currentRun ? <TmEquityDrawdownChart result={currentRun.raw} height={400} /> : null}
       </div>
       <div className="flex min-w-0 flex-col gap-4">
         <BacktestValidationGate currentRun={currentRun} thresholds={thresholds} />

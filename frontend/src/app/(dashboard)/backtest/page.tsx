@@ -275,8 +275,12 @@ export default function BacktestPage() {
     if (session.currentRun) session.togglePin(session.currentRun.id);
   }, [session]);
 
+  const draftChanged = session.currentRun && Object.entries(session.params).some(
+    ([key, value]) => key !== "operatorsUsed" && value !== session.currentRun?.params[key as keyof BacktestParams],
+  );
+
   return (
-    <main className="flex min-h-[calc(100vh-36px)] flex-col bg-tm-bg">
+    <div className="flex min-w-0 flex-col bg-tm-bg">
       <BacktestContextHeader
         params={session.params}
         runState={session.runState}
@@ -289,6 +293,7 @@ export default function BacktestPage() {
         onRun={session.runOnce}
       />
       <div className="flex flex-col">
+        {session.currentRun && (draftChanged || session.isRunning) && <p role="status" className="border-b border-tm-rule bg-tm-warn/5 px-6 py-2 text-xs text-tm-warn">{session.isRunning ? (locale === "zh" ? "正在重新计算，下方暂保留上次运行的证据。" : "Recalculating. Evidence below is from the previous run.") : (locale === "zh" ? "参数已修改，下方仍为上次运行结果。请重新运行以验证当前设置。" : "Setup changed. Results below are from the previous run; rerun to validate this setup.")}</p>}
         <BacktestVerdictBar
           runState={session.runState}
           currentRun={session.currentRun}
@@ -332,6 +337,6 @@ export default function BacktestPage() {
           />
         </div>
       </div>
-    </main>
+    </div>
   );
 }

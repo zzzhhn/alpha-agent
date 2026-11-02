@@ -13,12 +13,13 @@
  * worth it.
  */
 
+import { useEffect, useState } from "react";
 import { Bookmark, RotateCcw, Star } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmIconButton } from "@/components/tm/TmButton";
-import { TmStatePane } from "@/components/tm/TmStatePane";
+import { TmPagination } from "@/components/tm/TmPagination";
 import {
   TmTable,
   TmTableBody,
@@ -146,15 +147,14 @@ export function RecentRunsTable({
 }: RecentRunsTableProps) {
   const { locale } = useLocale();
   const title = t(locale, "backtest.runs.title");
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [runs[0]?.id]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(runs.length / 5)));
 
   if (runs.length === 0) {
     return (
       <TmPane title={title}>
-        <TmStatePane
-          state="empty"
-          title={t(locale, "backtest.runs.empty")}
-          className="min-h-20 rounded-none border-0"
-        />
+        <p className="px-4 py-3 text-xs text-tm-muted">{t(locale, "backtest.runs.empty")}</p>
       </TmPane>
     );
   }
@@ -204,8 +204,8 @@ export function RecentRunsTable({
             </TmTableRow>
           </TmTableHead>
           <TmTableBody>
-            {runs.map((run, idx) => {
-              const runNum = total - idx;
+            {runs.slice((currentPage - 1) * 5, currentPage * 5).map((run, idx) => {
+              const runNum = total - ((currentPage - 1) * 5 + idx);
               const isPinned = run.id === baselineRunId;
               const m = run.metrics;
               const rowBgClass = isPinned
@@ -288,6 +288,7 @@ export function RecentRunsTable({
           </TmTableBody>
         </TmTable>
       </TmTableFrame>
+      {total > 5 && <TmPagination page={currentPage} pageSize={5} totalItems={total} pageSizeOptions={[5]} onPageChange={setPage} onPageSizeChange={() => {}} labels={{ navigation: locale === "zh" ? "近期运行分页" : "Recent runs pagination", previous: "←", previousAriaLabel: locale === "zh" ? "上一页" : "Previous page", next: "→", nextAriaLabel: locale === "zh" ? "下一页" : "Next page", page: (p, count) => `${p} / ${count}`, pageSize: "", total: n => locale === "zh" ? `${n} 次运行 · 本次会话` : `${n} runs · this session` }} />}
     </TmPane>
   );
 }

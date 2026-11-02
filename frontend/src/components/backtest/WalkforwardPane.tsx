@@ -99,11 +99,7 @@ export function WalkforwardPane({ runState, currentRun }: Props) {
   if (folds.length === 0) {
     return (
       <TmPane title={title}>
-        <TmStatePane
-          state="empty"
-          title={t(locale, "backtest.evidence.unavailable")}
-          className="min-h-[220px] rounded-none border-0"
-        />
+        <p className="px-4 py-3 text-xs leading-5 text-tm-muted">{currentRun.params.mode === "static" ? (locale === "zh" ? "本次使用固定样本。展开「成本与验证设置」，切换 Walk-forward 后重新运行以查看各窗口 IC。" : "This run uses a static split. Open Cost & validation, choose Walk-forward and rerun to inspect window IC.") : t(locale, "backtest.evidence.unavailable")}</p>
       </TmPane>
     );
   }

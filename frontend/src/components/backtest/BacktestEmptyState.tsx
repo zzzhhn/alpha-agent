@@ -1,92 +1,38 @@
 "use client";
 
-import { FlaskConical, Loader2, ShieldCheck } from "lucide-react";
-
+import { FlaskConical, Loader2 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 
 export function BacktestEmptyState({ running }: { readonly running: boolean }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
+  const questions = zh
+    ? ["样本外表现", "Walk-forward 稳定性", "交易成本韧性", "持仓集中度", "前视与数据风险"]
+    : ["Out-of-sample performance", "Walk-forward stability", "Transaction-cost robustness", "Concentration check", "Look-ahead and data risk"];
   return (
-    <section className="border-b border-tm-rule px-6 py-4">
-      <div className="grid grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] gap-4">
-        <section className="min-h-[330px] border border-tm-rule bg-tm-bg" aria-label={zh ? "净值与基准" : "Equity and benchmark"}>
-          <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4">
-            <span className="font-tm-mono text-xs font-semibold tracking-[0.08em] text-tm-fg">
-              {zh ? "净值、基准与回撤" : "Equity, benchmark, and drawdown"}
-            </span>
+    <section className="border-b border-tm-rule px-6 py-4" aria-busy={running}>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(360px,1fr)]">
+        <section className="flex min-w-0 flex-col border border-tm-rule bg-tm-bg-2" aria-label={zh ? "净值与基准" : "Equity and benchmark"}>
+          <div className="flex items-center justify-between gap-3 border-b border-tm-rule px-4 py-3">
+            <span className="font-tm-mono text-xs font-semibold text-tm-fg">{zh ? "净值、基准与回撤" : "Equity, benchmark, and drawdown"}</span>
             <span className="font-tm-mono text-xs text-tm-muted">IS / OOS</span>
           </div>
-          <div className="relative flex h-[286px] items-center justify-center overflow-hidden px-8 text-center">
-            <div className="pointer-events-none absolute inset-6 bg-[linear-gradient(to_right,var(--tm-rule)_1px,transparent_1px),linear-gradient(to_bottom,var(--tm-rule)_1px,transparent_1px)] bg-[size:20%_25%] opacity-55" />
-            <div className="relative max-w-md bg-tm-bg/90 px-5 py-4">
-              {running ? (
-                <Loader2 className="mx-auto h-5 w-5 animate-spin text-tm-accent" />
-              ) : (
-                <FlaskConical className="mx-auto h-5 w-5 text-tm-muted" />
-              )}
-              <h2 className="mt-3 text-[12px] font-semibold text-tm-fg">
-                {running ? (zh ? "正在建立验证证据" : "Building validation evidence") : (zh ? "运行后在同一坐标系比较策略与基准" : "Run to compare strategy and benchmark on one scale")}
-              </h2>
-              <p className="mt-2 text-xs leading-5 text-tm-muted">
-                {running
-                  ? (zh ? "结果到达前保留工作台结构，避免页面跳动。" : "The workbench keeps its geometry while results arrive.")
-                  : (zh ? "先确认表达式、方向和成本。系统不会用示例曲线冒充真实结果。" : "Confirm expression, direction, and cost. Sample curves never impersonate real results.")}
-              </p>
+          <div className="flex min-h-[190px] flex-1 items-center gap-5 px-6 py-6">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-tm-rule text-tm-accent">
+              {running ? <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" /> : <FlaskConical className="h-5 w-5" />}
+            </div>
+            <div className="max-w-lg">
+              <h2 className="text-[18px] font-semibold leading-6 text-tm-fg">{running ? (zh ? "正在构建验证证据" : "Building validation evidence") : (zh ? "策略是否经得起检验？" : "Does the strategy hold up?")}</h2>
+              <p className="mt-2 text-xs leading-5 text-tm-muted">{running ? (zh ? "回测完成后显示实际净值与风险，不预填结果。" : "Actual equity and risk appear when the run completes.") : (zh ? "在同一坐标系对照策略与基准，并区分样本内和样本外。运行后显示实际结果。" : "Compare strategy and benchmark on one scale, with in-sample and out-of-sample evidence kept distinct.")}</p>
             </div>
           </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-tm-rule px-4 py-2 font-tm-mono text-xs text-tm-muted"><span>{zh ? "策略净值" : "Strategy equity"}</span><span>{zh ? "基准对照" : "Benchmark"}</span><span>{zh ? "回撤路径" : "Drawdown"}</span></div>
         </section>
-
-        <section className="border border-tm-rule bg-tm-bg">
-          <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4">
-            <span className="font-tm-mono text-xs font-semibold tracking-[0.08em] text-tm-fg">
-              {zh ? "验证门槛" : "Validation gates"}
-            </span>
-            <span className="text-xs text-tm-muted">{running ? (zh ? "计算中" : "Running") : (zh ? "等待运行" : "Waiting")}</span>
-          </div>
-          <div className="divide-y divide-tm-rule">
-            {[
-              zh ? "样本外 Sharpe" : "OOS Sharpe",
-              zh ? "最大回撤" : "Max drawdown",
-              zh ? "样本外 IC" : "OOS IC",
-              zh ? "换手与成本" : "Turnover and cost",
-              zh ? "集中度" : "Concentration",
-              zh ? "泄漏检查" : "Leakage check",
-            ].map((label) => (
-              <div key={label} className="grid min-h-[42px] grid-cols-[24px_1fr_auto] items-center gap-3 px-4 text-xs">
-                <ShieldCheck className={`h-3.5 w-3.5 ${running ? "animate-pulse text-tm-accent" : "text-tm-muted"}`} />
-                <span className="text-tm-fg-2">{label}</span>
-                <span className="font-mono text-tm-muted">—</span>
-              </div>
-            ))}
-          </div>
-          <p className="border-t border-tm-rule px-4 py-2 text-xs leading-4 text-tm-muted">
-            {zh ? "只显示服务端能够验证的门槛，缺失项保持未知。" : "Only server-verifiable gates are scored; missing evidence stays unknown."}
-          </p>
+        <section className="border border-tm-rule bg-tm-bg" aria-label={zh ? "验证门槛" : "Validation gates"}>
+          <div className="flex items-center justify-between border-b border-tm-rule px-4 py-3"><span className="text-xs font-semibold text-tm-fg">{zh ? "验证门槛" : "Validation gates"}</span><span className="text-xs text-tm-muted">{running ? (zh ? "计算中" : "Running") : (zh ? "尚未评估" : "Not evaluated")}</span></div>
+          <div className="divide-y divide-tm-rule">{questions.map((label, index) => <div key={label} className="flex items-center gap-3 px-4 py-2 text-xs"><span className="font-tm-mono tabular-nums text-tm-muted">0{index + 1}</span><span className="flex-1 text-tm-fg-2">{label}</span><span className="text-tm-muted">—</span></div>)}</div>
+          <p className="border-t border-tm-rule px-4 py-2 text-xs text-tm-muted">{zh ? "未评估与已通过不同，缺失证据保留为空。" : "Not evaluated is not a pass. Missing evidence stays empty."}</p>
         </section>
-      </div>
-
-      <div className="mt-3 grid grid-cols-[140px_repeat(3,minmax(0,1fr))] gap-2">
-        <div className="flex items-center border border-tm-rule bg-tm-bg-2 px-4 text-xs font-semibold text-tm-fg-2">{zh ? "对比摘要" : "Comparison"}</div>
-        {[zh ? "本次运行" : "Current", zh ? "固定基线" : "Baseline", zh ? "上次运行" : "Previous"].map((label) => (
-          <div key={label} className="border border-tm-rule bg-tm-bg px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.08em] text-tm-muted">{label}</p>
-            <p className="mt-2 font-mono text-xs text-tm-muted">Sharpe — · MaxDD — · IC —</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 grid gap-1.5" aria-label={zh ? "诊断摘要" : "Diagnostic summaries"}>
-        {[
-          [zh ? "风险明细" : "Risk detail", "3"],
-          [zh ? "市场状态拆分" : "Regime breakdown", "2"],
-          [zh ? "当前持仓" : "Holdings", "2"],
-          [zh ? "执行与成本" : "Operations", "2"],
-        ].map(([label, count]) => (
-          <div key={label} className="flex min-h-8 items-center justify-between border border-tm-rule bg-tm-bg px-3 font-tm-mono text-xs">
-            <span className="text-tm-accent">› {label}</span>
-            <span className="text-tm-muted">{count} {zh ? "项 · 运行后可展开" : "items · available after run"}</span>
-          </div>
-        ))}
       </div>
     </section>
   );

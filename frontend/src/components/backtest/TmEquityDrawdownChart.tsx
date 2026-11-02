@@ -31,7 +31,6 @@ import {
 } from "recharts";
 import { TmPane } from "@/components/tm/TmPane";
 import { useLocale } from "@/components/layout/LocaleProvider";
-import { t } from "@/lib/i18n";
 import type { FactorBacktestResponse } from "@/lib/types";
 
 interface MergedPoint {
@@ -87,13 +86,12 @@ export function TmEquityDrawdownChart({
       title="EQUITY.UNDERWATER"
       meta={
         data.length > 0
-          ? `factor ${((factorEnd - 1) * 100).toFixed(1)}% · bench ${((benchEnd - 1) * 100).toFixed(1)}% · worst DD ${minDD.toFixed(1)}%`
+          ? `${locale === "zh" ? "策略" : "Strategy"} ${((factorEnd - 1) * 100).toFixed(1)}% · ${result.benchmark_ticker} ${((benchEnd - 1) * 100).toFixed(1)}% · ${locale === "zh" ? "最大回撤" : "Max DD"} ${minDD.toFixed(1)}%`
           : undefined
       }
     >
       <p className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
-        {t(locale, "backtest.equity.subtitle")} · drawdown overlay on
-        secondary axis.
+        {locale === "zh" ? "左轴：策略与基准净值，起点均为 1。右轴：策略距历史高点的回撤百分比。" : "Left: strategy and benchmark equity, both starting at 1. Right: strategy drawdown from its running peak (%)."}
       </p>
       <div className="w-full px-1 pb-2 pt-2" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -140,7 +138,7 @@ export function TmEquityDrawdownChart({
               }}
               formatter={(v, name) =>
                 typeof v === "number"
-                  ? name === "drawdown"
+                  ? name === (locale === "zh" ? "回撤" : "Drawdown")
                     ? `${v.toFixed(2)}%`
                     : v.toFixed(3)
                   : String(v ?? "")
@@ -162,7 +160,7 @@ export function TmEquityDrawdownChart({
               yAxisId="dd"
               type="monotone"
               dataKey="drawdown"
-              name="drawdown"
+              name={locale === "zh" ? "回撤" : "Drawdown"}
               stroke="var(--tm-neg)"
               strokeWidth={1.2}
               fill="url(#tm-eq-dd-grad)"
@@ -172,7 +170,7 @@ export function TmEquityDrawdownChart({
               yAxisId="eq"
               type="monotone"
               dataKey="benchmark"
-              name="benchmark"
+              name={result.benchmark_ticker}
               stroke="var(--tm-muted)"
               strokeWidth={1.5}
               dot={false}
@@ -183,7 +181,7 @@ export function TmEquityDrawdownChart({
               yAxisId="eq"
               type="monotone"
               dataKey="factor"
-              name="factor"
+              name={locale === "zh" ? "策略" : "Strategy"}
               stroke="var(--tm-accent)"
               strokeWidth={1.8}
               dot={false}
