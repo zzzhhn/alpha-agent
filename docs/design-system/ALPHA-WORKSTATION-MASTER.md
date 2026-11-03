@@ -71,6 +71,8 @@ Every page follows this order:
 
 Async panes keep useful geometry while requests are in flight. Pre-run panes may be compact, non-animated placeholders rather than full-height empty result boxes. Loading uses a skeleton inside the pane. Empty explains the next action. Error contains the error and retry in the affected pane. A single failed request must not erase unrelated controls, queue navigation, or history.
 
+Global service status separates connectivity from pipeline freshness. A failed or timed-out pipeline check with a successful DB check means service available / data status unknown. Client timeout, offline, authentication or rate-limit failures mean connection unconfirmed, not a proven outage. Only an explicit DB-down result or a server error from the basic health probe shows service unavailable. Every visible-tab poll re-evaluates both observations without retaining a stale green state; no extra requests or retries are introduced. The `/reference` service-state catalogue includes these partial and unknown states.
+
 ## 6. Page geometry
 
 ### 6.1 Factor Alpha, `/alpha`
