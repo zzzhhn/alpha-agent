@@ -45,11 +45,11 @@ suppression of LLM errors and does not add a shared-key fallback.
 | Alpha translation, authenticated LLM APIs | Authenticated user's encrypted BYOK via `api/byok.py` | No direct effect; missing user key still fails with 400, invalid auth with 401 |
 | Streaming Rich Brief | Authenticated user's BYOK | No direct effect; individual provider/auth failures remain reported |
 | Lean brief and numeric recommendations | Deterministic data/logic | Do not depend on the optional platform client |
-| Paper investment bot | Bot account owner's BYOK, resolved by `trading/bot_runner.py` | No direct effect; worker records owner-credential/model failures |
+| Paper investment bot | Bot account owner's BYOK, resolved by `paper/bot_runner.py` | No direct effect; worker records owner-credential/model failures |
 | Factor proposals | Job owner's BYOK, through `factor_lab.py` and cron job route | No direct effect; job failures remain visible |
 | Daily factor research | Authorized SYSTEM_USER_ID plus that user's BYOK for the LLM arm | Separate identity/credential requirements; GA arm is independent |
 | BRAIN mining | Independent BRAIN credentials; MINING_LLM_KEY in GitHub Actions for optional LLM screening | No direct effect; missing mining LLM key uses deterministic evidence screening, not a successful LLM screen |
-| Standalone CLI / old Streamlit research pipeline configured for Kimi | System provider settings and KIMI_API_KEY | These independent entrypoints require the system key and fail without it |
+| Standalone CLI / old Streamlit research pipeline configured for Kimi | System provider settings and KIMI_API_KEY in their own runtime environment | They fail if that runtime lacks its key; Vercel's variable does not configure local CLI runs |
 
 The former global news enrichment cron is removed. Its legacy worker helper is
 not evidence of an active production job outage. GitHub's mining key and Vercel's
@@ -85,6 +85,6 @@ an implicit repair.
 
 Code references: `api/index.py`, `alpha_agent/api/app.py`, `api/byok.py`,
 `api/routes/brief.py`, `api/routes/interactive.py`, `api/routes/factor_lab.py`,
-`api/routes/cron_routes.py`, `trading/bot_runner.py` (the last paths are under
+`api/routes/cron_routes.py`, `paper/bot_runner.py` (the last paths are under
 `alpha_agent/`); `.github/workflows/brain-mining-loop.yml` and
 `scripts/brain_mining_loop.py` describe the separate GitHub runner.

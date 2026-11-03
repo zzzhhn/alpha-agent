@@ -4,6 +4,7 @@ import runpy
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from alpha_agent.config import Settings
 
@@ -24,5 +25,7 @@ def test_vercel_startup_distinguishes_byok_only_from_missing_system_key(monkeypa
         assert app.state.llm_init_error is None
     else:
         assert "KIMI_API_KEY" in app.state.llm_init_error
-    assert any(route.path == "/api/v1/alpha/translate" for route in app.routes)
-    assert any(route.path == "/api/_health/routers" for route in app.routes)
+    # Exercise HTTP behavior: newer FastAPI versions keep included routers lazy.
+    client = TestClient(app)
+    assert client.get("/api/_health/routers").status_code == 200
+    assert client.post("/api/v1/alpha/translate", json={"text": "test"}).status_code == 401
