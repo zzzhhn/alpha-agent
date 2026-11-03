@@ -117,3 +117,17 @@ def test_a_reused_branch_is_not_deleted_through_the_real_cleanup_path():
     neon = FakeNeon()
     assert cleanup.cleanup_pr(FakeGitHub(head="new-work"), neon, 68, apply=True)["status"] == "preserved_or_absent"
     assert neon.deleted == []
+
+
+def test_an_incomplete_neon_inventory_stops_deletion():
+    cleanup = cleanup_module()
+
+    class PagedNeon(FakeNeon):
+        def request(self, path, method="GET", allow_missing=False):
+            result = super().request(path, method, allow_missing)
+            return {**result, "pagination": {"next": "next-page"}}
+
+    neon = PagedNeon()
+    with pytest.raises(RuntimeError, match="inventory incomplete"):
+        cleanup.cleanup_pr(FakeGitHub(), neon, 68, apply=True)
+    assert neon.deleted == []

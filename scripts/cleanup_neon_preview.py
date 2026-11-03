@@ -60,7 +60,7 @@ class API:
 
 def branch_list(neon):
     result = neon.request(f"/projects/{PROJECT_ID}/branches?limit=100")
-    if (result.get("pagination") or {}).get("cursor"):
+    if (result.get("pagination") or {}).get("next"):
         raise RuntimeError("Branch inventory incomplete; no cleanup performed")
     return result["branches"]
 
