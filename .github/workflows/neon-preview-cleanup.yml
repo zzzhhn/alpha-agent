@@ -1,0 +1,66 @@
+name: neon-preview-cleanup
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Merged PR number whose preview may be reclaimed'
+        required: true
+        type: string
+      apply:
+        description: 'Delete the eligible preview; false is a read-only dry run'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: neon-preview-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: >-
+      github.repository == 'zzzhhn/alpha-agent' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.pull_request.merged == true &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check project-scoped cleanup credential
+        id: credential
+        env:
+          CLEANUP_KEY: ${{ secrets.NEON_PREVIEW_CLEANUP_KEY }}
+        run: |
+          if [ -n "$CLEANUP_KEY" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Preview cleanup not activated: project-scoped Neon secret missing.'
+            echo 'No deletion performed. Configure NEON_PREVIEW_CLEANUP_KEY to activate cleanup.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Never check out a PR head or run code from an untrusted fork with this key.
+      - uses: actions/checkout@v4
+        if: steps.credential.outputs.configured == 'true'
+        with:
+          ref: main
+          persist-credentials: false
+          sparse-checkout: scripts/cleanup_neon_preview.py
+          sparse-checkout-cone-mode: false
+      - name: Reclaim only the merged preview
+        if: steps.credential.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEON_PREVIEW_CLEANUP_KEY: ${{ secrets.NEON_PREVIEW_CLEANUP_KEY }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          APPLY: ${{ github.event_name == 'pull_request' || inputs.apply }}
+        run: |
+          set -euo pipefail
+          args=(--pr "$PR_NUMBER")
+          if [ "$APPLY" = true ]; then args+=(--apply); fi
+          python3 scripts/cleanup_neon_preview.py "${args[@]}"
