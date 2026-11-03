@@ -6,24 +6,16 @@ import { apiGet } from "@/lib/api/client";
 import { usePolling } from "@/hooks/usePolling";
 import { useLocale } from "./LocaleProvider";
 import { TmServiceStatus, type ServiceState } from "@/components/tm/TmServiceStatus";
+import { readSystemHealth } from "@/lib/service-health";
 
 type HealthState = ServiceState;
 const HealthContext = createContext<HealthState>("checking");
 const AdminContext = createContext(false);
 export const useAdminAccess = () => useContext(AdminContext);
 
-async function fetchHealth(): Promise<HealthState> {
-  const [health, dag] = await Promise.all([
-    apiGet<{ db: string }>("/api/_health", { timeoutMs: 12_000 }),
-    apiGet<{ overall: string }>("/api/_health/dag", { timeoutMs: 12_000 }),
-  ]);
-  if (health.db !== "ok") return "unavailable";
-  return dag.overall === "healthy" ? "healthy" : "degraded";
-}
-
 /** One visible-tab poll shared by topbar and sidebar, not one poll per badge. */
 export function SystemHealthProvider({ children }: { children: ReactNode }) {
-  const { data, error } = usePolling({ fetcher: fetchHealth, intervalMs: 60_000 });
+  const { data, error } = usePolling({ fetcher: readSystemHealth, intervalMs: 60_000 });
   const [admin, setAdmin] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -33,7 +25,7 @@ export function SystemHealthProvider({ children }: { children: ReactNode }) {
     return () => { alive = false; };
   }, []);
   return (
-    <HealthContext.Provider value={error ? "unavailable" : data ?? "checking"}>
+    <HealthContext.Provider value={error ? "unknown" : data ?? "checking"}>
       <AdminContext.Provider value={admin}>{children}</AdminContext.Provider>
     </HealthContext.Provider>
   );

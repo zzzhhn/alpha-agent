@@ -152,7 +152,7 @@ function FeedbackSpecimens({ locale }: { readonly locale: Locale }) {
   return (
     <div>
     <TmPane title={zh ? "状态与恢复 · 服务状态" : "Status and recovery · Service health"} bodyClassName="flex flex-wrap gap-6 p-4">
-      {(["checking", "healthy", "degraded", "unavailable"] as const).map((value) => <TmServiceStatus key={value} state={value} locale={locale} />)}
+      {(["checking", "healthy", "degraded", "partial", "unknown", "unavailable"] as const).map((value) => <TmServiceStatus key={value} state={value} locale={locale} />)}
     </TmPane>
     <TmPane title={t(locale, "reference.pane.feedbackState")} meta={zh ? "稳定几何 + 局部恢复" : "stable geometry + local recovery"} bodyClassName="p-4">
       <div className="mb-4 flex flex-wrap gap-1.5">
