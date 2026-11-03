@@ -38,15 +38,11 @@ def _ensure_initialized(app: FastAPI) -> None:
     settings = get_settings()
     app.state.settings = settings
     app.state.cache = _cache
-    # Phase 1 BYOK — platform LLM is now optional. Public deploys set
-    # ALPHACORE_REQUIRE_BYOK=true and leave provider keys unset; the
-    # `byok.get_llm_client` dependency builds one per request from the
-    # caller's headers. We still try to construct a platform client here
-    # so local dev (with KIMI_API_KEY in .env) keeps the legacy "no
-    # BYOK headers required" flow. Construction failure (no key) is now
-    # warned, not fatal — see feedback_silent_trycatch_antipattern.md;
-    # we surface the reason via app.state.llm_init_error so /healthz can
-    # report it.
+    # Hosted deploys set ALPHACORE_REQUIRE_BYOK=true and leave platform keys
+    # unset. api.byok resolves each authenticated user's encrypted stored key;
+    # it never falls back to this optional platform client, even in local dev.
+    # Keep optional platform initialization for legacy consumers and retain
+    # genuine configuration failures in app.state.llm_init_error.
     require_byok = os.environ.get("ALPHACORE_REQUIRE_BYOK", "").lower() == "true"
     if require_byok:
         app.state.llm = None
