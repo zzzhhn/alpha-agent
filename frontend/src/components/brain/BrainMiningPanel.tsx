@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   Loader2,
@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ArrowUp,
   ArrowDown,
+  Clipboard,
 } from "lucide-react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
@@ -50,8 +51,8 @@ import {
   type PnlPoint,
   type YearlyRow,
 } from "@/lib/api/brain";
+import { DEFAULT_BRAIN_PAGE_SIZE, brainSubmissionState, familyLabel, hasUnsimulatedCandidates, nextExpandedAlpha, runFailureAction, type BrainSubmissionState } from "./brain-review";
 
-const DEFAULT_PAGE_SIZE = 20;
 type WorkbenchView = "results" | "audit";
 
 // Format an ISO timestamp as Beijing time (UTC+8), to the second.
@@ -134,7 +135,7 @@ const OUTCOME_CLS: Record<BrainOutcome, string> = {
 function outcomeLabel(o: BrainOutcome, zh: boolean): string {
   return zh
     ? { passed: "通过", flagged: "存疑", rejected: "淘汰", sim_error: "错误" }[o]
-    : { passed: "PASS", flagged: "FLAG", rejected: "OUT", sim_error: "ERR" }[o];
+    : { passed: "Passed", flagged: "Flagged", rejected: "Rejected", sim_error: "Sim error" }[o];
 }
 
 type CandidateVerdict = {
@@ -190,22 +191,25 @@ function candidateVerdict(alpha: BrainAlpha): CandidateVerdict {
 }
 
 // ── submit control (two-step confirm, matches the app's forgiveness pattern) ──
-type SubmitState = "idle" | "confirm" | "sending" | "done" | "error";
+type SubmitState = "idle" | "confirm" | "sending" | "error" | BrainSubmissionState;
 
 function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
-  const [state, setState] = useState<SubmitState>(
-    alpha.submitted_at ? "done" : "idle",
-  );
-  const [msg, setMsg] = useState<string | null>(alpha.brain_status);
+  const [state, setState] = useState<SubmitState>("idle");
+  const [msg, setMsg] = useState<string | null>(null);
+  const recorded = brainSubmissionState(alpha);
+  const result = state === "accepted" || state === "rejected" ? state : recorded;
 
-  if (state === "done") {
+  if (result) {
     return (
-      <span className="inline-flex items-center gap-1.5 font-tm-mono text-xs text-tm-pos">
-        <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-        {zh ? "已提交" : "submitted"}
-        {msg ? ` · ${msg}` : ""}
+      <span role="status" className={`inline-flex items-center gap-1.5 font-tm-mono text-xs ${result === "accepted" ? "text-tm-pos" : result === "rejected" ? "text-tm-neg" : "text-tm-muted"}`}>
+        {result === "accepted" ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> : null}
+        {result === "accepted"
+          ? (zh ? "BRAIN 已受理" : "Accepted by BRAIN")
+          : result === "rejected"
+            ? (zh ? "BRAIN 未接受本次提交" : "BRAIN rejected this submission")
+            : (zh ? "已尝试提交，未确认受理" : "Submission attempted; acceptance unconfirmed")}
       </span>
     );
   }
@@ -214,8 +218,7 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
     setState("sending");
     try {
       const r = await submitBrainAlpha(alpha.id);
-      setMsg(r.brain_status);
-      setState("done");
+      setState(brainSubmissionState(r) ?? "attempted");
       onDone();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -579,11 +582,12 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
 
   return (
     <div className="flex flex-col gap-3 border-t border-tm-rule bg-tm-bg-2 px-3 py-3">
-      <code
-        className={`block break-all font-tm-mono text-xs leading-snug ${alpha.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
-      >
-        {alpha.expression}
-      </code>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <code className={`min-w-0 flex-1 break-all font-tm-mono text-xs leading-snug ${alpha.is_blend ? "text-tm-accent" : "text-tm-fg"}`}>
+          {alpha.expression}
+        </code>
+        {alpha.alpha_id ? <AlphaIdChip alphaId={alpha.alpha_id} /> : null}
+      </div>
 
       {/* Blend provenance: this candidate was stitched from real parent alphas
           (family_focus == "blend" round). Old rows have no blend_parents and
@@ -639,8 +643,14 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
             {zh ? verdict.labelZh : verdict.labelEn}
           </span>
         </div>
-        <div className="px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
+        <div className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
           {zh ? verdict.detailZh : verdict.detailEn}
+          {alpha.detail && alpha.detail !== verdict.detailEn ? (
+            <details className="mt-1 text-tm-muted">
+              <summary className="cursor-pointer">{zh ? "原始诊断" : "Raw diagnosis"}</summary>
+              {alpha.detail}
+            </details>
+          ) : null}
         </div>
       </div>
 
@@ -650,8 +660,8 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         <Metric label="Fitness" value={fmt(alpha.fitness)} />
         <Metric label={zh ? "换手" : "Turnover"} value={fmt(alpha.turnover)} />
         <Metric label={zh ? "收益" : "Returns"} value={fmt(alpha.returns)} />
-        <Metric label="Drawdown" value={fmt(alpha.drawdown)} />
-        <Metric label="Margin" value={fmt(alpha.margin, 4)} />
+        <Metric label={zh ? "回撤" : "Drawdown"} value={fmt(alpha.drawdown)} />
+        <Metric label={zh ? "边际收益" : "Margin"} value={fmt(alpha.margin, 4)} />
         <div className="flex flex-col">
           <span className="font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-muted">
             {zh ? "自相关·官方" : "S-corr (BRAIN)"}
@@ -792,27 +802,6 @@ function OfficialSCorrCell({ alpha, zh }: { alpha: BrainAlpha; zh: boolean }) {
 // mirror the FamilySelect dropdown so the same family reads the same everywhere.
 // The six value-orthogonal sources get an accent-tinted border (the families we
 // WANT); the saturated 'value'/'other' cluster stays muted.
-const FAMILY_LABEL: Record<string, string> = {
-  value: "value",
-  dispersion: "dispersion",
-  microstructure: "micro-pv",
-  seasonality: "seasonal",
-  overnight: "overnight",
-  iv_term: "iv-term",
-  iv_skew_dynamics: "skew-dynamics",
-  iv_momentum: "iv-momentum",
-  pcr_dynamics: "pcr-dynamics",
-  option_breakeven: "breakeven",
-  vrp: "vrp",
-  quality: "quality",
-  options: "iv-skew",
-  lowvol: "low-vol",
-  sentiment: "sentiment",
-  momentum: "momentum",
-  score: "factor-score",
-  revision: "revision",
-  other: "other",
-};
 const FAMILY_SATURATED = new Set(["value", "other"]);
 // When `onClick` is passed the badge becomes a family filter toggle (click to
 // filter to that family, click the active one to clear). `active` highlights the
@@ -826,8 +815,10 @@ function FamilyBadge({
   onClick?: (fam: string) => void;
   active?: boolean;
 }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
   if (!family) return null;
-  const label = FAMILY_LABEL[family] ?? family;
+  const label = familyLabel(family, zh);
   const base = FAMILY_SATURATED.has(family)
     ? "border-tm-rule text-tm-muted"
     : "border-tm-accent/40 text-tm-fg-2";
@@ -845,7 +836,7 @@ function FamilyBadge({
       variant="ghost"
       size="xs"
       aria-pressed={active}
-      aria-label={active ? `clear ${label} filter` : `filter: ${label}`}
+      aria-label={active ? (zh ? `清除${label}筛选` : `Clear ${label} filter`) : (zh ? `筛选：${label}` : `Filter: ${label}`)}
       onClick={(e) => {
         e.stopPropagation();
         onClick(family);
@@ -858,16 +849,20 @@ function FamilyBadge({
 }
 
 function GradeBadge({ grade, full = false }: { grade: string | null; full?: boolean }) {
+  const { locale } = useLocale();
   if (!grade) {
     return <span className="font-tm-mono text-xs text-tm-muted">—</span>;
   }
   const s = GRADE_STYLE[grade.toUpperCase()];
-  const label = full ? grade : (s?.short ?? grade.slice(0, 4).toUpperCase());
+  const labels: Record<string, string> = { SPECTACULAR: "卓越", EXCELLENT: "优秀", GOOD: "良好", AVERAGE: "一般", INFERIOR: "偏弱", POOR: "较差" };
+  const label = locale === "zh" ? labels[grade.toUpperCase()] ?? grade : full ? grade : (s?.short ?? grade);
   const cls = s?.cls ?? "border-tm-rule text-tm-muted";
   return (
-    <span className={`border px-1 py-px font-tm-mono text-xs font-bold uppercase ${cls}`}>
-      {label}
-    </span>
+    <TmTooltip content={grade}>
+      <span className={`border px-1 py-px font-tm-mono text-xs font-bold uppercase ${cls}`}>
+        {label}
+      </span>
+    </TmTooltip>
   );
 }
 
@@ -926,25 +921,37 @@ function OutcomeTags({ alpha }: { alpha: BrainAlpha }) {
 // the WorldQuant platform without expanding. Click copies it (stopPropagation so it
 // doesn't toggle the row). Only simulated candidates carry one.
 function AlphaIdChip({ alphaId }: { alphaId: string }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
   const [copied, setCopied] = useState(false);
+  const resetCopy = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (resetCopy.current != null) clearTimeout(resetCopy.current);
+  }, []);
   return (
     <TmButton
       variant="ghost"
       size="xs"
-      aria-label={`copy alpha id ${alphaId}`}
+      aria-label={zh ? `复制 Alpha ID ${alphaId}` : `Copy Alpha ID ${alphaId}`}
       onClick={(e) => {
         e.stopPropagation();
         navigator.clipboard?.writeText(alphaId).then(
           () => {
             setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
+            if (resetCopy.current != null) clearTimeout(resetCopy.current);
+            resetCopy.current = setTimeout(() => setCopied(false), 1200);
           },
           () => undefined,
         );
       }}
-      className="h-4 rounded-sm border border-tm-rule px-1 text-xs tabular-nums hover:border-tm-accent/60 hover:text-tm-accent"
+      className="border border-tm-rule text-xs tabular-nums hover:border-tm-accent/60 hover:text-tm-accent"
     >
-      {copied ? "copied" : alphaId}
+      <Clipboard className="h-3 w-3" aria-hidden />
+      <span className="grid">
+        <span className={`col-start-1 row-start-1 ${copied ? "invisible" : ""}`}>{alphaId}</span>
+        <span className={`col-start-1 row-start-1 ${copied ? "" : "invisible"}`}>{zh ? "已复制" : "Copied"}</span>
+      </span>
+      <span role="status" className="sr-only">{copied ? (zh ? "已复制" : "Copied") : ""}</span>
     </TmButton>
   );
 }
@@ -1184,41 +1191,39 @@ function MineButton({
   }
 
   return (
-    <div className="grid items-end gap-3 px-3 py-3 xl:grid-cols-[128px_18px_128px_180px_auto_minmax(240px,1fr)]">
-      <TmInput
-        label={zh ? "仿真预算" : "simulation budget"}
-        hint={zh ? "真实 BRAIN 仿真上限" : "real BRAIN simulation cap"}
-        value={n}
-        onChange={setN}
-        inputMode="numeric"
-        aria-label={zh ? "真实仿真预算" : "real simulation budget"}
-        fieldSize="sm"
-        inputClassName="text-center tabular-nums"
-      />
-      <span className="pb-6 text-center font-tm-mono text-xs text-tm-muted">←</span>
-      <TmInput
-        label={zh ? "生成池" : "generation pool"}
-        hint={zh ? "低成本候选表达式" : "low-cost candidates"}
-        value={generationTarget}
-        onChange={setGenerationTarget}
-        inputMode="numeric"
-        aria-label={zh ? "候选表达式生成池" : "generated expression pool"}
-        fieldSize="sm"
-        inputClassName="text-center tabular-nums"
-      />
-      <div className="flex flex-col gap-1">
+    <div className="flex flex-wrap items-end gap-x-3 gap-y-2 px-3 py-3">
+      <div className="w-32">
+        <TmInput
+          label={zh ? "仿真预算" : "Simulation budget"}
+          value={n}
+          onChange={setN}
+          inputMode="numeric"
+          aria-label={zh ? "真实仿真预算" : "Real simulation budget"}
+          fieldSize="sm"
+          inputClassName="text-center tabular-nums"
+        />
+      </div>
+      <div className="w-32">
+        <TmInput
+          label={zh ? "生成池" : "Generation pool"}
+          value={generationTarget}
+          onChange={setGenerationTarget}
+          inputMode="numeric"
+          aria-label={zh ? "候选表达式生成池" : "Generated expression pool"}
+          fieldSize="sm"
+          inputClassName="text-center tabular-nums"
+        />
+      </div>
+      <div className="flex min-w-36 flex-col gap-1">
         <span className="text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
           {zh ? "因子家族" : "alpha family"}
         </span>
         <FamilySelect value={family} onChange={setFamily} zh={zh} />
-        <span className="text-xs text-tm-muted">
-          {zh ? "决定字段与结构搜索空间" : "controls fields and structure search"}
-        </span>
       </div>
-      <div className="flex min-h-[50px] items-start gap-2 pt-[18px]">
+      <div className="flex flex-wrap items-center gap-2">
         {selectedRun ? (
           <TmButton onClick={reuseSelectedRun} variant="secondary" size="sm">
-            {zh ? `复用 RUN #${selectedRun.id}` : `reuse RUN #${selectedRun.id}`}
+            {zh ? `载入 #${selectedRun.id} 参数` : `Load #${selectedRun.id} settings`}
           </TmButton>
         ) : null}
         <TmButton
@@ -1232,9 +1237,12 @@ function MineButton({
           {zh ? "开始挖矿" : "Start mining"}
         </TmButton>
       </div>
-      <div className="min-w-0 pb-1 text-xs leading-4">
+      <div className="min-w-0 max-w-lg self-end pb-1 text-xs leading-4">
         {state === "error" && errMsg ? (
-          <span className="font-tm-mono text-tm-neg">{errMsg}</span>
+          <details className="font-tm-mono text-tm-neg">
+            <summary className="cursor-pointer">{zh ? "挖矿未能完成，查看错误" : "Mining did not complete. View error."}</summary>
+            <p className="mt-1 [overflow-wrap:anywhere]">{errMsg}</p>
+          </details>
         ) : doneMsg ? (
           <span className="inline-flex items-start gap-1.5 font-tm-mono text-tm-pos">
             <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
@@ -1245,10 +1253,10 @@ function MineButton({
             {zh
               ? parentRunId != null
                 ? `将作为 RUN #${parentRunId} 的独立衍生轮次，原结果不会被覆盖`
-                : "生成池先经过证据筛选，仅入选候选消耗真实仿真预算"
+                : "生成池先筛选，入选候选才占用仿真预算"
               : parentRunId != null
                 ? `new child of RUN #${parentRunId}; original results stay unchanged`
-                : "the evidence screen selects which candidates consume real simulations"}
+                : "Only shortlisted candidates use the simulation budget."}
           </span>
         )}
       </div>
@@ -1303,7 +1311,7 @@ function FamilyFilterSelect({
   zh: boolean;
 }) {
   const labelOf = (v: string) =>
-    v ? FAMILY_LABEL[v] ?? v : zh ? "全部家族" : "all families";
+    v ? familyLabel(v, zh) : zh ? "全部家族" : "all families";
   return (
     <TmSelectMenu
       value={value}
@@ -1320,11 +1328,11 @@ function FamilyFilterSelect({
 const FAMILIES: Array<[string, string, string]> = [
   ["", "普通(混合)", "normal"],
   ["options", "期权多机制", "options multi-mechanism"],
-  ["lowvol", "low-vol", "low-vol"],
-  ["sentiment", "sentiment", "sentiment"],
-  ["momentum", "momentum", "momentum"],
-  ["score", "factor-score", "factor-score"],
-  ["revision", "revision", "revision"],
+  ["lowvol", "低波动", "low-vol"],
+  ["sentiment", "情绪", "sentiment"],
+  ["momentum", "动量", "momentum"],
+  ["score", "因子评分", "factor-score"],
+  ["revision", "预期修正", "revision"],
   ["dispersion", "分歧度", "dispersion"],
   // Research-derived structural motifs (pv-corr / seasonality / overnight /
   // iv-term / vrp / quality...): one focus value cycling ~11 mechanisms.
@@ -1397,8 +1405,8 @@ function isEmptyCompletedRun(run: BrainMiningRun): boolean {
   return (
     (status === "completed" || status === "complete") &&
     (run.requested_n ?? 0) > 0 &&
-    (run.generated_n ?? 0) === 0 &&
-    (run.persisted_n ?? 0) === 0
+    run.generated_n === 0 &&
+    run.persisted_n === 0
   );
 }
 
@@ -1433,7 +1441,7 @@ function runStatusLabel(run: BrainMiningRun, zh: boolean): string {
 
 function runStatusClass(run: BrainMiningRun): string {
   if (isEmptyCompletedRun(run)) return "text-tm-neg";
-  const raw = `${run.status ?? ""} ${run.screen_status ?? ""}`.toLowerCase();
+  const raw = (run.status ?? run.screen_status ?? "").toLowerCase();
   if (raw.includes("fail") || raw.includes("error")) return "text-tm-neg";
   if (raw.includes("run") || raw.includes("queue") || raw.includes("screen")) return "text-tm-accent";
   if (raw.includes("complete") || raw.includes("pass")) return "text-tm-pos";
@@ -1478,8 +1486,8 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
   const screened = run.screened_n ?? 0;
   const requested = run.requested_n ?? 0;
 
-  if (run.status === "failed" || isEmptyCompletedRun(run)) {
-    return zh ? "先按错误信息恢复配置，再复用本轮参数重跑。" : "Recover the reported failure, then reuse this run.";
+  if (["failed", "error"].includes((run.status ?? "").toLowerCase()) || isEmptyCompletedRun(run)) {
+    return runFailureAction(run, zh);
   }
   if (simulated > 0 && simErrors / simulated >= 0.2) {
     return zh ? "仿真错误偏高，先检查 BRAIN 会话、表达式格式或上游限流。" : "Simulation errors are elevated; inspect auth, expressions, or upstream throttling.";
@@ -1505,9 +1513,6 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
       ? `证据筛选保留了 ${requested - screened} 个仿真名额，低可信候选没有被回填消耗预算。打开“候选审计”查看逐条字段覆盖与阻断原因。`
       : `The evidence screen kept ${requested - screened} simulation slots unused instead of backfilling weak candidates. Open Candidate Audit for field coverage and blocking reasons.`;
   }
-  if (generated <= requested) {
-    return zh ? "生成池没有形成候选冗余，下一轮可扩大到仿真预算的约 2 倍。" : "The pool had no ranking headroom; try roughly 2× the simulation budget.";
-  }
   if (passed === 0 && rejected > 0) {
     return zh ? "主要损失发生在硬门槛，优先换家族或扩大生成池，不要盲目增加仿真数。" : "Hard gates dominate; change family or widen generation before buying more simulations.";
   }
@@ -1516,6 +1521,9 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
   }
   if (passed > 0) {
     return zh ? "先审阅通过项的 PnL、自相关与年度稳定性，再人工提交；不要自动晋级。" : "Review PnL, self-correlation, and yearly stability before manual submission.";
+  }
+  if (generated > 0 && generated <= requested && run.status === "completed") {
+    return zh ? "生成池没有形成候选冗余，下一轮可扩大到仿真预算的约 2 倍。" : "The pool had no ranking headroom; try roughly 2× the simulation budget.";
   }
   return zh ? "等待本轮完成后再判断瓶颈。" : "Wait for completion before diagnosing the bottleneck.";
 }
@@ -1558,7 +1566,7 @@ function RunSelector({
         ...runs.map((run) => ({
           value: String(run.id),
           label: `RUN #${run.id} · ${runSourceLabel(run, zh)}`,
-          meta: `${run.family_focus || (zh ? "混合家族" : "mixed family")} · ${fmtUtc8(run.created_at ?? run.started_at)} · ${runStatusLabel(run, zh)}`,
+          meta: `${familyLabel(run.family_focus, zh)} · ${fmtUtc8(run.created_at ?? run.started_at)} · ${runStatusLabel(run, zh)}`,
         })),
       ]}
     />
@@ -1569,12 +1577,14 @@ function RunLedger({
   run,
   selectedRunId,
   runsError,
+  runsLoading,
   runsTotal,
   zh,
 }: {
   run: BrainMiningRun | null;
   selectedRunId: number | null;
   runsError: string | null;
+  runsLoading: boolean;
   runsTotal: number;
   zh: boolean;
 }) {
@@ -1582,8 +1592,9 @@ function RunLedger({
     return (
       <div className="border-b border-tm-rule px-3 py-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-xs text-tm-muted">
-          <span className="uppercase tracking-wider text-tm-accent">{zh ? "运行账本" : "run ledger"}</span>
-          {selectedRunId != null ? (
+          {runsLoading ? (
+            <span>{zh ? "正在读取运行记录…" : "Loading runs…"}</span>
+          ) : selectedRunId != null ? (
             <span>{zh ? `RUN #${selectedRunId} 等待账本记录` : `RUN #${selectedRunId} awaiting ledger record`}</span>
           ) : runsError ? (
             <span>{zh ? "运行选择器暂不可用，显示兼容的全部结果" : "run selector unavailable; showing legacy all-results mode"}</span>
@@ -1594,22 +1605,22 @@ function RunLedger({
           )}
         </div>
         {runsError ? (
-          <p className="mt-1 font-tm-mono text-xs text-tm-warn">
-            {zh ? `运行账本读取失败：${runsError}` : `run ledger unavailable: ${runsError}`}
-          </p>
+          <details className="mt-1 font-tm-mono text-xs text-tm-warn">
+            <summary className="cursor-pointer">{zh ? "运行记录读取失败，可刷新重试" : "Could not load runs. Refresh to retry."}</summary>
+            <p className="mt-1 [overflow-wrap:anywhere]">{runsError}</p>
+          </details>
         ) : null}
       </div>
     );
   }
 
   const funnel: Array<[string, string]> = [
-    [zh ? "仿真预算" : "sim budget", runCount(run, "requested_n")],
     [
       zh ? "生成" : "generated",
       `${runCount(run, "generated_n")} / ${run.generation_target_n ?? "—"}`,
     ],
     [zh ? "入选仿真" : "selected", runCount(run, "screened_n")],
-    [zh ? "已仿真" : "simulated", runCount(run, "simulated_n")],
+    [zh ? "已仿真 / 预算" : "Simulated / budget", `${runCount(run, "simulated_n")} / ${runCount(run, "requested_n")}`],
     [zh ? "已入库" : "persisted", runCount(run, "persisted_n")],
   ];
   const outcome = [
@@ -1620,11 +1631,10 @@ function RunLedger({
   ] as const;
 
   return (
-    <div className="border-b border-tm-rule px-3 py-2">
+    <div className="space-y-2 border-b border-tm-rule px-3 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-xs">
-        <span className="uppercase tracking-wider text-tm-accent">RUN #{run.id}</span>
         <span className="text-tm-fg-2">{runSourceLabel(run, zh)}</span>
-        <span className="text-tm-muted">{run.family_focus || (zh ? "混合家族" : "mixed family")}</span>
+        <span className="text-tm-muted">{familyLabel(run.family_focus, zh)}</span>
         {run.parent_run_id != null ? (
           <span className="text-tm-info">{zh ? `源 RUN #${run.parent_run_id}` : `from RUN #${run.parent_run_id}`}</span>
         ) : null}
@@ -1632,49 +1642,46 @@ function RunLedger({
         <span className="text-tm-muted">{fmtUtc8(run.created_at ?? run.started_at)} UTC+8</span>
         {runsTotal > 0 ? <span className="ml-auto text-tm-muted">{runsTotal} {zh ? "轮" : "runs"}</span> : null}
       </div>
-      <div className="mt-2 grid grid-cols-5 gap-2 border-t border-tm-rule/60 pt-1.5">
+      <dl className="grid grid-cols-2 divide-tm-rule border border-tm-rule bg-tm-bg-2 sm:grid-cols-4 sm:divide-x">
         {funnel.map(([label, value]) => (
-          <div key={label} className="flex min-w-0 flex-col font-tm-mono">
-            <span className="truncate text-xs uppercase tracking-wider text-tm-muted">{label}</span>
-            <span className="tabular-nums text-[12px] text-tm-fg">{value}</span>
+          <div key={label} className="flex min-w-0 items-baseline gap-2 px-3 py-1.5 font-tm-mono">
+            <dt className="text-xs text-tm-muted">{label}</dt>
+            <dd className="ml-auto shrink-0 text-sm tabular-nums text-tm-fg">{value}</dd>
           </div>
         ))}
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-xs">
+      </dl>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-tm-mono text-xs">
         {outcome.map(([label, count, className]) => (
           <span key={label} className={className}>{label} {count}</span>
         ))}
         {run.screen_status ? (
-          <span className="text-tm-muted">
-            {zh ? "筛选" : "screen"}: {screenStatusLabel(run.screen_status, zh)}
+          <span className={["failed", "timeout", "error", "partial", "fallback_partial", "bypassed"].includes(run.screen_status.toLowerCase()) ? "text-tm-warn" : "text-tm-muted"}>
+            {screenStatusLabel(run.screen_status, zh)}
           </span>
         ) : null}
       </div>
-      {run.screen_detail || run.error_detail ? (
-        <p className="mt-1 break-words font-tm-mono text-xs leading-relaxed text-tm-warn">
-          {run.error_detail || run.screen_detail}
-        </p>
-      ) : null}
-      <div className="mt-2 grid gap-px border border-tm-rule bg-tm-rule md:grid-cols-[0.7fr_0.7fr_0.7fr_2fr]">
+      <p className={`text-xs leading-relaxed ${isEmptyCompletedRun(run) || ["failed", "error"].includes((run.status ?? "").toLowerCase()) ? "text-tm-neg" : "text-tm-fg-2"}`}>
+        {runNextStep(run, zh)}
+      </p>
+      <details key={run.id} className="font-tm-mono text-xs text-tm-muted">
+        <summary className="w-fit cursor-pointer focus-visible:outline focus-visible:outline-tm-accent">
+          {zh ? "运行诊断" : "Run diagnostics"}
+        </summary>
+        <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         {[
           [zh ? "筛选利用" : "screen use", runRate(run.screened_n, run.generated_n)],
           [zh ? "通过率" : "pass yield", runRate(run.passed_n, run.simulated_n)],
           [zh ? "仿真错误" : "sim errors", runRate(run.sim_error_n, run.simulated_n)],
         ].map(([label, value]) => (
-          <div key={label} className="bg-tm-bg px-2 py-1.5 font-tm-mono">
-            <div className="text-xs uppercase tracking-wider text-tm-muted">{label}</div>
-            <div className="mt-0.5 text-xs tabular-nums text-tm-fg">{value}</div>
+          <div key={label} className="flex gap-2">
+            <dt>{label}</dt>
+            <dd className="tabular-nums text-tm-fg">{value}</dd>
           </div>
         ))}
-        <div className="bg-tm-bg px-2 py-1.5 font-tm-mono">
-          <div className="text-xs uppercase tracking-wider text-tm-accent">
-            {zh ? "下一步" : "next action"}
-          </div>
-          <div className="mt-0.5 text-xs leading-relaxed text-tm-fg-2">
-            {runNextStep(run, zh)}
-          </div>
-        </div>
-      </div>
+        </dl>
+        {run.error_detail ? <p className="mt-2 whitespace-pre-wrap text-tm-neg [overflow-wrap:anywhere]">{run.error_detail}</p> : null}
+        {run.screen_detail ? <p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{run.screen_detail}</p> : null}
+      </details>
     </div>
   );
 }
@@ -1684,19 +1691,22 @@ export function BrainMiningPanel() {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState(DEFAULT_BRAIN_PAGE_SIZE);
   const [outcome, setOutcome] = useState<BrainOutcome | "">("");
   const [q, setQ] = useState("");
   const [sharpeMin, setSharpeMin] = useState("");
   const [familyFilter, setFamilyFilter] = useState("");
   const [sort, setSort] = useState<string>("created_at");
   const [descending, setDescending] = useState(true);
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [workbenchView, setWorkbenchView] = useState<WorkbenchView>("results");
-  const autoViewRun = useRef<number | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [viewChoice, setViewChoice] = useState<{ runId: number | null; view: WorkbenchView } | null>(null);
 
-  const [data, setData] = useState<{ alphas: BrainAlpha[]; total: number } | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [response, setResponse] = useState<{
+    query: BrainAlphaQuery;
+    data: { alphas: BrainAlpha[]; total: number } | null;
+    error: string | null;
+  } | null>(null);
+  const [resultsLoading, setResultsLoading] = useState(true);
   const [runs, setRuns] = useState<BrainMiningRun[] | null>(null);
   const [runsTotal, setRunsTotal] = useState(0);
   const [runsError, setRunsError] = useState<string | null>(null);
@@ -1708,27 +1718,27 @@ export function BrainMiningPanel() {
   // replaced by a later refresh's default selection.
   const selectionTouched = useRef(selectedRunId != null);
 
-  const loadRuns = useCallback(async (preferRunId?: number | null) => {
+  const runLoadSequence = useRef(0);
+  const loadRuns = useCallback(async () => {
+    const sequence = ++runLoadSequence.current;
     setRunsLoading(true);
     try {
       const res = await fetchBrainRuns(RECENT_RUN_LIMIT);
+      if (sequence !== runLoadSequence.current) return;
       const recent = sortRecentRuns(Array.isArray(res.runs) ? res.runs : []).slice(0, RECENT_RUN_LIMIT);
       setRuns(recent);
       setRunsTotal(typeof res.total === "number" ? res.total : recent.length);
       setRunsError(null);
-      if (preferRunId != null) {
-        selectionTouched.current = true;
-        setSelectedRunId(preferRunId);
-      } else if (!selectionTouched.current) {
+      if (!selectionTouched.current) {
         const preferred = recent.find(isManualRun) ?? recent[0] ?? null;
         setSelectedRunId(preferred?.id ?? null);
       }
     } catch (e) {
       // The ledger is a rollout-era enhancement. Keep the legacy all-results
       // query usable when this endpoint is missing or temporarily unavailable.
-      setRunsError(e instanceof Error ? e.message : String(e));
+      if (sequence === runLoadSequence.current) setRunsError(e instanceof Error ? e.message : String(e));
     } finally {
-      setRunsLoading(false);
+      if (sequence === runLoadSequence.current) setRunsLoading(false);
     }
   }, []);
 
@@ -1750,15 +1760,16 @@ export function BrainMiningPanel() {
   const loadSequence = useRef(0);
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
+    setResultsLoading(true);
     try {
       const res = await fetchBrainAlphas(query);
       if (sequence !== loadSequence.current) return;
-      setData(res);
-      setLoadError(null);
+      setResponse({ query, data: res, error: null });
     } catch (e) {
       if (sequence !== loadSequence.current) return;
-      setLoadError(e instanceof Error ? e.message : String(e));
-      setData({ alphas: [], total: 0 });
+      setResponse({ query, data: null, error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      if (sequence === loadSequence.current) setResultsLoading(false);
     }
   }, [query]);
 
@@ -1770,20 +1781,12 @@ export function BrainMiningPanel() {
     void loadRuns();
   }, [loadRuns]);
 
-  // Do not leave the previous run's rows painted while a newly selected run is
-  // loading. This keeps the run label and candidate evidence in lockstep.
-  useEffect(() => {
-    setData(null);
-    setLoadError(null);
-  }, [selectedRunId]);
-
   const handleRunSelection = useCallback((runId: number | null) => {
     selectionTouched.current = true;
     setSelectedRunId(runId);
-    setData(null);
-    setLoadError(null);
     setPage(0);
-    setExpanded(new Set());
+    setExpanded(null);
+    setViewChoice(null);
   }, []);
 
   const handleMiningStarted = useCallback(
@@ -1791,11 +1794,10 @@ export function BrainMiningPanel() {
       if (runId == null) return;
       selectionTouched.current = true;
       setSelectedRunId(runId);
-      setData(null);
-      setLoadError(null);
       setPage(0);
-      setExpanded(new Set());
-      void loadRuns(runId);
+      setExpanded(null);
+      setViewChoice(null);
+      void loadRuns();
     },
     [loadRuns],
   );
@@ -1805,11 +1807,10 @@ export function BrainMiningPanel() {
       if (runId != null) {
         selectionTouched.current = true;
         setSelectedRunId(runId);
-        setData(null);
-        setLoadError(null);
         setPage(0);
-        setExpanded(new Set());
-        void loadRuns(runId);
+        setExpanded(null);
+        if (selectedRunId === runId && page === 0) void load();
+        void loadRuns();
       } else {
         // Legacy POST responses do not identify a run. Refresh the current
         // compatibility query without changing the user's selected run.
@@ -1817,22 +1818,17 @@ export function BrainMiningPanel() {
         void loadRuns();
       }
     },
-    [load, loadRuns],
+    [load, loadRuns, page, selectedRunId],
   );
 
   // reset to page 0 whenever a filter or the page size changes
   useEffect(() => {
     setPage(0);
-    setExpanded(new Set());
+    setExpanded(null);
   }, [selectedRunId, outcome, q, sharpeMin, familyFilter, sort, descending, pageSize]);
 
   function toggle(id: number) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setExpanded((prev) => nextExpandedAlpha(prev, id));
   }
 
   function toggleSort(col: string) {
@@ -1843,8 +1839,12 @@ export function BrainMiningPanel() {
     }
   }
 
+  // A result only belongs under the exact query that produced it.
+  const data = response?.query === query ? response.data : null;
+  const loadError = response?.query === query ? response.error : null;
   const total = data?.total ?? 0;
-  const meta = `${total} ${zh ? "个 alpha" : "alphas"}`;
+  const filtered = Boolean(query.outcome || query.family || query.q || query.sharpe_min != null);
+  const refreshing = runsLoading || resultsLoading;
   const selectedRun = runs?.find((run) => run.id === selectedRunId) ?? null;
   const recentRuns = runs ?? [];
   const selectedRunFailed = Boolean(
@@ -1853,30 +1853,24 @@ export function BrainMiningPanel() {
         (selectedRun.status ?? "").toLowerCase() === "error" ||
         isEmptyCompletedRun(selectedRun)),
   );
-  const selectedRunFailureDetail =
-    selectedRun?.error_detail || selectedRun?.screen_detail || null;
 
-  useEffect(() => {
-    if (!selectedRun || autoViewRun.current === selectedRun.id) return;
-    autoViewRun.current = selectedRun.id;
-    const generated = selectedRun.generated_n ?? 0;
-    const simulated = selectedRun.simulated_n ?? 0;
-    setWorkbenchView(generated > 0 && simulated === 0 ? "audit" : "results");
-  }, [selectedRun]);
+  const workbenchView = viewChoice?.runId === selectedRunId
+    ? viewChoice.view
+    : hasUnsimulatedCandidates(selectedRun) ? "audit" : "results";
+
+  function changeView(view: WorkbenchView) {
+    setViewChoice({ runId: selectedRunId, view });
+    setExpanded(null);
+  }
 
   return (
     <TmScreen>
       <WorkbenchHeader
         eyebrow={zh ? "高级研究工具 · WorldQuant" : "Advanced research · WorldQuant"}
         title={zh ? "BRAIN 因子挖掘" : "BRAIN Alpha Mining"}
-        subtitle={zh ? "从候选生成、证据筛选到官方仿真，完整保留运行与淘汰原因。" : "Trace candidate generation, evidence screening, and official simulation with complete rejection reasons."}
-        statuses={[
-          { label: zh ? "当前运行" : "Selected run", value: selectedRun ? `#${selectedRun.id}` : "—" },
-          { label: zh ? "运行状态" : "Run status", value: selectedRun?.status?.toUpperCase() ?? (zh ? "未选择" : "NONE"), tone: selectedRunFailed ? "negative" : selectedRun?.status === "completed" ? "positive" : selectedRun ? "warning" : "default" },
-          { label: zh ? "已入库" : "Persisted", value: String(selectedRun?.persisted_n ?? total) },
-        ]}
+        subtitle={zh ? "候选筛选与官方仿真" : "Candidate screening and official simulation"}
       />
-      <TmPane title={zh ? "挖矿控制" : "MINING.CONTROL"}>
+      <TmPane title={zh ? "新建挖矿运行" : "New mining run"}>
         <MineButton
           selectedRun={selectedRun}
           onStarted={handleMiningStarted}
@@ -1885,22 +1879,24 @@ export function BrainMiningPanel() {
       </TmPane>
 
       <TmPane
-        title="WORLDQUANT.BRAIN"
+        title={zh ? "运行回顾" : "Run review"}
         meta={
           <TmButton
-            onClick={() => void load()}
+            onClick={() => { void loadRuns(); void load(); }}
+            loading={refreshing}
+            loadingLabel={zh ? "刷新中…" : "Refreshing…"}
             variant="ghost"
             size="xs"
-            aria-label={zh ? "刷新 BRAIN 结果" : "Refresh BRAIN results"}
+            aria-label={zh ? "刷新运行记录与结果" : "Refresh runs and results"}
           >
-            {meta}
             <RefreshCw className="h-3 w-3" strokeWidth={1.75} />
+            {zh ? "刷新" : "Refresh"}
           </TmButton>
         }
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
           <span className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
-            {zh ? "查看运行" : "view run"}
+            {zh ? "查看运行" : "View run"}
           </span>
           <RunSelector
             runs={recentRuns}
@@ -1908,16 +1904,15 @@ export function BrainMiningPanel() {
             onChange={handleRunSelection}
             zh={zh}
           />
-          {runsLoading ? (
-            <span className="font-tm-mono text-xs text-tm-muted">{zh ? "读取账本…" : "loading ledger…"}</span>
-          ) : runsError ? (
-            <span className="font-tm-mono text-xs text-tm-warn">{zh ? "兼容模式" : "legacy mode"}</span>
+          {runsError && selectedRun ? (
+            <span className="font-tm-mono text-xs text-tm-warn">{zh ? "运行记录刷新失败，仍显示上次记录" : "Run refresh failed; showing the last loaded record."}</span>
           ) : null}
         </div>
         <RunLedger
           run={selectedRun}
           selectedRunId={selectedRunId}
           runsError={runsError}
+          runsLoading={runsLoading}
           runsTotal={runsTotal}
           zh={zh}
         />
@@ -1926,21 +1921,22 @@ export function BrainMiningPanel() {
             {
               key: "results",
               label: zh ? "仿真结果" : "simulation results",
-              badge: <span className="font-tm-mono text-xs tabular-nums">{selectedRun?.persisted_n ?? total}</span>,
+              badge: <span className="font-tm-mono text-xs tabular-nums">{selectedRun?.persisted_n ?? (data && !filtered ? total : "—")}</span>,
             },
             {
               key: "audit",
               label: zh ? "候选审计" : "candidate audit",
-              badge: <span className="font-tm-mono text-xs tabular-nums">{selectedRun?.generated_n ?? 0}</span>,
+              badge: <span className="font-tm-mono text-xs tabular-nums">{selectedRun?.generated_n ?? "—"}</span>,
             },
           ]}
           active={workbenchView}
-          onChange={setWorkbenchView}
+          onChange={changeView}
           ariaLabel={zh ? "BRAIN 挖掘数据视图" : "BRAIN mining data views"}
         />
 
         {workbenchView === "audit" ? (
           <BrainCandidateAudit
+            key={selectedRunId ?? "legacy"}
             runId={selectedRunId}
             generatedCount={selectedRun?.generated_n}
           />
@@ -1954,6 +1950,7 @@ export function BrainMiningPanel() {
             value={q}
             onChange={setQ}
             placeholder={zh ? "搜索表达式或编码…" : "search expr or code…"}
+            aria-label={zh ? "搜索表达式或 Alpha ID" : "Search expression or Alpha ID"}
             fieldSize="sm"
             className="w-56"
           />
@@ -1961,6 +1958,7 @@ export function BrainMiningPanel() {
             value={sharpeMin}
             onChange={setSharpeMin}
             placeholder={zh ? "Sharpe ≥" : "Sharpe ≥"}
+            aria-label={zh ? "最低 Sharpe" : "Minimum Sharpe"}
             inputMode="decimal"
             fieldSize="sm"
             className="w-24"
@@ -1974,9 +1972,10 @@ export function BrainMiningPanel() {
               onClick={() => toggleSort(s)}
               variant="ghost"
               size="xs"
+              aria-pressed={sort === s}
               className={sort === s ? "text-tm-accent" : undefined}
             >
-              {s === "created_at" ? (zh ? "时间" : "date") : s}
+              {s === "created_at" ? (zh ? "时间" : "Date") : s === "turnover" ? (zh ? "换手" : "Turnover") : s === "sharpe" ? "Sharpe" : "Fitness"}
               {sort === s ? (
                 descending ? (
                   <ArrowDown className="h-2.5 w-2.5" strokeWidth={2} />
@@ -1988,166 +1987,138 @@ export function BrainMiningPanel() {
           ))}
         </div>
 
-        {/* column header */}
-        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
-          <span>{zh ? "表达式" : "expr"}</span>
-          <span className="w-12 text-right">Sharpe</span>
-          <span className="w-12 text-right">Fitness</span>
-          <span className="w-12 text-right">{zh ? "换手" : "TO"}</span>
-          <span className="w-12 text-right">{zh ? "收益" : "Ret"}</span>
-          <span className="w-12 text-right">{zh ? "回撤" : "DD"}</span>
-          <span className="w-14 text-right">Margin</span>
-          <TmTooltip
-            className="w-12 justify-end"
-            content={
-              zh
-                ? "BRAIN 官方自相关性:与已提交(ACTIVE)因子的最大相关性。0.70 为官方硬门槛,0.65–0.70 仅预警。"
-                : "BRAIN official maximum correlation vs ACTIVE alphas. 0.70 is the hard limit; 0.65–0.70 is warning-only."
-            }
-          >
-            <span className="cursor-help">S-corr</span>
-          </TmTooltip>
-          <TmTooltip
-            className="w-14 justify-end"
-            content={
-              zh
-                ? "调整后自相关性:额外计入已挖出但暂未提交的通过因子。仍以 0.70 为硬门槛,0.65–0.70 只提示组合拥挤风险。"
-                : "Adjusted correlation also counts passed-but-unsubmitted factors. The hard limit remains 0.70; 0.65–0.70 only warns about crowding."
-            }
-          >
-            <span className="cursor-help text-tm-info">S-corr⁺</span>
-          </TmTooltip>
-          <span className="w-24 text-right">{zh ? "编码" : "code"}</span>
-          <span className="w-14 text-right">{zh ? "评级" : "grade"}</span>
-          <span className="w-20 text-right">{zh ? "结论" : "verdict"}</span>
-        </div>
-
-        {/* rows */}
-        {data === null ? (
-          <p className="flex items-center gap-2 px-3 py-5 font-tm-mono text-xs text-tm-muted">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-            {zh ? "加载中…" : "loading…"}
+        {loadError ? (
+          <details className="px-3 py-4 font-tm-mono text-xs text-tm-neg">
+            <summary className="cursor-pointer">{zh ? "结果读取失败，可刷新重试" : "Could not load results. Refresh to retry."}</summary>
+            <p className="mt-2 [overflow-wrap:anywhere]">{loadError}</p>
+          </details>
+        ) : data === null ? (
+          <p role="status" className="flex items-center gap-2 px-3 py-5 font-tm-mono text-xs text-tm-muted">
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+            {zh ? "正在读取仿真结果…" : "Loading simulation results…"}
           </p>
         ) : data.alphas.length === 0 ? (
-          <p className="px-3 py-5 font-tm-mono text-xs leading-relaxed text-tm-muted">
-            {loadError
-              ? (zh ? `读取失败: ${loadError}` : `load failed: ${loadError}`)
-              : selectedRunFailed
-              ? zh
-                ? `本轮在候选生成或仿真阶段失败，没有产生可展示结果。${selectedRunFailureDetail ? ` 原因: ${selectedRunFailureDetail}` : ""}`
-                : `This run failed during candidate generation or simulation and produced no displayable results.${selectedRunFailureDetail ? ` Reason: ${selectedRunFailureDetail}` : ""}`
-              : selectedRun && (selectedRun.generated_n ?? 0) > 0 && (selectedRun.simulated_n ?? 0) === 0
-              ? zh
-                ? "本轮没有执行 BRAIN 仿真。请切换到“候选审计”，查看生成表达式、字段覆盖与逐条筛选原因。"
-                : "This run did not execute BRAIN simulations. Open Candidate Audit to inspect generated expressions, field coverage, and per-candidate decisions."
-              : total === 0
-              ? zh
-                ? "还没有挖矿结果。点上方「开始挖矿」跑一轮,或等每日 08:00 UTC 自动运行。前提:已在「设置」连接 BRAIN 账号。"
-                : "No mining results yet. Click 'Start mining' above, or wait for the daily 08:00 UTC run. Requires a connected BRAIN account in Settings."
-              : zh
-              ? "没有符合筛选的结果。"
-              : "No results match the filters."}
-          </p>
+          <div className="flex flex-wrap items-center gap-3 px-3 py-5 text-xs text-tm-muted">
+            {selectedRunFailed
+              ? (zh ? "本轮运行失败，暂无仿真结果。请查看运行诊断。" : "This run failed and has no simulation results. See Run diagnostics.")
+              : hasUnsimulatedCandidates(selectedRun)
+                ? (zh ? "本轮生成了候选，但没有执行 BRAIN 仿真。" : "This run generated candidates but did not execute BRAIN simulations.")
+                : filtered
+                  ? (zh ? "没有符合当前筛选的结果。" : "No results match these filters.")
+                  : selectedRunId != null
+                    ? (zh ? "本轮暂无已入库的仿真结果。" : "No simulation results have been saved for this run.")
+                    : (zh ? "暂无仿真结果。连接 BRAIN 账号后即可新建运行。" : "No simulation results yet. Connect a BRAIN account to start a run.")}
+            {hasUnsimulatedCandidates(selectedRun) ? (
+              <TmButton variant="secondary" size="xs" onClick={() => changeView("audit")}>
+                {zh ? "查看候选审计" : "Open candidate audit"}
+              </TmButton>
+            ) : filtered && !selectedRunFailed ? (
+              <TmButton variant="secondary" size="xs" onClick={() => {
+                setOutcome(""); setFamilyFilter(""); setQ(""); setSharpeMin("");
+              }}>
+                {zh ? "清除筛选" : "Clear filters"}
+              </TmButton>
+            ) : null}
+          </div>
         ) : (
-          <ul className="flex flex-col">
-            {data.alphas.flatMap((a, i) => {
-              const open = expanded.has(a.id);
-              const verdict = candidateVerdict(a);
-              const prev = i > 0 ? data.alphas[i - 1] : null;
-              // Batch divider: only under the default time sort are rows from the
-              // same mining round contiguous. Any metric sort interleaves batches,
-              // so a divider would be noise — suppress it there. Rows carry the
-              // per-row separator manually now (divide-y is gone) so a batch
-              // boundary can swap the thin rule for the accent divider below.
-              const newBatch =
-                sort === "created_at" &&
-                prev != null &&
-                (a.batch_started_at ?? "") !== (prev.batch_started_at ?? "");
-              const row = (
-                <li
-                  key={a.id}
-                  className={i > 0 && !newBatch ? "border-t border-tm-rule" : ""}
-                >
-                  <TmRowButton
-                    onClick={() => toggle(a.id)}
-                    className="grid w-full grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center gap-2.5 px-3 py-2 text-left hover:bg-tm-bg-2"
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {open ? (
-                        <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
-                      ) : (
-                        <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" strokeWidth={1.75} />
-                      )}
-                      <FamilyBadge
-                        family={a.family}
-                        active={familyFilter === a.family}
-                        onClick={(fam) =>
-                          setFamilyFilter((cur) => (cur === fam ? "" : fam))
-                        }
-                      />
-                      <code
-                        className={`truncate font-tm-mono text-xs ${a.is_blend ? "text-tm-accent" : "text-tm-fg"}`}
-                      >
-                        {a.expression}
-                      </code>
-                      {a.submitted_at ? (
-                        <CheckCircle2 className="h-3 w-3 shrink-0 text-tm-pos" strokeWidth={1.75} />
+          <TmTableFrame aria-busy={resultsLoading}>
+            <TmTable
+              caption={zh ? "BRAIN 仿真结果" : "BRAIN simulation results"}
+              className="min-w-[560px] table-fixed"
+            >
+              <colgroup>
+                <col />
+                <col className="w-[64px] sm:w-[80px]" />
+                <col className="w-[64px] sm:w-[80px]" />
+                <col className="w-[82px] sm:w-[108px]" />
+                <col className="w-[65px] sm:w-[82px]" />
+                <col className="w-[130px] sm:w-[152px]" />
+              </colgroup>
+              <TmTableHead>
+                <TmTableRow>
+                  <TmTableHeaderCell>{zh ? "表达式" : "Expression"}</TmTableHeaderCell>
+                  <TmTableHeaderCell textAlign="right">Sharpe</TmTableHeaderCell>
+                  <TmTableHeaderCell textAlign="right">Fitness</TmTableHeaderCell>
+                  <TmTableHeaderCell textAlign="right">
+                    <TmTooltip content={zh ? "与现有 ACTIVE 因子的最大相关性。0.70 为官方门槛。" : "Maximum correlation with ACTIVE alphas. The official limit is 0.70."}>
+                      <span className="cursor-help">{zh ? "官方自相关" : "Official S-corr"}</span>
+                    </TmTooltip>
+                  </TmTableHeaderCell>
+                  <TmTableHeaderCell textAlign="right">{zh ? "评级" : "Grade"}</TmTableHeaderCell>
+                  <TmTableHeaderCell textAlign="right">{zh ? "结论" : "Verdict"}</TmTableHeaderCell>
+                </TmTableRow>
+              </TmTableHead>
+              <TmTableBody>
+                {data.alphas.map((a, i) => {
+                  const open = expanded === a.id;
+                  const verdict = candidateVerdict(a);
+                  const submission = brainSubmissionState(a);
+                  const previous = i > 0 ? data.alphas[i - 1] : null;
+                  const newBatch = sort === "created_at" && previous != null &&
+                    (a.batch_started_at ?? "") !== (previous.batch_started_at ?? "");
+                  return (
+                    <Fragment key={a.id}>
+                      {newBatch ? (
+                        <TmTableRow className="border-t border-tm-accent/30">
+                          <TmTableCell colSpan={6} className="bg-tm-bg-2 py-1 text-tm-muted">
+                            {a.batch_started_at ? `${fmtUtc8(a.batch_started_at)} UTC+8` : (zh ? "其他批次" : "Other batch")}
+                          </TmTableCell>
+                        </TmTableRow>
                       ) : null}
-                    </span>
-                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.sharpe)}</span>
-                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.fitness)}</span>
-                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.turnover)}</span>
-                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.returns)}</span>
-                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.drawdown)}</span>
-                    <span className="w-14 text-right font-mono text-xs tabular-nums text-tm-fg-2">{fmt(a.margin, 4)}</span>
-                    <span className="w-12 text-right font-mono text-xs tabular-nums text-tm-fg-2"><OfficialSCorrCell alpha={a} zh={zh} /></span>
-                    <span className="w-14 text-right font-mono text-xs tabular-nums"><SCorrValue value={a.self_correlation_adj} /></span>
-                    <span className="flex w-24 justify-end">
-                      {a.alpha_id ? (
-                        <AlphaIdChip alphaId={a.alpha_id} />
-                      ) : (
-                        <span className="font-tm-mono text-xs text-tm-muted">—</span>
-                      )}
-                    </span>
-                    <span className="flex w-14 justify-end">
-                      <GradeBadge grade={a.grade} />
-                    </span>
-                    <span className="flex w-20 justify-end">
-                      <TmTooltip content={zh ? verdict.detailZh : verdict.detailEn}>
-                        <span className={`whitespace-nowrap border px-1 py-px font-tm-mono text-xs font-bold uppercase ${verdict.cls}`}>
-                          {zh ? verdict.labelZh : verdict.labelEn}
-                        </span>
-                      </TmTooltip>
-                    </span>
-                  </TmRowButton>
-                  {open ? <RowDetail alpha={a} onDone={() => void load()} /> : null}
-                </li>
-              );
-              if (!newBatch) return [row];
-              // The accent line "where two boxes meet"; hover reveals the round's
-              // dispatch time (UTC+8). Labels the batch BELOW it (time sort is DESC,
-              // so crossing down enters the round dispatched at this timestamp).
-              return [
-                <li key={`div-${a.id}`} aria-hidden>
-                  <TmTooltip
-                    className="group relative flex w-full cursor-help items-center py-1.5"
-                    content={
-                      a.batch_started_at
-                        ? `${zh ? "本批次发起于 " : "batch dispatched "}${fmtUtc8(a.batch_started_at)} UTC+8`
-                        : "—"
-                    }
-                  >
-                    <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />
-                    <span className="whitespace-nowrap px-2 font-tm-mono text-xs uppercase tracking-wide text-tm-muted opacity-0 transition-opacity group-hover:opacity-100">
-                      {a.batch_started_at ? `${fmtUtc8(a.batch_started_at)} UTC+8` : "—"}
-                    </span>
-                    <span className="h-0.5 flex-1 bg-tm-accent/30 transition-colors group-hover:bg-tm-accent/60" />
-                  </TmTooltip>
-                </li>,
-                row,
-              ];
-            })}
-          </ul>
+                      <TmTableRow className={open ? "bg-tm-bg-2" : undefined}>
+                        <TmTableRowHeader className="py-1.5">
+                          <TmRowButton
+                            onClick={() => toggle(a.id)}
+                            aria-expanded={open}
+                            aria-controls={open ? `brain-alpha-detail-${a.id}` : undefined}
+                            className="flex w-full min-w-0 items-start gap-1.5 rounded-sm py-0.5 text-left"
+                          >
+                            {open ? (
+                              <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-tm-muted" aria-hidden />
+                            ) : (
+                              <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-tm-muted" aria-hidden />
+                            )}
+                            <code className={`line-clamp-2 min-w-0 break-all leading-snug ${a.is_blend ? "text-tm-accent" : "text-tm-fg"}`}>
+                              {a.expression}
+                            </code>
+                            {submission === "accepted" ? (
+                              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-tm-pos" aria-label={zh ? "BRAIN 已受理" : "Accepted by BRAIN"} />
+                            ) : null}
+                          </TmRowButton>
+                          {a.family || a.alpha_id ? (
+                            <div className="ml-[18px] mt-1 flex flex-wrap items-center gap-2">
+                              <FamilyBadge family={a.family} active={familyFilter === a.family} onClick={(fam) =>
+                                setFamilyFilter((cur) => (cur === fam ? "" : fam))
+                              } />
+                              {a.alpha_id ? <AlphaIdChip alphaId={a.alpha_id} /> : null}
+                            </div>
+                          ) : null}
+                        </TmTableRowHeader>
+                        <TmTableCell textAlign="right" numeric>{fmt(a.sharpe)}</TmTableCell>
+                        <TmTableCell textAlign="right" numeric>{fmt(a.fitness)}</TmTableCell>
+                        <TmTableCell textAlign="right" numeric><OfficialSCorrCell alpha={a} zh={zh} /></TmTableCell>
+                        <TmTableCell textAlign="right"><GradeBadge grade={a.grade} /></TmTableCell>
+                        <TmTableCell textAlign="right">
+                          <TmTooltip content={zh ? "展开表达式查看依据" : "Expand expression for details"}>
+                            <span className={`inline-block border px-1.5 py-px text-xs font-bold ${verdict.cls}`}>
+                              {zh ? verdict.labelZh : verdict.labelEn}
+                            </span>
+                          </TmTooltip>
+                        </TmTableCell>
+                      </TmTableRow>
+                      {open ? (
+                        <TmTableRow id={`brain-alpha-detail-${a.id}`}>
+                          <TmTableCell colSpan={6} className="p-0">
+                            <RowDetail alpha={a} onDone={() => void load()} />
+                          </TmTableCell>
+                        </TmTableRow>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </TmTableBody>
+            </TmTable>
+          </TmTableFrame>
         )}
 
         {/* Canonical workstation pagination. */}
@@ -2172,11 +2143,11 @@ export function BrainMiningPanel() {
             }}
             onPageChange={(nextPage) => {
               setPage(nextPage - 1);
-              setExpanded(new Set());
+              setExpanded(null);
             }}
             onPageSizeChange={(nextPageSize) => {
               setPageSize(nextPageSize);
-              setExpanded(new Set());
+              setExpanded(null);
             }}
           />
         ) : null}

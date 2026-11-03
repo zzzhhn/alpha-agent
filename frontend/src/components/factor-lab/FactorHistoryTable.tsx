@@ -5,6 +5,10 @@ import { useState } from "react";
 import { Clipboard, Check } from "lucide-react";
 import clsx from "clsx";
 import { useRouter } from "next/navigation";
+import { useLocale } from "@/components/layout/LocaleProvider";
+import { EvolutionPagination } from "@/components/evolution/EvolutionPagination";
+import { evolutionPage } from "@/components/evolution/review-state";
+import { formatUtc8DateTime } from "@/lib/format-datetime";
 import {
   TmTable,
   TmTableBody,
@@ -44,7 +48,7 @@ const STATUS_STYLE: Record<
   },
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, zh }: { status: string; zh: boolean }) {
   const style = STATUS_STYLE[status] ?? {
     border: "border-tm-rule",
     bg: "bg-tm-bg-3/40",
@@ -59,14 +63,14 @@ function StatusBadge({ status }: { status: string }) {
         style.text,
       )}
     >
-      {status}
+      {zh ? ({ pending: "待审", approved: "已批准", rejected: "已拒绝" } as Record<string, string>)[status] ?? status : status}
     </span>
   );
 }
 
 // ── Copy button ────────────────────────────────────────────────────────────
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, zh }: { text: string; zh: boolean }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -81,7 +85,7 @@ function CopyButton({ text }: { text: string }) {
 
   return (
     <TmIconButton
-      label="Copy expression"
+      label={zh ? "复制表达式" : "Copy expression"}
       variant="ghost"
       size="xs"
       icon={
@@ -92,26 +96,10 @@ function CopyButton({ text }: { text: string }) {
         )
       }
       onClick={handleCopy}
-      title="Copy expression"
+      title={zh ? "复制表达式" : "Copy expression"}
       className="ml-1"
     />
   );
-}
-
-// ── Relative time formatter ────────────────────────────────────────────────
-
-function relativeTime(raw: string | null): string {
-  if (!raw) return "—";
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return raw;
-  const diffMs = Date.now() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  return `${diffD}d ago`;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -119,17 +107,21 @@ function relativeTime(raw: string | null): string {
 export function FactorHistoryTable({
   proposals,
 }: {
-  proposals: FactorProposal[];
+  proposals: readonly FactorProposal[];
 }) {
   const router = useRouter();
   const isAdmin = useAdminAccess();
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const [requestedPage, setPage] = useState(1);
+  const { page, visible } = evolutionPage(proposals, requestedPage);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
 
   if (proposals.length === 0) {
     return (
       <p className="px-3 py-4 text-center font-tm-mono text-xs text-tm-muted">
-        No history yet.
+        {zh ? "暂无历史记录。" : "No history yet."}
       </p>
     );
   }
@@ -147,7 +139,7 @@ export function FactorHistoryTable({
       router.refresh();
     } catch (e) {
       const msg =
-        e instanceof Error ? e.message : "Rollback failed. Please retry.";
+        e instanceof Error ? e.message : (zh ? "回滚失败，请重试。" : "Rollback failed. Please retry.");
       setRowErrors((prev) => ({ ...prev, [id]: msg }));
     } finally {
       setPendingId(null);
@@ -155,32 +147,33 @@ export function FactorHistoryTable({
   }
 
   return (
+    <>
     <TmTableFrame>
-      <TmTable density="compact" caption="Factor proposal history" className="min-w-[640px] text-xs">
+      <TmTable density="compact" caption={zh ? "方法论提案历史" : "Methodology proposal history"} className="min-w-[640px] text-xs">
         <TmTableHead>
           <TmTableRow>
             <TmTableHeaderCell className="px-2 py-1.5 text-xs">
-              Expression
+              {zh ? "表达式" : "Expression"}
             </TmTableHeaderCell>
             <TmTableHeaderCell className="px-2 py-1.5 text-xs">
-              Status
+              {zh ? "状态" : "Status"}
             </TmTableHeaderCell>
             <TmTableHeaderCell className="px-2 py-1.5 text-xs">
               dSharpe
             </TmTableHeaderCell>
             <TmTableHeaderCell className="px-2 py-1.5 text-xs">
-              Decided
+              {zh ? "处理时间" : "Decided"}
             </TmTableHeaderCell>
             <TmTableHeaderCell className="px-2 py-1.5 text-xs">
-              By
+              {zh ? "处理人" : "By"}
             </TmTableHeaderCell>
             <TmTableHeaderCell textAlign="center" className="px-2 py-1.5 text-xs">
-              Actions
+              {zh ? "操作" : "Actions"}
             </TmTableHeaderCell>
           </TmTableRow>
         </TmTableHead>
         <TmTableBody>
-          {proposals.map((p) => {
+          {visible.map((p) => {
             const isRowPending = pendingId === p.id;
             const rowError = rowErrors[p.id];
             const dsharpe =
@@ -197,13 +190,13 @@ export function FactorHistoryTable({
                     <code className="break-all font-mono text-xs text-tm-fg">
                       {p.expression}
                     </code>
-                    <CopyButton text={p.expression} />
+                    <CopyButton text={p.expression} zh={zh} />
                   </div>
                 </TmTableRowHeader>
 
                 {/* Status */}
                 <TmTableCell className="px-2 py-1.5">
-                  <StatusBadge status={p.status} />
+                  <StatusBadge status={p.status} zh={zh} />
                 </TmTableCell>
 
                 {/* Deflated Sharpe */}
@@ -213,7 +206,7 @@ export function FactorHistoryTable({
 
                 {/* Decided at */}
                 <TmTableCell className="whitespace-nowrap px-2 py-1.5 text-xs text-tm-fg-2">
-                  {relativeTime(p.decided_at)}
+                  {formatUtc8DateTime(p.decided_at, { year: "two-digit" })}
                 </TmTableCell>
 
                 {/* Decided by */}
@@ -233,7 +226,7 @@ export function FactorHistoryTable({
                         loading={isRowPending}
                         className="text-xs leading-[16px]"
                       >
-                        Rollback
+                        {zh ? "回滚" : "Rollback"}
                       </TmButton>
                       {rowError && (
                         <p className="mt-0.5 max-w-[120px] text-center font-tm-mono text-xs text-tm-neg">
@@ -253,5 +246,7 @@ export function FactorHistoryTable({
         </TmTableBody>
       </TmTable>
     </TmTableFrame>
+    <EvolutionPagination locale={locale} label={locale === "zh" ? "方法论提案历史分页" : "Methodology proposal history pagination"} page={page} total={proposals.length} onPageChange={setPage} />
+    </>
   );
 }

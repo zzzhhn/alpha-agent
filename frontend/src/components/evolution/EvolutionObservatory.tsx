@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, RotateCcw, ShieldCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import type {
   EvolutionCalibration,
@@ -23,6 +23,9 @@ import { ReliabilityChart } from "./ReliabilityChart";
 import { WeightDeltaTable } from "./WeightDeltaTable";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import { TmLinkButton } from "@/components/tm/TmButton";
+import { EvolutionUnavailable } from "./EvolutionUnavailable";
+import type { pendingReviewCounts } from "./review-state";
 
 type DetailTab = "weights" | "calibration";
 
@@ -50,7 +53,7 @@ function focusSignals(icTrend: IcTrendResponse | null, weights: EvolutionWeight[
     const score = weight.consecutive_bad_windows * 10 + Math.max(0, 5 - weight.shadow_streak);
     weightRisk.set(weight.signal_name, Math.max(weightRisk.get(weight.signal_name) ?? 0, score));
   }
-  return [...icTrend.series]
+  return icTrend.series.filter((series) => series.points.length > 0)
     .sort((a, b) => {
       const aIc = latestIc(a.points) ?? 0;
       const bIc = latestIc(b.points) ?? 0;
@@ -74,7 +77,7 @@ export default function EvolutionObservatory({
   weights,
   calibration,
   changes,
-  pendingCount,
+  review,
   failures = [],
   children,
 }: {
@@ -85,7 +88,7 @@ export default function EvolutionObservatory({
   weights: EvolutionWeight[];
   calibration: EvolutionCalibration | null;
   changes: EvolutionChange[];
-  pendingCount: number;
+  review: ReturnType<typeof pendingReviewCounts>;
   failures?: readonly string[];
   children?: ReactNode;
 }) {
@@ -101,9 +104,8 @@ export default function EvolutionObservatory({
   const shadow = selected ? weightFor(weights, selected, "shadow") : null;
   const guarded = selected ? weightFor(weights, selected, "guarded_shadow") : null;
   const relatedChange = selected
-    ? changes.find((change) => change.signal === selected || change.new_value.includes(selected)) ?? null
+    ? changes.find((change) => change.signal === selected) ?? null
     : null;
-  const signalNames = new Set(weights.map((weight) => weight.signal_name));
   const liveCount = new Set(weights.filter((weight) => weight.status === "live").map((weight) => weight.signal_name)).size;
   const shadowCount = new Set(weights.filter((weight) => weight.status === "shadow").map((weight) => weight.signal_name)).size;
   const guardedCount = new Set(weights.filter((weight) => weight.status === "guarded_shadow").map((weight) => weight.signal_name)).size;
@@ -114,7 +116,7 @@ export default function EvolutionObservatory({
     source: change.source,
     label: change.signal ? `${change.source}: ${change.signal}` : change.source,
   }));
-  const latestUpdate = [calibration?.as_of, ...changes.map((change) => change.changed_at)]
+  const latestUpdate = [calibration?.as_of, ...weights.map((weight) => weight.last_updated), ...changes.map((change) => change.changed_at), ...(icTrend?.series.flatMap((series) => series.points.map((point) => point.computed_at)) ?? [])]
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1) ?? null;
@@ -122,45 +124,55 @@ export default function EvolutionObservatory({
   const positiveIc = numericFact(health, "ic", "pos");
   const totalIc = numericFact(health, "ic", "total");
   const degrading = numericFact(health, "weights", "degrading");
+  const evidenceMissing = !totalIc || brier === null || degrading === null;
+  const pendingLabel = review.total !== null ? String(review.total) : review.known > 0 ? `≥${review.known}` : (zh ? "未知" : "Unknown");
+  const unavailable = zh ? "不可用" : "Unavailable";
+  const noEvidence = zh ? "无数据" : "No data";
+  const countText = (count: number | null) => count === null ? unavailable : String(count);
+  const hasChangeData = !failures.includes("change ledger");
+  const hasWeightData = !failures.includes("weights");
+  const verdict = review.known > 0
+    ? review.total === null
+      ? (zh ? `至少 ${review.known} 项变化待审查` : `At least ${review.known} await review`)
+      : (zh ? `${review.total} 项变化待审查` : `${review.total} await review`)
+    : review.total === null
+      ? (zh ? "待审状态未确认" : "Review status unconfirmed")
+      : evidenceMissing
+        ? (zh ? "证据不足，无法评估整体表现" : "Insufficient evidence to assess performance")
+        : health.ic.tone === "warn" || health.calibration.tone === "warn" || health.weights.tone === "warn"
+          ? (zh ? "评估证据有警示" : "Evaluation evidence shows warnings")
+          : (zh ? "当前没有待审变化" : "No changes await review");
 
   return (
     <section className="border-b border-tm-rule bg-tm-bg">
       <WorkbenchHeader
         eyebrow={zh ? "高级研究工具" : "Advanced research tools"}
         title={zh ? "演化监控" : "Evolution monitor"}
-        subtitle={zh ? "观察样本外变化，审查每一次模型调整" : "Observe out-of-sample change and review every model adjustment"}
+        subtitle={zh ? "样本外证据与变更审查" : "Out-of-sample evidence and change review"}
         statuses={[
-          { label: zh ? "最后更新" : "Last update", value: formatUtc8DateTime(latestUpdate) },
-          { label: zh ? "评估健康" : "Evaluation", value: totalIc ? `${positiveIc ?? 0}/${totalIc} +IC` : (zh ? "无数据" : "NO DATA"), tone: healthTone(health.ic.tone) },
-          { label: zh ? "计算预算" : "Compute budget", value: zh ? "60 秒缓存" : "60S CACHE", tone: "positive" },
-          { label: zh ? "待审提议" : "Pending", value: String(pendingCount), tone: pendingCount > 0 ? "negative" : "positive" },
+          { label: zh ? "最新证据时间" : "Latest evidence", value: latestUpdate ? formatUtc8DateTime(latestUpdate) : noEvidence },
+          { label: zh ? "正 IC 信号" : "Positive IC signals", value: totalIc ? `${positiveIc ?? 0}/${totalIc}` : noEvidence, tone: totalIc ? healthTone(health.ic.tone) : "warning" },
+          { label: zh ? "待审（已加载）" : "Pending (loaded)", value: pendingLabel, tone: review.total === null || review.known > 0 ? "warning" : "default" },
         ]}
       />
 
       <DecisionStrip
-        headline={pendingCount > 0
-          ? (zh ? `整体可用，${pendingCount} 项变化需要审查` : `System available; ${pendingCount} change requires review`)
-          : degrading && degrading > 0
-            ? (zh ? `整体可用，${degrading} 个信号正在劣化` : `System available; ${degrading} signals are degrading`)
-            : (zh ? "整体可用，当前没有待审变化" : "System available; no change awaits review")}
-        description={zh ? "只突出三条决策相关信号，所有事件仅作同期相关性线索。" : "Only three decision-relevant signals are emphasized; events remain contemporaneous evidence."}
+        headline={verdict}
+        description={review.known > 0 && evidenceMissing ? (zh ? "评估证据不完整。" : "Evaluation evidence is incomplete.") : undefined}
         metrics={[
-          { label: zh ? "校准" : "Calibration", value: brier === null ? "—" : brier.toFixed(3), detail: zh ? "Brier 分数，悬停术语查看定义" : "Brier score; hover terms for definitions", tone: healthTone(health.calibration.tone) },
-          { label: zh ? "样本外 IC（20日）" : "OOS IC (20D)", value: selectedIc === null ? "—" : `${selectedIc >= 0 ? "+" : ""}${selectedIc.toFixed(3)}`, detail: selected ? getSignalDisplayLabel(selected, locale) : undefined, tone: selectedIc === null ? "default" : selectedIc >= 0 ? "positive" : "negative" },
-          { label: zh ? "权重自调节" : "Adaptive weights", value: degrading ?? "—", detail: zh ? "劣化信号" : "degrading signals", tone: healthTone(health.weights.tone) },
-          { label: zh ? "提议状态" : "Proposals", value: pendingCount, detail: zh ? "等待人工审查" : "awaiting review", tone: pendingCount > 0 ? "negative" : "positive" },
+          { label: zh ? "方法论因子" : "Methodology factors", value: countText(review.methodology), tone: review.methodology !== 0 ? "warning" : "default" },
+          { label: zh ? "策略参数" : "Policy parameters", value: countText(review.policy), tone: review.policy !== 0 ? "warning" : "default" },
+          { label: zh ? "校准" : "Calibration", value: brier === null ? (calibration === null ? unavailable : !calibration.applied ? (zh ? "未应用" : "Not applied") : noEvidence) : <GlossaryTip term="BRIER">{brier.toFixed(3)}</GlossaryTip>, detail: "Brier", tone: healthTone(health.calibration.tone) },
+          { label: zh ? "劣化权重记录" : "Degrading weight records", value: degrading ?? (hasWeightData ? noEvidence : unavailable), tone: healthTone(health.weights.tone) },
         ]}
-        action={<a href="#evolution-review" className="inline-flex h-11 items-center gap-2 bg-tm-accent px-4 text-xs font-semibold text-tm-bg hover:brightness-110">{zh ? "审查变化" : "Review changes"} <span className="font-mono">{pendingCount}</span><ArrowRight className="h-3.5 w-3.5" /></a>}
+        action={<TmLinkButton href="#evolution-review" variant={review.known > 0 ? "primary" : "secondary"} size="md">{zh ? "审查变化" : "Review changes"}<ArrowRight aria-hidden="true" className="h-3.5 w-3.5" /></TmLinkButton>}
       />
 
-      <div className="grid grid-cols-[minmax(720px,2fr)_minmax(380px,1fr)] gap-4 border-b border-tm-rule px-6 py-4">
-        <div className="min-w-0 border border-tm-rule p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{zh ? "样本外表现时间线" : "Out-of-sample performance timeline"}</p>
-              <p className="mt-1 text-xs text-tm-muted">{zh ? "按劣化窗口、负 IC 和保护状态确定关注顺序" : "Attention order uses degrading windows, negative IC, and guard state"}</p>
-            </div>
-            <div className="flex gap-1">
+      <div className="grid grid-cols-1 gap-3 border-b border-tm-rule px-4 py-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:px-6">
+        <div className="min-w-0 border border-tm-rule px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-tm-mono text-xs font-semibold text-tm-fg">{zh ? "样本外表现时间线" : "Out-of-sample performance timeline"}{icTrend && selected ? (zh ? ` · ${icTrend.horizon_days} 日远期` : ` · ${icTrend.horizon_days}D forward`) : ""}</h2>
+            {selected ? (
               <TmToggleGroup
                 value={selected}
                 onChange={setSelectedSignal}
@@ -170,83 +182,75 @@ export default function EvolutionObservatory({
                   label: getSignalDisplayLabel(signal, locale),
                 }))}
               />
-              <a href="#evolution-signal-details" className="border border-tm-rule px-2.5 py-1.5 text-xs text-tm-muted hover:border-tm-accent hover:text-tm-accent">
-                {zh ? `全部 ${signalNames.size}` : `All ${signalNames.size}`}
-              </a>
-            </div>
+            ) : null}
           </div>
-          {icTrend && focusedSeries.length > 0 ? (
-            <IcTrendChart series={focusedSeries} locale={locale} annotations={annotations.filter((item) => focus.includes(item.signal_name))} events={evidenceEvents} height={430} />
+          {icTrend === null ? (
+            <EvolutionUnavailable locale={locale} message={zh ? "无法读取 IC 时间线。" : "Could not load the IC timeline."} />
+          ) : focusedSeries.length > 0 ? (
+            <IcTrendChart series={focusedSeries} locale={locale} annotations={annotations.filter((item) => focus.includes(item.signal_name))} events={evidenceEvents} height={300} />
           ) : (
-            <div className="flex h-[220px] flex-col items-center justify-center border-t border-tm-rule px-6 text-center text-xs text-tm-muted"><span>{zh ? "暂无可绘制的 IC 数据，健康结论已降级为无数据。" : "No IC data is available; the health verdict is explicitly unavailable."}</span>{failures.length > 0 ? <span className="mt-2 text-tm-warn">{zh ? `部分数据源不可用：${failures.join("、")}` : `Unavailable sources: ${failures.join(", ")}`}</span> : null}</div>
+            <p className="mt-1 text-xs leading-5 text-tm-muted">{zh ? "近 30 天未返回可绘制的 " : "No plottable "}<GlossaryTip term="IC OOS">IC</GlossaryTip>{zh ? " 观测。" : " observations in the last 30 days."}</p>
           )}
+          {failures.includes("IC annotations") ? <p className="mt-1 text-xs text-tm-warn">{zh ? "IC 注释不可用。" : "IC annotations unavailable."}</p> : null}
         </div>
 
-        <aside className="min-w-0 border border-tm-rule bg-tm-bg-2/20 p-4">
+        <aside className="min-w-0 border border-tm-rule bg-tm-bg-2/20 px-3 py-2">
           <div className="flex items-center justify-between">
-            <p className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{zh ? "本次变化证据" : "Current change evidence"}</p>
-            <span className={selectedIc == null ? "text-tm-muted" : selectedIc >= 0 ? "text-tm-pos" : "text-tm-neg"}>
-              IC {selectedIc == null ? "—" : `${selectedIc >= 0 ? "+" : ""}${selectedIc.toFixed(3)}`}
-            </span>
+            <h2 className="font-tm-mono text-xs font-semibold text-tm-fg">{zh ? "信号证据" : "Signal evidence"}</h2>
+            {selectedIc !== null ? <span className={selectedIc >= 0 ? "text-tm-pos" : "text-tm-neg"}>
+              <GlossaryTip term="IC OOS">IC</GlossaryTip> {`${selectedIc >= 0 ? "+" : ""}${selectedIc.toFixed(3)}`}
+            </span> : null}
           </div>
-          <h2 className="mt-4 text-2xl font-semibold">{selected ? getSignalDisplayLabel(selected, locale) : (zh ? "没有可选信号" : "No signal selected")}</h2>
-          <div className="mt-3 grid grid-cols-3 gap-px border border-tm-rule bg-tm-rule text-center text-xs">
+          {selected ? <>
+          <h3 className="mt-2 text-base font-semibold">{getSignalDisplayLabel(selected, locale)}</h3>
+          {hasWeightData ? <div className="mt-2 grid grid-cols-3 gap-px border border-tm-rule bg-tm-rule text-center text-xs">
             {[
-              [zh ? "线上 LIVE" : "LIVE", live?.weight],
-              [zh ? "影子 SHADOW" : "SHADOW", shadow?.weight],
-              [zh ? "保护 GUARDED" : "GUARDED", guarded?.weight],
+              [zh ? "线上" : "Live", live?.weight],
+              [zh ? "影子" : "Shadow", shadow?.weight],
+              [zh ? "保护" : "Guarded", guarded?.weight],
             ].map(([label, value]) => (
-              <div key={String(label)} className="bg-tm-bg px-1 py-3">
+              <div key={String(label)} className="bg-tm-bg px-1 py-2">
                 <p className="text-tm-muted">{label}</p>
                 <p className="mt-1 font-mono text-base text-tm-fg">{typeof value === "number" ? value.toFixed(4) : "—"}</p>
               </div>
             ))}
-          </div>
+          </div> : <EvolutionUnavailable locale={locale} message={zh ? "信号权重不可用。" : "Signal weights unavailable."} />}
           {selectedSeries && selectedSeries.points.length > 1 ? (
             <SignalSparkline
               points={selectedSeries.points}
-              label={zh ? "IC（滚动 20D）" : "IC (rolling 20D)"}
+              label={zh ? "近期 IC 观测" : "Recent IC observations"}
+              locale={locale}
             />
           ) : null}
-          <div className="mt-4 space-y-3 border-t border-tm-rule pt-4 text-xs leading-5">
-            <div className="flex justify-between gap-4"><span className="text-tm-muted"><GlossaryTip term="BRIER">{zh ? "校准（Brier）" : "Calibration (Brier)"}</GlossaryTip></span><span>{brier == null ? "—" : brier.toFixed(3)}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "证据窗口" : "Evidence window"}</span><span>{selectedSeries?.points.length ?? 0} {zh ? "个观测" : "observations"}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "劣化窗口" : "Degrading windows"}</span><span>{live?.consecutive_bad_windows ?? shadow?.consecutive_bad_windows ?? 0}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "晋升累计" : "Promotion streak"}</span><span>{shadow?.shadow_streak ?? 0}/5</span></div>
-            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "最近同期事件" : "Latest co-occurring event"}</span><span className="max-w-[180px] truncate text-right" title={relatedChange?.source}>{relatedChange?.source ?? (zh ? "未记录" : "Not recorded")}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-tm-muted">{zh ? "事件时间" : "Event time"}</span><span>{formatUtc8DateTime(relatedChange?.changed_at, { year: "numeric", seconds: true })}</span></div>
+          <div className="mt-2 space-y-1 border-t border-tm-rule pt-2 text-xs leading-5">
+            {live || shadow ? <div className="flex justify-between gap-2"><span className="text-tm-muted">{zh ? "劣化窗口" : "Degrading windows"}</span><span>{live?.consecutive_bad_windows ?? shadow?.consecutive_bad_windows}</span></div> : null}
+            {shadow ? <div className="flex justify-between gap-2"><span className="text-tm-muted">{zh ? "晋升累计" : "Promotion streak"}</span><span>{shadow.shadow_streak}/5</span></div> : null}
+            <p className="text-tm-muted">{zh ? "最近相关记录：" : "Latest related record: "}{relatedChange ? `${relatedChange.source} · ${formatUtc8DateTime(relatedChange.changed_at)}` : hasChangeData ? (zh ? "已加载账本中未找到" : "Not found in the loaded ledger") : unavailable}</p>
           </div>
-          <p className="mt-4 border-l-2 border-tm-warn pl-3 text-xs leading-5 text-tm-muted">
-            {zh ? "这里只展示真实共现记录和前后 IC，不把相关性写成因果。" : "Only recorded co-occurrence and before/after IC are shown; correlation is not described as causation."}
-          </p>
+          <p className="mt-1 text-xs leading-5 text-tm-muted">{zh ? "事件与前后 IC 仅作同期对照，不代表因果。" : "Events and nearby IC provide context, not causation."}</p>
+          </> : <p className="mt-1 text-xs leading-5 text-tm-muted">{zh ? "没有可供对照的信号。权重和校准仍可单独查看。" : "No signal to compare. Weights and calibration can still be viewed separately."}</p>}
         </aside>
       </div>
 
-      <div className="border-b border-tm-rule px-6 py-4">
-        <p className="mb-3 text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{zh ? "晋升漏斗（当前批次）" : "Promotion funnel (current cohort)"}</p>
-        <div className="grid grid-cols-5 gap-3 text-xs">
-        {[
-          [zh ? "线上 LIVE" : "LIVE", liveCount],
-          [zh ? "影子 SHADOW" : "SHADOW", shadowCount],
-          [zh ? "保护 GUARDED" : "GUARDED", guardedCount],
-          [zh ? "已晋升" : "PROMOTED", promotedCount],
-          [zh ? "已回滚" : "ROLLED BACK", rolledBackCount],
-        ].map(([label, count], index) => (
-          <div key={String(label)} className={`relative flex min-h-[88px] flex-col items-center justify-center border bg-tm-bg ${index === 2 && Number(count) > 0 ? "border-tm-warn" : "border-tm-rule"}`}>
-            <p className="text-tm-muted">{label}</p>
-            <p className={`mt-2 font-mono text-2xl ${index === 2 && Number(count) > 0 ? "text-tm-warn" : "text-tm-fg"}`}>{count}</p>
-            {index < 4 ? <ArrowRight className="absolute -right-5 top-9 z-10 h-4 w-4 bg-tm-bg text-tm-muted" /> : null}
-          </div>
-        ))}
-        </div>
+      <div className="grid grid-cols-1 gap-3 border-b border-tm-rule px-4 py-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:px-6">
+        <LifecycleCounts title={zh ? "当前权重状态（信号可重叠）" : "Current weight states (signals can overlap)"}
+          entries={[
+            [zh ? "线上" : "Live", hasWeightData ? String(liveCount) : unavailable],
+            [zh ? "影子" : "Shadow", hasWeightData ? String(shadowCount) : unavailable],
+            [zh ? "保护" : "Guarded", hasWeightData ? String(guardedCount) : unavailable],
+          ]} />
+        <LifecycleCounts title={hasChangeData ? (zh ? `账本事件（已加载 ${changes.length} 条）` : `Ledger events (${changes.length} loaded)`) : (zh ? "账本事件" : "Ledger events")}
+          entries={[
+            [zh ? "自动晋升" : "Auto-promotions", hasChangeData ? String(promotedCount) : unavailable],
+            [zh ? "自动回滚" : "Auto-rollbacks", hasChangeData ? String(rolledBackCount) : unavailable],
+          ]} />
       </div>
 
       {children}
 
       <details id="evolution-signal-details" className="border-b border-tm-rule">
-        <summary className="flex h-11 cursor-pointer list-none items-center justify-between px-6 text-xs text-tm-muted hover:text-tm-fg">
-          <span>{zh ? "展开全部信号权重与校准明细" : "Expand all signal weights and calibration details"}</span>
-          <span>{zh ? "按需加载视图" : "On-demand view"}</span>
+        <summary className="cursor-pointer px-4 py-3 font-tm-mono text-xs text-tm-muted hover:text-tm-fg lg:px-6">
+          {zh ? "全部信号权重与校准明细" : "All signal weights and calibration"}
         </summary>
         <div className="flex min-h-11 items-center gap-3 border-y border-tm-rule px-6 py-1.5">
           <SegmentedTabs
@@ -259,28 +263,40 @@ export default function EvolutionObservatory({
             active={detailTab}
             onChange={setDetailTab}
           />
-          <span className="ml-auto flex items-center gap-1 text-xs text-tm-muted"><ShieldCheck className="h-3 w-3" /> {signalNames.size} {zh ? "个信号受控" : "signals governed"}</span>
         </div>
         <div className="px-6 py-4">
-          {detailTab === "weights" ? <WeightDeltaTable weights={weights} locale={locale} /> : null}
-          {detailTab === "calibration" ? calibration ? <ReliabilityChart calibration={calibration} locale={locale} /> : <p className="py-8 text-center text-xs text-tm-muted">{zh ? "暂无校准数据" : "No calibration data"}</p> : null}
+          {detailTab === "weights" ? hasWeightData ? <WeightDeltaTable weights={weights} locale={locale} /> : <EvolutionUnavailable locale={locale} /> : null}
+          {detailTab === "calibration" ? calibration ? <ReliabilityChart calibration={calibration} locale={locale} /> : <EvolutionUnavailable locale={locale} /> : null}
         </div>
       </details>
 
-      <div className="flex min-h-7 items-center justify-between px-3 text-xs text-tm-muted">
-        <span>{zh ? "60 秒缓存 · 默认只绘制 3 条重点信号 · 详情按需切换" : "60s cache · 3 focus signals by default · details on demand"}</span>
-        <span className="inline-flex items-center gap-1"><RotateCcw className="h-3 w-3" /> {zh ? "所有变化保留回滚与审计记录" : "Every change retains rollback and audit history"}</span>
-      </div>
     </section>
   );
 }
 
-function SignalSparkline({ points, label }: { readonly points: readonly { computed_at: string; ic: number }[]; readonly label: string }) {
-  const values = points.map((point) => point.ic);
+function LifecycleCounts({ title, entries }: { title: string; entries: readonly [string, string][] }) {
+  return (
+    <section className="min-w-0 border border-tm-rule px-3 py-2">
+      <h2 className="font-tm-mono text-xs font-semibold text-tm-fg">{title}</h2>
+      <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        {entries.map(([label, value]) => (
+          <div key={label} className="flex items-baseline gap-2">
+            <dt className="text-tm-muted">{label}</dt>
+            <dd className="font-tm-mono text-sm tabular-nums text-tm-fg">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function SignalSparkline({ points, label, locale }: { readonly points: readonly { computed_at: string; ic: number }[]; readonly label: string; readonly locale: Locale }) {
+  const ordered = [...points].sort((a, b) => a.computed_at.localeCompare(b.computed_at));
+  const values = ordered.map((point) => point.ic);
   const min = Math.min(...values, -0.01);
   const max = Math.max(...values, 0.01);
   const range = Math.max(max - min, 0.001);
-  const polyline = points.map((point, index) => {
+  const polyline = ordered.map((point, index) => {
     const x = 8 + (index / Math.max(points.length - 1, 1)) * 284;
     const y = 78 - ((point.ic - min) / range) * 62;
     return `${x.toFixed(1)},${y.toFixed(1)}`;
@@ -288,7 +304,7 @@ function SignalSparkline({ points, label }: { readonly points: readonly { comput
   const zeroY = 78 - ((0 - min) / range) * 62;
   return (
     <div className="mt-3 border border-tm-rule bg-tm-bg px-3 py-2">
-      <div className="flex items-center justify-between text-xs uppercase tracking-[0.08em] text-tm-muted"><span>{label}</span><span>{points.length} obs</span></div>
+      <div className="flex items-center justify-between text-xs text-tm-muted"><span>{label}</span><span>{locale === "zh" ? `${points.length} 个观测` : `${points.length} observations`}</span></div>
       <svg viewBox="0 0 300 86" className="mt-2 h-[96px] w-full" role="img" aria-label={label}>
         <line x1="8" x2="292" y1={zeroY} y2={zeroY} stroke="currentColor" className="text-tm-rule" strokeDasharray="3 3" />
         <polyline points={polyline} fill="none" stroke="currentColor" className="text-tm-pos" strokeWidth="2" />

@@ -11,6 +11,7 @@ import { TmPane } from "@/components/tm/TmPane";
 import { TmPagination } from "@/components/tm/TmPagination";
 import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
+import { EvolutionUnavailable } from "@/components/evolution/EvolutionUnavailable";
 import {
   approveFactorProposal,
   rejectFactorProposal,
@@ -21,7 +22,7 @@ import {
 type RowActionState = "idle" | "approving" | "rejecting";
 
 interface PendingProposalsSectionProps {
-  readonly proposals: readonly FactorProposal[];
+  readonly proposals: readonly FactorProposal[] | null;
   readonly liveExpression: string;
 }
 
@@ -58,13 +59,14 @@ const RISK_CLS: Record<string, string> = {
 };
 
 export function PendingProposalsSection({
-  proposals,
+  proposals: loadedProposals,
   liveExpression,
 }: PendingProposalsSectionProps) {
   const { locale } = useLocale();
   const isAdmin = useAdminAccess();
   const { toast } = useToast();
   const router = useRouter();
+  const proposals = loadedProposals ?? [];
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
   const [actionState, setActionState] = useState<Map<number, RowActionState>>(
@@ -74,7 +76,8 @@ export function PendingProposalsSection({
   const pageSize = 5;
   const pageCount = Math.max(1, Math.ceil(proposals.length / pageSize));
   useEffect(() => setPage((value) => Math.min(value, pageCount - 1)), [pageCount]);
-  const visible = proposals.slice(page * pageSize, (page + 1) * pageSize);
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = proposals.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
 
   function toggleExpand(id: number) {
     setExpandedId((current) => current === id ? null : id);
@@ -153,7 +156,11 @@ export function PendingProposalsSection({
     }
   }
 
-  const title = t(locale, "factorLab.pending.title");
+  const title = locale === "zh" ? "方法论因子待审" : "Methodology factor proposals";
+
+  if (loadedProposals === null) {
+    return <TmPane title={title}><EvolutionUnavailable locale={locale} /></TmPane>;
+  }
 
   if (proposals.length === 0) {
     return (
@@ -179,9 +186,9 @@ export function PendingProposalsSection({
           const rationale = ev?.llm_rationale;
           return (
             <div key={p.id} className="px-3 py-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <TmIconButton
-                  label={isOpen ? "Collapse proposal" : "Expand proposal"}
+                  label={locale === "zh" ? (isOpen ? `收起提案 #${p.id}` : `展开提案 #${p.id}`) : (isOpen ? `Collapse proposal #${p.id}` : `Expand proposal #${p.id}`)}
                   icon={
                     isOpen ? (
                       <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -195,7 +202,7 @@ export function PendingProposalsSection({
                   aria-expanded={isOpen}
                   className="shrink-0"
                 />
-                <code className="flex-1 truncate font-mono text-xs text-tm-fg">
+                <code className="min-w-0 flex-1 truncate font-mono text-xs text-tm-fg" title={p.expression}>
                   {p.expression}
                 </code>
                 {ev?.skeptic ? (
@@ -211,7 +218,7 @@ export function PendingProposalsSection({
                   <GlossaryTip term="DS">{t(locale, "factorLab.pending.colDS")}</GlossaryTip> {fmtNum(ds, 2)}
                 </span>
                 <TmButton
-                  variant="primary"
+                  variant="secondary"
                   size="xs"
                   onClick={() => handleApprove(p)}
                   disabled={!isAdmin || state !== "idle"}
@@ -257,7 +264,7 @@ export function PendingProposalsSection({
                       <div className="font-tm-mono text-xs uppercase tracking-wider text-tm-muted">
                         {t(locale, "factorLab.pending.metrics")}
                       </div>
-                      <div className="grid grid-cols-3 gap-2 font-mono text-xs text-tm-fg-2">
+                      <div className="grid grid-cols-2 gap-2 font-mono text-xs text-tm-fg-2 sm:grid-cols-3">
                         <span>
                           dSharpe {fmtNum(ev.deflated_sharpe, 2)}
                         </span>
@@ -321,7 +328,7 @@ export function PendingProposalsSection({
                                 : "text-tm-pos"
                             }
                           >
-                            {line.sign} {line.text}
+                            {line.sign} {line.text || (locale === "zh" ? "当前线上表达式不可用" : "Current live expression unavailable")}
                           </div>
                         ),
                       )}
@@ -334,7 +341,7 @@ export function PendingProposalsSection({
         })}
       </div>
       <TmPagination
-        page={page + 1}
+        page={currentPage + 1}
         pageSize={pageSize}
         totalItems={proposals.length}
         pageSizeOptions={[pageSize]}
@@ -354,8 +361,8 @@ export function PendingProposalsSection({
           pageSize: locale === "zh" ? "每页" : "PAGE SIZE",
           total: (total) =>
             locale === "zh"
-              ? `共 ${total} 条，每页 ${pageSize} 条，只允许展开一条`
-              : `${total} total, ${pageSize} per page, one expanded row`,
+              ? `已加载 ${total} 条`
+              : `${total} loaded`,
         }}
         onPageChange={(nextPage) => {
           setPage(nextPage - 1);

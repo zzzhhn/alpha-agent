@@ -18,12 +18,14 @@ import {
   fetchFactorProposals,
   fetchMiningLessons,
   fetchBriefing,
-  type MiningBriefing,
 } from "@/lib/api/factor-lab";
-import { TmScreen } from "@/components/tm/TmPane";
+import { TmPane, TmScreen } from "@/components/tm/TmPane";
 import { AdminAccessNote } from "@/components/layout/SystemHealth";
 import EvolutionObservatory from "@/components/evolution/EvolutionObservatory";
 import { ChangeHistoryTable } from "@/components/evolution/ChangeHistoryTable";
+import { ProposalsTable } from "@/components/evolution/ProposalsTable";
+import { pendingReviewCounts } from "@/components/evolution/review-state";
+import { EvolutionUnavailable } from "@/components/evolution/EvolutionUnavailable";
 import { assessEvolutionHealth } from "@/lib/evolution-health";
 // Methodology-proposals UI, merged in from the former /factor-lab page (the two
 // nav slots both surfaced proposals; consolidated into this one monitor).
@@ -95,18 +97,18 @@ async function fetchFactorLab() {
     ]);
   const diagnostic = diagSettled.status === "fulfilled" ? diagSettled.value : null;
   const pending =
-    pendingSettled.status === "fulfilled" ? pendingSettled.value.proposals : [];
-  const all = allSettled.status === "fulfilled" ? allSettled.value.proposals : [];
+    pendingSettled.status === "fulfilled" ? pendingSettled.value.proposals.filter((p) => p.status === "pending") : null;
+  const all = allSettled.status === "fulfilled" ? allSettled.value.proposals : null;
   const lessons =
-    lessonsSettled.status === "fulfilled" ? lessonsSettled.value.lessons : [];
-  const briefing: MiningBriefing =
+    lessonsSettled.status === "fulfilled" ? lessonsSettled.value.lessons : null;
+  const briefing =
     briefingSettled.status === "fulfilled"
       ? briefingSettled.value
-      : { validated: [], flagged: [], failure_insights: [] };
+      : null;
   return {
     diagnostic,
     pending,
-    history: all.filter((p) => p.status !== "pending"),
+    history: all?.filter((p) => p.status !== "pending") ?? null,
     lessons,
     briefing,
   };
@@ -124,7 +126,9 @@ export default async function EvolutionPage() {
   // one-glance "is the self-evolution effective & trustworthy?" read.
   const health = assessEvolutionHealth({ icTrend, calibration, weights, proposals });
 
-  const pendingCount = proposals?.proposals.filter((proposal) => proposal.status === "pending").length ?? 0;
+  const zh = locale === "zh";
+  const policyPending = proposals?.proposals.filter((proposal) => proposal.status === "pending") ?? null;
+  const review = pendingReviewCounts(policyPending, pending);
 
   return (
     <TmScreen>
@@ -137,38 +141,35 @@ export default async function EvolutionPage() {
         weights={weights?.weights ?? []}
         calibration={calibration}
         changes={changes?.changes ?? []}
-        pendingCount={pendingCount}
+        review={review}
         failures={failures}
       >
-        {/* ── Decision ledger: proposals before on-demand telemetry detail ──
-          The decision card + actionable pending list + collapsed history,
-          richer than the prior read-only table. `proposals` (fetchProposals)
-          still feeds the health strip above. */}
-        <div id="evolution-review" className="grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-4 border-b border-tm-rule px-6 py-4">
+        <div id="evolution-review" tabIndex={-1} aria-label={zh ? "审查变化" : "Review changes"} className="grid scroll-mt-3 grid-cols-1 items-start gap-4 border-b border-tm-rule px-4 py-4 lg:px-6 xl:grid-cols-2">
           <div className="min-w-0 space-y-3">
-            <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
             <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
+            <TmPane title={zh ? "策略参数待审" : "Policy proposals"} meta={review.policy?.toString()}>
+              {policyPending === null ? <EvolutionUnavailable locale={locale} /> : <ProposalsTable proposals={policyPending} locale={locale} />}
+            </TmPane>
           </div>
-          <section className="min-w-0 border border-tm-rule bg-tm-bg">
-            <div className="flex h-11 items-center justify-between border-b border-tm-rule bg-tm-bg-2/40 px-4">
-              <span className="text-[12px] font-semibold tracking-[0.08em] text-tm-fg">{locale === "zh" ? "变更账本" : "Change ledger"}</span>
-              <span className="font-mono text-xs text-tm-muted">{changes?.changes.length ?? 0}</span>
-            </div>
-            <div className="px-3 py-2">
-              <ChangeHistoryTable changes={(changes?.changes ?? []).slice(0, 8)} locale={locale} />
-            </div>
-            <HistoryCollapsedSection history={history} />
-          </section>
+          <div className="min-w-0 space-y-3">
+            <TmPane title={zh ? "变更账本" : "Change ledger"} meta={changes?.changes.length.toString()}>
+              {changes === null ? <EvolutionUnavailable locale={locale} /> : <ChangeHistoryTable changes={changes.changes} locale={locale} />}
+            </TmPane>
+            {history === null ? (
+              <TmPane title={zh ? "方法论提案历史" : "Methodology proposal history"}><EvolutionUnavailable locale={locale} /></TmPane>
+            ) : <HistoryCollapsedSection history={history} />}
+          </div>
         </div>
       </EvolutionObservatory>
 
-      <details className="border-b border-tm-rule px-6 py-3">
+      <details className="border-b border-tm-rule px-4 py-3 lg:px-6">
         <summary className="cursor-pointer font-tm-mono text-xs text-tm-muted hover:text-tm-fg">
-          {locale === "zh" ? "展开挖掘简报与学习日志" : "Expand mining briefing and learning journal"}
+          {zh ? "方法论诊断、挖掘简报与学习日志" : "Methodology diagnostics, briefing and journal"}
         </summary>
-        <div className="mt-3 grid grid-cols-2 gap-4">
-          <BriefingPane briefing={briefing} locale={locale} />
-          <MiningJournalPane lessons={lessons} locale={locale} />
+        <div className="mt-3 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+          <FactorLabDecisionCard locale={locale} diagnostic={diagnostic} />
+          {briefing === null ? <TmPane title={zh ? "挖掘简报" : "Mining briefing"}><EvolutionUnavailable locale={locale} /></TmPane> : <BriefingPane briefing={briefing} locale={locale} />}
+          {lessons === null ? <TmPane title={zh ? "学习日志" : "Learning journal"}><EvolutionUnavailable locale={locale} /></TmPane> : <MiningJournalPane lessons={lessons} locale={locale} />}
         </div>
       </details>
     </TmScreen>

@@ -23,6 +23,8 @@ import {
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
 import { TmButton } from "@/components/tm/TmButton";
+import { EvolutionPagination } from "./EvolutionPagination";
+import { evolutionPage } from "./review-state";
 
 // Localized status label. Falls back to the raw enum for any unmapped status.
 function statusLabel(status: string, locale: Locale): string {
@@ -124,7 +126,7 @@ function EvidenceCell({ evidence }: { evidence: Record<string, unknown> }) {
         </div>
       )}
       {rationale && (
-        <div className="text-tm-muted leading-snug line-clamp-2">{rationale}</div>
+        <div className="text-tm-muted leading-snug break-words">{rationale}</div>
       )}
       {lines.length === 0 && !rationale && (
         <span className="text-tm-muted">—</span>
@@ -144,6 +146,8 @@ export function ProposalsTable({
 }) {
   const router = useRouter();
   const isAdmin = useAdminAccess();
+  const [requestedPage, setPage] = useState(1);
+  const { page, visible } = evolutionPage(proposals, requestedPage);
   // Track which proposal id is currently awaiting a mutation (null = none)
   const [pendingId, setPendingId] = useState<number | null>(null);
   // Per-row error messages
@@ -152,7 +156,7 @@ export function ProposalsTable({
   if (proposals.length === 0) {
     return (
       <p className="px-3 py-4 font-tm-mono text-xs text-tm-muted text-center">
-        {t(locale, "evolution.proposals.empty")}
+        {locale === "zh" ? "没有待审策略参数。" : "No policy parameter changes await review."}
       </p>
     );
   }
@@ -186,6 +190,7 @@ export function ProposalsTable({
   }
 
   return (
+    <>
     <TmTableFrame>
       <TmTable
         density="compact"
@@ -204,7 +209,7 @@ export function ProposalsTable({
           </TmTableRow>
         </TmTableHead>
         <TmTableBody>
-          {proposals.map((p) => {
+          {visible.map((p) => {
             const isRowPending = pendingId === p.id;
             const rowError = rowErrors[p.id];
             const isPending = p.status === "pending";
@@ -250,7 +255,7 @@ export function ProposalsTable({
                   {isPending ? (
                     <div className="flex items-center gap-1.5 justify-center">
                       <TmButton
-                        variant="primary"
+                        variant="secondary"
                         size="xs"
                         disabled={!isAdmin || isRowPending}
                         onClick={() => handleAction(p.id, "approve")}
@@ -285,5 +290,7 @@ export function ProposalsTable({
         </TmTableBody>
       </TmTable>
     </TmTableFrame>
+    <EvolutionPagination locale={locale} label={locale === "zh" ? "策略参数提案分页" : "Policy proposals pagination"} page={page} total={proposals.length} onPageChange={setPage} />
+    </>
   );
 }
