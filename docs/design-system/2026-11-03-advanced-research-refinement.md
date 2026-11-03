@@ -21,7 +21,7 @@ Make saved factors reusable, pending changes reviewable, and mining outcomes leg
 - Browser checked actual components at the existing 1710×875 desktop viewport with the same captured data for both versions: three shipped local examples, 117 pending methodology proposals, 30 ledger records, actual BRAIN run #160 with eight rejected alphas and sixteen candidates. Negative outcomes were not changed for presentation.
 - Checked Zoo detail and small-sample analytics, Evolution next-page transition, and one actual BRAIN alpha's PnL/yearly detail. No factor submission, mining, approval, production deletion or database write was performed.
 - The temporary local review server blocks every non-GET API request. UI-only admin fixture is not an authorization test. Private BRAIN snapshots stay outside the repository; screenshots are the delivery evidence.
-- Browser connection timed out during the subsequent 1440px viewport check. That narrower-layout check and the final candidate-audit pagination interaction are not claimed verified unless a later release note records successful checks.
+- A transient browser connection interruption was recovered without closing user tabs. The subsequent 1440px English desktop check found a Zoo action/date collision, which was corrected with explicit column budgets and compact action padding. All three pages then had no body or main horizontal overflow. Also verified candidate audit page 2 (items 11–16 of 16), Zoo empty search and deletion cancellation, plus BRAIN dark theme. The temporary viewport override is restored after checks.
 - User visual acceptance remains separate from implementation and production deployment.
 
 ## Evidence artifacts

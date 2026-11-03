@@ -22,6 +22,7 @@ import { TmButton, TmIconButton, TmRowButton } from "@/components/tm/TmButton";
 import { TmPagination } from "@/components/tm/TmPagination";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 import { TmTooltip } from "@/components/tm/TmTooltip";
+import { familyLabel } from "./brain-review";
 
 type AuditFilter = "all" | "selected" | "withheld";
 
@@ -208,7 +209,7 @@ function CandidateRow({ candidate, zh }: { candidate: BrainRunCandidate; zh: boo
           {open ? <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" /> : <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" />}
           <code className="truncate font-tm-mono text-xs text-tm-fg">{candidate.expression}</code>
         </TmRowButton>
-        <span className="truncate font-tm-mono text-xs uppercase text-tm-fg-2" title={candidate.mechanism ?? undefined}>{candidate.mechanism || "—"}</span>
+        <span className="truncate font-tm-mono text-xs uppercase text-tm-fg-2" title={candidate.mechanism ?? undefined}>{candidate.mechanism ? familyLabel(candidate.mechanism, zh) : "—"}</span>
         <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg">{score(candidate.evidence_score)}</span>
         <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">{percent(evidence.coverage)}</span>
         <LlmState candidate={candidate} zh={zh} />

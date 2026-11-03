@@ -160,11 +160,11 @@ export function ZooCatalog({
         </p>
       ) : (
         <TmTableFrame tabIndex={0} role="region" aria-label={catalog}>
-          <TmTable density="standard" caption={catalog} className="min-w-[1140px] table-fixed">
+          <TmTable density="standard" caption={catalog} className="min-w-[1240px] table-fixed">
             <colgroup>
               <col className="w-[184px]" /><col className="w-24" /><col />
-              <col className="w-28" /><col className="w-24" /><col className="w-16" />
-              <col className="w-28" /><col className={zh ? "w-48" : "w-[294px]"} />
+              <col className="w-36" /><col className="w-28" /><col className="w-20" />
+              <col className="w-32" /><col className={zh ? "w-56" : "w-[336px]"} />
             </colgroup>
             <TmTableHead>
               <TmTableRow>
@@ -209,12 +209,12 @@ export function ZooCatalog({
                   <TmTableCell textAlign="right">
                     <div className="flex justify-end gap-0.5">
                       {actions.map(({ key, action }) => (
-                        <TmButton key={key} variant="ghost" size="xs" aria-label={`${t(locale, key)}: ${entry.name}`} onClick={() => action(entry)}>
+                        <TmButton key={key} variant="ghost" size="xs" className="!px-1.5 !tracking-normal" aria-label={`${t(locale, key)}: ${entry.name}`} onClick={() => action(entry)}>
                           {t(locale, key)}
                         </TmButton>
                       ))}
                       <TmButton
-                        variant="ghost" size="xs" aria-haspopup="dialog" aria-label={`${t(locale, "zoo.actDelete")}: ${entry.name}`}
+                        variant="ghost" size="xs" className="!px-1.5 !tracking-normal" aria-haspopup="dialog" aria-label={`${t(locale, "zoo.actDelete")}: ${entry.name}`}
                         onClick={() => { setDeleteError(false); setDeleting(entry); }}
                       >
                         {t(locale, "zoo.actDelete")}
