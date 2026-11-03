@@ -1,207 +1,90 @@
 "use client";
 
-/**
- * Data page — universe + coverage (left) and sectorised tickers (right)
- * side-by-side, then the operator catalog full-width below.
- *
- * Stage 3 redesign re-port (2nd iteration): the original layout had
- * UNIVERSE / TICKERS / OPERATORS / COVERAGE as four full-width panes
- * stacked vertically, which (a) wasted horizontal real estate and (b)
- * duplicated the trading-days / ticker-count fields between UNIVERSE
- * and COVERAGE. This iteration merges UNIVERSE + COVERAGE into a
- * single overview pane and pairs it left-of TICKERS via TmCols2.
- *
- * Data fetching, caching, cancelled-effect cleanup unchanged.
- */
-
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { TmScreen, TmCols2 } from "@/components/tm/TmPane";
-import {
-  TmSubbar,
-  TmSubbarKV,
-  TmSubbarSep,
-  TmSubbarSpacer,
-  TmStatusPill,
-  TmChip,
-} from "@/components/tm/TmSubbar";
+import { TmScreen, TmCols2, TmPane } from "@/components/tm/TmPane";
+import { TmChip, TmSubbar, TmSubbarSpacer } from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmStatePane } from "@/components/tm/TmStatePane";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
-import {
-  UniverseOverview,
-  UniverseTickers,
-} from "@/components/data/UniverseCard";
+import { UniverseOverview, UniverseTickers } from "@/components/data/UniverseCard";
 import { OperandCatalog } from "@/components/data/OperandCatalog";
 import { DataSourcesCard } from "@/components/data/DataSourcesCard";
-import {
-  fetchUniverses,
-  fetchOperandCatalog,
-  fetchCoverage,
-  invalidateDataCache,
-} from "@/lib/api";
-import type {
-  UniverseListResponse,
-  UniverseInfo,
-  OperandCatalogResponse,
-  CoverageResponse,
-} from "@/lib/types";
+import { DataRequestState, useDataRequest } from "@/components/data/DataControls";
+import { fetchUniverses, fetchOperandCatalog, fetchCoverage, invalidateDataCache } from "@/lib/api";
+
+const loadUniverses = (_key: string, force: boolean) => fetchUniverses({ force });
+const loadCatalog = (_key: string, force: boolean) => fetchOperandCatalog({ force });
+async function loadCoverage(id: string, force: boolean) {
+  const result = await fetchCoverage(id, { force });
+  return result.data && result.data.universe_id !== id
+    ? { data: null, error: "Coverage universe does not match selection." }
+    : result;
+}
 
 export default function DataPage() {
   const { locale } = useLocale();
-  const [universes, setUniverses] = useState<UniverseListResponse | null>(null);
-  const [activeUniverseId, setActiveUniverseId] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<OperandCatalogResponse | null>(null);
-  const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const zh = locale === "zh";
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  const universes = useDataRequest("universes", version, loadUniverses);
+  const catalog = useDataRequest("catalog", version, loadCatalog);
+  const roster = universes.data?.universes ?? [];
+  const active = roster.find((universe) => universe.id === selectedId) ?? roster[0];
+  const coverage = useDataRequest(active?.id ?? null, version, loadCoverage);
+  const refreshing = version > 0 && (universes.pending || catalog.pending || coverage.pending);
+  const closePct = coverage.data && coverage.data.ohlcv_total_cells > 0
+    ? coverage.data.ohlcv_coverage_pct
+    : null;
+  const catalogTitle = zh ? "因子表达式目录" : "Expression catalog";
 
-  const load = useCallback(
-    async (force = false) => {
-      const [u, o, c] = await Promise.all([
-        fetchUniverses({ force }),
-        fetchOperandCatalog({ force }),
-        fetchCoverage("SP500_subset", { force }),
-      ]);
-      if (u.error || o.error || c.error) {
-        setError(u.error ?? o.error ?? c.error);
-        return;
-      }
-      setError(null);
-      setUniverses(u.data);
-      if (u.data && !activeUniverseId && u.data.universes.length > 0) {
-        setActiveUniverseId(u.data.universes[0].id);
-      }
-      setCatalog(o.data);
-      setCoverage(c.data);
-    },
-    [activeUniverseId],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await load(false);
-      if (cancelled) return;
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  async function handleRefresh() {
-    setRefreshing(true);
+  function refresh() {
     invalidateDataCache();
-    await load(true);
-    setRefreshing(false);
+    setVersion((previous) => previous + 1);
   }
 
-  const activeUniverse: UniverseInfo | null =
-    (universes &&
-      activeUniverseId &&
-      universes.universes.find((u) => u.id === activeUniverseId)) ||
-    universes?.universes[0] ||
-    null;
-
   return (
-    <TmScreen>
+    <TmScreen className="shrink-0">
       <WorkbenchHeader
-        eyebrow={locale === "zh" ? "参考 · 数据资产" : "Reference · Data assets"}
-        title={locale === "zh" ? "数据" : "Data"}
-        subtitle={locale === "zh" ? "核验股票池、字段覆盖与数据来源，再进入研究流程。" : "Verify universe, field coverage, and provenance before research."}
-        statuses={[
-          { label: locale === "zh" ? "股票池" : "Universe", value: activeUniverse?.id ?? "—" },
-          {
-            label: locale === "zh" ? "缓存命中" : "Cache hit",
-            value: coverage ? `${coverage.ohlcv_coverage_pct.toFixed(1)}%` : "—",
-            tone: coverage && coverage.ohlcv_coverage_pct < 99 ? "warning" : "positive",
-          },
-          { label: locale === "zh" ? "加载状态" : "Load state", value: error ? (locale === "zh" ? "失败" : "ERROR") : universes ? (locale === "zh" ? "就绪" : "READY") : (locale === "zh" ? "读取中" : "LOADING"), tone: error ? "negative" : universes ? "positive" : "warning" },
-        ]}
+        title={zh ? "数据" : "Data"}
+        subtitle={zh ? "核验股票池、字段覆盖与数据来源。" : "Verify universe, field coverage, and provenance."}
+        statuses={active ? [{
+          label: zh ? "样本截止" : "Sample through",
+          value: active.end_date || "—",
+        }] : undefined}
       />
       <TmSubbar>
-        <span className="text-tm-muted">UNIVERSE</span>
-        {universes ? (
-          universes.universes.map((u) => (
-            <TmChip
-              key={u.id}
-              on={u.id === activeUniverse?.id}
-              onClick={() => setActiveUniverseId(u.id)}
-            >
-              {u.id}
-            </TmChip>
-          ))
-        ) : (
-          <span className="text-tm-muted">{t(locale, "data.loading")}</span>
-        )}
-        {activeUniverse && (
-          <>
-            <TmSubbarSep />
-            <TmSubbarKV
-              label={t(locale, "data.universe.benchmark")}
-              value={activeUniverse.benchmark}
-            />
-            <TmSubbarSep />
-            <TmSubbarKV
-              label="N"
-              value={activeUniverse.ticker_count.toString()}
-            />
-          </>
-        )}
+        <span className="text-tm-muted">{zh ? "股票池" : "Universe"}</span>
+        {roster.length > 1 ? roster.map((universe) => (
+          <TmChip key={universe.id} on={universe.id === active?.id} onClick={() => setSelectedId(universe.id)}>
+            {universe.id}
+          </TmChip>
+        )) : <span className="break-all font-semibold text-tm-fg">{active?.id ?? "—"}</span>}
         <TmSubbarSpacer />
-        {coverage && (
-          <TmStatusPill
-            tone={coverage.ohlcv_coverage_pct >= 99 ? "ok" : "warn"}
-          >
-            CACHE · {coverage.ohlcv_coverage_pct.toFixed(2)}% HIT
-          </TmStatusPill>
-        )}
-        <TmButton
-          variant="ghost"
-          onClick={handleRefresh}
-          disabled={refreshing || !universes}
-          className="-my-1 px-2"
-        >
-          {refreshing
-            ? t(locale, "data.refreshing")
-            : t(locale, "data.refresh")}
+        <TmButton variant="secondary" size="xs" onClick={refresh} disabled={universes.pending || catalog.pending || coverage.pending}>
+          {t(locale, refreshing ? "data.refreshing" : "data.refresh")}
         </TmButton>
       </TmSubbar>
 
-      {error && (
-        <TmStatePane
-          state="error"
-          title={t(locale, "data.error")}
-          description={error}
-          action={{ label: t(locale, "data.refresh"), onClick: () => void handleRefresh() }}
-        />
-      )}
-
-      {!error && !universes && (
-        <TmStatePane state="loading" title={t(locale, "data.loading")} />
-      )}
-
-      {/* Overview (universe + coverage merged) | Tickers (sector-grouped).
-          Fixed 640px height across both panes — neither grows when its
-          content does (e.g. user expands all sectors), they just scroll
-          internally. Keeps L/R vertically aligned regardless of which
-          collapsibles are open. 640px ≈ 16:10 viewport content area;
-          tweak via the inline style if you want denser/looser. */}
-      {activeUniverse && (
-        <TmCols2 className="h-[640px]">
-          <UniverseOverview
-            universe={activeUniverse}
-            coverage={coverage}
-            fillHeight
-          />
-          <UniverseTickers universe={activeUniverse} fillHeight />
+      <DataRequestState locale={locale} label={zh ? "股票池" : "universes"} request={universes} />
+      {active ? (
+        <TmCols2 className="lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <UniverseOverview key={`overview:${active.id}`} universe={active} coverage={coverage.data} closePct={closePct}>
+            <DataRequestState locale={locale} label={zh ? "覆盖率" : "coverage"} request={coverage} />
+          </UniverseOverview>
+          <UniverseTickers key={`tickers:${active.id}`} universe={active} />
         </TmCols2>
-      )}
+      ) : universes.data ? (
+        <TmStatePane state="empty" className="!min-h-24 border-x-0 !py-4" title={zh ? "未返回可用股票池" : "No universes returned"} />
+      ) : null}
 
-      <DataSourcesCard />
+      <DataSourcesCard version={version} />
 
-      {catalog && <OperandCatalog catalog={catalog} />}
+      <TmPane title={catalogTitle}>
+        <DataRequestState locale={locale} label={zh ? "目录" : "catalog"} request={catalog} />
+        {catalog.data && <OperandCatalog catalog={catalog.data} />}
+      </TmPane>
     </TmScreen>
   );
 }
