@@ -46,15 +46,22 @@ try:
     app.state.settings = settings
     app.state.cache = TTLCache()
 
-    try:
-        from alpha_agent.llm.factory import create_llm_client
-        app.state.llm = create_llm_client(settings)
-        app.state.llm_init_error = None
-        print(f"✓ LLM init: {settings.llm_provider}", file=sys.stderr, flush=True)
-    except Exception as e:
+    # Match create_app(): hosted BYOK-only mode does not need a platform key.
+    # User requests resolve their own encrypted credentials in api.byok.
+    if os.environ.get("ALPHACORE_REQUIRE_BYOK", "").lower() == "true":
         app.state.llm = None
-        app.state.llm_init_error = f"{type(e).__name__}: {e}"
-        print(f"⚠ LLM init failed: {app.state.llm_init_error}", file=sys.stderr, flush=True)
+        app.state.llm_init_error = None
+        print("✓ Platform LLM skipped: BYOK-only mode", file=sys.stderr, flush=True)
+    else:
+        try:
+            from alpha_agent.llm.factory import create_llm_client
+            app.state.llm = create_llm_client(settings)
+            app.state.llm_init_error = None
+            print(f"✓ LLM init: {settings.llm_provider}", file=sys.stderr, flush=True)
+        except Exception as e:
+            app.state.llm = None
+            app.state.llm_init_error = f"{type(e).__name__}: {e}"
+            print(f"⚠ LLM init failed: {app.state.llm_init_error}", file=sys.stderr, flush=True)
 
 except Exception as e:
     print(f"✗ Settings init failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
