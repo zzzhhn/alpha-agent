@@ -1,65 +1,31 @@
 "use client";
 
-/**
- * Methodology page — workstation port v2 (Stage 3 · 3/9, density rework).
- *
- * v1 left ~600px of bottom whitespace per tab — the page only carried
- * 12 tokens of info on a workstation canvas built for 200+. v2 fills
- * the canvas without scaling fonts:
- *
- *   - Data tab: 8-cell KPI strip + 2-col (Pipeline | Sectors+BiasGuards)
- *     + full PANEL.SCHEMA listing every field's type / source / group.
- *   - Operators tab: 4-cell summary + single chip-filtered catalog
- *     (replaces N stacked category panes with one dense scrollable list).
- *   - Backtest tab: 4-cell summary + categorized formulas with chip
- *     filter + 4 portfolio rules.
- *
- * Schema constants are colocated below; they document the live `_Panel`
- * dataclass at alpha_agent/factor_engine/factor_backtest.py:143.
- * Fundamental field list mirrors `_V2_FUNDAMENTAL_FIELDS` (line 98).
- *
- * Per-fetch error tracking + targeted retry preserved from v1.
- */
-
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
-import { t } from "@/lib/i18n";
-import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
-import {
-  TmSubbar,
-  TmSubbarKV,
-  TmSubbarSep,
-  TmSubbarSpacer,
-  TmChip,
-  TmStatusPill,
-} from "@/components/tm/TmSubbar";
-import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmButton } from "@/components/tm/TmButton";
+import { TmInput } from "@/components/tm/TmField";
+import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
+import { TmPagination } from "@/components/tm/TmPagination";
+import { TmCols2, TmPane, TmScreen } from "@/components/tm/TmPane";
+import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 import { TmStatePane } from "@/components/tm/TmStatePane";
+import { TmChip, TmStatusPill, TmSubbar, TmSubbarSpacer } from "@/components/tm/TmSubbar";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import {
+  fetchCoverage,
   fetchOperandCatalogWithSignatures,
   fetchSectors,
   fetchUniverses,
-  fetchCoverage,
   invalidateDataCache,
 } from "@/lib/api";
-import type {
-  OperandCatalogResponse,
-  UniverseListResponse,
-  CoverageResponse,
-} from "@/lib/types";
+import { t } from "@/lib/i18n";
+import { sectorLabel } from "@/lib/sector-label";
+import type { CoverageResponse, OperandCatalogResponse, OperatorInfo, UniverseListResponse } from "@/lib/types";
 
 type Tab = "data" | "operators" | "backtest";
-
-interface OperatorWithSignature {
-  readonly name: string;
-  readonly category?: string;
-  readonly tier?: string;
-  readonly implemented?: boolean;
-  readonly signature?: string;
-  readonly source_snippet?: string;
-}
+type OperatorWithSignature = OperatorInfo & { readonly source_snippet?: string };
+type LocalText = { readonly zh: string; readonly en: string };
+const text = (zh: string, en: string): LocalText => ({ zh, en });
 
 /* ── Static panel schema (matches _Panel dataclass) ───────────────── */
 
@@ -147,723 +113,472 @@ const METRIC_ROWS: readonly MetricRow[] = [
   { category: "REGIME", keyBase: "regime", formula: "Days classified by SPY 60d return: bull >+5%, bear <−5%, sideways otherwise; SR/IC/α reported per regime", ref: "factor_backtest.py:_classify_regimes" },
 ];
 
-/* ── Page ─────────────────────────────────────────────────────────── */
+const TABS = ["data", "operators", "backtest"] as const;
+const UNIVERSE_ID = "SP500_subset";
+const PAGE_SIZE = 10;
+
+const SCHEMA_GROUPS: Record<SchemaField["group"], LocalText> = {
+  PRICES: text("行情", "Prices"),
+  META: text("标的属性", "Security metadata"),
+  FUNDAMENTALS: text("财务数据", "Fundamentals"),
+  INSIDER: text("内部人交易", "Insider trades"),
+  MASKS: text("成员范围", "Membership"),
+  BENCHMARKS: text("基准", "Benchmarks"),
+};
+
+const SCHEMA_PATTERNS: Record<SchemaField["coverage"], LocalText> = {
+  full: text("面板对齐", "Panel-aligned"),
+  sparse: text("事件型，分布稀疏", "Sparse events"),
+  quarterly: text("季度披露", "Quarterly filings"),
+  snapshot: text("属性快照", "Metadata snapshot"),
+};
+
+const METRIC_GROUPS: Record<MetricCategory, LocalText> = {
+  BASE: text("组合表现", "Performance"),
+  IC: text("因子预测力", "Predictive power"),
+  SIG: text("统计检验", "Significance"),
+  OVERFIT: text("过拟合", "Overfitting"),
+  COST: text("交易成本", "Trading costs"),
+  REGIME: text("市场状态", "Market regimes"),
+};
+
+const OPERATOR_GROUPS: Record<string, LocalText> = {
+  arithmetic: text("算术", "Arithmetic"),
+  cross_section: text("横截面", "Cross-sectional"),
+  group: text("分组", "Group"),
+  logical: text("逻辑", "Logic"),
+  time_series: text("时间序列", "Time series"),
+  transformational: text("变换", "Transformations"),
+  vector: text("向量", "Vector"),
+  uncategorized: text("未分类", "Uncategorized"),
+};
+
+const PIPELINE = [
+  { label: text("准备历史行情", "Build the price history"), description: text("从历史 S&P 500 成员名单取标的并集（含已退市标的），再由 Alpaca 提取日线 OHLCV。", "Build the ticker union from historical S&P 500 membership, including delisted names, then pull daily OHLCV from Alpaca."), source: "scripts/fetch_sp500_alpaca.py → factor_universe_sp500_v3.parquet" },
+  { label: text("按披露日对齐财报", "Join financials by disclosure date"), description: text("WRDS Compustat 季报按披露日（RDQ）对齐。每个交易日只使用当日或此前已披露的报告。", "Join WRDS Compustat quarterly reports by disclosure date (RDQ). Each trading day can use only reports disclosed by that day."), source: "scripts/build_pit_fundamentals_wrds.py → fundamentals_pit_sp500_v3.parquet" },
+  { label: text("限制每日成分股范围", "Apply daily index membership"), description: text("用 is_member 标记当日成分股。即使面板保存了行情，非成员单元格也不参与该日因子评估。", "Use is_member to mask out nonmembers on each date, even if the panel has prices for those tickers."), source: "alpha_agent/data/membership.py · evaluate_factor_full" },
+  { label: text("对齐数据面板", "Align the panel"), description: text("行情、标的属性、财务数据、成员范围和基准共用一条日期轴，面板由服务读取并缓存。", "The service loads and caches prices, security metadata, financials, membership and benchmarks on a shared date axis."), source: "_Panel · benchmark_alts={SPY, RSP}" },
+  { label: text("检查交易日与缺值", "Check trading dates and missing data"), description: text("用 NYSE 交易日历校验日期。缺失行情保留为 NaN，不用前值补齐。", "Validate dates against the NYSE calendar. Missing prices stay NaN rather than being filled forward."), source: "_assert_trading_days() · DataIntegrityError" },
+] as const;
 
 export default function MethodologyPage() {
   const { locale } = useLocale();
+  const zh = locale === "zh";
   const [tab, setTab] = useState<Tab>("data");
   const [universes, setUniverses] = useState<UniverseListResponse | null>(null);
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
-  const [sectors, setSectors] = useState<readonly string[]>([]);
+  const [sectors, setSectors] = useState<readonly string[] | null>(null);
   const [catalog, setCatalog] = useState<OperandCatalogResponse | null>(null);
-  const [universesError, setUniversesError] = useState<string | null>(null);
-  const [coverageError, setCoverageError] = useState<string | null>(null);
-  const [sectorsError, setSectorsError] = useState<string | null>(null);
+  const [dataErrors, setDataErrors] = useState<readonly string[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [reloading, setReloading] = useState(false);
-  const [loadStartedAt] = useState<number>(() => Date.now());
-  const [loadFinishedAt, setLoadFinishedAt] = useState<number | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
   const loadDataTab = useCallback(async (force = false) => {
-    setReloading(true);
+    setDataLoading(true);
+    setDataErrors([]);
     if (force) invalidateDataCache();
-    setUniversesError(null);
-    setCoverageError(null);
-    setSectorsError(null);
-    const t0 = Date.now();
     const [u, c, s] = await Promise.all([
       fetchUniverses({ force }),
-      fetchCoverage("SP500_subset", { force }),
+      fetchCoverage(UNIVERSE_ID, { force }),
       fetchSectors(),
     ]);
-    if (u.error) setUniversesError(u.error);
-    else if (u.data) setUniverses(u.data);
-    if (c.error) setCoverageError(c.error);
-    else if (c.data) setCoverage(c.data);
-    if (s.error) setSectorsError(s.error);
-    else if (s.data) setSectors(s.data.sectors);
-    setLoadFinishedAt(Date.now());
-    void t0;
-    setReloading(false);
+    setUniverses(u.error ? null : (u.data ?? null));
+    setCoverage(c.error ? null : (c.data ?? null));
+    setSectors(s.error ? null : (s.data?.sectors ?? null));
+    setDataErrors([u.error, c.error, s.error].filter((error): error is string => Boolean(error)));
+    setDataLoading(false);
   }, []);
 
   const loadOperatorsTab = useCallback(async () => {
-    setReloading(true);
+    setCatalogLoading(true);
     setCatalogError(null);
     const r = await fetchOperandCatalogWithSignatures();
-    if (r.error) setCatalogError(r.error);
-    else if (r.data) setCatalog(r.data);
-    setReloading(false);
+    setCatalog(r.error ? null : (r.data ?? null));
+    setCatalogError(r.error ?? (r.data ? null : "—"));
+    setCatalogLoading(false);
   }, []);
 
-  useEffect(() => {
-    void loadDataTab(false);
-  }, [loadDataTab]);
+  useEffect(() => { void loadDataTab(); }, [loadDataTab]);
 
   useEffect(() => {
-    if (tab !== "operators" || catalog !== null) return;
-    void loadOperatorsTab();
-  }, [tab, catalog, loadOperatorsTab]);
+    if (tab === "operators" && !catalog && !catalogError && !catalogLoading) void loadOperatorsTab();
+  }, [tab, catalog, catalogError, catalogLoading, loadOperatorsTab]);
 
-  const dataTabHasError = Boolean(
-    universesError || coverageError || sectorsError,
-  );
-  const dataErrors = [universesError, coverageError, sectorsError].filter(
-    Boolean,
-  ) as string[];
-  const loadMs =
-    loadFinishedAt !== null ? loadFinishedAt - loadStartedAt : null;
+  const activeLoading = tab === "data"
+    ? dataLoading
+    : tab === "operators" && (catalogLoading || (!catalog && !catalogError));
+  const activeErrors = tab === "data" ? dataErrors : tab === "operators" && catalogError ? [catalogError] : [];
+  const hasData = Boolean(universes?.universes.length || coverage || sectors !== null);
+  const dataComplete = Boolean(universes?.universes.some((u) => u.id === UNIVERSE_ID) && coverage?.universe_id === UNIVERSE_ID && sectors !== null);
+  const incomplete = tab === "data" && !dataComplete;
+  const fetchState = activeLoading ? text("读取中", "Loading")
+    : activeErrors.length && (tab !== "data" || !hasData) ? text("读取失败", "Unavailable")
+    : activeErrors.length || incomplete ? text("数据不完整", "Partial")
+    : text("已读取", "Loaded");
+  const sourceLabel = tab === "backtest" ? text("静态定义", "Static definitions") : fetchState;
+  const tone = tab === "backtest" || activeLoading ? "default" : activeErrors.length || incomplete ? "warning" : "positive";
 
   return (
-    <TmScreen>
+    <TmScreen className="h-auto min-h-full">
       <WorkbenchHeader
-        eyebrow={locale === "zh" ? "参考 · 方法与口径" : "Reference · Methods and definitions"}
-        title={locale === "zh" ? "方法论" : "Methodology"}
-        subtitle={locale === "zh" ? "查看数据管线、运算符与回测口径，避免跨模块误读。" : "Inspect data pipelines, operators, and backtest definitions to prevent cross-module ambiguity."}
-        statuses={[
-          { label: locale === "zh" ? "当前视图" : "View", value: tab.toUpperCase() },
-          { label: locale === "zh" ? "数据读取" : "Data fetch", value: dataTabHasError || Boolean(catalogError) ? (locale === "zh" ? "部分失败" : "PARTIAL") : (locale === "zh" ? "正常" : "READY"), tone: dataTabHasError || Boolean(catalogError) ? "warning" : "positive" },
-          { label: locale === "zh" ? "字段" : "Fields", value: String(PANEL_SCHEMA.length) },
-        ]}
+        eyebrow={zh ? "参考" : "Reference"}
+        title={t(locale, "methodology.title")}
+        subtitle={zh ? "查数据来源、表达式能用的算子，以及回测指标怎么计算。" : "Look up data sources, callable operators, and how backtest metrics are calculated."}
+        statuses={[{ label: zh ? "当前内容" : "Current content", value: sourceLabel[locale], tone }]}
       />
       <TmSubbar>
-        <span className="text-tm-muted">METHODOLOGY</span>
-        <TmSubbarSep />
-        {(["data", "operators", "backtest"] as Tab[]).map((tk) => (
-          <TmChip key={tk} on={tab === tk} onClick={() => setTab(tk)}>
-            {t(locale, `methodology.tab.${tk}` as Parameters<typeof t>[1])}
+        {TABS.map((key) => (
+          <TmChip key={key} on={tab === key} onClick={() => setTab(key)}>
+            {t(locale, `methodology.tab.${key}`)}
           </TmChip>
         ))}
         <TmSubbarSpacer />
-        {tab === "data" && universes && (
-          <>
-            <TmSubbarKV
-              label="N"
-              value={universes.universes[0]?.ticker_count ?? "—"}
-            />
-            <TmSubbarSep />
-            <TmSubbarKV label="FIELDS" value={PANEL_SCHEMA.length} />
-            <TmSubbarSep />
-          </>
+        {tab !== "backtest" && (activeLoading || activeErrors.length > 0 || incomplete) && (
+          <TmStatusPill tone={activeErrors.length ? "err" : "warn"}>{fetchState[locale]}</TmStatusPill>
         )}
-        {tab === "operators" && catalog && (
-          <>
-            <TmSubbarKV
-              label="OPS"
-              value={`${(catalog.operators as OperatorWithSignature[]).filter((o) => o.implemented).length}/${catalog.operators.length}`}
-            />
-            <TmSubbarSep />
-          </>
-        )}
-        {tab === "backtest" && (
-          <>
-            <TmSubbarKV label="METRICS" value={METRIC_ROWS.length} />
-            <TmSubbarSep />
-          </>
-        )}
-        {tab === "data" && dataTabHasError && (
-          <TmStatusPill tone="err">FETCH ERROR</TmStatusPill>
-        )}
-        {tab === "operators" && catalogError && (
-          <TmStatusPill tone="err">FETCH ERROR</TmStatusPill>
-        )}
-        {tab === "data" && (
-          <TmButton
-            variant="ghost"
-            onClick={() => loadDataTab(true)}
-            disabled={reloading}
-            className="-my-1 px-2"
-          >
-            {reloading
-              ? t(locale, "methodology.retrying")
-              : t(locale, "methodology.retry")}
-          </TmButton>
-        )}
-        {tab === "operators" && (
-          <TmButton
-            variant="ghost"
-            onClick={loadOperatorsTab}
-            disabled={reloading}
-            className="-my-1 px-2"
-          >
-            {reloading
-              ? t(locale, "methodology.retrying")
-              : t(locale, "methodology.retry")}
+        {tab !== "backtest" && (
+          <TmButton variant="ghost" size="xs" onClick={() => tab === "data" ? loadDataTab(true) : loadOperatorsTab()} disabled={activeLoading}>
+            {activeLoading ? t(locale, "methodology.retrying") : activeErrors.length ? t(locale, "methodology.retry") : zh ? "刷新" : "Refresh"}
           </TmButton>
         )}
       </TmSubbar>
 
-      {tab === "data" && dataTabHasError && (
-        <ErrorPane
-          title={t(locale, "methodology.error")}
-          messages={dataErrors}
+      {activeErrors.length > 0 && (
+        <section>
+        <TmStatePane
+          state={tab === "data" && hasData ? "partial" : "error"}
+          title={fetchState[locale]}
+          description={zh ? "部分接口暂时不可用，可点击上方重试；字段与回测定义仍可查阅。" : "Some requests are unavailable. Retry above; field and backtest definitions remain accessible."}
+          className="[overflow-wrap:anywhere]"
         />
+        <details className="border-b border-tm-rule px-4 py-2 text-xs text-tm-muted">
+          <summary className="cursor-pointer">{zh ? "技术详情" : "Technical details"}</summary>
+          <ul className="mt-2 space-y-1 font-tm-mono [overflow-wrap:anywhere]">{[...new Set(activeErrors)].map(error=><li key={error}>{error}</li>)}</ul>
+        </details>
+        </section>
       )}
-      {tab === "operators" && catalogError && (
-        <ErrorPane
-          title={t(locale, "methodology.error")}
-          messages={[catalogError]}
-        />
-      )}
-
-      {tab === "data" && (
-        <DataTab
-          universes={universes}
-          coverage={coverage}
-          sectors={sectors}
-          loadMs={loadMs}
-        />
-      )}
-      {tab === "operators" && <OperatorsTab catalog={catalog} />}
+      {tab === "data" && <DataTab universes={universes} coverage={coverage} sectors={sectors} loading={dataLoading} />}
+      {tab === "operators" && (catalog
+        ? <OperatorsTab catalog={catalog} />
+        : activeLoading && <TmStatePane state="loading" title={zh ? "正在读取算子目录" : "Loading operator catalog"} />)}
       {tab === "backtest" && <BacktestTab />}
     </TmScreen>
   );
 }
 
-/* ── Data tab ─────────────────────────────────────────────────────── */
-
 function DataTab({
-  universes,
-  coverage,
-  sectors,
-  loadMs,
+  universes, coverage, sectors, loading,
 }: {
   readonly universes: UniverseListResponse | null;
   readonly coverage: CoverageResponse | null;
-  readonly sectors: readonly string[];
-  readonly loadMs: number | null;
+  readonly sectors: readonly string[] | null;
+  readonly loading: boolean;
 }) {
   const { locale } = useLocale();
-  const u = universes?.universes[0];
-
-  if (!u || !coverage) {
-    // P3-4: skeleton instead of bare "Loading..." text. The first load is a
-    // cold parquet+coverage compute (~12s); a structural placeholder reads
-    // as "loading" rather than "stuck". Repeat loads are instant (localStorage
-    // cache in lib/api.ts).
-    return (
-      <TmStatePane
-        state="loading"
-        title={t(locale, "common.loading")}
-        description={locale === "zh" ? "首次读取覆盖率与字段目录可能需要更长时间。" : "The first coverage and field-catalog load can take longer."}
-      />
-    );
-  }
+  const zh = locale === "zh";
+  const universe = universes?.universes.find((u) => u.id === UNIVERSE_ID);
+  const measured = coverage?.universe_id === UNIVERSE_ID ? coverage : null;
+  const start = measured?.start_date ?? universe?.start_date;
+  const end = measured?.end_date ?? universe?.end_date;
+  const rows: CatalogRow[] = PANEL_SCHEMA.map((field) => ({
+    id: field.name,
+    title: field.name,
+    group: field.group,
+    search: [field.type, field.source, SCHEMA_PATTERNS[field.coverage][locale]],
+    detail: [
+      { label: zh ? "类型" : "Type", value: field.type, code: true },
+      { label: zh ? "来源或推导" : "Source or derivation", value: field.source, code: true },
+      { label: zh ? "数据形态" : "Data pattern", value: SCHEMA_PATTERNS[field.coverage][locale] },
+    ],
+    code: true,
+  }));
 
   return (
     <>
-      {/* 8-cell KPI strip */}
-      <TmPane
-        title="PANEL.OVERVIEW"
-        meta={`${u.id} · ${u.benchmark} · ${u.currency}`}
-      >
+      <TmPane title="PANEL.OVERVIEW" meta={UNIVERSE_ID}>
         <TmKpiGrid>
-          <TmKpi label="TICKERS" value={u.ticker_count.toString()} sub={u.id} />
-          <TmKpi
-            label="N_DAYS"
-            value={u.n_days.toString()}
-            sub={`${u.start_date} → ${u.end_date}`}
-          />
-          <TmKpi
-            label="OHLCV %"
-            value={`${coverage.ohlcv_coverage_pct.toFixed(2)}%`}
-            tone={coverage.ohlcv_coverage_pct >= 99 ? "pos" : "warn"}
-            sub="non-NaN cells"
-          />
-          <TmKpi label="BENCHMARK" value={u.benchmark} sub={u.currency} />
-          <TmKpi label="SECTORS" value={sectors.length.toString()} sub="GICS-1" />
-          <TmKpi
-            label="FIELDS"
-            value={PANEL_SCHEMA.length.toString()}
-            sub="schema cols"
-          />
-          <TmKpi
-            label="LOAD_MS"
-            value={loadMs !== null ? loadMs.toString() : "—"}
-            sub="last fetch"
-          />
-          <TmKpi label="UNIVERSE" value={u.name} />
+          <TmKpi label={t(locale, "methodology.data.tickers")} value={universe?.ticker_count ?? measured?.n_tickers ?? "—"} />
+          <TmKpi label={t(locale, "methodology.data.days")} value={measured?.n_days ?? universe?.n_days ?? "—"} sub={start && end ? `${start} → ${end}` : undefined} />
+          <TmKpi label={zh ? "收盘价实测覆盖率" : "Measured close coverage"} value={measured ? `${measured.ohlcv_coverage_pct.toFixed(2)}%` : "—"} sub={zh ? "非空收盘价单元格占比" : "Share of non-null close cells"} />
+          <TmKpi label={t(locale, "methodology.data.benchmark")} value={universe?.benchmark ?? "—"} sub={universe?.currency} />
         </TmKpiGrid>
+        {loading && <p role="status" className={INTRO_CLASS}>{zh ? "正在读取面板快照。下方字段定义不依赖这次请求。" : "Loading the panel snapshot. Field definitions below are available without it."}</p>}
       </TmPane>
 
-      {/* 2-col: Pipeline (left) | Sectors + BiasGuards (right stacked) */}
+      <Catalog
+        title={text("面板字段", "Panel fields")}
+        intro={text("字段名可用于核对表达式输入；这里列的是静态结构，不是实测覆盖率。", "Use the field names to check expression inputs. This is the static schema, not measured coverage.")}
+        searchLabel={text("搜索字段名、类型或来源", "Search fields, types, or sources")}
+        groupLabel={text("字段分组", "Field group")}
+        allGroups={text("全部字段分组", "All field groups")}
+        groups={SCHEMA_GROUPS}
+        rows={rows}
+      />
+
       <TmCols2>
-        <TmPane title="DATA.PIPELINE" meta="5 STAGES">
-          <ol className="flex flex-col">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <li
-                key={n}
-                className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg last:border-b-0"
-              >
-                <span className="shrink-0 text-tm-accent">
-                  {String(n).padStart(2, "0")}
-                </span>
-                <span>
-                  {t(
-                    locale,
-                    `methodology.data.step${n}` as Parameters<typeof t>[1],
-                  )}
-                </span>
+        <TmPane title="DATA.PIPELINE">
+          <ol className="divide-y divide-tm-rule">
+            {PIPELINE.map((stage, index) => (
+              <li key={stage.source} className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-2 px-3 py-2 text-xs leading-relaxed">
+                <span className="font-tm-mono tabular-nums text-tm-accent">{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <strong className="font-semibold text-tm-fg">{stage.label[locale]}</strong>
+                  <p className="text-tm-fg-2">{stage.description[locale]}</p>
+                  <details className="mt-1">
+                    <summary className="w-fit cursor-pointer text-tm-accent">{zh ? "来源" : "Source"}</summary>
+                    <code className="block font-tm-mono text-tm-muted [overflow-wrap:anywhere]">{stage.source}</code>
+                  </details>
+                </div>
               </li>
             ))}
           </ol>
         </TmPane>
-
-        <div className="flex flex-col [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-tm-rule">
-          <TmPane title="AVAILABLE.SECTORS" meta={`${sectors.length} GICS-1`}>
-            <p className="px-3 pt-2.5 font-tm-mono text-xs leading-relaxed text-tm-muted">
-              {t(locale, "methodology.data.sectorsSubtitle")}
-            </p>
-            <div className="flex flex-wrap gap-1.5 px-3 pb-3 pt-2">
-              {sectors.map((s) => (
-                <span
-                  key={s}
-                  className="border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-xs text-tm-fg-2"
-                >
-                  {s}
-                </span>
+        <div className="min-w-0 divide-y divide-tm-rule">
+          <TmPane title="BIAS.GUARDS">
+            <ul className="divide-y divide-tm-rule">
+              {(["survivorship", "lookahead"] as const).map((bias) => (
+                <li key={bias} className="px-3 py-2 text-xs leading-relaxed">
+                  <strong className="font-semibold text-tm-fg">{t(locale, `methodology.bias.${bias}.label`)}</strong>
+                  <p className="text-tm-fg-2">{bias === "survivorship"
+                    ? (zh ? "按每个历史交易日的指数成员筛选，不用今天的成分股回推历史。" : "Use the membership of each historical session rather than projecting today's constituents back in time.")
+                    : (zh ? "财务数据按披露日而不是财季结束日对齐。首次披露前保留为缺值。" : "Align financials by disclosure date, not quarter-end. Values before the first disclosure remain missing.")}</p>
+                  <code className="font-tm-mono text-tm-muted">{bias === "survivorship" ? "is_member (T,N)" : "RDQ ≤ t"}</code>
+                </li>
               ))}
-            </div>
-          </TmPane>
-
-          <TmPane title="BIAS.GUARDS" meta="2 INVARIANTS">
-            <ul className="flex flex-col">
-              <li className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg">
-                <span className="text-tm-accent">
-                  ▸ {t(locale, "methodology.bias.survivorship.label")}
-                </span>
-                <span className="ml-2 text-tm-muted">
-                  {t(locale, "methodology.bias.survivorship.tag")}
-                </span>
-                <div className="mt-1 text-tm-fg-2">
-                  {t(locale, "methodology.bias.survivorship.desc")}
-                </div>
-              </li>
-              <li className="px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg">
-                <span className="text-tm-accent">
-                  ▸ {t(locale, "methodology.bias.lookahead.label")}
-                </span>
-                <span className="ml-2 text-tm-muted">
-                  {t(locale, "methodology.bias.lookahead.tag")}
-                </span>
-                <div className="mt-1 text-tm-fg-2">
-                  {t(locale, "methodology.bias.lookahead.desc")}
-                </div>
-              </li>
             </ul>
+          </TmPane>
+          <TmPane title="AVAILABLE.SECTORS" meta={sectors === null ? "—" : sectors.length}>
+            {sectors && sectors.length > 0 ? (
+              <ul className="flex flex-wrap gap-1.5 px-3 py-2">
+                {sectors.map((sector) => <li key={sector} className="border border-tm-rule bg-tm-bg-2 px-2 py-px font-tm-mono text-xs text-tm-fg-2 [overflow-wrap:anywhere]">{sectorLabel(sector, locale)}</li>)}
+              </ul>
+            ) : <p className={INTRO_CLASS}>{loading ? t(locale, "common.loading") : sectors === null ? (zh ? "未读取到板块数据。" : "Sector data is unavailable.") : (zh ? "面板没有板块值。" : "The panel contains no sector values.")}</p>}
           </TmPane>
         </div>
       </TmCols2>
-
-      {/* Full-width schema table */}
-      <TmPane
-        title="PANEL.SCHEMA"
-        meta={`${PANEL_SCHEMA.length} FIELDS · 6 GROUPS`}
-      >
-        <div
-          className="grid gap-px bg-tm-rule"
-          style={{
-            gridTemplateColumns:
-              "minmax(110px, 130px) minmax(150px, 180px) minmax(120px, 140px) 1fr minmax(80px, 100px)",
-          }}
-        >
-          <SchemaHeader>GROUP</SchemaHeader>
-          <SchemaHeader>FIELD</SchemaHeader>
-          <SchemaHeader>TYPE</SchemaHeader>
-          <SchemaHeader>SOURCE</SchemaHeader>
-          <SchemaHeader>COVERAGE</SchemaHeader>
-          {PANEL_SCHEMA.map((f) => (
-            <SchemaRow key={f.name} field={f} />
-          ))}
-        </div>
-      </TmPane>
     </>
   );
 }
 
-function SchemaHeader({ children }: { readonly children: React.ReactNode }) {
-  return (
-    <div className="bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
-      {children}
-    </div>
-  );
-}
-
-function SchemaRow({ field }: { readonly field: SchemaField }) {
-  const groupTone =
-    field.group === "PRICES"
-      ? "text-tm-accent"
-      : field.group === "FUNDAMENTALS"
-        ? "text-tm-info"
-        : field.group === "INSIDER"
-          ? "text-tm-warn"
-          : field.group === "MASKS"
-            ? "text-tm-pos"
-            : field.group === "BENCHMARKS"
-              ? "text-tm-fg"
-              : "text-tm-fg-2";
-  const covTone =
-    field.coverage === "full"
-      ? "text-tm-pos"
-      : field.coverage === "sparse"
-        ? "text-tm-warn"
-        : field.coverage === "snapshot"
-          ? "text-tm-muted"
-          : "text-tm-info";
-  return (
-    <>
-      <div className={`bg-tm-bg px-3 py-1 font-tm-mono text-xs ${groupTone}`}>
-        {field.group}
-      </div>
-      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-xs text-tm-fg">
-        {field.name}
-      </div>
-      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-xs text-tm-fg-2">
-        {field.type}
-      </div>
-      <div className="bg-tm-bg px-3 py-1 font-tm-mono text-xs text-tm-muted">
-        {field.source}
-      </div>
-      <div className={`bg-tm-bg px-3 py-1 font-tm-mono text-xs ${covTone}`}>
-        {field.coverage}
-      </div>
-    </>
-  );
-}
-
-/* ── Operators tab ────────────────────────────────────────────────── */
-
-function OperatorsTab({
-  catalog,
-}: {
-  readonly catalog: OperandCatalogResponse | null;
-}) {
+function OperatorsTab({ catalog }: { readonly catalog: OperandCatalogResponse }) {
   const { locale } = useLocale();
-  const [catFilter, setCatFilter] = useState<string>("all");
-  const [tierFilter, setTierFilter] = useState<string>("all");
+  const zh = locale === "zh";
+  const operators: readonly OperatorWithSignature[] = catalog.operators;
+  const implemented = operators.filter((operator) => operator.implemented);
+  const category = (operator: OperatorWithSignature) => operator.category || "uncategorized";
+  const groups = Object.fromEntries(Array.from(new Set(implemented.map(category))).sort().map((key) => [key, OPERATOR_GROUPS[key] ?? text(key, key)]));
+  const tiers = Array.from(new Set(implemented.map((operator) => operator.tier ?? "T1"))).sort();
+  const rows: CatalogRow[] = implemented.map((operator) => {
+    const description = zh ? (operator.description_zh || operator.description_en) : (operator.description_en || operator.description_zh);
+    return {
+      id: operator.name,
+      title: operator.signature || operator.name,
+      code: true,
+      group: category(operator),
+      tier: operator.tier ?? "T1",
+      search: [operator.description_zh ?? "", operator.description_en ?? ""],
+      detail: [
+        ...(description ? [{ label: zh ? "用途" : "What it does", value: description }] : []),
+        ...(operator.example ? [{ label: zh ? "示例" : "Example", value: operator.example, code: true }] : []),
+        {
+          label: zh ? "实现片段" : "Implementation excerpt",
+          value: operator.source_snippet || (zh ? "本次目录未返回源码片段。" : "This catalog response did not include a source excerpt."),
+          block: Boolean(operator.source_snippet),
+        },
+      ],
+    };
+  });
 
-  if (!catalog) {
-    return (
-      <TmPane title="OPS.OVERVIEW">
-        <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-muted">
-          {t(locale, "common.loading")}
-        </p>
-      </TmPane>
-    );
-  }
-  const ops = catalog.operators as OperatorWithSignature[];
-  const implemented = ops.filter((o) => o.implemented);
+  return (
+    <Catalog
+      title={text("运算符目录", "Operator catalog")}
+      intro={text(
+        `已登记 ${operators.length} 个算子，其中 ${implemented.length} 个可调用。展开查看用途、示例和可用的源码片段。`,
+        `${implemented.length} of ${operators.length} registered operators are callable. Expand a row for usage, examples, and any available source excerpt.`,
+      )}
+      searchLabel={text("搜索算子名、签名或用途", "Search operators, signatures, or descriptions")}
+      groupLabel={text("算子类别", "Operator category")}
+      allGroups={text("全部算子类别", "All operator categories")}
+      groups={groups}
+      rows={rows}
+      tiers={tiers}
+    />
+  );
+}
 
-  const categories = Array.from(
-    new Set(implemented.map((o) => o.category ?? "uncategorized")),
-  ).sort();
-  const tiers = Array.from(
-    new Set(implemented.map((o) => o.tier ?? "T1")),
-  ).sort();
+const PORTFOLIO = [
+  { label: text("按因子排名建仓", "Rank and weight"), description: text("每天按 factor[t] 对股票排序。排名前 top_pct 的标的等权做多，后 bottom_pct 的标的等权做空。", "Rank securities by factor[t] each day. Equal-weight the top top_pct as longs and the bottom bottom_pct as shorts.") },
+  { label: text("持仓与次日收益对齐", "Align weights and returns"), description: text("用前一日确定的权重计算次日收益：sum(weights[t-1] × fwd_returns[t-1])。", "Pair the prior day's weights with the next day's return: sum(weights[t-1] × fwd_returns[t-1]).") },
+  { label: text("按换手扣交易成本", "Deduct trading costs"), description: text("按两日之间的权重变动扣减日收益：bps × L1(weights[t] − weights[t-1]) / 10000。", "Deduct costs from daily returns based on the change in weights: bps × L1(weights[t] − weights[t-1]) / 10000.") },
+  { label: text("滚动观察稳定性", "Check stability over time"), description: text("Walk-forward 模式在静态 80/20 切分之外，按 wf_window_days 滚动计算各窗口指标。", "Walk-forward mode adds rolling metrics over wf_window_days windows alongside the static 80/20 split.") },
+] as const;
 
-  const filtered = implemented.filter((o) => {
-    const cat = o.category ?? "uncategorized";
-    const tier = o.tier ?? "T1";
-    if (catFilter !== "all" && cat !== catFilter) return false;
-    if (tierFilter !== "all" && tier !== tierFilter) return false;
-    return true;
+function BacktestTab() {
+  const { locale } = useLocale();
+  const rows: CatalogRow[] = METRIC_ROWS.map((row) => {
+    const key = `methodology.backtest.${row.keyBase}` as Parameters<typeof t>[1];
+    return {
+      id: row.keyBase,
+      title: t(locale, key),
+      group: row.category,
+      search: [t("zh", key), t("en", key), row.formula, row.ref],
+      detail: [
+        { label: t(locale, "methodology.backtest.colFormula"), value: row.formula, code: true },
+        { label: t(locale, "methodology.backtest.colRef"), value: row.ref, code: true },
+      ],
+    };
   });
 
   return (
     <>
-      <TmPane
-        title="OPS.OVERVIEW"
-        meta={`${implemented.length} / ${ops.length} IMPLEMENTED`}
-      >
-        <TmKpiGrid>
-          <TmKpi label="TOTAL" value={ops.length.toString()} sub="registered" />
-          <TmKpi
-            label="IMPL"
-            value={implemented.length.toString()}
-            tone="pos"
-            sub="callable"
-          />
-          <TmKpi
-            label="CATEGORIES"
-            value={categories.length.toString()}
-            sub="op groups"
-          />
-          <TmKpi
-            label="TIERS"
-            value={tiers.length.toString()}
-            sub={tiers.join(" · ")}
-          />
-        </TmKpiGrid>
-        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
-          {t(locale, "methodology.operators.subtitle")
-            .replace("{n}", String(implemented.length))
-            .replace("{total}", String(ops.length))}
-        </p>
+      <Catalog
+        title={text("回测指标公式", "Backtest formulas")}
+        intro={text("回测按因子排名构建等权多空组合，计算次日收益，再扣交易成本。展开指标可核对公式和实现位置。", "The backtest ranks securities, builds an equal-weight long/short portfolio, and deducts trading costs from next-day returns. Expand a metric for its formula and source.")}
+        searchLabel={text("搜索指标名、公式或代码位置", "Search metrics, formulas, or source references")}
+        groupLabel={text("指标类别", "Metric category")}
+        allGroups={text("全部指标类别", "All metric categories")}
+        groups={METRIC_GROUPS}
+        rows={rows}
+      />
+      <TmPane title={t(locale, "methodology.backtest.portfolioTitle")}>
+        <ol className="grid min-w-0 gap-px bg-tm-rule md:grid-cols-2">
+          {PORTFOLIO.map((rule) => (
+            <li key={rule.label.en} className="min-w-0 bg-tm-bg px-3 py-2 text-xs leading-relaxed [overflow-wrap:anywhere]">
+              <strong className="font-semibold text-tm-fg">{rule.label[locale]}</strong>
+              <p className="text-tm-fg-2">{rule.description[locale]}</p>
+            </li>
+          ))}
+        </ol>
       </TmPane>
+    </>
+  );
+}
 
-      <TmPane
-        title="OPS.CATALOG"
-        meta={`${filtered.length} SHOWN`}
-      >
-        {/* Filter chips */}
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-          <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-            CATEGORY
-          </span>
-          <TmChip on={catFilter === "all"} onClick={() => setCatFilter("all")}>
-            all
-          </TmChip>
-          {categories.map((c) => (
-            <TmChip
-              key={c}
-              on={catFilter === c}
-              onClick={() => setCatFilter(c)}
-            >
-              {c}
-            </TmChip>
-          ))}
-          <span className="ml-3 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-            TIER
-          </span>
-          <TmChip
-            on={tierFilter === "all"}
-            onClick={() => setTierFilter("all")}
-          >
-            all
-          </TmChip>
-          {tiers.map((t_) => (
-            <TmChip
-              key={t_}
-              on={tierFilter === t_}
-              onClick={() => setTierFilter(t_)}
-            >
-              {t_}
-            </TmChip>
-          ))}
-        </div>
+const INTRO_CLASS = "px-3 py-2 text-xs leading-relaxed text-tm-fg-2";
 
-        {/* Flat hairline list */}
-        <ul className="flex flex-col">
-          {filtered.map((op) => (
-            <li
-              key={op.name}
-              className="border-b border-tm-rule last:border-b-0"
-            >
-              <details className="group">
-                <summary className="flex cursor-pointer items-center gap-3 px-3 py-1.5 font-tm-mono text-xs hover:bg-tm-bg-2">
-                  <span className="text-tm-muted group-open:text-tm-accent">
-                    {">"}
+interface CatalogRow {
+  readonly id: string;
+  readonly title: string;
+  readonly group: string;
+  readonly tier?: string;
+  readonly code?: boolean;
+  readonly search: readonly string[];
+  readonly detail: readonly { readonly label: string; readonly value: ReactNode; readonly code?: boolean; readonly block?: boolean }[];
+}
+
+function Catalog({
+  title, intro, searchLabel, groupLabel, allGroups, groups, rows, tiers,
+}: {
+  readonly title: LocalText;
+  readonly intro: LocalText;
+  readonly searchLabel: LocalText;
+  readonly groupLabel: LocalText;
+  readonly allGroups: LocalText;
+  readonly groups: Readonly<Record<string, LocalText>>;
+  readonly rows: readonly CatalogRow[];
+  readonly tiers?: readonly string[];
+}) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const disclosureGroup = useId();
+  const [query, setQuery] = useState("");
+  const [group, setGroup] = useState("all");
+  const [tier, setTier] = useState("all");
+  const [page, setPage] = useState(1);
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = rows.filter((row) => {
+    if (group !== "all" && row.group !== group) return false;
+    if (tier !== "all" && row.tier !== tier) return false;
+    const labels = groups[row.group];
+    const haystack = [row.id, row.title, row.group, labels?.zh, labels?.en, row.tier, ...row.search].join(" ").toLowerCase();
+    return tokens.every((token) => haystack.includes(token));
+  });
+  const visiblePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
+  const start = (visiblePage - 1) * PAGE_SIZE;
+
+  return (
+    <TmPane title={<h2>{title[locale]}</h2>}>
+      <p className={INTRO_CLASS}>{intro[locale]}</p>
+      <div className="flex min-w-0 flex-wrap items-center gap-2 border-y border-tm-rule bg-tm-bg-2 px-3 py-2">
+        <TmInput
+          type="search"
+          fieldSize="sm"
+          aria-label={searchLabel[locale]}
+          placeholder={searchLabel[locale]}
+          value={query}
+          onChange={(value) => { setQuery(value); setPage(1); }}
+          className="w-full min-w-0 sm:w-72"
+        />
+        <TmSelectMenu
+          value={group}
+          ariaLabel={groupLabel[locale]}
+          options={[{ value: "all", label: allGroups[locale] }, ...Object.entries(groups).map(([value, label]) => ({ value, label: label[locale] }))]}
+          onChange={(value) => { setGroup(value); setPage(1); }}
+        />
+        {tiers && (
+          <TmSelectMenu
+            value={tier}
+            ariaLabel={zh ? "算子层级" : "Operator tier"}
+            options={[{ value: "all", label: zh ? "全部层级" : "All tiers" }, ...tiers.map((value) => ({ value, label: value }))]}
+            onChange={(value) => { setTier(value); setPage(1); }}
+          />
+        )}
+      </div>
+
+      {filtered.length > 0 ? (
+        <ul key={JSON.stringify([visiblePage, query, group, tier])} className="min-w-0 divide-y divide-tm-rule">
+          {filtered.slice(start, start + PAGE_SIZE).map((row) => (
+            <li key={row.id} className="min-w-0">
+              <details name={disclosureGroup} className="group min-w-0">
+                <summary className="grid min-h-8 cursor-pointer list-none grid-cols-[0.75rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-3 py-1.5 text-xs hover:bg-tm-bg-2 focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-tm-accent group-open:bg-tm-bg-2 sm:grid-cols-[0.75rem_minmax(0,1fr)_auto] [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden="true" className="text-tm-accent"><span className="group-open:hidden">+</span><span className="hidden group-open:inline">−</span></span>
+                  <span className={`min-w-0 font-semibold text-tm-fg [overflow-wrap:anywhere] ${row.code ? "font-tm-mono" : ""}`}>{row.title}</span>
+                  <span className="col-start-2 min-w-0 text-tm-muted [overflow-wrap:anywhere] sm:col-start-3 sm:text-right">
+                    {[groups[row.group]?.[locale] ?? row.group, row.tier].filter(Boolean).join(" · ")}
                   </span>
-                  <span className="flex-1 text-tm-accent">
-                    {op.signature ?? op.name}
-                  </span>
-                  <span className="text-tm-fg-2">{op.category ?? "—"}</span>
-                  <span className="text-tm-muted">·</span>
-                  <span className="w-6 text-tm-muted">{op.tier ?? "T1"}</span>
                 </summary>
-                {op.source_snippet && (
-                  <pre className="m-0 overflow-x-auto border-t border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
-                    {op.source_snippet}
-                  </pre>
-                )}
+                <dl className="grid min-w-0 gap-x-4 gap-y-1 border-t border-tm-rule bg-tm-bg-2 py-2 pl-8 pr-3 text-xs leading-relaxed sm:grid-cols-[8rem_minmax(0,1fr)]">
+                  {row.detail.map((item) => (
+                    <div key={item.label} className="contents">
+                      <dt className="font-semibold text-tm-muted">{item.label}</dt>
+                      <dd className="min-w-0 text-tm-fg-2 [overflow-wrap:anywhere]">
+                        {item.block
+                          ? <pre className="m-0 whitespace-pre-wrap font-tm-mono">{item.value}</pre>
+                          : item.code ? <code className="font-tm-mono">{item.value}</code> : item.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               </details>
             </li>
           ))}
-          {filtered.length === 0 && (
-            <li className="px-3 py-3 font-tm-mono text-xs text-tm-muted">
-              {t(locale, "methodology.operators.empty")}
-            </li>
-          )}
         </ul>
-      </TmPane>
-    </>
-  );
-}
-
-/* ── Backtest tab ─────────────────────────────────────────────────── */
-
-function BacktestTab() {
-  const { locale } = useLocale();
-  const [catFilter, setCatFilter] = useState<MetricCategory | "all">("all");
-
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<MetricCategory, number>();
-    for (const r of METRIC_ROWS) {
-      counts.set(r.category, (counts.get(r.category) ?? 0) + 1);
-    }
-    return counts;
-  }, []);
-
-  const filtered = METRIC_ROWS.filter(
-    (r) => catFilter === "all" || r.category === catFilter,
-  );
-
-  const sourceFiles = new Set(METRIC_ROWS.map((r) => r.ref.split(":")[0]));
-
-  return (
-    <>
-      <TmPane
-        title="METRICS.OVERVIEW"
-        meta={`${METRIC_ROWS.length} METRICS · ${categoryCounts.size} CATEGORIES`}
-      >
-        <TmKpiGrid>
-          <TmKpi
-            label="METRICS"
-            value={METRIC_ROWS.length.toString()}
-            sub="total formulas"
-          />
-          <TmKpi
-            label="CATEGORIES"
-            value={categoryCounts.size.toString()}
-            sub="metric groups"
-          />
-          <TmKpi
-            label="SOURCE_FILES"
-            value={sourceFiles.size.toString()}
-            sub="impl modules"
-          />
-          <TmKpi
-            label="ALPHA_LAYER"
-            value="OLS"
-            tone="pos"
-            sub="α/β + bootstrap"
-          />
-        </TmKpiGrid>
-        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
-          {t(locale, "methodology.backtest.subtitle")}
-        </p>
-      </TmPane>
-
-      <TmPane
-        title="METRICS.CATALOG"
-        meta={`${filtered.length} SHOWN`}
-      >
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-          <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-            CATEGORY
-          </span>
-          <TmChip
-            on={catFilter === "all"}
-            onClick={() => setCatFilter("all")}
-            count={METRIC_ROWS.length}
-          >
-            all
-          </TmChip>
-          {(["BASE", "IC", "SIG", "OVERFIT", "COST", "REGIME"] as MetricCategory[]).map(
-            (c) => (
-              <TmChip
-                key={c}
-                on={catFilter === c}
-                onClick={() => setCatFilter(c)}
-                count={categoryCounts.get(c) ?? 0}
-              >
-                {c}
-              </TmChip>
-            ),
-          )}
-        </div>
-
-        <div
-          className="grid gap-px bg-tm-rule"
-          style={{
-            gridTemplateColumns:
-              "minmax(80px, 100px) minmax(140px, 180px) 1fr minmax(180px, 220px)",
-          }}
-        >
-          <SchemaHeader>CAT</SchemaHeader>
-          <SchemaHeader>{t(locale, "methodology.backtest.colMetric")}</SchemaHeader>
-          <SchemaHeader>{t(locale, "methodology.backtest.colFormula")}</SchemaHeader>
-          <SchemaHeader>{t(locale, "methodology.backtest.colRef")}</SchemaHeader>
-          {filtered.map((r) => (
-            <MetricGridRow key={r.keyBase} row={r} />
-          ))}
-        </div>
-      </TmPane>
-
-      <TmPane
-        title="PORTFOLIO.RULES"
-        meta="4 RULES"
-      >
-        <ul className="flex flex-col">
-          {[1, 2, 3, 4].map((n) => (
-            <li
-              key={n}
-              className="flex gap-3 border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg last:border-b-0"
-            >
-              <span className="shrink-0 text-tm-accent">·</span>
-              <span>
-                {t(
-                  locale,
-                  `methodology.backtest.portfolio${n}` as Parameters<typeof t>[1],
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </TmPane>
-    </>
-  );
-}
-
-function MetricGridRow({ row }: { readonly row: MetricRow }) {
-  const { locale } = useLocale();
-  const catTone =
-    row.category === "BASE"
-      ? "text-tm-fg"
-      : row.category === "IC"
-        ? "text-tm-info"
-        : row.category === "SIG"
-          ? "text-tm-accent"
-          : row.category === "OVERFIT"
-            ? "text-tm-warn"
-            : row.category === "COST"
-              ? "text-tm-neg"
-              : "text-tm-pos";
-  return (
-    <>
-      <div className={`bg-tm-bg px-3 py-1.5 font-tm-mono text-xs ${catTone}`}>
-        {row.category}
-      </div>
-      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-xs text-tm-accent">
-        {t(locale, `methodology.backtest.${row.keyBase}` as Parameters<typeof t>[1])}
-      </div>
-      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-xs leading-relaxed text-tm-fg">
-        {row.formula}
-      </div>
-      <div className="bg-tm-bg px-3 py-1.5 font-tm-mono text-xs text-tm-muted">
-        {row.ref}
-      </div>
-    </>
-  );
-}
-
-/* ── Helpers ──────────────────────────────────────────────────────── */
-
-function ErrorPane({
-  title,
-  messages,
-}: {
-  readonly title: string;
-  readonly messages: readonly string[];
-}) {
-  // Dedupe — when multiple parallel fetches hit the same edge IP poisoning
-  // they often produce the identical TypeError text; one row is plenty.
-  const unique = Array.from(new Set(messages));
-  return (
-    <TmPane
-      title={title}
-      meta={`${unique.length} ISSUE${unique.length === 1 ? "" : "S"}`}
-    >
-      <ul className="flex flex-col">
-        {unique.map((m, i) => (
-          <li
-            key={i}
-            className="border-b border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-neg last:border-b-0"
-          >
-            {m}
-          </li>
-        ))}
-      </ul>
+      ) : (
+        <p className={INTRO_CLASS} role="status">{rows.length
+          ? (zh ? "没有匹配项。试试其他关键词或清除筛选。" : "No matches. Try another search or clear the filters.")
+          : (zh ? "目录没有返回条目。" : "The catalog returned no entries.")}</p>
+      )}
+      <TmPagination
+        page={visiblePage}
+        pageSize={PAGE_SIZE}
+        pageSizeOptions={[PAGE_SIZE]}
+        totalItems={filtered.length}
+        onPageChange={setPage}
+        onPageSizeChange={() => {}}
+        labels={{
+          navigation: zh ? `${title.zh}分页` : `${title.en} pagination`,
+          previous: "‹",
+          previousAriaLabel: zh ? "上一页" : "Previous page",
+          next: "›",
+          nextAriaLabel: zh ? "下一页" : "Next page",
+          page: (current, total) => `${current} / ${total}`,
+          pageSize: zh ? "每页" : "Rows per page",
+          total: (count) => zh
+            ? `显示 ${count ? start + 1 : 0}–${Math.min(start + PAGE_SIZE, count)} · 匹配 ${count} / ${rows.length} 条`
+            : `Showing ${count ? start + 1 : 0}–${Math.min(start + PAGE_SIZE, count)} · ${count} of ${rows.length} matched`,
+        }}
+      />
     </TmPane>
   );
 }

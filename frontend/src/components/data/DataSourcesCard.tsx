@@ -1,150 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t, type Locale } from "@/lib/i18n";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmTable, TmTableFrame } from "@/components/tm/TmTable";
 import { fetchDataSources, type DataSourceStat } from "@/lib/api/data_sources";
+import { DataRequestState, useDataRequest } from "./DataControls";
 
-// Live ingest sources. Kept in sync with the signal pipeline: Finnhub (earnings
-// -> Catalyst) and SEC EDGAR (Form 4 -> Insider) were added 2026-06; both run
-// as daily GitHub-Actions crons that prime the signal cache. `signal` is the
-// dimension each source powers (the same codes shown in the attribution radar);
-// `key` maps to the /api/_health/data_sources stat so the DATA column shows the
-// real row count + freshness, not just that the source is configured.
-interface SourceRow {
-  readonly name: string;
-  readonly key: string;
-  readonly feedsKey: I18nKey;
-  readonly signal: string;
-  readonly cadenceKey: I18nKey;
-}
+const SOURCES = [
+  { name: "yfinance", key: "yfinance", feeds: "data.src.yf", cadence: "data.cadence.intraday" },
+  { name: "FRED", key: "fred", feeds: "data.src.fred", cadence: null },
+  { name: "Finnhub", key: "finnhub", feeds: "data.src.finnhub", cadence: "data.cadence.daily" },
+  { name: "SEC EDGAR", key: "edgar", feeds: "data.src.edgar", cadence: "data.cadence.daily" },
+  { name: "RSS / Yahoo", key: "news", feeds: "data.src.news", cadence: "data.cadence.intraday" },
+] as const;
 
-type I18nKey = Parameters<typeof t>[1];
+const readSources = async () => ({ data: (await fetchDataSources()).sources, error: null });
 
-const SOURCES: readonly SourceRow[] = [
-  { name: "yfinance", key: "yfinance", feedsKey: "data.src.yf", signal: "Technicals · Analyst · Options", cadenceKey: "data.cadence.intraday" },
-  { name: "FRED", key: "fred", feedsKey: "data.src.fred", signal: "Macro", cadenceKey: "data.cadence.daily" },
-  { name: "Finnhub", key: "finnhub", feedsKey: "data.src.finnhub", signal: "Catalyst", cadenceKey: "data.cadence.daily" },
-  { name: "SEC EDGAR", key: "edgar", feedsKey: "data.src.edgar", signal: "Insider", cadenceKey: "data.cadence.daily" },
-  { name: "RSS / Yahoo", key: "news", feedsKey: "data.src.news", signal: "News", cadenceKey: "data.cadence.intraday" },
-];
-
-export function DataSourcesCard() {
+export function DataSourcesCard({ version }: { version: number }) {
   const { locale } = useLocale();
-  const [stats, setStats] = useState<Record<string, DataSourceStat | null> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchDataSources()
-      .then((r) => {
-        if (!cancelled) setStats(r.sources);
-      })
-      .catch(() => {
-        if (!cancelled) setStats({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const zh = locale === "zh";
+  const title = zh ? "数据来源" : "Data sources";
+  const request = useDataRequest("sources", version, readSources);
 
   return (
-    <TmPane title="DATA.SOURCES" meta={`${SOURCES.length} PROVIDERS`}>
-      <div
-        className="grid gap-px bg-tm-rule"
-        style={{ gridTemplateColumns: "minmax(100px,130px) 1fr minmax(100px,140px) minmax(56px,72px) minmax(110px,150px)" }}
-      >
-        <Cell head>SOURCE</Cell>
-        <Cell head>{t(locale, "data.src.col_feeds")}</Cell>
-        <Cell head>SIGNAL</Cell>
-        <Cell head>{t(locale, "data.src.col_cadence")}</Cell>
-        <Cell head>{t(locale, "data.src.col_data")}</Cell>
-        {SOURCES.map((s) => (
-          <Row key={s.name} locale={locale} src={s} stat={stats?.[s.key]} loaded={stats !== null} />
-        ))}
-      </div>
+    <TmPane title={title} meta={zh ? `${SOURCES.length} 个来源` : `${SOURCES.length} sources`}>
+      <DataRequestState locale={locale} label={zh ? "来源观测" : "source observations"} request={request} />
+      <TmTableFrame><TmTable aria-label={title} density="compact" className="table-fixed text-left">
+        <colgroup><col className="w-[18%]" /><col className="w-[30%] sm:w-[37%]" /><col className="w-[20%] sm:w-[16%]" /><col /></colgroup>
+        <thead className="bg-tm-bg-2 font-tm-mono text-tm-muted">
+          <tr className="border-b border-tm-rule">
+            {[zh ? "来源" : "Source", t(locale, "data.src.col_feeds"), zh ? "声明频率" : "Declared cadence", zh ? "存量 / 最近记录" : "Stored / last recorded"]
+              .map((label) => <th key={label} scope="col" className="break-words px-2 py-2 font-medium sm:px-3">{label}</th>)}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-tm-rule">
+          {SOURCES.map((source) => (
+            <tr key={source.key}>
+              <th scope="row" className="break-words px-2 py-2 font-tm-mono font-semibold text-tm-fg sm:px-3">{source.name}</th>
+              <td className="break-words px-2 py-2 text-tm-fg-2 sm:px-3">{t(locale, source.feeds)}</td>
+              <td className="break-words px-2 py-2 text-tm-muted sm:px-3">{source.cadence ? t(locale, source.cadence) : zh ? "按需拉取" : "On demand"}</td>
+              <td className="break-words px-2 py-2 sm:px-3"><Observation stat={request.data?.[source.key]} locale={locale} tickers={source.key === "yfinance"} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </TmTable></TmTableFrame>
     </TmPane>
   );
 }
 
-function Row({
-  locale,
-  src,
-  stat,
-  loaded,
-}: {
-  locale: Locale;
-  src: SourceRow;
-  stat: DataSourceStat | null | undefined;
-  loaded: boolean;
-}) {
+function Observation({ stat, locale, tickers }: { stat: DataSourceStat | null | undefined; locale: Locale; tickers: boolean }) {
+  const zh = locale === "zh";
+  if (stat === null) return <span className="text-tm-muted">{zh ? "未返回时间戳" : "No timestamp returned"}</span>;
+  if (stat?.error) return <span className="text-tm-warn">{zh ? "观测不可用" : "Observation unavailable"}</span>;
+  if (!stat) return <span className="text-tm-muted">—</span>;
+  const timestamp = stat.last_fetched_at ? new Date(stat.last_fetched_at) : null;
+  const utc = timestamp && Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : null;
+  const unit = tickers ? (zh ? "只" : "tickers") : zh ? "条" : "rows";
   return (
-    <>
-      <Cell>
-        <span className="font-tm-mono text-[12px] text-tm-fg">{src.name}</span>
-      </Cell>
-      <Cell>
-        <span className="text-sm text-tm-fg-2">{t(locale, src.feedsKey)}</span>
-      </Cell>
-      <Cell>
-        <span className="font-tm-mono text-xs text-tm-accent">{src.signal}</span>
-      </Cell>
-      <Cell>
-        <span className="text-xs text-tm-muted">{t(locale, src.cadenceKey)}</span>
-      </Cell>
-      <Cell>
-        <DataStat locale={locale} stat={stat} loaded={loaded} />
-      </Cell>
-    </>
-  );
-}
-
-// The live data presence for a source: row count + how fresh the last write is.
-// FRED is live-fetched (stat === null) so it shows a "live" marker; a query
-// error surfaces as "ERR" rather than a fake count.
-function DataStat({
-  locale,
-  stat,
-  loaded,
-}: {
-  locale: Locale;
-  stat: DataSourceStat | null | undefined;
-  loaded: boolean;
-}) {
-  if (!loaded) return <span className="text-xs text-tm-muted">…</span>;
-  if (stat === null) return <span className="text-xs text-tm-muted">{t(locale, "data.src.live")}</span>;
-  if (!stat || stat.rows === null) return <span className="text-xs text-tm-warn">ERR</span>;
-  const fresh = stat.last_fetched_at ? ago(stat.last_fetched_at, locale) : null;
-  return (
-    <span className="font-tm-mono text-xs tabular-nums text-tm-fg">
-      {stat.rows.toLocaleString()}
-      {fresh ? <span className="ml-1.5 text-tm-muted">· {fresh}</span> : null}
+    <span className="flex flex-wrap items-baseline gap-x-2 font-tm-mono tabular-nums">
+      <span className="text-tm-fg">{stat.rows === null ? "—" : `${stat.rows.toLocaleString()} ${unit}`}</span>
+      {utc ? <time className="text-tm-muted" dateTime={utc} title={utc}>{utc.slice(0, 10)} {utc.slice(11, 16)} UTC</time> : <span className="text-tm-muted">—</span>}
     </span>
-  );
-}
-
-// Compact relative age, e.g. "2h" / "3d" / "5m". Null on unparseable input.
-function ago(iso: string, locale: Locale): string | null {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (isNaN(ms) || ms < 0) return null;
-  const m = Math.floor(ms / 60000);
-  if (m < 60) return locale === "zh" ? `${m}分钟前` : `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return locale === "zh" ? `${h}小时前` : `${h}h`;
-  const d = Math.floor(h / 24);
-  return locale === "zh" ? `${d}天前` : `${d}d`;
-}
-
-function Cell({ children, head = false }: { children: React.ReactNode; head?: boolean }) {
-  return (
-    <div
-      className={
-        head
-          ? "bg-tm-bg-2 px-3 py-1.5 font-tm-sans text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted"
-          : "bg-tm-bg px-3 py-2"
-      }
-    >
-      {children}
-    </div>
   );
 }

@@ -1,538 +1,199 @@
 "use client";
 
-/**
- * Data-page composition primitives — UniverseOverview + UniverseTickers.
- *
- * The /data page wraps these two in a `<TmCols2>` so they sit side-by-
- * side in fixed-height "tabs" that scroll internally — neither pane
- * grows when its content does (e.g. user expands all sectors), they
- * just scroll. This keeps left and right vertically aligned regardless
- * of how either side's content changes.
- *
- * UniverseOverview merges the legacy UNIVERSE pane + DATA.COVERAGE pane
- * into one. The 5-cell KPI strip carries the union of their stats. Then
- * a collapsible 3-row category summary (`COVERAGE.CATEGORIES`) replaces
- * the prior wall of ~20 per-field fill-rate bars: each row shows the
- * category's average fill rate; click ▸ to expand and reveal the field-
- * level bars that were dominating the page before. Worst-coverage
- * tickers also moved into a collapsible block (closed by default).
- *
- * UniverseTickers is the sectorised ticker roster. Each GICS sector is
- * its own collapsible block; the body inside each block is a fixed-
- * density grid (78px-min auto-fill) so symbol density is predictable
- * regardless of the longest ticker in the bucket. When a sector
- * expands, the pane scrolls — it does NOT grow vertically, so the
- * paired UniverseOverview pane stays the same height.
- *
- * `UniverseDetail` and `UniverseCard` are kept as back-compat aliases
- * — old call sites continue to render the same content (overview +
- * tickers stacked, no fixed height).
- */
-
-import { useMemo, useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { TmPane } from "@/components/tm/TmPane";
-import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
-import { TmRowButton } from "@/components/tm/TmButton";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { TmInput, TmSelect } from "@/components/tm/TmField";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import type {
-  UniverseInfo,
-  CoverageResponse,
-  FieldCoverage,
-} from "@/lib/types";
+import { sectorLabel as localizedSector } from "@/lib/sector-label";
+import type { UniverseInfo, CoverageResponse, FieldCoverage } from "@/lib/types";
+import { DataPagination } from "./DataControls";
 
-const CATEGORY_LABEL_KEY = {
-  ohlcv: "data.coverage.catOhlcv",
-  metadata: "data.coverage.catMetadata",
-  fundamental: "data.coverage.catFundamental",
+const CATEGORIES = {
+  ohlcv: ["价量字段", "Price & volume"],
+  metadata: ["元数据", "Metadata"],
+  fundamental: ["基本面", "Fundamentals"],
 } as const;
+const percentage = (rate: number) => rate < 1 && rate >= 0.99995
+  ? "<100%"
+  : `${(rate * 100).toFixed(2)}%`;
+const number = (value: number) => value.toLocaleString();
 
-// Coverage health colour ramp derived entirely from workstation tokens.
-function colorFor(rate: number): string {
-  if (rate >= 0.99) return "var(--tm-pos)";
-  if (rate >= 0.95) return "color-mix(in srgb, var(--tm-pos) 72%, var(--tm-warn))";
-  if (rate >= 0.85) return "var(--tm-warn)";
-  if (rate >= 0.7) return "color-mix(in srgb, var(--tm-warn) 74%, var(--tm-neg))";
-  return "var(--tm-neg)";
+function fieldRate(field: FieldCoverage): number | null {
+  return field.n_total > 0 ? field.n_present / field.n_total : null;
 }
 
-// Fill-height pane CSS — TmPane root takes the full grid-cell height,
-// the body wrapper grows to fill remaining space and scrolls when
-// content overflows. Used by both panes inside data/page.tsx's TmCols2.
-const FILL_PANE_CLASS = "h-full overflow-hidden";
-const FILL_BODY_CLASS = "flex-1 min-h-0 overflow-y-auto";
-
-// ── UniverseOverview ────────────────────────────────────────────────
-
-interface UniverseOverviewProps {
-  readonly universe: UniverseInfo;
-  /** Coverage payload (from `fetchCoverage`). When undefined, the pane
-   *  renders without the fill-rate bars / worst-tickers section. */
-  readonly coverage?: CoverageResponse | null;
-  /** When true, the pane fills its parent's height and scrolls
-   *  internally on overflow. Used by data/page.tsx's TmCols2 to make
-   *  Overview + Tickers panes the same height. Defaults to false so
-   *  the back-compat `UniverseDetail` keeps its auto-height layout. */
-  readonly fillHeight?: boolean;
+function CoverageMeter({ rate }: { rate: number | null }) {
+  return (
+    <span className="flex items-center gap-2.5">
+      <span aria-hidden="true" className="hidden h-1.5 w-16 bg-tm-bg-3 sm:block">
+        {rate !== null && <span
+          className={`block h-full ${rate >= .99 ? "bg-tm-pos" : rate >= .85 ? "bg-tm-warn" : "bg-tm-neg"}`}
+          style={{ width: `${rate * 100}%` }}
+        />}
+      </span>
+      <span className="min-w-[4rem] text-right tabular-nums text-tm-fg">{rate === null ? "—" : percentage(rate)}</span>
+    </span>
+  );
 }
 
-export function UniverseOverview({
-  universe,
-  coverage,
-  fillHeight = false,
-}: UniverseOverviewProps) {
+function CoverageDisclosure({ title, meta, children }: { title: string; meta: ReactNode; children: ReactNode }) {
+  return (
+    <details className="border-b border-tm-rule last:border-b-0">
+      <summary className="cursor-pointer px-3 py-2.5 font-tm-mono text-xs text-tm-fg-2 hover:bg-tm-bg-2 focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-tm-accent">
+        <span className="ml-1 inline-flex w-[calc(100%-1.5rem)] items-center justify-between gap-2 align-middle">
+          <span>{title}</span>{meta}
+        </span>
+      </summary>
+      <div className="divide-y divide-tm-rule border-t border-tm-rule bg-tm-bg-2 px-4 py-1">{children}</div>
+    </details>
+  );
+}
+
+export function UniverseOverview({ universe, coverage, closePct, children }: {
+  universe: UniverseInfo;
+  coverage: CoverageResponse | null;
+  closePct: number | null;
+  children?: ReactNode;
+}) {
   const { locale } = useLocale();
-
-  const byCategory = useMemo(() => {
-    const map = new Map<string, FieldCoverage[]>();
-    if (!coverage) return map;
-    for (const f of coverage.field_coverage) {
-      if (!map.has(f.category)) map.set(f.category, []);
-      map.get(f.category)!.push(f);
-    }
-    return map;
-  }, [coverage]);
-
-  const worstTickers = useMemo(() => {
-    if (!coverage) return [] as CoverageResponse["ticker_coverage"];
-    return coverage.ticker_coverage
-      .slice(0, 6)
-      .filter((tk) => tk.fill_rate < 1.0);
-  }, [coverage]);
+  const zh = locale === "zh";
+  const [missingPage, setMissingPage] = useState(1);
+  const lowCoverage = coverage?.ticker_coverage.filter((row) => row.n_missing > 0) ?? [];
+  const missingPageSize = 6;
+  const currentMissingPage = Math.min(missingPage, Math.max(1, Math.ceil(lowCoverage.length / missingPageSize)));
 
   return (
-    <TmPane
-      title={`UNIVERSE.${universe.id}`}
-      meta={
-        <span className="font-tm-mono">
-          benchmark = {universe.benchmark} · {universe.currency}
-        </span>
-      }
-      className={fillHeight ? FILL_PANE_CLASS : undefined}
-      bodyClassName={fillHeight ? FILL_BODY_CLASS : undefined}
-    >
-      {/* Merged KPI strip — 5 cells consolidate the previous UNIVERSE
-          + COVERAGE overlap (tickers, days, ohlcv%, range, benchmark) */}
-      <TmKpiGrid>
-        <TmKpi
-          label={t(locale, "data.universe.tickerCount")}
-          value={universe.ticker_count.toLocaleString()}
-          sub="survivorship-corrected"
-        />
-        <TmKpi
-          label={t(locale, "data.universe.days")}
-          value={universe.n_days.toLocaleString()}
-          sub={`${universe.start_date} → ${universe.end_date}`}
-        />
-        <TmKpi
-          label={t(locale, "data.coverage.kOhlcvPct")}
-          value={
-            coverage ? `${coverage.ohlcv_coverage_pct.toFixed(2)}%` : "—"
-          }
-          tone={
-            coverage && coverage.ohlcv_coverage_pct >= 99
-              ? "pos"
-              : coverage
-                ? "warn"
-                : "default"
-          }
-          sub="missing bars forward-filled"
-        />
-        <TmKpi
-          label={t(locale, "data.universe.benchmark")}
-          value={universe.benchmark}
-          sub={universe.currency}
-        />
-        <TmKpi
-          label="UNIVERSE.ID"
-          value={universe.id}
-          sub={universe.name}
-        />
-      </TmKpiGrid>
-
-      {/* Coverage drilldown — collapsible category rows. Replaces the
-          previous wall of ~20 per-field fill-rate bars, which was both
-          information overload and the cause of the height mismatch
-          with the right pane. */}
+    <TmPane title={t(locale, "data.coverage.title")} className="min-w-0">
+      <dl className="grid grid-cols-3 divide-x divide-tm-rule border-b border-tm-rule bg-tm-bg-2/40 font-tm-mono">
+        {[
+          [zh ? "收盘价覆盖率" : "Close coverage", closePct === null ? "—" : percentage(closePct / 100)],
+          [t(locale, "data.universe.tickerCount"), number(universe.ticker_count)],
+          [t(locale, "data.universe.days"), number(universe.n_days)],
+        ].map(([label, value], index) => (
+          <div key={label} className="min-w-0 px-3 py-3 sm:px-4">
+            <dt className="text-xs text-tm-muted">{label}</dt>
+            <dd className={`mt-1 text-lg font-semibold tabular-nums sm:text-2xl ${index === 0 && closePct !== null ? closePct >= 99 ? "text-tm-pos" : "text-tm-warn" : "text-tm-fg"}`}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 border-b border-tm-rule px-4 py-3 font-tm-mono text-xs">
+        <dt className="text-tm-muted">{t(locale, "data.universe.range")}</dt>
+        <dd className="flex flex-wrap gap-x-2 tabular-nums text-tm-fg"><span>{universe.start_date}</span><span aria-hidden="true">→</span><span>{universe.end_date}</span></dd>
+        <dt className="text-tm-muted">{t(locale, "data.universe.benchmark")}</dt>
+        <dd className="break-words text-tm-fg">{universe.benchmark} · {universe.currency}</dd>
+        {universe.name && universe.name !== universe.id && <>
+          <dt className="text-tm-muted">{zh ? "样本" : "Sample"}</dt>
+          <dd className="break-words text-tm-fg">{universe.name}</dd>
+        </>}
+      </dl>
+      {children}
       {coverage && (
-        <section className="border-t border-tm-rule">
-          <div className="px-3 py-1 font-tm-mono text-xs uppercase tracking-[0.10em] text-tm-muted">
-            {t(locale, "data.coverage.title")}
-          </div>
-          <div className="flex flex-col">
-            {(["ohlcv", "metadata", "fundamental"] as const).map((cat) => {
-              const fields = byCategory.get(cat);
-              if (!fields || fields.length === 0) return null;
-              return (
-                <CategoryRow
-                  key={cat}
-                  label={t(locale, CATEGORY_LABEL_KEY[cat])}
-                  fields={fields}
-                />
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Worst-tickers — collapsible block (closed by default). Was a
-          full-width section taking ~80px; now hidden behind a single
-          row that the user expands when they actually want this view. */}
-      {coverage && worstTickers.length > 0 && (
-        <Collapsible
-          label={t(locale, "data.coverage.worstTickers")}
-          summary={`${worstTickers.length} below 100%`}
-          tone="warn"
-        >
-          <div className="flex flex-col gap-1 px-3 pb-2 font-tm-mono">
-            {worstTickers.map((tk) => (
-              <div
-                key={tk.ticker}
-                className="flex items-center gap-3 text-xs"
-              >
-                <span className="w-20 font-semibold text-tm-fg">
-                  {tk.ticker}
-                </span>
-                <div className="relative h-2.5 flex-1 overflow-hidden bg-tm-bg-3">
-                  <div
-                    className="h-full"
-                    style={{
-                      width: `${tk.fill_rate * 100}%`,
-                      background: colorFor(tk.fill_rate),
-                    }}
-                  />
+        <>
+          {Object.entries(CATEGORIES).map(([category, labels]) => {
+            const fields = coverage.field_coverage.filter((field) => field.category === category);
+            if (!fields.length) return null;
+            const rates = fields.map(fieldRate).filter((rate): rate is number => rate !== null);
+            const average = rates.length ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length : null;
+            return (
+              <CoverageDisclosure key={category} title={labels[zh ? 0 : 1]} meta={<CoverageMeter rate={average} />}>
+                {fields.map((field) => (
+                  <div key={field.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 font-tm-mono text-xs">
+                    <code className="min-w-0 break-all text-tm-fg">{field.name}</code>
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tm-muted">
+                      <span>{number(field.n_present)} / {number(field.n_total)}</span>
+                      <CoverageMeter rate={fieldRate(field)} />
+                    </span>
+                  </div>
+                ))}
+              </CoverageDisclosure>
+            );
+          })}
+          {lowCoverage.length > 0 && (
+            <CoverageDisclosure title={t(locale, "data.coverage.worstTickers")} meta={<span className="text-tm-warn">{zh ? `${lowCoverage.length} 只缺失` : `${lowCoverage.length} incomplete`}</span>}>
+              {lowCoverage.slice((currentMissingPage - 1) * missingPageSize, currentMissingPage * missingPageSize).map((row) => (
+                <div key={row.ticker} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 font-tm-mono text-xs">
+                  <code className="text-tm-fg">{row.ticker}</code>
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tm-muted">
+                    <span>{zh ? `缺 ${number(row.n_missing)} 条` : `${number(row.n_missing)} missing`}</span>
+                    <CoverageMeter rate={row.fill_rate} />
+                  </span>
                 </div>
-                <span className="w-14 text-right tabular-nums text-tm-fg">
-                  {(tk.fill_rate * 100).toFixed(1)}%
-                </span>
-                <span className="w-20 text-right text-xs text-tm-muted">
-                  {tk.n_missing} missing
-                </span>
-              </div>
-            ))}
-          </div>
-        </Collapsible>
+              ))}
+              {lowCoverage.length > missingPageSize && (
+                <DataPagination locale={locale} scope={t(locale, "data.coverage.worstTickers")} page={currentMissingPage} pageSize={missingPageSize} total={lowCoverage.length} onChange={setMissingPage} />
+              )}
+            </CoverageDisclosure>
+          )}
+          <p className="border-t border-tm-rule px-4 py-2.5 text-xs leading-relaxed text-tm-muted">
+            {zh
+              ? "总览按面板中非空收盘价计，分类按各字段覆盖率取平均。覆盖率不代表行情实时性。"
+              : "The headline counts non-null panel closes. Categories average their field coverage; coverage does not measure freshness."}
+          </p>
+        </>
       )}
+    </TmPane>
+  );
+}
 
-      {coverage && (
-        <p className="border-t border-tm-rule px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-muted">
-          {t(locale, "data.coverage.legend")}
+const ROSTER_PAGE_SIZE = 16;
+
+export function UniverseTickers({ universe }: { universe: UniverseInfo }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const title = t(locale, "data.universe.tickersLabel");
+  const [query, setQuery] = useState("");
+  const [sector, setSector] = useState("");
+  const [page, setPage] = useState(1);
+  const rows = universe.tickers.map((symbol, index) => ({
+    symbol,
+    sector: universe.sectors?.length === universe.tickers.length
+      ? universe.sectors[index] || "Unknown"
+      : null,
+  })).sort((a, b) => a.symbol.localeCompare(b.symbol));
+  const sectorLabel = (key: string) => localizedSector(key, locale);
+  const counts = new Map<string, number>();
+  for (const row of rows) if (row.sector) counts.set(row.sector, (counts.get(row.sector) ?? 0) + 1);
+  const sectors = [...counts].sort(([a], [b]) => a === "Unknown" ? 1 : b === "Unknown" ? -1 : sectorLabel(a).localeCompare(sectorLabel(b), locale));
+  const activeSector = counts.has(sector) ? sector : "";
+  const needle = query.trim().toLowerCase();
+  const matches = rows.filter((row) => (!activeSector || row.sector === activeSector) && row.symbol.toLowerCase().includes(needle));
+  const current = Math.min(page, Math.max(1, Math.ceil(matches.length / ROSTER_PAGE_SIZE)));
+  const visible = matches.slice((current - 1) * ROSTER_PAGE_SIZE, current * ROSTER_PAGE_SIZE);
+
+  return (
+    <TmPane title={title} meta={zh ? `${number(rows.length)} 只 · 代码升序` : `${number(rows.length)} symbols · A–Z`} className="min-w-0">
+      <div className="flex flex-wrap gap-2 border-b border-tm-rule px-3 py-2">
+        <TmInput type="search" value={query} onChange={(value) => { setQuery(value); setPage(1); }}
+          aria-label={zh ? "搜索股票代码" : "Search ticker symbols"}
+          placeholder={zh ? "搜索股票代码" : "Search tickers"} className="min-w-0 flex-[1_1_9rem]" />
+        {sectors.length > 0 && <TmSelect value={activeSector} onChange={(value) => { setSector(value); setPage(1); }}
+          aria-label={zh ? "按板块筛选" : "Filter by sector"} className="min-w-0 flex-[1_1_9rem] sm:flex-none"
+          options={[
+            { value: "", label: zh ? "全部板块" : "All sectors" },
+            ...sectors.map(([key, count]) => ({ value: key, label: `${sectorLabel(key)} · ${number(count)}` })),
+          ]} />}
+      </div>
+      {visible.length ? (
+        <ul aria-label={title} className="grid grid-cols-2 gap-px bg-tm-rule sm:grid-cols-4">
+          {visible.map((row) => (
+            <li key={row.symbol} className="min-w-0 bg-tm-bg px-3 py-1.5">
+              <code className="block break-all text-xs font-semibold text-tm-fg">{row.symbol}</code>
+              {row.sector && <span className="block text-xs leading-4 text-tm-muted">{sectorLabel(row.sector)}</span>}
+            </li>
+          ))}
+        </ul>
+      ) : <p role="status" className="px-3 py-6 text-xs text-tm-muted">{rows.length
+        ? (zh ? "未找到匹配的股票。试试其他代码或板块。" : "No matching tickers. Try another symbol or sector.")
+        : (zh ? "该股票池未返回成分股。" : "This universe returned no constituents.")}</p>}
+      <DataPagination locale={locale} scope={title} page={current} pageSize={ROSTER_PAGE_SIZE} total={matches.length} onChange={setPage} />
+      {activeSector === "Unknown" && (
+        <p className="border-t border-tm-rule px-3 py-2 text-xs text-tm-muted">
+          {zh ? "未返回板块信息，不等同于退市。" : "Missing sector data does not prove delisting."}{" "}
+          <Link href="/methodology" className="text-tm-accent underline underline-offset-2">{zh ? "查看样本方法" : "See sample methodology"}</Link>
         </p>
       )}
     </TmPane>
   );
 }
-
-// ── CategoryRow — collapsible per-category coverage summary ─────────
-
-function mean(rates: readonly number[]): number {
-  if (rates.length === 0) return 0;
-  return rates.reduce((s, r) => s + r, 0) / rates.length;
-}
-
-// Honest fill rate derived from the actual cell counts, not the backend's
-// fill_rate field: an empty column (n_present === 0, or n_total === 0) reports
-// a vacuous fill_rate of 1.0 and was being counted as "healthy". Recomputing
-// from n_present/n_total makes zero-data columns read as 0% (red, not healthy).
-function effFill(f: FieldCoverage): number {
-  return f.n_total > 0 ? f.n_present / f.n_total : 0;
-}
-
-// "Healthy" = substantially complete coverage. 99% was unrealistically strict
-// for real market data (a few missing bars / late filings are normal), so every
-// category read 0/N healthy even at 97% coverage. 95% is the green+yellow band:
-// data is essentially there. The n_present > 0 guard still excludes empty
-// columns (the original zero-data-is-healthy bug).
-const HEALTHY_FILL = 0.95;
-
-function CategoryRow({
-  label,
-  fields,
-}: {
-  label: string;
-  fields: readonly FieldCoverage[];
-}) {
-  const [open, setOpen] = useState(false);
-  const avg = mean(fields.map(effFill));
-  // A field is healthy only if it actually has data AND is ≥99% filled. The
-  // n_present > 0 guard is what stops a zero-row column from reading healthy.
-  const healthy = fields.filter((f) => f.n_present > 0 && effFill(f) >= HEALTHY_FILL).length;
-  const tone = colorFor(avg);
-
-  return (
-    <div className="border-t border-tm-rule first:border-t-0">
-      <TmRowButton
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-xs transition-colors hover:bg-tm-bg-2"
-        aria-expanded={open}
-      >
-        <span className="w-3 text-tm-muted" aria-hidden="true">
-          {open ? "▾" : "▸"}
-        </span>
-        <span className="w-32 truncate font-semibold uppercase tracking-[0.04em] text-tm-accent">
-          {label}
-        </span>
-        <span className="w-32 text-tm-muted">
-          {healthy}/{fields.length} healthy
-        </span>
-        {/* Mini summary bar — same colour ramp as field-level bars */}
-        <div className="relative h-2.5 flex-1 overflow-hidden bg-tm-bg-3">
-          <div
-            className="h-full transition-[width] duration-200"
-            style={{ width: `${avg * 100}%`, background: tone }}
-          />
-        </div>
-        <span className="w-14 text-right tabular-nums text-tm-fg">
-          {(avg * 100).toFixed(2)}%
-        </span>
-      </TmRowButton>
-      {open && (
-        <div className="flex flex-col gap-1 bg-tm-bg-2 px-3 py-2">
-          {fields.map((f) => (
-            <FieldBar key={f.name} field={f} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FieldBar({ field }: { field: FieldCoverage }) {
-  const fill = effFill(field);
-  return (
-    <div className="flex items-center gap-3 font-tm-mono text-xs">
-      <code className="w-32 truncate text-tm-fg" title={field.name}>
-        {field.name}
-      </code>
-      <div className="relative h-2.5 flex-1 overflow-hidden bg-tm-bg-3">
-        <div
-          className="h-full transition-[width] duration-200"
-          style={{
-            width: `${fill * 100}%`,
-            background: colorFor(fill),
-          }}
-        />
-      </div>
-      <span className="w-14 text-right tabular-nums text-tm-fg">
-        {(fill * 100).toFixed(1)}%
-      </span>
-      <span className="w-20 text-right text-xs text-tm-muted">
-        {field.n_present.toLocaleString()} / {field.n_total.toLocaleString()}
-      </span>
-    </div>
-  );
-}
-
-// ── Generic Collapsible (used for worst-tickers + future drilldowns) ─
-
-function Collapsible({
-  label,
-  summary,
-  tone,
-  defaultOpen = false,
-  children,
-}: {
-  label: string;
-  summary?: string;
-  tone?: "warn" | "pos" | "muted";
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const summaryTone =
-    tone === "warn"
-      ? "text-tm-warn"
-      : tone === "pos"
-        ? "text-tm-pos"
-        : "text-tm-muted";
-  return (
-    <div className="border-t border-tm-rule">
-      <TmRowButton
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-1.5 text-left font-tm-mono text-xs uppercase tracking-[0.08em] transition-colors hover:bg-tm-bg-2"
-        aria-expanded={open}
-      >
-        <span className="w-3 text-tm-muted" aria-hidden="true">
-          {open ? "▾" : "▸"}
-        </span>
-        <span className="font-semibold text-tm-fg-2">{label}</span>
-        {summary && <span className={summaryTone}>· {summary}</span>}
-      </TmRowButton>
-      {open && children}
-    </div>
-  );
-}
-
-// ── UniverseTickers (sectorised, fill-height capable) ───────────────
-
-interface UniverseTickersProps {
-  readonly universe: UniverseInfo;
-  /** When true, the pane fills its parent's height and scrolls
-   *  internally on overflow. Same convention as UniverseOverview. */
-  readonly fillHeight?: boolean;
-}
-
-interface SectorBucket {
-  readonly key: string;
-  readonly label: string;
-  readonly tickers: readonly string[];
-  // True for the null-sector bucket. These are overwhelmingly tickers that
-  // delisted / merged during the panel window (yfinance returns no GICS
-  // sector for them). The v3 panel deliberately retains them to remove
-  // survivorship bias; surfacing that as a labelled bucket + tooltip turns
-  // what looked like "missing data" into the methodology selling point.
-  readonly isDelisted?: boolean;
-}
-
-const UNKNOWN_SECTOR = "Unknown";
-// Sectors smaller than this stay open by default; bigger ones collapse.
-const COLLAPSE_THRESHOLD = 24;
-
-function bucketTickers(universe: UniverseInfo): SectorBucket[] {
-  const sectors = universe.sectors;
-  if (!sectors || sectors.length !== universe.tickers.length) {
-    return [
-      {
-        key: "__all",
-        label: "All tickers",
-        tickers: universe.tickers,
-      },
-    ];
-  }
-
-  const map = new Map<string, string[]>();
-  universe.tickers.forEach((tk, i) => {
-    const sec = sectors[i] ?? UNKNOWN_SECTOR;
-    const list = map.get(sec) ?? [];
-    list.push(tk);
-    map.set(sec, list);
-  });
-
-  return Array.from(map.entries())
-    .sort(([aK, aTk], [bK, bTk]) => {
-      if (aK === UNKNOWN_SECTOR) return 1;
-      if (bK === UNKNOWN_SECTOR) return -1;
-      return bTk.length - aTk.length;
-    })
-    .map(([sec, tickers]) => ({
-      key: sec,
-      label: sec,
-      tickers,
-      isDelisted: sec === UNKNOWN_SECTOR,
-    }));
-}
-
-export function UniverseTickers({
-  universe,
-  fillHeight = false,
-}: UniverseTickersProps) {
-  const buckets = useMemo(() => bucketTickers(universe), [universe]);
-
-  return (
-    <TmPane
-      title={`TICKERS.${universe.id}`}
-      meta={
-        <span className="font-tm-mono">
-          {universe.tickers.length} symbols · {buckets.length} sectors
-        </span>
-      }
-      className={fillHeight ? FILL_PANE_CLASS : undefined}
-      bodyClassName={fillHeight ? FILL_BODY_CLASS : undefined}
-    >
-      <div className="flex flex-col">
-        {buckets.map((b, idx) => (
-          <SectorBlock key={b.key} bucket={b} isFirst={idx === 0} />
-        ))}
-      </div>
-    </TmPane>
-  );
-}
-
-function SectorBlock({
-  bucket,
-  isFirst,
-}: {
-  bucket: SectorBucket;
-  isFirst: boolean;
-}) {
-  const { locale } = useLocale();
-  const initiallyOpen = bucket.tickers.length < COLLAPSE_THRESHOLD;
-  const [open, setOpen] = useState(initiallyOpen);
-
-  const displayLabel = bucket.isDelisted
-    ? t(locale, "data.delistedBucket")
-    : bucket.label;
-
-  return (
-    <div
-      className={`flex flex-col ${isFirst ? "" : "border-t border-tm-rule"}`}
-    >
-      {/* Toggle button + (for the delisted bucket) tooltip/link kept as flex
-          siblings, not nested — an <a>/InfoTooltip inside a <button> is
-          invalid interactive nesting. */}
-      <div className="flex items-center bg-tm-bg-2">
-        <TmRowButton
-          onClick={() => setOpen((o) => !o)}
-          className="flex flex-1 items-center gap-2 px-3 py-1.5 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-fg-2 hover:text-tm-fg"
-          aria-expanded={open}
-        >
-          <span className="w-3 text-tm-muted" aria-hidden="true">
-            {open ? "▾" : "▸"}
-          </span>
-          <span className="font-semibold text-tm-accent">{displayLabel}</span>
-          <span className="text-tm-muted">· {bucket.tickers.length}</span>
-        </TmRowButton>
-        {bucket.isDelisted ? (
-          <div className="flex items-center gap-1.5 pr-3">
-            <InfoTooltip content={t(locale, "data.delistedTooltip")} />
-            <Link
-              href="/methodology"
-              className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted underline-offset-2 hover:text-tm-accent hover:underline"
-            >
-              {t(locale, "data.delistedLink")}
-            </Link>
-          </div>
-        ) : null}
-      </div>
-      {open && (
-        <div
-          className="grid gap-px bg-tm-rule p-px"
-          style={{
-            gridTemplateColumns: "repeat(auto-fill, minmax(78px, 1fr))",
-          }}
-        >
-          {bucket.tickers.map((tk) => (
-            <span
-              key={tk}
-              className="bg-tm-bg px-2 py-1 font-tm-mono text-xs text-tm-fg-2"
-            >
-              {tk}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Back-compat exports ─────────────────────────────────────────────
-
-interface UniverseDetailProps {
-  readonly universe: UniverseInfo;
-  readonly coverage?: CoverageResponse | null;
-}
-
-/** Legacy combined renderer — overview + tickers stacked vertically,
- *  auto-height (no fill behavior). */
-export function UniverseDetail({ universe, coverage }: UniverseDetailProps) {
-  return (
-    <>
-      <UniverseOverview universe={universe} coverage={coverage} />
-      <UniverseTickers universe={universe} />
-    </>
-  );
-}
-
-export const UniverseCard = UniverseDetail;
