@@ -23,7 +23,8 @@ No records are hidden by a hard truncation. Pagination preserves access to every
 - Actual components rendered in the existing shell at 1710×931, light Chinese, with matching inputs for before/after. Also checked English/dark Settings at 1440×900 and English Methodology at 900×900; neither body nor main horizontally overflowed.
 - Guide: cross-chapter search, result selection and returning to the pre-search topic. Methodology: detail disclosure, last formula page and search resetting pagination. Data: roster page 2, ticker search, empty search and independent errors. Settings: draft persistence across tabs, rollback disabled while draft is dirty, history page 2, discard, credential-removal cancellation and typed deletion guard.
 - Local visual harness blocks all non-GET requests. Settings uses explicitly synthetic masked connection/history metadata. No real credential save/test, rollback or account deletion was performed for QA. Existing watchlist mount synchronization was not redesigned.
-- Public universe/sectors are genuine same-day archived responses: 568 tickers, 12 sector values. Coverage/catalog/source requests retain captured production HTTP 500, not invented healthy data. The Data comparison therefore demonstrates partial-failure recovery. Full live Data/catalog acceptance remains blocked by the separate backend incident.
+- Initial failure-state review used genuine same-day archived universe/sectors (568 tickers, 12 sector values) plus captured production HTTP 500 responses. A newly built PR #70 backend preview then returned HTTP 200 on all eight read-only health/data routes. Its responses supplied a second full-data comparison and catalog verification: 68 registered/52 implemented operators, 201 registered/45 implemented operands, 96.24% close coverage. This proves the preview instance and UI work, not that the earlier production cold-start failure is permanently repaired.
+- Full-data review exercised operator/operand tabs, implemented/all filters and source/signature disclosure. Legacy catalog rows include duplicate display names; UI keys use source identity rather than those names. The default filter explicitly selects implemented entries; all registered entries remain accessible.
 - Guide content retains its declared 2026-09-08 version; this pass does not claim a complete current-feature manual rewrite.
 - Focused checks: guide navigation and saved-connection matching (8 tests), TypeScript, changed-file lint, design-system/token audit. Production build and release outcome are recorded below.
 - User visual approval remains separate from implementation, browser verification and release.
@@ -37,6 +38,8 @@ At 13:26 UTC, both frontend same-origin and backend health/data paths returned H
 Local delivery directory: `/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/`.
 
 Pairs: `guide-comparison-before-20261103.jpg` / `guide-after-20261103.jpg`, `data-comparison-before-20261103.jpg` / `data-after-20261103.jpg`, `methodology-comparison-before-20261103.jpg` / `methodology-after-20261103.jpg`, `settings-comparison-before-20261103.jpg` / `settings-after-20261103.jpg`. Methodology pair uses the same Backtest view, with one formula opened after refinement to show disclosure behavior.
+
+Additional full-data pair: `data-loaded-before-20261103.jpg` / `data-loaded-after-20261103.jpg`, captured with identical real preview responses. `methodology-operators-after-20261103.jpg` shows the live-catalog-backed operator signature and implementation disclosure.
 
 ## Release
 

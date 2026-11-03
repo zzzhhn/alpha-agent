@@ -21,7 +21,7 @@ export function OperandCatalog({ catalog }: { catalog: OperandCatalogResponse })
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [tab, setTab] = useState<Tab>("operators");
-  const [tier, setTier] = useState("all");
+  const [tier, setTier] = useState("available");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const operatorsLabel = zh ? "算子" : "Operators";
@@ -29,13 +29,15 @@ export function OperandCatalog({ catalog }: { catalog: OperandCatalogResponse })
   const activeLabel = tab === "operators" ? operatorsLabel : operandsLabel;
   const labelCategory = (category: string) => (zh ? CATEGORIES[category] : undefined) ?? category.replaceAll("_", " ");
   const rows = (tab === "operators"
-    ? catalog.operators.map((item) => ({
+    ? catalog.operators.map((item, index) => ({
       ...item,
+      rowKey: `operator:${index}`,
       example: item.example ?? item.signature ?? `${item.name}(…)`,
       detail: zh ? item.description_zh || item.function_zh || item.description_en : item.description_en || item.description_zh || item.function_zh,
     }))
-    : catalog.operands.map((item) => ({
+    : catalog.operands.map((item, index) => ({
       ...item,
+      rowKey: `operand:${index}`,
       category: item.category ?? "other",
       example: zh ? item.usage_zh || item.unit : item.unit || item.usage_zh,
       detail: zh ? item.description_zh || item.description_en : item.description_en || item.description_zh,
@@ -78,7 +80,7 @@ export function OperandCatalog({ catalog }: { catalog: OperandCatalogResponse })
             {visible.length > 0 ? (
               <ul aria-label={activeLabel} className="grid gap-px bg-tm-rule sm:grid-cols-2 xl:grid-cols-4">
                 {visible.map((row) => (
-                  <li key={row.name} className="min-w-0 bg-tm-bg">
+                  <li key={row.rowKey} className="min-w-0 bg-tm-bg">
                     <details className="group px-3 py-2.5">
                       <summary className="cursor-pointer font-tm-mono text-xs leading-5 text-tm-fg-2 focus-visible:outline focus-visible:outline-tm-accent">
                         <code className="break-all font-semibold text-tm-accent">{row.name}</code>
