@@ -1,6 +1,9 @@
 "use client";
 
 import clsx from "clsx";
+import { useState } from "react";
+import { EvolutionPagination } from "./EvolutionPagination";
+import { evolutionPage } from "./review-state";
 import type { EvolutionChange } from "@/lib/api/evolution";
 import { t, type Locale } from "@/lib/i18n";
 import { formatUtc8DateTime } from "@/lib/format-datetime";
@@ -52,7 +55,7 @@ function IcAroundCell({ change }: { change: EvolutionChange }) {
   const b = change.ic_before;
   const a = change.ic_after;
   if (b == null && a == null) {
-    return <span className="text-tm-muted">—</span>;
+    return <span className="text-tm-muted">{change.signal ? `— · ${change.signal}` : "—"}</span>;
   }
   const fmt = (v: number | null | undefined) =>
     v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(3)}`;
@@ -126,6 +129,8 @@ export function ChangeHistoryTable({
   changes: EvolutionChange[];
   locale: Locale;
 }) {
+  const [requestedPage, setPage] = useState(1);
+  const { page, visible } = evolutionPage(changes, requestedPage);
   if (changes.length === 0) {
     return (
       <p className="px-1 py-4 font-tm-mono text-xs text-tm-muted text-center">
@@ -135,6 +140,7 @@ export function ChangeHistoryTable({
   }
 
   return (
+    <>
     <TmTableFrame>
       <TmTable
         density="compact"
@@ -152,7 +158,7 @@ export function ChangeHistoryTable({
           </TmTableRow>
         </TmTableHead>
         <TmTableBody>
-          {changes.map((change) => {
+          {visible.map((change) => {
             const baselineIc = parseBaselineIc(change.new_value);
             const isRollback = change.source === "auto_rollback";
 
@@ -199,5 +205,7 @@ export function ChangeHistoryTable({
         </TmTableBody>
       </TmTable>
     </TmTableFrame>
+    <EvolutionPagination locale={locale} label={locale === "zh" ? "变更账本分页" : "Change ledger pagination"} page={page} total={changes.length} onPageChange={setPage} />
+    </>
   );
 }

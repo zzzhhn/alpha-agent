@@ -248,3 +248,10 @@ the user corrections, verified causes and remaining evidence limits.
 
 Future incidents of these same families extend the linked catalog. Do not add
 duplicate always-loaded AGENTS rules or new skills for each instance.
+
+### 10.2 Advanced research refinement, 2026-11-03
+
+- Zoo opens on the local factor catalog. Search, direction/status filters, saved-metric sorting and 5/10-row pagination share the existing table and field grammar. Long expressions open in a dialog; deletion requires confirmation and reports storage failure. Curated historical examples are labeled, not presented as current backtests or server-synchronized assets. Distribution/ranking charts need at least 10 recorded samples; smaller libraries retain explicit summary values without duplicated top/bottom lists. Correlation remains a separate on-demand calculation, capped at 20 most recently saved factors and disclosing its uniform long/short convention.
+- Evolution separates methodology-factor and strategy-parameter reviews. The header counts both loaded queues; failed requests remain unknown rather than zero. Missing IC observations use compact explanatory panes. Weight-state totals may overlap, and ledger promotions are historical events, not a conversion funnel. Review and history lists use five-row pages; diagnostics and secondary history remain discoverable disclosures.
+- BRAIN separates the new-run composer from the selected-run review. Family/grade/status labels are localized without changing API values. Successful LLM diagnostics are not rendered as warnings. Results default to ten rows with one expanded result; candidate audit also defaults to ten rows and discloses partial loading. Filtering and page changes reset incompatible detail state. Official submission acceptance is based on the response and stored BRAIN status, not merely a timestamp; HTTP success does not imply acceptance or ACTIVE status.
+- No new motion library, chart package, production polling, mining calls or database changes are introduced. The keep/refine/replace boundary and evidence limits are recorded in `2026-11-03-advanced-research-refinement.md`.

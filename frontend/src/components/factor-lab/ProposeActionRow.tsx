@@ -139,7 +139,7 @@ export function ProposeActionRow({ n = 5 }: ProposeActionRowProps) {
   return (
     <div className="flex flex-col gap-2">
       <TmButton
-        variant="primary"
+        variant="secondary"
         size="sm"
         onClick={handleClick}
         disabled={state.kind === "running"}

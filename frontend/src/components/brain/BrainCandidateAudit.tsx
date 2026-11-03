@@ -19,8 +19,10 @@ import {
   type BrainRunCandidatePage,
 } from "@/lib/api/brain";
 import { TmButton, TmIconButton, TmRowButton } from "@/components/tm/TmButton";
+import { TmPagination } from "@/components/tm/TmPagination";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 import { TmTooltip } from "@/components/tm/TmTooltip";
+import { familyLabel } from "./brain-review";
 
 type AuditFilter = "all" | "selected" | "withheld";
 
@@ -207,7 +209,7 @@ function CandidateRow({ candidate, zh }: { candidate: BrainRunCandidate; zh: boo
           {open ? <ChevronDown className="h-3 w-3 shrink-0 text-tm-muted" /> : <ChevronRight className="h-3 w-3 shrink-0 text-tm-muted" />}
           <code className="truncate font-tm-mono text-xs text-tm-fg">{candidate.expression}</code>
         </TmRowButton>
-        <span className="truncate font-tm-mono text-xs uppercase text-tm-fg-2" title={candidate.mechanism ?? undefined}>{candidate.mechanism || "—"}</span>
+        <span className="truncate font-tm-mono text-xs uppercase text-tm-fg-2" title={candidate.mechanism ?? undefined}>{candidate.mechanism ? familyLabel(candidate.mechanism, zh) : "—"}</span>
         <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg">{score(candidate.evidence_score)}</span>
         <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">{percent(evidence.coverage)}</span>
         <LlmState candidate={candidate} zh={zh} />
@@ -241,6 +243,8 @@ export function BrainCandidateAudit({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<AuditFilter>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const sequence = useRef(0);
 
   const load = useCallback(async () => {
@@ -269,6 +273,7 @@ export function BrainCandidateAudit({
     setData(null);
     setError(null);
     setFilter("all");
+    setPage(1);
     void load();
   }, [load]);
 
@@ -278,6 +283,11 @@ export function BrainCandidateAudit({
     if (filter === "withheld") return rows.filter((candidate) => !candidate.selected && candidate.status !== "generated");
     return rows;
   }, [data, filter]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(candidates.length / pageSize)));
+  const firstIndex = (currentPage - 1) * pageSize;
+  const visibleCandidates = candidates.slice(firstIndex, firstIndex + pageSize);
+  const loadedCount = data?.candidates.length ?? 0;
+  const partial = data != null && loadedCount < data.total;
   const selected = (data?.candidates ?? []).filter((candidate) => candidate.selected).length;
   const withheld = (data?.candidates ?? []).filter(
     (candidate) => !candidate.selected && candidate.status !== "generated",
@@ -370,7 +380,7 @@ export function BrainCandidateAudit({
       <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
         <TmToggleGroup<AuditFilter>
           value={filter}
-          onChange={setFilter}
+          onChange={(value) => { setFilter(value); setPage(1); }}
           ariaLabel={zh ? "候选审计筛选" : "Candidate audit filter"}
           options={[
             {
@@ -400,6 +410,14 @@ export function BrainCandidateAudit({
           {zh ? "刷新审计" : "refresh audit"}
         </TmButton>
       </div>
+
+      {partial && data ? (
+        <p className="border-b border-tm-rule px-3 py-2 text-xs text-tm-warn" role="status">
+          {zh
+            ? `已加载 ${loadedCount} / ${data.total} 条候选。筛选和分页仅适用于已加载候选。`
+            : `Loaded ${loadedCount} of ${data.total} candidates. Filters and pagination apply only to loaded candidates.`}
+        </p>
+      ) : null}
 
       {llmFallbacks > 0 ? (
         <div className="flex items-start gap-2 border-b border-tm-warn/40 bg-tm-warn/5 px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-warn" role="status">
@@ -451,21 +469,49 @@ export function BrainCandidateAudit({
               </TmTooltip>
               <span className="text-right">{zh ? "筛选结论" : "decision"}</span>
             </div>
-            {candidates.length > 0 ? (
-              <ul>
-                {candidates.map((candidate) => (
+            {visibleCandidates.length > 0 ? (
+              <ul key={`${runId}:${filter}:${currentPage}:${pageSize}`}>
+                {visibleCandidates.map((candidate) => (
                   <CandidateRow key={candidate.id} candidate={candidate} zh={zh} />
                 ))}
               </ul>
             ) : (
               <div className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
-                {zh ? "当前筛选条件下没有候选。" : "No candidates match this audit filter."}
+                {partial
+                  ? (zh ? "已加载候选中没有匹配项。" : "No loaded candidates match this filter.")
+                  : (zh ? "当前筛选条件下没有候选。" : "No candidates match this audit filter.")}
               </div>
             )}
           </div>
+          {candidates.length > 0 ? (
+            <TmPagination
+              page={page}
+              pageSize={pageSize}
+              totalItems={candidates.length}
+              pageSizeOptions={[5, 10, 20]}
+              labels={{
+                navigation: zh ? "候选审计分页" : "Candidate audit pagination",
+                previous: zh ? "上一页" : "Previous",
+                previousAriaLabel: zh ? "上一页" : "Previous page",
+                next: zh ? "下一页" : "Next",
+                nextAriaLabel: zh ? "下一页" : "Next page",
+                page: (current, total) => zh ? `第 ${current} / ${total} 页` : `Page ${current} / ${total}`,
+                pageSize: zh ? "每页" : "Rows",
+                total: (count) => zh
+                  ? `第 ${firstIndex + 1}–${firstIndex + visibleCandidates.length} 条，共 ${count} 条`
+                  : `${firstIndex + 1}–${firstIndex + visibleCandidates.length} of ${count}`,
+              }}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            />
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-tm-rule px-3 py-2 font-tm-mono text-xs text-tm-muted">
             <span>
-              {zh
+              {partial
+                ? (zh
+                  ? `已加载候选中，入选 ${selected} 条，未入选 ${withheld} 条。`
+                  : `Among loaded candidates, ${selected} selected and ${withheld} withheld.`)
+                : zh
                 ? `共 ${data.total} 条，入选 ${selected} 条，未入选 ${withheld} 条。`
                 : `${data.total} total, ${selected} selected, ${withheld} withheld.`}
             </span>

@@ -1,28 +1,6 @@
 "use client";
 
-/**
- * Factors / Zoo page — workstation port v2 (Stage 3 · 5/9, density rework).
- *
- * v1 was an OVERVIEW + table page. v2 turns the page into an analyst
- * dashboard with 6 client-side aggregations layered on top of the same
- * server data:
- *
- *   1. ZOO.OVERVIEW           — 8 KPIs (was 4): adds AVG_SHARPE, MEDIAN_IC,
- *                               STALE_30D, DIR_LS%
- *   2. PERF.LEADERBOARD       — TmCols2: TOP 5 / BOTTOM 5 by Sharpe
- *   3. OPS.USAGE | DIR.MIX    — TmCols2: terminal-style horizontal bars
- *                               (operator frequency + direction split)
- *   4. PERF.DIST              — 3 fixed-bin histograms (Sharpe / Return / IC)
- *                               via recharts in tm-* token palette
- *   5. STALE.FACTORS (cond.)  — ≥ 30d untouched + last_sharpe ≥ 0.5
- *                               ("forgotten champions" surfacing)
- *   6. ZOO.CATALOG            — gains chip filter (direction × status) +
- *                               sortable column headers + inline DIR badge
- *
- * All aggregations are pure-client from the merged entries[] array. Zero
- * new backend endpoints. Server-merge logic, sessionStorage prefill keys,
- * removeFromZoo + refresh flow all preserved.
- */
+// Catalog-first workstation view. Analytics summarize stored snapshots, not a new backtest.
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -42,22 +20,11 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
 import { listZoo, removeFromZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
-import {
-  runZooCorrelation,
-  type DecayAlert,
-} from "@/lib/api";
+import { runZooCorrelation } from "@/lib/api";
 import type { ZooCorrelationResponse } from "@/lib/types";
 import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
-import {
-  TmSubbar,
-  TmSubbarKV,
-  TmSubbarSep,
-  TmSubbarSpacer,
-  TmStatusPill,
-  TmChip,
-} from "@/components/tm/TmSubbar";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
-import { TmButton, TmIconButton, TmRowButton } from "@/components/tm/TmButton";
+import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 import {
   TmTable,
   TmTableBody,
@@ -68,7 +35,9 @@ import {
   TmTableRow,
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
-import { SegmentedTabs, type SegmentedTabItem } from "@/components/ui/SegmentedTabs";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { ZooCatalog } from "@/components/zoo/ZooCatalog";
+import { isFiniteZooMetric } from "@/components/zoo/zoo-catalog";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
@@ -78,11 +47,9 @@ const STALE_DAY_THRESHOLD = 30;
 const STALE_SHARPE_THRESHOLD = 0.5;
 const TOP_K = 5;
 const OPS_TOP_N = 10;
-// Hide TIMELINE.ACTIVITY when fewer than this many entries exist.
-// 2 was picked after a real-world check: a single-entry timeline is
-// just one bar (no story), but 2+ entries already produce a readable
-// 1- or 2-week pulse worth surfacing.
-const TIMELINE_MIN_ENTRIES = 2;
+const MIN_DISTRIBUTION_SAMPLES = 10;
+const MAX_CORRELATION_FACTORS = 20;
+const EMPTY_ENTRIES: readonly ZooEntry[] = [];
 
 // Fixed histogram bins — picked to span typical SP500 long_short Sharpe
 // (-1 → 3) and Compustat-era IC (-3% → 8%). Stable bin edges avoid the
@@ -134,7 +101,7 @@ function bucketize<T extends { lo: number; hi: number }>(
 ): readonly (T & { count: number })[] {
   return bins.map((b) => ({
     ...b,
-    count: values.filter((v) => v > b.lo && v <= b.hi).length,
+    count: values.filter((v) => v >= b.lo && v < b.hi).length,
   }));
 }
 
@@ -147,12 +114,12 @@ interface ActivityWeek {
   readonly count: number;
 }
 function mondayOf(d: Date): Date {
-  const day = d.getDay();
+  const day = d.getUTCDay();
   // 0 = Sunday → roll back 6; 1..6 → roll back day-1
   const offset = day === 0 ? 6 : day - 1;
   const monday = new Date(d);
-  monday.setDate(d.getDate() - offset);
-  monday.setHours(0, 0, 0, 0);
+  monday.setUTCDate(d.getUTCDate() - offset);
+  monday.setUTCHours(0, 0, 0, 0);
   return monday;
 }
 function bucketByWeek(entries: readonly ZooEntry[]): readonly ActivityWeek[] {
@@ -188,7 +155,6 @@ function bucketByWeek(entries: readonly ZooEntry[]): readonly ActivityWeek[] {
 interface Aggregates {
   readonly avgSharpe: number | null;
   readonly medianIC: number | null;
-  readonly staleCount: number;
   readonly dirSplit: ReadonlyMap<string, number>;
   readonly opsCount: ReadonlyArray<readonly [string, number]>;
   readonly top5: readonly ZooEntry[];
@@ -229,24 +195,19 @@ function computeAggregates(entries: readonly ZooEntry[]): Aggregates {
     .sort((a, b) => b[1] - a[1])
     .slice(0, OPS_TOP_N);
 
-  // Sort entries by sharpe (desc) for top/bottom; use -Infinity for missing
-  // so they sink to the bottom of the desc list (and "bottom" picks them up).
-  const sortedBySharpe = [...entries].sort(
-    (a, b) =>
-      (b.headlineMetrics?.testSharpe ?? -Infinity) -
-      (a.headlineMetrics?.testSharpe ?? -Infinity),
-  );
-  const ranked = sortedBySharpe.filter(
-    (e) => typeof e.headlineMetrics?.testSharpe === "number",
-  );
-  const top5 = ranked.slice(0, TOP_K);
-  const bottom5 = ranked.slice(-TOP_K).reverse();
+  const ranked = entries.flatMap((entry) => {
+    const sharpe = entry.headlineMetrics?.testSharpe;
+    return isFiniteZooMetric(sharpe) ? [{ entry, sharpe }] : [];
+  }).sort((a, b) => b.sharpe - a.sharpe).map(({ entry }) => entry);
+  // Separate leaderboards only when both can show distinct entries.
+  const top5 = ranked.length >= TOP_K * 2 ? ranked.slice(0, TOP_K) : [];
+  const bottom5 = ranked.length >= TOP_K * 2 ? ranked.slice(-TOP_K).reverse() : [];
 
   const staleEntries = entries.filter((e) => {
     const sharpe = e.headlineMetrics?.testSharpe;
     return (
       ageDays(e.savedAt) >= STALE_DAY_THRESHOLD &&
-      typeof sharpe === "number" &&
+      isFiniteZooMetric(sharpe) &&
       sharpe >= STALE_SHARPE_THRESHOLD
     );
   });
@@ -264,7 +225,6 @@ function computeAggregates(entries: readonly ZooEntry[]): Aggregates {
   return {
     avgSharpe: sharpes.length ? sharpes.reduce((a, b) => a + b, 0) / sharpes.length : null,
     medianIC: ics.length ? median(ics) : null,
-    staleCount: entries.filter((e) => ageDays(e.savedAt) >= STALE_DAY_THRESHOLD).length,
     dirSplit,
     opsCount,
     top5,
@@ -281,46 +241,21 @@ function computeAggregates(entries: readonly ZooEntry[]): Aggregates {
 
 /* ── Page ─────────────────────────────────────────────────────────── */
 
-type SortCol = "sharpe" | "return" | "ic" | "savedAt" | "name";
-type SortDir = "asc" | "desc";
-type DirFilter = "all" | "long_short" | "long_only" | "short_only";
-type StatusFilter = "all" | "decaying" | "stale" | "champion";
-const EMPTY_DECAY_ALERTS: readonly DecayAlert[] = [];
 
 export default function FactorsPage() {
   const { locale } = useLocale();
   const router = useRouter();
-  const [entries, setEntries] = useState<readonly ZooEntry[]>([]);
-  const [serverCount, setServerCount] = useState(0);
-  const [localCount, setLocalCount] = useState(0);
-  // Decay alerts come from the (currently disabled) factors_db backend; with
-  // that endpoint not enabled this is always empty. Kept as a typed constant so
-  // decayIds + the row decay markers still resolve (to "none decaying").
-  const decay = EMPTY_DECAY_ALERTS;
-
-  async function refresh() {
-    // Cold-start seed before the first Zoo read so a new user sees the
-    // curated factors instead of an empty Zoo. Flag-guarded → no-op after.
-    seedZooIfFirstRun();
-    // The Factor Zoo is localStorage-backed. The server-side saved-factors +
-    // decay-alerts endpoints (the factors_db backend router) are not enabled,
-    // so calling them only 404'd on every load with no functional effect (the
-    // page already fell back to the local Zoo). Read the local Zoo directly.
-    const local = listZoo();
-    setEntries(local);
-    setLocalCount(local.length);
-    setServerCount(0);
-  }
+  const zh = locale === "zh";
+  const [storedEntries, setEntries] = useState<readonly ZooEntry[] | null>(null);
+  const entries = storedEntries ?? EMPTY_ENTRIES;
+  const [prefillError, setPrefillError] = useState(false);
 
   useEffect(() => {
-    void refresh();
+    seedZooIfFirstRun();
+    setEntries(listZoo());
   }, []);
 
   const aggregates = useMemo(() => computeAggregates(entries), [entries]);
-  const decayIds = useMemo(
-    () => new Set(decay.map((d) => d.factor_id)),
-    [decay],
-  );
   const staleIds = useMemo(
     () => new Set(aggregates.staleEntries.map((e) => e.id)),
     [aggregates.staleEntries],
@@ -347,8 +282,10 @@ export default function FactorsPage() {
         }),
       );
     } catch {
-      /* ignore */
+      setPrefillError(true);
+      return;
     }
+    setPrefillError(false);
     router.push("/backtest");
   }
 
@@ -360,8 +297,10 @@ export default function FactorsPage() {
         JSON.stringify(e),
       );
     } catch {
-      /* ignore */
+      setPrefillError(true);
+      return;
     }
+    setPrefillError(false);
     router.push("/report");
   }
 
@@ -373,335 +312,186 @@ export default function FactorsPage() {
         JSON.stringify({ ids: [e.id] }),
       );
     } catch {
-      /* ignore */
+      setPrefillError(true);
+      return;
     }
+    setPrefillError(false);
     router.push("/screener");
   }
 
+  const [zooView, setZooView] = useState<"analytics" | "manage">("manage");
+  const [corrLoading, setCorrLoading] = useState(false);
+  const [corrSnapshot, setCorrSnapshot] = useState<(
+    { result: ZooCorrelationResponse; error?: never } | { error: string; result?: never }
+  ) & { entries: readonly ZooEntry[] } | null>(null);
+  const currentCorrelation = corrSnapshot?.entries === entries ? corrSnapshot : null;
+  const corrResult = currentCorrelation?.result;
+  const corrError = currentCorrelation?.error;
+  const corrEntries = entries.slice(0, MAX_CORRELATION_FACTORS);
+
   function deleteEntry(id: string) {
     removeFromZoo(id);
-    void refresh();
+    const next = listZoo();
+    if (next.some((entry) => entry.id === id)) return false;
+    setEntries(next);
+    setCorrSnapshot(null);
+    return true;
   }
-
-  /* ── correlation panel ────────────────────────────────────────── */
-  // ALPHACORE design (zoo block): split the page into analytics / manage tabs.
-  // Analytics (the dashboard) is the default; manage holds the factor catalog +
-  // correlation. Keeps the high-frequency view (analytics) front and centre and
-  // demotes the long catalog behind a tab, per the design's "次要信息收进标签页".
-  const [zooView, setZooView] = useState<"analytics" | "manage">("analytics");
-  const [corrLoading, setCorrLoading] = useState(false);
-  const [corrError, setCorrError] = useState<string | null>(null);
-  const [corrResult, setCorrResult] =
-    useState<ZooCorrelationResponse | null>(null);
 
   async function checkCorrelation() {
-    if (entries.length < 2) return;
-    // The correlation result lives in the MANAGE tab; the trigger is in the
-    // always-visible subbar, so switch the user there to see the result.
-    setZooView("manage");
+    if (corrEntries.length < 2 || corrLoading) return;
     setCorrLoading(true);
-    setCorrError(null);
-    setCorrResult(null);
-    const res = await runZooCorrelation({
-      factors: entries.map((e) => ({
-        spec: {
-          name: e.name,
-          hypothesis: e.hypothesis ?? "",
-          expression: e.expression,
-          operators_used: [...extractOps(e.expression)],
-          lookback: 12,
-          universe: "SP500",
-          justification: e.intuition ?? e.hypothesis ?? "zoo entry",
-        },
-        label: e.name,
-      })),
-    });
-    if (res.error || !res.data) {
-      setCorrError(res.error ?? "unknown error");
-    } else {
-      setCorrResult(res.data);
+    setCorrSnapshot(null);
+    try {
+      const res = await runZooCorrelation({
+        factors: corrEntries.map((entry) => ({
+          spec: {
+            name: entry.name,
+            hypothesis: entry.hypothesis ?? "",
+            expression: entry.expression,
+            operators_used: [...extractOps(entry.expression)],
+            lookback: 12,
+            universe: "SP500",
+            justification: entry.intuition ?? entry.hypothesis ?? "zoo entry",
+          },
+          label: entry.name,
+        })),
+      });
+      if (res.error || !res.data) setCorrSnapshot({ entries, error: res.error ?? (zh ? "未返回结果。" : "No result returned.") });
+      else setCorrSnapshot({ entries, result: res.data });
+    } catch {
+      setCorrSnapshot({ entries, error: zh ? "未能读取计算结果。" : "Could not read the correlation result." });
+    } finally {
+      setCorrLoading(false);
     }
-    setCorrLoading(false);
   }
 
-  const dirLsPct =
-    entries.length > 0
-      ? Math.round(((aggregates.dirSplit.get("long_short") ?? 0) / entries.length) * 100)
-      : 0;
+  const distributions = [
+    { title: zh ? "测试夏普" : "Test Sharpe", data: aggregates.sharpeDist, accent: "var(--tm-accent)" },
+    { title: zh ? "总收益" : "Total return", data: aggregates.returnDist, accent: "var(--tm-pos)" },
+    { title: "IC", data: aggregates.icDist, accent: "var(--tm-info)" },
+  ].map((item) => ({ ...item, samples: item.data.reduce((sum, bin) => sum + bin.count, 0) }));
 
   return (
-    <TmScreen>
+    <TmScreen className="!h-auto min-h-full">
       <WorkbenchHeader
-        eyebrow={locale === "zh" ? "研究 · 因子资产" : "Research · Factor assets"}
-        title={locale === "zh" ? "因子库" : "Factor Zoo"}
-        subtitle={locale === "zh" ? "比较绩效、衰减与相关性，管理可复用研究资产。" : "Compare performance, decay, and correlation across reusable research assets."}
+        eyebrow={zh ? "研究 · 因子资产" : "Research · Factor assets"}
+        title={zh ? "因子库" : "Factor Zoo"}
+        subtitle={zh ? "复用本地因子，比较保存时的回测快照。" : "Reuse local factors and compare saved backtest snapshots."}
         statuses={[
-          { label: locale === "zh" ? "因子总数" : "Entries", value: String(entries.length) },
-          { label: locale === "zh" ? "衰减" : "Decaying", value: String(decay.length), tone: decay.length > 0 ? "warning" : "positive" },
-          { label: locale === "zh" ? "过期" : "Stale", value: String(aggregates.staleEntries.length), tone: aggregates.staleEntries.length > 0 ? "warning" : "positive" },
+          { label: zh ? "本地因子" : "Local factors", value: storedEntries ? String(entries.length) : "—" },
+          ...(staleIds.size ? [{ label: zh ? "待复测" : "Review due", value: String(staleIds.size), tone: "warning" as const }] : []),
         ]}
       />
-      <TmSubbar>
-        <span className="text-tm-muted">FACTORS · ZOO</span>
-        <TmSubbarSep />
-        <TmSubbarKV label="ENTRIES" value={entries.length.toString()} />
-        <TmSubbarSep />
-        <TmSubbarKV label="SERVER" value={serverCount.toString()} />
-        <TmSubbarSep />
-        <TmSubbarKV label="LOCAL" value={localCount.toString()} />
-        <TmSubbarSpacer />
-        {decay.length > 0 && (
-          <TmStatusPill tone="warn">
-            <GlossaryTip term="DECAYING" underline={false}>
-              {`${decay.length} DECAYING`}
-            </GlossaryTip>
-          </TmStatusPill>
-        )}
-        {aggregates.staleEntries.length > 0 && (
-          <TmStatusPill tone="warn">
-            <GlossaryTip term="STALE" underline={false}>
-              {`${aggregates.staleEntries.length} STALE`}
-            </GlossaryTip>
-          </TmStatusPill>
-        )}
-        {corrLoading && <TmStatusPill tone="warn">RUNNING…</TmStatusPill>}
-        <TmButton
-          variant="primary"
-          onClick={checkCorrelation}
-          disabled={corrLoading || entries.length < 2}
-          className="-my-1"
-          title={
-            entries.length < 2
-              ? t(locale, "zoo.corr.disabledHint")
-              : undefined
-          }
-        >
-          {corrLoading
-            ? t(locale, "zoo.corr.running")
-            : t(locale, "zoo.corr.run")}
-        </TmButton>
-      </TmSubbar>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-y-2 bg-tm-bg-2">
+        <SegmentedTabs
+          idBase="zoo"
+          items={[
+            { key: "manage", label: zh ? "因子目录" : "Catalog" },
+            { key: "analytics", label: zh ? "库内分析" : "Library analysis" },
+          ]}
+          active={zooView}
+          onChange={setZooView}
+          ariaLabel={zh ? "因子库视图" : "Factor library view"}
+          className="min-w-0 !border-b-0 [&_button]:focus-visible:ring-1 [&_button]:focus-visible:ring-inset [&_button]:focus-visible:ring-tm-accent"
+        />
+        <div className="px-3 py-1">
+          <TmButton
+            size="sm"
+            onClick={() => {
+              setZooView("analytics");
+              document.getElementById("zoo-tab-analytics")?.focus();
+              void checkCorrelation();
+            }}
+            loading={corrLoading}
+            loadingLabel={t(locale, "zoo.corr.running")}
+            disabled={entries.length < 2}
+            title={entries.length < 2 ? t(locale, "zoo.corr.disabledHint") : undefined}
+          >
+            {entries.length > MAX_CORRELATION_FACTORS
+              ? (zh ? `检查最近 ${MAX_CORRELATION_FACTORS} 个因子` : `Check correlation · latest ${MAX_CORRELATION_FACTORS}`)
+              : t(locale, "zoo.corr.run")}
+          </TmButton>
+        </div>
+      </div>
 
-      {/* manage / analytics tab bar — high-affordance segmented control */}
-      <SegmentedTabs
-        items={
-          [
-            { key: "analytics", label: locale === "zh" ? "分析" : "ANALYTICS" },
-            { key: "manage", label: locale === "zh" ? "管理" : "MANAGE" },
-          ] as ReadonlyArray<SegmentedTabItem<"analytics" | "manage">>
-        }
-        active={zooView}
-        onChange={setZooView}
-        ariaLabel={locale === "zh" ? "因子库视图" : "Factor zoo view"}
-      />
-
-      {zooView === "analytics" && (
-        <>
-      {/* 1. OVERVIEW — 8 KPIs */}
-      <TmPane
-        title="ZOO.OVERVIEW"
-        meta={`${entries.length} TOTAL · ${serverCount} SERVER · ${localCount} LOCAL`}
-      >
-        <TmKpiGrid>
-          <TmKpi label="ENTRIES" value={entries.length.toString()} sub="merged" />
-          <TmKpi
-            label="DECAYING"
-            value={decay.length.toString()}
-            tone={decay.length > 0 ? "warn" : "default"}
-            sub="IC drop ≥ 50%"
-          />
-          <TmKpi label="FROM_SERVER" value={serverCount.toString()} sub="auto-saved" />
-          <TmKpi label="FROM_LOCAL" value={localCount.toString()} sub="offline-only" />
-          <TmKpi
-            label="AVG_SHARPE"
-            value={aggregates.avgSharpe != null ? aggregates.avgSharpe.toFixed(2) : "—"}
-            tone={
-              aggregates.avgSharpe == null
-                ? "default"
-                : aggregates.avgSharpe > 0
-                  ? "pos"
-                  : "neg"
-            }
-            sub="test"
-          />
-          <TmKpi
-            label="MEDIAN_IC"
-            value={aggregates.medianIC != null ? `${(aggregates.medianIC * 100).toFixed(2)}%` : "—"}
-            tone={
-              aggregates.medianIC == null
-                ? "default"
-                : aggregates.medianIC > 0
-                  ? "pos"
-                  : "neg"
-            }
-            sub="spearman"
-          />
-          <TmKpi
-            label="STALE_30D"
-            value={aggregates.staleCount.toString()}
-            tone={aggregates.staleCount > 0 ? "warn" : "default"}
-            sub="≥30d untouched"
-          />
-          <TmKpi
-            label="DIR_LS"
-            value={`${dirLsPct}%`}
-            sub="long_short share"
-          />
-        </TmKpiGrid>
-      </TmPane>
-
-      {/* 2. PERF.LEADERBOARD */}
-      {entries.length > 0 && (aggregates.top5.length > 0 || aggregates.bottom5.length > 0) && (
-        <TmCols2>
-          <LeaderSide
-            title="TOP 5 SHARPE"
-            tone="pos"
-            entries={aggregates.top5}
-            onPick={loadIntoBacktest}
-          />
-          <LeaderSide
-            title="BOTTOM 5 SHARPE"
-            tone="neg"
-            entries={aggregates.bottom5}
-            onPick={loadIntoBacktest}
-          />
-        </TmCols2>
+      {prefillError && (
+        <p role="alert" className="border-b border-tm-rule px-3 py-2 text-xs text-tm-neg">
+          {zh ? "未能传递因子。请允许此浏览器使用会话存储后重试。" : "Could not pass the factor to the next page. Allow session storage in this browser and try again."}
+        </p>
       )}
+      <div id="zoo-panel-manage" role="tabpanel" aria-labelledby="zoo-tab-manage" hidden={zooView !== "manage"}>
+        <ZooCatalog
+          entries={storedEntries}
+          staleIds={staleIds}
+          locale={locale}
+          onLoadBacktest={loadIntoBacktest}
+          onLoadReport={loadIntoReport}
+          onLoadScreener={loadIntoScreener}
+          onDelete={deleteEntry}
+        />
+      </div>
 
-      {/* 3. OPS.USAGE | DIR.MIX */}
-      {entries.length > 0 && (
-        <TmCols2>
-          <OperatorUsagePane opsCount={aggregates.opsCount} totalEntries={entries.length} />
-          <DirectionMixPane dirSplit={aggregates.dirSplit} totalEntries={entries.length} />
-        </TmCols2>
-      )}
-
-      {/* 4. PERF.DIST */}
-      {entries.length > 0 && (
-        <TmPane
-          title="PERF.DIST"
-          meta={`${entries.length} ENTRIES · 3 METRICS`}
-        >
-          <div className="grid grid-cols-1 gap-px bg-tm-rule lg:grid-cols-3">
-            <DistChart title="SHARPE" data={aggregates.sharpeDist} accent="var(--tm-accent)" />
-            <DistChart title="TOTAL RETURN" data={aggregates.returnDist} accent="var(--tm-pos)" />
-            <DistChart title="IC" data={aggregates.icDist} accent="var(--tm-info)" />
-          </div>
-        </TmPane>
-      )}
-
-      {/* 7. TIMELINE.ACTIVITY — only when ≥5 entries (sparkline of fewer
-          weeks is meaningless and looks empty). savedAt reflects most-
-          recent touch (created_at fallback) so this is "factor activity
-          heartbeat", not just minting rate. */}
-      {entries.length >= TIMELINE_MIN_ENTRIES &&
-        aggregates.activityWeeks.length > 0 && (
-          <TimelineActivityPane
-            weeks={aggregates.activityWeeks}
-            activeWeekCount={aggregates.activeWeekCount}
-            peakWeek={aggregates.peakWeek}
-            totalEntries={entries.length}
-          />
-        )}
-
-      {/* DECAY.ALERTS (existing) */}
-      {decay.length > 0 && (
-        <TmPane
-          title="DECAY.ALERTS"
-          meta={`${decay.length} FACTOR${decay.length === 1 ? "" : "S"}`}
-        >
-          <ul className="flex flex-col">
-            {decay.map((d) => (
-              <li
-                key={d.factor_id}
-                className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs last:border-b-0"
-              >
-                <span className="text-tm-warn">▸</span>
-                <span className="text-tm-fg">{d.name}</span>
-                <span className="text-tm-muted">IC</span>
-                <span className="tabular-nums text-tm-fg-2">
-                  {(d.baseline_ic * 100).toFixed(2)}%
-                </span>
-                <span className="text-tm-muted">→</span>
-                <span className="tabular-nums text-tm-neg">
-                  {(d.latest_ic * 100).toFixed(2)}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </TmPane>
-      )}
-
-      {/* 5. STALE.FACTORS — forgotten champions */}
-      {aggregates.staleEntries.length > 0 && (
-        <TmPane
-          title="STALE.FACTORS"
-          meta={`${aggregates.staleEntries.length} FORGOTTEN · ≥${STALE_DAY_THRESHOLD}d & SHARPE ≥ ${STALE_SHARPE_THRESHOLD}`}
-        >
-          <ul className="flex flex-col">
-            {aggregates.staleEntries.map((e) => (
-              <li
-                key={e.id}
-                className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-3 py-1.5 font-tm-mono text-xs last:border-b-0"
-              >
-                <span className="text-tm-info">⏱</span>
-                <span className="flex-1 truncate text-tm-fg">{e.name}</span>
-                <span className="text-tm-muted">AGE</span>
-                <span className="tabular-nums text-tm-fg-2">
-                  {Math.round(ageDays(e.savedAt))}d
-                </span>
-                <span className="text-tm-muted">SHARPE</span>
-                <span className="tabular-nums text-tm-pos">
-                  {(e.headlineMetrics?.testSharpe ?? 0).toFixed(2)}
-                </span>
-                <TmButton
-                  variant="ghost"
-                  onClick={() => loadIntoBacktest(e)}
-                  className="h-6 px-1.5 text-xs"
+      <div id="zoo-panel-analytics" role="tabpanel" aria-labelledby="zoo-tab-analytics" hidden={zooView !== "analytics"}>
+        {zooView === "analytics" && (
+          <div className="min-w-0 [&>*+*]:border-t [&>*+*]:border-tm-rule">
+            <TmPane title="CORRELATION" meta={corrResult
+              ? (zh ? `${corrResult.names.length} 个因子 · 面板 ${corrResult.n_sessions} 个交易日` : `${corrResult.names.length} factors · ${corrResult.n_sessions} panel sessions`)
+              : undefined}>
+              <p className="border-b border-tm-rule px-3 py-2 text-xs leading-5 text-tm-muted">
+                {entries.length < 2 ? t(locale, "zoo.corr.disabledHint") : zh
+                  ? `按统一的等权多空口径计算日收益相关性（做多前 30%、做空后 30%），不使用各自保存的回测设置。${entries.length > MAX_CORRELATION_FACTORS ? ` 本次范围为最近保存的 ${MAX_CORRELATION_FACTORS} / ${entries.length} 个因子。` : ""}`
+                  : `Uses one equal-weight long/short strategy (top and bottom 30%) for all expressions, not each factor's saved settings.${entries.length > MAX_CORRELATION_FACTORS ? ` Includes the ${MAX_CORRELATION_FACTORS} most recently saved of ${entries.length} factors.` : ""}`}
+              </p>
+              {corrLoading && <p role="status" className="px-3 py-3 text-xs text-tm-muted">{t(locale, "zoo.corr.running")}</p>}
+              {corrError && (
+                <div role="alert" className="px-3 py-3 text-xs text-tm-neg">
+                  <p>{zh ? "相关性计算失败，请重试。" : "Correlation check failed. Try again."}</p>
+                  <p className="mt-1 break-words text-tm-muted">{corrError}</p>
+                </div>
+              )}
+              {corrResult && <CorrelationPanel data={corrResult} />}
+            </TmPane>
+            {entries.length > 0 && (
+              <>
+                <TmPane
+                  title={zh ? "保存指标概览" : "Saved metrics"}
+                  meta={zh ? "仅描述已记录值，不代表当前回测" : "Recorded values only · not a current backtest"}
                 >
-                  re-run
-                </TmButton>
-              </li>
-            ))}
-          </ul>
-        </TmPane>
-      )}
-        </>
-      )}
-
-      {zooView === "manage" && (
-        <>
-      {/* 6. CATALOG (with chip filter + sort) */}
-      <ZooCatalogPane
-        entries={entries}
-        decayIds={decayIds}
-        staleIds={staleIds}
-        locale={locale}
-        onLoadBacktest={loadIntoBacktest}
-        onLoadReport={loadIntoReport}
-        onLoadScreener={loadIntoScreener}
-        onDelete={deleteEntry}
-      />
-
-      {(corrError || corrResult) && (
-        <TmPane
-          title="CORRELATION"
-          meta={
-            corrResult
-              ? `${corrResult.names.length} FACTORS · ${corrResult.n_sessions} SESSIONS`
-              : undefined
-          }
-        >
-          {corrError && (
-            <p className="px-3 py-2.5 font-tm-mono text-xs text-tm-neg">
-              {corrError}
-            </p>
-          )}
-          {corrResult && <CorrelationPanel data={corrResult} />}
-        </TmPane>
-      )}
-        </>
-      )}
+                  <TmKpiGrid>
+                    <TmKpi label={zh ? "平均测试夏普" : "Mean test Sharpe"} value={aggregates.avgSharpe?.toFixed(2) ?? "—"}
+                      sub={zh ? `已记录 ${distributions[0].samples} / ${entries.length}` : `${distributions[0].samples} / ${entries.length} recorded`} />
+                    <TmKpi label={zh ? "测试 IC 中位数" : "Median test IC"} value={aggregates.medianIC?.toFixed(3) ?? "—"}
+                      sub={zh ? `已记录 ${distributions[2].samples} / ${entries.length}` : `${distributions[2].samples} / ${entries.length} recorded`} />
+                  </TmKpiGrid>
+                </TmPane>
+                {aggregates.bottom5.length > 0 && (
+                  <TmCols2>
+                    <LeaderSide title={zh ? "测试夏普前 5" : "Top 5 test Sharpe"} tone="pos" entries={aggregates.top5} onPick={loadIntoBacktest} />
+                    <LeaderSide title={zh ? "测试夏普后 5" : "Bottom 5 test Sharpe"} tone="neg" entries={aggregates.bottom5} onPick={loadIntoBacktest} />
+                  </TmCols2>
+                )}
+                <TmCols2>
+                  <OperatorUsagePane opsCount={aggregates.opsCount} totalEntries={entries.length} />
+                  <DirectionMixPane dirSplit={aggregates.dirSplit} totalEntries={entries.length} />
+                </TmCols2>
+                <TmPane title="PERF.DIST">
+                  <div className="grid grid-cols-1 gap-px bg-tm-rule xl:grid-cols-3">
+                    {distributions.map(({ title, data, accent, samples }) => samples >= MIN_DISTRIBUTION_SAMPLES
+                      ? <DistChart key={title} title={title} data={data} accent={accent} />
+                      : <p key={title} className="bg-tm-bg px-3 py-3 text-xs text-tm-muted">
+                          {zh ? `${title}：${samples} 个已记录，满 ${MIN_DISTRIBUTION_SAMPLES} 个后显示分布。` : `${title}: ${samples} recorded; distribution shown from ${MIN_DISTRIBUTION_SAMPLES} values.`}
+                        </p>)}
+                  </div>
+                </TmPane>
+                {aggregates.activeWeekCount > 1 && (
+                  <TimelineActivityPane weeks={aggregates.activityWeeks} activeWeekCount={aggregates.activeWeekCount} peakWeek={aggregates.peakWeek} totalEntries={aggregates.activityWeeks.reduce((sum, week) => sum + week.count, 0)} />
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </TmScreen>
   );
 }
@@ -719,12 +509,14 @@ function LeaderSide({
   readonly entries: readonly ZooEntry[];
   readonly onPick: (e: ZooEntry) => void;
 }) {
-  const accentClass = tone === "pos" ? "text-tm-pos" : "text-tm-neg";
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const accentClass = tone === "pos" ? "text-tm-accent" : "text-tm-fg-2";
   return (
-    <TmPane title={title} meta={`${entries.length} SHOWN`}>
+    <TmPane title={title} className="min-w-0">
       {entries.length === 0 ? (
         <p className="px-3 py-3 font-tm-mono text-xs text-tm-muted">
-          no ranked entries.
+          {zh ? "没有可排名的因子。" : "No ranked factors."}
         </p>
       ) : (
         <div
@@ -732,17 +524,17 @@ function LeaderSide({
           style={{ gridTemplateColumns: "32px 1fr 64px 64px 60px" }}
         >
           <HCell>#</HCell>
-          <HCell>NAME</HCell>
+          <HCell>{t(locale, "zoo.colName")}</HCell>
           <HCell align="right">
-            <GlossaryTip term="SHARPE">SHARPE</GlossaryTip>
+            <GlossaryTip term="SHARPE">{zh ? "夏普" : "Sharpe"}</GlossaryTip>
           </HCell>
           <HCell align="right">
             <GlossaryTip term="IC">IC</GlossaryTip>
           </HCell>
-          <HCell align="right">ACT</HCell>
+          <HCell align="right">{zh ? "回测" : "Test"}</HCell>
           {entries.map((e, i) => {
-            const sh = e.headlineMetrics?.testSharpe ?? 0;
-            const ic = e.headlineMetrics?.testIc ?? 0;
+            const sh = e.headlineMetrics?.testSharpe;
+            const ic = e.headlineMetrics?.testIc;
             return (
               <LeaderRow
                 key={e.id}
@@ -752,6 +544,7 @@ function LeaderSide({
                 sharpe={sh}
                 ic={ic}
                 accentClass={accentClass}
+                actionLabel={t(locale, "zoo.actLoadBacktest")}
                 onPick={() => onPick(e)}
               />
             );
@@ -769,14 +562,16 @@ function LeaderRow({
   sharpe,
   ic,
   accentClass,
+  actionLabel,
   onPick,
 }: {
   readonly rank: number;
   readonly name: string;
   readonly expr: string;
-  readonly sharpe: number;
-  readonly ic: number;
+  readonly sharpe: number | undefined;
+  readonly ic: number | undefined;
   readonly accentClass: string;
+  readonly actionLabel: string;
   readonly onPick: () => void;
 }) {
   return (
@@ -788,15 +583,15 @@ function LeaderRow({
         </span>
       </DCell>
       <DCell align="right">
-        <span className={`tabular-nums ${accentClass}`}>{sharpe.toFixed(2)}</span>
+        <span className={`tabular-nums ${accentClass}`}>{isFiniteZooMetric(sharpe) ? sharpe.toFixed(2) : "—"}</span>
       </DCell>
       <DCell align="right">
-        <span className="tabular-nums text-tm-fg-2">{ic.toFixed(3)}</span>
+        <span className="tabular-nums text-tm-fg-2">{isFiniteZooMetric(ic) ? ic.toFixed(3) : "—"}</span>
       </DCell>
       <DCell align="right">
         <TmIconButton
           onClick={onPick}
-          label={name}
+          label={`${actionLabel}: ${name}`}
           variant="ghost"
           icon={<span aria-hidden="true">▶</span>}
         />
@@ -814,17 +609,17 @@ function OperatorUsagePane({
   readonly opsCount: ReadonlyArray<readonly [string, number]>;
   readonly totalEntries: number;
 }) {
-  const max = opsCount.reduce((m, [, c]) => Math.max(m, c), 0) || 1;
+  const { locale } = useLocale();
+  const zh = locale === "zh";
   return (
-    <TmPane title="OPS.USAGE" meta={`TOP ${opsCount.length} OF UNIQUE OPS`}>
+    <TmPane title="OPS.USAGE" meta={zh ? "按因子出现次数" : "By number of factors"}>
       {opsCount.length === 0 ? (
         <p className="px-3 py-3 font-tm-mono text-xs text-tm-muted">
-          no operators detected.
+          {zh ? "未发现运算符。" : "No operators detected."}
         </p>
       ) : (
         <ul className="flex flex-col">
           {opsCount.map(([op, count]) => {
-            const widthPct = (count / max) * 100;
             const sharePct = totalEntries > 0 ? (count / totalEntries) * 100 : 0;
             return (
               <li
@@ -838,7 +633,7 @@ function OperatorUsagePane({
                 <div className="relative h-3 w-full bg-tm-bg-2">
                   <div
                     className="h-full bg-tm-accent-soft"
-                    style={{ width: `${widthPct}%` }}
+                    style={{ width: `${sharePct}%` }}
                   />
                 </div>
                 <span className="text-right font-tm-mono text-xs tabular-nums text-tm-fg-2">
@@ -863,6 +658,8 @@ function DirectionMixPane({
   readonly dirSplit: ReadonlyMap<string, number>;
   readonly totalEntries: number;
 }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
   // Static class strings (Tailwind only ships classes that appear
   // verbatim in source — `bg-${tone}` interpolation gets tree-shaken).
   const dirs: {
@@ -871,12 +668,12 @@ function DirectionMixPane({
     readonly textClass: string;
     readonly barClass: string;
   }[] = [
-    { code: "long_short", label: "LONG_SHORT", textClass: "text-tm-accent", barClass: "bg-tm-accent" },
-    { code: "long_only", label: "LONG_ONLY", textClass: "text-tm-pos", barClass: "bg-tm-pos" },
-    { code: "short_only", label: "SHORT_ONLY", textClass: "text-tm-neg", barClass: "bg-tm-neg" },
+    { code: "long_short", label: zh ? "多空" : "Long/short", textClass: "text-tm-accent", barClass: "bg-tm-accent" },
+    { code: "long_only", label: zh ? "仅多头" : "Long only", textClass: "text-tm-fg-2", barClass: "bg-tm-accent" },
+    { code: "short_only", label: zh ? "仅空头" : "Short only", textClass: "text-tm-fg-2", barClass: "bg-tm-accent" },
   ];
   return (
-    <TmPane title="DIR.MIX" meta={`${totalEntries} ENTRIES`}>
+    <TmPane title="DIR.MIX">
       <ul className="flex flex-col">
         {dirs.map((d) => {
           const count = dirSplit.get(d.code) ?? 0;
@@ -921,10 +718,12 @@ function DistChart({
   readonly data: readonly { label: string; count: number }[];
   readonly accent: string;
 }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
   return (
-    <div className="flex flex-col bg-tm-bg">
+    <div className="flex min-w-0 flex-col bg-tm-bg">
       <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted">
-        {title}
+        {title} · {zh ? `${data.reduce((sum, bin) => sum + bin.count, 0)} 个已记录` : `${data.reduce((sum, bin) => sum + bin.count, 0)} recorded`}
       </div>
       <div className="h-[180px] w-full px-1 pb-1 pt-2">
         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
@@ -950,7 +749,7 @@ function DistChart({
                 color: "var(--tm-fg)",
               }}
             />
-            <Bar dataKey="count" fill={accent}>
+            <Bar dataKey="count" name={zh ? "因子数" : "Factors"} fill={accent} isAnimationActive={false}>
               {data.map((_, i) => (
                 <Cell key={i} fill={accent} />
               ))}
@@ -975,6 +774,8 @@ function TimelineActivityPane({
   readonly peakWeek: { week: string; count: number } | null;
   readonly totalEntries: number;
 }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
   // Density caption: avg entries per ACTIVE week (not per total — would
   // suppress the signal once you have a few quiet stretches).
   const avgPerActiveWeek =
@@ -982,29 +783,28 @@ function TimelineActivityPane({
   return (
     <TmPane
       title="TIMELINE.ACTIVITY"
-      meta={`${weeks.length} WEEKS · ${activeWeekCount} ACTIVE`}
+      meta={zh ? "按目录记录的最后保存时间（UTC）" : "By latest save per catalog entry (UTC)"}
     >
       <TmKpiGrid>
         <TmKpi
-          label="WINDOW"
-          value={`${weeks.length}w`}
+          label={zh ? "统计周数" : "Weeks in window"}
+          value={weeks.length.toString()}
           sub={`${weeks[0].week} → ${weeks[weeks.length - 1].week}`}
         />
         <TmKpi
-          label="ACTIVE"
+          label={zh ? "有保存的周数" : "Active weeks"}
           value={activeWeekCount.toString()}
-          sub={`${((activeWeekCount / weeks.length) * 100).toFixed(0)}% of window`}
+          sub={zh ? `占统计窗口 ${((activeWeekCount / weeks.length) * 100).toFixed(0)}%` : `${((activeWeekCount / weeks.length) * 100).toFixed(0)}% of window`}
         />
         <TmKpi
-          label="PEAK"
+          label={zh ? "单周最多保存" : "Peak saves per week"}
           value={peakWeek ? peakWeek.count.toString() : "—"}
           tone={peakWeek ? "pos" : "default"}
-          sub={peakWeek ? peakWeek.week : "no activity"}
+          sub={peakWeek?.week}
         />
         <TmKpi
-          label="AVG / ACTIVE"
+          label={zh ? "活跃周平均保存" : "Mean per active week"}
           value={avgPerActiveWeek.toFixed(1)}
-          sub="entries per active week"
         />
       </TmKpiGrid>
 
@@ -1045,11 +845,12 @@ function TimelineActivityPane({
                 fontFamily: "var(--font-jetbrains-mono)",
                 color: "var(--tm-fg)",
               }}
-              labelFormatter={(label) => `Week of ${label}`}
+              labelFormatter={(label) => zh ? `${label} 当周` : `Week of ${label}`}
             />
             <Area
               type="monotone"
               dataKey="count"
+              name={zh ? "因子数" : "Factors"}
               stroke="var(--tm-accent)"
               strokeWidth={1.5}
               fill="url(#tm-activity-grad)"
@@ -1062,230 +863,6 @@ function TimelineActivityPane({
   );
 }
 
-/* ── Catalog with filter + sort ───────────────────────────────────── */
-
-function ZooCatalogPane({
-  entries,
-  decayIds,
-  staleIds,
-  locale,
-  onLoadBacktest,
-  onLoadReport,
-  onLoadScreener,
-  onDelete,
-}: {
-  readonly entries: readonly ZooEntry[];
-  readonly decayIds: ReadonlySet<string>;
-  readonly staleIds: ReadonlySet<string>;
-  readonly locale: "zh" | "en";
-  readonly onLoadBacktest: (e: ZooEntry) => void;
-  readonly onLoadReport: (e: ZooEntry) => void;
-  readonly onLoadScreener: (e: ZooEntry) => void;
-  readonly onDelete: (id: string) => void;
-}) {
-  const [dirFilter, setDirFilter] = useState<DirFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortCol, setSortCol] = useState<SortCol>("savedAt");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-
-  const filtered = useMemo(() => {
-    let xs = [...entries];
-    if (dirFilter !== "all") {
-      xs = xs.filter((e) => (e.direction ?? "long_short") === dirFilter);
-    }
-    if (statusFilter === "decaying") xs = xs.filter((e) => decayIds.has(e.id));
-    else if (statusFilter === "stale") xs = xs.filter((e) => staleIds.has(e.id));
-    else if (statusFilter === "champion") {
-      xs = xs.filter((e) => (e.headlineMetrics?.testSharpe ?? 0) >= 1.0);
-    }
-    xs.sort((a, b) => {
-      const sign = sortDir === "asc" ? 1 : -1;
-      switch (sortCol) {
-        case "sharpe":
-          return (
-            sign *
-            ((a.headlineMetrics?.testSharpe ?? -Infinity) -
-              (b.headlineMetrics?.testSharpe ?? -Infinity))
-          );
-        case "return":
-          return (
-            sign *
-            ((a.headlineMetrics?.totalReturn ?? -Infinity) -
-              (b.headlineMetrics?.totalReturn ?? -Infinity))
-          );
-        case "ic":
-          return (
-            sign *
-            ((a.headlineMetrics?.testIc ?? -Infinity) -
-              (b.headlineMetrics?.testIc ?? -Infinity))
-          );
-        case "name":
-          return sign * a.name.localeCompare(b.name);
-        case "savedAt":
-        default:
-          return sign * (new Date(a.savedAt).getTime() - new Date(b.savedAt).getTime());
-      }
-    });
-    return xs;
-  }, [entries, dirFilter, statusFilter, sortCol, sortDir, decayIds, staleIds]);
-
-  function toggleSort(col: SortCol) {
-    if (sortCol === col) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortCol(col);
-      setSortDir(col === "name" ? "asc" : "desc");
-    }
-  }
-
-  const dirChips: { code: DirFilter; label: string }[] = [
-    { code: "all", label: "all" },
-    { code: "long_short", label: "long_short" },
-    { code: "long_only", label: "long_only" },
-    { code: "short_only", label: "short_only" },
-  ];
-  const statusChips: { code: StatusFilter; label: string; tone?: "warn" }[] = [
-    { code: "all", label: "all" },
-    { code: "champion", label: `champion (≥1.0 SR)` },
-    { code: "decaying", label: "decaying", tone: "warn" },
-    { code: "stale", label: "stale", tone: "warn" },
-  ];
-
-  return (
-    <TmPane
-      title="ZOO.CATALOG"
-      meta={`${filtered.length}/${entries.length} ENTRIES`}
-    >
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-tm-rule bg-tm-bg-2 px-3 py-1.5">
-        <span className="font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-          DIR
-        </span>
-        {dirChips.map((c) => (
-          <TmChip
-            key={c.code}
-            on={dirFilter === c.code}
-            onClick={() => setDirFilter(c.code)}
-          >
-            {c.label}
-          </TmChip>
-        ))}
-        <span className="ml-3 font-tm-mono text-xs uppercase tracking-[0.06em] text-tm-muted">
-          STATUS
-        </span>
-        {statusChips.map((c) => (
-          <TmChip
-            key={c.code}
-            on={statusFilter === c.code}
-            tone={c.tone}
-            onClick={() => setStatusFilter(c.code)}
-          >
-            {c.label}
-          </TmChip>
-        ))}
-      </div>
-
-      {filtered.length === 0 ? (
-        <p className="px-3 py-6 text-center font-tm-mono text-xs text-tm-muted">
-          {entries.length === 0
-            ? t(locale, "zoo.empty")
-            : "no entries match the current filter."}
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <div
-            className="grid min-w-[1180px] gap-px bg-tm-rule"
-            style={{
-              gridTemplateColumns:
-                "minmax(140px, 180px) 60px minmax(220px, 1fr) 80px 80px 80px minmax(120px, 140px) minmax(280px, 320px)",
-            }}
-          >
-            <SortHeader col="name" current={sortCol} dir={sortDir} onClick={toggleSort}>
-              {t(locale, "zoo.colName")}
-            </SortHeader>
-            <Header>
-              <GlossaryTip term="DIR">DIR</GlossaryTip>
-            </Header>
-            <Header>{t(locale, "zoo.colExpr")}</Header>
-            <SortHeader col="sharpe" current={sortCol} dir={sortDir} onClick={toggleSort} align="right">
-              {t(locale, "zoo.colSharpe")}
-            </SortHeader>
-            <SortHeader col="return" current={sortCol} dir={sortDir} onClick={toggleSort} align="right">
-              {t(locale, "zoo.colReturn")}
-            </SortHeader>
-            <SortHeader col="ic" current={sortCol} dir={sortDir} onClick={toggleSort} align="right">
-              {t(locale, "zoo.colIc")}
-            </SortHeader>
-            <SortHeader col="savedAt" current={sortCol} dir={sortDir} onClick={toggleSort}>
-              {t(locale, "zoo.colSavedAt")}
-            </SortHeader>
-            <Header align="right">ACTIONS</Header>
-            {filtered.map((e) => (
-              <ZooRow
-                key={e.id}
-                entry={e}
-                locale={locale}
-                isDecaying={decayIds.has(e.id)}
-                isStale={staleIds.has(e.id)}
-                onLoadBacktest={() => onLoadBacktest(e)}
-                onLoadReport={() => onLoadReport(e)}
-                onLoadScreener={() => onLoadScreener(e)}
-                onDelete={() => onDelete(e.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </TmPane>
-  );
-}
-
-function Header({
-  children,
-  align = "left",
-}: {
-  readonly children: React.ReactNode;
-  readonly align?: "left" | "right";
-}) {
-  return (
-    <div
-      className={`bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-muted ${
-        align === "right" ? "text-right" : ""
-      }`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SortHeader({
-  children,
-  col,
-  current,
-  dir,
-  onClick,
-  align = "left",
-}: {
-  readonly children: React.ReactNode;
-  readonly col: SortCol;
-  readonly current: SortCol;
-  readonly dir: SortDir;
-  readonly onClick: (col: SortCol) => void;
-  readonly align?: "left" | "right";
-}) {
-  const active = col === current;
-  const arrow = active ? (dir === "asc" ? "▲" : "▼") : "·";
-  return (
-    <TmRowButton
-      onClick={() => onClick(col)}
-      className={`flex items-center gap-1 bg-tm-bg-2 px-2 py-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] hover:text-tm-fg ${
-        align === "right" ? "justify-end" : ""
-      } ${active ? "text-tm-accent" : "text-tm-muted"}`}
-    >
-      <span>{children}</span>
-      <span className="text-xs">{arrow}</span>
-    </TmRowButton>
-  );
-}
 
 function HCell({
   children,
@@ -1326,129 +903,8 @@ function DCell({
   );
 }
 
-function DirBadge({ direction }: { readonly direction: "long_short" | "long_only" | "short_only" }) {
-  const map = {
-    long_short: { label: "LS", tone: "text-tm-accent" },
-    long_only: { label: "LO", tone: "text-tm-pos" },
-    short_only: { label: "SO", tone: "text-tm-neg" },
-  } as const;
-  const { label, tone } = map[direction];
-  return (
-    <GlossaryTip term={label} underline={false}>
-      <span className={`inline-block border border-current px-1 py-px font-tm-mono text-xs tabular-nums ${tone}`}>
-        {label}
-      </span>
-    </GlossaryTip>
-  );
-}
 
-function ZooRow({
-  entry,
-  locale,
-  isDecaying,
-  isStale,
-  onLoadBacktest,
-  onLoadReport,
-  onLoadScreener,
-  onDelete,
-}: {
-  readonly entry: ZooEntry;
-  readonly locale: "zh" | "en";
-  readonly isDecaying: boolean;
-  readonly isStale: boolean;
-  readonly onLoadBacktest: () => void;
-  readonly onLoadReport: () => void;
-  readonly onLoadScreener: () => void;
-  readonly onDelete: () => void;
-}) {
-  const sharpe = entry.headlineMetrics?.testSharpe;
-  const totalRet = entry.headlineMetrics?.totalReturn;
-  const ic = entry.headlineMetrics?.testIc;
-  const dir = entry.direction ?? "long_short";
-  return (
-    <>
-      <div className="flex min-w-0 items-center gap-1.5 bg-tm-bg px-2 py-1 font-tm-mono text-xs">
-        <span className="truncate text-tm-accent">{entry.name}</span>
-        {isDecaying && (
-          <GlossaryTip term="DECAYING" underline={false}>
-            <span className="text-tm-warn">⚠</span>
-          </GlossaryTip>
-        )}
-        {isStale && (
-          <GlossaryTip term="STALE" underline={false}>
-            <span className="text-tm-info">⏱</span>
-          </GlossaryTip>
-        )}
-      </div>
-      <div className="flex items-center bg-tm-bg px-2 py-1">
-        <DirBadge direction={dir} />
-      </div>
-      <div
-        className="flex min-w-0 items-center bg-tm-bg px-2 py-1 font-tm-mono text-xs"
-        title={entry.expression}
-      >
-        <span className="block truncate text-tm-fg-2">{entry.expression}</span>
-      </div>
-      <NumCell value={sharpe} format={(v) => v.toFixed(2)} />
-      <NumCell value={totalRet} format={(v) => `${(v * 100).toFixed(1)}%`} />
-      <NumCell value={ic} format={(v) => v.toFixed(3)} />
-      <DCell>
-        <span className="text-tm-muted">
-          {new Date(entry.savedAt).toLocaleString(
-            locale === "zh" ? "zh-CN" : "en-US",
-            {
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            },
-          )}
-        </span>
-      </DCell>
-      <DCell align="right">
-        <div className="flex justify-end gap-1">
-          <TmButton variant="ghost" onClick={onLoadBacktest} className="h-6 px-1.5 text-xs">
-            {t(locale, "zoo.actLoadBacktest")}
-          </TmButton>
-          <TmButton variant="ghost" onClick={onLoadReport} className="h-6 px-1.5 text-xs">
-            {t(locale, "zoo.actLoadReport")}
-          </TmButton>
-          <TmButton variant="ghost" onClick={onLoadScreener} className="h-6 px-1.5 text-xs">
-            {t(locale, "zoo.actLoadScreener")}
-          </TmButton>
-          <TmButton variant="ghost" onClick={onDelete} className="h-6 px-1.5 text-xs">
-            {t(locale, "zoo.actDelete")}
-          </TmButton>
-        </div>
-      </DCell>
-    </>
-  );
-}
-
-function NumCell({
-  value,
-  format,
-}: {
-  readonly value: number | undefined;
-  readonly format: (v: number) => string;
-}) {
-  if (value == null) {
-    return (
-      <DCell align="right">
-        <span className="text-tm-muted">—</span>
-      </DCell>
-    );
-  }
-  const tone =
-    value > 0 ? "text-tm-pos" : value < 0 ? "text-tm-neg" : "text-tm-fg";
-  return (
-    <DCell align="right">
-      <span className={`tabular-nums ${tone}`}>{format(value)}</span>
-    </DCell>
-  );
-}
-
-/* ── Correlation panel (unchanged) ────────────────────────────────── */
+/* ── Correlation panel ────────────────────────────────────────────── */
 
 function CorrelationPanel({
   data,
@@ -1456,45 +912,47 @@ function CorrelationPanel({
   readonly data: ZooCorrelationResponse;
 }) {
   const { locale } = useLocale();
+  const zh = locale === "zh";
   const { names, matrix, warnings } = data;
+  const ambiguousZero = matrix.some((row, i) => row.some((value, j) => i !== j && value === 0));
 
   function cellTone(v: number): string {
-    if (v >= 0.95) return "bg-tm-neg-soft text-tm-neg";
-    if (v >= 0.8) return "bg-tm-warn-soft text-tm-warn";
-    if (v >= 0.5) return "bg-tm-warn-soft text-tm-warn";
-    if (v >= -0.5) return "text-tm-fg-2";
-    return "bg-tm-accent-soft text-tm-accent";
+    if (Math.abs(v) >= 0.95) return "bg-tm-neg-soft text-tm-neg";
+    if (Math.abs(v) >= 0.8) return "bg-tm-warn-soft text-tm-warn";
+    return "text-tm-fg-2";
   }
 
   return (
     <div className="flex flex-col">
       {warnings.length > 0 && (
-        <div className="border-b border-tm-rule bg-tm-bg-2 px-3 py-2.5">
-          <div className="mb-1.5 font-tm-mono text-xs font-semibold uppercase tracking-[0.06em] text-tm-neg">
-            {t(locale, "zoo.corr.warningsHeader").replace(
-              "{n}",
-              String(warnings.length),
-            )}
-          </div>
-          <ul className="flex flex-col gap-1">
+        <details className="border-b border-tm-rule bg-tm-bg-2 px-3 py-2.5">
+          <summary className="cursor-pointer font-tm-mono text-xs font-semibold text-tm-warn">
+            {zh ? `${warnings.length} 对需复查（|相关系数| ≥ 0.8）` : `${warnings.length} pairs to review (|correlation| ≥ 0.8)`}
+          </summary>
+          <ul className="mt-2 flex max-h-44 flex-col gap-1 overflow-y-auto">
             {warnings.map((w) => (
               <li
                 key={`${w.a}|${w.b}`}
-                className="flex items-center gap-2 font-tm-mono text-xs"
+                className="flex flex-wrap items-center gap-2 break-all font-tm-mono text-xs"
               >
                 <span className="text-tm-fg">{w.a}</span>
                 <span className="text-tm-muted">↔</span>
                 <span className="text-tm-fg">{w.b}</span>
                 <span className="ml-2 tabular-nums text-tm-neg">
-                  corr = {w.corr >= 0 ? "+" : ""}
+                  {w.corr >= 0 ? "+" : ""}
                   {w.corr.toFixed(3)}
                 </span>
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
-      <TmTableFrame className="px-3 py-3">
+      {ambiguousZero && (
+        <p className="px-3 py-2 text-xs text-tm-muted">
+          {zh ? "—：接口的零值可能来自重叠数据不足，不能据此判断因子不相关。" : "—: The API also returns zero for insufficient overlap, so this does not establish no correlation."}
+        </p>
+      )}
+      <TmTableFrame className="max-h-96 overflow-y-auto px-3 py-3" tabIndex={0} role="region" aria-label={t(locale, "zoo.corr.title")}>
         <TmTable
           density="compact"
           caption={t(locale, "zoo.corr.title")}
@@ -1521,10 +979,9 @@ function CorrelationPanel({
                     key={j}
                     numeric
                     textAlign="center"
-                    className={`px-2 py-1 ${cellTone(v)}`}
+                    className={`px-2 py-1 ${i === j ? "bg-tm-bg-2 text-tm-muted" : cellTone(v)}`}
                   >
-                    {v >= 0 ? "+" : ""}
-                    {v.toFixed(2)}
+                    {i !== j && v === 0 ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}`}
                   </TmTableCell>
                 ))}
               </TmTableRow>
