@@ -44,6 +44,18 @@ const SIZE_CLASSES = {
 const VIEWPORT_GAP = 8;
 const MENU_MAX_HEIGHT = 288;
 
+export function tmMenuVerticalPosition(top: number, bottom: number, viewportHeight: number, contentHeight: number) {
+  const below = Math.max(0, viewportHeight - bottom - VIEWPORT_GAP - 4);
+  const above = Math.max(0, top - VIEWPORT_GAP - 4);
+  const desired = Math.min(MENU_MAX_HEIGHT, contentHeight);
+  const openAbove = below < desired && above > below;
+  const maxHeight = Math.min(MENU_MAX_HEIGHT, openAbove ? above : below);
+  return {
+    top: openAbove ? Math.max(VIEWPORT_GAP, top - 4 - Math.min(desired, maxHeight)) : bottom + 4,
+    maxHeight,
+  };
+}
+
 /** Portal-backed listbox for styled selection when native Safari controls fail. */
 export function TmSelectMenu({
   value,
@@ -65,7 +77,7 @@ export function TmSelectMenu({
   const listRef = useRef<HTMLUListElement>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [position, setPosition] = useState({ top: 0, left: 0, minWidth: 0 });
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: MENU_MAX_HEIGHT });
 
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const selected = options.find((option) => option.value === value);
@@ -81,7 +93,8 @@ export function TmSelectMenu({
 
   const place = useCallback(() => {
     const trigger = buttonRef.current;
-    if (!trigger || typeof window === "undefined") return;
+    const list = listRef.current;
+    if (!trigger || !list || typeof window === "undefined") return;
     const rect = trigger.getBoundingClientRect();
     const availableWidth = Math.max(0, window.innerWidth - VIEWPORT_GAP * 2);
     const width = Math.min(
@@ -89,18 +102,17 @@ export function TmSelectMenu({
       availableWidth,
     );
     const preferredLeft = align === "end" ? rect.right - width : rect.left;
-    const roomBelow = window.innerHeight - rect.bottom - VIEWPORT_GAP;
-    const roomAbove = rect.top - VIEWPORT_GAP;
-    const openAbove = roomBelow < Math.min(MENU_MAX_HEIGHT, roomAbove);
+    // Measure at the final width so wrapped labels determine the real height.
+    // A short upward menu must stay attached to its trigger, not reserve 288px.
+    list.style.width = `${width}px`;
+    const vertical = tmMenuVerticalPosition(rect.top, rect.bottom, window.innerHeight, list.scrollHeight + 2);
     setPosition({
-      top: openAbove
-        ? Math.max(VIEWPORT_GAP, rect.top - 4 - Math.min(MENU_MAX_HEIGHT, roomAbove))
-        : Math.min(rect.bottom + 4, window.innerHeight - VIEWPORT_GAP),
+      ...vertical,
       left: Math.min(
         Math.max(preferredLeft, VIEWPORT_GAP),
         window.innerWidth - width - VIEWPORT_GAP,
       ),
-      minWidth: width,
+      width,
     });
   }, [align, menuMinWidth]);
 
@@ -128,6 +140,17 @@ export function TmSelectMenu({
     place();
     listRef.current?.focus();
   }, [open, place]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const list = listRef.current;
+    const option = list?.children[activeIndex] as HTMLElement | undefined;
+    if (!list || !option) return;
+    const top = option.offsetTop;
+    const bottom = top + option.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  }, [activeIndex, open, position.maxHeight]);
 
   useEffect(() => {
     if (!open) return;
@@ -198,7 +221,8 @@ export function TmSelectMenu({
                 position: "fixed",
                 top: position.top,
                 left: position.left,
-                minWidth: position.minWidth,
+                width: position.width,
+                maxHeight: position.maxHeight,
                 maxWidth: `calc(100vw - ${VIEWPORT_GAP * 2}px)`,
               }}
               onKeyDown={(event) => {
@@ -217,13 +241,16 @@ export function TmSelectMenu({
                   choose(activeIndex);
                 } else if (event.key === "Escape") {
                   event.preventDefault();
+                  event.stopPropagation();
                   closeMenu(true);
                 } else if (event.key === "Tab") {
-                  closeMenu();
+                  // Continue the normal tab order from the trigger, not the
+                  // portal appended at the end of document.body.
+                  closeMenu(true);
                 }
               }}
               className={clsx(
-                "z-[80] max-h-72 overflow-y-auto border border-tm-rule-2 bg-tm-bg-2 py-0.5 font-tm-mono text-xs text-tm-fg shadow-[var(--tm-shadow-floating)] outline-none focus-visible:ring-1 focus-visible:ring-tm-accent",
+                "relative z-[80] overflow-y-auto border border-tm-rule-2 bg-tm-bg-2 py-0.5 font-tm-mono text-xs text-tm-fg shadow-[var(--tm-shadow-floating)] outline-none focus-visible:ring-1 focus-visible:ring-tm-accent",
                 menuClassName,
               )}
             >
@@ -245,9 +272,9 @@ export function TmSelectMenu({
                   )}
                 >
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate">{option.label}</span>
+                    <span className="break-words">{option.label}</span>
                     {option.meta !== undefined && option.meta !== null ? (
-                      <span className="truncate text-xs text-tm-muted">{option.meta}</span>
+                      <span className="break-words text-xs text-tm-muted">{option.meta}</span>
                     ) : null}
                   </span>
                   <Check

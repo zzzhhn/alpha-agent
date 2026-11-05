@@ -12,3 +12,9 @@ export function isPicksSnapshotStale(
   if (!asOf) return true;
   return !Number.isFinite(Date.parse(asOf));
 }
+
+/** Empty search results do not establish that a snapshot is current. */
+export function picksSnapshotStatus(asOf: string | null, serverStale: boolean): "unknown" | "stale" | "current" {
+  if (!asOf || !Number.isFinite(Date.parse(asOf))) return "unknown";
+  return serverStale ? "stale" : "current";
+}

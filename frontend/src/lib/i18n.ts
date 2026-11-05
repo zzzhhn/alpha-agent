@@ -1070,8 +1070,8 @@ const translations = {
     "radar.dimension_flow": "资金流",
     "rating.agreement": "信号一致性",
     "rating.agreement_tooltip": "信号一致性 = 1/(1+信号方差)：底层信号有多齐，代表这一票的把握程度（非命中率）。低于 50% 表示信号分歧大于一致。",
-    "rating.hitrate": "历史方向命中率",
-    "rating.hitrate_tooltip": "该一致性档位的信号过去 5 个交易日方向预测的实际命中率（经等渗校准）。约 50% 是接近市场中性信号的正常水平，并用于 Kelly 仓位计算。",
+    "rating.hitrate": "5日校准置信度",
+    "rating.hitrate_tooltip": "根据已实现的未来 5 个交易日方向结果进行等渗校准的信号级输出。它不是该股票最近 5 日的实际命中率，也不等于今日推荐中的 1日方向一致度；不保证未来收益。",
     "attribution.ic_accumulating":
       "Rank IC / ICIR / IR 暂未就绪：滚动 IC 历史正在累积。这三列由 IC 回测引擎按交易日写入，约需 30 个交易日的信号观测才会显示。在此之前显示 “—” 属正常，并非缺失或错误。",
     "attribution.tooltip_rank_ic":
@@ -2629,8 +2629,8 @@ const translations = {
     "radar.dimension_flow": "Flow",
     "rating.agreement": "Signal agreement",
     "rating.agreement_tooltip": "Signal agreement = 1/(1+signal variance): how aligned the underlying signals are — the conviction on this name (not a hit-rate). Below 50% the signals disagree more than they agree.",
-    "rating.hitrate": "Hist. hit-rate",
-    "rating.hitrate_tooltip": "How often signals at this agreement level got the next 5 trading days' direction right historically (isotonic-calibrated). ~50% is normal for a near-market-neutral signal, and it also drives Kelly position sizing.",
+    "rating.hitrate": "5D calibrated confidence",
+    "rating.hitrate_tooltip": "Signal-level output calibrated against realized forward 5-trading-day directional outcomes. Not this stock's past-five-day hit rate or the 1D direction agreement shown in Picks; it does not guarantee future returns.",
     "attribution.ic_accumulating":
       "Rank IC / ICIR / IR not yet available: the rolling IC history is still accumulating. These three columns are written per trading day by the IC backtest engine and need ~30 trading days of signal observations before they populate. Until then, “—” is expected, not missing or broken.",
     "attribution.tooltip_rank_ic":

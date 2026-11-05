@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/watchlist";
-import { syncWatchlistRemote } from "@/lib/api/watchlist";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
 import { TmPagination } from "@/components/tm/TmPagination";
@@ -22,11 +21,8 @@ export default function WatchlistEditor() {
   useEffect(() => {
     const initial = getWatchlist();
     setList(initial);
-    // One-time reconcile: push whatever is in localStorage to the backend
-    // so the cron sees it. Covers pre-existing entries from before
-    // dual-write shipped. Future add/remove already dual-write via
-    // setWatchlist; this is the catch-up for the existing state.
-    void syncWatchlistRemote(initial);
+    // Opening Settings must be read-only. A stale or empty local list must
+    // not replace the server mirror; explicit add/remove still dual-write.
   }, []);
 
   function handleAdd() {

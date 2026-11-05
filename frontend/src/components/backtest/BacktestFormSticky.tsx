@@ -60,6 +60,7 @@ import type { FactorUniverse } from "@/lib/types";
 import type { BacktestMode, BacktestParams, DirectionMode } from "./types";
 import { DEFAULT_PARAMS } from "./useBacktestSession";
 import styles from "./research-form.module.css";
+import { RESEARCH_NUMBER_LIMITS, researchParameterErrors } from "@/lib/research-input-validation";
 
 interface BacktestFormStickyProps {
   readonly params: BacktestParams;
@@ -157,7 +158,9 @@ export function BacktestFormSticky({
   const hasUnknownOps = unknownOps.length > 0;
   const hasUnknownOperands = unknownOperands.length > 0;
   const hasValidationIssues = hasUnknownOps || hasUnknownOperands;
-  const runDisabled = exprEmpty || isRunning || hasValidationIssues;
+  const numberErrors = researchParameterErrors(params, locale);
+  const hasNumberErrors = Object.values(numberErrors).some(Boolean);
+  const runDisabled = exprEmpty || isRunning || hasValidationIssues || hasNumberErrors;
 
   function updateExpression(next: string) {
     // Keep operators_used coherent with expression text. The hook reads
@@ -317,8 +320,8 @@ export function BacktestFormSticky({
             className="min-w-0"
             fieldSize="md"
             value={params.topPct}
-            min={1}
-            max={50}
+            {...RESEARCH_NUMBER_LIMITS.topPct}
+            error={numberErrors.topPct}
             step={1}
             suffix="%"
             onChange={(value) => updateField("topPct", value)}
@@ -375,6 +378,9 @@ export function BacktestFormSticky({
         </div>
 
         {/* Row 3 — Advanced 6-field collapsible */}
+        {!advancedOpen && (numberErrors.bottomPct || numberErrors.lookback || numberErrors.transactionCostBps) && (
+          <p role="alert" className="text-xs text-tm-neg">{locale === "zh" ? "成本与验证设置中有无效参数，请展开修正后运行。" : "Invalid advanced settings. Expand cost and validation settings to correct them before running."}</p>
+        )}
         <div className="flex flex-wrap gap-x-5 gap-y-1 font-tm-mono text-xs text-tm-muted">
           <span>{locale === "zh" ? "成本" : "Cost"} <strong className="font-normal text-tm-fg-2">{params.transactionCostBps} bps</strong></span>
           <span>{locale === "zh" ? "基准" : "Benchmark"} <strong className="font-normal text-tm-fg-2">{params.benchmark}</strong></span>
@@ -388,8 +394,8 @@ export function BacktestFormSticky({
               className="min-w-[120px] flex-1"
               fieldSize="md"
               value={params.bottomPct}
-              min={1}
-              max={50}
+              {...RESEARCH_NUMBER_LIMITS.bottomPct}
+              error={numberErrors.bottomPct}
               step={1}
               suffix="%"
               onChange={(value) => updateField("bottomPct", value)}
@@ -400,8 +406,8 @@ export function BacktestFormSticky({
               className="min-w-[120px] flex-1"
               fieldSize="md"
               value={params.lookback}
-              min={10}
-              max={2000}
+              {...RESEARCH_NUMBER_LIMITS.lookback}
+              error={numberErrors.lookback}
               step={1}
               suffix="d"
               onChange={(value) => updateField("lookback", value)}
@@ -443,8 +449,8 @@ export function BacktestFormSticky({
               className="min-w-[120px] flex-1"
               fieldSize="md"
               value={params.transactionCostBps}
-              min={0}
-              max={50}
+              {...RESEARCH_NUMBER_LIMITS.transactionCostBps}
+              error={numberErrors.transactionCostBps}
               step={1}
               suffix="bps"
               onChange={(value) => updateField("transactionCostBps", value)}

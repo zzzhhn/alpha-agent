@@ -18,10 +18,12 @@ export function AlphaResearchContext({
   state,
   universe,
   onOpenBacktest,
+  draftChanged = false,
 }: {
   readonly state: ChainState;
   readonly universe: FactorUniverse;
   readonly onOpenBacktest: () => void;
+  readonly draftChanged?: boolean;
 }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
@@ -41,7 +43,7 @@ export function AlphaResearchContext({
       title={<>{zh ? "因子" : "Factor"} <span className="font-normal text-tm-fg-2">Alpha</span></>}
       subtitle={zh ? "从假设到可检验表达式" : "From hypothesis to a testable expression"}
       statuses={[
-        { label: zh ? "阶段" : "Stage", value: stage, tone: state.kind.includes("error") ? "negative" : state.kind === "done" ? "positive" : "default" },
+        { label: zh ? "阶段" : "Stage", value: draftChanged ? (zh ? "草稿待验证" : "Draft unverified") : stage, tone: state.kind.includes("error") ? "negative" : draftChanged ? "warning" : state.kind === "done" ? "positive" : "default" },
         { label: zh ? "股票池" : "Universe", value: universe },
         { label: zh ? "数据状态" : "Data state", value: result ? (zh ? "随运行返回" : "Returned with run") : (zh ? "等待运行" : "Awaiting run"), tone: result ? "positive" : "default" },
       ]}

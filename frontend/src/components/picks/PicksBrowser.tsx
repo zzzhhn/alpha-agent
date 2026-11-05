@@ -36,7 +36,7 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 // Shared hook so a flip on Stock detail's AttributionTable / Radar
 // propagates back here via the storage event broadcast inside the hook.
 import { useFactorMode } from "@/hooks/useFactorMode";
-import { isPicksSnapshotStale } from "@/lib/picks-freshness";
+import { picksSnapshotStatus } from "@/lib/picks-freshness";
 import {
   DISPATCH_EVENT,
   isInFlight,
@@ -227,9 +227,8 @@ export default function PicksBrowser({
   const queryPending = loading || resultQuery.search !== search.trim().toUpperCase()
     || resultQuery.mode !== factorMode || resultQuery.side !== side;
   const count = data.picks.length;
-  const snapshotStale =
-    count > 0 &&
-    (!data.tradable || isPicksSnapshotStale(data.as_of, data.stale));
+  const snapshotStatus = picksSnapshotStatus(data.as_of, data.stale);
+  const snapshotStale = !data.tradable || snapshotStatus !== "current";
   const asOf = data.as_of
     ? data.as_of.replace("T", " ").replace(/:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/, "") + " UTC"
     : locale === "zh"
@@ -311,7 +310,7 @@ export default function PicksBrowser({
         subtitle={locale === "zh" ? "核对快照与驱动，再进入模拟仓验证。" : "Review the snapshot and drivers, then validate on paper."}
         statuses={[
           { label: locale === "zh" ? "数据时间" : "As of", value: asOf },
-          { label: locale === "zh" ? "快照" : "Snapshot", value: queryPending ? (locale === "zh" ? "待更新" : "UPDATING") : snapshotStale ? (locale === "zh" ? "过期" : "STALE") : (locale === "zh" ? "有效" : "CURRENT"), tone: snapshotStale || queryPending ? "warning" : "positive" },
+          { label: locale === "zh" ? "快照" : "Snapshot", value: queryPending ? (locale === "zh" ? "待更新" : "UPDATING") : snapshotStatus === "unknown" ? (locale === "zh" ? "未确认" : "UNCONFIRMED") : snapshotStatus === "stale" ? (locale === "zh" ? "过期" : "STALE") : (locale === "zh" ? "有效" : "CURRENT"), tone: snapshotStatus !== "current" || queryPending ? "warning" : "positive" },
           { label: locale === "zh" ? "方向" : "Side", value: side === "short" ? (locale === "zh" ? "做空" : "SHORT") : (locale === "zh" ? "做多" : "LONG") },
         ]}
         action={<TmLinkButton href="/paper" variant="primary" size="md">{locale === "zh" ? "02 · 打开组合工作台" : "02 · OPEN PORTFOLIO WORKSPACE"}</TmLinkButton>}

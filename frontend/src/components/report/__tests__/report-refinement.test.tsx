@@ -11,6 +11,12 @@ const config: ReportConfig = { direction: "long_short", neutralize: "none", benc
 const props = { factorName: "", onFactorName: noop, expr: "", onExpr: noop, config, onConfig: noop, zoo: [], running: false, sourceName: null, onExample: noop, onZoo: noop, onGenerate: noop };
 
 describe("Report in-place refinement", () => {
+  it("blocks invalid report costs without changing saved settings", () => {
+    const html = renderToStaticMarkup(<ReportComposer {...props} expr="rank(close)" config={{ ...config, transactionCostBps: -1 }} />);
+    expect(html).toContain("请输入 0 至 200 的数值");
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*bg-tm-accent/);
+  });
   it("marks any unrun input change without invalidating the previous report snapshot", () => {
     const report = { name: "factor", expression: "rank(close)", config: { ...config } };
     expect(isReportDraftDirty("factor", " rank(close) ", config, report)).toBe(false);

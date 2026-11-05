@@ -8,6 +8,13 @@ import type { Run } from "../types";
 
 const noop = () => {};
 describe("Backtest research refinement", () => {
+  it("blocks invalid numeric drafts with local errors before any request", () => {
+    const html = renderToStaticMarkup(<BacktestFormSticky params={{ ...DEFAULT_PARAMS, expression: "rank(close)", operatorsUsed: ["rank"], topPct: 99, transactionCostBps: -1 }} setParams={noop} isRunning={false} onRun={noop} />);
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain("请输入 1 至 50 的数值");
+    expect(html).toContain("成本与验证设置中有无效参数");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*bg-tm-accent/);
+  });
   it("keeps cost visible but removes collapsed advanced controls from keyboard order", () => {
     const html = renderToStaticMarkup(<BacktestFormSticky params={DEFAULT_PARAMS} setParams={noop} isRunning={false} onRun={noop} />);
     expect(html).toContain("因子表达式");
