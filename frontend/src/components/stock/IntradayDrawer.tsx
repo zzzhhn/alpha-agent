@@ -52,7 +52,6 @@ export default function IntradayDrawer({
   const locked = !keyLoading && !hasKey;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [status, setStatus] = useState<
     "loading" | "ok" | "empty" | "out_of_range" | "error"
@@ -131,15 +130,7 @@ export default function IntradayDrawer({
   useEffect(() => {
     if (!date) return;
     titleRef.current?.focus({ preventScroll: true });
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented && panelRef.current?.contains(document.activeElement)) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [date, onClose]);
+  }, [date]);
 
   const renderChart = useCallback(async (bars: MinuteBar[]) => {
     const el = containerRef.current;
@@ -255,7 +246,15 @@ export default function IntradayDrawer({
   if (!date) return null;
 
   return (
-    <div id={id} ref={panelRef} role="region" aria-labelledby={`${id}-title`} className="mt-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
+    <div id={id} role="region" aria-labelledby={`${id}-title`} className="mt-3 rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
       <div className="mb-3 flex items-center justify-between">
         <h3 id={`${id}-title`} ref={titleRef} tabIndex={-1} className="text-base font-semibold text-tm-fg">
           {ticker} {t(locale, "intraday.title")} · {date}
