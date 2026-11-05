@@ -164,7 +164,7 @@ export function ZooCatalog({
             <colgroup>
               <col className="w-[184px]" /><col className="w-24" /><col />
               <col className="w-36" /><col className="w-28" /><col className="w-20" />
-              <col className="w-32" /><col className={zh ? "w-56" : "w-[336px]"} />
+              <col className="w-32" /><col className={zh ? "w-[256px]" : "w-[400px]"} />
             </colgroup>
             <TmTableHead>
               <TmTableRow>

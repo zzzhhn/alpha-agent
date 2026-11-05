@@ -1927,7 +1927,7 @@ export function BrainMiningPanel() {
             nextAriaLabel: zh ? "查看更早运行" : "View older runs",
             page: (current, count) => `${current} / ${count}`,
             pageSize: zh ? "每页" : "Per page",
-            total: (total) => zh ? `共 ${total} 轮 · 翻页载入该页首轮` : `${total} runs · paging opens the first run`,
+            total: (total) => zh ? `共 ${total} 轮 · 翻页切换运行` : `${total} runs · paging switches runs`,
           }}
         />}
         <RunLedger

@@ -1,0 +1,1140 @@
+{
+  "audit": "2026-11-05-sidebar-research",
+  "inspection_dates": [
+    "2026-11-05",
+    "2026-11-06"
+  ],
+  "baseline": {
+    "repository": "/Users/a22309/claude-project/.worktrees/alpha-sidebar-interaction-audit",
+    "source_commit": "e4a53c4c531c96d9df8e136b0fb2c6554f24e3d5",
+    "production": "https://alpha.bobbyzhong.com",
+    "browser": "existing Chrome 用户1 profile",
+    "task_tab": "1395914578",
+    "tab_closed": true,
+    "theme": "Chinese dark initial and restored; representative English/light on all4routes",
+    "locale": "zh-CN baseline; en representative",
+    "viewport": {
+      "width": 1710,
+      "height": 875
+    },
+    "resource_preflight": {
+      "memory_pressure_level": 2,
+      "swap_used_gib": 11,
+      "disk_free_gib": 19.07
+    }
+  },
+  "counts": {
+    "tested-pass": 33,
+    "tested-fail": 8,
+    "blocked": 23
+  },
+  "total_control_families": 64,
+  "evidence_boundary": "Production baseline safe draft interactions only. No compute/save/delete/auth/settings-save. Primary has edited source fixes but this audit did not deploy or recheck them. A tested-pass family names exact sampled instances and does not imply all records/options or all conditional states were clicked.",
+  "coverage_gaps": [
+    "No completed run/report/screen generated or injected",
+    "Charts, report deep diagnostics, comparison results, CSV/HTML/print, saved-result operations unavailable without computation",
+    "Explicit safe gaps R56,R57,R59,R61,R62,R63,R64 retained as blocked rather than claiming completion",
+    "Only3 saved factors; Screener5-row pagination not naturally available",
+    "No network error injection; existing error recovery/result states not forced",
+    "1710x875 only; no narrow/mobile acceptance"
+  ],
+  "controls": [
+    {
+      "id": "R01",
+      "route": "/alpha",
+      "label": "浏览示例",
+      "type": "dialog",
+      "source_file": "frontend/src/components/alpha/FactorExampleModal.tsx",
+      "steps": [
+        "Open 浏览示例; modal enters focus on close control",
+        "Escape closes and returns focus to 浏览示例"
+      ],
+      "status": "tested-pass",
+      "result": "Dialog open/Escape/focus-return contract passed",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R02",
+      "route": "/alpha",
+      "label": "示例搜索／无匹配",
+      "type": "search",
+      "source_file": "frontend/src/components/alpha/FactorExampleList.tsx",
+      "steps": [
+        "Search zzzz-no-factor",
+        "Search Cash Buffer"
+      ],
+      "status": "tested-pass",
+      "result": "No-match copy then exactly one Cash Buffer row; search covers source",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R03",
+      "route": "/alpha",
+      "label": "示例选择（10 条等价行）",
+      "type": "row",
+      "source_file": "frontend/src/components/alpha/FactorExampleList.tsx",
+      "steps": [
+        "Select filtered Cash Buffer · LO/RSP"
+      ],
+      "status": "tested-pass",
+      "result": "Loads Chinese hypothesis, direction long_only, group10%, benchmarkRSP; no execution; one representative row of10, not all rows",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R04",
+      "route": "/alpha",
+      "label": "历史记录：展开／Escape",
+      "type": "popover",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Open 历史",
+        "Press Escape"
+      ],
+      "status": "tested-pass",
+      "result": "Popover closes and focus returns to 历史; outside click not exercised",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R05",
+      "route": "/alpha",
+      "label": "历史条目载入：旧 CSI500",
+      "type": "row",
+      "source_file": "frontend/src/components/alpha/AlphaExperimentLedger.tsx",
+      "steps": [
+        "Open 历史",
+        "Click existing 2026-05-20 CSI500 history entry"
+      ],
+      "status": "tested-fail",
+      "result": "Header universe becomes CSI500 while native select still shows S&P500; no run occurs",
+      "reason": "Unsupported legacy state is restored without normalization",
+      "evidence": [
+        "browser AX/DOM observation",
+        "source alpha/page.tsx handleHistorySelect",
+        "/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/sidebar-audit-research/alpha-history-universe.jpg"
+      ]
+    },
+    {
+      "id": "R06",
+      "route": "/alpha",
+      "label": "因子假设",
+      "type": "textarea",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Load example/history text",
+        "Clear hypothesis"
+      ],
+      "status": "tested-pass",
+      "result": "Character count follows text; Translate button enabled for draft and disabled when blank; no invocation",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R07",
+      "route": "/alpha",
+      "label": "股票池：SP500／custom",
+      "type": "select",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Select custom then SP500",
+        "Inspect available options and backend source contract"
+      ],
+      "status": "tested-fail",
+      "result": "Custom is selectable but no custom-membership input exists and smoke/backtest ignore universe",
+      "reason": "Browser confirms misleading option; unsupported backend contract is source-only",
+      "evidence": [
+        "browser AX/DOM observation",
+        "source interactive.py:310,352; scan/smoke.py:309; factor_backtest.py:774"
+      ]
+    },
+    {
+      "id": "R08",
+      "route": "/alpha",
+      "label": "策略方向：多空／只做多／只做空",
+      "type": "select",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Example loads long_only",
+        "Select short_only then long_short"
+      ],
+      "status": "tested-pass",
+      "result": "All direction options change draft, no computation",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R09",
+      "route": "/alpha",
+      "label": "分组比例：5–50%",
+      "type": "number",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Enter99 then0",
+        "Restore30"
+      ],
+      "status": "tested-pass",
+      "result": "Clamps to50 then5; restored30",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R10",
+      "route": "/alpha",
+      "label": "成本模型：0–200bps",
+      "type": "number",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Enter999 then-2",
+        "Restore10"
+      ],
+      "status": "tested-pass",
+      "result": "Clamps to200 then0; restored10",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R11",
+      "route": "/alpha",
+      "label": "行业中性：none／sector",
+      "type": "select",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Select sector then none"
+      ],
+      "status": "tested-pass",
+      "result": "Selection changes and restores",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R12",
+      "route": "/alpha",
+      "label": "基准：SPY／RSP",
+      "type": "select",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Example loadsRSP",
+        "SelectSPY"
+      ],
+      "status": "tested-pass",
+      "result": "Benchmark changes and restores",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R13",
+      "route": "/alpha",
+      "label": "翻译并回测／重测／阶段重试",
+      "type": "execution",
+      "source_file": "frontend/src/components/alpha/useAlphaChain.ts",
+      "steps": [
+        "Observe initial disabled action",
+        "Observe draft-enabled state where available",
+        "Do not invoke"
+      ],
+      "status": "blocked",
+      "result": "Disabled/enabled affordance observed; execution itself blocked",
+      "reason": "Safety: no LLM/backtest/report/screener computation triggers",
+      "evidence": [
+        "browser initial/draft state",
+        "source handler inventory"
+      ]
+    },
+    {
+      "id": "R14",
+      "route": "/alpha",
+      "label": "保存到 Zoo／撤销",
+      "type": "mutation",
+      "source_file": "frontend/src/app/(dashboard)/alpha/page.tsx",
+      "steps": [
+        "Trace source handler; do not invoke"
+      ],
+      "status": "blocked",
+      "result": "Not browser tested",
+      "reason": "Safety: saves/pins/undo/deletion writes prohibited; also require completed result",
+      "evidence": [
+        "source-only"
+      ]
+    },
+    {
+      "id": "R15",
+      "route": "/alpha",
+      "label": "在回测中比较（自动运行 handoff）",
+      "type": "execution",
+      "source_file": "frontend/src/app/(dashboard)/backtest/page.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "Requires translated result; handoff also auto-runs compute",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R16",
+      "route": "/alpha",
+      "label": "表达式 AST／详细诊断",
+      "type": "disclosure",
+      "source_file": "frontend/src/components/alpha/AnalyticsAccordion.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R17",
+      "route": "/backtest",
+      "label": "从因子库载入",
+      "type": "select",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Load saved Volume Z-Score20d"
+      ],
+      "status": "tested-pass",
+      "result": "Expression ts_zscore(volume,20), sector-neutral parameters populate without run; one of3 equivalent saved-factor entries sampled",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R18",
+      "route": "/backtest",
+      "label": "重置默认",
+      "type": "button",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Edit form",
+        "Click 重置默认"
+      ],
+      "status": "tested-pass",
+      "result": "Blank expression/default params restored; default run disabled; existing original form was blank/default",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R19",
+      "route": "/backtest",
+      "label": "因子表达式／未知操作符与字段",
+      "type": "textarea",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Type ts_means(retruns,20)"
+      ],
+      "status": "tested-pass",
+      "result": "Unknown operator/data field show suggestions ts_mean/returns and disable Run; cleared by reset",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R20",
+      "route": "/backtest",
+      "label": "方向：多空／只做多／只做空",
+      "type": "select",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Load long_short saved factor",
+        "Select long_only then short_only",
+        "Reset restores long_short"
+      ],
+      "status": "tested-pass",
+      "result": "Direction draft changes without computation",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R21",
+      "route": "/backtest",
+      "label": "多头分组比例：手工越界99",
+      "type": "field",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Valid saved expression",
+        "Enter99 in top%"
+      ],
+      "status": "tested-fail",
+      "result": "99 remains visible and Run enabled",
+      "reason": "Native range validity does not gate button handler",
+      "evidence": [
+        "browser AX/DOM observation",
+        "source BacktestFormSticky.tsx",
+        "/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/sidebar-audit-research/backtest-invalid-range.jpg"
+      ]
+    },
+    {
+      "id": "R22",
+      "route": "/backtest",
+      "label": "成本与验证设置展开／折叠",
+      "type": "disclosure",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Open 成本与验证设置",
+        "After reset collapse"
+      ],
+      "status": "tested-pass",
+      "result": "Advanced controls mount/unmount and summary remains visible",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R23",
+      "route": "/backtest",
+      "label": "交易成本：手工越界-1",
+      "type": "number",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Valid saved expression",
+        "Enter-1 in cost"
+      ],
+      "status": "tested-fail",
+      "result": "Cost summary shows-1bps and Run enabled",
+      "reason": "No local error or numeric validation gate; execution not clicked",
+      "evidence": [
+        "browser AX/DOM observation",
+        "/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/sidebar-audit-research/backtest-invalid-range.jpg"
+      ]
+    },
+    {
+      "id": "R24",
+      "route": "/backtest",
+      "label": "基准：SPY／RSP；模式：静态／Walk-forward",
+      "type": "select",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "SelectRSP",
+        "Select walk_forward",
+        "Reset defaults"
+      ],
+      "status": "tested-pass",
+      "result": "Header reflects Walk-forward then static; benchmark restoresSPY; no run",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R25",
+      "route": "/backtest",
+      "label": "行业中性／每日持仓明细",
+      "type": "checkbox",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Turn sector-neutral checkbox off",
+        "Daily breakdown on",
+        "Reset"
+      ],
+      "status": "tested-pass",
+      "result": "Summary updates, reset restores both off",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R26",
+      "route": "/backtest",
+      "label": "运行回测／重新运行／重试",
+      "type": "execution",
+      "source_file": "frontend/src/components/backtest/useBacktestSession.ts",
+      "steps": [
+        "Observe initial disabled action",
+        "Observe draft-enabled state where available",
+        "Do not invoke"
+      ],
+      "status": "blocked",
+      "result": "Disabled/enabled affordance observed; execution itself blocked",
+      "reason": "Safety: no LLM/backtest/report/screener computation triggers",
+      "evidence": [
+        "browser initial/draft state",
+        "source handler inventory"
+      ]
+    },
+    {
+      "id": "R27",
+      "route": "/backtest",
+      "label": "风险／行情／持仓／操作诊断",
+      "type": "disclosure",
+      "source_file": "frontend/src/components/backtest/BacktestAnalyticsGroups.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R28",
+      "route": "/backtest",
+      "label": "曲线／回撤／Walk-forward 图表悬停",
+      "type": "chart",
+      "source_file": "frontend/src/components/backtest/BacktestEvidenceGrid.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R29",
+      "route": "/backtest",
+      "label": "最近运行：载入／分页",
+      "type": "pagination",
+      "source_file": "frontend/src/components/backtest/RecentRunsTable.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R30",
+      "route": "/backtest",
+      "label": "固定基线／保存到 Zoo",
+      "type": "mutation",
+      "source_file": "frontend/src/components/backtest/RecentRunsTable.tsx",
+      "steps": [
+        "Trace source handler; do not invoke"
+      ],
+      "status": "blocked",
+      "result": "Not browser tested",
+      "reason": "Safety: saves/pins/undo/deletion writes prohibited; also require completed result",
+      "evidence": [
+        "source-only"
+      ]
+    },
+    {
+      "id": "R31",
+      "route": "/screener",
+      "label": "因子搜索／无匹配／选择保留",
+      "type": "search-pagination",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Select Earnings Yield",
+        "Search zzzz-no-factor",
+        "Clear"
+      ],
+      "status": "tested-pass",
+      "result": "No matching rows but selected1/3 and Run remains available; clearing restores3 rows; only3 records loaded so pagination unavailable",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R32",
+      "route": "/screener",
+      "label": "因子行选择／取消；键盘选择",
+      "type": "row",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Select Earnings Yield via button; deselect with Space",
+        "Select/deselect Volume and Dollar Volume"
+      ],
+      "status": "tested-pass",
+      "result": "All3 loaded factor selection buttons tested; keyboard selection works",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R33",
+      "route": "/screener",
+      "label": "组合方式：等权Z／IC加权／用户权重",
+      "type": "select",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Open combine menu near viewport bottom",
+        "Select user_weighted, IC-weighted, equal_z"
+      ],
+      "status": "tested-fail",
+      "result": "Selections work, but upward 3-row menu ends202px above its trigger",
+      "reason": "Placement uses fixed288px instead of actual90px height",
+      "evidence": [
+        "browser AX/DOM observation",
+        "/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/sidebar-audit-research/screener-upward-menu.jpg"
+      ]
+    },
+    {
+      "id": "R34",
+      "route": "/screener",
+      "label": "用户因子权重",
+      "type": "number",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Select user_weighted",
+        "Edit Earnings Yield weight2.5",
+        "Change method"
+      ],
+      "status": "tested-pass",
+      "result": "Weight is editable; field conditional on method+selection",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R35",
+      "route": "/screener",
+      "label": "回看窗口 slider／30、60、120、252天",
+      "type": "range-presets",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Click30,120,252,60-day presets",
+        "Inspect252 native range",
+        "Keyboard Home/End; restore60"
+      ],
+      "status": "tested-fail",
+      "result": "252-day preset output252 but native slider value250; keyboard End reaches250",
+      "reason": "min10/max252/step10 incompatible with252 endpoint",
+      "evidence": [
+        "browser AX/DOM observation",
+        "/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/sidebar-audit-research/screener-252-slider.jpg"
+      ]
+    },
+    {
+      "id": "R36",
+      "route": "/screener",
+      "label": "选股数量：10、20、50、100预设",
+      "type": "range-presets",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Click10,50,100,20"
+      ],
+      "status": "tested-pass",
+      "result": "All count presets respond; restored20; direct slider drag not tested",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R37",
+      "route": "/screener",
+      "label": "中性化：none／sector",
+      "type": "select",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Select sector then none"
+      ],
+      "status": "tested-pass",
+      "result": "Neutralization draft changes and restores",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R38",
+      "route": "/screener",
+      "label": "添加行业／移除标签／清空",
+      "type": "multi-select",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Select all11 actual catalog options",
+        "Remove 信息技术 tag",
+        "Clear all"
+      ],
+      "status": "tested-pass",
+      "result": "All11 sector options tested; translated labels and removable tags; full selection/clear worked",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R39",
+      "route": "/screener",
+      "label": "排除股票输入／添加／移除",
+      "type": "chips-input",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Enter aapl，MSFT aapl",
+        "Click Exclude",
+        "Remove both tags"
+      ],
+      "status": "tested-pass",
+      "result": "Deduplicated uppercase AAPL/MSFT; comma/space parsing correct; blank add disabled",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R40",
+      "route": "/screener",
+      "label": "市值上下限／10B、100B、1T预设",
+      "type": "input-presets",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "For each10B/100B/1T click min and max preset",
+        "Clear both manual inputs"
+      ],
+      "status": "tested-pass",
+      "result": "All6 preset buttons and both field edits respond; defaults restored",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R41",
+      "route": "/screener",
+      "label": "数据日期／最新、7、30、90天预设",
+      "type": "input-presets",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Click7/30/90-days then latest"
+      ],
+      "status": "tested-pass",
+      "result": "Date presets set draft; latest clears date; no screen executed",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R42",
+      "route": "/screener",
+      "label": "运行选股",
+      "type": "execution",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Observe initial disabled action",
+        "Observe draft-enabled state where available",
+        "Do not invoke"
+      ],
+      "status": "blocked",
+      "result": "Disabled/enabled affordance observed; execution itself blocked",
+      "reason": "Safety: no LLM/backtest/report/screener computation triggers",
+      "evidence": [
+        "browser initial/draft state",
+        "source handler inventory"
+      ]
+    },
+    {
+      "id": "R43",
+      "route": "/screener",
+      "label": "结果详情／关闭／十条分页／CSV",
+      "type": "result-controls",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R44",
+      "route": "/report",
+      "label": "报告来源库：打开／选择后关闭",
+      "type": "dialog",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Open Load library",
+        "Choose saved factor and historical example"
+      ],
+      "status": "tested-pass",
+      "result": "Dialog opens, selecting row stages draft/closes and returns focus; explicit close-icon click not tested; nested Escape separately failed inR58",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R45",
+      "route": "/report",
+      "label": "来源：历史示例／已保存因子",
+      "type": "select",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Switch historical10→saved3→historical10"
+      ],
+      "status": "tested-pass",
+      "result": "Correct source rows/counts and explanatory copy; no computation",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R46",
+      "route": "/report",
+      "label": "因子库搜索／无匹配／五条分页",
+      "type": "search-pagination",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "First page1/2→last2/2",
+        "Search zzzz-no-factor→rank→clear"
+      ],
+      "status": "tested-pass",
+      "result": "Disabled prev on1 and next on2, empty0 items1/1, full-loaded search8 rank matches;5-row library pages",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R47",
+      "route": "/report",
+      "label": "载入草稿（不计算）",
+      "type": "row",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Load saved Volume Z-Score",
+        "Load historical Cash Buffer"
+      ],
+      "status": "tested-pass",
+      "result": "Name/expression stage without calculation; Cash direction/benchmark preserved; resulting report remains absent",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R48",
+      "route": "/report",
+      "label": "名称／表达式",
+      "type": "input",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Change name to Research audit draft",
+        "Clear name/expression"
+      ],
+      "status": "tested-pass",
+      "result": "Draft edits shown; blank expression disables Generate; no report created",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R49",
+      "route": "/report",
+      "label": "方向：多空／只做多／只做空",
+      "type": "select",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Select long_only,short_only,long_short"
+      ],
+      "status": "tested-pass",
+      "result": "All3 direction choices respond and restore",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R50",
+      "route": "/report",
+      "label": "中性化：none／sector；基准：SPY／RSP",
+      "type": "select",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Sector→none",
+        "RSP→SPY"
+      ],
+      "status": "tested-pass",
+      "result": "Both option pairs respond and restore",
+      "reason": "",
+      "evidence": [
+        "browser AX/DOM observation"
+      ]
+    },
+    {
+      "id": "R51",
+      "route": "/report",
+      "label": "交易成本：0–50bps",
+      "type": "number",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Valid saved expression",
+        "Enter999 in cost"
+      ],
+      "status": "tested-fail",
+      "result": "999 remains visible and Generate enabled",
+      "reason": "min0/max50 HTML attributes do not gate action; no computation",
+      "evidence": [
+        "browser AX/DOM observation",
+        "/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/sidebar-audit-research/report-invalid-range.jpg"
+      ]
+    },
+    {
+      "id": "R52",
+      "route": "/report",
+      "label": "生成报告／比较因子计算",
+      "type": "execution",
+      "source_file": "frontend/src/app/(dashboard)/report/page.tsx",
+      "steps": [
+        "Observe initial disabled action",
+        "Observe draft-enabled state where available",
+        "Do not invoke"
+      ],
+      "status": "blocked",
+      "result": "Disabled/enabled affordance observed; execution itself blocked",
+      "reason": "Safety: no LLM/backtest/report/screener computation triggers",
+      "evidence": [
+        "browser initial/draft state",
+        "source handler inventory"
+      ]
+    },
+    {
+      "id": "R53",
+      "route": "/report",
+      "label": "深度分析／来源假设／比较详情",
+      "type": "disclosure-dialog",
+      "source_file": "frontend/src/app/(dashboard)/report/page.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R54",
+      "route": "/report",
+      "label": "比较因子选择／清除",
+      "type": "select",
+      "source_file": "frontend/src/components/report/ReportCompareBar.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R55",
+      "route": "/report",
+      "label": "打印／HTML导出",
+      "type": "export",
+      "source_file": "frontend/src/app/(dashboard)/report/page.tsx",
+      "steps": [
+        "Inspect idle page and source condition"
+      ],
+      "status": "blocked",
+      "result": "Unavailable in naturally existing state; not browser-tested",
+      "reason": "No naturally existing completed result in route state; obtaining it requires prohibited computation",
+      "evidence": [
+        "browser idle state",
+        "source-only conditional control inventory"
+      ]
+    },
+    {
+      "id": "R56",
+      "route": "/backtest",
+      "label": "空头比例／回看窗口／单选股票池",
+      "type": "field",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Blocked: controls visible but not edited before requested prompt release; source ranges inventoried",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    },
+    {
+      "id": "R57",
+      "route": "/alpha",
+      "label": "示例库关闭图标按钮",
+      "type": "button",
+      "source_file": "frontend/src/components/alpha/FactorExampleModal.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Safe control not clicked; Escape and select-close tested instead",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    },
+    {
+      "id": "R58",
+      "route": "/report",
+      "label": "来源 listbox 中 Escape",
+      "type": "keyboard",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Open Load library",
+        "Open 来源 listbox",
+        "Press Escape once"
+      ],
+      "status": "tested-fail",
+      "result": "Both menu and enclosing dialog close; focus returns outer library trigger",
+      "reason": "Escape should close the top menu only",
+      "evidence": [
+        "browser AX/DOM observation",
+        "source TmSelectMenu Escape propagation",
+        "/Users/a22309/.codex/visualizations/2026/07/27/019fa455-20bf-7ca3-b1c9-94534e8bb207/sidebar-audit-research/report-escape-closes-dialog.jpg"
+      ]
+    },
+    {
+      "id": "R59",
+      "route": "/backtest",
+      "label": "参数自动记忆悬浮说明",
+      "type": "tooltip",
+      "source_file": "frontend/src/components/backtest/BacktestFormSticky.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Safe hover not exercised; reset/form persistence inspected only",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    },
+    {
+      "id": "R60",
+      "route": "/screener",
+      "label": "因子选择五条分页",
+      "type": "pagination",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Only3 naturally loaded factors, pagination absent; no synthetic rows created",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    },
+    {
+      "id": "R61",
+      "route": "/screener",
+      "label": "推荐数量滑块直接拖动／键盘",
+      "type": "range",
+      "source_file": "frontend/src/app/(dashboard)/screener/page.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Preset buttons tested but direct slider interaction not exercised",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    },
+    {
+      "id": "R62",
+      "route": "/alpha",
+      "label": "历史弹层点击外部关闭",
+      "type": "popover",
+      "source_file": "frontend/src/components/alpha/HypothesisInputCard.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Safe outside-click path not exercised; Escape tested",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    },
+    {
+      "id": "R63",
+      "route": "/alpha",
+      "label": "最近实验独立重开按钮",
+      "type": "row",
+      "source_file": "frontend/src/components/alpha/AlphaExperimentLedger.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Existing history popover row tested, equivalent ledger trigger not separately clicked",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    },
+    {
+      "id": "R64",
+      "route": "/report",
+      "label": "来源库关闭图标按钮",
+      "type": "button",
+      "source_file": "frontend/src/components/report/ReportComposer.tsx",
+      "steps": [
+        "Inventory actual control; see linked parent-family observations"
+      ],
+      "status": "blocked",
+      "result": "Not separately exercised",
+      "reason": "Safe close-icon not clicked; selection/incorrect nested Escape closure observed",
+      "evidence": [
+        "browser/source control inventory"
+      ]
+    }
+  ]
+}
