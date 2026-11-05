@@ -1712,7 +1712,6 @@ export function BrainMiningPanel() {
   const [resultsLoading, setResultsLoading] = useState(true);
   const [runs, setRuns] = useState<BrainMiningRun[] | null>(null);
   const [runsPage, setRunsPage] = useState(1);
-  const [selectedRunSnapshot, setSelectedRunSnapshot] = useState<BrainMiningRun | null>(null);
   const [runsTotal, setRunsTotal] = useState(0);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [runsLoading, setRunsLoading] = useState(true);
@@ -1736,7 +1735,7 @@ export function BrainMiningPanel() {
       setRunsTotal(typeof res.total === "number" ? res.total : recent.length);
       setRunsError(null);
       if (!selectionTouched.current) {
-        const preferred = recent.find(isManualRun) ?? recent[0] ?? null;
+        const preferred = (runsPage === 1 ? recent.find(isManualRun) : null) ?? recent[0] ?? null;
         setSelectedRunId(preferred?.id ?? null);
       }
     } catch (e) {
@@ -1786,11 +1785,6 @@ export function BrainMiningPanel() {
   useEffect(() => {
     void loadRuns();
   }, [loadRuns]);
-
-  useEffect(() => {
-    const selected = runs?.find((run) => run.id === selectedRunId);
-    if (selected) setSelectedRunSnapshot(selected);
-  }, [runs, selectedRunId]);
 
   const handleRunSelection = useCallback((runId: number | null) => {
     selectionTouched.current = true;
@@ -1858,8 +1852,7 @@ export function BrainMiningPanel() {
   const total = data?.total ?? 0;
   const filtered = Boolean(query.outcome || query.family || query.q || query.sharpe_min != null);
   const refreshing = runsLoading || resultsLoading;
-  const selectedRun = runs?.find((run) => run.id === selectedRunId)
-    ?? (selectedRunSnapshot?.id === selectedRunId ? selectedRunSnapshot : null);
+  const selectedRun = runs?.find((run) => run.id === selectedRunId) ?? null;
   const recentRuns = runs ?? [];
   const selectedRunFailed = Boolean(
     selectedRun &&
@@ -1925,7 +1918,7 @@ export function BrainMiningPanel() {
         </div>
         {runsTotal > RECENT_RUN_LIMIT && <TmPagination
           page={runsPage} pageSize={RECENT_RUN_LIMIT} totalItems={runsTotal}
-          pageSizeOptions={[RECENT_RUN_LIMIT]} onPageChange={(next) => { selectionTouched.current = true; setRunsPage(next); }}
+          pageSizeOptions={[RECENT_RUN_LIMIT]} onPageChange={(next) => { selectionTouched.current = false; setRunsPage(next); }}
           onPageSizeChange={() => {}} loading={runsLoading}
           labels={{
             navigation: zh ? "运行目录分页" : "Run directory pagination",
@@ -1934,7 +1927,7 @@ export function BrainMiningPanel() {
             nextAriaLabel: zh ? "查看更早运行" : "View older runs",
             page: (current, count) => `${current} / ${count}`,
             pageSize: zh ? "每页" : "Per page",
-            total: (total) => zh ? `共 ${total} 轮 · 翻页后选择运行` : `${total} runs · select a run after paging`,
+            total: (total) => zh ? `共 ${total} 轮 · 翻页载入该页首轮` : `${total} runs · paging opens the first run`,
           }}
         />}
         <RunLedger
