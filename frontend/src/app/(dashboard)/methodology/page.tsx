@@ -316,7 +316,6 @@ function DataTab({
         rows={rows}
       />
 
-      <TmCols2>
         <TmPane title="DATA.PIPELINE">
           <ol className="divide-y divide-tm-rule">
             {PIPELINE.map((stage, index) => (
@@ -334,7 +333,7 @@ function DataTab({
             ))}
           </ol>
         </TmPane>
-        <div className="min-w-0 divide-y divide-tm-rule">
+      <TmCols2>
           <TmPane title="BIAS.GUARDS">
             <ul className="divide-y divide-tm-rule">
               {(["survivorship", "lookahead"] as const).map((bias) => (
@@ -355,7 +354,6 @@ function DataTab({
               </ul>
             ) : <p className={INTRO_CLASS}>{loading ? t(locale, "common.loading") : sectors === null ? (zh ? "未读取到板块数据。" : "Sector data is unavailable.") : (zh ? "面板没有板块值。" : "The panel contains no sector values.")}</p>}
           </TmPane>
-        </div>
       </TmCols2>
     </>
   );

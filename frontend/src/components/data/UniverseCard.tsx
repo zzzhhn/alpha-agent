@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmInput, TmSelect } from "@/components/tm/TmField";
@@ -38,9 +38,9 @@ function CoverageMeter({ rate }: { rate: number | null }) {
   );
 }
 
-function CoverageDisclosure({ title, meta, children }: { title: string; meta: ReactNode; children: ReactNode }) {
+function CoverageDisclosure({ title, meta, children, group }: { title: string; meta: ReactNode; children: ReactNode; group: string }) {
   return (
-    <details className="border-b border-tm-rule last:border-b-0">
+    <details name={group} className="border-b border-tm-rule last:border-b-0">
       <summary className="cursor-pointer px-3 py-2.5 font-tm-mono text-xs text-tm-fg-2 hover:bg-tm-bg-2 focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-tm-accent">
         <span className="ml-1 inline-flex w-[calc(100%-1.5rem)] items-center justify-between gap-2 align-middle">
           <span>{title}</span>{meta}
@@ -51,19 +51,13 @@ function CoverageDisclosure({ title, meta, children }: { title: string; meta: Re
   );
 }
 
-export function UniverseOverview({ universe, coverage, closePct, children }: {
+export function UniverseOverview({ universe, closePct, children }: {
   universe: UniverseInfo;
-  coverage: CoverageResponse | null;
   closePct: number | null;
   children?: ReactNode;
 }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
-  const [missingPage, setMissingPage] = useState(1);
-  const lowCoverage = coverage?.ticker_coverage.filter((row) => row.n_missing > 0) ?? [];
-  const missingPageSize = 6;
-  const currentMissingPage = Math.min(missingPage, Math.max(1, Math.ceil(lowCoverage.length / missingPageSize)));
-
   return (
     <TmPane title={t(locale, "data.coverage.title")} className="min-w-0">
       <dl className="grid grid-cols-3 divide-x divide-tm-rule border-b border-tm-rule bg-tm-bg-2/40 font-tm-mono">
@@ -89,52 +83,70 @@ export function UniverseOverview({ universe, coverage, closePct, children }: {
         </>}
       </dl>
       {children}
-      {coverage && (
-        <>
-          {Object.entries(CATEGORIES).map(([category, labels]) => {
-            const fields = coverage.field_coverage.filter((field) => field.category === category);
-            if (!fields.length) return null;
-            const rates = fields.map(fieldRate).filter((rate): rate is number => rate !== null);
-            const average = rates.length ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length : null;
-            return (
-              <CoverageDisclosure key={category} title={labels[zh ? 0 : 1]} meta={<CoverageMeter rate={average} />}>
-                {fields.map((field) => (
-                  <div key={field.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 font-tm-mono text-xs">
-                    <code className="min-w-0 break-all text-tm-fg">{field.name}</code>
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tm-muted">
-                      <span>{number(field.n_present)} / {number(field.n_total)}</span>
-                      <CoverageMeter rate={fieldRate(field)} />
-                    </span>
-                  </div>
-                ))}
-              </CoverageDisclosure>
-            );
-          })}
-          {lowCoverage.length > 0 && (
-            <CoverageDisclosure title={t(locale, "data.coverage.worstTickers")} meta={<span className="text-tm-warn">{zh ? `${lowCoverage.length} 只缺失` : `${lowCoverage.length} incomplete`}</span>}>
-              {lowCoverage.slice((currentMissingPage - 1) * missingPageSize, currentMissingPage * missingPageSize).map((row) => (
-                <div key={row.ticker} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 font-tm-mono text-xs">
-                  <code className="text-tm-fg">{row.ticker}</code>
-                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tm-muted">
-                    <span>{zh ? `缺 ${number(row.n_missing)} 条` : `${number(row.n_missing)} missing`}</span>
-                    <CoverageMeter rate={row.fill_rate} />
-                  </span>
-                </div>
-              ))}
-              {lowCoverage.length > missingPageSize && (
-                <DataPagination locale={locale} scope={t(locale, "data.coverage.worstTickers")} page={currentMissingPage} pageSize={missingPageSize} total={lowCoverage.length} onChange={setMissingPage} />
-              )}
-            </CoverageDisclosure>
-          )}
-          <p className="border-t border-tm-rule px-4 py-2.5 text-xs leading-relaxed text-tm-muted">
-            {zh
-              ? "总览按面板中非空收盘价计，分类按各字段覆盖率取平均。覆盖率不代表行情实时性。"
-              : "The headline counts non-null panel closes. Categories average their field coverage; coverage does not measure freshness."}
-          </p>
-        </>
-      )}
     </TmPane>
   );
+}
+
+function CoverageFieldGroup({ fields, title, group }: { fields: FieldCoverage[]; title: string; group: string }) {
+  const { locale } = useLocale();
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+  const current = Math.min(page, Math.max(1, Math.ceil(fields.length / pageSize)));
+  const rates = fields.map(fieldRate).filter((rate): rate is number => rate !== null);
+  const average = rates.length ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length : null;
+  return <CoverageDisclosure group={group} title={title} meta={<CoverageMeter rate={average} />}>
+    {fields.slice((current - 1) * pageSize, current * pageSize).map((field) => (
+      <div key={field.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 font-tm-mono text-xs">
+        <code className="min-w-0 break-all text-tm-fg">{field.name}</code>
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tm-muted">
+          <span>{number(field.n_present)} / {number(field.n_total)}</span>
+          <CoverageMeter rate={fieldRate(field)} />
+        </span>
+      </div>
+    ))}
+    {fields.length > pageSize && <DataPagination locale={locale} scope={title} page={current} pageSize={pageSize} total={fields.length} onChange={setPage} />}
+  </CoverageDisclosure>;
+}
+
+/** Variable-length evidence belongs below the overview/roster pair, not inside
+ * one side of a shared-height grid. Pagination preserves access to every field. */
+export function UniverseCoverage({ coverage }: { coverage: CoverageResponse }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const group = useId();
+  const [missingPage, setMissingPage] = useState(1);
+  const lowCoverage = coverage.ticker_coverage.filter((row) => row.n_missing > 0);
+  const missingPageSize = 6;
+  const currentMissingPage = Math.min(missingPage, Math.max(1, Math.ceil(lowCoverage.length / missingPageSize)));
+
+  return <TmPane title={zh ? "覆盖明细" : "Coverage detail"} meta={zh ? `${coverage.field_coverage.length} 个字段` : `${coverage.field_coverage.length} fields`}>
+    {Object.entries(CATEGORIES).map(([category, labels]) => {
+      const fields = coverage.field_coverage.filter((field) => field.category === category);
+      if (!fields.length) return null;
+      return <CoverageFieldGroup key={category} group={group} title={labels[zh ? 0 : 1]} fields={fields} />;
+    })}
+    {lowCoverage.length > 0 && (
+      <CoverageDisclosure group={group} title={t(locale, "data.coverage.worstTickers")} meta={<span className="text-tm-warn">{zh ? `${lowCoverage.length} 只缺失` : `${lowCoverage.length} incomplete`}</span>}>
+        {lowCoverage.slice((currentMissingPage - 1) * missingPageSize, currentMissingPage * missingPageSize).map((row) => (
+          <div key={row.ticker} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5 font-tm-mono text-xs">
+            <code className="text-tm-fg">{row.ticker}</code>
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tm-muted">
+              <span>{zh ? `缺 ${number(row.n_missing)} 条` : `${number(row.n_missing)} missing`}</span>
+              <CoverageMeter rate={row.fill_rate} />
+            </span>
+          </div>
+        ))}
+        {lowCoverage.length > missingPageSize && (
+          <DataPagination locale={locale} scope={t(locale, "data.coverage.worstTickers")} page={currentMissingPage} pageSize={missingPageSize} total={lowCoverage.length} onChange={setMissingPage} />
+        )}
+      </CoverageDisclosure>
+    )}
+    <p className="border-t border-tm-rule px-4 py-2.5 text-xs leading-relaxed text-tm-muted">
+      {zh
+        ? "总览按面板中非空收盘价计，分类按各字段覆盖率取平均。覆盖率不代表行情实时性。"
+        : "The headline counts non-null panel closes. Categories average their field coverage; coverage does not measure freshness."}
+    </p>
+  </TmPane>;
 }
 
 const ROSTER_PAGE_SIZE = 16;
