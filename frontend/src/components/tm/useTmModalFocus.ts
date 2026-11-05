@@ -35,6 +35,7 @@ export function useTmModalFocus(
     (initialFocusRef?.current ?? focusable()[0] ?? containerRef.current)?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();

@@ -31,6 +31,7 @@ import {
   type FactorExample,
 } from "@/components/alpha/FactorExamples";
 import { ReportComposer, ReportEvidenceEmpty, reportDirectionLabel, isReportDraftDirty, type ReportConfig } from "@/components/report/ReportComposer";
+import { researchNumberError } from "@/lib/research-input-validation";
 import { ReportVerdictHero } from "@/components/report/ReportVerdictHero";
 import { ReportCompareBar } from "@/components/report/ReportCompareBar";
 import { ReportDeepModal } from "@/components/report/ReportDeepModal";
@@ -230,6 +231,8 @@ export default function ReportPage() {
       intuitionForCover?: string,
       requestedConfig: ReportConfig = config,
     ) => {
+      const costError = researchNumberError("transactionCostBps", requestedConfig.transactionCostBps, locale);
+      if (costError) { setError(costError); return; }
       setRunning(true);
       setError(null);
       try {
@@ -257,7 +260,7 @@ export default function ReportPage() {
         setRunning(false);
       }
     },
-    [config],
+    [config, locale],
   );
 
   // P6.D — read /factors zoo handoff (if any) and auto-generate.

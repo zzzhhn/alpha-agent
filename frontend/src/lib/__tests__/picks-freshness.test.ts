@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPicksSnapshotStale } from "../picks-freshness";
+import { isPicksSnapshotStale, picksSnapshotStatus } from "../picks-freshness";
 
 describe("isPicksSnapshotStale", () => {
   const asOf = "2026-08-01T00:00:00Z";
@@ -14,5 +14,12 @@ describe("isPicksSnapshotStale", () => {
   it("fails closed for a missing or invalid timestamp", () => {
     expect(isPicksSnapshotStale(null, false)).toBe(true);
     expect(isPicksSnapshotStale("not-a-date", false)).toBe(true);
+  });
+
+  it("never calls an empty lookup with no snapshot timestamp current", () => {
+    expect(picksSnapshotStatus(null, false)).toBe("unknown");
+    expect(picksSnapshotStatus("not-a-date", false)).toBe("unknown");
+    expect(picksSnapshotStatus(asOf, true)).toBe("stale");
+    expect(picksSnapshotStatus(asOf, false)).toBe("current");
   });
 });

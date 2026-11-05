@@ -11,6 +11,7 @@ import { TmPagination } from "@/components/tm/TmPagination";
 import { FACTOR_EXAMPLES, type FactorExample } from "@/components/alpha/FactorExamples";
 import type { ZooEntry } from "@/lib/factor-zoo";
 import styles from "./report-composer.module.css";
+import { RESEARCH_NUMBER_LIMITS, researchNumberError } from "@/lib/research-input-validation";
 
 export interface ReportConfig {
   readonly direction: "long_short" | "long_only" | "short_only";
@@ -60,6 +61,7 @@ export function ReportComposer({
 }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
+  const costError = researchNumberError("transactionCostBps", config.transactionCostBps, locale);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [librarySource, setLibrarySource] = useState("examples");
   const [query, setQuery] = useState("");
@@ -86,7 +88,7 @@ export function ReportComposer({
             <TmTextarea label={zh ? "表达式" : "Expression"} value={expr} onChange={onExpr} disabled={running} rows={2} spellCheck={false} placeholder="rank(divide(net_income_adjusted, multiply(close, shares_outstanding)))" textareaClassName="min-h-[64px] resize-y leading-relaxed" />
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-tm-rule pt-3">
               <p className="font-tm-mono text-xs text-tm-muted">{zh ? "运行后生成回测、风险与信号证据。" : "Run to generate backtest, risk and signal evidence."}</p>
-              <TmButton variant="primary" size="md" onClick={onGenerate} disabled={!expr.trim() || running} loading={running} loadingLabel={zh ? "正在生成报告" : "Generating report"}>
+              <TmButton variant="primary" size="md" onClick={onGenerate} disabled={!expr.trim() || running || Boolean(costError)} loading={running} loadingLabel={zh ? "正在生成报告" : "Generating report"}>
                 {zh ? "生成报告" : "Generate report"}
               </TmButton>
             </div>
@@ -98,7 +100,7 @@ export function ReportComposer({
             <ConfigSelect label={zh ? "交易方向" : "Direction"} value={config.direction} options={(["long_short", "long_only", "short_only"] as const).map((value) => ({ value, label: reportDirectionLabel(value, locale) }))} onChange={(direction) => onConfig((c) => ({ ...c, direction: direction as ReportConfig["direction"] }))} disabled={running} />
             <ConfigSelect label={zh ? "中性化" : "Neutralization"} value={config.neutralize} options={[{ value: "none", label: zh ? "不中性化" : "None" }, { value: "sector", label: zh ? "行业中性" : "Sector neutral" }]} onChange={(neutralize) => onConfig((c) => ({ ...c, neutralize: neutralize as ReportConfig["neutralize"] }))} disabled={running} />
             <ConfigSelect label={zh ? "比较基准" : "Benchmark"} value={config.benchmarkTicker} options={[{ value: "SPY", label: "SPY" }, { value: "RSP", label: "RSP" }]} onChange={(benchmarkTicker) => onConfig((c) => ({ ...c, benchmarkTicker: benchmarkTicker as ReportConfig["benchmarkTicker"] }))} disabled={running} />
-            <TmNumberInput label={zh ? "交易成本（基点）" : "Trading cost (bps)"} min={0} max={50} step={1} value={config.transactionCostBps} onChange={(transactionCostBps) => onConfig((c) => ({ ...c, transactionCostBps }))} disabled={running} inputClassName="text-right" />
+            <TmNumberInput label={zh ? "交易成本（基点）" : "Trading cost (bps)"} {...RESEARCH_NUMBER_LIMITS.transactionCostBps} error={costError} step={1} value={config.transactionCostBps} onChange={(transactionCostBps) => onConfig((c) => ({ ...c, transactionCostBps }))} disabled={running} inputClassName="text-right" />
           </div>
           <div className="mt-4 border-t border-tm-rule pt-3 font-tm-mono text-xs leading-5 text-tm-muted">
             {zh ? "多头 / 空头各取 30% · 示例仅载入草稿，不自动计算。" : "Top / bottom 30% · loading a source does not run a backtest."}

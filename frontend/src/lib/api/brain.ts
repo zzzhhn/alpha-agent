@@ -193,8 +193,8 @@ export interface BrainRunsPage {
   total: number;
 }
 
-export const fetchBrainRuns = (limit = 12, opts?: ApiGetOptions) =>
-  apiGet<BrainRunsPage>(`/api/brain/runs?limit=${encodeURIComponent(String(limit))}`, opts);
+export const fetchBrainRuns = (limit = 12, opts?: ApiGetOptions, offset = 0) =>
+  apiGet<BrainRunsPage>(`/api/brain/runs?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`, opts);
 
 export interface BrainRunCandidate {
   id: number;

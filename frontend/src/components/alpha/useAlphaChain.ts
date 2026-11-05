@@ -73,11 +73,14 @@ function deriveMetrics(s: ChainState): VerdictMetrics {
 
 export function useAlphaChain() {
   const [state, setState] = useState<ChainState>({ kind: "idle" });
+  const [inputSnapshot, setInputSnapshot] = useState<{ text: string; universe: FactorUniverse } | null>(null);
+  const [validationSnapshot, setValidationSnapshot] = useState<AlphaValidationParams | null>(null);
 
   const runTranslatedBacktest = useCallback(async (
     translate: Extract<ChainState, { kind: "backtesting" }>["translate"],
     validation: AlphaValidationParams,
   ) => {
+    setValidationSnapshot({ ...validation });
     setState({ kind: "backtesting", translate });
     try {
       const resp = await runFactorBacktest({
@@ -108,6 +111,8 @@ export function useAlphaChain() {
     universe: FactorUniverse,
     validation: AlphaValidationParams,
   ) => {
+    setInputSnapshot({ text, universe });
+    setValidationSnapshot({ ...validation });
     setState({ kind: "translating" });
 
     let translate;
@@ -148,7 +153,11 @@ export function useAlphaChain() {
     await runTranslatedBacktest(state.translate, validation);
   }, [state, runTranslatedBacktest]);
 
-  const reset = useCallback(() => setState({ kind: "idle" }), []);
+  const reset = useCallback(() => {
+    setState({ kind: "idle" });
+    setInputSnapshot(null);
+    setValidationSnapshot(null);
+  }, []);
 
   // Derive all computed values inside useMemo so `state` is the only
   // dependency that drives re-computation (rerender-derived-state,
@@ -158,6 +167,8 @@ export function useAlphaChain() {
     const m = deriveMetrics(state);
     return {
       state,
+      inputSnapshot,
+      validationSnapshot,
       panes: paneStates(state),
       metrics: m,
       thresholds: evalThresholds(m),
@@ -166,5 +177,5 @@ export function useAlphaChain() {
       reset,
       isLoading: state.kind === "translating" || state.kind === "backtesting",
     };
-  }, [state, start, retryBacktest, reset]);
+  }, [state, inputSnapshot, validationSnapshot, start, retryBacktest, reset]);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { MousePointerClick } from "lucide-react";
 import type { ChartEvent, OhlcvBar } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
@@ -8,6 +8,8 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import IntradayDrawer from "./IntradayDrawer";
 import ExplainRangePanel from "./ExplainRangePanel";
 import { readTmChartPalette, tmChartColorWithAlpha } from "@/components/charts";
+import { TmButton } from "@/components/tm/TmButton";
+import { TmSelect } from "@/components/tm/TmField";
 
 // lightweight-charts v4 imports — keep dynamic to avoid SSR breakage (the
 // lib touches `document` at import time). The component itself is
@@ -47,9 +49,18 @@ export default function PriceChart({
   const [errMsg, setErrMsg] = useState<string>("");
   // YYYY-MM-DD of the daily candle the user clicked; null = drawer closed.
   const [drawerDate, setDrawerDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState("");
+  const intradayId = useId();
+  const intradayTriggerRef = useRef<HTMLButtonElement>(null);
+  const availableDate = bars.some((bar) => bar.date === selectedDate)
+    ? selectedDate
+    : bars.at(-1)?.date ?? "";
   // Stable reference so IntradayDrawer's keydown-listener effect does not
   // tear down + re-bind on every PriceChart render (e.g. status changes).
-  const handleDrawerClose = useCallback(() => setDrawerDate(null), []);
+  const handleDrawerClose = useCallback(() => {
+    setDrawerDate(null);
+    intradayTriggerRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const renderChart = useCallback(async (bars: OhlcvBar[], events: ChartEvent[]) => {
     const el = containerRef.current;
@@ -227,6 +238,7 @@ export default function PriceChart({
       } else {
         return;
       }
+      setSelectedDate(dateStr);
       setDrawerDate(dateStr);
     });
 
@@ -282,16 +294,28 @@ export default function PriceChart({
 
   return (
     <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-tm-fg">
           {t(locale, "chart.title")} · {ticker}
         </h2>
         {status === "ok" ? (
-          <div className="inline-flex items-center gap-1.5 rounded-[2px] border border-tm-accent/30 bg-tm-accent/10 px-2.5 py-1 text-sm text-tm-accent">
-            <MousePointerClick className="h-4 w-4" strokeWidth={1.75} />
-            <span className="font-medium">
-              {t(locale, "chart.click_for_intraday")}
-            </span>
+          <div className="flex items-center gap-2">
+            <TmSelect
+              aria-label={locale === "zh" ? "分时走势日期" : "Intraday date"}
+              value={availableDate}
+              onChange={setSelectedDate}
+              options={[...bars].reverse().map((bar) => ({ value: bar.date, label: bar.date }))}
+            />
+            <TmButton
+              ref={intradayTriggerRef}
+              variant="secondary"
+              aria-expanded={drawerDate !== null}
+              aria-controls={drawerDate ? intradayId : undefined}
+              onClick={() => setDrawerDate(availableDate)}
+            >
+              <MousePointerClick aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
+              {locale === "zh" ? "查看分时" : "View intraday"}
+            </TmButton>
           </div>
         ) : null}
       </div>
@@ -322,6 +346,7 @@ export default function PriceChart({
         ) : null}
       </div>
       <IntradayDrawer
+        id={intradayId}
         ticker={ticker}
         date={drawerDate}
         onClose={handleDrawerClose}

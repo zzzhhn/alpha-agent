@@ -10,6 +10,7 @@ import { EvidencePaneGrid } from "@/components/alpha/EvidencePaneGrid";
 import { HypothesisInputCard } from "@/components/alpha/HypothesisInputCard";
 import type { InputCardHistoryEntry } from "@/components/alpha/HypothesisInputCard";
 import { useAlphaChain } from "@/components/alpha/useAlphaChain";
+import { alphaRunConfig, sameAlphaValidation } from "@/components/alpha/run-config";
 import type { AlphaValidationParams } from "@/components/alpha/useAlphaChain";
 import { VerdictBar } from "@/components/alpha/VerdictBar";
 import { AlphaResearchContext } from "@/components/alpha/AlphaResearchContext";
@@ -78,9 +79,15 @@ export default function AlphaPage() {
   const handleHistorySelect = useCallback(
     (entry: InputCardHistoryEntry) => {
       setText(entry.request.text);
-      if (entry.request.universe) setUniverse(entry.request.universe);
+      // Custom universe membership is not supported by the current engine.
+      setUniverse("SP500");
+      if (entry.request.universe !== "SP500") {
+        toast.info(locale === "zh"
+          ? "已载入历史假设；当前验证股票池使用 S&P 500。历史记录未修改。"
+          : "Historical hypothesis loaded. Validation now uses S&P 500; the saved record is unchanged.");
+      }
     },
-    [],
+    [locale, toast],
   );
 
   const handleReTranslate = useCallback(() => {
@@ -99,6 +106,12 @@ export default function AlphaPage() {
 
   const canSave =
     translate !== null && !(translate.smoke.degenerate ?? false);
+  const evidenceValidation = chain.validationSnapshot ?? validation;
+  const draftChanged = translate !== null && !chain.isLoading && (
+    chain.inputSnapshot?.text !== text.trim()
+    || chain.inputSnapshot?.universe !== universe
+    || !sameAlphaValidation(evidenceValidation, validation)
+  );
 
   const handleOpenBacktest = useCallback(() => {
     if (!translate || typeof window === "undefined") return;
@@ -108,16 +121,10 @@ export default function AlphaPage() {
       operators_used: translate.spec.operators_used,
       lookback: translate.spec.lookback,
       hypothesis: translate.spec.hypothesis,
-      direction: validation.direction,
-      neutralize: validation.neutralize,
-      benchmarkTicker: validation.benchmarkTicker,
-      mode: "static",
-      topPct: validation.topPct / 100,
-      bottomPct: validation.topPct / 100,
-      transactionCostBps: validation.transactionCostBps,
+      ...alphaRunConfig(evidenceValidation),
     }));
     window.location.assign("/backtest");
-  }, [translate, validation]);
+  }, [translate, evidenceValidation]);
 
   // Save-to-Zoo: localStorage via addToZoo (mirrors ZooSaveButton internals).
   // Payload mirrors old page's ZooSaveButton props (lines 276-297):
@@ -154,6 +161,7 @@ export default function AlphaPage() {
         hypothesis: translate.spec.hypothesis ?? "",
         intuition: translate.spec.justification,
         headlineMetrics,
+        ...alphaRunConfig(evidenceValidation),
       });
       toast.success(t(locale, "alpha.zoo.savedToast" as Parameters<typeof t>[1]), {
         action: {
@@ -167,11 +175,11 @@ export default function AlphaPage() {
           (e instanceof Error ? e.message : String(e))
       );
     }
-  }, [translate, chain.state, toast, locale]);
+  }, [translate, chain.state, evidenceValidation, toast, locale]);
 
   return (
     <TmScreen className="alpha-workbench">
-      <AlphaResearchContext state={chain.state} universe={universe} onOpenBacktest={handleOpenBacktest} />
+      <AlphaResearchContext state={chain.state} universe={chain.inputSnapshot?.universe ?? universe} draftChanged={draftChanged} onOpenBacktest={handleOpenBacktest} />
       <HypothesisInputCard
         text={text}
         onTextChange={setText}
@@ -188,6 +196,7 @@ export default function AlphaPage() {
         history={history as readonly InputCardHistoryEntry[]}
         onHistorySelect={handleHistorySelect}
       />
+      {draftChanged ? <p role="status" className="border-b border-tm-rule bg-tm-warn-soft px-6 py-3 text-xs leading-5 text-tm-warn">{locale === "zh" ? "草稿已修改，当前证据仍属于上次运行。保存与比较沿用上次参数；使用上方重测按钮验证新参数。" : "Draft changed; the evidence still belongs to the previous run. Save and Compare retain its settings. Rerun above to validate new parameters."}</p> : null}
       <VerdictBar
         state={chain.state}
         metrics={chain.metrics}

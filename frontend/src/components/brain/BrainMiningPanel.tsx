@@ -1530,11 +1530,13 @@ function runNextStep(run: BrainMiningRun, zh: boolean): string {
 
 function RunSelector({
   runs,
+  disabled,
   selectedRunId,
   onChange,
   zh,
 }: {
   runs: BrainMiningRun[];
+  disabled: boolean;
   selectedRunId: number | null;
   onChange: (id: number | null) => void;
   zh: boolean;
@@ -1550,6 +1552,7 @@ function RunSelector({
 
   return (
     <TmSelectMenu
+      disabled={disabled}
       value={selectedRunId == null ? "" : String(selectedRunId)}
       onChange={(next) => onChange(next ? Number(next) : null)}
       ariaLabel={zh ? "选择挖矿运行" : "Select mining run"}
@@ -1708,6 +1711,7 @@ export function BrainMiningPanel() {
   } | null>(null);
   const [resultsLoading, setResultsLoading] = useState(true);
   const [runs, setRuns] = useState<BrainMiningRun[] | null>(null);
+  const [runsPage, setRunsPage] = useState(1);
   const [runsTotal, setRunsTotal] = useState(0);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [runsLoading, setRunsLoading] = useState(true);
@@ -1722,15 +1726,16 @@ export function BrainMiningPanel() {
   const loadRuns = useCallback(async () => {
     const sequence = ++runLoadSequence.current;
     setRunsLoading(true);
+    setRuns(null);
     try {
-      const res = await fetchBrainRuns(RECENT_RUN_LIMIT);
+      const res = await fetchBrainRuns(RECENT_RUN_LIMIT, undefined, (runsPage - 1) * RECENT_RUN_LIMIT);
       if (sequence !== runLoadSequence.current) return;
       const recent = sortRecentRuns(Array.isArray(res.runs) ? res.runs : []).slice(0, RECENT_RUN_LIMIT);
       setRuns(recent);
       setRunsTotal(typeof res.total === "number" ? res.total : recent.length);
       setRunsError(null);
       if (!selectionTouched.current) {
-        const preferred = recent.find(isManualRun) ?? recent[0] ?? null;
+        const preferred = (runsPage === 1 ? recent.find(isManualRun) : null) ?? recent[0] ?? null;
         setSelectedRunId(preferred?.id ?? null);
       }
     } catch (e) {
@@ -1740,7 +1745,7 @@ export function BrainMiningPanel() {
     } finally {
       if (sequence === runLoadSequence.current) setRunsLoading(false);
     }
-  }, []);
+  }, [runsPage]);
 
   const query = useMemo<BrainAlphaQuery>(
     () => ({
@@ -1797,9 +1802,10 @@ export function BrainMiningPanel() {
       setPage(0);
       setExpanded(null);
       setViewChoice(null);
-      void loadRuns();
+      if (runsPage !== 1) setRunsPage(1);
+      else void loadRuns();
     },
-    [loadRuns],
+    [loadRuns, runsPage],
   );
 
   const handleMiningComplete = useCallback(
@@ -1810,7 +1816,8 @@ export function BrainMiningPanel() {
         setPage(0);
         setExpanded(null);
         if (selectedRunId === runId && page === 0) void load();
-        void loadRuns();
+        if (runsPage !== 1) setRunsPage(1);
+        else void loadRuns();
       } else {
         // Legacy POST responses do not identify a run. Refresh the current
         // compatibility query without changing the user's selected run.
@@ -1818,7 +1825,7 @@ export function BrainMiningPanel() {
         void loadRuns();
       }
     },
-    [load, loadRuns, page, selectedRunId],
+    [load, loadRuns, page, runsPage, selectedRunId],
   );
 
   // reset to page 0 whenever a filter or the page size changes
@@ -1900,6 +1907,7 @@ export function BrainMiningPanel() {
           </span>
           <RunSelector
             runs={recentRuns}
+            disabled={runsLoading || Boolean(runsError)}
             selectedRunId={selectedRunId}
             onChange={handleRunSelection}
             zh={zh}
@@ -1908,6 +1916,20 @@ export function BrainMiningPanel() {
             <span className="font-tm-mono text-xs text-tm-warn">{zh ? "运行记录刷新失败，仍显示上次记录" : "Run refresh failed; showing the last loaded record."}</span>
           ) : null}
         </div>
+        {runsTotal > RECENT_RUN_LIMIT && <TmPagination
+          page={runsPage} pageSize={RECENT_RUN_LIMIT} totalItems={runsTotal}
+          pageSizeOptions={[RECENT_RUN_LIMIT]} onPageChange={(next) => { selectionTouched.current = false; setRunsPage(next); }}
+          onPageSizeChange={() => {}} loading={runsLoading}
+          labels={{
+            navigation: zh ? "运行目录分页" : "Run directory pagination",
+            previous: zh ? "较新运行" : "Newer", next: zh ? "更早运行" : "Older",
+            previousAriaLabel: zh ? "查看较新运行" : "View newer runs",
+            nextAriaLabel: zh ? "查看更早运行" : "View older runs",
+            page: (current, count) => `${current} / ${count}`,
+            pageSize: zh ? "每页" : "Per page",
+            total: (total) => zh ? `共 ${total} 轮 · 翻页切换运行` : `${total} runs · paging switches runs`,
+          }}
+        />}
         <RunLedger
           run={selectedRun}
           selectedRunId={selectedRunId}

@@ -976,7 +976,7 @@ function CombineParamsPane({
             label={t(locale, "screener.params.lookback")}
             min={10}
             max={252}
-            step={10}
+            step={1}
             value={lookback}
             unit={locale === "zh" ? "天" : "d"}
             onChange={onLookback}

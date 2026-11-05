@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { runFactorBacktest } from "@/lib/api";
+import { researchParameterErrors } from "@/lib/research-input-validation";
 import type {
   FactorBacktestRequest,
   FactorBacktestResponse,
@@ -146,6 +147,11 @@ export function useBacktestSession(
   const [baselineRunId, setBaselineRunId] = useState<string | null>(null);
 
   const runOnce = useCallback(async () => {
+    const invalid = Object.entries(researchParameterErrors(params, "en")).find(([, error]) => error);
+    if (invalid) {
+      setRunState({ kind: "error", message: `${invalid[0]}: ${invalid[1]}` });
+      return;
+    }
     setRunState({ kind: "running" });
     try {
       const request = buildRequest(params, specMeta);

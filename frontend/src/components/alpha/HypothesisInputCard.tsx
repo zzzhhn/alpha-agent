@@ -55,7 +55,7 @@ interface Props {
 // FactorUniverse = "CSI300" | "CSI500" | "SP500" | "custom"
 // CSI300/CSI500 dropped: the backend has no A-share data and the LLM only
 // emits SP500|custom, so they were non-functional. SP500 + custom remain.
-const UNIVERSES: FactorUniverse[] = ["SP500", "custom"];
+const UNIVERSES: FactorUniverse[] = ["SP500"];
 
 // ---- Component ----
 
@@ -215,6 +215,7 @@ export function HypothesisInputCard(p: Props) {
           {/* Universe selector */}
           <TmSelect
             label={zh ? "股票池" : "Universe"}
+            hint={zh ? "当前验证仅支持 S&P 500" : "Validation currently supports S&P 500 only"}
             value={p.universe}
             onChange={(value) => p.onUniverseChange(value as FactorUniverse)}
             options={UNIVERSES.map((value) => ({ value, label: value === "SP500" ? "S&P 500" : zh ? "自定义" : "Custom" }))}
