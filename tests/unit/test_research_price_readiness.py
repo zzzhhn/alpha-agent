@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from alpha_agent.data.research_refresh import research_price_readiness
-from scripts.ensure_research_prices import ensure_prices
+from scripts.ensure_research_prices import ensure_prices, within_research_day
 
 
 @pytest.mark.parametrize("missing,spy,ready", [(0, True, True), (2, True, True), (3, True, False), (0, False, False)])
@@ -56,6 +56,23 @@ def test_recovery_does_not_hide_auth_or_code_errors_as_data_pause():
     request = Mock(return_value={"ok": True, "ready": False, "price_universe_count": 76})
     with pytest.raises(RuntimeError, match="unexpectedly"):
         ensure_prices(request, lambda: {"ready": False, "expected_pause": False})
+
+
+def test_local_price_error_does_not_override_final_actual_coverage():
+    request = Mock(side_effect=[
+        {"ok": True, "ready": False, "price_universe_count": 75},
+        {"updated": 300, "error_count": 1},
+        {"ok": True, "ready": True},
+    ])
+    result = ensure_prices(request, lambda: {"ready": True})
+    assert result["ready"]
+    assert result["partial_price_errors"] == 1
+
+
+def test_research_day_reserves_one_request_before_midnight():
+    assert within_research_day("2026-11-06", datetime(2026, 11, 6, 23, 54, tzinfo=UTC))
+    assert not within_research_day("2026-11-06", datetime(2026, 11, 6, 23, 56, tzinfo=UTC))
+    assert not within_research_day("2026-11-06", datetime(2026, 11, 7, 0, tzinfo=UTC))
 
 
 async def test_daily_prices_filters_nonfinite_and_unfinished_candles(monkeypatch):
