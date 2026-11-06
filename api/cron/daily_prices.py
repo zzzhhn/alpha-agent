@@ -14,6 +14,7 @@ backfill by curling this endpoint with ?period=3y over offset slices.
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -21,7 +22,8 @@ from typing import Any
 from alpha_agent.signals.yf_helpers import get_ticker
 from alpha_agent.storage.postgres import get_pool
 from alpha_agent.storage.queries import upsert_daily_close
-from alpha_agent.data.security_identity import valid_research_symbol
+from alpha_agent.data.research_refresh import price_universe
+from alpha_agent.market_session import latest_completed_xnys_session
 
 
 async def handler(
@@ -31,10 +33,8 @@ async def handler(
 ) -> dict[str, Any]:
     started_at = datetime.now(UTC)
     pool = await get_pool(os.environ["DATABASE_URL"])
-    rows = await pool.fetch(
-        "SELECT DISTINCT ticker FROM daily_signals_slow ORDER BY ticker"
-    )
-    tickers = [r["ticker"] for r in rows if valid_research_symbol(r["ticker"])]
+    tickers = await price_universe(pool)
+    expected_date = latest_completed_xnys_session(started_at)
     start = offset if offset is not None else 0
     end = (start + limit) if limit else len(tickers)
     n = 0
@@ -59,7 +59,11 @@ async def handler(
             wrote = 0
             for ts, row in df.iterrows():
                 close = row.get("Close")
-                if close is None:
+                if close is None or not math.isfinite(float(close)) or float(close) <= 0:
+                    continue
+                # Intraday history may include today's unfinished candle. It is
+                # not a settled daily close and must not advance ledger dates.
+                if ts.date() > expected_date:
                     continue
                 await upsert_daily_close(pool, tk, ts.date().isoformat(), float(close))
                 n += 1
@@ -86,7 +90,20 @@ async def handler(
         error_count += 1
         errors.append(f"consistency_materialize: {type(exc).__name__}: {exc}")
 
-    # Stamp cron_runs for observability, mirroring the other cron handlers.
+    fresh_rows = await pool.fetch(
+        "SELECT ticker FROM daily_prices WHERE date=$1 AND ticker=ANY($2::text[]) AND close>0",
+        expected_date, tickers[start:end],
+    )
+    fresh_tickers = {r["ticker"] for r in fresh_rows}
+    freshness = {
+        "expected_market_date": expected_date.isoformat(),
+        "requested_count": len(tickers[start:end]),
+        "fresh_count": len(fresh_tickers),
+        "stale_tickers": [tk for tk in tickers[start:end] if tk not in fresh_tickers][:40],
+        "price_universe_count": len(tickers),
+    }
+    # `updated` is retained for existing clients; it counts valid rows offered
+    # to the idempotent upsert, not changed rows or fresh ticker coverage.
     await pool.execute(
         "INSERT INTO cron_runs "
         "(cron_name, started_at, finished_at, ok, error_count, details) "
@@ -98,6 +115,8 @@ async def handler(
         error_count,
         json.dumps({
             "updated": n,
+            "rows_processed": n,
+            **freshness,
             "range": [start, end],
             "errors": errors,
             "skipped_count": len(skipped),
@@ -108,6 +127,8 @@ async def handler(
     return {
         "cron": "daily_prices",
         "updated": n,
+        "rows_processed": n,
+        **freshness,
         "range": [start, end],
         "error_count": error_count,
         "errors": errors,

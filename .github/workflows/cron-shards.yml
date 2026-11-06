@@ -112,13 +112,36 @@ jobs:
           test "$HTTP" = 200
           python3 -c "import json,sys; sys.exit(0 if json.load(open('/tmp/publish.json')).get('ok') else 1)"
 
+  research_prices:
+    needs: [preflight]
+    if: |
+      needs.preflight.outputs.ready == 'true' && (
+      github.event.schedule == '0 23 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.job == 'fast_intraday' || inputs.job == 'both'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    concurrency:
+      group: alpha-bounded-recovery
+      cancel-in-progress: false
+    outputs:
+      ready: ${{ steps.prices.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: prices
+        name: Ensure current prices before complete research refresh
+        env:
+          TRIGGER_EVENT: ${{ github.event_name }}
+        run: python3 scripts/ensure_research_prices.py
+
   # fast_intraday runs first when both are dispatched, so picks-page data
   # (the user-visible product surface) gets refreshed before the bulk slow
   # refresh tail. Each is independent at the data layer.
   fast_intraday:
-    needs: [preflight]
+    needs: [preflight, research_prices]
     if: |
-      needs.preflight.outputs.ready == 'true' && (
+      needs.preflight.outputs.ready == 'true' && needs.research_prices.outputs.ready == 'true' && (
       github.event.schedule == '0 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.job == 'fast_intraday' || inputs.job == 'both'))
