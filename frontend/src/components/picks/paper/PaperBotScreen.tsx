@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import { TmPane, TmScreen } from "@/components/tm/TmPane";
@@ -17,12 +17,13 @@ import {
 } from "@/lib/api/paper-bot";
 import { Metric } from "./PaperUi";
 import PaperBotConfigDrawer from "./PaperBotConfigDrawer";
-import { PaperBotState, PaperBotPagination, PaperBotRunDrawer, PaperBotOrderDrawer, PaperBotActions, PaperBotOutcome, botTime, botRunLabel, botStageLabel, botTriggerLabel } from "./PaperBotUi";
+import { PaperBotState, PaperBotPagination, PaperBotRunDrawer, PaperBotOrderDrawer, PaperBotExecutionSummary, PaperBotOutcome, botTime, botRunLabel, botStageLabel, botTriggerLabel, botModelLabel } from "./PaperBotUi";
 import { PaperBotReadiness, PaperBotPerformanceSummary, PaperBotPerformanceDrawer, PaperBotScheduleDrawer } from "./PaperBotEvidence";
 import PaperPositionsWithSource from "./PaperPositionsWithSource";
 import PaperCurvePane from "./PaperCurvePane";
 import PaperOrdersPane from "./PaperOrdersPane";
 import RecommendationPerformance from "../RecommendationPerformance";
+import PaperBotPositionReview from "./PaperBotPositionReview";
 
 export default function PaperBotScreen({ accountTabs }: { readonly accountTabs: ReactNode }) {
   const { locale } = useLocale();
@@ -68,15 +69,19 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
   const [orders,setOrders] = useState<Resource<OrderListResponse>>(pending);
   const [runPage,setRunPage] = useState(1);
   const [orderPage,setOrderPage] = useState(1);
+  const [positionPage,setPositionPage] = useState(1);
+  const [reviewTicker,setReviewTicker] = useState<string | null>(null);
   const [ledger,setLedger] = useState<"runs" | "orders">("runs");
   const [revision,setRevision] = useState(0);
   const [configDraft,setConfigDraft] = useState<PaperBotConfig | null>(null);
   const [details,setDetails] = useState<PaperBotRun | null>(null);
+  const [detailId,setDetailId] = useState<string | null>(null);
   const [detailsLoading,setDetailsLoading] = useState(false);
   const [detailsError,setDetailsError] = useState<unknown>(null);
   const [orderDetails,setOrderDetails] = useState<OrderOut | null>(null);
   const [researchOpen,setResearchOpen] = useState(false);
   const [busy,setBusy] = useState(false);
+  const [waking,setWaking] = useState(false);
   const [actionError,setActionError] = useState<unknown>(null);
   const [pollError,setPollError] = useState(false);
   const alive = useRef(true);
@@ -89,8 +94,8 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
   useEffect(()=>{
     let cancelled=false;
     const version=mutationVersion.current;
-    const read = async <T,>(fetcher:()=>Promise<T>, setter:(value:Resource<T>)=>void) => {
-      setter({data:null,error:null,loading:true});
+    const read = async <T,>(fetcher:()=>Promise<T>, setter:Dispatch<SetStateAction<Resource<T>>>) => {
+      setter(previous=>({...previous,error:null,loading:true}));
       try {const data=await fetcher(); if(!cancelled && version===mutationVersion.current) setter({data,error:null,loading:false});}
       catch(error){if(!cancelled && version===mutationVersion.current) setter({data:null,error,loading:false});}
     };
@@ -156,6 +161,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
         if(version === mutationVersion.current) {
           setLatest({data:run,error:null,loading:false}); setPollError(false);
           setDetails(previous=>previous?.id===run.id ? run : previous);
+          setRuns(previous=>previous.data ? {...previous,data:{...previous.data,runs:previous.data.runs.map(row=>row.id===run.id ? run : row)}} : previous);
           if(!isActivePaperRun(run)){refresh();return;}
         }
       } catch {if(!cancelled && version===mutationVersion.current)setPollError(true);}
@@ -177,28 +183,41 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
     finally {busyRef.current=false;if(alive.current){setBusy(false);refresh();}}
   }
   async function inspectRun(run: PaperBotRun) {
+    setDetailId(run.id);
     const version=++detailRequestVersion.current;
     setDetails(run);setDetailsLoading(true);setDetailsError(null);
     try {const fresh=await fetchPaperBotRun(id,run.id);if(alive.current && version===detailRequestVersion.current)setDetails(fresh);}
     catch(error){if(alive.current && version===detailRequestVersion.current)setDetailsError(error);}
     finally {if(alive.current && version===detailRequestVersion.current)setDetailsLoading(false);}
   }
+  async function inspectRunById(runId:string) {
+    const version=++detailRequestVersion.current;
+    setDetailId(runId);setDetails(null);setDetailsLoading(true);setDetailsError(null);
+    try {const fresh=await fetchPaperBotRun(id,runId);if(alive.current && version===detailRequestVersion.current)setDetails(fresh);}
+    catch(error){if(alive.current && version===detailRequestVersion.current)setDetailsError(error);}
+    finally {if(alive.current && version===detailRequestVersion.current)setDetailsLoading(false);}
+  }
   const cfg=config.data;
   const acc=account.data;
   const marksMissing=acc ? acc.portfolio_value === null || acc.unrealized_pnl === null || acc.total_return_pct === null || acc.positions.some(position=>position.current_price === null) : false;
-  const runNow = () => mutate(async()=>{const run=await startPaperBotRun(id);if(alive.current)setLatest({data:run,error:null,loading:false});});
+  const runNow = async () => {setWaking(true);try {await mutate(async()=>{const run=await startPaperBotRun(id);if(alive.current)setLatest({data:run,error:null,loading:false});});}finally {if(alive.current)setWaking(false);}};
   const returnPct=acc?.total_return_pct;
+  const refreshing=[account,config,curve,performance,latest].some(resource=>resource.loading);
+  const currentWindow=cfg?.schedule_observations?.find(row=>row.status === "waiting");
+  const wakeTime=currentWindow?.planned_at ?? cfg?.next_wake_at;
+  const shownPositionPage=Math.min(positionPage,Math.max(1,Math.ceil((acc?.positions.length ?? 0)/5)));
   return <TmScreen className="overflow-y-auto paper-bot-appear">
     <WorkbenchHeader title={summary.name || t(locale,"sim.bot.title")} subtitle={t(locale,"sim.bot.subtitle")} statuses={[
-      {label:t(locale,"sim.bot.model"),value:cfg ? `${cfg.provider} / ${cfg.model}` : "—"},
+      {label:t(locale,"sim.bot.model"),value:cfg ? botModelLabel(cfg.provider,cfg.model) : "—"},
       {label:t(locale,"sim.bot.readiness"),value:cfg?.readiness ? t(locale,cfg.readiness.can_wake ? "sim.bot.can_wake" : "sim.bot.cannot_wake") : "—",tone:cfg?.readiness && !cfg.readiness.can_wake ? "warning" : "default"},
-      {label:t(locale,"sim.bot.next"),value:cfg?.schedule_enabled ? `${botTime(cfg.next_wake_at,locale)} CST` : cfg ? t(locale,"sim.bot.paused") : "—"},
+      {label:t(locale,currentWindow ? "sim.bot.schedule.current_window" : "sim.bot.next"),value:cfg?.schedule_enabled && wakeTime ? `${botTime(wakeTime,locale)} CST` : cfg && !cfg.schedule_enabled ? t(locale,"sim.bot.paused") : "—"},
     ]} action={<div className="flex flex-wrap gap-2">
-      <TmButton variant="secondary" onClick={refresh} disabled={busy}>{t(locale,"sim.bot.refresh")}</TmButton>
+      <TmButton variant="secondary" onClick={refresh} disabled={busy} loading={refreshing}>{t(locale,"sim.bot.refresh")}</TmButton>
       <TmButton variant="secondary" onClick={()=>setConfigDraft(cfg)} disabled={!cfg || busy}>{t(locale,"sim.bot.configure")}</TmButton>
-      <TmButton onClick={()=>void runNow()} loading={busy} disabled={active || latest.loading || !!latest.error || !canWakePaperBot(cfg)}>{active ? t(locale,"sim.bot.status.running") : t(locale,"sim.bot.wake")}</TmButton>
+      <TmButton onClick={()=>void runNow()} loading={waking} disabled={busy || active || latest.loading || !!latest.error || !canWakePaperBot(cfg)}>{active ? t(locale,"sim.bot.status.running") : t(locale,"sim.bot.wake")}</TmButton>
     </div>} />
     {accountTabs}
+    {refreshing && acc ? <p role="status" className="px-6 py-2 text-xs text-tm-muted">{t(locale,"sim.bot.refreshing")}</p> : null}
     {actionError ? <PaperBotState error={actionError} onRetry={()=>{setActionError(null);refresh();}} /> : null}
     <TmPane title={t(locale,"sim.account.tab")} meta={cfg ? `${t(locale,"sim.bot.version")} ${cfg.config_version}` : "—"}>
       <div className="grid grid-cols-2 gap-4 px-6 py-4 sm:grid-cols-4">
@@ -208,7 +227,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
         <Metric label={t(locale,"sim.workspace.total_return")} value={returnPct == null || marksMissing ? "—" : `${returnPct>0 ? "+" : ""}${returnPct.toFixed(2)}%`} tone={!marksMissing && returnPct ? returnPct>0 ? "text-tm-pos" : "text-tm-neg" : "text-tm-fg"} />
       </div>
       {marksMissing ? <p role="status" className="px-6 pb-3 text-xs leading-5 text-tm-warn">{t(locale,"sim.bot.missing_marks")}</p> : null}
-      {acc?.valued_at ? <p className="px-6 pb-3 text-xs text-tm-muted">{t(locale,"sim.bot.valued_at")} · {botTime(acc.valued_at,locale)} CST</p> : null}
+      {acc?.valued_at ? <p className="px-6 pb-3 text-xs text-tm-muted">{t(locale,"sim.bot.valuation_snapshot")} · {botTime(acc.valued_at,locale)} CST</p> : null}
       {account.error ? <PaperBotState error={account.error} onRetry={refresh} /> : null}
     </TmPane>
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
@@ -217,24 +236,23 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
           {(latest.loading && !current) || latest.error ? (
             <PaperBotState loading={latest.loading} error={latest.error} onRetry={refresh} />
           ) : current ? <div className="space-y-3 px-6 py-5">
-            <div role="status" aria-live="polite" className="font-tm-mono text-xs text-tm-accent">{botStageLabel(locale,current)}</div>
+            <div role="status" aria-live="polite" className="flex flex-wrap justify-between gap-2 font-tm-mono text-xs text-tm-accent"><span>{botStageLabel(locale,current)}</span><span className="text-tm-muted">{botTriggerLabel(locale,current.trigger)}</span></div>
+            <PaperBotExecutionSummary run={current} />
             <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-tm-fg">{current.summary || (active ? t(locale,"sim.bot.running_hint") : current.status === "no_trade" ? t(locale,"sim.bot.no_trade") : current.status === "failed" ? t(locale,"sim.bot.run_error") : t(locale,"sim.bot.no_result"))}</p>
             <PaperBotOutcome run={current} />
-            <div className="[&_li_p]:line-clamp-2"><PaperBotActions run={current} limit={4} /></div>
             <p className="text-xs leading-5 text-tm-muted">{t(locale,active ? "sim.bot.running_hint" : "sim.bot.completed_hint")}</p>
             <TmButton variant="secondary" onClick={()=>void inspectRun(current)}>{t(locale,"sim.bot.details")}</TmButton>
             {pollError ? <p role="alert" className="text-xs text-tm-neg">{t(locale,"sim.bot.stale_poll")}</p> : null}
           </div> : <TmStatePane state="empty" title={t(locale,"sim.bot.no_runs")} description={t(locale,"sim.bot.no_runs_hint")} className="border-0 !bg-transparent" />}
         </TmPane>
-        <TmPane title={t(locale,"sim.bot.curve")} meta={curve.data?.base_date ?? "—"}>{curve.loading || curve.error ? <PaperBotState loading={curve.loading} error={curve.error} onRetry={refresh} /> : <PaperCurvePane curve={curve.data} compact showDisclaimer={false} />}</TmPane>
       </div>
       <div className="min-w-0"><TmPane title={t(locale,"sim.bot.run_panel")}>
-        {config.loading || config.error ? <PaperBotState loading={config.loading} error={config.error} onRetry={refresh} /> : cfg ? <div className="space-y-4 px-4 py-4 text-xs leading-5 text-tm-muted">
+        {(config.loading && !cfg) || config.error ? <PaperBotState loading={config.loading} error={config.error} onRetry={refresh} /> : cfg ? <div className="space-y-3 px-4 py-4 text-xs leading-5 text-tm-muted">
           <PaperBotReadiness config={cfg} />
           <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-tm-fg">{t(locale,cfg.schedule_enabled ? "sim.bot.scheduled" : "sim.bot.paused")}</span><TmButton variant="secondary" disabled={busy || (!cfg.schedule_enabled && !cfg.credential_configured)} onClick={()=>void mutate(()=>patchPaperBotConfig(id,{schedule_enabled:!cfg.schedule_enabled}))}>{t(locale,cfg.schedule_enabled ? "sim.bot.pause" : "sim.bot.resume")}</TmButton></div>
-          <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2"><dt>{t(locale,"sim.bot.open_slot")}</dt><dd>{cfg.open_enabled ? `${cfg.open_offset_minutes} ${t(locale,"sim.bot.minutes")}` : "—"}</dd><dt>{t(locale,"sim.bot.close_slot")}</dt><dd>{cfg.close_enabled ? `${cfg.close_offset_minutes} ${t(locale,"sim.bot.minutes")}` : "—"}</dd><dt>{t(locale,"sim.bot.daily_runs")}</dt><dd>{cfg.max_daily_runs}</dd><dt>{t(locale,"sim.bot.market_day")}</dt><dd>{cfg.market.session_date}</dd></dl>
-          <div className="border-t border-tm-rule pt-3"><p className="text-tm-fg">{t(locale,"sim.bot.next")} · {botTime(cfg.next_wake_at,locale,"America/New_York")} ET</p><p>{botTime(cfg.next_wake_at,locale)} CST</p></div>
-          <p>{t(locale,cfg.market.is_open ? "sim.bot.market_open" : "sim.bot.market_closed_hint")}</p>
+          <p>{t(locale,"sim.bot.open_slot")} {cfg.open_enabled ? `${cfg.open_offset_minutes} ${t(locale,"sim.bot.minutes")}` : "—"} · {t(locale,"sim.bot.close_slot")} {cfg.close_enabled ? `${cfg.close_offset_minutes} ${t(locale,"sim.bot.minutes")}` : "—"}</p>
+          <div className="border-t border-tm-rule pt-3"><p className="text-tm-fg">{t(locale,currentWindow ? "sim.bot.schedule.current_window" : "sim.bot.next")} · {wakeTime ? `${botTime(wakeTime,locale)} CST` : "—"}</p>{wakeTime ? <p>{botTime(wakeTime,locale,"America/New_York")} ET</p> : null}</div>
+          <p>{cfg.market.session_date} · {t(locale,cfg.market.is_open ? "sim.bot.market_open" : "sim.bot.market_closed_hint")}</p>
           <TmButton variant="secondary" size="xs" onClick={()=>setScheduleOpen(true)}>{t(locale,"sim.bot.schedule_observations")}</TmButton>
           {cfg.schedule_observations?.some(row=>row.status === "missed") ? <p role="status" className="text-tm-warn">{t(locale,"sim.bot.schedule.missed_notice")}</p> : null}
           {!cfg.credential_configured ? <p className="text-tm-warn">{t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p> : null}
@@ -242,11 +260,13 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
         </div> : null}
       </TmPane></div>
     </div>
-    <TmPane title={t(locale,"sim.bot.positions")} meta={acc ? `${acc.positions.length}` : "—"}>{account.loading || account.error ? <PaperBotState loading={account.loading} error={account.error} onRetry={refresh} /> : acc ? <PaperPositionsWithSource accountKind="bot" positions={acc.positions} attribution={[]} attributionAvailable={false} pendingOrders={acc.pending_orders} /> : null}</TmPane>
+    <TmPane title={t(locale,"sim.bot.positions")} meta={acc ? `${acc.positions.length}` : "—"}>{(account.loading && !acc) || account.error ? <PaperBotState loading={account.loading} error={account.error} onRetry={refresh} /> : acc ? <><PaperPositionsWithSource accountKind="bot" positions={acc.positions.slice((shownPositionPage-1)*5,shownPositionPage*5)} attribution={[]} attributionAvailable={false} pendingOrders={acc.pending_orders} onReview={setReviewTicker} />{acc.positions.length>5 ? <PaperBotPagination page={shownPositionPage} total={acc.positions.length} loading={account.loading} onChange={setPositionPage} /> : null}</> : null}</TmPane>
     <TmPane title={t(locale,"sim.bot.performance.title")} meta={t(locale,"sim.bot.performance.current_cohort")}>
-      {performance.loading || performance.error ? <PaperBotState loading={performance.loading} error={performance.error} onRetry={refresh} /> : performance.data ? <PaperBotPerformanceSummary data={performance.data} onDetails={()=>setPerformanceOpen(true)} /> : null}
+      {(performance.loading && !performance.data) || performance.error ? <PaperBotState loading={performance.loading} error={performance.error} onRetry={refresh} /> : performance.data ? <PaperBotPerformanceSummary data={performance.data} onDetails={()=>setPerformanceOpen(true)} /> : null}
+      {(curve.loading && !curve.data) || curve.error ? <PaperBotState loading={curve.loading} error={curve.error} onRetry={refresh} /> : <PaperCurvePane curve={curve.data} compact showDisclaimer={false} />}
+      <p className="px-6 pb-3 text-xs text-tm-muted">{t(locale,"sim.bot.curve_basis")}</p>
     </TmPane>
-    <TmPane title={t(locale,ledger === "runs" ? "sim.bot.history" : "sim.bot.orders")} meta={t(locale,"sim.bot.records_timezone")}>
+    <TmPane title={t(locale,ledger === "runs" ? "sim.bot.history" : "sim.bot.orders")} meta={t(locale,ledger === "runs" ? "sim.bot.records_timezone" : "sim.bot.orders_timezone")}>
       <SegmentedTabs<"runs" | "orders"> active={ledger} onChange={setLedger} ariaLabel={t(locale,"sim.bot.history")} items={[{key:"runs",label:t(locale,"sim.bot.history")},{key:"orders",label:t(locale,"sim.bot.orders")}]} />
       <div key={`${ledger}-${ledger === "runs" ? runPage : orderPage}`} className="paper-bot-appear">
       {ledger === "runs" ? (
@@ -276,13 +296,13 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
     </TmPane>
     <TmDisclosureButton expanded={researchOpen} onClick={()=>setResearchOpen(value=>!value)} label={locale === "zh" ? "系统策略验证" : "System policy validation"} meta={locale === "zh" ? "独立研究账户，不计入机器人收益" : "Independent research books, excluded from bot returns"} aria-controls="paper-bot-system-evidence" />{researchOpen ? <div id="paper-bot-system-evidence"><RecommendationPerformance /></div> : null}
     {configDraft ? <PaperBotConfigDrawer open onClose={()=>setConfigDraft(null)} account={summary} config={configDraft} onSaved={()=>{mutationVersion.current++;refresh();}} /> : null}
-    <PaperBotRunDrawer run={details} loading={detailsLoading} error={detailsError} onRetry={()=>{if(details)void inspectRun(details);}} onClose={()=>{detailRequestVersion.current++;setDetails(null);setDetailsLoading(false);setDetailsError(null);}} />
+    <PaperBotRunDrawer key={detailId ?? "closed"} open={!!detailId} run={details} loading={detailsLoading} error={detailsError} onRetry={()=>{if(detailId)void inspectRunById(detailId);}} onClose={()=>{detailRequestVersion.current++;setDetailId(null);setDetails(null);setDetailsLoading(false);setDetailsError(null);}} />
     <PaperBotPerformanceDrawer data={performance.data} open={performanceOpen} onClose={()=>setPerformanceOpen(false)} />
-    {cfg ? <PaperBotScheduleDrawer config={cfg} open={scheduleOpen} onClose={()=>setScheduleOpen(false)} onRun={runId=>{setScheduleOpen(false);const version=++detailRequestVersion.current;void fetchPaperBotRun(id,runId).then(run=>{if(alive.current && version===detailRequestVersion.current)setDetails(run);}).catch(error=>{if(alive.current && version===detailRequestVersion.current)setActionError(error);});}} /> : null}
+    {cfg ? <PaperBotScheduleDrawer config={cfg} open={scheduleOpen} onClose={()=>setScheduleOpen(false)} onRun={runId=>{setScheduleOpen(false);void inspectRunById(runId);}} /> : null}
+    {reviewTicker ? <PaperBotPositionReview accountId={id} ticker={reviewTicker} onClose={()=>setReviewTicker(null)} onRun={runId=>{setReviewTicker(null);void inspectRunById(runId);}} /> : null}
     <PaperBotOrderDrawer order={orderDetails} onClose={()=>setOrderDetails(null)} onRun={runId=>{
       setOrderDetails(null);
-      const version=++detailRequestVersion.current;
-      void fetchPaperBotRun(id,runId).then(run=>{if(alive.current && version===detailRequestVersion.current)setDetails(run);}).catch(error=>{if(alive.current && version===detailRequestVersion.current)setActionError(error);});
+      void inspectRunById(runId);
     }} />
   </TmScreen>;
 }

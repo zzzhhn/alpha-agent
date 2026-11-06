@@ -62,6 +62,7 @@ export interface PaperBotScheduleObservation {
   readonly status: string;
   readonly reason: string | null;
   readonly run_id: string | null;
+  readonly finished_at?: string | null;
 }
 
 export type PaperBotConfigPatch = Partial<Pick<PaperBotConfig,
@@ -89,6 +90,17 @@ export interface PaperBotRun {
   readonly completion_tokens: number | null;
   readonly provider: string | null;
   readonly model: string | null;
+  readonly order_summary?: {
+    readonly total: number; readonly filled: number; readonly pending: number;
+    readonly failed: number; readonly expired: number; readonly cancelled: number;
+    readonly filled_notional: number | null; readonly paid_fees: number | null;
+  };
+}
+
+export interface PaperBotPositionReview {
+  readonly ticker: string; readonly note: string | null; readonly thesis: string | null;
+  readonly invalidation: string | null; readonly review_after: string | null;
+  readonly run_id: string | null; readonly updated_at: string | null;
 }
 
 export interface PaperBotRunList { readonly runs: readonly PaperBotRun[]; readonly total: number }
@@ -117,6 +129,7 @@ export const fetchBotCurve = (id: number) => paperFetch<EquityCurveResponse>(`${
 export const fetchBotOrders = (id: number, limit = 5, offset = 0) => paperFetch<OrderListResponse>(`${root(id)}/orders?limit=${limit}&offset=${offset}`);
 export const fetchPaperBotConfig = (id: number) => paperFetch<PaperBotConfig>(`${root(id)}/bot`);
 export const fetchPaperBotPerformance = (id: number) => paperFetch<PaperBotPerformance>(`${root(id)}/bot/performance`);
+export const fetchPaperBotPositionReviews = (id: number) => paperFetch<{positions: readonly PaperBotPositionReview[]}>(`${root(id)}/bot/position-notes`);
 export const patchPaperBotConfig = (id: number, body: PaperBotConfigPatch) => paperFetch<PaperBotConfig>(`${root(id)}/bot`, { method: "PATCH", body: JSON.stringify(body) });
 export const fetchPaperBotRuns = (id: number, limit = 5, offset = 0) => paperFetch<PaperBotRunList>(`${root(id)}/runs?limit=${limit}&offset=${offset}`);
 export const fetchPaperBotRun = (id: number, runId: string) => paperFetch<PaperBotRun>(`${root(id)}/runs/${encodeURIComponent(runId)}`);

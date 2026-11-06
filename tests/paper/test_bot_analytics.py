@@ -202,6 +202,13 @@ async def test_read_performance_is_owner_scoped_bounded_coherent_and_costs_are_n
     assert result['comparators']['deterministic']['available'] is False
 
 
+async def test_incomplete_fee_ledger_is_not_reported_as_a_known_total(clock):
+    book = Snapshot()
+    book.aggregate['missing_fees'] = 1
+    result = await analytics.read_performance(book, 11, 22)
+    assert result['orders']['paid_fees'] is None
+
+
 @pytest.mark.parametrize('user_id,kind,code', [(99, 'bot', 404), (11, 'human', 400)])
 async def test_owner_or_account_kind_failure_happens_before_ledger_reads(clock, user_id, kind, code):
     book = Snapshot(kind=kind)

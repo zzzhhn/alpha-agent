@@ -15,6 +15,7 @@ import {
   TmTableRowHeader,
 } from "@/components/tm/TmTable";
 import { TmStatePane } from "@/components/tm/TmStatePane";
+import { TmButton } from "@/components/tm/TmButton";
 
 function sourceLabel(source: TickerAttribution["source_type"] | undefined, locale: "zh" | "en") {
   if (source === "pick") return t(locale, "sim.workspace.source_pick");
@@ -30,6 +31,7 @@ export default function PaperPositionsWithSource({
   pendingOrders = 0,
   onChoose,
   accountKind = "human",
+  onReview,
 }: {
   readonly positions: readonly PositionOut[];
   readonly attribution: readonly TickerAttribution[];
@@ -37,6 +39,7 @@ export default function PaperPositionsWithSource({
   readonly pendingOrders?: number;
   readonly onChoose?: () => void;
   readonly accountKind?: "human" | "bot";
+  readonly onReview?: (ticker: string) => void;
 }) {
   const { locale } = useLocale();
   const sourceByTicker = new Map((attributionAvailable ? attribution : []).map((row) => [row.ticker, row]));
@@ -52,7 +55,7 @@ export default function PaperPositionsWithSource({
     t(locale, "sim.workspace.avg_cost"),
     t(locale, "sim.workspace.current_value"),
     t(locale, "sim.workspace.pnl"),
-    t(locale, "sim.workspace.source"),
+    t(locale, accountKind === "bot" && onReview ? "sim.bot.holding_review" : "sim.workspace.source"),
   ];
 
   return (
@@ -85,10 +88,10 @@ export default function PaperPositionsWithSource({
                   {!pnlKnown || position.unrealized_pnl === null || position.unrealized_pct === null ? "—" : <>{pnlPositive ? "+" : "-"}${Math.abs(position.unrealized_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="ml-1 font-normal">({position.unrealized_pct >= 0 ? "+" : ""}{position.unrealized_pct.toFixed(2)}%)</span></>}
                 </TmTableCell>
                 <TmTableCell>
-                  <span className={clsx(
+                  {accountKind === "bot" && onReview ? <TmButton variant="ghost" size="xs" aria-label={`${t(locale,"sim.bot.holding_review")} ${position.ticker}`} onClick={()=>onReview(position.ticker)}>{t(locale,"sim.bot.holding_review")}</TmButton> : <span className={clsx(
                     "border px-1.5 py-0.5 font-tm-mono text-xs uppercase tracking-wide",
                     source?.source_type === "pick" ? "border-tm-accent text-tm-accent" : "border-tm-rule text-tm-fg-2",
-                  )}>{accountKind === "bot" ? t(locale, "sim.bot.position_source") : sourceLabel(source?.source_type, locale)}</span>
+                  )}>{accountKind === "bot" ? t(locale, "sim.bot.position_source") : sourceLabel(source?.source_type, locale)}</span>}
                   {source?.latest_pick_date ? <span className="ml-2 font-tm-mono text-xs text-tm-muted">{source.latest_pick_date}</span> : null}
                 </TmTableCell>
               </TmTableRow>

@@ -57,7 +57,7 @@ async def config_with_readiness(pool, user_id, account_id):
         'SELECT session_date,slot,planned_at,observed_at,status,reason,run_id '
         'FROM sim_bot_schedule_slot WHERE account_id=$1 ORDER BY session_date DESC,planned_at DESC LIMIT 10', account_id)
     scheduled_runs = await pool.fetch(
-        'SELECT id,trigger,trading_session,created_at FROM sim_bot_run '
+        'SELECT id,trigger,trading_session,created_at,status,finished_at FROM sim_bot_run '
         "WHERE account_id=$1 AND slot_key IS NOT NULL AND trigger IN ('open_after','close_before') "
         'ORDER BY created_at DESC LIMIT 10', account_id)
     config['schedule_observations'] = schedule_observations(config, slots, now, scheduled_runs=scheduled_runs)
@@ -111,6 +111,29 @@ async def run_detail(account_id: int, run_id: uuid.UUID, user_id: int = Depends(
 async def performance(account_id: int, user_id: int = Depends(require_user)):
     from alpha_agent.paper.bot_analytics import read_performance
     return await read_performance(await get_db_pool(), user_id, account_id)
+
+
+@router.get(BASE + '/bot/position-notes')
+async def position_notes(account_id: int, user_id: int = Depends(require_user)):
+    """Current holdings' latest model reviews, not an invented entry attribution."""
+    pool = await get_db_pool()
+    await store.bot_account(pool, user_id, account_id)
+    rows = await pool.fetch(
+        'SELECT p.ticker,n.note,n.metadata,n.run_id,n.updated_at '
+        'FROM sim_position p JOIN sim_account a ON a.id=p.account_id '
+        'LEFT JOIN sim_bot_position_note n ON n.account_id=p.account_id AND n.ticker=p.ticker '
+        'WHERE p.account_id=$1 AND p.cohort_id=a.reset_count AND p.qty>0 '
+        'ORDER BY p.ticker LIMIT 20', account_id)
+    notes = []
+    for row in rows:
+        metadata = store.unpack(row['metadata'])
+        notes.append({
+            'ticker': row['ticker'], 'note': row['note'],
+            'run_id': str(row['run_id']) if row['run_id'] else None,
+            'updated_at': row['updated_at'],
+            **{key: metadata.get(key) for key in ('thesis', 'invalidation', 'review_after')},
+        })
+    return {'positions': notes}
 
 
 @router.post(BASE + '/runs/{run_id}/stop')

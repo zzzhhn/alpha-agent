@@ -45,11 +45,22 @@ async def enrich_runs(pool, rows):
     if not runs:
         return runs
     orders = await pool.fetch(
-        'SELECT id,bot_run_id,action_id,status,filled_at,fill_price,transaction_cost,fail_reason '
+        'SELECT id,bot_run_id,action_id,status,qty,filled_at,fill_price,transaction_cost,fail_reason '
         'FROM sim_order WHERE bot_run_id=ANY($1::uuid[]) ORDER BY id LIMIT 400',
         [uuid.UUID(r['id']) for r in runs])
     by_action = {(str(o['bot_run_id']), o['action_id']): dict(o) for o in orders}
     for row in runs:
+        actual = [dict(o) for o in orders if str(o['bot_run_id']) == row['id']]
+        filled = [o for o in actual if o['status'] == 'filled']
+        row['order_summary'] = {
+            'total': len(actual),
+            **{state: sum(o['status'] == state for o in actual)
+               for state in ('filled', 'pending', 'failed', 'expired', 'cancelled')},
+            'filled_notional': (sum(o['qty'] * o['fill_price'] for o in filled)
+                                if all(o['fill_price'] is not None for o in filled) else None),
+            'paid_fees': (sum(o['transaction_cost'] for o in filled)
+                          if all(o['transaction_cost'] is not None for o in filled) else None),
+        }
         result = row.get('result')
         if not result:
             continue
