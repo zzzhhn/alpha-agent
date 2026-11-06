@@ -118,6 +118,30 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
   const active = isActivePaperRun(current);
   const activeId = active ? current?.id : null;
   useEffect(()=>{
+    if(activeId || !config.data?.schedule_enabled) return;
+    let cancelled=false, inFlight=false;
+    async function checkSchedule() {
+      if(cancelled || document.hidden || inFlight || busyRef.current) return;
+      inFlight=true;
+      const version=mutationVersion.current;
+      try {
+        const [nextConfig,history]=await Promise.all([fetchPaperBotConfig(id),fetchPaperBotRuns(id,1,0)]);
+        if(!cancelled && version===mutationVersion.current) {
+          setConfig({data:nextConfig,error:null,loading:false});
+          const newest=history.runs[0] ?? null;
+          setLatest({data:newest,error:null,loading:false});
+          if(newest?.id !== current?.id) refresh();
+        }
+      } catch(error) {
+        if(!cancelled && version===mutationVersion.current) setConfig(previous=>({...previous,error}));
+      } finally {inFlight=false;}
+    }
+    const timer=setInterval(()=>void checkSchedule(),60000);
+    const visibility=()=>{if(!document.hidden)void checkSchedule();};
+    document.addEventListener("visibilitychange",visibility);
+    return ()=>{cancelled=true;clearInterval(timer);document.removeEventListener("visibilitychange",visibility);};
+  },[id,activeId,current?.id,config.data?.schedule_enabled,refresh]);
+  useEffect(()=>{
     if(!activeId) return;
     let cancelled=false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -212,6 +236,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
           <div className="border-t border-tm-rule pt-3"><p className="text-tm-fg">{t(locale,"sim.bot.next")} · {botTime(cfg.next_wake_at,locale,"America/New_York")} ET</p><p>{botTime(cfg.next_wake_at,locale)} CST</p></div>
           <p>{t(locale,cfg.market.is_open ? "sim.bot.market_open" : "sim.bot.market_closed_hint")}</p>
           <TmButton variant="secondary" size="xs" onClick={()=>setScheduleOpen(true)}>{t(locale,"sim.bot.schedule_observations")}</TmButton>
+          {cfg.schedule_observations?.some(row=>row.status === "missed") ? <p role="status" className="text-tm-warn">{t(locale,"sim.bot.schedule.missed_notice")}</p> : null}
           {!cfg.credential_configured ? <p className="text-tm-warn">{t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p> : null}
           {active && current ? <div className="border-t border-tm-rule pt-3"><TmButton variant="secondary" disabled={busy} onClick={()=>void mutate(async()=>{const run=await stopPaperBotRun(id,current.id);if(alive.current)setLatest({data:run,error:null,loading:false});})}>{t(locale,"sim.bot.stop")}</TmButton><p className="mt-2">{t(locale,"sim.bot.stop_hint")}</p></div> : null}
         </div> : null}

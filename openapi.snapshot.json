@@ -9068,6 +9068,54 @@
         ]
       }
     },
+    "/api/cron/paper_bot/wake": {
+      "get": {
+        "description": "Independent Vercel clock; reuse the durable queue and bounded GH worker.\n\nKeep this request short. A successful dispatch is not a completed decision.\nDuplicate clocks share slot keys, and dispatch failures leave queued work\navailable for the next carrier rather than erasing the obligation.",
+        "operationId": "scheduled_wake_api_cron_paper_bot_wake_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scheduled Wake",
+        "tags": [
+          "paper-bot"
+        ]
+      }
+    },
     "/api/cron/paper_fill": {
       "get": {
         "description": "Daily post-close fill simulation for all pending sim_orders.\n\nRuns after daily_prices cron (at 01:00 UTC = ~21:00 ET).\nIdempotent: re-running on the same day is safe (ON CONFLICT DO UPDATE\non sim_equity_daily; already-filled orders are skipped by status='pending' filter).",

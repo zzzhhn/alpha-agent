@@ -102,6 +102,7 @@ async def get_config(pool, user_id, account_id):
         version = 0
     stored = await credential(pool, user_id, config.provider)
     return {**config.model_dump(), 'account_id': account_id, 'config_version': version,
+            'config_updated_at': row['updated_at'].isoformat() if row else None,
             'credential_configured': bool(stored), 'next_wake_at': next_wake(config),
             'market': market_session()}
 

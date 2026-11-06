@@ -54,6 +54,7 @@ export interface PaperBotReadiness {
 }
 
 export interface PaperBotScheduleObservation {
+  readonly inferred?: boolean;
   readonly session_date: string;
   readonly slot: string;
   readonly planned_at: string | null;

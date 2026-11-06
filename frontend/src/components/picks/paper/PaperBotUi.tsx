@@ -57,6 +57,7 @@ const reasonKeys: Record<string, TranslationKey> = {
   stage_failed:"sim.bot.reason.stage_failed", dispatch_failed:"sim.bot.reason.dispatch_failed",
   targets_proposed:"sim.bot.reason.targets_proposed", orders_accepted:"sim.bot.reason.orders_accepted",
   account_unavailable:"sim.bot.reason.account_inactive", enqueue_failed:"sim.bot.reason.dispatch_failed", slot_expired:"sim.bot.reason.slot_expired",
+  trigger_not_observed:"sim.bot.reason.trigger_not_observed", runner_dispatch_failed:"sim.bot.reason.dispatch_failed",
 };
 
 export function botReason(locale: Locale, reason: string | null | undefined) {

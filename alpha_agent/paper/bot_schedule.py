@@ -9,6 +9,44 @@ from alpha_agent.paper.bot_models import BotConfig
 from alpha_agent.paper.market_clock import NEW_YORK, as_utc, market_session, target_slot_times
 
 
+def schedule_observations(config, recorded, now=None, *, scheduled_runs=()):
+    """Overlay bounded expected slots without pretending a worker observed them.
+
+    Reads never enqueue or backfill trades. Only the current configuration's
+    lifetime is inferred; actual older observations remain authoritative.
+    """
+    now = now or datetime.now(UTC)
+    rows = {(str(r['session_date']), r['slot']): dict(r) for r in recorded}
+    # enqueue commits before its observation write. The run is authoritative
+    # if a carrier died between these two writes.
+    for run in scheduled_runs:
+        key = (str(run['trading_session']), run['trigger'])
+        slots = target_slot_times(run['created_at'])
+        rows[key] = {
+            'session_date': key[0], 'slot': key[1], 'planned_at': as_utc(slots[key[1]]),
+            'observed_at': run['created_at'], 'status': 'enqueued', 'reason': None,
+            'run_id': str(run['id']),
+        }
+    activated = config.get('config_updated_at')
+    if config['schedule_enabled'] and activated:
+        for days_ago in range(8):
+            slots = target_slot_times(now - timedelta(days=days_ago))
+            for slot, enabled in [('open_after', config['open_enabled']), ('close_before', config['close_enabled'])]:
+                due = as_utc(slots[slot])
+                key = (slots['session_date'], slot)
+                prior = rows.get(key)
+                if not enabled or due < as_utc(activated) or (prior and prior['status'] != 'planned'):
+                    continue
+                status = 'missed' if now >= due + timedelta(minutes=20) else 'waiting' if now >= due else 'planned'
+                rows[key] = {
+                    'session_date': slots['session_date'], 'slot': slot, 'planned_at': due,
+                    'observed_at': prior['observed_at'] if prior else None,
+                    'status': status, 'reason': 'trigger_not_observed' if status != 'planned' else None,
+                    'run_id': None, 'inferred': True,
+                }
+    return sorted(rows.values(), key=lambda row: as_utc(row['planned_at']), reverse=True)[:10]
+
+
 async def enqueue_due(pool, now=None):
     now = now or datetime.now(UTC)
     market = market_session(now)
