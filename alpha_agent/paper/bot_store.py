@@ -14,7 +14,7 @@ from alpha_agent.paper.bot_models import BotConfig
 from alpha_agent.paper.market_clock import market_session, target_slot_times
 
 ACTIVE = ('queued', 'running')
-PUBLIC_RUN_COLUMNS = 'id,account_id,trigger,trading_session,status,stage,created_at,started_at,finished_at,expires_at,config_version,result,summary,error,provider,model,prompt_tokens,completion_tokens,llm_calls'
+PUBLIC_RUN_COLUMNS = 'id,account_id,trigger,trading_session,status,stage,created_at,started_at,finished_at,expires_at,config_version,result,summary,error,provider,model,prompt_tokens,completion_tokens,llm_calls,diagnostics'
 
 
 def unpack(value):
@@ -33,7 +33,33 @@ def public_run(row):
         result.pop(key, None)
     result['id'] = str(result['id'])
     result['result'] = unpack(result.get('result')) or None
+    diagnostics = unpack(result.pop('diagnostics', None))
+    if diagnostics:
+        result['result'] = {**(result['result'] or {}), 'diagnostics': diagnostics}
     return result
+
+
+async def enrich_runs(pool, rows):
+    """Join terminal order facts at read time; never mutate historical decisions."""
+    runs = [public_run(row) for row in rows]
+    if not runs:
+        return runs
+    orders = await pool.fetch(
+        'SELECT id,bot_run_id,action_id,status,filled_at,fill_price,transaction_cost,fail_reason '
+        'FROM sim_order WHERE bot_run_id=ANY($1::uuid[]) ORDER BY id LIMIT 400',
+        [uuid.UUID(r['id']) for r in runs])
+    by_action = {(str(o['bot_run_id']), o['action_id']): dict(o) for o in orders}
+    for row in runs:
+        result = row.get('result')
+        if not result:
+            continue
+        for action in result.get('actions', []):
+            order = by_action.get((row['id'], action.get('action_id')))
+            if order:
+                action.update(order_status=order['status'], filled_at=order['filled_at'],
+                              filled_price=order['fill_price'], fee=order['transaction_cost'],
+                              order_reason=order['fail_reason'])
+    return runs
 
 
 async def bot_account(pool, user_id, account_id):
@@ -156,6 +182,7 @@ async def claim(pool, run_id=None):
 
 
 async def finish(pool, run, status, *, summary='', error=None, result=None):
+    await record_stage(pool, run)
     await pool.execute(
         'UPDATE sim_bot_run SET status=$3,stage=$3,summary=$4,error=$5,result=COALESCE($6::jsonb,result),'
         'finished_at=now(),lease_until=NULL,lease_token=NULL '
@@ -165,5 +192,26 @@ async def finish(pool, run, status, *, summary='', error=None, result=None):
 
 
 async def release(pool, run, stage):
+    await record_stage(pool, run)
     await pool.execute("UPDATE sim_bot_run SET stage=$3,lease_until=NULL,lease_token=NULL WHERE id=$1 AND lease_token=$2 AND status='running'",
                        run['id'], run['lease_token'], stage)
+
+
+async def record_stage(pool, run):
+    started = run.get('_step_started_at')
+    if started is None:
+        return
+    ended = datetime.now(UTC)
+    event = {'stage': run['stage'], 'started_at': started.isoformat(), 'finished_at': ended.isoformat(),
+             'duration_ms': round((ended-started).total_seconds()*1000)}
+    await pool.execute(
+        "UPDATE sim_bot_run SET diagnostics=jsonb_set(diagnostics,'{stages}',"
+        "COALESCE(diagnostics->'stages','[]'::jsonb) || $3::jsonb) "
+        "WHERE id=$1 AND lease_token=$2 AND status='running'",
+        run['id'], run['lease_token'], dump([event]))
+
+
+async def diagnose(pool, run, values):
+    await pool.execute("UPDATE sim_bot_run SET diagnostics=diagnostics || $3::jsonb "
+                       "WHERE id=$1 AND lease_token=$2 AND status='running'",
+                       run['id'], run['lease_token'], dump(values))

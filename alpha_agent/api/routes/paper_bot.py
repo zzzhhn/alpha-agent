@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import UTC, datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +15,9 @@ from alpha_agent.data.capacity import read_capacity
 from alpha_agent.paper import bot_store as store
 from alpha_agent.paper.bot_runner import step
 from alpha_agent.paper.bot_schedule import enqueue_due
+from alpha_agent.paper.bot_policy import readiness
+from alpha_agent.paper.market_clock import NEW_YORK
+from alpha_agent.storage.product_ledger import get_latest_canonical_run
 
 router = APIRouter(tags=['paper-bot'])
 BASE = '/api/paper/accounts/{account_id}'
@@ -34,13 +38,34 @@ async def dispatch_runner():
 
 @router.get(BASE + '/bot')
 async def get_config(account_id: int, user_id: int = Depends(require_user)):
-    return await store.get_config(await get_db_pool(), user_id, account_id)
+    return await config_with_readiness(await get_db_pool(), user_id, account_id)
+
+
+async def config_with_readiness(pool, user_id, account_id):
+    config = await store.get_config(pool, user_id, account_id)
+    account = await store.bot_account(pool, user_id, account_id)
+    now = datetime.now(UTC)
+    counts = await pool.fetchrow(
+        "SELECT count(*) FILTER(WHERE trading_session=$2) AS today, "
+        "count(*) FILTER(WHERE status IN ('queued','running')) AS active "
+        "FROM sim_bot_run WHERE account_id=$1 AND (trading_session=$2 OR status IN ('queued','running'))",
+        account_id, now.astimezone(NEW_YORK).date())
+    source = await get_latest_canonical_run(pool)
+    config['readiness'] = readiness(config, account, counts['today'], counts['active'],
+                                    source, await read_capacity(pool), now)
+    slots = await pool.fetch(
+        'SELECT session_date,slot,planned_at,observed_at,status,reason,run_id '
+        'FROM sim_bot_schedule_slot WHERE account_id=$1 ORDER BY session_date DESC,planned_at DESC LIMIT 10', account_id)
+    config['schedule_observations'] = [dict(row) for row in slots]
+    return config
 
 
 @router.patch(BASE + '/bot')
 async def patch_config(account_id: int, body: dict, user_id: int = Depends(require_user)):
     try:
-        return await store.save_config(await get_db_pool(), user_id, account_id, body)
+        pool = await get_db_pool()
+        await store.save_config(pool, user_id, account_id, body)
+        return await config_with_readiness(pool, user_id, account_id)
     except ValidationError:
         raise HTTPException(422, '配置格式或数值范围不正确') from None
 
@@ -51,29 +76,37 @@ async def runs(account_id: int, limit: int = Query(5, ge=1, le=20), offset: int 
     await store.bot_account(pool, user_id, account_id)
     rows = await pool.fetch(f'SELECT {store.PUBLIC_RUN_COLUMNS} FROM sim_bot_run WHERE account_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3', account_id, limit, offset)
     total = await pool.fetchval('SELECT count(*) FROM sim_bot_run WHERE account_id=$1', account_id)
-    return {'runs': [store.public_run(r) for r in rows], 'total': total}
+    return {'runs': await store.enrich_runs(pool, rows), 'total': total}
 
 
 @router.post(BASE + '/runs', status_code=202)
 async def wake(account_id: int, user_id: int = Depends(require_user)):
     pool = await get_db_pool()
-    await store.bot_account(pool, user_id, account_id)
-    if not (await read_capacity(pool))['allow_writes']:
-        raise HTTPException(503, '数据库可用容量不足，暂不创建新运行；现有账本保留')
+    config = await config_with_readiness(pool, user_id, account_id)
+    blocked = [r for r in config['readiness']['blocked_reasons'] if r != 'run_active']
+    if blocked:
+        raise HTTPException(409, {'reason': blocked[0], 'readiness': config['readiness']})
     run = await store.enqueue(pool, user_id, account_id)
     try:
         await dispatch_runner()
     except (httpx.HTTPError, HTTPException) as exc:
         # Do not strand an apparently running job after a dispatch failure.
         message = exc.detail if isinstance(exc, HTTPException) else '运行器暂时无法连接，请稍后重试'
-        await pool.execute("UPDATE sim_bot_run SET status='failed',stage='failed',error=$2,finished_at=now() WHERE id=$1 AND status='queued'", uuid.UUID(run['id']), message)
+        await pool.execute("UPDATE sim_bot_run SET status='failed',stage='failed',error=$2,finished_at=now(),result=jsonb_build_object('outcome_reason','dispatch_failed') WHERE id=$1 AND status='queued'", uuid.UUID(run['id']), message)
         raise HTTPException(503, message) from None
     return run
 
 
 @router.get(BASE + '/runs/{run_id}')
 async def run_detail(account_id: int, run_id: uuid.UUID, user_id: int = Depends(require_user)):
-    return store.public_run(await store.get_run(await get_db_pool(), user_id, account_id, run_id))
+    pool = await get_db_pool()
+    return (await store.enrich_runs(pool, [await store.get_run(pool, user_id, account_id, run_id)]))[0]
+
+
+@router.get(BASE + '/bot/performance')
+async def performance(account_id: int, user_id: int = Depends(require_user)):
+    from alpha_agent.paper.bot_analytics import read_performance
+    return await read_performance(await get_db_pool(), user_id, account_id)
 
 
 @router.post(BASE + '/runs/{run_id}/stop')

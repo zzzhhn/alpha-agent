@@ -185,9 +185,23 @@ async def submit_targets(
                         results[aid] = _result(aid, 'deferred', reason='ticker_has_pending_order')
                         continue
                     delta = target_qty - held.get(ticker, 0)
+                    intent = {'ticker': ticker, 'current_weight': held.get(ticker, 0)*price/nav,
+                              'target_weight': action.target_weight, 'delta_qty': delta,
+                              'estimated_notional': abs(delta)*price}
                     if delta == 0:
                         desired[ticker] = target_qty
-                        results[aid] = _result(aid, 'held', ticker=ticker)
+                        results[aid] = _result(aid, 'held', reason='below_rounding_threshold', **intent)
+                        continue
+                    if not action.evidence_ids:
+                        raise ValueError('evidence_missing')
+                    refs = [context.get('evidence_map', {}).get(ref, {}) for ref in action.evidence_ids]
+                    if not any(ref.get('ticker') == ticker for ref in refs):
+                        raise ValueError('ticker_evidence_missing')
+                    if delta > 0 and not any(ref.get('ticker') == ticker and ref.get('kind') == 'research'
+                                             and ref.get('usable_for_new_buy') for ref in refs):
+                        raise ValueError('fresh_research_required_for_buy')
+                    if abs(delta)*price/nav < config.min_trade_weight_delta:
+                        results[aid] = _result(aid, 'held', reason='below_adjustment_band', **intent)
                         continue
                     first_end = instant.replace(second=0, microsecond=0) + timedelta(minutes=2)
                     if first_end > deadline:
@@ -196,9 +210,12 @@ async def submit_targets(
                     plans.append({
                         'action_id': aid, 'ticker': ticker, 'instrument_id': instrument_id,
                         'side': 'buy' if delta > 0 else 'sell', 'qty': abs(delta), 'price': price,
+                        'intent': intent,
                     })
                 except (TypeError, ValueError, KeyError) as exc:
-                    results[aid] = _result(aid, 'rejected', reason=str(exc))
+                    results[aid] = _result(aid, 'rejected', reason=str(exc),
+                                           ticker=instrument.get('ticker') if instrument else None,
+                                           target_weight=action.target_weight)
             desired_value = sum(qty * marks.get(ticker, 0) for ticker, qty in desired.items())
             budget_error = (
                 'max_positions_exceeded' if len(
@@ -207,6 +224,9 @@ async def submit_targets(
                 ) > config.max_positions
                 else 'targets_exceed_total_capital' if desired_value > nav + 0.000001 else None
             )
+            prior_turnover = sum(float(o.get('reference_price') or 0)*int(o['qty']) for o in previous if o['status'] in ('pending','filled'))
+            if nav > 0 and prior_turnover + sum(p['qty']*p['price'] for p in plans) > config.max_turnover_weight*nav + 0.000001:
+                budget_error = 'turnover_budget_exceeded'
             for plan in sorted(plans, key=lambda item: item['side'] == 'buy'):
                 aid = plan['action_id']
                 if budget_error:
@@ -241,7 +261,9 @@ async def submit_targets(
                     # accepted position commitment before it is allowed in.
                     pending.append({'ticker': plan['ticker'], 'side': 'buy'})
                 results[aid] = _result(aid, 'accepted', order_id=order_id, ticker=plan['ticker'],
-                                       side=plan['side'], qty=plan['qty'])
+                                       side=plan['side'], qty=plan['qty'],
+                                       current_weight=plan['intent']['current_weight'],
+                                       target_weight=plan['intent']['target_weight'], delta_qty=plan['intent']['delta_qty'])
             return [results[action.action_id] for action in decision.actions]
 
 

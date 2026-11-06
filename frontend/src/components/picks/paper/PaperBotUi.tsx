@@ -39,6 +39,31 @@ export function botTime(value: string | null | undefined, locale: Locale, zone =
   }).format(date);
 }
 
+const reasonKeys: Record<string, TranslationKey> = {
+  market_closed:"sim.bot.reason.market_closed", near_close:"sim.bot.reason.near_close",
+  credential_missing:"sim.bot.reason.credential_missing", storage_headroom_low:"sim.bot.reason.storage_headroom_low",
+  account_inactive:"sim.bot.reason.account_inactive", daily_limit:"sim.bot.reason.daily_limit",
+  run_active:"sim.bot.reason.run_active", research_unavailable:"sim.bot.reason.research_unavailable",
+  research_stale:"sim.bot.reason.research_stale", schedule_paused:"sim.bot.reason.schedule_paused",
+  schedule_disabled:"sim.bot.reason.schedule_paused", paused:"sim.bot.reason.schedule_paused",
+  scheduled:"sim.bot.scheduled", no_slots_enabled:"sim.bot.reason.no_slots_enabled",
+  keep_cash:"sim.bot.reason.keep_cash", keep_positions:"sim.bot.reason.keep_positions",
+  strategy_no_op:"sim.bot.reason.strategy_no_op", evidence_insufficient:"sim.bot.reason.evidence_insufficient",
+  config_changed:"sim.bot.reason.config_changed", execution_window_expired:"sim.bot.reason.execution_window_expired",
+  decision_budget_exhausted:"sim.bot.reason.decision_budget_exhausted", model_timeout:"sim.bot.reason.model_timeout",
+  invalid_output:"sim.bot.reason.invalid_output", research_budget_exhausted:"sim.bot.reason.research_budget_exhausted",
+  execution_blocked:"sim.bot.reason.execution_blocked", targets_unchanged:"sim.bot.reason.targets_unchanged",
+  execution_partial:"sim.bot.reason.execution_partial", orders_settled:"sim.bot.reason.orders_settled",
+  stage_failed:"sim.bot.reason.stage_failed", dispatch_failed:"sim.bot.reason.dispatch_failed",
+  targets_proposed:"sim.bot.reason.targets_proposed", orders_accepted:"sim.bot.reason.orders_accepted",
+  account_unavailable:"sim.bot.reason.account_inactive", enqueue_failed:"sim.bot.reason.dispatch_failed", slot_expired:"sim.bot.reason.slot_expired",
+};
+
+export function botReason(locale: Locale, reason: string | null | undefined) {
+  if (!reason) return "—";
+  return reasonKeys[reason] ? t(locale, reasonKeys[reason]) : reason;
+}
+
 export function PaperBotState({ error, loading, onRetry }: { readonly error?: unknown; readonly loading?: boolean; readonly onRetry?: () => void }) {
   const { locale } = useLocale();
   const auth = error instanceof PaperApiError && error.status === 401;
@@ -54,47 +79,73 @@ export function PaperBotPagination({ page, total, loading, onChange }: { readonl
   return <TmPagination page={page} pageSize={5} totalItems={total} pageSizeOptions={[5]} onPageChange={onChange} onPageSizeChange={() => {}} loading={loading} labels={{navigation:t(locale,"sim.bot.pagination"),previous:t(locale,"sim.bot.previous"),previousAriaLabel:t(locale,"sim.bot.previous"),next:t(locale,"sim.bot.next_page"),nextAriaLabel:t(locale,"sim.bot.next_page"),page:(current,count)=>`${current} / ${count}`,pageSize:t(locale,"sim.bot.per_page"),total:n=>t(locale,"sim.bot.total").replace("{n}",String(n))}} />;
 }
 
-function record(value: unknown): Record<string, unknown> | null {
+export function botRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+export function recordedBotActions(run: PaperBotRun) {
+  const decision=botRecord(run.result?.decision);
+  const planned=Array.isArray(decision?.actions) ? decision.actions.map(botRecord).filter((row): row is Record<string,unknown>=>row!==null) : [];
+  const raw=run.result?.actions ?? run.result?.action_results ?? decision?.actions;
+  return Array.isArray(raw) ? raw.map(botRecord).filter((row): row is Record<string,unknown>=>row!==null).map(action=>({...planned.find(plan=>plan.action_id === action.action_id),...action})) : [];
+}
+
+export function PaperBotOutcome({ run }: { readonly run: PaperBotRun }) {
+  const { locale }=useLocale();
+  const decision=botRecord(run.result?.decision);
+  const reason=decision?.no_trade_reason ?? run.result?.outcome_reason;
+  const active=run.status === "queued" || run.status === "running";
+  const noActions=!recordedBotActions(run).length;
+  return <div className="space-y-1 text-xs leading-5 text-tm-muted">
+    {typeof reason === "string" && reason ? <p>{t(locale,"sim.bot.outcome_reason")} · {botReason(locale,reason)}</p> : null}
+    {noActions && !active ? <p>{t(locale,"sim.bot.no_order_evidence")}</p> : null}
+  </div>;
+}
+
 /** Only render recorded actions. Unknown result shapes remain available in details. */
-export function PaperBotActions({ run }: { readonly run: PaperBotRun }) {
+export function PaperBotActions({ run, limit }: { readonly run: PaperBotRun; readonly limit?: number }) {
   const { locale } = useLocale();
-  const result=run.result;
-  const decision=record(result?.decision);
-  const planned=Array.isArray(decision?.actions) ? decision.actions.map(record).filter((row): row is Record<string,unknown>=>row!==null) : [];
-  const raw=result?.actions ?? result?.action_results ?? decision?.actions;
-  const actions=Array.isArray(raw) ? raw.map(record).filter((row): row is Record<string,unknown>=>row!==null).slice(0,20).map(action=>({...planned.find(plan=>plan.action_id === action.action_id),...action})) : [];
+  const allActions=recordedBotActions(run);
+  const actions=limit == null ? allActions : allActions.slice(0,limit);
   if(!actions.length) return null;
   const statusKeys: Record<string,TranslationKey> = {
     accepted:"sim.bot.order.accepted", rejected:"sim.bot.order.rejected", held:"sim.bot.action.held",
     deferred:"sim.bot.action.deferred", existing:"sim.bot.action.existing", cancel_requested:"sim.bot.order.cancel_requested",
     filled:"sim.status.filled", failed:"sim.status.failed", expired:"sim.bot.order.expired", cancelled:"sim.status.cancelled",
+    pending_market_data:"sim.bot.order.pending_market_data", pending:"sim.bot.order.pending_market_data",
   };
   const reasons:Record<string,TranslationKey> = {
     ticker_has_pending_order:"sim.bot.reason.ticker_has_pending_order", awaiting_settled_cash:"sim.bot.reason.awaiting_settled_cash", bot_order_not_found:"sim.bot.reason.bot_order_not_found",
   };
   return <div className="space-y-2"><h3 className="text-xs font-semibold text-tm-muted">{t(locale,"sim.bot.actions")}</h3><ul className="divide-y divide-tm-rule border-y border-tm-rule">{actions.map((action,index)=>{
     const status=typeof action.status === "string" ? action.status : "";
+    const orderStatus=typeof action.order_status === "string" ? action.order_status : null;
     const reason=typeof action.reason === "string" ? action.reason : "";
     const symbol=typeof action.ticker === "string" ? action.ticker : typeof action.instrument_id === "string" ? action.instrument_id : "—";
-    return <li key={typeof action.action_id === "string" ? action.action_id : index} className="space-y-1 py-3 text-xs leading-5"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-tm-mono font-semibold text-tm-fg">{symbol}</span><span className={status === "rejected" || status === "failed" ? "text-tm-neg" : "text-tm-muted"}>{t(locale,statusKeys[status] ?? "sim.bot.action.unknown")}</span></div><div className="flex flex-wrap gap-3 text-tm-fg-2">{action.side === "buy" || action.side === "sell" ? <span>{t(locale,action.side === "buy" ? "sim.order_side.buy" : "sim.order_side.sell")}{typeof action.qty === "number" ? ` · ${action.qty}` : ""}</span> : null}{typeof action.target_weight === "number" ? <span>{t(locale,"sim.bot.target")} {(action.target_weight*100).toFixed(1)}%</span> : null}{action.type === "cancel_order" ? <span>{t(locale,"sim.bot.action.cancel_order")}</span> : null}</div>{reason ? <p className="break-words text-tm-muted">{reasons[reason] ? t(locale,reasons[reason]) : reason}</p> : null}</li>;
-  })}</ul></div>;
+    return <li key={typeof action.action_id === "string" ? action.action_id : index} className="space-y-1 py-3 text-xs leading-5"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-tm-mono font-semibold text-tm-fg">{symbol}</span><span className={status === "rejected" || status === "failed" ? "text-tm-neg" : "text-tm-muted"}>{t(locale,"sim.bot.action_result")} · {t(locale,statusKeys[status] ?? "sim.bot.action.unknown")}</span></div><div className="flex flex-wrap gap-3 text-tm-fg-2">{action.side === "buy" || action.side === "sell" ? <span>{t(locale,action.side === "buy" ? "sim.order_side.buy" : "sim.order_side.sell")}{typeof action.qty === "number" ? ` · ${action.qty}` : ""}</span> : null}{typeof action.target_weight === "number" ? <span>{t(locale,"sim.bot.target")} {(action.target_weight*100).toFixed(1)}%</span> : null}{action.type === "cancel_order" ? <span>{t(locale,"sim.bot.action.cancel_order")}</span> : null}</div>{orderStatus ? <p className={orderStatus === "failed" || orderStatus === "rejected" ? "text-tm-neg" : "text-tm-fg-2"}>{t(locale,"sim.bot.actual_order_status")} · {t(locale,statusKeys[orderStatus] ?? "sim.bot.action.unknown")}{typeof action.filled_at === "string" ? ` · ${botTime(action.filled_at,locale)} CST` : ""}{typeof action.filled_price === "number" ? ` · $${action.filled_price.toFixed(2)}` : ""}{typeof action.fee === "number" ? ` · ${t(locale,"sim.bot.fee")} $${action.fee.toFixed(2)}` : ""}</p> : status === "accepted" ? <p>{t(locale,"sim.bot.order_status_unknown")}</p> : null}{reason ? <p className="break-words text-tm-muted">{reasons[reason] ? t(locale,reasons[reason]) : reason}</p> : null}</li>;
+  })}</ul>{allActions.length>actions.length ? <p className="text-xs text-tm-muted">{t(locale,"sim.bot.more_actions").replace("{shown}",String(actions.length)).replace("{total}",String(allActions.length))}</p> : null}</div>;
 }
 
-export function PaperBotRunDrawer({ run, onClose }: { readonly run: PaperBotRun | null; readonly onClose: () => void }) {
+export function PaperBotRunDrawer({ run, onClose, loading, error, onRetry }: { readonly run: PaperBotRun | null; readonly onClose: () => void; readonly loading?: boolean; readonly error?: unknown; readonly onRetry?: () => void }) {
   const { locale } = useLocale();
-  const decision=record(run?.result?.decision);
-  const notes=Array.isArray(decision?.position_notes) ? decision.position_notes.map(record).filter((note): note is Record<string,unknown>=>note!==null && typeof note.ticker === "string" && typeof note.note === "string").slice(0,20) : [];
+  const decision=botRecord(run?.result?.decision);
+  const diagnostics=botRecord(run?.result?.diagnostics);
+  const timings=botRecord(diagnostics?.stage_timings_ms ?? diagnostics?.stage_timings);
+  const stages=Array.isArray(diagnostics?.stages) ? diagnostics.stages.map(botRecord).filter((stage): stage is Record<string,unknown>=>stage !== null) : [];
+  const notes=Array.isArray(decision?.position_notes) ? decision.position_notes.map(botRecord).filter((note): note is Record<string,unknown>=>note!==null && typeof note.ticker === "string") : [];
   return <TmDrawer open={!!run} onClose={onClose} closeLabel={t(locale,"sim.bot.close")} title={t(locale,"sim.bot.decision")} width="lg">
     {run ? <div className="space-y-5 text-sm leading-6 text-tm-fg">
+      {loading ? <p role="status" className="text-xs text-tm-muted">{t(locale,"sim.bot.refreshing_details")}</p> : error ? <div><p className="text-xs text-tm-warn">{t(locale,"sim.bot.details_stale")}</p><PaperBotState error={error} onRetry={onRetry} /></div> : null}
       <div className="flex flex-wrap gap-3 font-tm-mono text-xs text-tm-muted"><span>{botRunLabel(locale,run.status)}</span><span>{botTriggerLabel(locale,run.trigger)}</span><span>{run.provider} / {run.model}</span></div>
       <p className="whitespace-pre-wrap break-words">{run.summary || t(locale,"sim.bot.no_result")}</p>
+      <PaperBotOutcome run={run} />
+      {decision?.target_semantics === "patch_targets" ? <p className="text-xs text-tm-muted">{t(locale,"sim.bot.patch_targets")}</p> : null}
       <PaperBotActions run={run} />
-      {notes.length ? <section><h3 className="mb-2 text-xs font-semibold text-tm-muted">{t(locale,"sim.bot.position_notes")}</h3><ul className="divide-y divide-tm-rule">{notes.map((note,index)=><li key={index} className="py-2"><span className="font-tm-mono text-xs font-semibold">{String(note.ticker)}</span><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-tm-muted">{String(note.note)}</p></li>)}</ul></section> : null}
+      {notes.length ? <section><h3 className="mb-2 text-xs font-semibold text-tm-muted">{t(locale,"sim.bot.position_notes")}</h3><ul className="divide-y divide-tm-rule">{notes.map((note,index)=><li key={index} className="space-y-1 py-2 text-xs leading-5"><span className="font-tm-mono font-semibold">{String(note.ticker)}</span>{(["note","thesis","invalidation","review_after"] as const).map(field=>typeof note[field] === "string" ? <p key={field} className="whitespace-pre-wrap break-words text-tm-muted">{field === "note" ? "" : `${t(locale,`sim.bot.position_${field}`)} · `}{String(note[field])}</p> : null)}</li>)}</ul></section> : null}
       <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 font-tm-mono text-xs"><dt>{t(locale,"sim.bot.started")}</dt><dd>{botTime(run.started_at,locale)} CST</dd><dt>{t(locale,"sim.bot.finished")}</dt><dd>{botTime(run.finished_at,locale)} CST</dd><dt>{t(locale,"sim.bot.tokens")}</dt><dd>{run.prompt_tokens == null && run.completion_tokens == null ? t(locale,"sim.bot.tokens_unknown") : `${run.prompt_tokens ?? "—"} / ${run.completion_tokens ?? "—"} tokens`}</dd></dl>
       {run.error ? <details><summary className="cursor-pointer text-tm-neg">{t(locale,"sim.bot.diagnostics")}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs text-tm-muted">{run.error}</p></details> : null}
+      {timings ? <details><summary className="cursor-pointer text-xs">{t(locale,"sim.bot.stage_timings")}</summary><dl className="mt-2 grid grid-cols-[1fr_auto] gap-2 font-tm-mono text-xs text-tm-muted">{Object.entries(timings).map(([stage,value])=><div key={stage} className="contents"><dt>{botStageLabel(locale,{...run,stage})}</dt><dd>{typeof value === "number" ? `${value.toLocaleString()} ms` : "—"}</dd></div>)}</dl></details> : null}
+      {stages.length ? <details><summary className="cursor-pointer text-xs">{t(locale,"sim.bot.stage_timings")}</summary><dl className="mt-2 grid grid-cols-[1fr_auto] gap-2 font-tm-mono text-xs text-tm-muted">{stages.map((stage,index)=><div key={index} className="contents"><dt>{typeof stage.stage === "string" ? botStageLabel(locale,{...run,stage:stage.stage}) : "—"}</dt><dd>{typeof stage.duration_ms === "number" ? `${stage.duration_ms.toLocaleString()} ms` : "—"}</dd></div>)}</dl></details> : null}
       {run.result ? <details><summary className="cursor-pointer">{t(locale,"sim.bot.result")}</summary><pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-tm-mono text-xs text-tm-muted">{JSON.stringify(run.result,null,2)}</pre></details> : null}
     </div> : null}
   </TmDrawer>;

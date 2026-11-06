@@ -120,7 +120,9 @@ class Ledger:
 
 def context():
     return {
-        'context_id': RUN_ID, 'account': {'reset_count': 0}, 'evidence_ids': ['e1'],
+        'context_id': RUN_ID, 'account': {'reset_count': 0}, 'evidence_ids': ['e1','e2'],
+        'evidence_map': {'e1': {'ticker':'AAPL','kind':'research','usable_for_new_buy':True},
+                         'e2': {'ticker':'MSFT','kind':'research','usable_for_new_buy':True}},
         'instruments': [{'instrument_id': '1', 'ticker': 'AAPL'}, {'instrument_id': '2', 'ticker': 'MSFT'}],
         'quotes': {ticker: {'price': 100.0, 'as_of': (NOW - timedelta(minutes=1)).isoformat(),
                             'source': 'yfinance', 'quality': 'fresh', 'price_basis': 'raw_unadjusted'}
@@ -129,8 +131,10 @@ def context():
 
 
 def decision(*actions):
+    actions = list(actions) or [{'action_id': 'a1', 'instrument_id': '1', 'target_weight': 0.2}]
+    actions = [dict(action, evidence_ids=action.get('evidence_ids', ['e2' if action.get('instrument_id') == '2' else 'e1'])) for action in actions]
     return BotDecision(context_id=RUN_ID, decision='rebalance', summary='Test simulated targets',
-                       actions=list(actions) or [{'action_id': 'a1', 'instrument_id': '1', 'target_weight': 0.2}])
+                       actions=actions)
 
 
 def bar(price=100.0, **values):
@@ -187,7 +191,8 @@ async def test_no_daily_stale_future_or_invalid_quote_submitted(change, reason):
     ledger, ctx = Ledger(), context()
     ctx['quotes']['AAPL'].update(change)
     results = await submit(ledger, ctx=ctx)
-    assert results[0] == {'action_id': 'a1', 'status': 'rejected', 'reason': reason}
+    assert results[0] == {'action_id': 'a1', 'status': 'rejected', 'reason': reason,
+                          'ticker': 'AAPL', 'target_weight': 0.2}
     assert not ledger.orders
 
 
@@ -422,6 +427,42 @@ async def test_cohort_change_never_writes_old_order_to_new_book(monkeypatch):
     assert not ledger.positions
 
 
+@pytest.mark.parametrize(('references', 'reason'), [
+    ([], 'evidence_missing'), (['e2'], 'ticker_evidence_missing'),
+])
+async def test_new_position_requires_its_own_evidence(references, reason):
+    ledger = Ledger()
+    result = await submit(ledger, decision({'action_id': 'a', 'instrument_id': '1',
+                                           'target_weight': .2, 'evidence_ids': references}))
+    assert result[0]['reason'] == reason
+    assert not ledger.orders
+
+
+async def test_stale_research_blocks_buy_but_not_evidenced_risk_reduction():
+    ledger, ctx = Ledger(), context()
+    ctx['evidence_map']['e1']['usable_for_new_buy'] = False
+    assert (await submit(ledger, ctx=ctx))[0]['reason'] == 'fresh_research_required_for_buy'
+    ledger.positions['AAPL'] = {'ticker': 'AAPL', 'qty': 20}
+    ctx['evidence_map']['e1']['kind'] = 'position'
+    result = await submit(ledger, decision({'action_id': 'reduce', 'instrument_id': '1',
+                                          'target_weight': 0}), ctx)
+    assert result[0]['status'] == 'accepted'
+    assert ledger.orders[1]['side'] == 'sell'
+
+
+async def test_adjustment_band_and_turnover_are_execution_constraints():
+    ledger = Ledger()
+    ledger.config.min_trade_weight_delta = .25
+    ledger.config_row['config'] = ledger.config.model_dump()
+    assert (await submit(ledger))[0]['reason'] == 'below_adjustment_band'
+    assert not ledger.orders
+    ledger.config.min_trade_weight_delta = 0
+    ledger.config.max_turnover_weight = .1
+    ledger.config_row['config'] = ledger.config.model_dump()
+    assert (await submit(ledger))[0]['reason'] == 'turnover_budget_exceeded'
+    assert not ledger.orders
+
+
 @pytest.mark.skipif(not os.environ.get('ALPHA_PAPER_BOT_TEST_DSN'), reason='explicit local test DB only')
 async def test_real_postgres_migrations_accept_fill_retry_preserve_human(monkeypatch):
     """Opt-in local-only SQL/invariant integration, retaining its audit rows."""
@@ -493,6 +534,7 @@ async def test_real_postgres_migrations_accept_fill_retry_preserve_human(monkeyp
         run.pop('lease_token')  # This direct ledger test is not a claimed worker.
         chosen = BotDecision(context_id=str(run_id), decision='rebalance', summary='SQL test', actions=[{
             'action_id': 'real1', 'instrument_id': str(instrument_id), 'target_weight': 0.2,
+            'evidence_ids': ['e1'],
         }])
         submitted = await execution.submit_targets(pool, run, chosen, ctx, config, NOW)
         assert submitted[0]['status'] == 'accepted'
