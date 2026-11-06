@@ -519,8 +519,8 @@ export function TmCheckbox({
         <span
           aria-hidden="true"
           className={clsx(
-            "flex h-4 w-4 shrink-0 items-center justify-center rounded-[2px] border border-tm-rule-2 bg-tm-bg text-xs font-semibold text-tm-bg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-tm-accent",
-            checked && "border-tm-accent bg-tm-accent",
+            "flex h-4 w-4 shrink-0 items-center justify-center rounded-[2px] border text-xs font-semibold text-tm-bg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-tm-accent",
+            checked ? "border-tm-accent bg-tm-accent" : "border-tm-rule-2 bg-tm-bg",
           )}
         >
           {checked ? "✓" : ""}

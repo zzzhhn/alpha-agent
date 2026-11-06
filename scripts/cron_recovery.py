@@ -13,17 +13,22 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from cron_preflight import check
+if __package__:
+    from .cron_preflight import check
+else:
+    from cron_preflight import check
 
 
-def recovery_path(operation: str, limit: int, offset: int, run_id: str) -> str:
+def recovery_path(operation: str, limit: int, offset: int, run_id: str, period: str = "5d") -> str:
     if operation in ("daily_prices", "fast_intraday"):
         cap = 75 if operation == "daily_prices" else 40
         if not 1 <= limit <= cap or not 0 <= offset <= 600:
             raise ValueError("Recovery slice exceeds the allowed bounds")
         params = {"limit": limit, "offset": offset}
         if operation == "daily_prices":
-            params["period"] = "3mo"
+            if period not in {"5d", "1mo", "3mo"}:
+                raise ValueError("Recovery price period outside allowed bounds")
+            params["period"] = period
         else:
             params["run_key"] = f"recovery-{run_id}-{offset}"
         return operation + "?" + urlencode(params)
@@ -57,7 +62,7 @@ def main() -> int:
     operation = os.environ["RECOVERY_OPERATION"]
     path = recovery_path(operation, int(os.environ.get("RECOVERY_LIMIT", "5")),
                          int(os.environ.get("RECOVERY_OFFSET", "0")),
-                         os.environ["GITHUB_RUN_ID"])
+                         os.environ["GITHUB_RUN_ID"], os.environ.get("RECOVERY_PERIOD", "5d"))
     base = os.environ["BACKEND_BASE"].rstrip("/")
     secret = os.environ["CRON_SECRET"]
     # Recheck immediately before writing, in case this job waited in a queue.

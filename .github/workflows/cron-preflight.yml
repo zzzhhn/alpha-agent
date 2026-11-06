@@ -15,6 +15,11 @@ on:
         description: 'Start offset in the endpoint universe (0-600)'
         type: number
         default: 0
+      period:
+        description: 'Price recovery window; only expand for a verified longer gap'
+        type: choice
+        options: [5d, 1mo, 3mo]
+        default: 5d
   workflow_call:
     inputs:
       trigger_event:
@@ -62,4 +67,5 @@ jobs:
           RECOVERY_OPERATION: ${{ inputs.operation }}
           RECOVERY_LIMIT: ${{ inputs.limit }}
           RECOVERY_OFFSET: ${{ inputs.offset }}
+          RECOVERY_PERIOD: ${{ inputs.period || '5d' }}
         run: python3 scripts/cron_recovery.py
