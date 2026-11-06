@@ -202,7 +202,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
             {pollError ? <p role="alert" className="text-xs text-tm-neg">{t(locale,"sim.bot.stale_poll")}</p> : null}
           </div> : <TmStatePane state="empty" title={t(locale,"sim.bot.no_runs")} description={t(locale,"sim.bot.no_runs_hint")} className="border-0 !bg-transparent" />}
         </TmPane>
-        <TmPane title={t(locale,"sim.bot.positions")} meta={acc ? `${acc.positions.length}` : "—"}>{account.loading || account.error ? <PaperBotState loading={account.loading} error={account.error} onRetry={refresh} /> : acc ? <PaperPositionsWithSource accountKind="bot" positions={acc.positions} attribution={[]} attributionAvailable={false} pendingOrders={acc.pending_orders} /> : null}</TmPane>
+        <TmPane title={t(locale,"sim.bot.curve")} meta={curve.data?.base_date ?? "—"}>{curve.loading || curve.error ? <PaperBotState loading={curve.loading} error={curve.error} onRetry={refresh} /> : <PaperCurvePane curve={curve.data} compact showDisclaimer={false} />}</TmPane>
       </div>
       <div className="min-w-0"><TmPane title={t(locale,"sim.bot.run_panel")}>
         {config.loading || config.error ? <PaperBotState loading={config.loading} error={config.error} onRetry={refresh} /> : cfg ? <div className="space-y-4 px-4 py-4 text-xs leading-5 text-tm-muted">
@@ -215,8 +215,9 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
           {!cfg.credential_configured ? <p className="text-tm-warn">{t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p> : null}
           {active && current ? <div className="border-t border-tm-rule pt-3"><TmButton variant="secondary" disabled={busy} onClick={()=>void mutate(async()=>{const run=await stopPaperBotRun(id,current.id);if(alive.current)setLatest({data:run,error:null,loading:false});})}>{t(locale,"sim.bot.stop")}</TmButton><p className="mt-2">{t(locale,"sim.bot.stop_hint")}</p></div> : null}
         </div> : null}
-      </TmPane><TmPane title={t(locale,"sim.bot.curve")} meta={curve.data?.base_date ?? "—"}>{curve.loading || curve.error ? <PaperBotState loading={curve.loading} error={curve.error} onRetry={refresh} /> : <PaperCurvePane curve={curve.data} compact showDisclaimer={false} />}</TmPane></div>
+      </TmPane></div>
     </div>
+    <TmPane title={t(locale,"sim.bot.positions")} meta={acc ? `${acc.positions.length}` : "—"}>{account.loading || account.error ? <PaperBotState loading={account.loading} error={account.error} onRetry={refresh} /> : acc ? <PaperPositionsWithSource accountKind="bot" positions={acc.positions} attribution={[]} attributionAvailable={false} pendingOrders={acc.pending_orders} /> : null}</TmPane>
     <TmPane title={t(locale,"sim.bot.performance.title")} meta={t(locale,"sim.bot.performance.current_cohort")}>
       {performance.loading || performance.error ? <PaperBotState loading={performance.loading} error={performance.error} onRetry={refresh} /> : performance.data ? <PaperBotPerformanceSummary data={performance.data} onDetails={()=>setPerformanceOpen(true)} /> : null}
     </TmPane>
