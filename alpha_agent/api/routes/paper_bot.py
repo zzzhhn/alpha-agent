@@ -14,7 +14,7 @@ from alpha_agent.auth.dependencies import require_cron, require_user
 from alpha_agent.data.capacity import read_capacity
 from alpha_agent.paper import bot_store as store
 from alpha_agent.paper.bot_runner import step
-from alpha_agent.paper.bot_schedule import enqueue_due
+from alpha_agent.paper.bot_schedule import enqueue_due, schedule_observations
 from alpha_agent.paper.bot_policy import readiness
 from alpha_agent.paper.market_clock import NEW_YORK
 from alpha_agent.storage.product_ledger import get_latest_canonical_run
@@ -56,7 +56,11 @@ async def config_with_readiness(pool, user_id, account_id):
     slots = await pool.fetch(
         'SELECT session_date,slot,planned_at,observed_at,status,reason,run_id '
         'FROM sim_bot_schedule_slot WHERE account_id=$1 ORDER BY session_date DESC,planned_at DESC LIMIT 10', account_id)
-    config['schedule_observations'] = [dict(row) for row in slots]
+    scheduled_runs = await pool.fetch(
+        'SELECT id,trigger,trading_session,created_at FROM sim_bot_run '
+        "WHERE account_id=$1 AND slot_key IS NOT NULL AND trigger IN ('open_after','close_before') "
+        'ORDER BY created_at DESC LIMIT 10', account_id)
+    config['schedule_observations'] = schedule_observations(config, slots, now, scheduled_runs=scheduled_runs)
     return config
 
 
@@ -137,6 +141,35 @@ async def context(account_id: int, user_id: int = Depends(require_user)):
     row = await pool.fetchrow('SELECT context FROM sim_bot_run WHERE account_id=$1 AND context IS NOT NULL ORDER BY created_at DESC LIMIT 1', account_id)
     return {'context': store.unpack(row['context']) if row else None,
             'reason': None if row else '尚未唤起机器人，暂无研究上下文'}
+
+
+@router.get('/api/cron/paper_bot/wake', dependencies=[Depends(require_cron)])
+async def scheduled_wake():
+    """Independent Vercel clock; reuse the durable queue and bounded GH worker.
+
+    Keep this request short. A successful dispatch is not a completed decision.
+    Duplicate clocks share slot keys, and dispatch failures leave queued work
+    available for the next carrier rather than erasing the obligation.
+    """
+    pool = await get_db_pool()
+    scheduled = await enqueue_due(pool)
+    active = await pool.fetchval(
+        "SELECT EXISTS(SELECT 1 FROM sim_bot_run WHERE status IN ('queued','running')) "
+        "OR EXISTS(SELECT 1 FROM sim_order WHERE execution_model='intraday_next_bar_v1' AND status='pending')")
+    if not active:
+        return {'ok': True, 'scheduled': scheduled, 'dispatched': False}
+    attempted = datetime.now(UTC).isoformat()
+    try:
+        await dispatch_runner()
+    except (httpx.HTTPError, HTTPException):
+        await pool.execute(
+            "UPDATE sim_bot_run SET diagnostics=diagnostics || $1::jsonb WHERE status IN ('queued','running')",
+            store.dump({'dispatch': {'source': 'vercel_cron', 'at': attempted, 'status': 'failed'}}))
+        raise HTTPException(503, {'reason': 'runner_dispatch_failed', 'scheduled': scheduled}) from None
+    await pool.execute(
+        "UPDATE sim_bot_run SET diagnostics=diagnostics || $1::jsonb WHERE status IN ('queued','running')",
+        store.dump({'dispatch': {'source': 'vercel_cron', 'at': attempted, 'status': 'requested'}}))
+    return {'ok': True, 'scheduled': scheduled, 'dispatched': True}
 
 
 @router.post('/api/cron/paper_bot', dependencies=[Depends(require_cron)])
