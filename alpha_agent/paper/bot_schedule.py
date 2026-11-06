@@ -24,7 +24,8 @@ def schedule_observations(config, recorded, now=None, *, scheduled_runs=()):
         slots = target_slot_times(run['created_at'])
         rows[key] = {
             'session_date': key[0], 'slot': key[1], 'planned_at': as_utc(slots[key[1]]),
-            'observed_at': run['created_at'], 'status': 'enqueued', 'reason': None,
+            'observed_at': run['created_at'], 'status': run.get('status', 'enqueued'), 'reason': None,
+            'finished_at': run.get('finished_at'),
             'run_id': str(run['id']),
         }
     activated = config.get('config_updated_at')

@@ -61,9 +61,9 @@ export default function PaperOrdersPane({
           <TmTable density="compact" caption={t(locale, "sim.orders.title")} className="text-left">
             <TmTableHead>
               <TmTableRow>
-                {ORDER_HEADERS[locale].map((h) => (
+                {ORDER_HEADERS[locale].map((h,index) => (
                   <TmTableHeaderCell key={h} className="text-xs tracking-wide">
-                    {h}
+                    {botMode && index===0 ? t(locale,"sim.bot.market_day") : h}
                   </TmTableHeaderCell>
                 ))}
                 {botMode ? <TmTableHeaderCell>{t(locale, "sim.bot.fee")}</TmTableHeaderCell> : null}

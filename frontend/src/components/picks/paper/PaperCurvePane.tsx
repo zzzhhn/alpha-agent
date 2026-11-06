@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
 } from "recharts";
 import { useMemo } from "react";
 import type { EquityCurveResponse } from "@/lib/api/paper";
@@ -17,6 +18,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { Disclaimer } from "./PaperUi";
 import { TmStatePane } from "@/components/tm/TmStatePane";
+import { TM_CHART_CSS, TM_CHART_TYPOGRAPHY } from "@/components/charts/chartTokens";
 
 export default function PaperCurvePane({
   curve,
@@ -41,27 +43,30 @@ export default function PaperCurvePane({
       ) : (
         <div style={{ width: "100%", height: compact ? 210 : 300 }}>
           <ResponsiveContainer>
-            <ComposedChart data={normalizedSeries as unknown as Record<string, unknown>[]}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-tm-rule)" />
-              <XAxis dataKey="date" tick={{ fontSize: 12, fontFamily: "var(--font-tm-mono)" }} />
-              <YAxis tick={{ fontSize: 12, fontFamily: "var(--font-tm-mono)" }} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+            <ComposedChart data={normalizedSeries as unknown as Record<string, unknown>[]} accessibilityLayer>
+              <CartesianGrid strokeDasharray="3 3" stroke={TM_CHART_CSS.grid} />
+              <XAxis dataKey="date" minTickGap={48} tick={{ fontSize: TM_CHART_TYPOGRAPHY.tick, fill: TM_CHART_CSS.muted, fontFamily: "var(--font-tm-mono)" }} />
+              <YAxis domain={["auto","auto"]} tickFormatter={value=>Number(value).toFixed(1)} tick={{ fontSize: TM_CHART_TYPOGRAPHY.tick, fill: TM_CHART_CSS.muted, fontFamily: "var(--font-tm-mono)" }} />
+              <Tooltip contentStyle={{background:TM_CHART_CSS.surface,border:`1px solid ${TM_CHART_CSS.grid}`,color:TM_CHART_CSS.foreground,fontSize:TM_CHART_TYPOGRAPHY.tooltip}} formatter={value=>typeof value === "number" ? value.toFixed(2) : "—"} />
+              <Legend wrapperStyle={{ fontSize: TM_CHART_TYPOGRAPHY.legend }} />
+              <ReferenceLine y={100} stroke={TM_CHART_CSS.gridStrong} />
               <Line
                 connectNulls={false}
-                type="monotone"
+                type="linear"
                 dataKey="portfolio_index"
                 stroke="var(--tm-accent)"
-                dot={false}
+                dot={normalizedSeries.length===1}
+                isAnimationActive={false}
                 name={t(locale, "sim.account.nav")}
               />
               <Line
                 connectNulls={false}
-                type="monotone"
+                type="linear"
                 dataKey="benchmark_index"
                 stroke="var(--tm-muted)"
                 strokeDasharray="4 2"
-                dot={false}
+                dot={normalizedSeries.length===1}
+                isAnimationActive={false}
                 name="SPY"
               />
             </ComposedChart>

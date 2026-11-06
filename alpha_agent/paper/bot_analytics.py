@@ -183,6 +183,7 @@ async def read_performance(pool: Any, user_id: int, account_id: int) -> dict:
                 "count(*) FILTER (WHERE status='expired') AS expired, "
                 "count(*) FILTER (WHERE status='cancelled') AS cancelled, "
                 "COALESCE(sum(transaction_cost) FILTER (WHERE status='filled'),0) AS paid_fees, "
+                "count(*) FILTER (WHERE status='filled' AND transaction_cost IS NULL) AS missing_fees, "
                 "count(*) FILTER (WHERE status='filled' AND filled_at IS NULL) AS undated_fills, "
                 "count(*) FILTER (WHERE status='filled' AND filled_at>$3 AND filled_at<=$4 "
                 "AND (fill_price IS NULL OR fill_price<=0 OR qty<=0)) AS invalid_window_fills, "
@@ -214,7 +215,7 @@ async def read_performance(pool: Any, user_id: int, account_id: int) -> dict:
         'reason': turnover_reason,
         'basis': 'two_sided_gross_notional_over_mean_daily_nav_start_exclusive_end_inclusive',
     }
-    orders['paid_fees'] = _number(orders['paid_fees'])
+    orders['paid_fees'] = None if orders.pop('missing_fees', 0) else _number(orders['paid_fees'])
     return {
         'account_id': account_id, 'cohort_id': cohort, 'as_of': now.isoformat(),
         'history': history['history'], 'matched_window': window,
