@@ -53,8 +53,8 @@ export default function PaperPositionsWithSource({
     t(locale, "sim.attribution.col_ticker"),
     t(locale, "sim.workspace.qty"),
     t(locale, "sim.workspace.avg_cost"),
-    t(locale, "sim.workspace.current_value"),
-    t(locale, "sim.workspace.pnl"),
+    t(locale, accountKind === "bot" ? "sim.bot.snapshot_value" : "sim.workspace.current_value"),
+    t(locale, accountKind === "bot" ? "sim.bot.snapshot_pnl" : "sim.workspace.pnl"),
     t(locale, accountKind === "bot" && onReview ? "sim.bot.holding_review" : "sim.workspace.source"),
   ];
 
@@ -78,12 +78,21 @@ export default function PaperPositionsWithSource({
             const currentValue = position.current_price === null
               ? null
               : position.current_price * position.qty;
+            const markTime = position.mark_at ? new Date(position.mark_at) : null;
+            const markLabel = position.price_quality === "stale" ? "sim.bot.quote_stale"
+              : position.price_quality === "session_close" ? "sim.bot.quote_close"
+              : position.price_quality === "fresh" ? "sim.bot.quote_intraday" : "sim.bot.quote_unverified";
             return (
               <TmTableRow key={position.ticker}>
                 <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">{position.ticker}</TmTableRowHeader>
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">{position.qty.toLocaleString()}</TmTableCell>
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">${position.avg_cost.toFixed(2)}</TmTableCell>
-                <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">{currentValue === null ? "—" : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</TmTableCell>
+                <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
+                  {currentValue === null ? "—" : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                  {accountKind === "bot" && currentValue !== null ? <span className={clsx("mt-1 block font-normal", position.price_quality === "stale" ? "text-tm-warn" : "text-tm-muted")}>
+                    {t(locale, markLabel)}{markTime && Number.isFinite(markTime.getTime()) ? <> · <time dateTime={position.mark_at!}>{markTime.toLocaleString(locale === "zh" ? "zh-CN" : "en-GB", { timeZone:"Asia/Shanghai", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false })} CST</time></> : null}
+                  </span> : null}
+                </TmTableCell>
                 <TmTableCell numeric textAlign="right" className={clsx("text-xs font-semibold", !pnlKnown ? "text-tm-muted" : pnlPositive ? "text-tm-pos" : "text-tm-neg")}>
                   {!pnlKnown || position.unrealized_pnl === null || position.unrealized_pct === null ? "—" : <>{pnlPositive ? "+" : "-"}${Math.abs(position.unrealized_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="ml-1 font-normal">({position.unrealized_pct >= 0 ? "+" : ""}{position.unrealized_pct.toFixed(2)}%)</span></>}
                 </TmTableCell>
