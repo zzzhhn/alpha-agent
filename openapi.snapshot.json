@@ -9358,6 +9358,58 @@
         ]
       }
     },
+    "/api/cron/research_readiness": {
+      "get": {
+        "description": "Read-only actual-date coverage; no provider requests or model calls.",
+        "operationId": "cron_research_readiness_api_cron_research_readiness_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Research Readiness Api Cron Research Readiness Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron Research Readiness",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/research_validation": {
       "post": {
         "description": "Read-only real-kernel canary. No LLM spend, proposals or config mutation.",

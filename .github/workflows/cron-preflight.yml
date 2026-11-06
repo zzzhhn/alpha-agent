@@ -6,7 +6,7 @@ on:
         description: 'Read-only check, or one bounded recovery action (no schedule)'
         type: choice
         default: check
-        options: [check, daily_prices, fast_intraday, publish_recommendation, research_validation, run_propose_jobs, daily_factor_loop, l2_cycle]
+        options: [check, daily_prices, ensure_research_prices, fast_intraday, publish_recommendation, research_validation, run_propose_jobs, daily_factor_loop, l2_cycle]
       limit:
         description: 'Ticker count: prices 1-75, signals 1-40'
         type: number
@@ -15,6 +15,11 @@ on:
         description: 'Start offset in the endpoint universe (0-600)'
         type: number
         default: 0
+      period:
+        description: 'Price recovery window; only expand for a verified longer gap'
+        type: choice
+        options: [5d, 1mo, 3mo]
+        default: 5d
   workflow_call:
     inputs:
       trigger_event:
@@ -47,7 +52,7 @@ jobs:
     needs: check
     if: github.event_name == 'workflow_dispatch' && inputs.operation && inputs.operation != 'check' && needs.check.outputs.ready == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 40
     concurrency:
       group: alpha-bounded-recovery
       cancel-in-progress: false
@@ -62,4 +67,10 @@ jobs:
           RECOVERY_OPERATION: ${{ inputs.operation }}
           RECOVERY_LIMIT: ${{ inputs.limit }}
           RECOVERY_OFFSET: ${{ inputs.offset }}
-        run: python3 scripts/cron_recovery.py
+          RECOVERY_PERIOD: ${{ inputs.period || '5d' }}
+        run: |
+          if [ "$RECOVERY_OPERATION" = "ensure_research_prices" ]; then
+            python3 scripts/ensure_research_prices.py
+          else
+            python3 scripts/cron_recovery.py
+          fi

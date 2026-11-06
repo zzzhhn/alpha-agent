@@ -1067,6 +1067,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/research_readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Research Readiness
+         * @description Read-only actual-date coverage; no provider requests or model calls.
+         */
+        get: operations["cron_research_readiness_api_cron_research_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/research_validation": {
         parameters: {
             query?: never;
@@ -7665,6 +7685,39 @@ export interface operations {
             query?: {
                 request_id?: string | null;
             };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_research_readiness_api_cron_research_readiness_get: {
+        parameters: {
+            query?: never;
             header?: {
                 authorization?: string | null;
             };

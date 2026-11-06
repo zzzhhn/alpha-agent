@@ -38,6 +38,15 @@ async def cron_auth_check() -> dict[str, bool]:
     return {"ok": True}
 
 
+@router.get("/research_readiness")
+async def cron_research_readiness() -> dict[str, Any]:
+    """Read-only actual-date coverage; no provider requests or model calls."""
+    from alpha_agent.api.dependencies import get_db_pool
+    from alpha_agent.data.research_refresh import research_price_readiness
+
+    return await research_price_readiness(await get_db_pool())
+
+
 @router.get("/preflight")
 async def cron_preflight() -> dict[str, Any]:
     """Authenticated read-only check. Does not ingest, prune, trade or call LLMs."""

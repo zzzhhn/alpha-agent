@@ -45,11 +45,36 @@ gh workflow run cron-preflight.yml --ref main \
   -f operation=daily_prices -f limit=5 -f offset=0
 ```
 
-Prices use a three-month window and a maximum of 75 tickers per call. Start
+Prices default to a five-trading-day window and a maximum of 75 tickers per call. Start
 with five; verify actual dates and capacity before increasing the slice. A
 positive `updated` count includes existing-row upserts and is not a freshness
 check. Missing feeds are explicitly `PARTIAL`; HTTP/database errors or zero
 writes fail the manual action. Review both the response and actual DB coverage.
+For a verified longer outage, explicitly pass `-f period=1mo` or `3mo`; do not
+expand the window merely because the valid-row counter is small.
+
+After the canary, `operation=ensure_research_prices` checks current-session
+coverage of the exact planned Top-240 plus watchlist, and requires the SPY
+close for that same session. It skips provider calls if ready. Otherwise it
+walks the bounded price universe (at most 600 symbols, 75 per request, five-day
+window), rechecks storage before each write, then reads actual-date coverage
+again. This action does not compute IC, generate signals, publish, trade or
+call an LLM. Watchlists, research symbols and SPY are included in the price
+universe even when absent from old slow-signal rows. Unfinished current-session
+candles are not stored as settled daily closes.
+
+The full scheduled/manual `fast_intraday` workflow now depends on this price
+stage, rather than assuming the separate 22:00 price cron finished before the
+23:00 research cron. Insufficient fresh prices pause scheduled full research
+with a visible warning and `ready=false`; unexpected auth/code errors still
+fail normally. Final publication health gates are unchanged. A green paused
+workflow is not a new recommendation. Manual recovery still fails if not ready.
+Per-ticker provider failures remain in the receipt but do not override a passing
+actual-coverage gate for the required universe. HTTP/auth/invalid-response
+errors still fail. Each stage retains the starting UTC research day and leaves
+a full request budget before midnight; an expired day pauses publication rather
+than mixing ranking scopes. Scheduled L2 now follows successful publication in
+the same workflow, not an independent 23:45 timer.
 
 Other manual actions are `fast_intraday` (at most 40 plus watchlist additions),
 `publish_recommendation`, `run_propose_jobs`, and `daily_factor_loop`. Inspect
