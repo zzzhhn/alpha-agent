@@ -18,7 +18,10 @@ while time.monotonic() < deadline:
         print(json.dumps(result), flush=True)
         break
     # Deliberately do not print private account, research or trading payloads.
-    print(json.dumps({k: result.get(k) for k in ('ok', 'processed', 'active', 'status', 'stage')}), flush=True)
+    log = {k: result.get(k) for k in ('ok', 'processed', 'active', 'status', 'stage')}
+    scheduled = result.get('scheduled') or {}
+    log['schedule'] = {k: scheduled.get(k) for k in ('reason', 'enqueued', 'observed_accounts', 'missed_observations')}
+    print(json.dumps(log), flush=True)
     if not result.get('ok'):
         raise RuntimeError('paper bot worker rejected request')
     if not result.get('active'):

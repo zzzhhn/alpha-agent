@@ -11580,6 +11580,62 @@
         ]
       }
     },
+    "/api/paper/accounts/{account_id}/bot/performance": {
+      "get": {
+        "operationId": "performance_api_paper_accounts__account_id__bot_performance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Performance",
+        "tags": [
+          "paper-bot"
+        ]
+      }
+    },
     "/api/paper/accounts/{account_id}/capabilities": {
       "get": {
         "operationId": "capabilities_api_paper_accounts__account_id__capabilities_get",

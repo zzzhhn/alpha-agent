@@ -250,6 +250,16 @@ the user corrections, verified causes and remaining evidence limits.
 Future incidents of these same families extend the linked catalog. Do not add
 duplicate always-loaded AGENTS rules or new skills for each instance.
 
+For each changed interaction family, the author/reviewer handoff uses this
+compact receipt rather than an aggregate click count. `Unverified` is not pass;
+the primary combines local findings into a whole-page composition decision.
+
+| Surface/state | Behavior (result, focus, data) | Composition (adjacent pane, next section, scroll end) | Evidence / remaining gap |
+| --- | --- | --- | --- |
+| Longest realistic detail | pass / fail / unverified | pass / fail / unverified | viewport, locale/theme, screenshot or limitation |
+| Combined permitted expansion | pass / fail / unverified | pass / fail / unverified | same page context, not isolated cropped control |
+| Last page / close / empty result | pass / fail / unverified | pass / fail / unverified | all records reachable, close restores context |
+
 ### 10.2 Advanced research refinement, 2026-11-03
 
 - Zoo opens on the local factor catalog. Search, direction/status filters, saved-metric sorting and 5/10-row pagination share the existing table and field grammar. Long expressions open in a dialog; deletion requires confirmation and reports storage failure. Curated historical examples are labeled, not presented as current backtests or server-synchronized assets. Distribution/ranking charts need at least 10 recorded samples; smaller libraries retain explicit summary values without duplicated top/bottom lists. Correlation remains a separate on-demand calculation, capped at 20 most recently saved factors and disclosing its uniform long/short convention.

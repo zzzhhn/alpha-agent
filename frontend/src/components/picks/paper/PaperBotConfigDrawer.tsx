@@ -30,6 +30,10 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
   const [weight,setWeight] = useState("25");
   const [fees,setFees] = useState("10");
   const [slippage,setSlippage] = useState("5");
+  const [horizon,setHorizon] = useState("20");
+  const [researchAge,setResearchAge] = useState("3");
+  const [tradeDelta,setTradeDelta] = useState("0");
+  const [turnover,setTurnover] = useState("200");
   const [busy,setBusy] = useState(false);
   const [byokLoading,setByokLoading] = useState(false);
   const [error,setError] = useState<string | null>(null);
@@ -49,6 +53,8 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
     setDaily(String(config?.max_daily_runs ?? 6)); setPositions(String(config?.max_positions ?? 8));
     setWeight(String((config?.max_position_weight ?? 0.25)*100));
     setFees(String(config?.fee_bps ?? 10)); setSlippage(String(config?.slippage_bps ?? 5));
+    setHorizon(String(config?.horizon_sessions ?? 20)); setResearchAge(String(config?.max_research_age_sessions ?? 3));
+    setTradeDelta(String((config?.min_trade_weight_delta ?? 0)*100)); setTurnover(String((config?.max_turnover_weight ?? 2)*100));
   }, [open, account, config, locale]);
   useEffect(() => {
     if (!open || account) return;
@@ -74,6 +80,8 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
         instructions, schedule_enabled:schedule, open_enabled:atOpen, close_enabled:atClose,
         open_offset_minutes:Number(openMinutes), close_offset_minutes:Number(closeMinutes), max_daily_runs:Number(daily),
         max_positions:Number(positions), max_position_weight:Number(weight)/100, fee_bps:Number(fees), slippage_bps:Number(slippage),
+        horizon_sessions:Number(horizon), max_research_age_sessions:Number(researchAge),
+        min_trade_weight_delta:Number(tradeDelta)/100, max_turnover_weight:Number(turnover)/100, cash_policy:"discretionary",
       });
       onSaved(target); onClose();
     } catch (reason) {
@@ -88,6 +96,8 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmSelect label={t(locale,"sim.bot.provider")} value={provider} onChange={setProvider} options={[{value:"",label:t(locale,"sim.bot.saved_model")},{value:"kimi",label:"Kimi"},{value:"openai",label:"OpenAI"},{value:"anthropic",label:"Anthropic"},{value:"ollama",label:"Ollama"}]} /><TmInput label={t(locale,"sim.bot.model")} value={model} onChange={setModel} placeholder={t(locale,"sim.bot.saved_model")} maxLength={120} /></div>
         <p className="text-xs leading-5 text-tm-muted">{config?.credential_configured ? t(locale,"sim.bot.byok_ready") : !config ? t(locale,"sim.bot.saved_model") : t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p>
         <TmTextarea label={t(locale,"sim.bot.instructions")} hint={t(locale,"sim.bot.instructions_hint")} value={instructions} onChange={setInstructions} rows={5} maxLength={2000} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmInput label={t(locale,"sim.bot.horizon_sessions")} value={horizon} onChange={setHorizon} type="number" min={1} max={252} step={1} required /><TmInput label={t(locale,"sim.bot.research_age_limit")} value={researchAge} onChange={setResearchAge} type="number" min={0} max={20} step={1} required /></div>
+        <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.cash_discretionary")}</p>
       </fieldset>
       <fieldset disabled={busy} className="space-y-3"><legend className="mb-3 text-sm font-semibold text-tm-fg">{t(locale,"sim.bot.wake_times")}</legend>
         <TmCheckbox label={t(locale,"sim.bot.schedule")} checked={schedule} onChange={setSchedule} />
@@ -95,7 +105,17 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
         <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.schedule_hint")}</p>
       </fieldset>
       <fieldset disabled={busy} className="space-y-3"><legend className="mb-3 text-sm font-semibold text-tm-fg">{t(locale,"sim.bot.budget")}</legend><TmInput label={t(locale,"sim.bot.daily_runs")} value={daily} onChange={setDaily} type="number" min={1} max={12} step={1} required /></fieldset>
-      <details className="border-t border-tm-rule pt-4"><summary className="cursor-pointer text-sm text-tm-fg">{t(locale,"sim.bot.advanced")}</summary><fieldset disabled={busy} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2"><TmInput label={t(locale,"sim.bot.max_positions")} value={positions} onChange={setPositions} type="number" min={1} max={20} step={1} required /><TmInput label={t(locale,"sim.bot.max_weight")} value={weight} onChange={setWeight} type="number" min={1} max={100} step={1} required /><TmInput label={`${t(locale,"sim.bot.fee")} (bps)`} value={fees} onChange={setFees} type="number" min={0} max={100} step={1} required /><TmInput label={`${t(locale,"sim.bot.slippage")} (bps)`} value={slippage} onChange={setSlippage} type="number" min={0} max={100} step={1} required /></fieldset></details>
+      <details className="border-t border-tm-rule pt-4">
+        <summary className="cursor-pointer text-sm text-tm-fg">{t(locale,"sim.bot.advanced")}</summary>
+        <fieldset disabled={busy} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <TmInput label={t(locale,"sim.bot.max_positions")} value={positions} onChange={setPositions} type="number" min={1} max={20} step={1} required />
+          <TmInput label={t(locale,"sim.bot.max_weight")} value={weight} onChange={setWeight} type="number" min={1} max={100} step={1} required />
+          <TmInput label={t(locale,"sim.bot.min_trade_delta")} value={tradeDelta} onChange={setTradeDelta} type="number" min={0} max={25} step="any" required />
+          <TmInput label={t(locale,"sim.bot.max_turnover")} value={turnover} onChange={setTurnover} type="number" min={0} max={200} step="any" required />
+          <TmInput label={`${t(locale,"sim.bot.fee")} (bps)`} value={fees} onChange={setFees} type="number" min={0} max={100} step={1} required />
+          <TmInput label={`${t(locale,"sim.bot.slippage")} (bps)`} value={slippage} onChange={setSlippage} type="number" min={0} max={100} step={1} required />
+        </fieldset>
+      </details>
       {error ? <p role="alert" className="break-words text-xs leading-5 text-tm-neg">{error}</p> : null}
     </form>
   </TmDrawer>;

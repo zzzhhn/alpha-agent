@@ -38,7 +38,8 @@ async def test_sql_owner_api_byok_worker_and_scheduler(monkeypatch):
     from alpha_agent.auth.crypto_box import encrypt
     from alpha_agent.auth.dependencies import require_user
     from alpha_agent.llm.base import LLMResponse
-    from alpha_agent.paper import bot_valuation
+    from alpha_agent.paper import bot_policy, bot_valuation
+    from alpha_agent.paper.market_clock import market_session
 
     dsn = os.environ['ALPHA_PAPER_BOT_TEST_DSN']
     assert urlsplit(dsn).hostname in ('localhost', '127.0.0.1')
@@ -57,6 +58,11 @@ async def test_sql_owner_api_byok_worker_and_scheduler(monkeypatch):
     monkeypatch.setattr(paper_bot, 'read_capacity', AsyncMock(return_value={'allow_writes': True}))
     monkeypatch.setattr(bot_schedule, 'read_capacity', AsyncMock(return_value={'allow_writes': True}))
     monkeypatch.setattr(bot_valuation, 'refresh_marks', AsyncMock(return_value={'valuation_quality': 'cash_only', 'portfolio_value': 10000}))
+    # This adapter test is independent of the wall clock. Live market behaviour
+    # is covered separately; the provider below never leaves the local process.
+    open_market = market_session(datetime(2026, 11, 6, 15, tzinfo=UTC))
+    monkeypatch.setattr(bot_runner, 'market_session', lambda: open_market)
+    monkeypatch.setattr(bot_policy, 'market_session', lambda _now=None: open_market)
     app = FastAPI()
     app.include_router(paper.router)
     app.include_router(paper_bot.router)
@@ -88,7 +94,7 @@ async def test_sql_owner_api_byok_worker_and_scheduler(monkeypatch):
             async def chat(messages, **kwargs):
                 packet = json.loads(messages[1].content)
                 assert packet['context']['account']['account_id'] == bot_id
-                return LLMResponse(json.dumps({'context_id': run_id, 'decision': 'no_trade', 'summary': '休市，保留现金。'}), 'selected-model', 100, 30)
+                return LLMResponse(json.dumps({'context_id': run_id, 'decision': 'no_trade', 'no_trade_reason': 'evidence_insufficient', 'summary': '证据不足，保留现金。'}), 'selected-model', 100, 30)
             fake = type('Client', (), {})()
             fake.chat, fake.close = chat, AsyncMock()
             def client(provider, key, base, model):
@@ -101,13 +107,20 @@ async def test_sql_owner_api_byok_worker_and_scheduler(monkeypatch):
             detail = (await api.get(root + '/runs/' + run_id)).json()
             assert detail['prompt_tokens'] == 100 and detail['llm_calls'] == 1
             assert 'lease_token' not in detail and 'config_snapshot' not in detail
+            assert detail['result']['outcome_reason'] == 'evidence_insufficient'
+            assert len(detail['result']['diagnostics']['stages']) == 3
+            evidence = (await api.get(root + '/bot/performance')).json()
+            assert evidence['orders']['filled'] == 0
+            assert evidence['matched_window']['bot_return_pct'] is None
             assert dict(await pool.fetchrow('SELECT * FROM sim_account WHERE id=$1', human_id)) == human_before
             assert await pool.fetchval('SELECT count(*) FROM sim_order WHERE account_id=$1', bot_id) == 0
             # Same due slot cannot create a second run after config changes.
-            at = datetime(2026, 11, 2, 15, 2, tzinfo=UTC)
+            at = datetime(2026, 11, 6, 15, 2, tzinfo=UTC)
+            await pool.execute("UPDATE sim_bot_config SET updated_at=$2 WHERE account_id=$1", bot_id, datetime(2026, 11, 6, 14, tzinfo=UTC))
             assert (await bot_schedule.enqueue_due(pool, at))['enqueued'] >= 1
             scheduled = await pool.fetchrow("SELECT * FROM sim_bot_run WHERE account_id=$1 AND trigger='open_after'", bot_id)
             assert scheduled
+            assert await pool.fetchval("SELECT status FROM sim_bot_schedule_slot WHERE account_id=$1 AND slot='open_after'", bot_id) == 'enqueued'
             await pool.execute("UPDATE sim_bot_run SET status='completed' WHERE id=$1", scheduled['id'])
             await bot_store.save_config(pool, user, bot_id, {'instructions': '新说明'})
             await bot_schedule.enqueue_due(pool, at)

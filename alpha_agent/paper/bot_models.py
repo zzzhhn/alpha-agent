@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -24,6 +25,11 @@ class BotConfig(BaseModel):
     max_position_weight: float = Field(default=0.25, gt=0, le=1, allow_inf_nan=False)
     fee_bps: float = Field(default=10, ge=0, le=100, allow_inf_nan=False)
     slippage_bps: float = Field(default=5, ge=0, le=100, allow_inf_nan=False)
+    horizon_sessions: int = Field(default=20, ge=1, le=252)
+    max_research_age_sessions: int = Field(default=3, ge=0, le=20)
+    min_trade_weight_delta: float = Field(default=0, ge=0, le=0.25, allow_inf_nan=False)
+    max_turnover_weight: float = Field(default=2, ge=0, le=2, allow_inf_nan=False)
+    cash_policy: Literal['discretionary'] = 'discretionary'
 
 
 class BotAction(BaseModel):
@@ -46,8 +52,12 @@ class BotAction(BaseModel):
 
 
 class PositionNote(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     ticker: str = Field(max_length=10, pattern=r'^[A-Z0-9.^-]+$')
     note: str = Field(max_length=600)
+    thesis: str = Field(default='', max_length=400)
+    invalidation: str = Field(default='', max_length=400)
+    review_after: date | None = None
 
 
 class BotDecision(BaseModel):
@@ -58,11 +68,15 @@ class BotDecision(BaseModel):
     actions: list[BotAction] = Field(default_factory=list, max_length=20)
     position_notes: list[PositionNote] = Field(default_factory=list, max_length=20)
     research_tickers: list[str] = Field(default_factory=list, max_length=5)
+    target_semantics: Literal['patch_targets'] = 'patch_targets'
+    no_trade_reason: Literal['keep_cash', 'keep_positions', 'strategy_no_op', 'evidence_insufficient'] | None = None
 
     @model_validator(mode='after')
     def coherent(self):
         if self.decision != 'rebalance' and self.actions:
             raise ValueError('only rebalance may contain actions')
+        if self.decision == 'rebalance' and not self.actions:
+            raise ValueError('empty rebalance: use no_trade with an explicit reason')
         if len({a.action_id for a in self.actions}) != len(self.actions):
             raise ValueError('action_id must be unique')
         ids = [a.instrument_id for a in self.actions if a.type == 'set_target_weight']
