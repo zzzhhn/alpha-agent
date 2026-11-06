@@ -18,12 +18,14 @@
 | 已有长期持仓复核没有入口 | sim_bot_position_note 已保存，持仓表仅显示账户来源 | 只读 owner-scoped 查询当前持仓复核，明确不是建仓归因 |
 | 查看来源运行时抽屉瞬间关闭后无反馈 | 当前 onRun 异步完成前未打开新 drawer | 即时显示加载和就地重试，保留请求版本隔离 |
 | 刷新全页会清空已有事实，活动 run 与历史表不同步 | 当前 Resource 读取先置 null，poll 只更新 latest | 保留旧读数并标记刷新；同一 run 的多个视图同步 |
+| 推荐已有驱动信息在模型输入中丢失 | 生产快照 ERIE 的 top_drivers 为 factor/analyst/rsrs，真实已持久化 context.drivers 为字符串空列表 | 修正 top_drivers/top_drags 字段映射，保留旧字段兼容；显式传递推荐原策略、期限和仅为信号名称的证据边界 |
 
 ## 前后端契约
 
 - run.order_summary 来自 sim_order，不从模型自然语言或 accepted 推断 filled。未知费用保留 null。
 - `/bot/position-notes` 限当前 owner、bot、cohort 和最多 20 个非零持仓；不抓行情、不调用 LLM、不写库。保留源 run 和更新时间。
 - scheduled observation 状态以对应真实 run 为准。派发和完成仍是不同事实。
+- 推荐归因修复只改变后续 context 中原本遗漏的已有信息；不重写历史 context，不切换推荐策略，不修改用户持有期限或交易门槛。
 - 维护空、失败、部分、加载、运行中与终态；不把不可用数据画成 0。
 
 ## 设计原则复核

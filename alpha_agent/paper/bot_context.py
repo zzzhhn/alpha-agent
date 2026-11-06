@@ -14,6 +14,22 @@ from alpha_agent.paper.market_clock import as_utc, market_session
 from alpha_agent.storage.product_ledger import get_latest_canonical_run
 
 
+def recommendation_evidence(payload):
+    """Read the published pick schema; attribution names are not detailed research."""
+    def signals(name, legacy):
+        value = payload.get(name, payload.get(legacy, []))
+        return [item[:80] for item in value[:5] if isinstance(item, str)] if isinstance(value, list) else []
+
+    horizon = payload.get('horizon_days')
+    return {
+        'drivers': signals('top_drivers', 'drivers'),
+        'drags': signals('top_drags', 'drags'),
+        'recommendation_policy_id': str(payload['policy_id'])[:80] if payload.get('policy_id') else None,
+        'recommendation_horizon_days': horizon if type(horizon) is int and 0 < horizon <= 252 else None,
+        'attribution_basis': 'signal_names_not_full_research',
+    }
+
+
 async def quotes_for(tickers, now=None):
     now = now or datetime.now(UTC)
     market = market_session(now)
@@ -97,8 +113,7 @@ async def build_context(pool, run, research_tickers=None):
             'age_sessions': age, 'usable_for_new_buy': research_usable,
             'previous_tier': previous[row['ticker']]['tier'] if row['ticker'] in previous else None,
             'previous_rank': previous[row['ticker']]['rank'] if row['ticker'] in previous else None,
-            'drivers': str(payload.get('drivers', []))[:400],
-            'drags': str(payload.get('drags', []))[:400]})
+            **recommendation_evidence(payload)})
     quote_symbols = held + [t for t in requested if t in symbols] + [r['ticker'] for r in rows[:8]]
     quotes = await quotes_for(quote_symbols)
     evidence = {r['evidence_id']: {'ticker': r['ticker'], 'kind': 'research', 'usable_for_new_buy': research_usable}

@@ -6,6 +6,19 @@ import pytest
 
 from alpha_agent.paper.bot_store import enrich_runs
 from alpha_agent.paper.bot_schedule import schedule_observations
+from alpha_agent.paper.bot_context import recommendation_evidence
+
+
+def test_bot_receives_the_published_recommendation_attribution_and_source_horizon():
+    packet = recommendation_evidence({'top_drivers': ['factor', 'analyst', 'rsrs'],
+                                      'top_drags': [], 'policy_id': 'tactical', 'horizon_days': 5})
+    assert packet['drivers'] == ['factor', 'analyst', 'rsrs']
+    assert packet['drags'] == []
+    assert packet['recommendation_horizon_days'] == 5
+    assert packet['attribution_basis'] == 'signal_names_not_full_research'
+    assert recommendation_evidence({'drivers': ['legacy']})['drivers'] == ['legacy']
+    assert recommendation_evidence({'top_drivers': [], 'drivers': ['stale']})['drivers'] == []
+    assert recommendation_evidence({'top_drivers': 'not a list'})['drivers'] == []
 
 
 async def test_summary_uses_actual_orders_not_planned_or_accepted_actions():

@@ -59,7 +59,7 @@ async def test_order_readback_uses_actual_terminal_fact():
     ident = uuid.uuid4()
     pool = type('Pool', (), {'fetch':AsyncMock(return_value=[{
         'id':3,'bot_run_id':ident,'action_id':'a','status':'filled','filled_at':NOW,
-        'fill_price':10,'transaction_cost':1,'fail_reason':None}])})()
+        'qty':2,'fill_price':10,'transaction_cost':1,'fail_reason':None}])})()
     row = {'id':ident,'result':{'actions':[{'action_id':'a','status':'accepted'}]}}
     result = (await bot_store.enrich_runs(pool, [row]))[0]['result']['actions'][0]
     assert result['status'] == 'accepted' and result['order_status'] == 'filled'
