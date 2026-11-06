@@ -1,24 +1,22 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Inter_Tight } from "next/font/google";
+import localFont from "next/font/local";
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
 
-// Workstation aesthetic (Variation C) — fonts are self-hosted by Next.js
-// and exposed as CSS vars (--font-jetbrains-mono / --font-inter-tight). The
-// tailwind.config maps `font-tm-mono` / `font-tm-sans` to these vars; nothing
-// in Stage 1 actually applies them yet. Stage 2 (workstation shell) opts in.
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
+// Keep the workstation's original families without a build-time Google fetch.
+// Font sources and OFL licenses live beside these pinned local assets.
+const jetbrainsMono = localFont({
+  src: "./fonts/JetBrainsMono-variable.ttf",
   variable: "--font-jetbrains-mono",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: "400 700",
 });
 
-const interTight = Inter_Tight({
-  subsets: ["latin"],
+const interTight = localFont({
+  src: "./fonts/InterTight-variable.ttf",
   variable: "--font-inter-tight",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: "400 700",
 });
 
 export const metadata: Metadata = {
