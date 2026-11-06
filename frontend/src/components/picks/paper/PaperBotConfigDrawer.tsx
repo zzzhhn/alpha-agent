@@ -89,12 +89,12 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
     } finally { setBusy(false); }
   }
 
-  return <TmDrawer open={open} onClose={() => {if (!busy) onClose();}} title={t(locale,account || created ? "sim.bot.configure" : "sim.bot.create")} closeLabel={t(locale,"sim.bot.close")} width="lg" description={t(locale,"sim.bot.config_next")} footer={<div className="flex justify-end gap-2"><TmButton variant="secondary" disabled={busy} onClick={onClose}>{t(locale,"sim.bot.close")}</TmButton><TmButton type="submit" form="paper-bot-config" loading={busy || byokLoading} loadingLabel={t(locale,byokLoading ? "common.loading" : "sim.bot.saving")}>{t(locale,"sim.bot.save")}</TmButton></div>}>
+  return <TmDrawer open={open} onClose={() => {if (!busy) onClose();}} title={t(locale,account || created ? "sim.bot.configure" : "sim.bot.create")} closeLabel={t(locale,"sim.bot.close")} width="lg" description={t(locale,"sim.bot.config_next")} footer={<div className="space-y-3">{error ? <p role="alert" className="break-words text-xs leading-5 text-tm-neg">{error}</p> : null}<div className="flex justify-end gap-2"><TmButton variant="secondary" disabled={busy} onClick={onClose}>{t(locale,"sim.bot.close")}</TmButton><TmButton type="submit" form="paper-bot-config" loading={busy || byokLoading} loadingLabel={t(locale,byokLoading ? "common.loading" : "sim.bot.saving")}>{t(locale,"sim.bot.save")}</TmButton></div></div>}>
     <form id="paper-bot-config" onSubmit={event => void save(event)} className="space-y-6">
       {!account ? <fieldset disabled={busy || !!created} className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmInput label={t(locale,"sim.bot.name")} value={name} onChange={setName} required maxLength={80} /><TmInput label={t(locale,"sim.bot.initial_cash")} value={cash} onChange={setCash} type="number" min={0.01} step={0.01} required /></fieldset> : null}
       <fieldset disabled={busy} className="space-y-3"><legend className="mb-3 text-sm font-semibold text-tm-fg">{t(locale,"sim.bot.model_strategy")}</legend>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmSelect label={t(locale,"sim.bot.provider")} value={provider} onChange={setProvider} options={[{value:"",label:t(locale,"sim.bot.saved_model")},{value:"kimi",label:"Kimi"},{value:"openai",label:t(locale,"sim.bot.openai_compatible")},{value:"anthropic",label:"Anthropic"},{value:"ollama",label:"Ollama"}]} /><TmInput label={t(locale,"sim.bot.model")} value={model} onChange={setModel} placeholder={t(locale,"sim.bot.saved_model")} maxLength={120} /></div>
-        <p className="text-xs leading-5 text-tm-muted">{config?.credential_configured ? t(locale,"sim.bot.byok_ready") : !config ? t(locale,"sim.bot.saved_model") : t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p>
+        <p className="text-xs leading-5 text-tm-muted">{config && provider && provider !== config.provider ? t(locale,"sim.bot.byok_provider_changed") : config?.credential_configured ? t(locale,"sim.bot.byok_ready") : !config ? t(locale,"sim.bot.saved_model") : t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p>
         <TmTextarea label={t(locale,"sim.bot.instructions")} hint={t(locale,"sim.bot.instructions_hint")} value={instructions} onChange={setInstructions} rows={5} maxLength={2000} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmInput label={t(locale,"sim.bot.horizon_sessions")} value={horizon} onChange={setHorizon} type="number" min={1} max={252} step={1} required /><TmInput label={t(locale,"sim.bot.research_age_limit")} value={researchAge} onChange={setResearchAge} type="number" min={0} max={20} step={1} required /></div>
         <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.cash_discretionary")}</p>
@@ -116,7 +116,6 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
           <TmInput label={`${t(locale,"sim.bot.slippage")} (bps)`} value={slippage} onChange={setSlippage} type="number" min={0} max={100} step={1} required />
         </fieldset>
       </details>
-      {error ? <p role="alert" className="break-words text-xs leading-5 text-tm-neg">{error}</p> : null}
     </form>
   </TmDrawer>;
 }

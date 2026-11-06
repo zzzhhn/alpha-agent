@@ -240,7 +240,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
             <PaperBotExecutionSummary run={current} />
             <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-tm-fg">{current.summary || (active ? t(locale,"sim.bot.running_hint") : current.status === "no_trade" ? t(locale,"sim.bot.no_trade") : current.status === "failed" ? t(locale,"sim.bot.run_error") : t(locale,"sim.bot.no_result"))}</p>
             <PaperBotOutcome run={current} />
-            <p className="text-xs leading-5 text-tm-muted">{t(locale,active ? "sim.bot.running_hint" : "sim.bot.completed_hint")}</p>
+            {active && current.summary ? <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.running_hint")}</p> : null}
             <TmButton variant="secondary" onClick={()=>void inspectRun(current)}>{t(locale,"sim.bot.details")}</TmButton>
             {pollError ? <p role="alert" className="text-xs text-tm-neg">{t(locale,"sim.bot.stale_poll")}</p> : null}
           </div> : <TmStatePane state="empty" title={t(locale,"sim.bot.no_runs")} description={t(locale,"sim.bot.no_runs_hint")} className="border-0 !bg-transparent" />}
