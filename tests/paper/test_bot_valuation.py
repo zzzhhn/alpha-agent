@@ -254,6 +254,7 @@ async def test_bot_api_never_reads_adjusted_daily_prices_and_exposes_nulls(monke
 
     pool = MagicMock()
     pool.fetch = AsyncMock(return_value=[position()])
+    pool.fetchrow = AsyncMock(return_value=None)
     pool.fetchval = AsyncMock(return_value=0)
     monkeypatch.setattr(paper, 'resolve_account', AsyncMock(return_value={
         'id': 22, 'kind': 'bot', 'cash': 1000, 'initial_cash': 1000, 'reset_count': 0,

@@ -35,6 +35,16 @@
             "title": "Initial Cash",
             "type": "number"
           },
+          "last_valid_valuation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValuationSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "pending_orders": {
             "title": "Pending Orders",
             "type": "integer"
@@ -5409,6 +5419,51 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "ValuationSnapshot": {
+        "properties": {
+          "market_date": {
+            "title": "Market Date",
+            "type": "string"
+          },
+          "portfolio_value": {
+            "title": "Portfolio Value",
+            "type": "number"
+          },
+          "total_return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Return Pct"
+          },
+          "unrealized_pnl": {
+            "title": "Unrealized Pnl",
+            "type": "number"
+          },
+          "valuation_quality": {
+            "title": "Valuation Quality",
+            "type": "string"
+          },
+          "valued_at": {
+            "title": "Valued At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portfolio_value",
+          "unrealized_pnl",
+          "total_return_pct",
+          "valued_at",
+          "market_date",
+          "valuation_quality"
+        ],
+        "title": "ValuationSnapshot",
+        "type": "object"
+      },
       "WatchlistPut": {
         "properties": {
           "tickers": {
@@ -9063,6 +9118,98 @@
           }
         },
         "summary": "Market Probe",
+        "tags": [
+          "paper-bot"
+        ]
+      }
+    },
+    "/api/cron/paper_bot/valuation": {
+      "get": {
+        "operationId": "refresh_valuation_api_cron_paper_bot_valuation_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Valuation",
+        "tags": [
+          "paper-bot"
+        ]
+      },
+      "post": {
+        "operationId": "refresh_valuation_api_cron_paper_bot_valuation_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Valuation",
         "tags": [
           "paper-bot"
         ]

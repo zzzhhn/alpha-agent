@@ -28,6 +28,14 @@ export interface AccountResponse {
   readonly reset_count: number;
   readonly valuation_quality?: string | null;
   readonly valued_at?: string | null;
+  readonly last_valid_valuation?: {
+    readonly portfolio_value: number;
+    readonly unrealized_pnl: number;
+    readonly total_return_pct: number | null;
+    readonly valued_at: string;
+    readonly market_date: string;
+    readonly valuation_quality: string;
+  } | null;
 }
 
 export interface PlaceOrderRequest {

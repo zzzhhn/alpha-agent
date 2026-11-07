@@ -53,6 +53,15 @@ class PositionOut(BaseModel):
     mark_at: str | None = None
 
 
+class ValuationSnapshot(BaseModel):
+    portfolio_value: float
+    unrealized_pnl: float
+    total_return_pct: float | None
+    valued_at: str
+    market_date: str
+    valuation_quality: str
+
+
 class AccountResponse(BaseModel):
     account_id: int
     cash: float
@@ -68,6 +77,7 @@ class AccountResponse(BaseModel):
     reset_count: int
     valuation_quality: str | None = None
     valued_at: str | None = None
+    last_valid_valuation: ValuationSnapshot | None = None
 
 
 class PlaceOrderRequest(BaseModel):
@@ -360,10 +370,13 @@ async def _read_account(
     tickers = [r["ticker"] for r in positions]
     is_bot = account.get('kind') == 'bot'
     valuation = None
+    last_valid = None
     if is_bot:
-        from alpha_agent.paper.bot_valuation import summarize_marks
+        from alpha_agent.paper.bot_valuation import last_valid_valuation, summarize_marks
 
-        valuation = summarize_marks([dict(row) for row in positions], account['cash'], datetime.now(UTC))
+        now = datetime.now(UTC)
+        valuation = summarize_marks([dict(row) for row in positions], account['cash'], now)
+        last_valid = await last_valid_valuation(pool, dict(account), now)
         closes = {ticker: mark['price'] for ticker, mark in valuation['marks'].items()}
     else:
         closes = await _current_closes(pool, tickers)
@@ -428,6 +441,7 @@ async def _read_account(
         reset_count=account["reset_count"],
         valuation_quality=valuation['valuation_quality'] if valuation else None,
         valued_at=valuation['valued_at'].isoformat() if valuation and valuation['valued_at'] else None,
+        last_valid_valuation=last_valid,
     )
 
 

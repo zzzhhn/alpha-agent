@@ -7,14 +7,14 @@ import urllib.request
 deadline = time.monotonic() + 14 * 60
 schedule = os.environ.get('BOT_SCHEDULE', 'false')
 operation = os.environ.get('BOT_OPERATION', 'run')
-suffix = '/market_probe' if operation == 'market_probe' else f'?schedule={schedule}'
+suffix = {'market_probe': '/market_probe', 'valuation_refresh': '/valuation'}.get(operation, f'?schedule={schedule}')
 while time.monotonic() < deadline:
     request = urllib.request.Request(
         f'https://alpha-api.bobbyzhong.com/api/cron/paper_bot{suffix}',
         method='POST', headers={'Authorization': 'Bearer ' + os.environ['CRON_SECRET']})
     with urllib.request.urlopen(request, timeout=280) as response:
         result = json.load(response)
-    if operation == 'market_probe':
+    if operation in {'market_probe', 'valuation_refresh'}:
         print(json.dumps(result), flush=True)
         break
     # Deliberately do not print private account, research or trading payloads.

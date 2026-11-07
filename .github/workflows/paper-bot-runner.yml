@@ -6,7 +6,7 @@ on:
       bot_operation:
         type: choice
         default: run
-        options: [run, market_probe]
+        options: [run, market_probe, valuation_refresh]
   schedule:
     # A second small window catches delayed dispatch. The NYSE calendar
     # filters ordinary vs half-day close; no every-minute polling.
