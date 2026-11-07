@@ -210,6 +210,13 @@ async def worker(schedule: bool = False):
             'scheduled': scheduled, 'settlement': {k: v for k, v in settlement.items() if k != 'errors'}}
 
 
+@router.get('/api/cron/paper_bot/valuation', dependencies=[Depends(require_cron)])
+@router.post('/api/cron/paper_bot/valuation', dependencies=[Depends(require_cron)])
+async def refresh_valuation():
+    from alpha_agent.paper.bot_quote_refresh import refresh_intraday_valuations
+    return await refresh_intraday_valuations(await get_db_pool())
+
+
 @router.post('/api/cron/paper_bot/market_probe', dependencies=[Depends(require_cron)])
 async def market_probe():
     """One public-symbol availability sample, not a trade or blanket SLA."""

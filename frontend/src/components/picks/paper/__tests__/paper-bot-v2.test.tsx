@@ -4,12 +4,31 @@ import { canWakePaperBot, type PaperBotConfig, type PaperBotPerformance, type Pa
 import { PaperBotActions, PaperBotOutcome, PaperBotExecutionSummary, botReason } from "../PaperBotUi";
 import { PaperBotReadiness, PaperBotPerformanceSummary } from "../PaperBotEvidence";
 import PaperPositionsWithSource from "../PaperPositionsWithSource";
+import PaperBotValuation from "../PaperBotValuation";
+import type { AccountResponse } from "@/lib/api/paper";
 
 const config: PaperBotConfig={account_id:7,provider:"kimi",model:"saved-model",instructions:"",schedule_enabled:false,open_enabled:true,close_enabled:true,open_offset_minutes:30,close_offset_minutes:30,max_daily_runs:6,max_positions:8,max_position_weight:0.25,fee_bps:10,slippage_bps:5,config_version:2,credential_configured:true,next_wake_at:null,market:{session_date:"2026-11-06",is_open:true,open_at:null,close_at:null,next_open_at:null},readiness:{evaluated_at:"2026-11-06T15:00:00Z",can_wake:true,blocked_reasons:[],warnings:["research_stale"],schedule_reason:"schedule_disabled",today_runs:1,research_as_of:null,research_age_sessions:null}};
 const run: PaperBotRun={id:"r1",account_id:7,status:"no_trade",stage:null,trigger:"manual",created_at:"2026-11-05T12:00:00Z",started_at:null,finished_at:null,summary:null,error:null,result:{actions:[],outcome_reason:"market_closed"},prompt_tokens:null,completion_tokens:null,provider:null,model:null};
 const performance: PaperBotPerformance={account_id:7,cohort_id:1,as_of:"2026-11-06T15:00:00Z",history:{scope:"current_cohort_recent_366",sample_count:1,valid_nav_count:0,null_nav_count:1,first_date:"2026-11-05",last_date:"2026-11-05",truncated:false},valuation:{cash:100000,portfolio_value:null,invested_value:null,exposure_pct:null,quality:"partial",valued_at:null},matched_window:{start_date:null,end_date:null,sample_count:0,expected_sessions:0,missing_sessions:0,complete:false,bot_return_pct:null,spy_return_pct:null,cash_return_pct:null,bot_max_drawdown_pct:null,reason:"insufficient_common_observations"},orders:{scope:"current_cohort",filled:0,pending:0,failed:0,expired:0,cancelled:0,paid_fees:0},turnover:{window_start:null,window_end:null,gross_filled_notional:null,average_nav:null,ratio_pct:null,reason:"insufficient_common_observations"},llm:{scope:"recent_20_runs_account_lifetime",run_count:1,prompt_tokens:null,completion_tokens:null,cost_usd:null,cost_reason:"provider_pricing_unavailable"},comparators:{spy:{basis:"raw_price_no_dividends"},cash:{basis:"zero_interest"},deterministic:{available:false,reason:"no_simulated_ledger"}}};
 
 describe("paper bot v2 evidence boundaries",()=>{
+  it("retains a dated historical valuation without turning it into current account values",()=>{
+    const account: AccountResponse={account_id:7,cash:900,reserved_cash:0,available_cash:900,initial_cash:1000,portfolio_value:null,total_return_pct:null,unrealized_pnl:null,realized_pnl:0,positions:[],pending_orders:0,reset_count:0,last_valid_valuation:{portfolio_value:1200,unrealized_pnl:200,total_return_pct:20,valued_at:"2026-11-06T20:32:00Z",market_date:"2026-11-06",valuation_quality:"fresh"}};
+    const historical=renderToStaticMarkup(<PaperBotValuation account={account} />);
+    expect(historical).toContain("$1,200");
+    expect(historical).toContain("+20.00%");
+    expect(historical).toContain("04:32");
+    expect(historical).toContain("历史快照，非当前报价");
+    expect(historical).toContain("当前可用现金");
+    expect(account.portfolio_value).toBeNull();
+    const missing=renderToStaticMarkup(<PaperBotValuation account={{...account,last_valid_valuation:null}} />);
+    expect(missing).toContain("尚无完整有效估值");
+    expect(missing).not.toContain("0.00%");
+    const current=renderToStaticMarkup(<PaperBotValuation account={{...account,portfolio_value:1250,unrealized_pnl:250,total_return_pct:25,valued_at:"2026-11-06T20:35:00Z"}} />);
+    expect(current).toContain("$1,250");
+    expect(current).not.toContain("$1,200");
+    expect(current).not.toContain("历史快照，非当前报价");
+  });
   it("labels stale bot marks as dated snapshots without changing human labels",()=>{
     const positions=[{ticker:"TEST",qty:10,avg_cost:9,current_price:10,unrealized_pnl:10,unrealized_pct:11.11,price_quality:"stale",mark_at:"2026-11-06T20:31:00Z"}];
     const bot=renderToStaticMarkup(<PaperPositionsWithSource positions={positions} attribution={[]} accountKind="bot" />);

@@ -77,6 +77,27 @@ def summarize_marks(positions: list[dict], cash: float, now: datetime) -> dict:
     }
 
 
+async def last_valid_valuation(pool: Any, account: dict, now: datetime) -> dict | None:
+    """Historical display only. Never substitute these values into execution."""
+    row = await pool.fetchrow(
+        'SELECT portfolio_value,unrealized_pnl,valued_at,as_of_date,valuation_quality '
+        'FROM sim_equity_daily WHERE account_id=$1 AND cohort_id=$2 '
+        'AND portfolio_value IS NOT NULL AND unrealized_pnl IS NOT NULL '
+        "AND valuation_quality IN ('fresh','session_close','cash_only') "
+        'AND valued_at <= $3 ORDER BY as_of_date DESC LIMIT 1',
+        account['id'], account['reset_count'], now,
+    )
+    if row is None:
+        return None
+    initial = account['initial_cash']
+    return {
+        'portfolio_value': row['portfolio_value'], 'unrealized_pnl': row['unrealized_pnl'],
+        'total_return_pct': (row['portfolio_value'] / initial - 1) * 100 if initial > 0 else None,
+        'valued_at': row['valued_at'].isoformat(), 'market_date': row['as_of_date'].isoformat(),
+        'valuation_quality': row['valuation_quality'],
+    }
+
+
 def _latest_mark(bars: list[dict], now: datetime, session: dict) -> dict:
     candidates = []
     opening, closing = as_utc(session['open_at']), as_utc(session['close_at'])
@@ -227,7 +248,9 @@ async def refresh_marks(
                 'portfolio_value=EXCLUDED.portfolio_value,cash=EXCLUDED.cash,'
                 'unrealized_pnl=EXCLUDED.unrealized_pnl,realized_pnl=EXCLUDED.realized_pnl,'
                 'benchmark_close=EXCLUDED.benchmark_close,valuation_quality=EXCLUDED.valuation_quality,'
-                'valued_at=EXCLUDED.valued_at',
+                'valued_at=EXCLUDED.valued_at '
+                'WHERE (sim_equity_daily.valued_at IS NULL OR EXCLUDED.valued_at >= sim_equity_daily.valued_at) '
+                'AND (EXCLUDED.portfolio_value IS NOT NULL OR sim_equity_daily.portfolio_value IS NULL)',
                 account_id, cohort, date.fromisoformat(session['session_date']), summary['portfolio_value'],
                 account['cash'], summary['unrealized_pnl'], sum(row['realized_pnl'] or 0 for row in updated),
                 benchmark_close, summary['valuation_quality'], instant,

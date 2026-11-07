@@ -145,11 +145,15 @@ def test_legacy_query_cannot_switch_default_account(client, pool):
 
 
 def test_scoped_bot_summary_uses_existing_cash_and_cohort(client, pool):
-    pool.fetchrow.return_value = _account(22, kind="bot", cash=1234.0, reset_count=0)
+    pool.fetchrow.side_effect = [
+        _account(22, kind="bot", cash=1234.0, reset_count=0),
+        None,  # No historical valuation has been recorded for this cohort.
+    ]
     response = client.get("/api/paper/accounts/22")
     assert response.status_code == 200
     assert response.json()["cash"] == 1234.0
     assert response.json()["account_id"] == 22
+    assert response.json()["last_valid_valuation"] is None
     ledger_query = pool.fetch.call_args_list[0]
     assert ledger_query.args[1:] == (22, 0)
 

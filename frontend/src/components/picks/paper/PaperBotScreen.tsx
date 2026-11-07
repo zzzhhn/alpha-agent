@@ -15,7 +15,6 @@ import {
   fetchPaperBotRuns, fetchPaperBotRun, startPaperBotRun, stopPaperBotRun, patchPaperBotConfig, fetchPaperBotPerformance,
   isActivePaperRun, canWakePaperBot, type PaperAccountSummary, type PaperBotConfig, type PaperBotRun, type PaperBotRunList, type PaperBotPerformance,
 } from "@/lib/api/paper-bot";
-import { Metric } from "./PaperUi";
 import PaperBotConfigDrawer from "./PaperBotConfigDrawer";
 import { PaperBotState, PaperBotPagination, PaperBotRunDrawer, PaperBotOrderDrawer, PaperBotExecutionSummary, PaperBotOutcome, botTime, botRunLabel, botStageLabel, botTriggerLabel, botModelLabel } from "./PaperBotUi";
 import { PaperBotReadiness, PaperBotPerformanceSummary, PaperBotPerformanceDrawer, PaperBotScheduleDrawer } from "./PaperBotEvidence";
@@ -24,6 +23,7 @@ import PaperCurvePane from "./PaperCurvePane";
 import PaperOrdersPane from "./PaperOrdersPane";
 import RecommendationPerformance from "../RecommendationPerformance";
 import PaperBotPositionReview from "./PaperBotPositionReview";
+import PaperBotValuation from "./PaperBotValuation";
 
 export default function PaperBotScreen({ accountTabs }: { readonly accountTabs: ReactNode }) {
   const { locale } = useLocale();
@@ -53,7 +53,6 @@ export default function PaperBotScreen({ accountTabs }: { readonly accountTabs: 
 
 type Resource<T> = { readonly data: T | null; readonly error: unknown; readonly loading: boolean };
 const pending = <T,>(): Resource<T> => ({data:null,error:null,loading:true});
-const money = (value: number) => `$${value.toLocaleString("en-US",{maximumFractionDigits:0})}`;
 
 function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccountSummary; readonly accountTabs: ReactNode }) {
   const { locale } = useLocale();
@@ -97,7 +96,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
     const read = async <T,>(fetcher:()=>Promise<T>, setter:Dispatch<SetStateAction<Resource<T>>>) => {
       setter(previous=>({...previous,error:null,loading:true}));
       try {const data=await fetcher(); if(!cancelled && version===mutationVersion.current) setter({data,error:null,loading:false});}
-      catch(error){if(!cancelled && version===mutationVersion.current) setter({data:null,error,loading:false});}
+      catch(error){if(!cancelled && version===mutationVersion.current) setter(previous=>({...previous,error,loading:false}));}
     };
     void read(()=>fetchBotAccount(id),setAccount);
     void read(()=>fetchPaperBotConfig(id),setConfig);
@@ -122,6 +121,25 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
   const current = latest.data;
   const active = isActivePaperRun(current);
   const activeId = active ? current?.id : null;
+  useEffect(()=>{
+    if(activeId) return;
+    let cancelled=false, inFlight=false, lastRead=Date.now();
+    async function readValuation() {
+      if(cancelled || document.hidden || inFlight || busyRef.current || Date.now()-lastRead<300000) return;
+      inFlight=true;lastRead=Date.now();
+      const version=mutationVersion.current;
+      const read=async <T,>(fetcher:()=>Promise<T>,setter:Dispatch<SetStateAction<Resource<T>>>)=>{
+        try {const data=await fetcher();if(!cancelled && version===mutationVersion.current)setter({data,error:null,loading:false});}
+        catch(error){if(!cancelled && version===mutationVersion.current)setter(previous=>({...previous,error}));}
+      };
+      try {await Promise.all([read(()=>fetchBotAccount(id),setAccount),read(()=>fetchBotCurve(id),setCurve),read(()=>fetchPaperBotPerformance(id),setPerformance)]);}
+      finally {inFlight=false;}
+    }
+    const timer=setInterval(()=>void readValuation(),300000);
+    const visibility=()=>{if(!document.hidden)void readValuation();};
+    document.addEventListener("visibilitychange",visibility);
+    return ()=>{cancelled=true;clearInterval(timer);document.removeEventListener("visibilitychange",visibility);};
+  },[id,activeId,revision]);
   useEffect(()=>{
     if(activeId || !config.data?.schedule_enabled) return;
     let cancelled=false, inFlight=false;
@@ -199,9 +217,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
   }
   const cfg=config.data;
   const acc=account.data;
-  const marksMissing=acc ? acc.portfolio_value === null || acc.unrealized_pnl === null || acc.total_return_pct === null || acc.positions.some(position=>position.current_price === null) : false;
   const runNow = async () => {setWaking(true);try {await mutate(async()=>{const run=await startPaperBotRun(id);if(alive.current)setLatest({data:run,error:null,loading:false});});}finally {if(alive.current)setWaking(false);}};
-  const returnPct=acc?.total_return_pct;
   const refreshing=[account,config,curve,performance,latest].some(resource=>resource.loading);
   const currentWindow=cfg?.schedule_observations?.find(row=>row.status === "waiting");
   const wakeTime=currentWindow?.planned_at ?? cfg?.next_wake_at;
@@ -220,14 +236,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
     {refreshing && acc ? <p role="status" className="px-6 py-2 text-xs text-tm-muted">{t(locale,"sim.bot.refreshing")}</p> : null}
     {actionError ? <PaperBotState error={actionError} onRetry={()=>{setActionError(null);refresh();}} /> : null}
     <TmPane title={t(locale,"sim.account.tab")} meta={cfg ? `${t(locale,"sim.bot.version")} ${cfg.config_version}` : "—"}>
-      <div className="grid grid-cols-2 gap-4 px-6 py-4 sm:grid-cols-4">
-        <Metric label={t(locale,"sim.account.nav")} value={acc?.portfolio_value != null && !marksMissing ? money(acc.portfolio_value) : "—"} />
-        <Metric label={t(locale,"sim.account.cash")} value={acc ? money(acc.available_cash) : "—"} />
-        <Metric label={t(locale,"sim.account.unrealized")} value={acc?.unrealized_pnl != null && !marksMissing ? `${acc.unrealized_pnl > 0 ? "+" : acc.unrealized_pnl < 0 ? "-" : ""}${money(Math.abs(acc.unrealized_pnl))}` : "—"} tone={!marksMissing && acc?.unrealized_pnl ? acc.unrealized_pnl>0 ? "text-tm-pos" : "text-tm-neg" : "text-tm-fg"} />
-        <Metric label={t(locale,"sim.workspace.total_return")} value={returnPct == null || marksMissing ? "—" : `${returnPct>0 ? "+" : ""}${returnPct.toFixed(2)}%`} tone={!marksMissing && returnPct ? returnPct>0 ? "text-tm-pos" : "text-tm-neg" : "text-tm-fg"} />
-      </div>
-      {marksMissing ? <p role="status" className="px-6 pb-3 text-xs leading-5 text-tm-warn">{t(locale,"sim.bot.missing_marks")}</p> : null}
-      {acc?.valued_at ? <p className="px-6 pb-3 text-xs text-tm-muted">{t(locale,"sim.bot.valuation_snapshot")} · {botTime(acc.valued_at,locale)} CST</p> : null}
+      <PaperBotValuation account={acc} />
       {account.error ? <PaperBotState error={account.error} onRetry={refresh} /> : null}
     </TmPane>
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
