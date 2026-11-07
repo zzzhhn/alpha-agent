@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { UniverseCoverage, UniverseOverview } from "../UniverseCard";
+import { UniverseCoverage, UniverseOverview, UniverseTickers } from "../UniverseCard";
 import { OperandCatalog } from "../OperandCatalog";
 import type { CoverageResponse, UniverseInfo } from "@/lib/types";
 
@@ -29,6 +29,15 @@ describe("expanded workspace layout contracts", () => {
     expect((html.match(/<code\b/g) ?? []).length).toBe(8);
     expect(html).toMatch(/<details name="[^"]+"/);
     expect(html).not.toContain("field_17");
+  });
+  it("keeps all sixteen roster items available in the wider layout", () => {
+    const html = renderToStaticMarkup(<UniverseTickers universe={{
+      ...universe, tickers: Array.from({ length: 20 }, (_, index) => `STOCK${String(index).padStart(2, "0")}`),
+    }} />);
+    expect((html.match(/<li\b/g) ?? []).length).toBe(16);
+    expect(html).toContain("STOCK15");
+    expect(html).not.toContain("STOCK16");
+    expect(html).toContain("1 / 2");
   });
   it("opens directory evidence outside the equal-height tile grid", () => {
     const html = renderToStaticMarkup(<OperandCatalog catalog={{
