@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { TmScreen, TmCols2, TmPane } from "@/components/tm/TmPane";
+import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmChip, TmSubbar, TmSubbarSpacer } from "@/components/tm/TmSubbar";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmStatePane } from "@/components/tm/TmStatePane";
@@ -69,12 +69,12 @@ export default function DataPage() {
 
       <DataRequestState locale={locale} label={zh ? "股票池" : "universes"} request={universes} />
       {active ? (
-        <TmCols2 className="lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <>
           <UniverseOverview key={`overview:${active.id}`} universe={active} closePct={closePct}>
             <DataRequestState locale={locale} label={zh ? "覆盖率" : "coverage"} request={coverage} />
           </UniverseOverview>
           <UniverseTickers key={`tickers:${active.id}`} universe={active} />
-        </TmCols2>
+        </>
       ) : universes.data ? (
         <TmStatePane state="empty" className="!min-h-24 border-x-0 !py-4" title={zh ? "未返回可用股票池" : "No universes returned"} />
       ) : null}

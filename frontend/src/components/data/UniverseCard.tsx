@@ -60,7 +60,8 @@ export function UniverseOverview({ universe, closePct, children }: {
   const zh = locale === "zh";
   return (
     <TmPane title={t(locale, "data.coverage.title")} className="min-w-0">
-      <dl className="grid grid-cols-3 divide-x divide-tm-rule border-b border-tm-rule bg-tm-bg-2/40 font-tm-mono">
+      <div className="grid lg:grid-cols-2">
+      <dl className="grid grid-cols-3 divide-x divide-tm-rule border-b border-tm-rule bg-tm-bg-2/40 font-tm-mono lg:border-b-0 lg:border-r">
         {[
           [zh ? "收盘价覆盖率" : "Close coverage", closePct === null ? "—" : percentage(closePct / 100)],
           [t(locale, "data.universe.tickerCount"), number(universe.ticker_count)],
@@ -72,7 +73,7 @@ export function UniverseOverview({ universe, closePct, children }: {
           </div>
         ))}
       </dl>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 border-b border-tm-rule px-4 py-3 font-tm-mono text-xs">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] content-center gap-x-4 gap-y-1.5 px-4 py-3 font-tm-mono text-xs">
         <dt className="text-tm-muted">{t(locale, "data.universe.range")}</dt>
         <dd className="flex flex-wrap gap-x-2 tabular-nums text-tm-fg"><span>{universe.start_date}</span><span aria-hidden="true">→</span><span>{universe.end_date}</span></dd>
         <dt className="text-tm-muted">{t(locale, "data.universe.benchmark")}</dt>
@@ -82,6 +83,7 @@ export function UniverseOverview({ universe, closePct, children }: {
           <dd className="break-words text-tm-fg">{universe.name}</dd>
         </>}
       </dl>
+      </div>
       {children}
     </TmPane>
   );
@@ -108,7 +110,7 @@ function CoverageFieldGroup({ fields, title, group }: { fields: FieldCoverage[];
   </CoverageDisclosure>;
 }
 
-/** Variable-length evidence belongs below the overview/roster pair, not inside
+/** Variable-length evidence belongs below the summary and roster, not inside
  * one side of a shared-height grid. Pagination preserves access to every field. */
 export function UniverseCoverage({ coverage }: { coverage: CoverageResponse }) {
   const { locale } = useLocale();
@@ -188,7 +190,7 @@ export function UniverseTickers({ universe }: { universe: UniverseInfo }) {
           ]} />}
       </div>
       {visible.length ? (
-        <ul aria-label={title} className="grid grid-cols-2 gap-px bg-tm-rule sm:grid-cols-4">
+        <ul aria-label={title} className="grid grid-cols-2 gap-px bg-tm-rule sm:grid-cols-4 xl:grid-cols-8">
           {visible.map((row) => (
             <li key={row.symbol} className="min-w-0 bg-tm-bg px-3 py-1.5">
               <code className="block break-all text-xs font-semibold text-tm-fg">{row.symbol}</code>
