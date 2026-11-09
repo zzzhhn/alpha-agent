@@ -15,6 +15,23 @@ def position(ticker='AAPL', **overrides):
             'realized_pnl': 4, 'mark_price': None, 'mark_at': None, 'price_quality': None} | overrides
 
 
+def test_reference_valuation_is_display_only_and_reports_stale_quote():
+    rows = [position(mark_price=100, mark_at=NOW-timedelta(minutes=6), price_quality='fresh')]
+    strict = valuation.summarize_marks(rows, 800, NOW)
+    display = valuation.display_valuation(rows, {'cash': 800, 'initial_cash': 1000}, strict, NOW)
+    assert strict['portfolio_value'] is None
+    assert strict['valuation_quality'] == 'partial'
+    assert display['reference_valuation']['portfolio_value'] == 1000
+    assert display['reference_valuation']['valuation_quality'] == 'indicative'
+    assert display['valuation_issues'][0]['ticker'] == 'AAPL'
+    assert display['valuation_issues'][0]['quality'] == 'stale'
+    for overrides in ({'mark_price': None}, {'price_quality': 'corporate_action_blocked'},
+                      {'mark_at': NOW-timedelta(days=1)}):
+        unavailable = [rows[0] | overrides]
+        strict = valuation.summarize_marks(unavailable, 800, NOW)
+        assert valuation.display_valuation(unavailable, {'cash': 800, 'initial_cash': 1000}, strict, NOW)['reference_valuation'] is None
+
+
 def bars(now=NOW, **overrides):
     return [{'start': (now - timedelta(minutes=1)).isoformat(), 'end': now.isoformat(),
              'open': 100, 'high': 101, 'low': 99, 'close': 100, 'volume': 20,

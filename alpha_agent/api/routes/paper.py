@@ -62,6 +62,16 @@ class ValuationSnapshot(BaseModel):
     valuation_quality: str
 
 
+class ReferenceValuation(ValuationSnapshot):
+    newest_mark_at: str
+
+
+class ValuationIssue(BaseModel):
+    ticker: str
+    quality: str
+    as_of: str | None
+
+
 class AccountResponse(BaseModel):
     account_id: int
     cash: float
@@ -78,6 +88,8 @@ class AccountResponse(BaseModel):
     valuation_quality: str | None = None
     valued_at: str | None = None
     last_valid_valuation: ValuationSnapshot | None = None
+    reference_valuation: ReferenceValuation | None = None
+    valuation_issues: list[ValuationIssue] = Field(default_factory=list)
 
 
 class PlaceOrderRequest(BaseModel):
@@ -371,11 +383,13 @@ async def _read_account(
     is_bot = account.get('kind') == 'bot'
     valuation = None
     last_valid = None
+    display = {}
     if is_bot:
-        from alpha_agent.paper.bot_valuation import last_valid_valuation, summarize_marks
+        from alpha_agent.paper.bot_valuation import display_valuation, last_valid_valuation, summarize_marks
 
         now = datetime.now(UTC)
         valuation = summarize_marks([dict(row) for row in positions], account['cash'], now)
+        display = display_valuation([dict(row) for row in positions], dict(account), valuation, now)
         last_valid = await last_valid_valuation(pool, dict(account), now)
         closes = {ticker: mark['price'] for ticker, mark in valuation['marks'].items()}
     else:
@@ -442,6 +456,7 @@ async def _read_account(
         valuation_quality=valuation['valuation_quality'] if valuation else None,
         valued_at=valuation['valued_at'].isoformat() if valuation and valuation['valued_at'] else None,
         last_valid_valuation=last_valid,
+        **display,
     )
 
 

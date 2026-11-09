@@ -123,6 +123,7 @@ class LiteLLMClient(LLMClient):
             model=getattr(response, "model", self._model) or self._model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+            finish_reason=getattr(choice, "finish_reason", None),
         )
 
     async def stream_chat(
