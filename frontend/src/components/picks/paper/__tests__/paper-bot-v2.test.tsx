@@ -17,7 +17,7 @@ describe("paper bot v2 evidence boundaries",()=>{
       {session_date:"2026-11-06",slot:"open_after",status:"missed",reason:"slot_expired",planned_at:null,observed_at:null,run_id:null},
       {session_date:"2026-11-09",slot:"open_after",status:"failed",reason:"invalid_output",planned_at:null,observed_at:null,run_id:"r1"},
     ]}} />);
-    expect(html).toContain("历史异常（非今日）");
+    expect(html).toContain("历史异常（非本交易日）");
     expect(html).toContain("2026-11-06");
     expect(html).toContain("2026-11-09");
     expect(html).toContain("运行失败");
