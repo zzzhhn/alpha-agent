@@ -9,6 +9,7 @@ import { TmStatePane } from "@/components/tm/TmStatePane";
 import { TmTable, TmTableBody, TmTableCell, TmTableFrame, TmTableHead, TmTableHeaderCell, TmTableRow } from "@/components/tm/TmTable";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { t } from "@/lib/i18n";
+import { pollVisible } from "@/lib/paper-bot-polling";
 import type { AccountResponse, EquityCurveResponse, OrderListResponse, OrderOut } from "@/lib/api/paper";
 import {
   fetchPaperAccounts, fetchBotAccount, fetchBotCurve, fetchBotOrders, fetchPaperBotConfig,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/api/paper-bot";
 import PaperBotConfigDrawer from "./PaperBotConfigDrawer";
 import { PaperBotState, PaperBotPagination, PaperBotRunDrawer, PaperBotOrderDrawer, PaperBotExecutionSummary, PaperBotOutcome, botTime, botRunLabel, botStageLabel, botTriggerLabel, botModelLabel } from "./PaperBotUi";
-import { PaperBotReadiness, PaperBotPerformanceSummary, PaperBotPerformanceDrawer, PaperBotScheduleDrawer } from "./PaperBotEvidence";
+import { PaperBotReadiness, PaperBotPerformanceSummary, PaperBotPerformanceDrawer, PaperBotScheduleDrawer, PaperBotScheduleNotice } from "./PaperBotEvidence";
 import PaperPositionsWithSource from "./PaperPositionsWithSource";
 import PaperCurvePane from "./PaperCurvePane";
 import PaperOrdersPane from "./PaperOrdersPane";
@@ -83,6 +84,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
   const [waking,setWaking] = useState(false);
   const [actionError,setActionError] = useState<unknown>(null);
   const [pollError,setPollError] = useState(false);
+  const [lastPollAt,setLastPollAt] = useState<string | null>(null);
   const alive = useRef(true);
   const busyRef = useRef(false);
   const mutationVersion = useRef(0);
@@ -166,31 +168,24 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
   },[id,activeId,current?.id,config.data?.schedule_enabled,refresh]);
   useEffect(()=>{
     if(!activeId) return;
-    let cancelled=false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let inFlight=false;
-    async function poll() {
-      if(cancelled || document.hidden || inFlight) return;
-      inFlight=true;
-      const version=mutationVersion.current;
-      try {
-        const run=await fetchPaperBotRun(id,activeId!);
-        if(cancelled) return;
-        if(version === mutationVersion.current) {
+    setPollError(false);
+    return pollVisible({
+      read:async signal=>{
+        const version=mutationVersion.current;
+        return {run:await fetchPaperBotRun(id,activeId,signal),version};
+      },
+      receive:({run,version})=>{
+        if(version === mutationVersion.current && !busyRef.current) {
           setLatest({data:run,error:null,loading:false}); setPollError(false);
+          setLastPollAt(new Date().toISOString());
           setDetails(previous=>previous?.id===run.id ? run : previous);
           setRuns(previous=>previous.data ? {...previous,data:{...previous.data,runs:previous.data.runs.map(row=>row.id===run.id ? run : row)}} : previous);
-          if(!isActivePaperRun(run)){refresh();return;}
+          if(!isActivePaperRun(run)) refresh();
         }
-      } catch {if(!cancelled && version===mutationVersion.current)setPollError(true);}
-      finally {inFlight=false;}
-      if(!cancelled && !document.hidden) timer=setTimeout(()=>void poll(),5000);
-    }
-    function visibility(){if(timer)clearTimeout(timer); if(!document.hidden)void poll();}
-    document.addEventListener("visibilitychange",visibility);
-    if(!document.hidden) timer=setTimeout(()=>void poll(),3000);
-    return ()=>{cancelled=true;if(timer)clearTimeout(timer);document.removeEventListener("visibilitychange",visibility);};
-  },[id,activeId,refresh]);
+      },
+      failed:()=>setPollError(true),
+    });
+  },[id,activeId,refresh,revision]);
 
   async function mutate(action:()=>Promise<unknown>) {
     if(busyRef.current) return;
@@ -251,7 +246,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
             <PaperBotOutcome run={current} />
             {active && current.summary ? <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.running_hint")}</p> : null}
             <TmButton variant="secondary" onClick={()=>void inspectRun(current)}>{t(locale,"sim.bot.details")}</TmButton>
-            {pollError ? <p role="alert" className="text-xs text-tm-neg">{t(locale,"sim.bot.stale_poll")}</p> : null}
+            {active ? <p role={pollError ? "alert" : undefined} className={`text-xs ${pollError ? "text-tm-warn" : "text-tm-muted"}`}>{t(locale,pollError ? "sim.bot.stale_poll" : "sim.bot.status_synced")}{lastPollAt ? ` · ${botTime(lastPollAt,locale)} CST` : null}</p> : null}
           </div> : <TmStatePane state="empty" title={t(locale,"sim.bot.no_runs")} description={t(locale,"sim.bot.no_runs_hint")} className="border-0 !bg-transparent" />}
         </TmPane>
       </div>
@@ -263,7 +258,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
           <div className="border-t border-tm-rule pt-3"><p className="text-tm-fg">{t(locale,currentWindow ? "sim.bot.schedule.current_window" : "sim.bot.next")} · {wakeTime ? `${botTime(wakeTime,locale)} CST` : "—"}</p>{wakeTime ? <p>{botTime(wakeTime,locale,"America/New_York")} ET</p> : null}</div>
           <p>{cfg.market.session_date} · {t(locale,cfg.market.is_open ? "sim.bot.market_open" : "sim.bot.market_closed_hint")}</p>
           <TmButton variant="secondary" size="xs" onClick={()=>setScheduleOpen(true)}>{t(locale,"sim.bot.schedule_observations")}</TmButton>
-          {cfg.schedule_observations?.some(row=>row.status === "missed") ? <p role="status" className="text-tm-warn">{t(locale,"sim.bot.schedule.missed_notice")}</p> : null}
+          <PaperBotScheduleNotice config={cfg} />
           {!cfg.credential_configured ? <p className="text-tm-warn">{t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p> : null}
           {active && current ? <div className="border-t border-tm-rule pt-3"><TmButton variant="secondary" disabled={busy} onClick={()=>void mutate(async()=>{const run=await stopPaperBotRun(id,current.id);if(alive.current)setLatest({data:run,error:null,loading:false});})}>{t(locale,"sim.bot.stop")}</TmButton><p className="mt-2">{t(locale,"sim.bot.stop_hint")}</p></div> : null}
         </div> : null}

@@ -77,6 +77,37 @@ def summarize_marks(positions: list[dict], cash: float, now: datetime) -> dict:
     }
 
 
+def display_valuation(positions: list[dict], account: dict, summary: dict, now: datetime) -> dict:
+    """Read-only indicative value. Not a NAV sample, risk input or execution price.
+
+    All holdings must have known raw marks from the latest valuation session.
+    Missing/action-blocked/prior-session prices never become cost-price proxies.
+    """
+    marks = summary['marks']
+    issues = [{'ticker': ticker, 'quality': mark['quality'],
+               'as_of': mark['as_of'].isoformat() if mark['as_of'] else None}
+              for ticker, mark in marks.items() if mark['quality'] not in {'fresh', 'session_close'}]
+    result = {'reference_valuation': None, 'valuation_issues': issues}
+    if summary['portfolio_value'] is not None or not marks:
+        return result
+    session = valuation_session(now)
+    opening = as_utc(session['open_at'])
+    if any(mark['price'] is None or mark['as_of'] is None or mark['as_of'] < opening
+           for mark in marks.values()):
+        return result
+    live = [row for row in positions if row['qty'] > 0]
+    value = float(account['cash']) + sum(marks[row['ticker']]['price'] * row['qty'] for row in live)
+    pnl = sum((marks[row['ticker']]['price'] - row['avg_cost']) * row['qty'] for row in live)
+    dates = [mark['as_of'] for mark in marks.values()]
+    result['reference_valuation'] = {
+        'portfolio_value': value, 'unrealized_pnl': pnl,
+        'total_return_pct': (value / account['initial_cash'] - 1) * 100 if account['initial_cash'] > 0 else None,
+        'valued_at': min(dates).isoformat(), 'newest_mark_at': max(dates).isoformat(),
+        'market_date': session['session_date'], 'valuation_quality': 'indicative',
+    }
+    return result
+
+
 async def last_valid_valuation(pool: Any, account: dict, now: datetime) -> dict | None:
     """Historical display only. Never substitute these values into execution."""
     row = await pool.fetchrow(

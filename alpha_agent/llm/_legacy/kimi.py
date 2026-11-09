@@ -105,6 +105,7 @@ class KimiClient(LLMClient):
                     model=data.get("model", self._model),
                     prompt_tokens=last_usage.get("input_tokens", 0),
                     completion_tokens=last_usage.get("output_tokens", 0),
+                    finish_reason=last_stop_reason,
                 )
             logger.warning(
                 "Kimi returned no visible text (attempt=%s budget=%s stop=%s output_tokens=%s)",

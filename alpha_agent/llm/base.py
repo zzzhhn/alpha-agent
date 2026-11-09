@@ -26,6 +26,7 @@ class LLMResponse:
     model: str
     prompt_tokens: int
     completion_tokens: int
+    finish_reason: str | None = None
 
 
 class LLMClient(ABC):

@@ -11,7 +11,7 @@ from alpha_agent.llm.base import Message
 from alpha_agent.paper import bot_store as store
 from alpha_agent.paper.bot_context import build_context, execution_context
 from alpha_agent.paper.bot_execution import settle_orders, submit_targets
-from alpha_agent.paper.bot_models import BotConfig, BotDecision, parse_decision
+from alpha_agent.paper.bot_models import BotConfig, BotDecision, DecisionParseError, parse_decision
 from alpha_agent.paper.bot_policy import MODEL_TIMEOUT_SECONDS, model_budget
 from alpha_agent.paper.market_clock import market_session
 
@@ -41,6 +41,14 @@ Market closed means no_trade. If created_at precedes market.open_at, say 尚未�
 not 已收盘. Distinguish premarket, postmarket and holiday using the supplied times.
 Give a short Chinese summary of evidence, uncertainty,
 and intended change, not hidden chain-of-thought. No claims of guaranteed profit.
+OUTPUT DISCIPLINE: the entire response has a fixed 4096-token budget. Aim for at
+most 1800 Chinese characters total; finish the JSON object within that budget.
+Keep summary within 220 Chinese characters and each action reason within 60.
+Do not repeat the input portfolio, timestamps, policy or every unchanged holding.
+For no_trade use actions=[] and a concise comparison of the strongest alternative.
+Position notes are incremental: return at most 3 materially new/changed reviews,
+with note/thesis/invalidation each within 60 characters; omit unchanged reviews.
+Omit optional empty fields. Never omit required action evidence to save space.
 '''
 
 
@@ -120,11 +128,25 @@ async def step(pool, run_id=None):
                 saved = await pool.fetchval("UPDATE sim_bot_run SET prompt_tokens=prompt_tokens+$3,completion_tokens=completion_tokens+$4,model=$5 WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now() RETURNING id", run['id'], run['lease_token'], response.prompt_tokens, response.completion_tokens, response.model)
                 if saved is None:
                     return {'processed': True, 'active': True, 'stage': 'lease_lost'}
+                # Provider completion is not proof that the JSON is complete.
+                # Keep metadata, not raw output or validation input values.
+                finish_reason = getattr(response, 'finish_reason', None)
+                output = {'finish_reason': finish_reason if finish_reason in
+                          {'end_turn', 'stop', 'length', 'max_tokens', 'tool_calls', 'stop_sequence', 'content_filter'} else 'unknown',
+                          'completion_tokens': response.completion_tokens, 'token_limit': 4096,
+                          'at_token_limit': response.completion_tokens >= 4096}
+                if finish_reason in {'length', 'max_tokens'}:
+                    await store.diagnose(pool, run, {'model_output': {**output, 'parse_status': 'truncated'}})
+                    await store.finish(pool, run, 'failed', summary='模型输出达到长度上限，决策不完整；未提交订单，也未自动重试。',
+                                       error='output_truncated', result={'outcome_reason': 'output_truncated'})
+                    return await current_state(pool, run)
                 try:
                     decision = parse_decision(response.content, str(run['id']))
-                except (ValueError, TypeError, KeyError):
+                except DecisionParseError as exc:
+                    await store.diagnose(pool, run, {'model_output': {**output, 'parse_status': exc.kind, 'fields': exc.fields}})
                     await store.finish(pool, run, 'failed', summary='模型返回的决策不符合动作／证据契约；未提交订单。', error='invalid_output', result={'outcome_reason': 'invalid_output'})
                     return await current_state(pool, run)
+                await store.diagnose(pool, run, {'model_output': {**output, 'parse_status': 'valid'}})
                 if decision.decision == 'research' and run['llm_calls'] < 2:
                     if not model_budget(run)['can_call_model']:
                         await complete_run(pool, run, 'no_trade', '模型请求补查，但剩余时间不足以再次研究并执行；保留现有持仓。',

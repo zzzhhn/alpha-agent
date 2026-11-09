@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { canWakePaperBot, type PaperBotConfig, type PaperBotPerformance, type PaperBotRun } from "@/lib/api/paper-bot";
 import { PaperBotActions, PaperBotOutcome, PaperBotExecutionSummary, botReason } from "../PaperBotUi";
-import { PaperBotReadiness, PaperBotPerformanceSummary } from "../PaperBotEvidence";
+import { PaperBotReadiness, PaperBotPerformanceSummary, PaperBotScheduleNotice } from "../PaperBotEvidence";
 import PaperPositionsWithSource from "../PaperPositionsWithSource";
 import PaperBotValuation from "../PaperBotValuation";
 import type { AccountResponse } from "@/lib/api/paper";
@@ -12,6 +12,17 @@ const run: PaperBotRun={id:"r1",account_id:7,status:"no_trade",stage:null,trigge
 const performance: PaperBotPerformance={account_id:7,cohort_id:1,as_of:"2026-11-06T15:00:00Z",history:{scope:"current_cohort_recent_366",sample_count:1,valid_nav_count:0,null_nav_count:1,first_date:"2026-11-05",last_date:"2026-11-05",truncated:false},valuation:{cash:100000,portfolio_value:null,invested_value:null,exposure_pct:null,quality:"partial",valued_at:null},matched_window:{start_date:null,end_date:null,sample_count:0,expected_sessions:0,missing_sessions:0,complete:false,bot_return_pct:null,spy_return_pct:null,cash_return_pct:null,bot_max_drawdown_pct:null,reason:"insufficient_common_observations"},orders:{scope:"current_cohort",filled:0,pending:0,failed:0,expired:0,cancelled:0,paid_fees:0},turnover:{window_start:null,window_end:null,gross_filled_notional:null,average_nav:null,ratio_pct:null,reason:"insufficient_common_observations"},llm:{scope:"recent_20_runs_account_lifetime",run_count:1,prompt_tokens:null,completion_tokens:null,cost_usd:null,cost_reason:"provider_pricing_unavailable"},comparators:{spy:{basis:"raw_price_no_dividends"},cash:{basis:"zero_interest"},deterministic:{available:false,reason:"no_simulated_ledger"}}};
 
 describe("paper bot v2 evidence boundaries",()=>{
+  it("distinguishes today's decision failure from a historical missed wake",()=>{
+    const html=renderToStaticMarkup(<PaperBotScheduleNotice config={{...config,market:{...config.market,session_date:"2026-11-09"},schedule_observations:[
+      {session_date:"2026-11-06",slot:"open_after",status:"missed",reason:"slot_expired",planned_at:null,observed_at:null,run_id:null},
+      {session_date:"2026-11-09",slot:"open_after",status:"failed",reason:"invalid_output",planned_at:null,observed_at:null,run_id:"r1"},
+    ]}} />);
+    expect(html).toContain("历史异常（非今日）");
+    expect(html).toContain("2026-11-06");
+    expect(html).toContain("2026-11-09");
+    expect(html).toContain("运行失败");
+    expect(html).not.toContain("近期有计划未唤起");
+  });
   it("retains a dated historical valuation without turning it into current account values",()=>{
     const account: AccountResponse={account_id:7,cash:900,reserved_cash:0,available_cash:900,initial_cash:1000,portfolio_value:null,total_return_pct:null,unrealized_pnl:null,realized_pnl:0,positions:[],pending_orders:0,reset_count:0,last_valid_valuation:{portfolio_value:1200,unrealized_pnl:200,total_return_pct:20,valued_at:"2026-11-06T20:32:00Z",market_date:"2026-11-06",valuation_quality:"fresh"}};
     const historical=renderToStaticMarkup(<PaperBotValuation account={account} />);
@@ -28,6 +39,14 @@ describe("paper bot v2 evidence boundaries",()=>{
     expect(current).toContain("$1,250");
     expect(current).not.toContain("$1,200");
     expect(current).not.toContain("历史快照，非当前报价");
+    const indicative=renderToStaticMarkup(<PaperBotValuation account={{...account,reference_valuation:{portfolio_value:1230,unrealized_pnl:230,total_return_pct:23,valued_at:"2026-11-09T15:16:00Z",newest_mark_at:"2026-11-09T15:21:00Z",market_date:"2026-11-09",valuation_quality:"indicative"},valuation_issues:[{ticker:"ERIE",quality:"stale",as_of:"2026-11-09T15:16:00Z"}]}} />);
+    expect(indicative).toContain("参考净值");
+    expect(indicative).toContain("$1,230");
+    expect(indicative).toContain("不作为成交依据或正式收益记录");
+    expect(indicative).toContain("ERIE");
+    expect(indicative).toContain("23:16");
+    expect(indicative).toContain("23:21");
+    expect(indicative).not.toContain("$1,200");
   });
   it("labels stale bot marks as dated snapshots without changing human labels",()=>{
     const positions=[{ticker:"TEST",qty:10,avg_cost:9,current_price:10,unrealized_pnl:10,unrealized_pct:11.11,price_quality:"stale",mark_at:"2026-11-06T20:31:00Z"}];

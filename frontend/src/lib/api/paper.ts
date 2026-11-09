@@ -28,6 +28,16 @@ export interface AccountResponse {
   readonly reset_count: number;
   readonly valuation_quality?: string | null;
   readonly valued_at?: string | null;
+  readonly reference_valuation?: {
+    readonly portfolio_value: number;
+    readonly unrealized_pnl: number;
+    readonly total_return_pct: number | null;
+    readonly valued_at: string;
+    readonly newest_mark_at: string;
+    readonly market_date: string;
+    readonly valuation_quality: "indicative";
+  } | null;
+  readonly valuation_issues?: readonly { readonly ticker: string; readonly quality: string; readonly as_of: string | null }[];
   readonly last_valid_valuation?: {
     readonly portfolio_value: number;
     readonly unrealized_pnl: number;
@@ -191,6 +201,9 @@ export async function paperFetch<T>(path: string, init?: RequestInit): Promise<T
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
     cache: "no-store",
+    // A hung read must not pin the UI in an old "running" state indefinitely.
+    // Writes retain their existing semantics; a read timeout never replays them.
+    signal: init?.signal ?? (!init?.method || init.method === "GET" ? AbortSignal.timeout(20000) : undefined),
   });
   if (!r.ok) {
     const body = await r.json().catch(() => ({})) as { detail?: unknown };

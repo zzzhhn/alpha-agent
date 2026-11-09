@@ -55,3 +55,15 @@ async def test_kimi_empty_after_retry_is_an_explicit_failure() -> None:
 
     with pytest.raises(LLMEmptyResponseError):
         await client.chat([Message(role="user", content="test")], max_tokens=128)
+
+
+async def test_kimi_preserves_truncation_without_retrying_visible_output():
+    client = KimiClient(api_key="test-only")
+    await client._client.aclose()
+    client._client = AsyncMock()
+    client._client.post.return_value = _response(
+        [{"type": "text", "text": '{"decision":'}], output_tokens=4096, stop="max_tokens")
+    result = await client.chat([Message('user', 'test')])
+    assert result.finish_reason == 'max_tokens'
+    assert result.completion_tokens == 4096
+    client._client.post.assert_awaited_once()

@@ -991,6 +991,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/paper_bot/valuation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Refresh Valuation */
+        get: operations["refresh_valuation_api_cron_paper_bot_valuation_get"];
+        put?: never;
+        /** Refresh Valuation */
+        post: operations["refresh_valuation_api_cron_paper_bot_valuation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/paper_bot/wake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scheduled Wake
+         * @description Independent Vercel clock; reuse the durable queue and bounded GH worker.
+         *
+         *     Keep this request short. A successful dispatch is not a completed decision.
+         *     Duplicate clocks share slot keys, and dispatch failures leave queued work
+         *     available for the next carrier rather than erasing the obligation.
+         */
+        get: operations["scheduled_wake_api_cron_paper_bot_wake_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/paper_fill": {
         parameters: {
             query?: never;
@@ -2020,6 +2062,26 @@ export interface paths {
         };
         /** Performance */
         get: operations["performance_api_paper_accounts__account_id__bot_performance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/bot/position-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Position Notes
+         * @description Current holdings' latest model reviews, not an invented entry attribution.
+         */
+        get: operations["position_notes_api_paper_accounts__account_id__bot_position_notes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3588,6 +3650,7 @@ export interface components {
             cash: number;
             /** Initial Cash */
             initial_cash: number;
+            last_valid_valuation?: components["schemas"]["ValuationSnapshot"] | null;
             /** Pending Orders */
             pending_orders: number;
             /** Portfolio Value */
@@ -3596,6 +3659,7 @@ export interface components {
             positions: components["schemas"]["PositionOut"][];
             /** Realized Pnl */
             realized_pnl: number;
+            reference_valuation?: components["schemas"]["ReferenceValuation"] | null;
             /** Reserved Cash */
             reserved_cash: number;
             /** Reset Count */
@@ -3604,6 +3668,8 @@ export interface components {
             total_return_pct: number | null;
             /** Unrealized Pnl */
             unrealized_pnl: number | null;
+            /** Valuation Issues */
+            valuation_issues?: components["schemas"]["ValuationIssue"][];
             /** Valuation Quality */
             valuation_quality?: string | null;
             /** Valued At */
@@ -5118,6 +5184,23 @@ export interface components {
              */
             validation_status: string;
         };
+        /** ReferenceValuation */
+        ReferenceValuation: {
+            /** Market Date */
+            market_date: string;
+            /** Newest Mark At */
+            newest_mark_at: string;
+            /** Portfolio Value */
+            portfolio_value: number;
+            /** Total Return Pct */
+            total_return_pct: number | null;
+            /** Unrealized Pnl */
+            unrealized_pnl: number;
+            /** Valuation Quality */
+            valuation_quality: string;
+            /** Valued At */
+            valued_at: string;
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /**
@@ -5573,6 +5656,30 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValuationIssue */
+        ValuationIssue: {
+            /** As Of */
+            as_of: string | null;
+            /** Quality */
+            quality: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** ValuationSnapshot */
+        ValuationSnapshot: {
+            /** Market Date */
+            market_date: string;
+            /** Portfolio Value */
+            portfolio_value: number;
+            /** Total Return Pct */
+            total_return_pct: number | null;
+            /** Unrealized Pnl */
+            unrealized_pnl: number;
+            /** Valuation Quality */
+            valuation_quality: string;
+            /** Valued At */
+            valued_at: string;
         };
         /** WatchlistPut */
         WatchlistPut: {
@@ -7546,6 +7653,99 @@ export interface operations {
             };
         };
     };
+    refresh_valuation_api_cron_paper_bot_valuation_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_valuation_api_cron_paper_bot_valuation_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scheduled_wake_api_cron_paper_bot_wake_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cron_paper_fill_api_cron_paper_fill_get: {
         parameters: {
             query?: never;
@@ -9133,6 +9333,39 @@ export interface operations {
         };
     };
     performance_api_paper_accounts__account_id__bot_performance_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    position_notes_api_paper_accounts__account_id__bot_position_notes_get: {
         parameters: {
             query?: never;
             header?: {

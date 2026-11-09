@@ -6,7 +6,7 @@ import math
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 class BotConfig(BaseModel):
@@ -88,13 +88,35 @@ class BotDecision(BaseModel):
         return self
 
 
+class DecisionParseError(ValueError):
+    """Safe diagnostics only: never retain model text, values or error messages."""
+
+    def __init__(self, kind: str, fields: list[str] | None = None):
+        super().__init__(kind)
+        self.kind = kind
+        self.fields = fields or []
+
+
 def parse_decision(text: str, context_id: str) -> BotDecision:
     if len(text.encode()) > 24000:
-        raise ValueError('decision exceeds output budget')
+        raise DecisionParseError('output_size_exceeded')
     value = text.strip()
     if value.startswith('```'):
-        value = value.split('\n', 1)[1].rsplit('```', 1)[0].strip()
-    decision = BotDecision.model_validate(json.loads(value))
+        value = value.partition('\n')[2].rsplit('```', 1)[0].strip()
+    try:
+        packet = json.loads(value)
+    except json.JSONDecodeError:
+        raise DecisionParseError('invalid_json') from None
+    try:
+        decision = BotDecision.model_validate(packet)
+    except ValidationError as exc:
+        allowed = set(BotDecision.model_fields) | set(BotAction.model_fields) | set(PositionNote.model_fields)
+        fields = list(dict.fromkeys(
+            '.'.join(str(part) if isinstance(part, int) else part if part in allowed else 'unknown_field'
+                     for part in error['loc']) or 'decision'
+            for error in exc.errors(include_input=False, include_context=False, include_url=False)
+        ))[:6]
+        raise DecisionParseError('schema_mismatch', fields) from None
     if decision.context_id != context_id:
-        raise ValueError('context_id mismatch')
+        raise DecisionParseError('context_mismatch', ['context_id'])
     return decision

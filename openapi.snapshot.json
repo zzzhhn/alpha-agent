@@ -71,6 +71,16 @@
             "title": "Realized Pnl",
             "type": "number"
           },
+          "reference_valuation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceValuation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "reserved_cash": {
             "title": "Reserved Cash",
             "type": "number"
@@ -100,6 +110,13 @@
               }
             ],
             "title": "Unrealized Pnl"
+          },
+          "valuation_issues": {
+            "items": {
+              "$ref": "#/components/schemas/ValuationIssue"
+            },
+            "title": "Valuation Issues",
+            "type": "array"
           },
           "valuation_quality": {
             "anyOf": [
@@ -4240,6 +4257,56 @@
         "title": "RecommendationRunState",
         "type": "object"
       },
+      "ReferenceValuation": {
+        "properties": {
+          "market_date": {
+            "title": "Market Date",
+            "type": "string"
+          },
+          "newest_mark_at": {
+            "title": "Newest Mark At",
+            "type": "string"
+          },
+          "portfolio_value": {
+            "title": "Portfolio Value",
+            "type": "number"
+          },
+          "total_return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Return Pct"
+          },
+          "unrealized_pnl": {
+            "title": "Unrealized Pnl",
+            "type": "number"
+          },
+          "valuation_quality": {
+            "title": "Valuation Quality",
+            "type": "string"
+          },
+          "valued_at": {
+            "title": "Valued At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portfolio_value",
+          "unrealized_pnl",
+          "total_return_pct",
+          "valued_at",
+          "market_date",
+          "valuation_quality",
+          "newest_mark_at"
+        ],
+        "title": "ReferenceValuation",
+        "type": "object"
+      },
       "RefreshRequest": {
         "properties": {
           "job": {
@@ -5417,6 +5484,36 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValuationIssue": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "quality": {
+            "title": "Quality",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "quality",
+          "as_of"
+        ],
+        "title": "ValuationIssue",
         "type": "object"
       },
       "ValuationSnapshot": {

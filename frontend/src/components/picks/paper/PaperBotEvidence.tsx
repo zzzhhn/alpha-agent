@@ -5,7 +5,7 @@ import { TmButton } from "@/components/tm/TmButton";
 import { TmDrawer } from "@/components/tm/TmDrawer";
 import { t, type TranslationKey } from "@/lib/i18n";
 import type { PaperBotConfig, PaperBotPerformance } from "@/lib/api/paper-bot";
-import { botTime, botReason } from "./PaperBotUi";
+import { botTime, botReason, botTriggerLabel } from "./PaperBotUi";
 import { Metric } from "./PaperUi";
 
 export function PaperBotReadiness({ config }: { readonly config: PaperBotConfig }) {
@@ -62,6 +62,17 @@ export function PaperBotPerformanceDrawer({ data, open, onClose }: { readonly da
       <p>{t(locale,"sim.bot.performance.basis")}</p><p>{t(locale,"sim.bot.performance.cost_unknown")}</p><p>{t(locale,"sim.bot.performance.deterministic_unavailable")}</p>
     </div> : null}
   </TmDrawer>;
+}
+
+export function PaperBotScheduleNotice({ config }: { readonly config: PaperBotConfig }) {
+  const {locale}=useLocale();
+  const issues=(config.schedule_observations ?? []).filter(row=>["missed","failed","blocked","partial"].includes(row.status));
+  const today=issues.filter(row=>row.session_date === config.market.session_date);
+  const previous=issues.filter(row=>row.session_date < config.market.session_date).sort((a,b)=>b.session_date.localeCompare(a.session_date))[0];
+  return <div className="space-y-1" role="status">
+    {today.map(row=><p key={row.slot} className="text-tm-warn">{row.session_date} · {botTriggerLabel(locale,row.slot)} · {t(locale,row.status === "missed" ? "sim.bot.schedule.missed" : row.status === "blocked" ? "sim.bot.schedule.blocked" : row.status === "partial" ? "sim.bot.status.partial" : "sim.bot.status.failed")}</p>)}
+    {previous ? <p className="text-tm-muted">{t(locale,"sim.bot.schedule.historical_issue")} · {previous.session_date} · {botTriggerLabel(locale,previous.slot)} · {t(locale,previous.status === "missed" ? "sim.bot.schedule.missed" : previous.status === "blocked" ? "sim.bot.schedule.blocked" : previous.status === "partial" ? "sim.bot.status.partial" : "sim.bot.status.failed")}</p> : null}
+  </div>;
 }
 
 export function PaperBotScheduleDrawer({ config, open, onClose, onRun }: { readonly config: PaperBotConfig; readonly open: boolean; readonly onClose: () => void; readonly onRun: (id: string) => void }) {

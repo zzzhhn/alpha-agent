@@ -132,6 +132,6 @@ export const fetchPaperBotPerformance = (id: number) => paperFetch<PaperBotPerfo
 export const fetchPaperBotPositionReviews = (id: number) => paperFetch<{positions: readonly PaperBotPositionReview[]}>(`${root(id)}/bot/position-notes`);
 export const patchPaperBotConfig = (id: number, body: PaperBotConfigPatch) => paperFetch<PaperBotConfig>(`${root(id)}/bot`, { method: "PATCH", body: JSON.stringify(body) });
 export const fetchPaperBotRuns = (id: number, limit = 5, offset = 0) => paperFetch<PaperBotRunList>(`${root(id)}/runs?limit=${limit}&offset=${offset}`);
-export const fetchPaperBotRun = (id: number, runId: string) => paperFetch<PaperBotRun>(`${root(id)}/runs/${encodeURIComponent(runId)}`);
+export const fetchPaperBotRun = (id: number, runId: string, signal?: AbortSignal) => paperFetch<PaperBotRun>(`${root(id)}/runs/${encodeURIComponent(runId)}`, { signal });
 export const startPaperBotRun = (id: number) => paperFetch<PaperBotRun>(`${root(id)}/runs`, { method: "POST", body: "{}" });
 export const stopPaperBotRun = (id: number, runId: string) => paperFetch<PaperBotRun>(`${root(id)}/runs/${encodeURIComponent(runId)}/stop`, { method: "POST", body: "{}" });
