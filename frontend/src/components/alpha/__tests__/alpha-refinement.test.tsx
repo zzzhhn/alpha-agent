@@ -26,7 +26,9 @@ describe("Alpha in-place refinement", () => {
   });
   it("keeps idle evidence truthful and does not show loading or invented results", () => {
     const html = renderToStaticMarkup(<EvidencePaneGrid state={{kind:"idle"}} panes={{spec:"waiting",smoke:"waiting",backtest:"waiting"}} onReTranslate={noop} onRetryBacktest={noop} />);
-    expect(html.match(/data-state="waiting"/g)).toHaveLength(3);
+    // One combined placeholder before the first run instead of three empty panes.
+    expect(html).toContain("尚未运行");
+    expect(html.match(/data-state="waiting"/g) ?? []).toHaveLength(0);
     expect(html).not.toContain("animate-pulse");
     const verdict = renderToStaticMarkup(<VerdictBar state={{kind:"idle"}} metrics={{ic:null,sharpe:null,maxDrawdown:null}} thresholds={{ic:null,sharpe:null,maxDrawdown:null}} canSave={false} onSave={noop} onReTranslate={noop} />);
     expect(verdict).toContain("等待验证");

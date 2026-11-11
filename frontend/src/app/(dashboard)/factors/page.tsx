@@ -2,7 +2,7 @@
 
 // Catalog-first workstation view. Analytics summarize stored snapshots, not a new backtest.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart,
@@ -19,7 +19,7 @@ import {
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { extractOps } from "@/lib/factor-spec";
 import { t } from "@/lib/i18n";
-import { listZoo, removeFromZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
+import { exportZooJson, importZooJson, listZoo, removeFromZoo, seedZooIfFirstRun, type ZooEntry } from "@/lib/factor-zoo";
 import { runZooCorrelation } from "@/lib/api";
 import type { ZooCorrelationResponse } from "@/lib/types";
 import { TmScreen, TmPane, TmCols2 } from "@/components/tm/TmPane";
@@ -329,6 +329,31 @@ export default function FactorsPage() {
   const corrError = currentCorrelation?.error;
   const corrEntries = entries.slice(0, MAX_CORRELATION_FACTORS);
 
+  const [zooTransfer, setZooTransfer] = useState<string | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+
+  function downloadZoo() {
+    const blob = new Blob([exportZooJson()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `alphacore-factor-zoo-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setZooTransfer(zh ? `已导出 ${entries.length} 个因子` : `Exported ${entries.length} factors`);
+  }
+
+  async function uploadZoo(file: File) {
+    try {
+      const { added, skipped } = importZooJson(await file.text());
+      setEntries(listZoo());
+      setCorrSnapshot(null);
+      setZooTransfer(zh ? `已导入 ${added} 个，跳过 ${skipped} 个（重复或格式不符）` : `Imported ${added}, skipped ${skipped} (duplicate or malformed)`);
+    } catch {
+      setZooTransfer(zh ? "文件不是有效的因子库 JSON，未做任何改动" : "Not a valid factor library JSON; nothing changed");
+    }
+  }
+
   function deleteEntry(id: string) {
     removeFromZoo(id);
     const next = listZoo();
@@ -388,14 +413,24 @@ export default function FactorsPage() {
           idBase="zoo"
           items={[
             { key: "manage", label: zh ? "因子目录" : "Catalog" },
-            { key: "analytics", label: zh ? "库内分析" : "Library analysis" },
+            { key: "analytics", label: entries.length < MIN_DISTRIBUTION_SAMPLES ? (zh ? `库内分析 ${entries.length}/${MIN_DISTRIBUTION_SAMPLES}` : `Library analysis ${entries.length}/${MIN_DISTRIBUTION_SAMPLES}`) : (zh ? "库内分析" : "Library analysis") },
           ]}
           active={zooView}
           onChange={setZooView}
           ariaLabel={zh ? "因子库视图" : "Factor library view"}
           className="min-w-0 !border-b-0 [&_button]:focus-visible:ring-1 [&_button]:focus-visible:ring-inset [&_button]:focus-visible:ring-tm-accent"
         />
-        <div className="px-3 py-1">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-1">
+          <TmButton size="sm" variant="secondary" onClick={downloadZoo} disabled={entries.length === 0}
+            title={zh ? "因子库只存在本浏览器，账户导出不包含它；可在此下载 JSON 备份。" : "The library lives only in this browser and is not part of the account export; download a JSON backup here."}>
+            {zh ? "导出 JSON" : "Export JSON"}
+          </TmButton>
+          <TmButton size="sm" variant="secondary" onClick={() => importInput.current?.click()}>
+            {zh ? "导入 JSON" : "Import JSON"}
+          </TmButton>
+          {/* File pickers have no TM primitive; the visible control is the TmButton above. */}
+          <input ref={importInput} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadZoo(file); }} />
+          {zooTransfer ? <span role="status" className="text-xs text-tm-muted">{zooTransfer}</span> : null}
           <TmButton
             size="sm"
             onClick={() => {

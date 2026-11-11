@@ -409,7 +409,8 @@ const PORTFOLIO = [
   { label: text("按因子排名建仓", "Rank and weight"), description: text("每天按 factor[t] 对股票排序。排名前 top_pct 的标的等权做多，后 bottom_pct 的标的等权做空。", "Rank securities by factor[t] each day. Equal-weight the top top_pct as longs and the bottom bottom_pct as shorts.") },
   { label: text("持仓与次日收益对齐", "Align weights and returns"), description: text("用前一日确定的权重计算次日收益：sum(weights[t-1] × fwd_returns[t-1])。", "Pair the prior day's weights with the next day's return: sum(weights[t-1] × fwd_returns[t-1]).") },
   { label: text("按换手扣交易成本", "Deduct trading costs"), description: text("按两日之间的权重变动扣减日收益：bps × L1(weights[t] − weights[t-1]) / 10000。", "Deduct costs from daily returns based on the change in weights: bps × L1(weights[t] − weights[t-1]) / 10000.") },
-  { label: text("滚动观察稳定性", "Check stability over time"), description: text("Walk-forward 模式在静态 80/20 切分之外，按 wf_window_days 滚动计算各窗口指标。", "Walk-forward mode adds rolling metrics over wf_window_days windows alongside the static 80/20 split.") },
+  { label: text("滚动观察稳定性", "Check stability over time"), description: text("Walk-forward 模式在静态切分之外，按 wf_window_days 滚动计算各窗口指标。", "Walk-forward mode adds rolling metrics over wf_window_days windows alongside the static split.") },
+  { label: text("各页面的样本切分", "Sample split by page"), description: text("回测与因子页：训练 80% / 测试 20%（后端默认）。报告页：训练 70% / 测试 30%（固定）。演化页因子验证：前 60% 只用于搜索，后 40% 分成 3 个连续折、每折前留 5 个交易日空档，各折独立计算样本外 Sharpe 与 IC。三处数字不能直接互比。", "Backtest and Alpha: 80% train / 20% test (backend default). Report: 70% / 30% (fixed). Evolution factor validation: the first 60% is search-only; the last 40% is split into three contiguous folds with a five-session embargo, each scored out of sample. The three are not directly comparable.") },
 ] as const;
 
 function BacktestTab() {

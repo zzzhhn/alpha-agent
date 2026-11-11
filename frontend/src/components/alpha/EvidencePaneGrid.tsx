@@ -7,6 +7,8 @@ import type {
 import { BacktestPane } from "./BacktestPane";
 import { SmokePane } from "./SmokePane";
 import { SpecPane } from "./SpecPane";
+import { TmStatePane } from "@/components/tm/TmStatePane";
+import { useLocale } from "@/components/layout/LocaleProvider";
 import type { ChainPaneStates, ChainState } from "./types";
 
 interface Props {
@@ -37,12 +39,24 @@ export function EvidencePaneGrid({
   onReTranslate,
   onRetryBacktest,
 }: Props) {
+  const { locale } = useLocale();
   const translate = extractTranslate(state);
   const backtest = extractBacktest(state);
   const translateError =
     state.kind === "translate_error" ? state.message : null;
   const backtestError =
     state.kind === "backtest_error" ? state.message : null;
+
+  if (state.kind === "idle") {
+    return (
+      <TmStatePane
+        state="empty"
+        title={locale === "zh" ? "尚未运行" : "Not run yet"}
+        description={locale === "zh" ? "输入假设并翻译后，这里依次显示表达式、冒烟检查与样本外回测。" : "Translate a hypothesis to see its expression, smoke check and out-of-sample backtest here."}
+        className="alpha-evidence !min-h-[160px]"
+      />
+    );
+  }
 
   return (
     <div className="alpha-evidence grid grid-cols-1 gap-3 lg:grid-cols-3">

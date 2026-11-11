@@ -130,7 +130,9 @@ const DEFAULT_REPORT_CONFIG: ReportConfig = {
   direction: "long_short",
   neutralize: "none",
   benchmarkTicker: "SPY",
-  transactionCostBps: 5,
+  // Same default as Backtest and Alpha (10 bps per side). Only new drafts use
+  // this; a loaded/saved report keeps the cost it was generated with.
+  transactionCostBps: 10,
 };
 
 // Backend FactorSpec.hypothesis is bounded to 200 chars (Pydantic

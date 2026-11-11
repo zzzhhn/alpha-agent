@@ -202,9 +202,11 @@ export function ZooCatalog({
                   {metricCell(entry.headlineMetrics?.totalReturn, (v) => `${(v * 100).toFixed(1)}%`)}
                   {metricCell(entry.headlineMetrics?.testIc, (v) => v.toFixed(3))}
                   <TmTableCell className="whitespace-nowrap text-tm-muted">
-                    {Number.isFinite(Date.parse(entry.savedAt))
-                      ? <time dateTime={entry.savedAt}>{new Date(entry.savedAt).toLocaleDateString(zh ? "zh-CN" : "en-CA")}</time>
-                      : "—"}
+                    {entry.curated
+                      ? (zh ? "内置示例" : "Curated")
+                      : Number.isFinite(Date.parse(entry.savedAt))
+                        ? <time dateTime={entry.savedAt}>{new Date(entry.savedAt).toLocaleDateString(zh ? "zh-CN" : "en-CA")}</time>
+                        : "—"}
                   </TmTableCell>
                   <TmTableCell textAlign="right">
                     <div className="flex justify-end gap-0.5">
