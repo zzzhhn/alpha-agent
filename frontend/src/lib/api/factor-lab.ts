@@ -151,15 +151,40 @@ export const fetchMiningLessons = (limit = 20, opts?: ApiGetOptions) =>
 export const fetchBriefing = (opts?: ApiGetOptions) =>
   apiGet<MiningBriefing>("/api/factor-lab/briefing", opts);
 
+/** Proposals sharing one canonical expression (same-day GA repeats, re-proposals). */
+export interface FactorProposalGroup {
+  canonical_expression: string;
+  count: number;
+  proposal_ids: number[];
+  latest_id: number;
+  first_created_at: string | null;
+  last_created_at: string | null;
+  has_validation_evidence: boolean;
+  best_mean_sharpe: number | null;
+  best_ic_oos: number | null;
+  latest_evidence: FactorProposalEvidence;
+}
+
 export const fetchFactorProposals = (
   status?: "pending" | "approved" | "rejected",
   opts?: ApiGetOptions,
-) =>
-  apiGet<{ proposals: FactorProposal[] }>(
-    status
-      ? `/api/factor-lab/proposals?status=${status}`
-      : "/api/factor-lab/proposals",
+  group?: "expression",
+) => {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (group) params.set("group", group);
+  const qs = params.toString();
+  return apiGet<{ proposals: FactorProposal[]; groups?: FactorProposalGroup[] }>(
+    `/api/factor-lab/proposals${qs ? `?${qs}` : ""}`,
     opts,
+  );
+};
+
+/** Admin-only: reject every still-pending id in one transaction (never deletes). */
+export const rejectFactorProposalsBatch = (proposalIds: number[]) =>
+  apiPost<{ rejected: number; skipped_not_pending: number[]; not_found: number[] }, { proposal_ids: number[] }>(
+    "/api/factor-lab/proposals/reject-batch",
+    { proposal_ids: proposalIds },
   );
 
 // Phase D: POST now returns 202 with a job_id (or 'done' + inline_result

@@ -22,6 +22,7 @@ import time
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from pydantic import BaseModel, Field, StrictInt, field_validator
 
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
@@ -33,6 +34,7 @@ from alpha_agent.evolution.correlation_gate import (
     SelfCorrelationGate,
 )
 from alpha_agent.evolution.diagnostics import compute_diagnostic
+from alpha_agent.evolution.expression_canonical import canonical_expression
 from alpha_agent.evolution.factor_validation import evaluate_factor_candidate
 from alpha_agent.evolution.research_panel import (
     load_research_context, score_expression, slice_panel,
@@ -243,6 +245,34 @@ async def _run_propose_work(
             await close()
 
 
+async def _insert_pending_if_new(pool, expression, new_operators, evidence, diagnostic) -> bool:
+    """Serialize propose writers, then compare at most 500 pending expressions.
+
+    This is a bounded application-level guard, not a database uniqueness rule.
+    The transaction lock also covers concurrent LLM/GA runs using this path.
+    """
+    canonical = canonical_expression(expression)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtext('factor_lab_pending_proposals'))"
+            )
+            pending = await conn.fetch(
+                "SELECT id, expression FROM factor_proposals WHERE status='pending' "
+                "ORDER BY id DESC LIMIT 500"
+            )
+            if any(canonical_expression(row["expression"]) == canonical for row in pending):
+                return False
+            await conn.execute(
+                "INSERT INTO factor_proposals "
+                "(status, expression, new_operators, evidence, diagnostic) "
+                "VALUES ('pending', $1, $2::jsonb, $3::jsonb, $4::jsonb)",
+                expression, json.dumps(new_operators), json.dumps(evidence),
+                json.dumps(diagnostic),
+            )
+    return True
+
+
 async def _evaluate_and_record(
     pool, raw_proposals, diagnostic, *, llm_client=None, source: str = "llm",
     context=None, n_trials: int | None = None, deadline: float | None = None,
@@ -272,8 +302,10 @@ async def _evaluate_and_record(
         )
         if baseline is None:
             return {"ok": False, "status": "invalid_evaluation", "evaluated": 0,
-                    "proposed": 0, "dormant": True, "validation": validation,
-                    "_diag": {"rejects": rejects, "baseline_rejected": True}}
+                    "proposed": 0, "duplicates_skipped": 0,
+                    "dormant": True, "validation": validation,
+                    "_diag": {"rejects": rejects, "baseline_rejected": True,
+                              "duplicates_skipped": 0}}
         # 1. Evaluate each candidate (canned tests + purged WF)
         results = []
         for proposal in raw_proposals:
@@ -290,15 +322,19 @@ async def _evaluate_and_record(
                 "status": "no_valid_candidates", "validated": 0, "validation": validation,
                 "evaluated": len(raw_proposals),
                 "proposed": 0,
+                "duplicates_skipped": 0,
                 "dormant": False,
-                "_diag": {"rejects": rejects},
+                "_diag": {"rejects": rejects, "duplicates_skipped": 0},
             }
 
         # 3. DSR-lite deflation: keep only survivors that beat baseline AND
         #    have post-deflation positive Sharpe.
         all_means = [float(np.mean(r.sharpes)) for r in results]
         base_mean = float(np.mean(baseline.sharpes))
+        base_threshold = base_mean * _BASE_RATIO if base_mean > 0 else 0.0
+        gate_version = "dsr_lite_v2_nonneg_floor"
         proposed_count = 0
+        duplicates_skipped = 0
         skeptic_used = 0
 
         # Phase B1: the SELF_CORRELATION gate re-evaluates every saved factor on
@@ -336,7 +372,7 @@ async def _evaluate_and_record(
             r_mean = float(np.mean(r.sharpes))
             trial_count = max(n_trials or 0, len(raw_proposals))
             defl = deflated_sharpe_lite(r_mean, all_means, trial_count)
-            passes_mean = r_mean > base_mean * _BASE_RATIO
+            passes_mean = r_mean > base_threshold
             passes_defl = defl > _DSR_THRESHOLD
             accepted = passes_mean and passes_defl
 
@@ -358,6 +394,8 @@ async def _evaluate_and_record(
                 "defl": defl,
                 "passes_mean": passes_mean,
                 "passes_defl": passes_defl,
+                "gate_version": gate_version,
+                "base_threshold": base_threshold,
                 "self_correlation": self_corr,
                 "self_correlation_with": corr_with,
                 "redundant": redundant,
@@ -388,18 +426,18 @@ async def _evaluate_and_record(
                     )
                     skeptic_used += 1
                     skeptic_json = verdict.to_jsonable() if verdict else None
-                await pool.execute(
-                    "INSERT INTO factor_proposals "
-                    "(status, expression, new_operators, evidence, diagnostic) "
-                    "VALUES ('pending', $1, $2::jsonb, $3::jsonb, $4::jsonb)",
+                inserted = await _insert_pending_if_new(
+                    pool,
                     r.expression,
-                    json.dumps(r.new_operators),
-                    json.dumps({
+                    r.new_operators,
+                    {
                         "source": source,
                         "sharpes": r.sharpes,
                         "ic_oos": r.ic_oos,
                         "deflated_sharpe": defl,
                         "baseline_sharpe": base_mean,
+                        "gate_version": gate_version,
+                        "base_threshold": base_threshold,
                         "n_folds": r.n_folds,
                         "n_trials": trial_count,
                         "validation": validation,
@@ -409,9 +447,13 @@ async def _evaluate_and_record(
                         "self_correlation_with": corr_with,
                         "skeptic": skeptic_json,
                         "skeptic_status": "completed" if skeptic_json else "not_completed",
-                    }),
-                    json.dumps(diagnostic.to_jsonable()),
+                    },
+                    diagnostic.to_jsonable(),
                 )
+                if not inserted:
+                    duplicates_skipped += 1
+                    diag_candidates[-1]["skipped_duplicate"] = True
+                    continue
                 proposed_count += 1
 
             # Phase A/B: journal this candidate's outcome so future rounds learn.
@@ -456,10 +498,13 @@ async def _evaluate_and_record(
             "status": "completed", "validated": len(results), "validation": validation,
             "evaluated": len(raw_proposals),
             "proposed": proposed_count,
+            "duplicates_skipped": duplicates_skipped,
             "dormant": False,
             "_diag": {
                 "base_mean": base_mean,
-                "base_threshold": base_mean * _BASE_RATIO,
+                "base_threshold": base_threshold,
+                "gate_version": gate_version,
+                "duplicates_skipped": duplicates_skipped,
                 "defl_threshold": _DSR_THRESHOLD,
                 "candidates": diag_candidates,
                 "rejects": rejects,
@@ -497,6 +542,7 @@ async def _run_ga_work(
     if not raw:
         return {"ok": True, "status": "no_valid_candidates", "evaluated": 0,
                 "proposed": 0, "dormant": False, "source": "ga",
+                "duplicates_skipped": 0, "_diag": {"duplicates_skipped": 0},
                 "validation": context.evidence()}
     result = await _evaluate_and_record(
         pool, raw, diagnostic, llm_client=llm_client, source="ga", context=context,
@@ -588,7 +634,8 @@ async def post_propose(
     # round-trip rather than dispatching a runner for a known-empty result.
     history_n = await pool.fetchval("SELECT count(*) FROM daily_prices") or 0
     if history_n < _MIN_HISTORY_ROWS:
-        dormant_result = {"evaluated": 0, "proposed": 0, "dormant": True}
+        dormant_result = {"evaluated": 0, "proposed": 0, "dormant": True,
+                          "duplicates_skipped": 0, "_diag": {"duplicates_skipped": 0}}
         job_id = await propose_jobs.create_job(pool, user_id, n)
         await propose_jobs.mark_done(pool, job_id, dormant_result)
         return {"job_id": job_id, "status": "done", "inline_result": dormant_result}
@@ -855,15 +902,24 @@ def _decode_jsonb(value):
 @router.get("/proposals")
 async def list_proposals(
     status: str | None = None,
+    group: str | None = None,
     pool=Depends(get_db_pool),
 ) -> dict:
-    """List factor proposals. Optional ?status filter. Unauthed read (matches
-    the existing /diagnostic and the Phase 2c evolution router precedent)."""
+    """Public proposal list; group=expression adds groups over the newest 500 rows.
+
+    Without grouping, the existing 200-row response is preserved. Group counts
+    and best evidence describe only the bounded, status-filtered result set.
+    latest_evidence is the newest member's evidence, including zero-only data.
+    """
+    if group not in (None, "expression"):
+        raise HTTPException(400, f"invalid group: {group}")
+    limit = 500 if group else 200
+    order = "created_at DESC, id DESC" if group else "created_at DESC"
     if status is None:
         rows = await pool.fetch(
             "SELECT id, status, expression, new_operators, evidence, diagnostic, "
             "created_at, decided_at, decided_by FROM factor_proposals "
-            "ORDER BY created_at DESC LIMIT 200"
+            f"ORDER BY {order} LIMIT {limit}"
         )
     else:
         if status not in {"pending", "approved", "rejected"}:
@@ -871,10 +927,10 @@ async def list_proposals(
         rows = await pool.fetch(
             "SELECT id, status, expression, new_operators, evidence, diagnostic, "
             "created_at, decided_at, decided_by FROM factor_proposals "
-            "WHERE status = $1 ORDER BY created_at DESC LIMIT 200",
+            f"WHERE status = $1 ORDER BY {order} LIMIT {limit}",
             status,
         )
-    return {"proposals": [{
+    proposals = [{
         "id": r["id"],
         "status": r["status"],
         "expression": r["expression"],
@@ -884,7 +940,82 @@ async def list_proposals(
         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
         "decided_at": r["decided_at"].isoformat() if r["decided_at"] else None,
         "decided_by": r["decided_by"],
-    } for r in rows]}
+    } for r in rows]
+    result = {"proposals": proposals}
+    if group == "expression":
+        grouped: dict[str, dict] = {}
+        for proposal in proposals:
+            canonical = canonical_expression(proposal["expression"])
+            evidence = proposal["evidence"]
+            sharpes = evidence.get("sharpes") or []
+            mean_sharpe = sum(sharpes) / len(sharpes) if sharpes else None
+            ic_oos = evidence.get("ic_oos")
+            has_evidence = any(s != 0 for s in sharpes) or ic_oos not in (None, 0)
+            if canonical not in grouped:
+                grouped[canonical] = {
+                    "canonical_expression": canonical,
+                    "count": 0,
+                    "proposal_ids": [],
+                    "latest_id": proposal["id"],
+                    "first_created_at": proposal["created_at"],
+                    "last_created_at": proposal["created_at"],
+                    "has_validation_evidence": False,
+                    "best_mean_sharpe": None,
+                    "best_ic_oos": None,
+                    "latest_evidence": evidence,
+                }
+            item = grouped[canonical]
+            item["count"] += 1
+            item["proposal_ids"].append(proposal["id"])
+            item["first_created_at"] = proposal["created_at"]
+            item["has_validation_evidence"] |= has_evidence
+            for key, value in (("best_mean_sharpe", mean_sharpe), ("best_ic_oos", ic_oos)):
+                if value is not None and (item[key] is None or value > item[key]):
+                    item[key] = value
+        result["groups"] = sorted(
+            grouped.values(),
+            key=lambda g: (g["has_validation_evidence"], g["last_created_at"] or "", g["latest_id"]),
+            reverse=True,
+        )
+    return result
+
+
+class RejectBatchRequest(BaseModel):
+    proposal_ids: list[StrictInt] = Field(min_length=1, max_length=500)
+
+    @field_validator("proposal_ids")
+    @classmethod
+    def unique_ids(cls, ids: list[int]) -> list[int]:
+        if len(ids) != len(set(ids)):
+            raise ValueError("proposal_ids must be unique")
+        return ids
+
+
+@router.post("/proposals/reject-batch")
+async def reject_proposals_batch(
+    body: RejectBatchRequest,
+    user_id: int = Depends(require_admin),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Reject only pending rows, atomically; report other IDs in request order."""
+    ids = body.proposal_ids
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            rows = await conn.fetch(
+                "SELECT id, status FROM factor_proposals WHERE id=ANY($1::bigint[]) "
+                "ORDER BY id FOR UPDATE", ids,
+            )
+            existing = {row["id"]: row["status"] for row in rows}
+            rejected = await conn.fetch(
+                "UPDATE factor_proposals SET status='rejected', decided_at=now(), decided_by=$2 "
+                "WHERE id=ANY($1::bigint[]) AND status='pending' RETURNING id",
+                ids, user_id,
+            )
+    return {
+        "rejected": len(rejected),
+        "skipped_not_pending": [pid for pid in ids if pid in existing and existing[pid] != "pending"],
+        "not_found": [pid for pid in ids if pid not in existing],
+    }
 
 
 @router.post("/proposals/{proposal_id}/approve")

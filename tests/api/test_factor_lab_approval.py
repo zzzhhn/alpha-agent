@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime, timezone
 
 import asyncpg
 import pytest
@@ -205,3 +206,177 @@ async def test_rollback_404_on_non_approved(authed_client, applied_db):
     # Still pending; rollback should 404.
     r = authed_client.post(f"/api/factor-lab/proposals/{pid}/rollback", headers=_auth())
     assert r.status_code == 404
+
+
+async def test_factor_lab_group_proposals_by_expression(client_with_db, applied_db):
+    zero = {"sharpes": [0, 0, 0], "ic_oos": 0}
+    strongest_sharpe = {"sharpes": [1, 2, 3], "ic_oos": 0.03}
+    strongest_ic = {"sharpes": [0.5, 0.5, 0.5], "ic_oos": 0.08}
+    ic_only = {"sharpes": [0, 0, 0], "ic_oos": -0.01}
+    data = [
+        ("rank(close)", strongest_sharpe, 1, "pending"),
+        ("rank( close )", strongest_ic, 2, "pending"),
+        ("rank(close)", zero, 3, "pending"),
+        ("zscore(volume)", ic_only, 4, "pending"),
+        ("rank(volume)", zero, 5, "pending"),
+        ("adv20", {}, 6, "pending"),
+        ("rank(close)", strongest_sharpe, 7, "rejected"),
+    ]
+    conn = await asyncpg.connect(applied_db)
+    try:
+        ids = []
+        for expression, evidence, day, status in data:
+            ids.append(await conn.fetchval(
+                "INSERT INTO factor_proposals (expression, evidence, diagnostic, created_at, status) "
+                "VALUES ($1, $2::jsonb, '{}'::jsonb, $3, $4) RETURNING id",
+                expression, json.dumps(evidence), datetime(2026, 11, day, tzinfo=timezone.utc), status,
+            ))
+    finally:
+        await conn.close()
+
+    response = client_with_db.get("/api/factor-lab/proposals?status=pending&group=expression")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["proposals"]) == 6
+    assert all(p["status"] == "pending" for p in body["proposals"])
+    groups = body["groups"]
+    assert [g["canonical_expression"] for g in groups] == [
+        "zscore(volume)", "rank(close)", "adv20", "rank(volume)",
+    ]
+    assert groups[0]["has_validation_evidence"] is True  # IC alone, including negative IC
+    assert groups[0]["best_ic_oos"] == -0.01
+    ranked = groups[1]
+    assert ranked == {
+        "canonical_expression": "rank(close)",
+        "count": 3,
+        "proposal_ids": [ids[2], ids[1], ids[0]],
+        "latest_id": ids[2],
+        "first_created_at": "2026-11-01T00:00:00+00:00",
+        "last_created_at": "2026-11-03T00:00:00+00:00",
+        "has_validation_evidence": True,
+        "best_mean_sharpe": 2.0,
+        "best_ic_oos": 0.08,
+        "latest_evidence": zero,
+    }
+    assert groups[2]["has_validation_evidence"] is False
+    assert groups[2]["best_mean_sharpe"] is None
+    assert groups[2]["best_ic_oos"] is None
+    assert groups[3]["has_validation_evidence"] is False
+
+
+@pytest.mark.parametrize("group", [None, "expression"])
+async def test_factor_lab_grouping_is_bounded_and_default_unchanged(client_with_db, applied_db, group):
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute(
+            "INSERT INTO factor_proposals (expression, evidence, diagnostic) "
+            "SELECT 'rank(close)', '{}'::jsonb, '{}'::jsonb FROM generate_series(1, 501)"
+        )
+    finally:
+        await conn.close()
+    url = "/api/factor-lab/proposals" + ("?group=expression" if group else "")
+    response = client_with_db.get(url)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    if group:
+        assert len(body["proposals"]) == 500
+        assert body["groups"][0]["count"] == 500
+        assert body["groups"][0]["latest_id"] == 501
+        assert body["groups"][0]["proposal_ids"] == list(range(501, 1, -1))
+    else:
+        assert set(body) == {"proposals"}
+        assert len(body["proposals"]) == 200
+
+
+@pytest.mark.parametrize("query", ["group=other", "group=expression&status=other"])
+def test_factor_lab_grouping_rejects_invalid_filters(client_with_db, query):
+    assert client_with_db.get(f"/api/factor-lab/proposals?{query}").status_code == 400
+
+
+async def test_factor_lab_batch_reject_pending_only(authed_client, applied_db):
+    pending = await _seed_pending(applied_db)
+    approved = await _seed_pending(applied_db)
+    rejected = await _seed_pending(applied_db)
+    untouched = await _seed_pending(applied_db)
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute(
+            "UPDATE factor_proposals SET status='approved', decided_at=now(), decided_by=9 "
+            "WHERE id=$1", approved,
+        )
+        await conn.execute(
+            "UPDATE factor_proposals SET status='rejected', decided_at=now(), decided_by=8 "
+            "WHERE id=$1", rejected,
+        )
+        before = {row["id"]: dict(row) for row in await conn.fetch("SELECT * FROM factor_proposals")}
+    finally:
+        await conn.close()
+
+    response = authed_client.post(
+        "/api/factor-lab/proposals/reject-batch", headers=_auth(),
+        json={"proposal_ids": [rejected, 999999, pending, approved]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "rejected": 1, "skipped_not_pending": [rejected, approved], "not_found": [999999],
+    }
+    conn = await asyncpg.connect(applied_db)
+    try:
+        after = {row["id"]: dict(row) for row in await conn.fetch("SELECT * FROM factor_proposals")}
+        assert set(after) == set(before)  # no deletion or insertion
+        expected = {**before[pending], "status": "rejected", "decided_by": 1,
+                    "decided_at": after[pending]["decided_at"]}
+        assert after[pending] == expected
+        assert after[pending]["decided_at"] is not None
+        for pid in (approved, rejected, untouched):
+            assert after[pid] == before[pid]
+        assert await conn.fetchval("SELECT count(*) FROM engine_config") == 0
+    finally:
+        await conn.close()
+
+
+@pytest.mark.parametrize("sub", [None, "2"])
+async def test_factor_lab_batch_reject_requires_admin(authed_client, applied_db, sub):
+    pid = await _seed_pending(applied_db)
+    response = authed_client.post(
+        "/api/factor-lab/proposals/reject-batch", headers=_auth(sub) if sub else {},
+        json={"proposal_ids": [pid]},
+    )
+    assert response.status_code == (403 if sub else 401)
+    conn = await asyncpg.connect(applied_db)
+    try:
+        row = await conn.fetchrow("SELECT status, decided_at, decided_by FROM factor_proposals WHERE id=$1", pid)
+        assert dict(row) == {"status": "pending", "decided_at": None, "decided_by": None}
+    finally:
+        await conn.close()
+
+
+@pytest.mark.parametrize("ids", [[], list(range(501)), [1, 1], ["1"], [1.5], [True]])
+def test_factor_lab_batch_reject_validates_ids(authed_client, ids):
+    response = authed_client.post(
+        "/api/factor-lab/proposals/reject-batch", headers=_auth(), json={"proposal_ids": ids},
+    )
+    assert response.status_code == 422, response.text
+
+
+async def test_factor_lab_batch_reject_accepts_500_ids(authed_client, applied_db):
+    conn = await asyncpg.connect(applied_db)
+    try:
+        rows = await conn.fetch(
+            "INSERT INTO factor_proposals (expression, evidence, diagnostic) "
+            "SELECT 'rank(close)', '{}'::jsonb, '{}'::jsonb FROM generate_series(1, 500) RETURNING id"
+        )
+    finally:
+        await conn.close()
+    response = authed_client.post(
+        "/api/factor-lab/proposals/reject-batch", headers=_auth(),
+        json={"proposal_ids": [row["id"] for row in rows]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"rejected": 500, "skipped_not_pending": [], "not_found": []}
+    conn = await asyncpg.connect(applied_db)
+    try:
+        assert await conn.fetchval("SELECT count(*) FROM factor_proposals WHERE status='rejected'") == 500
+        assert await conn.fetchval("SELECT count(DISTINCT decided_at) FROM factor_proposals") == 1
+    finally:
+        await conn.close()
