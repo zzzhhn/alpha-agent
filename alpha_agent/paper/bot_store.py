@@ -157,11 +157,11 @@ async def enqueue(pool, user_id, account_id, *, trigger='manual', slot_key=None,
                 raise HTTPException(409, '机器人账户当前不可运行')
             active = await conn.fetchrow("SELECT * FROM sim_bot_run WHERE account_id=$1 AND status IN ('queued','running')", account_id)
             if active:
-                return public_run(active)
+                return {**public_run(active), 'queue_created': False}
             if slot_key:
                 prior = await conn.fetchrow('SELECT * FROM sim_bot_run WHERE slot_key=$1', slot_key)
                 if prior:
-                    return public_run(prior)
+                    return {**public_run(prior), 'queue_created': False}
             count = await conn.fetchval('SELECT count(*) FROM sim_bot_run WHERE account_id=$1 AND trading_session=$2', account_id, session)
             if count >= config.max_daily_runs:
                 raise HTTPException(429, '本交易日唤起额度已用完')
@@ -170,7 +170,7 @@ async def enqueue(pool, user_id, account_id, *, trigger='manual', slot_key=None,
                 'VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10) RETURNING *',
                 uuid.uuid4(), account_id, trigger, slot_key, session, expires,
                 info['config_version'], dump(config.model_dump()), config.provider, config.model)
-    return public_run(row)
+    return {**public_run(row), 'queue_created': True}
 
 
 async def get_run(pool, user_id, account_id, run_id):

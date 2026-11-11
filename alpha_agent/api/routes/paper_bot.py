@@ -180,11 +180,13 @@ async def scheduled_wake():
         "SELECT EXISTS(SELECT 1 FROM sim_bot_run WHERE status IN ('queued','running')) "
         "OR EXISTS(SELECT 1 FROM sim_order WHERE execution_model='intraday_next_bar_v1' AND status='pending')")
     if not active:
+        log_clock('vercel_cron', scheduled, dispatched=False)
         return {'ok': True, 'scheduled': scheduled, 'dispatched': False}
     attempted = datetime.now(UTC).isoformat()
     try:
         await dispatch_runner()
     except (httpx.HTTPError, HTTPException):
+        log_clock('vercel_cron', scheduled, dispatched=False, dispatch_failed=True)
         await pool.execute(
             "UPDATE sim_bot_run SET diagnostics=diagnostics || $1::jsonb WHERE status IN ('queued','running')",
             store.dump({'dispatch': {'source': 'vercel_cron', 'at': attempted, 'status': 'failed'}}))
@@ -192,6 +194,7 @@ async def scheduled_wake():
     await pool.execute(
         "UPDATE sim_bot_run SET diagnostics=diagnostics || $1::jsonb WHERE status IN ('queued','running')",
         store.dump({'dispatch': {'source': 'vercel_cron', 'at': attempted, 'status': 'requested'}}))
+    log_clock('vercel_cron', scheduled, dispatched=True)
     return {'ok': True, 'scheduled': scheduled, 'dispatched': True}
 
 
@@ -199,6 +202,8 @@ async def scheduled_wake():
 async def worker(schedule: bool = False):
     pool = await get_db_pool()
     scheduled = await enqueue_due(pool) if schedule else None
+    if scheduled is not None:
+        log_clock('worker_schedule', scheduled)
     # Also finish accepted orders whose run has stopped/expired. Never reopen
     # decisions or call the model merely to settle an existing obligation.
     from alpha_agent.paper.bot_execution import settle_orders
@@ -208,6 +213,14 @@ async def worker(schedule: bool = False):
     active = await pool.fetchval("SELECT count(*) FROM sim_bot_run WHERE status IN ('queued','running')")
     return {'ok': True, **result, 'active': bool(active or pending),
             'scheduled': scheduled, 'settlement': {k: v for k, v in settlement.items() if k != 'errors'}}
+
+
+def log_clock(source, scheduled, **outcome):
+    """Small carrier receipt, without accounts, holdings, credentials or DB rows."""
+    fields = ('observed_at', 'session_date', 'window_open', 'market_open',
+              'reason', 'enqueued', 'deduplicated', 'missed_observations')
+    print(store.dump({'event': 'paper_bot_clock', 'source': source,
+                      **{k: scheduled.get(k) for k in fields}, **outcome}), flush=True)
 
 
 @router.get('/api/cron/paper_bot/valuation', dependencies=[Depends(require_cron)])

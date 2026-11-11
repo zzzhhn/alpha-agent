@@ -58,7 +58,10 @@ async def enqueue_due(pool, now=None):
         return {'enqueued': 0, 'reason': 'storage_headroom_low'}
     rows = await pool.fetch("SELECT a.id,a.user_id,c.config,c.config_version,c.updated_at FROM sim_account a JOIN sim_bot_config c ON c.account_id=a.id WHERE a.kind='bot' AND a.status='active' AND c.config->>'schedule_enabled'='true' ORDER BY a.id LIMIT 20")
     slots = target_slot_times(now)
-    count, missed, skipped = 0, 0, []
+    count, deduplicated, missed, skipped = 0, 0, 0, []
+    window_open = market['is_open'] and any(
+        as_utc(slots[slot]) <= now < as_utc(slots[slot]) + timedelta(minutes=20)
+        for slot in ('open_after', 'close_before'))
     for row in rows:
         config = BotConfig.model_validate(store.unpack(row['config']))
         for slot, enabled in [('open_after', config.open_enabled), ('close_before', config.close_enabled)]:
@@ -75,7 +78,8 @@ async def enqueue_due(pool, now=None):
                     run = await store.enqueue(pool, row['user_id'], row['id'], trigger=slot, slot_key=key, now=now)
                     if run.get('slot_key') == key:
                         status, run_id = 'enqueued', run['id']
-                        count += 1
+                        count += int(run['queue_created'])
+                        deduplicated += int(not run['queue_created'])
                     else:
                         status, reason = 'blocked', 'run_active'
                 except HTTPException as exc:
@@ -86,8 +90,13 @@ async def enqueue_due(pool, now=None):
                 status, reason = 'missed', 'slot_expired'
             written = await record_slot(pool, row, slots, slot, due, now, status, reason, run_id)
             missed += int(written == 'missed')
-    return {'enqueued': count, 'observed_accounts': len(rows), 'missed_observations': missed,
-            'reason': 'no_enabled_accounts' if not rows else 'slots_checked', 'skipped': skipped}
+    return {'enqueued': count, 'deduplicated': deduplicated,
+            'observed_accounts': len(rows), 'missed_observations': missed,
+            'observed_at': now.isoformat(), 'session_date': market['session_date'],
+            'window_open': window_open, 'market_open': market['is_open'],
+            'reason': ('no_enabled_accounts' if not rows else
+                       'outside_schedule_window' if not window_open else 'slots_checked'),
+            'skipped': skipped}
 
 
 async def record_slot(pool, account, slots, slot, due, now, status, reason, run_id):

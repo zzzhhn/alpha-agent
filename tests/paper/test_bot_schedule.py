@@ -82,3 +82,40 @@ async def test_authenticated_fallback_only_dispatches_existing_work(monkeypatch,
     else:
         assert response.json()['detail']['reason'] == 'runner_dispatch_failed'
 
+
+@pytest.mark.parametrize('created', [True, False])
+async def test_second_clock_counts_reuse_not_a_new_run(monkeypatch, created):
+    from alpha_agent.paper.bot_models import BotConfig
+    config = BotConfig(schedule_enabled=True).model_dump()
+    pool = type('Pool', (), {'fetch': AsyncMock(return_value=[{
+        'id': 3, 'user_id': 7, 'config': config, 'config_version': 4,
+        'updated_at': datetime(2026, 11, 6, tzinfo=UTC),
+    }])})()
+    monkeypatch.setattr(bot_schedule, 'read_capacity', AsyncMock(return_value={'allow_writes': True}))
+    enqueue = AsyncMock(return_value={'id': 'run', 'slot_key': '3:2026-11-09:close_before',
+                                     'queue_created': created})
+    monkeypatch.setattr(bot_schedule.store, 'enqueue', enqueue)
+    monkeypatch.setattr(bot_schedule, 'record_slot', AsyncMock(return_value=None))
+    result = await bot_schedule.enqueue_due(pool, datetime(2026, 11, 9, 20, 34, tzinfo=UTC))
+    assert result['enqueued'] == int(created)
+    assert result['deduplicated'] == int(not created)
+    assert result['window_open'] is True
+    enqueue.assert_awaited_once()
+
+
+async def test_late_github_arrival_is_explicit_and_never_backfills(monkeypatch):
+    from alpha_agent.paper.bot_models import BotConfig
+    pool = type('Pool', (), {'fetch': AsyncMock(return_value=[{
+        'id': 3, 'user_id': 7, 'config': BotConfig(schedule_enabled=True).model_dump(),
+        'config_version': 4, 'updated_at': datetime(2026, 11, 6, tzinfo=UTC),
+    }])})()
+    monkeypatch.setattr(bot_schedule, 'read_capacity', AsyncMock(return_value={'allow_writes': True}))
+    enqueue = AsyncMock()
+    monkeypatch.setattr(bot_schedule.store, 'enqueue', enqueue)
+    monkeypatch.setattr(bot_schedule, 'record_slot', AsyncMock(return_value=None))
+    result = await bot_schedule.enqueue_due(pool, datetime(2026, 11, 9, 23, 41, tzinfo=UTC))
+    assert result['reason'] == 'outside_schedule_window'
+    assert not result['window_open'] and not result['market_open']
+    assert result['enqueued'] == 0
+    enqueue.assert_not_called()
+

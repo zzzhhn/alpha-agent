@@ -37,6 +37,14 @@ calibrated probability. For no_trade give no_trade_reason and explain the candid
 or holdings considered, not a generic success statement.
 Missing/stale evidence and quotes cannot be invented. To request up to 5 supported
 tickers use decision=research, research_tickers=[...], no actions; at most two rounds.
+CURRENT FACTS: use recommendations.rank and ranking_context from this research_run_id.
+previous_rank/previous_tier are historical comparisons, not current ranks. Recent
+decisions and position_memory are past model opinions, never current rank or price
+evidence. Do not copy their factual claims. Check holdings_equal_top_n and the
+explicit held_outside_top_n/top_n_not_held sets before describing portfolio overlap.
+Do not claim all holdings match the top N when this flag is false or unknown.
+Ranking scores are not expected returns: a score gap alone cannot be compared
+numerically with fees or prove that an alternative does or does not cover costs.
 Market closed means no_trade. If created_at precedes market.open_at, say 尚未开盘,
 not 已收盘. Distinguish premarket, postmarket and holiday using the supplied times.
 Give a short Chinese summary of evidence, uncertainty,
@@ -101,6 +109,7 @@ async def step(pool, run_id=None):
             await pool.execute("UPDATE sim_bot_run SET context=$3::jsonb WHERE id=$1 AND lease_token=$2 AND status='running'", run['id'], run['lease_token'], store.dump(context))
             await store.diagnose(pool, run, {'context_bytes': len(store.dump(context).encode()),
                                            'quote_coverage': context['quote_coverage'],
+                                           'ranking_context': context.get('ranking_context'),
                                            'research_age_sessions': context['research_age_sessions'],
                                            'queue_wait_seconds': max(0, round((run['_step_started_at']-run['created_at']).total_seconds()))})
             await store.release(pool, run, 'deciding')
