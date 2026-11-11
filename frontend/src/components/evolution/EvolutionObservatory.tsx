@@ -26,6 +26,7 @@ import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
 import { TmLinkButton } from "@/components/tm/TmButton";
 import { EvolutionUnavailable } from "./EvolutionUnavailable";
 import type { pendingReviewCounts } from "./review-state";
+import { hasEnoughIcObservations, selectFocusSignals } from "./observatory-model";
 
 type DetailTab = "weights" | "calibration";
 
@@ -44,25 +45,6 @@ function numericFact(health: EvolutionHealth, section: keyof EvolutionHealth, ke
 function latestIc(points: Array<{ computed_at: string; ic: number }>): number | null {
   if (points.length === 0) return null;
   return [...points].sort((a, b) => a.computed_at.localeCompare(b.computed_at)).at(-1)?.ic ?? null;
-}
-
-function focusSignals(icTrend: IcTrendResponse | null, weights: EvolutionWeight[]): string[] {
-  if (!icTrend) return [];
-  const weightRisk = new Map<string, number>();
-  for (const weight of weights) {
-    const score = weight.consecutive_bad_windows * 10 + Math.max(0, 5 - weight.shadow_streak);
-    weightRisk.set(weight.signal_name, Math.max(weightRisk.get(weight.signal_name) ?? 0, score));
-  }
-  return icTrend.series.filter((series) => series.points.length > 0)
-    .sort((a, b) => {
-      const aIc = latestIc(a.points) ?? 0;
-      const bIc = latestIc(b.points) ?? 0;
-      const aScore = (weightRisk.get(a.signal_name) ?? 0) + (aIc < 0 ? Math.abs(aIc) * 100 : 0);
-      const bScore = (weightRisk.get(b.signal_name) ?? 0) + (bIc < 0 ? Math.abs(bIc) * 100 : 0);
-      return bScore - aScore;
-    })
-    .slice(0, 3)
-    .map((series) => series.signal_name);
 }
 
 function weightFor(weights: EvolutionWeight[], signal: string, status: EvolutionWeight["status"]): EvolutionWeight | null {
@@ -93,7 +75,7 @@ export default function EvolutionObservatory({
   children?: ReactNode;
 }) {
   const zh = locale === "zh";
-  const focus = useMemo(() => focusSignals(icTrend, weights), [icTrend, weights]);
+  const focus = useMemo(() => selectFocusSignals(weights, changes, Date.now()), [weights, changes]);
   const [selectedSignal, setSelectedSignal] = useState<string | null>(focus[0] ?? null);
   const [detailTab, setDetailTab] = useState<DetailTab>("weights");
   const selected = selectedSignal && focus.includes(selectedSignal) ? selectedSignal : focus[0] ?? null;
@@ -215,7 +197,7 @@ export default function EvolutionObservatory({
               </div>
             ))}
           </div> : <EvolutionUnavailable locale={locale} message={zh ? "信号权重不可用。" : "Signal weights unavailable."} />}
-          {selectedSeries && selectedSeries.points.length > 1 ? (
+          {selectedSeries && selectedSeries.points.length > 0 ? (
             <SignalSparkline
               points={selectedSeries.points}
               label={zh ? "近期 IC 观测" : "Recent IC observations"}
@@ -296,19 +278,22 @@ function SignalSparkline({ points, label, locale }: { readonly points: readonly 
   const min = Math.min(...values, -0.01);
   const max = Math.max(...values, 0.01);
   const range = Math.max(max - min, 0.001);
-  const polyline = ordered.map((point, index) => {
+  const coordinates = ordered.map((point, index) => {
     const x = 8 + (index / Math.max(points.length - 1, 1)) * 284;
     const y = 78 - ((point.ic - min) / range) * 62;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+    return { x, y };
+  });
+  const enough = hasEnoughIcObservations(points.length);
   const zeroY = 78 - ((0 - min) / range) * 62;
   return (
     <div className="mt-3 border border-tm-rule bg-tm-bg px-3 py-2">
       <div className="flex items-center justify-between text-xs text-tm-muted"><span>{label}</span><span>{locale === "zh" ? `${points.length} 个观测` : `${points.length} observations`}</span></div>
       <svg viewBox="0 0 300 86" className="mt-2 h-[96px] w-full" role="img" aria-label={label}>
         <line x1="8" x2="292" y1={zeroY} y2={zeroY} stroke="currentColor" className="text-tm-rule" strokeDasharray="3 3" />
-        <polyline points={polyline} fill="none" stroke="currentColor" className="text-tm-pos" strokeWidth="2" />
+        {enough ? <polyline points={coordinates.map(({ x, y }) => `${x},${y}`).join(" ")} fill="none" stroke="currentColor" className="text-tm-pos" strokeWidth="2" />
+          : coordinates.map(({ x, y }, i) => <circle key={i} cx={x} cy={y} r="3" fill="currentColor" className="text-tm-pos" />)}
       </svg>
+      {!enough ? <p className="mt-1 text-xs text-tm-warn">{locale === "zh" ? `观测不足（${points.length} 个点），不构成趋势` : `Too few observations (${points.length}); not a trend`}</p> : null}
     </div>
   );
 }

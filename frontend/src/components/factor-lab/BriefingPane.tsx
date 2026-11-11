@@ -1,4 +1,9 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { TmPane } from "@/components/tm/TmPane";
+import { TmPagination } from "@/components/tm/TmPagination";
+import { BRIEFING_PAGE_SIZE, dedupeBriefingItems, paginateBriefingItems } from "@/components/evolution/observatory-model";
 import type { Locale } from "@/lib/i18n";
 import type { BriefingItem, MiningBriefing } from "@/lib/api/factor-lab";
 
@@ -96,7 +101,15 @@ export function BriefingPane({
   readonly briefing: MiningBriefing;
   readonly locale: Locale;
 }) {
-  const { validated, flagged, failure_insights } = briefing;
+  const zh = locale === "zh";
+  const [page, setPage] = useState(1);
+  const entries = useMemo(() => dedupeBriefingItems(briefing), [briefing]);
+  const paginated = paginateBriefingItems(entries, page);
+  const validated = entries.filter((entry) => !entry.flagged);
+  const flagged = entries.filter((entry) => entry.flagged);
+  const visibleValidated = paginated.items.filter((entry) => !entry.flagged);
+  const visibleFlagged = paginated.items.filter((entry) => entry.flagged);
+  const { failure_insights } = briefing;
   const meta = `${validated.length} ${locale === "zh" ? "通过" : "PASS"} · ${flagged.length} ${locale === "zh" ? "存疑" : "FLAG"} · ${failure_insights.length} ${locale === "zh" ? "规避" : "AVOID"}`;
   const isEmpty =
     validated.length === 0 &&
@@ -124,20 +137,37 @@ export function BriefingPane({
         </p>
       ) : (
         <div className="flex flex-col divide-y divide-tm-rule">
-          <Bucket title={t.validated} cls="text-tm-pos" empty={validated.length === 0}>
+          <Bucket title={t.validated} cls="text-tm-pos" empty={visibleValidated.length === 0}>
             <ul className="flex flex-col divide-y divide-tm-rule">
-              {validated.map((it) => (
-                <ItemRow key={it.id} item={it} flagged={false} />
+              {visibleValidated.map(({ item }) => (
+                <ItemRow key={item.id} item={item} flagged={false} />
               ))}
             </ul>
           </Bucket>
-          <Bucket title={t.flagged} cls="text-tm-warn" empty={flagged.length === 0}>
+          <Bucket title={t.flagged} cls="text-tm-warn" empty={visibleFlagged.length === 0}>
             <ul className="flex flex-col divide-y divide-tm-rule">
-              {flagged.map((it) => (
-                <ItemRow key={it.id} item={it} flagged={true} />
+              {visibleFlagged.map(({ item }) => (
+                <ItemRow key={item.id} item={item} flagged={true} />
               ))}
             </ul>
           </Bucket>
+          {entries.length > 0 ? <TmPagination
+            page={page}
+            pageSize={BRIEFING_PAGE_SIZE}
+            totalItems={entries.length}
+            pageSizeOptions={[BRIEFING_PAGE_SIZE]}
+            onPageChange={setPage}
+            onPageSizeChange={() => {}}
+            labels={{
+              navigation: zh ? "挖掘简报分页" : "Mining briefing pages",
+              previous: "←", next: "→",
+              previousAriaLabel: zh ? "上一页" : "Previous page",
+              nextAriaLabel: zh ? "下一页" : "Next page",
+              page: (current, count) => `${current} / ${count}`,
+              pageSize: zh ? "每页" : "Per page",
+              total: (count) => zh ? `去重后 ${count} 条` : `${count} unique items`,
+            }}
+          /> : null}
           <Bucket
             title={t.avoid}
             cls="text-tm-muted"
