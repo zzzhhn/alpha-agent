@@ -16,6 +16,8 @@ import {
 } from "@/components/tm/TmTable";
 import { TmStatePane } from "@/components/tm/TmStatePane";
 import { TmButton } from "@/components/tm/TmButton";
+import { useTimezonePreference } from "@/hooks/useTimezonePreference";
+import { botZonedTime } from "./PaperBotUi";
 
 function sourceLabel(source: TickerAttribution["source_type"] | undefined, locale: "zh" | "en") {
   if (source === "pick") return t(locale, "sim.workspace.source_pick");
@@ -45,6 +47,7 @@ export default function PaperPositionsWithSource({
   readonly onReview?: (ticker: string) => void;
 }) {
   const { locale } = useLocale();
+  const { timeZone } = useTimezonePreference();
   const sourceByTicker = new Map((attributionAvailable ? attribution : []).map((row) => [row.ticker, row]));
 
   if (positions.length === 0) {
@@ -93,7 +96,7 @@ export default function PaperPositionsWithSource({
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
                   {currentValue === null ? "—" : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                   {accountKind === "bot" && currentValue !== null ? <span className={clsx("mt-1 block font-normal", position.price_quality === "stale" ? "text-tm-warn" : "text-tm-muted")}>
-                    {t(locale, markLabel)}{markTime && Number.isFinite(markTime.getTime()) ? <> · <time dateTime={position.mark_at!}>{markTime.toLocaleString(locale === "zh" ? "zh-CN" : "en-GB", { timeZone:"Asia/Shanghai", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false })} CST</time></> : null}
+                    {t(locale, markLabel)}{markTime && Number.isFinite(markTime.getTime()) ? <> · <time dateTime={position.mark_at!}>{botZonedTime(position.mark_at, locale, timeZone)}</time></> : null}
                   </span> : null}
                 </TmTableCell>
                 <TmTableCell numeric textAlign="right" className={clsx("text-xs font-semibold", !pnlKnown ? "text-tm-muted" : pnlPositive ? "text-tm-pos" : "text-tm-neg")}>
