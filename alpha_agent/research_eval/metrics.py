@@ -70,6 +70,11 @@ class NavPath:
     cost_rates: tuple[float, ...]
 
     @property
+    def total_turnover(self) -> float:
+        """Sum of two-sided interval notional / beginning NAV ratios."""
+        return sum(self.traded_weight)
+
+    @property
     def cost_drag(self) -> float:
         """Counterfactual compounded gross minus net, per initial capital."""
         return (self.gross_nav[-1] - self.nav[-1]) / self.nav[0]

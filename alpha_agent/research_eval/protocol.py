@@ -52,6 +52,16 @@ class FrozenProtocol:
     minimum_forward_sessions: int = 252
     annual_sessions: int = 252
     cash_interest: float = 0
+    baseline_initial_capital: float = 1_000_000
+    baseline_rebalance: str = "month_end_d1_close"
+    baseline_max_position: float = 0.02
+    baseline_rebalance_turnover_cap: float = 0.20
+    baseline_initial_turnover_cap: float = 1.0
+    momentum_lookback_sessions: int = 252
+    momentum_skip_sessions: int = 21
+    momentum_top_n: int = 50
+    baseline_shares: str = "integer_sell_first_cash_constrained"
+    baseline_tie_break: str = "ticker_ascending"
 
     def __post_init__(self):
         blocks = (self.train, *self.validation, self.historical_test, self.final_forward)

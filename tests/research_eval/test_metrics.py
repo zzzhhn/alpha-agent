@@ -41,6 +41,7 @@ def test_costs_on_both_sides_with_explicit_entry_and_exit():
     assert path.nav == pytest.approx([100, 99.9, 109.89, 109.78011])
     assert path.gross_nav[-1] == pytest.approx(110)
     assert path.traded_weight == (1, 0, 1)
+    assert path.total_turnover == 2
     assert path.cost_drag == pytest.approx(.0021989)
     assert max_drawdown(path.nav[:2]) == pytest.approx(-.001)
 

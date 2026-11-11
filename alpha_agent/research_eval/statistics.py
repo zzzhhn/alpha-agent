@@ -93,7 +93,8 @@ def deflated_sharpe(
     sd = stdev(x)
     if sd == 0:
         return {**result, "reason": "zero_variance"}
-    sr = mean(x)/sd
+    average = mean(x)
+    sr = average/sd
     benchmark = 0.0
     if count > 1:
         normal, gamma = NormalDist(), 0.5772156649015329
@@ -101,7 +102,7 @@ def deflated_sharpe(
             (1-gamma)*normal.inv_cdf(1-1/count)
             + gamma*normal.inv_cdf(1-1/(count*exp(1)))
         )
-    centered = [value-mean(x) for value in x]
+    centered = [value-average for value in x]
     m2 = mean(value**2 for value in centered)
     skew = mean(value**3 for value in centered)/m2**1.5
     kurt = mean(value**4 for value in centered)/m2**2
