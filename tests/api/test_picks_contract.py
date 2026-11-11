@@ -71,7 +71,7 @@ async def test_canonical_full_population_side_limit_pagination_invariance(monkey
 
 async def test_strategic_uses_matching_policy_complete_population(monkeypatch):
     rows = [snapshot('AAA', 100., 1, strategic=-2.), snapshot('BBB', 0., 2, strategic=2.),
-            snapshot('CCC', -100., 3, strategic=0.), snapshot('OLD', 200., 4, strategic=99.)]
+            snapshot('CCC', -100., 3, strategic=0.), snapshot('OLD', 200., 4, strategic=99., eligible=False)]
     rows[-1]['user_visible_payload_json']['_mode_payloads']['long']['policy_id'] = 'older-policy'
     result = await canonical(monkeypatch, rows, mode='long', limit=1)
     assert [(c.ticker, c.rank_score) for c in result.picks] == [('BBB', 100)]
@@ -109,3 +109,8 @@ def test_changes_scope_dates_and_no_fabricated_previous():
     assert changes.prior_market_date == '2026-11-09'
     missing = _recommendation_changes(current, [], **kwargs)
     assert missing.available is False and not missing.tier_changes
+
+
+async def test_mixed_strategic_run_keeps_existing_exploratory_fallback(monkeypatch):
+    rows = [snapshot('AAA', 1., 1, strategic=2.), snapshot('OLD', 3., 2)]
+    assert await canonical(monkeypatch, rows, mode='long') is None

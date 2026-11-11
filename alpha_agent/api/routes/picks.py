@@ -396,7 +396,10 @@ async def _build_canonical_view(
                 not isinstance(long_payload, dict)
                 or long_payload.get("policy_id") != selected_policy.policy_id
             ):
-                continue
+                # Preserve the existing canonical-support gate: a mixed or
+                # legacy strategic run remains an exploratory fallback.
+                mode_supported = False
+                break
             payload = long_payload
         raw_score = payload.get("composite_score") if mode == "long" else row["composite_z"]
         value = float(raw_score) if isinstance(raw_score, (int, float)) and isfinite(raw_score) else None
