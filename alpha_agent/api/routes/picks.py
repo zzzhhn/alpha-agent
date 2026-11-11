@@ -14,15 +14,20 @@ import asyncio
 import json
 import logging
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
+from math import isfinite
+from typing import Literal
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.fusion.attribution import top_drivers, top_drags
-from alpha_agent.fusion.grades import grade_dimensions
+from alpha_agent.fusion.grades import (
+    grade_dimensions, score_dimensions, grade_method_metadata, dimension_missing_reasons,
+)
 from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.fusion.rating import compute_confidence, map_to_tier
 from alpha_agent.fusion.combine import combine
@@ -71,7 +76,8 @@ class LeanCard(BaseModel):
     # Raw signal-agreement = 1/(1+variance(z)). The conviction headline: how
     # aligned the underlying signals are on this name. NOT a hit-rate.
     agreement: float = 0.0
-    composite_score: float
+    composite_score: float | None
+    rank_score: int | None = Field(default=None, ge=0, le=100)
     as_of: str
     top_drivers: list[str]
     top_drags: list[str]
@@ -83,6 +89,8 @@ class LeanCard(BaseModel):
     # B8 (2026-05-19): per-dimension letter grades from breakdown z's so
     # the picks table can show A+/A/B/.../F at-a-glance per row.
     dimension_grades: dict[str, str] = {}
+    dimension_scores: dict[str, float | None] | None = None
+    dimension_missing_reasons: dict[str, str] = {}
     # Descriptive per-ticker 1-day direction agreement: predicted tier versus
     # the next trading day's realized move over {d5, m1, y1, hist}. Each value
     # is a fraction in [0,1], or None when the window has too little realized
@@ -138,11 +146,60 @@ class PickChange(BaseModel):
 class RecommendationChanges(BaseModel):
     available: bool
     prior_run_id: int | None = None
+    current_market_date: str | None = None
+    prior_market_date: str | None = None
+    prior_generated_at: datetime | None = None
     turnover: float | None = None
     added: list[PickChange] = []
     removed: list[PickChange] = []
     tier_changes: list[PickChange] = []
     reason: str | None = None
+
+
+class GradeBand(BaseModel):
+    grade: str
+    min_z: float | None
+
+
+class GradeMethod(BaseModel):
+    version: str
+    bands: list[GradeBand]
+    dimensions: dict[str, list[str]]
+    min_universe: int
+    flatness_floor: float
+    definition: str
+    missing_semantics: list[str]
+
+
+class RankScoreMethod(BaseModel):
+    version: str = "xs_pct_avg_rank_v1"
+    status: Literal["available", "unavailable_exploratory_view", "insufficient_population"] = "unavailable_exploratory_view"
+    population: int = 0
+    run_id: int | None = None
+    sleeve: str | None = None
+    definition: str = "Ascending average rank over all finite eligible same-policy snapshot composites; ROUND_HALF_UP(100*(average_rank-1)/(n-1)). High is more bullish; shorts are not inverted. Not probability, confidence or expected return."
+
+
+def snapshot_rank_scores(values: dict[str, float | None]) -> tuple[dict[str, int | None], int]:
+    """Read-time projection only: ties share an average rank; never rank a subset."""
+    ordered = sorted((value, ticker) for ticker, value in values.items()
+                     if isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value))
+    n = len(ordered)
+    result = dict.fromkeys(values)
+    if n < 2:
+        return result, n
+    i = 0
+    while i < n:
+        end = i + 1
+        while end < n and ordered[end][0] == ordered[i][0]:
+            end += 1
+        # Average one-based rank is (i+1+end)/2. Decimal avoids binary ties.
+        score = int((Decimal(100) * Decimal(i + end - 1) / Decimal(2 * (n - 1)))
+                    .quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        for _, ticker in ordered[i:end]:
+            result[ticker] = score
+        i = end
+    return result, n
 
 
 class PicksResponse(BaseModel):
@@ -154,6 +211,8 @@ class PicksResponse(BaseModel):
     tradable: bool = False
     run: RecommendationRunState | None = None
     changes: RecommendationChanges | None = None
+    rank_score_method: RankScoreMethod = Field(default_factory=RankScoreMethod)
+    grade_method: GradeMethod = Field(default_factory=lambda: GradeMethod(**grade_method_metadata()))
 
 
 def _json_object(value) -> dict:
@@ -234,6 +293,9 @@ def _recommendation_changes(
     mode: str,
     policy_id: str,
     prior_run_id: int | None,
+    current_market_date: str | None = None,
+    prior_market_date: str | None = None,
+    prior_generated_at: datetime | None = None,
 ) -> RecommendationChanges:
     current = _top_policy_rows(current_rows, mode=mode, policy_id=policy_id)
     previous = _top_policy_rows(previous_rows, mode=mode, policy_id=policy_id)
@@ -241,6 +303,9 @@ def _recommendation_changes(
         return RecommendationChanges(
             available=False,
             prior_run_id=prior_run_id,
+            current_market_date=current_market_date,
+            prior_market_date=prior_market_date,
+            prior_generated_at=prior_generated_at,
             reason="no_prior_snapshot_for_same_policy",
         )
     added_names = sorted(set(current) - set(previous), key=lambda ticker: current[ticker]["rank"])
@@ -265,6 +330,9 @@ def _recommendation_changes(
     return RecommendationChanges(
         available=True,
         prior_run_id=prior_run_id,
+        current_market_date=current_market_date,
+        prior_market_date=prior_market_date,
+        prior_generated_at=prior_generated_at,
         turnover=len(added_names) / max(len(current), 1),
         added=[change(ticker) for ticker in added_names[:10]],
         removed=[change(ticker) for ticker in removed_names[:10]],
@@ -288,6 +356,7 @@ async def _build_canonical_view(
     run = await get_latest_canonical_run(pool)
     if run is None:
         return None
+    selected_policy = get_policy("strategic" if mode == "long" else "tactical")
     snapshots, previous_run = await asyncio.gather(
         get_run_snapshots(pool, int(run["id"])),
         pool.fetchrow(
@@ -295,12 +364,17 @@ async def _build_canonical_view(
             SELECT * FROM research_run
             WHERE run_type=$1 AND status='complete' AND id<>$2
               AND scheduled_for_date < $3
+              AND (($4 = 'short' AND weight_policy_id IS NOT DISTINCT FROM $5)
+                   OR ($4 = 'long' AND EXISTS (SELECT 1 FROM rating_snapshot rs
+                       WHERE rs.run_id=research_run.id AND rs.eligible
+                         AND rs.user_visible_payload_json->'_mode_payloads'->'long'->>'policy_id'=$6)))
             ORDER BY scheduled_for_date DESC, finished_at DESC NULLS LAST, id DESC
             LIMIT 1
             """,
             run["run_type"],
             int(run["id"]),
             run["scheduled_for_date"],
+            mode, run["weight_policy_id"], selected_policy.policy_id,
         ),
     )
     previous_snapshots = (
@@ -308,12 +382,12 @@ async def _build_canonical_view(
         if previous_run is not None else []
     )
     from alpha_agent.data.security_identity import valid_research_symbol
-    eligible = [row for row in snapshots if row["eligible"] and row["rank"] is not None
+    eligible = [row for row in snapshots if row["eligible"] and row["in_universe"]
                 and valid_research_symbol(row["ticker"])]
     cards: list[LeanCard] = []
     mode_supported = True
     market_date: date = run["scheduled_for_date"]
-    selected_policy = get_policy("strategic" if mode == "long" else "tactical")
+    rank_values: dict[str, float | None] = {}
     for row in eligible:
         payload = _json_object(row["user_visible_payload_json"])
         if mode == "long":
@@ -322,9 +396,14 @@ async def _build_canonical_view(
                 not isinstance(long_payload, dict)
                 or long_payload.get("policy_id") != selected_policy.policy_id
             ):
-                mode_supported = False
-                break
+                continue
             payload = long_payload
+        raw_score = payload.get("composite_score") if mode == "long" else row["composite_z"]
+        value = float(raw_score) if isinstance(raw_score, (int, float)) and isfinite(raw_score) else None
+        rank_values[row["ticker"]] = value
+        payload = {**payload, "composite_score": value}
+        if row["rank"] is None:
+            continue
         try:
             card = LeanCard.model_validate(payload).model_copy(
                 update={"run_id": int(run["id"]), "market_date": market_date.isoformat()}
@@ -340,13 +419,13 @@ async def _build_canonical_view(
             break
         cards.append(card)
 
-    if not mode_supported:
+    if not mode_supported or (mode == "long" and not cards):
         return None
 
-    cards.sort(
-        key=lambda card: card.composite_score,
-        reverse=(side == "long"),
-    )
+    scores, population = snapshot_rank_scores(rank_values)
+    cards = [card.model_copy(update={"rank_score": scores.get(card.ticker)}) for card in cards]
+    cards.sort(key=lambda card: (card.composite_score is None,
+               (-(card.composite_score or 0) if side == "long" else (card.composite_score or 0))))
     if side == "long":
         cards = [
             card.model_copy(update={"policy_rank": index})
@@ -375,6 +454,9 @@ async def _build_canonical_view(
         mode=mode,
         policy_id=selected_policy.policy_id,
         prior_run_id=int(previous_run["id"]) if previous_run is not None else None,
+        current_market_date=market_date.isoformat(),
+        prior_market_date=previous_run["scheduled_for_date"].isoformat() if previous_run else None,
+        prior_generated_at=(previous_run["finished_at"] or previous_run["data_asof"]) if previous_run else None,
     )
     return PicksResponse(
         picks=cards,
@@ -401,6 +483,11 @@ async def _build_canonical_view(
             ),
         ),
         changes=changes,
+        rank_score_method=RankScoreMethod(
+            status="available" if population >= 2 else "insufficient_population",
+            population=population, run_id=int(run["id"]),
+            sleeve="strategic" if mode == "long" else "tactical",
+        ),
     )
 
 
@@ -772,6 +859,8 @@ async def build_lean_view(
                 partial=is_partial,
                 tier_flip_today=tier_flip_today,
                 dimension_grades=grade_dimensions(breakdown_data, dim_thresholds),
+                dimension_scores=score_dimensions(breakdown_data, dim_thresholds),
+                dimension_missing_reasons=dimension_missing_reasons(breakdown_data, dim_thresholds),
                 consistency=consistency_by_ticker.get(r["ticker"], {}),
                 consistency_n={
                     w: n

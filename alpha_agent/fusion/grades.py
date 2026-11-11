@@ -182,3 +182,26 @@ def score_dimensions(
         v = sum(present) / len(present)
         out[dim] = (v - mu) / sd
     return out
+
+
+# Display metadata is derived from the grading constants above. It does not
+# participate in aggregation or change historical grades.
+def grade_method_metadata() -> dict:
+    return {
+        "version": "dimension_rez_v1",
+        "bands": [{"grade": grade, "min_z": cut} for cut, grade in _Z_BANDS]
+        + [{"grade": "F", "min_z": None}],
+        "dimensions": {key: list(members) for key, members in DIMENSION_GROUPS.items()},
+        "min_universe": _MIN_UNIVERSE,
+        "flatness_floor": _LIVE_STD_FLOOR,
+        "definition": "Mean of present live member signals, re-standardized across the full universe.",
+        "missing_semantics": ["no_live_member", "fewer_than_min_universe", "no_spread", "ticker_lacks_live_member"],
+    }
+
+
+def dimension_missing_reasons(breakdown, thresholds) -> dict[str, str]:
+    scores = score_dimensions(breakdown, thresholds)
+    return {
+        dim: ("universe_not_gradeable" if thresholds.get(dim) is None else "ticker_lacks_live_member")
+        for dim, score in scores.items() if score is None
+    }
