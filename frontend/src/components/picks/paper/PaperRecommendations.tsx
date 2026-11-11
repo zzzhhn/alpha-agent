@@ -74,7 +74,7 @@ export default function PaperRecommendations({
               )}
             >
               <div className="min-w-0">
-                <div className="truncate text-[12px] text-tm-fg">{company ?? pick.ticker}</div>
+                <div className={clsx("truncate text-[12px]", company ? "text-tm-fg" : "text-tm-muted")}>{company ?? (locale === "zh" ? "名称缺失" : "Name unavailable")}</div>
                 <div className="font-tm-mono text-xs font-semibold text-tm-accent">{pick.ticker}</div>
               </div>
               <div className="text-right">
@@ -132,7 +132,7 @@ export default function PaperRecommendations({
               >
                 <TmTableRowHeader className="!py-3 font-normal">
                   <div className="font-tm-mono text-sm font-semibold text-tm-accent">{pick.ticker}</div>
-                  <HoverTip content={company ?? pick.ticker} className="max-w-48" width={240}><span className="truncate text-xs text-tm-muted">{company ?? pick.ticker}</span></HoverTip>
+                  <HoverTip content={company ?? (locale === "zh" ? "数据源未返回公司名称" : "The data source returned no company name")} className="max-w-48" width={240}><span className="truncate text-xs text-tm-muted">{company ?? (locale === "zh" ? "名称缺失" : "Name unavailable")}</span></HoverTip>
                 </TmTableRowHeader>
                 <TmTableCell className={clsx("text-xs font-semibold", TIER_TONE[pick.rating] ?? "text-tm-fg-2")}>{pick.rating}</TmTableCell>
                 <TmTableCell numeric className="text-xs text-tm-fg-2">

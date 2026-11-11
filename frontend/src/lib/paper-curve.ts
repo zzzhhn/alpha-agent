@@ -22,3 +22,17 @@ export function normalizePaperCurve(
       : null,
   }));
 }
+
+/**
+ * A cash-only account has a flat 100 line by construction; plotting it against
+ * SPY reads as underperformance that never involved a decision. Only chart
+ * once the account has held a position or has an order in flight.
+ */
+export function shouldChartPaperCurve(account: {
+  readonly positions: readonly unknown[];
+  readonly pending_orders?: number;
+  readonly realized_pnl?: number | null;
+} | null): boolean {
+  if (!account) return true;
+  return account.positions.length > 0 || (account.pending_orders ?? 0) > 0 || (account.realized_pnl ?? 0) !== 0;
+}

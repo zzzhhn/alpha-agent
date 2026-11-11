@@ -28,6 +28,8 @@ import { TmButton, TmDisclosureButton, TmLinkButton } from "@/components/tm/TmBu
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { isPicksSnapshotStale } from "@/lib/picks-freshness";
+import { shouldChartPaperCurve } from "@/lib/paper-curve";
+import { TmStatePane } from "@/components/tm/TmStatePane";
 import SimOrderForm from "../SimOrderForm";
 import { Metric, TwoStepConfirm } from "./PaperUi";
 import PaperRecommendations from "./PaperRecommendations";
@@ -209,6 +211,7 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
         ) : null}
       </TmPane>
 
+      {picksFrozen ? <FrozenRecommendations /> : null}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
         <TmPane
           className="min-w-0 lg:border-r lg:border-tm-rule"
@@ -218,12 +221,11 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
           }
         >
           {resourceErrors.picks ? <SectionError detail={resourceErrors.picks} onRetry={() => void loadAll(false)} /> : null}
-          {picksFrozen ? <FrozenRecommendations /> : null}
           {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker ?? null} actionable={!picksFrozen && !refreshing && !resourceErrors.picks} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
         </TmPane>
         <TmPane className="min-w-0" title={t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelectedTicker(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
           <div ref={orderTicket} tabIndex={-1} aria-label={zh ? "模拟下单区" : "Paper order ticket"} className="px-4 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-tm-accent">
-            {loading ? <Loading /> : picksFrozen ? <FrozenRecommendations /> : authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : paperError ? <PaperError detail={paperError} /> : selectedPick && account ? (
+            {loading ? <Loading /> : picksFrozen ? <OrderingPaused market={picksRun?.market_date ?? null} /> : authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : paperError ? <PaperError detail={paperError} /> : selectedPick && account ? (
               <SimOrderForm
                 key={selectedPick.ticker}
                 layout="ticket"
@@ -250,11 +252,11 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
         <TmPane className="min-w-0 lg:border-r lg:border-tm-rule" title={t(locale, "sim.workspace.positions")} meta={accountUnavailable ? "—" : `${account.positions.length} ${zh ? "个标的" : "positions"}`}>
           {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.account ? <SectionError detail={resourceErrors.account} onRetry={() => void loadAll(false)} /> : account ? <>
             {resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : null}
-            <PaperPositionsWithSource positions={account.positions} attribution={attribution} attributionAvailable={!resourceErrors.attribution} pendingOrders={account.pending_orders} onChoose={showOrderTicket} />
+            <PaperPositionsWithSource positions={account.positions} attribution={attribution} attributionAvailable={!resourceErrors.attribution} pendingOrders={account.pending_orders} onChoose={picksFrozen ? undefined : showOrderTicket} chooseDisabledReason={picksFrozen ? (zh ? "推荐快照暂不可交易，下单区已暂停；见页面顶部的快照状态。" : "The recommendation snapshot is not tradable, so the order ticket is paused; see the snapshot status at the top.") : undefined} />
           </> : null}
         </TmPane>
         <TmPane className="min-w-0" title={zh ? "我的模拟净值" : "My paper equity"} meta={curve?.base_date ?? (zh ? "按日估值" : "Daily marks")}>
-          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.curve ? <SectionError detail={resourceErrors.curve} onRetry={() => void loadAll(false)} /> : <PaperCurvePane curve={curve} compact showDisclaimer={false} />}
+          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.curve ? <SectionError detail={resourceErrors.curve} onRetry={() => void loadAll(false)} /> : shouldChartPaperCurve(account) ? <PaperCurvePane curve={curve} compact showDisclaimer={false} /> : <TmStatePane state="empty" title={zh ? "尚无持仓，暂不比较收益" : "No holdings yet, so no return comparison"} description={zh ? "账户一直是现金，净值固定在起点。产生持仓后才与 SPY 在同一起点比较。" : "The account has only held cash, so its value is flat by construction. SPY is compared once a position exists."} className="!min-h-[148px] rounded-none border-0 !bg-transparent" />}
           {!loading && !authRequired ? <><TmDisclosureButton expanded={sourceOpen} onClick={() => setSourceOpen(v => !v)} aria-controls="paper-source-details" label={t(locale, "sim.workspace.source_record")} />{sourceOpen ? <div id="paper-source-details">{resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : <PaperSourceSummary rows={attribution} />}</div> : null}</> : null}
         </TmPane>
       </div>
@@ -296,5 +298,15 @@ function SectionError({ detail, onRetry }: { readonly detail: string; readonly o
 
 function FrozenRecommendations() {
   const { locale } = useLocale();
-  return <p className="mx-3 my-2 rounded-[2px] border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
+  return <p role="status" className="mx-4 my-3 rounded-[2px] border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
+}
+
+function OrderingPaused({ market }: { readonly market: string | null }) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  return <div className="space-y-2 py-4 text-sm leading-6 text-tm-muted">
+    <p className="text-tm-fg-2">{zh ? "下单区已暂停" : "Order ticket paused"}</p>
+    <p>{zh ? `当前推荐快照（市场日 ${market ?? "—"}）未对齐最近完整交易日或未通过健康门槛，不能据此下单。新的合格快照发布后自动恢复；已有持仓与订单不受影响。` : `The current snapshot (market date ${market ?? "—"}) is not aligned with the latest complete session or failed the health gate, so it cannot be traded. Ordering resumes automatically after the next eligible snapshot; existing positions and orders are unaffected.`}</p>
+    <TmLinkButton href="/picks" variant="secondary" size="sm">{zh ? "查看快照状态" : "View snapshot status"}</TmLinkButton>
+  </div>;
 }
