@@ -18,7 +18,9 @@ import { useWatchlist } from "@/hooks/useWatchlist";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
-import RatingBadge from "./RatingBadge";
+import RatingBadge, { type CalibrationBasis } from "./RatingBadge";
+import { useEffect, useState } from "react";
+import { fetchEvolutionCalibration } from "@/lib/api/evolution";
 import ActionBox from "./ActionBox";
 import CompanyProfile from "./CompanyProfile";
 import LeanThesis from "./LeanThesis";
@@ -58,6 +60,20 @@ export default function StockCardLayout({
 }) {
   const { isWatched } = useWatchlist();
   const { timeZone } = useTimezonePreference();
+  // Basis of the calibrated value shown in RatingBadge: the APPLIED map's
+  // sample size, number of output levels and fit date. Public, low-frequency.
+  const [calibration, setCalibration] = useState<CalibrationBasis | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchEvolutionCalibration()
+      .then((value) => {
+        if (!alive) return;
+        const active = value.active ?? (value.applied ? { as_of: value.as_of ?? "", n_pairs: value.n_pairs, levels: value.levels ?? null } : null);
+        setCalibration(active ? { nPairs: active.n_pairs, levels: active.levels, asOf: active.as_of || null } : null);
+      })
+      .catch(() => { if (alive) setCalibration(null); });
+    return () => { alive = false; };
+  }, []);
   const watched = isWatched(card.ticker);
   const { locale } = useLocale();
   // Personal weight override (settings → WeightsEditor): recompute the header
@@ -116,6 +132,7 @@ export default function StockCardLayout({
           confidence={card.confidence}
           agreement={card.agreement}
           composite={shownCard.composite_score}
+          calibration={calibration}
           locale={locale}
         />
         {card.gex_info ? (

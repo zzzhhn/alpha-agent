@@ -11,11 +11,27 @@ const TIER_COLOR: Record<string, string> = {
   SELL: "bg-tm-neg-soft text-tm-neg border-tm-neg",
 };
 
+export interface CalibrationBasis {
+  readonly nPairs: number | null;
+  readonly levels: number | null;
+  readonly asOf: string | null;
+}
+
+/** "95 samples · 4 levels · fitted 2026-11-11" style basis line for the calibrated value. */
+export function calibrationBasisText(basis: CalibrationBasis | null | undefined, locale: Locale): string {
+  if (!basis || basis.nPairs == null || !basis.asOf) return t(locale, "rating.hitrate_basis_unknown");
+  return t(locale, "rating.hitrate_basis")
+    .replace("{n}", String(basis.nPairs))
+    .replace("{levels}", basis.levels == null ? "—" : String(basis.levels))
+    .replace("{date}", basis.asOf.slice(0, 10));
+}
+
 export default function RatingBadge({
   rating,
   confidence,
   agreement,
   composite,
+  calibration,
   locale = "en",
 }: {
   rating: string;
@@ -24,6 +40,8 @@ export default function RatingBadge({
   // Raw signal-agreement (conviction). The primary bar + headline number.
   agreement?: number | null;
   composite: number | null;
+  // Sample size / levels / fit date of the map behind `confidence`.
+  calibration?: CalibrationBasis | null;
   locale?: Locale;
 }) {
   // NaN/Inf were sanitized to null at the storage boundary; coalesce to 0 here.
@@ -82,6 +100,8 @@ export default function RatingBadge({
           <span>{t(locale, "rating.hitrate")}</span>
           <span className="font-mono">{(hit * 100).toFixed(0)}%</span>
         </div>
+        <p className="text-xs leading-4 text-tm-muted">{calibrationBasisText(calibration, locale)}</p>
+        <p className="text-xs leading-4 text-tm-muted">{t(locale, "rating.hitrate_snapshot_note")}</p>
       </div>
     </div>
   );

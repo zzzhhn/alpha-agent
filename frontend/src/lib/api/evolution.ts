@@ -47,8 +47,12 @@ export interface EvolutionCalibration {
   as_of: string | null;
   n_pairs: number;
   applied: boolean;
+  /** Distinct output levels of the latest fit. */
+  levels?: number | null;
   isotonic_map?: { x: number[]; y: number[] };
   buckets: CalibrationBucket[];
+  /** Latest APPLIED map, i.e. what live confidence actually uses. */
+  active?: { as_of: string; n_pairs: number; levels: number | null } | null;
 }
 
 export interface EvolutionChange {

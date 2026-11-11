@@ -10688,7 +10688,7 @@
     },
     "/api/evolution/calibration": {
       "get": {
-        "description": "Most-recent confidence-calibration snapshot (isotonic map + buckets).",
+        "description": "Most-recent confidence-calibration snapshot (isotonic map + buckets).\n\n``active`` describes the latest APPLIED map, which is what the live\nconfidence path uses; the top-level fields keep describing the most recent\nfit attempt (which may be unapplied when the sample was too small).",
         "operationId": "calibration_api_evolution_calibration_get",
         "responses": {
           "200": {

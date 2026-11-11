@@ -122,22 +122,49 @@ async def weights() -> dict[str, Any]:
     }
 
 
+def _level_count(isotonic_map: Any) -> int | None:
+    """Distinct output levels of an isotonic map (how coarse the calibration is)."""
+    if not isinstance(isotonic_map, dict) or not isinstance(isotonic_map.get("y"), list):
+        return None
+    return len({round(float(v), 6) for v in isotonic_map["y"]}) or None
+
+
 @router.get("/calibration")
 async def calibration() -> dict[str, Any]:
-    """Most-recent confidence-calibration snapshot (isotonic map + buckets)."""
+    """Most-recent confidence-calibration snapshot (isotonic map + buckets).
+
+    ``active`` describes the latest APPLIED map, which is what the live
+    confidence path uses; the top-level fields keep describing the most recent
+    fit attempt (which may be unapplied when the sample was too small).
+    """
     pool = await get_db_pool()
     row = await pool.fetchrow(
         "SELECT as_of, isotonic_map, buckets, n_pairs, applied "
         "FROM confidence_calibration ORDER BY as_of DESC LIMIT 1"
     )
     if row is None:
-        return {"as_of": None, "n_pairs": 0, "applied": False, "buckets": []}
+        return {"as_of": None, "n_pairs": 0, "applied": False, "buckets": [], "active": None}
+    active_row = row if row["applied"] else await pool.fetchrow(
+        "SELECT as_of, isotonic_map, n_pairs FROM confidence_calibration "
+        "WHERE applied = true ORDER BY as_of DESC LIMIT 1"
+    )
+    isotonic_map = _decode_jsonb(row["isotonic_map"])
+    active = None
+    if active_row is not None:
+        active_map = isotonic_map if active_row is row else _decode_jsonb(active_row["isotonic_map"])
+        active = {
+            "as_of": active_row["as_of"].isoformat(),
+            "n_pairs": active_row["n_pairs"],
+            "levels": _level_count(active_map),
+        }
     return {
         "as_of": row["as_of"].isoformat(),
         "n_pairs": row["n_pairs"],
         "applied": row["applied"],
-        "isotonic_map": _decode_jsonb(row["isotonic_map"]),
+        "levels": _level_count(isotonic_map),
+        "isotonic_map": isotonic_map,
         "buckets": _decode_jsonb(row["buckets"]),
+        "active": active,
     }
 
 
