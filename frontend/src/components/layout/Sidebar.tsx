@@ -147,7 +147,7 @@ export function Sidebar({
                 {active ? <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 bg-tm-accent" /> : null}
                 <Icon aria-hidden className={clsx("h-4 w-4 shrink-0", active ? "text-tm-accent" : "text-tm-muted group-hover:text-tm-fg-2")} strokeWidth={1.75} />
                 {collapsed ? (
-                  signal ? <span aria-hidden className={clsx("absolute right-1.5 top-1.5 h-1.5 w-1.5", DOT[signal.tone])} /> : null
+                  signal ? <span aria-hidden className={clsx("absolute right-2 top-1.5 h-2 w-2 ring-2 ring-tm-bg", DOT[signal.tone])} /> : null
                 ) : (
                   <>
                     <span className="flex min-w-0 flex-1 flex-col leading-4">
@@ -186,16 +186,17 @@ export function Sidebar({
               </div>
             );
           }
+          // Group headings stay single-language so they never wrap at 200px;
+          // the bilingual name remains available to assistive technology.
           const heading = (
-            <span className="flex min-w-0 items-baseline gap-1.5">
-              <span className="text-xs font-semibold tracking-[0.08em] text-tm-muted">{zh ? group.zh : group.en}</span>
-              <span className="truncate text-xs text-tm-muted/70">{zh ? group.en : group.zh}</span>
+            <span className="min-w-0 truncate text-xs font-semibold tracking-[0.08em] text-tm-muted">
+              {zh ? group.zh : group.en}
             </span>
           );
           if (group.secondary) {
             return (
               <details key={group.id} open={containsActive || undefined}>
-                <summary className="flex cursor-pointer list-none items-center gap-1.5 px-1.5 py-1 text-tm-muted hover:text-tm-fg-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-tm-accent">
+                <summary aria-label={groupLabel} className="flex cursor-pointer list-none items-center gap-1.5 px-1.5 py-1 text-tm-muted hover:text-tm-fg-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-tm-accent">
                   <span aria-hidden className="w-2.5">{containsActive ? "▾" : "▸"}</span>
                   {heading}
                   {groupSignal && !containsActive ? (
