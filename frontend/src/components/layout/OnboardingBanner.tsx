@@ -22,8 +22,8 @@ const DISMISS_KEY = "alphacore.onboarding.dismissed.v1";
 
 export default function OnboardingBanner() {
   const { locale } = useLocale();
-  // Whether the user already has an LLM key, so the banner stops nagging them
-  // to "configure a key" once it's done and points to managing it instead.
+  // useHasByok calls getByok only for an authenticated session. An error
+  // resolves to no key, preserving the existing onboarding fallback.
   const { hasKey, loading: keyLoading } = useHasByok();
   const configured = hasKey && !keyLoading;
   // Start hidden; reveal only after the post-mount localStorage check, so
@@ -47,7 +47,7 @@ export default function OnboardingBanner() {
     }
   }
 
-  if (!show) return null;
+  if (!show || keyLoading || configured) return null;
 
   const copy =
     locale === "zh"
@@ -56,11 +56,9 @@ export default function OnboardingBanner() {
           steps: [
             "在 因子 Alpha (Hypothesis Lab) 用自然语言研究因子",
             "回测 → 保存到 Zoo → 选股 / 浏览今日推荐",
-            configured
-              ? "Rich Brief、分析师视角等 LLM 功能已就绪（API Key 已配置）"
-              : "Rich Brief、分析师视角等 LLM 功能需在 Settings 配置 API Key",
+            "Rich Brief、分析师视角等 LLM 功能需在 Settings 配置 API Key",
           ],
-          settings: configured ? "前往 Settings 管理 Key" : "去 Settings 配置 Key",
+          settings: "去 Settings 配置 Key",
           dismiss: "知道了",
         }
       : {
@@ -68,13 +66,9 @@ export default function OnboardingBanner() {
           steps: [
             "Research factors in natural language in Alpha (Hypothesis Lab)",
             "Backtest → save to Zoo → screen stocks / browse Picks",
-            configured
-              ? "LLM features (Rich Brief, Personas) are ready; your API key is configured"
-              : "LLM features (Rich Brief, Personas) need an API key in Settings",
+            "LLM features (Rich Brief, Personas) need an API key in Settings",
           ],
-          settings: configured
-            ? "Manage key in Settings"
-            : "Configure key in Settings",
+          settings: "Configure key in Settings",
           dismiss: "Got it",
         };
 

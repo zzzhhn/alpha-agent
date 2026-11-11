@@ -29,36 +29,43 @@ function toneClass(score: number | null): string {
   return "bg-tm-muted";
 }
 
+export type MarketContextState =
+  | { status: "loading" | "error" }
+  | { status: "ready"; items: MacroContextItem[] };
+
 export default function MarketContextWidget({ ticker }: { ticker: string }) {
+  // Reset pending/results on navigation; a previous ticker must not leak in.
+  return <MarketContextLoader key={ticker} ticker={ticker} />;
+}
+
+function MarketContextLoader({ ticker }: { ticker: string }) {
   const { locale } = useLocale();
-  const [items, setItems] = useState<MacroContextItem[] | null>(null);
+  const [state, setState] = useState<MarketContextState>({ status: "loading" });
 
   useEffect(() => {
     let cancelled = false;
     fetchMacroContext(ticker, 5)
-      .then((r) => { if (!cancelled) setItems(r.items); })
-      .catch(() => { if (!cancelled) setItems([]); });
+      .then((r) => { if (!cancelled) setState({ status: "ready", items: r.items }); })
+      .catch(() => { if (!cancelled) setState({ status: "error" }); });
     return () => { cancelled = true; };
   }, [ticker]);
 
-  if (items === null) {
-    return (
-      <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
-        <h2 className="text-lg font-semibold mb-2 text-tm-fg">
-          {t(locale, "market_context.title")}
-        </h2>
-        <p className="text-sm text-tm-muted">...</p>
-      </section>
-    );
-  }
+  return <MarketContextContent state={state} locale={locale} />;
+}
 
-  if (items.length === 0) {
+export function MarketContextContent({ state, locale }: { state: MarketContextState; locale: Locale }) {
+  if (state.status !== "ready" || state.items.length === 0) {
+    const message = state.status === "loading"
+      ? (locale === "zh" ? "正在加载宏观事件…" : "Loading macro events…")
+      : state.status === "error"
+        ? (locale === "zh" ? "宏观事件暂时无法加载，请稍后重试。" : "Macro events could not be loaded. Please try again later.")
+        : t(locale, "market_context.empty");
     return (
-      <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
-        <h2 className="text-lg font-semibold mb-2 text-tm-fg">
+      <section aria-busy={state.status === "loading"} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2">
+        <h2 className="text-sm font-semibold text-tm-fg">
           {t(locale, "market_context.title")}
         </h2>
-        <p className="text-sm text-tm-muted">{t(locale, "market_context.empty")}</p>
+        <p role="status" className={`text-xs ${state.status === "error" ? "text-tm-warn" : "text-tm-muted"}`}>{message}</p>
       </section>
     );
   }
@@ -69,7 +76,7 @@ export default function MarketContextWidget({ ticker }: { ticker: string }) {
         {t(locale, "market_context.title")}
       </h2>
       <ul className="space-y-3">
-        {items.map((it) => (
+        {state.items.map((it) => (
           <li key={it.id} className="flex gap-2 text-sm">
             <span className={`mt-1.5 inline-block h-2 w-2 rounded-full ${toneClass(it.sentiment_score)}`} />
             <div className="flex-1">
