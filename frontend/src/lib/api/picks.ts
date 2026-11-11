@@ -55,6 +55,9 @@ export interface RatingCard {
   // aligned the signals are), NOT a hit-rate. May be absent on legacy rows.
   agreement?: number | null;
   composite_score: number | null;
+  rank_score?: number | null;
+  grade_method?: GradeMethod;
+  dimension_missing_reasons?: Record<string, string>;
   as_of: string;
   run_id?: number | null;
   market_date?: string | null;
@@ -151,11 +154,33 @@ export interface PickChange {
 export interface RecommendationChanges {
   available: boolean;
   prior_run_id: number | null;
+  current_market_date?: string | null;
+  prior_market_date?: string | null;
+  prior_generated_at?: string | null;
   turnover: number | null;
   added: PickChange[];
   removed: PickChange[];
   tier_changes: PickChange[];
   reason: string | null;
+}
+
+export interface GradeMethod {
+  version: string;
+  bands: { grade: string; min_z: number | null }[];
+  dimensions: Record<string, string[]>;
+  min_universe: number;
+  flatness_floor: number;
+  definition: string;
+  missing_semantics: string[];
+}
+
+export interface RankScoreMethod {
+  version: string;
+  status: "available" | "unavailable_exploratory_view" | "insufficient_population";
+  population: number;
+  run_id: number | null;
+  sleeve: string | null;
+  definition: string;
 }
 
 export interface PicksResponse {
@@ -167,6 +192,8 @@ export interface PicksResponse {
   tradable: boolean;
   run: RecommendationRunState | null;
   changes: RecommendationChanges | null;
+  rank_score_method?: RankScoreMethod;
+  grade_method?: GradeMethod;
 }
 
 export const fetchPicks = (

@@ -14,6 +14,10 @@
  * the chain didn't load).
  */
 
+import type { GradeMethod } from "@/lib/api/picks";
+import { gradeExplanation } from "@/lib/grade-method";
+import { TmTooltip } from "@/components/tm/TmTooltip";
+import GradeLegend from "@/components/picks/GradeLegend";
 import type { Locale } from "@/lib/i18n";
 
 const GRADE_TONE: Record<string, string> = {
@@ -46,23 +50,20 @@ const DIMENSION_ORDER: string[] = [
 ];
 
 export default function LetterGradeRibbon({
-  grades,
+  grades, scores, method,
   locale,
 }: {
   grades: Record<string, string>;
+  scores?: Record<string, number | null> | null;
+  method?: GradeMethod;
   locale: Locale;
 }) {
   if (!grades || Object.keys(grades).length === 0) return null;
 
-  const tip =
-    locale === "zh"
-      ? "每个维度的字母评级 A+ 到 F,来自 breakdown z-score 按维度聚合后的均值映射。A+ ≥1.5σ,F ≤-1.0σ。"
-      : "Per-dimension letter grade A+ to F, derived from breakdown z-scores averaged within each dimension. A+ ≥1.5σ, F ≤-1.0σ.";
-
   return (
-    <div title={tip} className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-2">
+    <div className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-2">
       <div className="mb-1 text-xs uppercase tracking-wide text-tm-muted font-tm-sans">
-        {locale === "zh" ? "维度评级" : "GRADES"}
+        <GradeLegend method={method} locale={locale} />
       </div>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-3">
         {DIMENSION_ORDER.map((dim) => {
@@ -70,14 +71,12 @@ export default function LetterGradeRibbon({
           const tone = GRADE_TONE[grade] ?? GRADE_TONE["—"];
           const label = DIMENSION_LABELS[dim]?.[locale] ?? dim;
           return (
-            <div
-              key={dim}
-              className={`flex flex-col items-center rounded-[2px] border ${tone} px-1 py-0.5`}
-              title={`${dim}: ${grade}`}
-            >
+            <TmTooltip key={dim} width={280} content={gradeExplanation(label, grade, scores?.[dim], method, locale === "zh")} className="justify-center">
+            <div className={`flex w-full flex-col items-center rounded-[2px] border ${tone} px-1 py-0.5`}>
               <span className="whitespace-nowrap text-xs font-tm-sans text-tm-fg-2">{label}</span>
               <span className="text-sm font-semibold font-tm-sans">{grade}</span>
             </div>
+            </TmTooltip>
           );
         })}
       </div>

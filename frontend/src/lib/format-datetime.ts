@@ -36,3 +36,19 @@ export function formatUtc8DateTime(
 
   return `${yearPrefix}${date} ${time}${seconds} UTC+8`;
 }
+
+
+/** An instant uses the selected IANA zone; exchange session dates remain strings. */
+export function formatZonedDateTime(raw: string | null | undefined, timeZone = "UTC"): string {
+  if (!raw) return "—";
+  const instant = new Date(raw);
+  if (!Number.isFinite(instant.getTime())) return "—";
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(instant);
+    const part = (key: string) => parts.find(p => p.type === key)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")} ${part("hour")}:${part("minute")}`;
+  } catch { return "—"; }
+}

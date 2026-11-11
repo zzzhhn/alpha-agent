@@ -4,6 +4,7 @@ import type { RatingCard } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { buildAttributionDimensions } from "@/lib/attribution-dimensions";
+import GradeLegend from "@/components/picks/GradeLegend";
 import { TmRadarChart } from "@/components/charts/TmRadarChart";
 
 // Fixed radar scale [0, 3] sigma so visualization stays stable across tickers
@@ -31,6 +32,7 @@ export default function AttributionRadar({ card }: { card: RatingCard }) {
 
   return (
     <>
+      <GradeLegend method={card.grade_method} locale={locale} />
       <TmRadarChart
         data={data}
         positiveLabel={t(locale, "radar.bullish")}
