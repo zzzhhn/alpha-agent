@@ -6,6 +6,7 @@ const ROOT = path.resolve("src");
 const CONTROL_TAGS = new Set(["button", "input", "select", "textarea"]);
 const CONTROL_EXCEPTIONS = new Map([
   ["components/ui/SegmentedTabs.tsx", "canonical ARIA tab implementation"],
+  ["app/(dashboard)/factors/page.tsx", "hidden file picker behind a TmButton for factor-library JSON import"],
 ]);
 const TABLE_EXCEPTIONS = new Map([
   ["components/backtest/TmMonthlyReturnsHeatmap.tsx", "semantic year-by-month heatmap matrix"],
@@ -150,6 +151,7 @@ for (const file of collectCssFiles(ROOT)) {
 const unexpectedControls = rawControls.filter(({ rel, tag }) => {
   const reason = CONTROL_EXCEPTIONS.get(rel);
   if (!reason) return true;
+  if (rel === "app/(dashboard)/factors/page.tsx") return tag !== "input";
   return rel !== "components/ui/SegmentedTabs.tsx";
 });
 const unexpectedTables = nativeTables.filter(({ rel }) => !TABLE_EXCEPTIONS.has(rel));

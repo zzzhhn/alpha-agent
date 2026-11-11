@@ -185,6 +185,8 @@ export function HypothesisInputCard(p: Props) {
         />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs tabular-nums text-tm-muted">{p.text.length} {t(locale, "alpha.input.chars" as Parameters<typeof t>[1])}</span>
+          {/* Translation is the only paid step here; the backtest itself does not call a model. */}
+          <span className="text-xs text-tm-muted">{zh ? "翻译会用你的模型密钥调用一次模型（按你的服务商计费）；回测本身不调用模型。" : "Translation calls your configured model once (billed by your provider); the backtest itself does not call a model."}</span>
           <div className="flex flex-wrap items-center gap-2">
           {p.canRerun && (
             <TmButton type="button" variant="secondary" size="md" onClick={p.onRerun} disabled={p.disabled}

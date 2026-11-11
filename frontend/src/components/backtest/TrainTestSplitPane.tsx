@@ -74,7 +74,7 @@ export function TrainTestSplitPane({ currentRun }: Props) {
   return (
     <TmPane
       title="TRAIN/TEST.SPLIT"
-      meta={`split @ ${splitDate} · OOS decay ${(oosDecay * 100).toFixed(0)}%`}
+      meta={`${locale === "zh" ? "训练 / 测试" : "train / test"} ${Math.round((split / Math.max(1, eq.length - 1)) * 100)} / ${100 - Math.round((split / Math.max(1, eq.length - 1)) * 100)} · split @ ${splitDate} · OOS decay ${(oosDecay * 100).toFixed(0)}%`}
     >
       <TmKpiGrid>
         <TmKpi

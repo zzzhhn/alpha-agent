@@ -388,7 +388,7 @@ export default function SettingsPage() {
     </section>
     <section id="settings-section-panel-account" role="tabpanel" aria-labelledby="settings-section-tab-account" hidden={section !== "account"}>
       <TmPane title={zh ? "账户数据" : "Account data"} className="max-w-[980px]" bodyClassName="space-y-6 p-5">
-        <div className="flex flex-wrap items-center gap-4"><TmButton variant="secondary" onClick={()=>void handleExport()} disabled={exportInProgress || deleteInProgress} loading={exportInProgress} loadingLabel={zh ? "导出中…" : "Exporting…"}>{t(locale,"settings.danger.export")}</TmButton><p className="text-sm text-tm-muted">{zh ? "下载账户 JSON 数据包，不删除或重置账户。" : "Download your account JSON bundle without deleting or resetting it."}</p></div>
+        <div className="flex flex-wrap items-center gap-4"><TmButton variant="secondary" onClick={()=>void handleExport()} disabled={exportInProgress || deleteInProgress} loading={exportInProgress} loadingLabel={zh ? "导出中…" : "Exporting…"}>{t(locale,"settings.danger.export")}</TmButton><p className="text-sm text-tm-muted">{zh ? "下载账户 JSON 数据包，不删除或重置账户。不含因子库（只存在本浏览器，请在因子库页单独导出）。" : "Download your account JSON bundle without deleting or resetting it. The factor library lives only in this browser; export it from the Zoo page."}</p></div>
         <div className="space-y-3 border-t border-tm-rule pt-5">
           <h2 className="font-tm-mono text-sm font-semibold text-tm-neg">{t(locale,"settings.danger.delete")}</h2>
           <p className="max-w-[65ch] text-sm leading-6 text-tm-muted">{zh ? "永久删除当前账户及其服务端个人数据。这不是清除凭据，也不是重置模拟仓，执行后无法撤销。" : "Permanently remove your account and its server-side personal data. This is not a credential removal or a paper-account reset, and cannot be undone."}</p>

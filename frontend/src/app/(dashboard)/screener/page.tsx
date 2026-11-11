@@ -270,11 +270,11 @@ export default function ScreenerPage() {
     <TmScreen>
       <WorkbenchHeader
         eyebrow={locale === "zh" ? "研究 · 组合构建" : "Research · portfolio construction"}
-        title={locale === "zh" ? "选股 Screener" : "Stock Screener"}
+        title={locale === "zh" ? "选股" : "Screener"}
         subtitle={locale === "zh" ? "构建组合，审查排名与集中度" : "Build a basket. Review ranks and concentration."}
         statuses={[
           { label: locale === "zh" ? "因子库" : "Zoo", value: String(zoo.length) },
-          { label: locale === "zh" ? "已选择" : "Selected", value: String(selections.length), tone: selections.length ? "positive" : "warning" },
+          { label: locale === "zh" ? "已选择" : "Selected", value: String(selections.length), tone: selections.length ? "positive" : "default" },
           { label: locale === "zh" ? "数据日期" : "As of", value: result?.metadata.as_of_date ?? "—" },
           { label: locale === "zh" ? "校正模式" : "Membership", value: result ? (survivorshipCorrected ? `PIT ${survivorshipAsOf ?? ""}` : "LEGACY") : "—", tone: result ? (survivorshipCorrected ? "positive" : "warning") : "default" },
         ]}

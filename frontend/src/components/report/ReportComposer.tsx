@@ -74,7 +74,7 @@ export function ReportComposer({
   const visibleEntries = entries.slice((currentPage - 1) * 5, currentPage * 5);
 
   return (
-    <TmPane title={zh ? "报告配置" : "Report setup"} meta={running ? (zh ? "正在生成报告" : "Generating report") : sourceName ? (zh ? "当前草稿 · 已载入" : "Current draft · loaded") : (zh ? "S&P 500 · 训练 / 测试 70 / 30" : "S&P 500 · train / test 70 / 30")} className={`report-chrome ${styles.composer}`}>
+    <TmPane title={zh ? "报告配置" : "Report setup"} meta={running ? (zh ? "正在生成报告" : "Generating report") : sourceName ? (zh ? "当前草稿 · 已载入" : "Current draft · loaded") : (zh ? "S&P 500 · 训练 / 测试 70 / 30（本页固定）" : "S&P 500 · train / test 70 / 30 (fixed on this page)")} className={`report-chrome ${styles.composer}`}>
       <div className="grid min-w-0 grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)]">
         <div className="min-w-0 p-4 lg:border-r lg:border-tm-rule">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

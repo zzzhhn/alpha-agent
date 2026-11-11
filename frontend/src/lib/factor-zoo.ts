@@ -226,3 +226,44 @@ export function clearZoo(): void {
 export function isInZoo(expression: string): boolean {
   return readRaw().some((e) => e.expression === expression);
 }
+
+/** Versioned JSON backup of this browser's factor library (export only, no server copy). */
+export function exportZooJson(): string {
+  return JSON.stringify({ format: "alphacore-factor-zoo", version: 1, exported_at: new Date().toISOString(), entries: readRaw() }, null, 2);
+}
+
+/**
+ * Merge a backup into the library. Entries are matched by expression; an
+ * existing entry is kept (never overwritten) so an older backup cannot roll
+ * back newer local edits. Malformed items are skipped and counted.
+ */
+export function importZooJson(text: string): { added: number; skipped: number } {
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { throw new Error("invalid_json"); }
+  const items = Array.isArray(parsed) ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { entries?: unknown }).entries)
+      ? (parsed as { entries: unknown[] }).entries : null;
+  if (!items) throw new Error("invalid_format");
+  const all = readRaw();
+  const known = new Set(all.map((entry) => entry.expression));
+  let added = 0;
+  let skipped = 0;
+  for (const raw of items) {
+    const item = raw as Partial<ZooEntry> | null;
+    if (!item || typeof item.expression !== "string" || !item.expression.trim() || typeof item.name !== "string") { skipped += 1; continue; }
+    if (known.has(item.expression)) { skipped += 1; continue; }
+    all.push({
+      ...item,
+      id: typeof item.id === "string" && item.id ? item.id : generateId(),
+      name: item.name,
+      expression: item.expression,
+      hypothesis: typeof item.hypothesis === "string" ? item.hypothesis : "",
+      savedAt: typeof item.savedAt === "string" && Number.isFinite(Date.parse(item.savedAt)) ? item.savedAt : new Date().toISOString(),
+    } as ZooEntry);
+    known.add(item.expression);
+    added += 1;
+  }
+  if (all.length > MAX_ENTRIES) all.length = MAX_ENTRIES;
+  writeRaw(all);
+  return { added, skipped };
+}
