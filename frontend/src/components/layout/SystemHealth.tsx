@@ -7,7 +7,7 @@ import { apiGet } from "@/lib/api/client";
 import { usePolling } from "@/hooks/usePolling";
 import { useLocale } from "./LocaleProvider";
 import { TmServiceStatus, type ServiceState } from "@/components/tm/TmServiceStatus";
-import { readSystemHealth } from "@/lib/service-health";
+import { readCachedServiceHealth, readSystemHealth, serializeServiceHealthCache, SERVICE_HEALTH_CACHE_KEY } from "@/lib/service-health";
 import type { AlertAttention, NavStatusResponse } from "@/lib/nav-status";
 
 type HealthState = ServiceState;
@@ -35,19 +35,37 @@ const readAttention = () => apiGet<AlertAttention>("/api/alerts/attention", { ti
 
 /** One visible-tab poll shared by topbar and sidebar, not one poll per badge. */
 export function SystemHealthProvider({ children }: { children: ReactNode }) {
-  const { data, error } = usePolling({ fetcher: readSystemHealth, intervalMs: 60_000 });
+  const { data, error, lastUpdated } = usePolling({ fetcher: readSystemHealth, intervalMs: 60_000 });
+  const [cachedHealth, setCachedHealth] = useState<HealthState>("checking");
+  useEffect(() => {
+    // Read after hydration so SSR and the first client render agree. A fresh
+    // cache replaces "checking" immediately on mount while the poll runs.
+    try {
+      setCachedHealth(readCachedServiceHealth(window.sessionStorage.getItem(SERVICE_HEALTH_CACHE_KEY)) ?? "checking");
+    } catch {
+      // Storage may be disabled; the live health read still works.
+    }
+  }, []);
+  useEffect(() => {
+    if (!data || !lastUpdated) return;
+    const cached = serializeServiceHealthCache(data, new Date(lastUpdated).getTime());
+    if (!cached) return;
+    try { window.sessionStorage.setItem(SERVICE_HEALTH_CACHE_KEY, cached); } catch { /* optional cache */ }
+  }, [data, lastUpdated]);
   const nav = usePolling({ fetcher: readNavStatus, intervalMs: NAV_STATUS_INTERVAL_MS });
   const { status: session } = useSession();
   const signedIn = session === "authenticated";
   const alerts = usePolling({ fetcher: readAttention, intervalMs: NAV_STATUS_INTERVAL_MS, enabled: signedIn });
   const [admin, setAdmin] = useState(false);
   useEffect(() => {
+    setAdmin(false);
+    if (!signedIn) return;
     let alive = true;
     apiGet<{ is_admin: boolean }>("/api/user/me")
       .then((me) => { if (alive) setAdmin(me.is_admin === true); })
       .catch(() => { if (alive) setAdmin(false); });
     return () => { alive = false; };
-  }, []);
+  }, [signedIn]);
   const attentionState: NavStatusValue["attentionState"] =
     session === "loading" ? "loading"
       : !signedIn ? "signed_out"
@@ -61,8 +79,8 @@ export function SystemHealthProvider({ children }: { children: ReactNode }) {
     attentionState,
   };
   return (
-    <HealthContext.Provider value={error ? "unknown" : data ?? "checking"}>
-      <AdminContext.Provider value={admin}>
+    <HealthContext.Provider value={error ? "unknown" : data ?? cachedHealth}>
+      <AdminContext.Provider value={signedIn && admin}>
         <NavStatusContext.Provider value={navValue}>{children}</NavStatusContext.Provider>
       </AdminContext.Provider>
     </HealthContext.Provider>

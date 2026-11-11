@@ -1105,7 +1105,7 @@ const translations = {
     "stock_layout.reference": "参考资料",
     /* ActionBox */
     "actionbox.title": "操作建议",
-    "actionbox.partial_hint": "Entry / stop / target 需要 intraday 数据 (ATR、实时价)。该 ticker 当前只走日线 pipeline，暂无 intraday 因子。",
+    "actionbox.partial_hint": "入场价、止损价和目标价需要盘中数据（平均真实波幅与实时价）。该股票目前只有日线数据，暂无盘中因子，因此不给出价位。",
     "actionbox.rr_warning": "R:R<1.5，建议等待更优入场点",
     "actionbox.entry": "入场",
     "actionbox.stop": "止损",
@@ -2854,7 +2854,7 @@ const translations = {
     "stock_layout.reference": "Reference",
     /* ActionBox */
     "actionbox.title": "Action",
-    "actionbox.partial_hint": "Entry / stop / target need intraday data (ATR, live price). This ticker is on the daily pipeline only, no intraday factors yet.",
+    "actionbox.partial_hint": "Entry, stop-loss and target prices require intraday data (ATR and a live price). This stock currently has daily data only and no intraday factors, so price levels are not provided.",
     "actionbox.rr_warning": "R:R<1.5 - wait for better entry",
     "actionbox.entry": "Entry",
     "actionbox.stop": "Stop",

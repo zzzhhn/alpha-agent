@@ -28,55 +28,65 @@ export default function CatalystsBlock({ card }: { card: RatingCard }) {
   const calendar = decodeCalendar(card.breakdown.find((b) => b.signal === "calendar")?.raw);
 
   return (
-    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4 space-y-4">
-      <h2 className="text-lg font-semibold text-tm-fg">{t(locale, "catalysts.title")}</h2>
+    <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-3 space-y-2">
+      <h2 className="text-sm font-semibold text-tm-fg">{t(locale, "catalysts.title")}</h2>
 
       {/* Earnings card */}
       <div>
-        <div className="text-xs text-tm-muted uppercase tracking-wide mb-2">
-          {t(locale, "catalysts.earnings_label")}
-        </div>
         {earnings && earnings.next_date ? (
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <div className="text-tm-fg font-mono">{earnings.next_date}</div>
-              <div className="text-xs text-tm-muted">
-                {earnings.days_until != null
-                  ? `${earnings.days_until} ${t(locale, "catalysts.days_until")}`
-                  : ""}
+          <>
+            <div className="text-xs text-tm-muted uppercase tracking-wide mb-2">
+              {t(locale, "catalysts.earnings_label")}
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div>
+                <div className="text-tm-fg font-mono">{earnings.next_date}</div>
+                <div className="text-xs text-tm-muted">
+                  {earnings.days_until != null
+                    ? `${earnings.days_until} ${t(locale, "catalysts.days_until")}`
+                    : ""}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-tm-muted">{t(locale, "catalysts.eps_estimate")}</div>
+                <div className="text-tm-fg font-mono">
+                  {earnings.eps_estimate != null ? earnings.eps_estimate.toFixed(2) : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-tm-muted">{t(locale, "catalysts.revenue_estimate")}</div>
+                <div className="text-tm-fg font-mono">{fmtCurrency(earnings.revenue_estimate)}</div>
               </div>
             </div>
-            <div>
-              <div className="text-xs text-tm-muted">{t(locale, "catalysts.eps_estimate")}</div>
-              <div className="text-tm-fg font-mono">
-                {earnings.eps_estimate != null ? earnings.eps_estimate.toFixed(2) : "—"}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-tm-muted">{t(locale, "catalysts.revenue_estimate")}</div>
-              <div className="text-tm-fg font-mono">{fmtCurrency(earnings.revenue_estimate)}</div>
-            </div>
-          </div>
+          </>
         ) : (
-          <p className="text-sm text-tm-muted">{t(locale, "catalysts.no_earnings")}</p>
+          <p className="text-xs text-tm-muted">
+            <span className="mr-2">{t(locale, "catalysts.earnings_label")}</span>
+            {t(locale, "catalysts.no_earnings")}
+          </p>
         )}
       </div>
 
       {/* Macro calendar */}
       <div>
-        <div className="text-xs text-tm-muted uppercase tracking-wide mb-2">
-          {t(locale, "catalysts.calendar_label")}
-        </div>
         {calendar.length === 0 ? (
-          <p className="text-sm text-tm-muted">{t(locale, "catalysts.no_calendar")}</p>
+          <p className="text-xs text-tm-muted">
+            <span className="mr-2">{t(locale, "catalysts.calendar_label")}</span>
+            {t(locale, "catalysts.no_calendar")}
+          </p>
         ) : (
-          <ul className="text-xs text-tm-fg-2 space-y-1">
-            {calendar.slice(0, 5).map((evt, i) => (
-              <li key={i} className="font-tm-sans">
-                {typeof evt === "string" ? evt : JSON.stringify(evt)}
-              </li>
-            ))}
-          </ul>
+          <>
+            <div className="text-xs text-tm-muted uppercase tracking-wide mb-2">
+              {t(locale, "catalysts.calendar_label")}
+            </div>
+            <ul className="text-xs text-tm-fg-2 space-y-1">
+              {calendar.slice(0, 5).map((evt, i) => (
+                <li key={i} className="font-tm-sans">
+                  {typeof evt === "string" ? evt : JSON.stringify(evt)}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </section>

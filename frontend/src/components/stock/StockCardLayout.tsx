@@ -37,7 +37,17 @@ import { useWeightsOverride } from "@/hooks/useWeightsOverride";
 import { applyWeightsToCard } from "@/lib/weights-override";
 import { TmScreen } from "@/components/tm/TmPane";
 import { TmLinkButton } from "@/components/tm/TmButton";
-import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
+import { WorkbenchHeader, type WorkbenchStatus } from "@/components/workbench/WorkbenchHeader";
+
+export function stockDataStatus(partial: boolean, stale: boolean, locale: Locale): WorkbenchStatus {
+  return {
+    label: locale === "zh" ? "数据状态" : "Data status",
+    value: stale ? (locale === "zh" ? "需刷新" : "STALE")
+      : partial ? (locale === "zh" ? "部分（仅日线）" : "Partial (daily only)")
+        : (locale === "zh" ? "最新" : "CURRENT"),
+    tone: stale || partial ? "warning" : "positive",
+  };
+}
 
 export default function StockCardLayout({
   card,
@@ -97,11 +107,7 @@ export default function StockCardLayout({
         title={<>{card.ticker} <span className="font-normal text-tm-fg-2">{shownCard.rating}</span></>}
         subtitle={locale === "zh" ? "从组合判断进入单股证据、风险与来源。" : "Inspect single-name evidence, risk, and sources from the portfolio decision."}
         statuses={[
-          {
-            label: locale === "zh" ? "数据状态" : "Data status",
-            value: stale ? (locale === "zh" ? "需刷新" : "STALE") : (locale === "zh" ? "最新" : "CURRENT"),
-            tone: stale ? "warning" : "positive",
-          },
+          stockDataStatus(Boolean(card.partial), stale, locale),
           {
             label: locale === "zh" ? "综合分" : "Composite",
             value: `${composite >= 0 ? "+" : ""}${composite.toFixed(2)}σ`,

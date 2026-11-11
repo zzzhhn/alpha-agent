@@ -43,7 +43,7 @@ function fmtCurrency(v: number | null): string {
 
 // Plausible ranges in each field's RAW backend units. A value outside its
 // range is almost certainly an upstream data error (unit drift, yfinance
-// junk for a given ticker); we hide it behind "—" + a tooltip rather than
+// junk for a given ticker); we hide it behind "—" + a visible reason rather than
 // present it as fact, because one absurd number (a 218% yield, a negative
 // P/E) destroys the page's credibility for any user who knows stocks.
 // NOTE: this catches gross anomalies, not subtly-wrong-but-in-range values
@@ -53,12 +53,12 @@ const SANITY_BOUNDS: Partial<Record<keyof FundamentalsData, readonly [number, nu
   pe_forward: [0.5, 500],
   eps_ttm: [-50, 500],
   dividend_yield: [0, 25], // percent units
-  profit_margin: [-1, 0.6], // ratio units
+  profit_margin: [-5, 1], // ratio units
   debt_to_equity: [0, 2000],
   beta: [-3, 5],
 };
 
-function withinBounds(field: keyof FundamentalsData, v: number | null): boolean {
+export function withinBounds(field: keyof FundamentalsData, v: number | null): boolean {
   if (v == null) return true; // null already renders as "—" via the formatter
   const b = SANITY_BOUNDS[field];
   if (!b) return true;
@@ -121,11 +121,13 @@ export default function FundamentalsBlock({ card }: { card: RatingCard }) {
               {ok ? (
                 <div className="text-base font-mono text-tm-fg">{c.fmt(raw)}</div>
               ) : (
-                <div
-                  className="text-base font-mono text-tm-warn cursor-help"
-                  title={`${t(locale, "fundamentals.anomaly")} (${raw})`}
-                >
-                  ⚠ —
+                <div>
+                  <div className="text-base font-mono text-tm-warn">⚠ —</div>
+                  <p className="text-xs leading-relaxed text-tm-warn">
+                    {locale === "zh"
+                      ? `超出合理范围（原值 ${raw}），已隐藏`
+                      : `Outside the reasonable range (raw value ${raw}); hidden`}
+                  </p>
                 </div>
               )}
             </div>
