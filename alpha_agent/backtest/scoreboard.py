@@ -30,9 +30,15 @@ independent samples; the cumulative numbers are descriptive, not a t-stat.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
+
+from alpha_agent.market_session import next_xnys_session
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +136,7 @@ class Scoreboard:
 async def compute_picks_scoreboard(
     pool, *, top_n: int = 10, days: int = 21, cost_bps: float = 10.0
 ) -> Scoreboard | None:
-    """Reconstruct daily top/bottom baskets from stored signals and score them.
+    """Retrospective: reconstruct daily top/bottom baskets from stored signals.
 
     Returns None when there is not enough realized history (fewer than 3
     evaluated days). One SQL pass: per (date) the composite ranking as stored
@@ -327,4 +333,194 @@ async def compute_picks_scoreboard(
         beta=beta_val,
         alpha_ann=alpha_ann_val,
         alpha_t=alpha_t_val,
+    )
+
+
+@dataclass(frozen=True)
+class ExecutableDayCoverage:
+    snapshot_run_id: int
+    scheduled_for_date: date
+    entry_date: date
+    exit_date: date
+    long_candidate_count: int
+    long_known_count: int
+    short_candidate_count: int
+    short_known_count: int
+    long_coverage: float
+    short_coverage: float
+    evaluated: bool
+
+
+@dataclass(frozen=True)
+class ExecutableScoreboard:
+    days_evaluated: int
+    excluded_days: int
+    top_n: int
+    long_gross_cum: float
+    long_net_cum: float
+    short_gross_cum: float
+    spy_cum: float
+    long_minus_spy: float
+    unknown_count: int
+    candidate_count: int
+    cost_bps_used: float
+    first_entry_date: date
+    last_exit_date: date
+    snapshot_run_ids: list[int]
+    daily_coverage: list[ExecutableDayCoverage]
+    basis: str = "executable_v1"
+
+
+def _executable_interval(run: Mapping[str, Any]) -> tuple[date, date]:
+    published: datetime = run["finished_at"]
+    if published.tzinfo is None:
+        published = published.replace(tzinfo=UTC)
+    publish_date = published.astimezone(ZoneInfo("America/New_York")).date()
+    entry = next_xnys_session(max(run["scheduled_for_date"], publish_date))
+    return entry, next_xnys_session(entry)
+
+
+def compute_executable_scoreboard_from_rows(
+    run_rows: Sequence[Mapping[str, Any]],
+    snapshot_rows: Sequence[Mapping[str, Any]],
+    price_rows: Sequence[Mapping[str, Any]],
+    *, top_n: int = 10, days: int = 21, cost_bps: float = 10.0,
+) -> ExecutableScoreboard | None:
+    """Score immutable published baskets over explicit XNYS close intervals.
+
+    Select the latest ``days`` canonical market dates BEFORE checking prices;
+    incomplete/immature intervals count as exclusions, never as older backfill.
+    Canonical means latest finished_at, then highest run id. Naive publication
+    timestamps are interpreted as UTC (the DB supplies aware timestamptz).
+    Long members have stored ranks 1..top_n; bottom members sort by composite_z,
+    then ticker ascending. ``short_gross_cum`` is the bottom basket's underlying
+    return, as in the retrospective scoreboard, not a short-sale P&L.
+
+    Counts cover both baskets across ALL selected dates, including exclusions
+    (a member in both baskets counts twice). Zero exit closes are known losses;
+    missing/nonfinite/negative closes and nonpositive entry closes are unknown.
+    At least 50% of each nonempty basket and both SPY closes must be known.
+    Run ids and daily coverage include exclusions; date bounds cover only
+    evaluated intervals. Relative wealth compares gross long with SPY.
+    """
+    if top_n < 1 or days < 1 or not math.isfinite(cost_bps) or not 0 <= cost_bps < 10000:
+        raise ValueError("invalid basket size, window or cost")
+    canonical: dict[date, Mapping[str, Any]] = {}
+    for run in run_rows:
+        if (run["run_type"] != "daily_close" or run["status"] != "complete"
+                or run["finished_at"] is None):
+            continue
+        market_date = run["scheduled_for_date"]
+        previous = canonical.get(market_date)
+        if previous is None or (run["finished_at"], run["id"]) > (
+            previous["finished_at"], previous["id"]
+        ):
+            canonical[market_date] = run
+    runs = [canonical[d] for d in sorted(canonical)[-days:]]
+    by_run: dict[int, list[Mapping[str, Any]]] = {run["id"]: [] for run in runs}
+    for row in snapshot_rows:
+        if (row["run_id"] in by_run and row["eligible"] and row["in_universe"]
+                and row["rank"] is not None and row["composite_z"] is not None
+                and math.isfinite(float(row["composite_z"]))):
+            by_run[row["run_id"]].append(row)
+    prices = {
+        (row["ticker"], row["date"]): float(row["close"])
+        for row in price_rows if row["close"] is not None
+    }
+
+    def realized(ticker: str, entry: date, exit_: date) -> float | None:
+        start, end = prices.get((ticker, entry)), prices.get((ticker, exit_))
+        if (start is None or end is None or not math.isfinite(start)
+                or not math.isfinite(end) or start <= 0 or end < 0):
+            return None
+        return end / start - 1.0
+
+    # nav_from_returns semantics, full buy + sell notional, zero slippage.
+    f, s = cost_bps / 10000.0, 0.0
+    round_trip_cost = (f + s + f * s) + (f + s - f * s)
+    long_wealth = net_wealth = short_wealth = spy_wealth = 1.0
+    candidate_count = unknown_count = 0
+    coverage = []
+    evaluated_intervals = []
+    for run in runs:
+        members = by_run[run["id"]]
+        long = [row for row in members if 1 <= row["rank"] <= top_n]
+        short = sorted(members, key=lambda row: (row["composite_z"], row["ticker"]))[:top_n]
+        entry, exit_ = _executable_interval(run)
+        long_known = [r for row in long if (r := realized(row["ticker"], entry, exit_))
+                      is not None]
+        short_known = [r for row in short if (r := realized(row["ticker"], entry, exit_))
+                       is not None]
+        candidate_count += len(long) + len(short)
+        unknown_count += len(long) + len(short) - len(long_known) - len(short_known)
+        long_coverage = len(long_known) / len(long) if long else 0.0
+        short_coverage = len(short_known) / len(short) if short else 0.0
+        spy = realized("SPY", entry, exit_)
+        # A zero-valued benchmark cannot define relative wealth.
+        evaluated = long_coverage >= 0.5 and short_coverage >= 0.5 and spy is not None
+        evaluated = evaluated and spy > -1.0
+        coverage.append(ExecutableDayCoverage(
+            snapshot_run_id=run["id"], scheduled_for_date=run["scheduled_for_date"],
+            entry_date=entry, exit_date=exit_, long_candidate_count=len(long),
+            long_known_count=len(long_known), short_candidate_count=len(short),
+            short_known_count=len(short_known), long_coverage=long_coverage,
+            short_coverage=short_coverage, evaluated=evaluated,
+        ))
+        if not evaluated:
+            continue
+        lr, sr = sum(long_known) / len(long_known), sum(short_known) / len(short_known)
+        long_wealth *= 1.0 + lr
+        net_wealth *= 1.0 + lr - round_trip_cost
+        short_wealth *= 1.0 + sr
+        spy_wealth *= 1.0 + spy
+        evaluated_intervals.append((entry, exit_))
+    if len(evaluated_intervals) < 3:
+        return None
+    return ExecutableScoreboard(
+        days_evaluated=len(evaluated_intervals),
+        excluded_days=len(runs) - len(evaluated_intervals), top_n=top_n,
+        long_gross_cum=long_wealth - 1.0, long_net_cum=net_wealth - 1.0,
+        short_gross_cum=short_wealth - 1.0, spy_cum=spy_wealth - 1.0,
+        long_minus_spy=long_wealth / spy_wealth - 1.0,
+        unknown_count=unknown_count, candidate_count=candidate_count,
+        cost_bps_used=cost_bps, first_entry_date=min(d[0] for d in evaluated_intervals),
+        last_exit_date=max(d[1] for d in evaluated_intervals),
+        snapshot_run_ids=[run["id"] for run in runs], daily_coverage=coverage,
+    )
+
+
+async def compute_executable_scoreboard(
+    pool, *, top_n: int = 10, days: int = 21, cost_bps: float = 10.0,
+) -> ExecutableScoreboard | None:
+    """Load canonical immutable snapshots and bounded prices for the pure core."""
+    runs = await pool.fetch(
+        """
+        SELECT DISTINCT ON (scheduled_for_date)
+               id, scheduled_for_date, run_type, status, finished_at
+        FROM research_run
+        WHERE run_type = 'daily_close' AND status = 'complete' AND finished_at IS NOT NULL
+        ORDER BY scheduled_for_date DESC, finished_at DESC, id DESC
+        LIMIT $1
+        """, days,
+    )
+    if not runs:
+        return None
+    snapshots = await pool.fetch(
+        """
+        SELECT run_id, ticker, eligible, in_universe, rank, composite_z
+        FROM rating_snapshot
+        WHERE run_id = ANY($1::bigint[]) AND eligible AND in_universe
+          AND rank IS NOT NULL AND composite_z IS NOT NULL
+        """, [run["id"] for run in runs],
+    )
+    price_dates = sorted({d for run in runs for d in _executable_interval(run)})
+    tickers = sorted({row["ticker"] for row in snapshots} | {"SPY"})
+    prices = await pool.fetch(
+        """
+        SELECT ticker, date, close FROM daily_prices
+        WHERE ticker = ANY($1::text[]) AND date = ANY($2::date[])
+        """, tickers, price_dates,
+    )
+    return compute_executable_scoreboard_from_rows(
+        runs, snapshots, prices, top_n=top_n, days=days, cost_bps=cost_bps,
     )

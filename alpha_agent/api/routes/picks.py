@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import uuid
+from dataclasses import asdict
 from decimal import Decimal, ROUND_HALF_UP
 from math import isfinite
 from typing import Literal
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.backtest.scoreboard import ExecutableDayCoverage
 from alpha_agent.fusion.attribution import top_drivers, top_drags
 from alpha_agent.fusion.grades import (
     grade_dimensions, score_dimensions, grade_method_metadata, dimension_missing_reasons,
@@ -494,6 +496,25 @@ async def _build_canonical_view(
     )
 
 
+class ExecutableScoreboardResponse(BaseModel):
+    basis: str = "executable_v1"
+    days_evaluated: int
+    excluded_days: int
+    top_n: int
+    long_gross_cum: float
+    long_net_cum: float
+    short_gross_cum: float
+    spy_cum: float
+    long_minus_spy: float
+    unknown_count: int
+    candidate_count: int
+    cost_bps_used: float
+    first_entry_date: date
+    last_exit_date: date
+    snapshot_run_ids: list[int]
+    daily_coverage: list[ExecutableDayCoverage]
+
+
 class ScoreboardResponse(BaseModel):
     """Portfolio-level next-day basket diagnostic for the picks.
 
@@ -531,6 +552,8 @@ class ScoreboardResponse(BaseModel):
     beta: float | None = None
     alpha_ann: float | None = None
     alpha_t: float | None = None
+    basis: str = "retrospective_v0"
+    executable: ExecutableScoreboardResponse | None = None
 
 
 def _safe_float(v: float | None, default: float = 0.0) -> float:
@@ -993,11 +1016,20 @@ async def picks_scoreboard(
     turnover, and cost-adjusted evidence. Returns null (not an error) when
     there is too little realized history. Changes ~once per trading day ->
     cached aggressively at the edge."""
-    from alpha_agent.backtest.scoreboard import compute_picks_scoreboard
+    from alpha_agent.backtest.scoreboard import (
+        compute_executable_scoreboard, compute_picks_scoreboard,
+    )
 
     pool = await get_db_pool()
     sb = await compute_picks_scoreboard(pool, top_n=top_n, days=days)
     set_public_cache(response, s_maxage=3600, swr=86400)
+    executable = None
+    try:
+        result = await compute_executable_scoreboard(pool, top_n=top_n, days=days)
+        if result is not None:
+            executable = ExecutableScoreboardResponse(**asdict(result))
+    except Exception:
+        logger.exception("Executable picks scoreboard failed")
     if sb is None:
         return None
     return ScoreboardResponse(
@@ -1014,4 +1046,5 @@ async def picks_scoreboard(
         beta=sb.beta,
         alpha_ann=sb.alpha_ann,
         alpha_t=sb.alpha_t,
+        executable=executable,
     )
