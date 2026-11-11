@@ -90,7 +90,7 @@ async function fetchFactorLab() {
   const [diagSettled, pendingSettled, allSettled, lessonsSettled, briefingSettled] =
     await Promise.allSettled([
       fetchFactorDiagnostic({ revalidate: 0, tags: ["factor-lab-diagnostic"] }),
-      fetchFactorProposals("pending", { revalidate: 0, tags: ["factor-lab-pending"] }),
+      fetchFactorProposals("pending", { revalidate: 0, tags: ["factor-lab-pending"] }, "expression"),
       fetchFactorProposals(undefined, { revalidate: 0, tags: ["factor-lab-history"] }),
       fetchMiningLessons(20, { revalidate: 0, tags: ["factor-lab-lessons"] }),
       fetchBriefing({ revalidate: 0, tags: ["factor-lab-briefing"] }),
@@ -98,6 +98,8 @@ async function fetchFactorLab() {
   const diagnostic = diagSettled.status === "fulfilled" ? diagSettled.value : null;
   const pending =
     pendingSettled.status === "fulfilled" ? pendingSettled.value.proposals.filter((p) => p.status === "pending") : null;
+  const pendingGroups =
+    pendingSettled.status === "fulfilled" ? pendingSettled.value.groups ?? null : null;
   const all = allSettled.status === "fulfilled" ? allSettled.value.proposals : null;
   const lessons =
     lessonsSettled.status === "fulfilled" ? lessonsSettled.value.lessons : null;
@@ -108,6 +110,7 @@ async function fetchFactorLab() {
   return {
     diagnostic,
     pending,
+    pendingGroups,
     history: all?.filter((p) => p.status !== "pending") ?? null,
     lessons,
     briefing,
@@ -118,7 +121,7 @@ export default async function EvolutionPage() {
   const locale = await getServerLocale();
   const [
     { icTrend, icAnnotations, weights, calibration, changes, proposals, failures },
-    { diagnostic, pending, history, lessons, briefing },
+    { diagnostic, pending, pendingGroups, history, lessons, briefing },
   ] = await Promise.all([fetchAllEvolution(), fetchFactorLab()]);
   const liveExpression = diagnostic?.current_expression ?? "";
 
@@ -128,7 +131,8 @@ export default async function EvolutionPage() {
 
   const zh = locale === "zh";
   const policyPending = proposals?.proposals.filter((proposal) => proposal.status === "pending") ?? null;
-  const review = pendingReviewCounts(policyPending, pending);
+  // Review counts are per distinct expression: 117 rows were 15 expressions.
+  const review = pendingReviewCounts(policyPending, pendingGroups ? pendingGroups.map(() => ({ status: "pending" })) : pending);
 
   return (
     <TmScreen>
@@ -146,7 +150,7 @@ export default async function EvolutionPage() {
       >
         <div id="evolution-review" tabIndex={-1} aria-label={zh ? "审查变化" : "Review changes"} className="grid scroll-mt-3 grid-cols-1 items-start gap-4 border-b border-tm-rule px-4 py-4 lg:px-6 xl:grid-cols-2">
           <div className="min-w-0 space-y-3">
-            <PendingProposalsSection proposals={pending} liveExpression={liveExpression} />
+            <PendingProposalsSection proposals={pending} groups={pendingGroups} liveExpression={liveExpression} />
             <TmPane title={zh ? "策略参数待审" : "Policy proposals"} meta={review.policy?.toString()}>
               {policyPending === null ? <EvolutionUnavailable locale={locale} /> : <ProposalsTable proposals={policyPending} locale={locale} />}
             </TmPane>

@@ -1687,12 +1687,35 @@ export interface paths {
         };
         /**
          * List Proposals
-         * @description List factor proposals. Optional ?status filter. Unauthed read (matches
-         *     the existing /diagnostic and the Phase 2c evolution router precedent).
+         * @description Public proposal list; group=expression adds groups over the newest 500 rows.
+         *
+         *     Without grouping, the existing 200-row response is preserved. Group counts
+         *     and best evidence describe only the bounded, status-filtered result set.
+         *     latest_evidence is the newest member's evidence, including zero-only data.
          */
         get: operations["list_proposals_api_factor_lab_proposals_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/factor-lab/proposals/reject-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Proposals Batch
+         * @description Reject only pending rows, atomically; report other IDs in request order.
+         */
+        post: operations["reject_proposals_batch_api_factor_lab_proposals_reject_batch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5573,6 +5596,11 @@ export interface components {
             /** Request Id */
             request_id?: string | null;
         };
+        /** RejectBatchRequest */
+        RejectBatchRequest: {
+            /** Proposal Ids */
+            proposal_ids: number[];
+        };
         /** ResetResponse */
         ResetResponse: {
             /** Cash */
@@ -9088,12 +9116,50 @@ export interface operations {
         parameters: {
             query?: {
                 status?: string | null;
+                group?: string | null;
             };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_proposals_batch_api_factor_lab_proposals_reject_batch_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectBatchRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

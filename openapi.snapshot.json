@@ -5002,6 +5002,24 @@
         "title": "RefreshResponse",
         "type": "object"
       },
+      "RejectBatchRequest": {
+        "properties": {
+          "proposal_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Proposal Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "proposal_ids"
+        ],
+        "title": "RejectBatchRequest",
+        "type": "object"
+      },
       "ResetResponse": {
         "properties": {
           "cash": {
@@ -11587,7 +11605,7 @@
     },
     "/api/factor-lab/proposals": {
       "get": {
-        "description": "List factor proposals. Optional ?status filter. Unauthed read (matches\nthe existing /diagnostic and the Phase 2c evolution router precedent).",
+        "description": "Public proposal list; group=expression adds groups over the newest 500 rows.\n\nWithout grouping, the existing 200-row response is preserved. Group counts\nand best evidence describe only the bounded, status-filtered result set.\nlatest_evidence is the newest member's evidence, including zero-only data.",
         "operationId": "list_proposals_api_factor_lab_proposals_get",
         "parameters": [
           {
@@ -11604,6 +11622,22 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group"
             }
           }
         ],
@@ -11632,6 +11666,68 @@
           }
         },
         "summary": "List Proposals",
+        "tags": [
+          "factor_lab"
+        ]
+      }
+    },
+    "/api/factor-lab/proposals/reject-batch": {
+      "post": {
+        "description": "Reject only pending rows, atomically; report other IDs in request order.",
+        "operationId": "reject_proposals_batch_api_factor_lab_proposals_reject_batch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reject Proposals Batch Api Factor Lab Proposals Reject Batch Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Proposals Batch",
         "tags": [
           "factor_lab"
         ]

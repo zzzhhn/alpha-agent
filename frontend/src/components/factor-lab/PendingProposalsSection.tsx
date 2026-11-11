@@ -12,18 +12,41 @@ import { TmPagination } from "@/components/tm/TmPagination";
 import { TmButton, TmIconButton } from "@/components/tm/TmButton";
 import { GlossaryTip } from "@/components/zoo/GlossaryTip";
 import { EvolutionUnavailable } from "@/components/evolution/EvolutionUnavailable";
+import { TmDialog } from "@/components/tm/TmDialog";
 import {
   approveFactorProposal,
   rejectFactorProposal,
+  rejectFactorProposalsBatch,
   rollbackFactorProposal,
   type FactorProposal,
+  type FactorProposalGroup,
 } from "@/lib/api/factor-lab";
 
 type RowActionState = "idle" | "approving" | "rejecting";
 
 interface PendingProposalsSectionProps {
   readonly proposals: readonly FactorProposal[] | null;
+  /** Server grouping by canonical expression; null falls back to one row per proposal. */
+  readonly groups?: readonly FactorProposalGroup[] | null;
   readonly liveExpression: string;
+}
+
+/** One reviewable row: the latest proposal of a group plus its group metadata. */
+export interface ProposalRow {
+  readonly proposal: FactorProposal;
+  readonly group: FactorProposalGroup | null;
+}
+
+export function proposalRows(
+  proposals: readonly FactorProposal[],
+  groups: readonly FactorProposalGroup[] | null | undefined,
+): ProposalRow[] {
+  if (!groups || groups.length === 0) return proposals.map((proposal) => ({ proposal, group: null }));
+  const byId = new Map(proposals.map((proposal) => [proposal.id, proposal]));
+  return groups.flatMap((group) => {
+    const proposal = byId.get(group.latest_id);
+    return proposal ? [{ proposal, group }] : [];
+  });
 }
 
 function shortExpr(expr: string, max = 40): string {
@@ -60,6 +83,7 @@ const RISK_CLS: Record<string, string> = {
 
 export function PendingProposalsSection({
   proposals: loadedProposals,
+  groups,
   liveExpression,
 }: PendingProposalsSectionProps) {
   const { locale } = useLocale();
@@ -73,11 +97,31 @@ export function PendingProposalsSection({
     new Map(),
   );
 
+  const [confirmGroup, setConfirmGroup] = useState<FactorProposalGroup | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const rows = proposalRows(proposals, groups);
+
   const pageSize = 5;
-  const pageCount = Math.max(1, Math.ceil(proposals.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   useEffect(() => setPage((value) => Math.min(value, pageCount - 1)), [pageCount]);
   const currentPage = Math.min(page, pageCount - 1);
-  const visible = proposals.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const visible = rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+
+  async function handleRejectGroup(group: FactorProposalGroup) {
+    setBatchBusy(true);
+    try {
+      const result = await rejectFactorProposalsBatch(group.proposal_ids);
+      setConfirmGroup(null);
+      router.refresh();
+      toast.success(locale === "zh"
+        ? `已拒绝 ${result.rejected} 条；记录保留，可在提案历史中查看`
+        : `Rejected ${result.rejected}; records are kept in proposal history`);
+    } catch {
+      toast.error(t(locale, "factorLab.toast.rejectFailed"));
+    } finally {
+      setBatchBusy(false);
+    }
+  }
 
   function toggleExpand(id: number) {
     setExpandedId((current) => current === id ? null : id);
@@ -172,10 +216,18 @@ export function PendingProposalsSection({
     );
   }
 
+  const zh = locale === "zh";
   return (
-    <TmPane title={title} meta={`${proposals.length}`}>
+    <TmPane title={title} meta={groups ? (zh ? `${rows.length} 组 · ${proposals.length} 条` : `${rows.length} groups · ${proposals.length} rows`) : `${proposals.length}`}>
+      {groups ? (
+        <p className="border-b border-tm-rule px-3 py-2 text-xs leading-5 text-tm-muted">
+          {zh
+            ? "同一表达式的重复提案合并为一组。无验证数据的组来自旧版评估，数值全为 0，不代表因子有效。拒绝只改状态，不删除记录。"
+            : "Repeated proposals of one expression are grouped. Groups without validation evidence come from the legacy evaluator (all zeros) and do not show a working factor. Rejecting changes status only; records are kept."}
+        </p>
+      ) : null}
       <div className="divide-y divide-tm-rule">
-        {visible.map((p) => {
+        {visible.map(({ proposal: p, group }) => {
           const isOpen = expandedId === p.id;
           const state = actionState.get(p.id) ?? "idle";
           // FactorProposal has `evidence` (not `metrics`); no hypothesis/justification.
@@ -214,6 +266,16 @@ export function PendingProposalsSection({
                       ev.skeptic.risk_level.toUpperCase()}
                   </span>
                 ) : null}
+                {group && group.count > 1 ? (
+                  <span className="shrink-0 border border-tm-rule px-1.5 py-px font-tm-mono text-xs text-tm-fg-2" title={zh ? `首次 ${group.first_created_at?.slice(0, 10) ?? "—"} · 最近 ${group.last_created_at?.slice(0, 10) ?? "—"}` : `First ${group.first_created_at?.slice(0, 10) ?? "—"} · latest ${group.last_created_at?.slice(0, 10) ?? "—"}`}>
+                    {zh ? `重复 ${group.count} 次` : `${group.count}×`}
+                  </span>
+                ) : null}
+                {group && !group.has_validation_evidence ? (
+                  <span className="shrink-0 border border-tm-warn px-1.5 py-px font-tm-mono text-xs text-tm-warn">
+                    {zh ? "无验证数据" : "No validation evidence"}
+                  </span>
+                ) : null}
                 <span className="shrink-0 font-mono text-xs text-tm-fg-2">
                   <GlossaryTip term="DS">{t(locale, "factorLab.pending.colDS")}</GlossaryTip> {fmtNum(ds, 2)}
                 </span>
@@ -235,6 +297,16 @@ export function PendingProposalsSection({
                 >
                   <span>{t(locale, "factorLab.pending.reject")}</span>
                 </TmButton>
+                {group && group.count > 1 ? (
+                  <TmButton
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => setConfirmGroup(group)}
+                    disabled={!isAdmin || batchBusy}
+                  >
+                    <span>{zh ? `拒绝本组 ${group.count} 条` : `Reject all ${group.count}`}</span>
+                  </TmButton>
+                ) : null}
               </div>
 
               {isOpen ? (
@@ -340,10 +412,36 @@ export function PendingProposalsSection({
           );
         })}
       </div>
+      <TmDialog
+        open={confirmGroup !== null}
+        onClose={() => { if (!batchBusy) setConfirmGroup(null); }}
+        title={zh ? "拒绝本组全部待审提案？" : "Reject every pending proposal in this group?"}
+        closeLabel={zh ? "取消" : "Cancel"}
+        className="max-w-[560px]"
+      >
+        {confirmGroup ? (
+          <div className="space-y-3 text-sm leading-6 text-tm-fg-2">
+            <code className="block break-all font-mono text-xs text-tm-fg">{confirmGroup.canonical_expression}</code>
+            <p>
+              {zh
+                ? `将把 ${confirmGroup.count} 条仍待审的提案标为“已拒绝”。只改状态，不删除记录，也不改动线上因子。`
+                : `Marks ${confirmGroup.count} still-pending proposals as rejected. Status only: nothing is deleted and the live factor is unchanged.`}
+            </p>
+            <div className="flex justify-end gap-2">
+              <TmButton variant="secondary" size="sm" onClick={() => setConfirmGroup(null)} disabled={batchBusy}>
+                {zh ? "取消" : "Cancel"}
+              </TmButton>
+              <TmButton variant="danger" size="sm" loading={batchBusy} onClick={() => void handleRejectGroup(confirmGroup)}>
+                {zh ? `确认拒绝 ${confirmGroup.count} 条` : `Reject ${confirmGroup.count}`}
+              </TmButton>
+            </div>
+          </div>
+        ) : null}
+      </TmDialog>
       <TmPagination
         page={currentPage + 1}
         pageSize={pageSize}
-        totalItems={proposals.length}
+        totalItems={rows.length}
         pageSizeOptions={[pageSize]}
         labels={{
           navigation:
@@ -361,8 +459,8 @@ export function PendingProposalsSection({
           pageSize: locale === "zh" ? "每页" : "PAGE SIZE",
           total: (total) =>
             locale === "zh"
-              ? `已加载 ${total} 条`
-              : `${total} loaded`,
+              ? `${groups ? "共" : "已加载"} ${total} ${groups ? "组" : "条"}`
+              : `${total} ${groups ? "groups" : "loaded"}`,
         }}
         onPageChange={(nextPage) => {
           setPage(nextPage - 1);
