@@ -108,13 +108,17 @@ def assess_alert(
     else:
         confidence, confidence_score = "low", 5
 
+    triage_score = min(
+        100, relevance_score + severity_score + freshness_score + confidence_score,
+    )
+    # Weak informational evidence belongs below the inbox's needs-action gate.
+    if severity == "info" and confidence == "low":
+        triage_score = min(triage_score, 44)
+
     return {
         "severity": severity,
         "relevance": relevance,
-        "triage_score": min(
-            100,
-            relevance_score + severity_score + freshness_score + confidence_score,
-        ),
+        "triage_score": triage_score,
         "freshness_score": freshness_score,
         "confidence_score": confidence_score,
         "confidence": confidence,

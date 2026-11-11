@@ -25,6 +25,8 @@ import { ApiException } from "@/lib/api/client";
 import {
   fetchAlertInbox,
   setAlertState,
+  setAlertStatesBatch,
+  alertMemberIds,
   type AlertInboxItem,
   type AlertInboxResponse,
   type AlertWorkflowStatus,
@@ -229,18 +231,20 @@ export default function AlertWorkbench() {
   ) {
     if (!data) return;
     const previous = item.state;
+    const ids = alertMemberIds(item);
     setBusyId(item.id);
     setData((current) => current ? replaceState(current, item.id, status, snoozeUntil) : current);
     try {
-      const saved = await setAlertState(item.id, {
-        status,
-        snooze_until: snoozeUntil,
-      });
-      setData(current => current ? {...current, alerts: current.alerts.map(row => row.id === item.id ? {...row, state:saved} : row)} : current);
+      // A grouped item stands for every same-day repeat; one decision covers
+      // all of them so an older open member cannot keep the group open.
+      const saved = ids.length > 1
+        ? (await setAlertStatesBatch({ alert_ids: ids, status, snooze_until: snoozeUntil })).states[String(item.id)]
+        : await setAlertState(item.id, { status, snooze_until: snoozeUntil });
+      setData(current => current ? {...current, alerts: current.alerts.map(row => row.id === item.id && saved ? {...row, state:saved} : row)} : current);
       if (withUndo && status !== "open") {
         toast.success(
           status === "resolved"
-            ? (zh ? "已标记为已处理" : "Marked resolved")
+            ? (ids.length > 1 ? (zh ? `已处理本组 ${ids.length} 条` : `Resolved ${ids.length} grouped alerts`) : (zh ? "已标记为已处理" : "Marked resolved"))
             : (zh ? "已稍后提醒" : "Snoozed"),
           {
             duration: 8000,
@@ -449,7 +453,7 @@ export default function AlertWorkbench() {
                       onClick={() => setSelectedId(item.id)}
                       className={`alerts-inbox-row w-full border-l-2 px-4 py-3 text-left transition-colors ${active ? "border-tm-accent bg-tm-accent-soft" : "border-transparent hover:bg-tm-bg-2"}`}
                     >
-                      <div className="flex flex-wrap items-center gap-2"><span className="min-w-16 font-semibold text-lg">{item.ticker}</span><span className={`border px-1.5 py-0.5 text-xs ${SEVERITY_CLASS[item.severity]}`}>{severityLabel(item.severity, locale)}</span><span className="text-xs text-tm-muted">{alertTypeLabel(item, locale)}</span><time dateTime={item.created_at} className="ml-auto shrink-0 text-xs tabular-nums text-tm-muted">{stamp(item.created_at)} · {relativeTime(item.created_at, locale)}</time></div>
+                      <div className="flex flex-wrap items-center gap-2"><span className="min-w-16 font-semibold text-lg">{item.ticker}</span><span className={`border px-1.5 py-0.5 text-xs ${SEVERITY_CLASS[item.severity]}`}>{severityLabel(item.severity, locale)}</span><span className="text-xs text-tm-muted">{alertTypeLabel(item, locale)}</span>{(item.occurrences ?? 1) > 1 ? <span className="border border-tm-rule px-1.5 py-0.5 text-xs text-tm-fg-2" title={zh ? `同一标的同类警报在美东同一天出现 ${item.occurrences} 次，已合并显示` : `${item.occurrences} same-type alerts for this ticker on one New York date, shown as one`}>{zh ? `同日 ${item.occurrences} 次` : `${item.occurrences}× today`}</span> : null}<time dateTime={item.created_at} className="ml-auto shrink-0 text-xs tabular-nums text-tm-muted">{stamp(item.created_at)} · {relativeTime(item.created_at, locale)}</time></div>
                       <p className="mt-1.5 text-sm leading-5 text-tm-fg">{changeSummary(item, locale)}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-tm-muted"><span>{relevanceLabel(item.relevance, locale)}{item.context.recommendation_rank ? ` #${item.context.recommendation_rank}` : ""}</span><span className={item.confidence === "low" ? "text-tm-warn" : ""}>{zh ? "证据" : "Evidence"} {confidenceLabel(item.confidence,locale)} · {item.confidence_score}/100</span><span>{item.source_count} {zh ? "个来源" : "source(s)"}</span><span className="ml-auto">{workflowLabel(item.state.status,locale)}{active ? " · ✓" : ""}</span></div>
                     </TmRowButton>
@@ -478,12 +482,12 @@ export default function AlertWorkbench() {
                   <p className="text-sm leading-6 text-tm-fg">{changeSummary(selected,locale)}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <TmButton disabled={busyId !== null} loading={busyId === selected.id} onClick={()=>void persistState(selected,selected.state.status === "resolved" ? "open" : "resolved")} className="col-span-2">
-                      <CheckCircle2 className="h-3.5 w-3.5" />{selected.state.status === "resolved" ? (zh ? "重新打开" : "Reopen alert") : (zh ? "标记已处理" : "Mark resolved")}
+                      <CheckCircle2 className="h-3.5 w-3.5" />{selected.state.status === "resolved" ? (zh ? "重新打开" : "Reopen alert") : (selected.occurrences ?? 1) > 1 ? (zh ? `一并处理本组 ${selected.occurrences} 条` : `Resolve all ${selected.occurrences} in group`) : (zh ? "标记已处理" : "Mark resolved")}
                     </TmButton>
                     <TmButton disabled={busyId !== null} onClick={()=>void persistState(selected,"snoozed",new Date(Date.now()+4*3600_000).toISOString())} variant="secondary" size="sm"><Clock3 className="h-3 w-3" />{zh ? "稍后 4 小时" : "Snooze 4h"}</TmButton>
                     <TmLinkButton href={`/stock/${selected.ticker}#news`} variant="secondary" size="sm"><ExternalLink className="h-3 w-3" />{zh ? "打开研究" : "Research"}</TmLinkButton>
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-tm-muted">{zh ? "处理后可撤销，不会触发交易。" : "Actions support undo and never place trades."}</p>
+                  <p className="mt-2 text-xs leading-5 text-tm-muted">{(selected.occurrences ?? 1) > 1 ? (zh ? `本组为同一标的、同类、美东同一天的 ${selected.occurrences} 条重复警报（首次 ${stamp(selected.first_seen_at ?? selected.created_at)}）；处理与稍后提醒作用于整组，可撤销。` : `${selected.occurrences} repeats of this ticker and type on one New York date (first ${stamp(selected.first_seen_at ?? selected.created_at)}); actions apply to the whole group and can be undone.`) : null}{zh ? "处理后可撤销，不会触发交易。" : "Actions support undo and never place trades."}</p>
                 </section>
 
                 <section className="border-b border-r border-tm-rule p-4 min-[1680px]:border-r-0">

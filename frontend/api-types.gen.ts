@@ -344,6 +344,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/alerts/state/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Alert States Batch
+         * @description Atomically update 1–200 unique alerts for this user.
+         *
+         *     Any missing alert returns 404 without writes. Revert a decision by calling
+         *     again with status ``open`` (clears snooze_until and resolved_at).
+         */
+        post: operations["set_alert_states_batch_api_alerts_state_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/alerts/{alert_id}/state": {
         parameters: {
             query?: never;
@@ -355,7 +378,7 @@ export interface paths {
         put?: never;
         /**
          * Set Alert State
-         * @description Persist a reversible per-user triage decision.
+         * @description Persist a reversible per-user triage decision; status open reverts it.
          */
         post: operations["set_alert_state_api_alerts__alert_id__state_post"];
         delete?: never;
@@ -3777,6 +3800,29 @@ export interface components {
             /** Window */
             window: number;
         };
+        /** AlertBatchStateRequest */
+        AlertBatchStateRequest: {
+            /** Alert Ids */
+            alert_ids: number[];
+            /** Note */
+            note?: string | null;
+            /** Snooze Until */
+            snooze_until?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "snoozed" | "resolved";
+        };
+        /** AlertBatchStateResponse */
+        AlertBatchStateResponse: {
+            /** States */
+            states: {
+                [key: string]: components["schemas"]["AlertTriageState"];
+            };
+            /** Updated */
+            updated: number;
+        };
         /** AlertContext */
         AlertContext: {
             /** In Position */
@@ -3817,10 +3863,21 @@ export interface components {
             created_at: string;
             /** Dedup Bucket */
             dedup_bucket: number;
+            /** First Seen At */
+            first_seen_at?: string | null;
             /** Freshness Score */
             freshness_score: number;
             /** Id */
             id: number;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /** Member Ids */
+            member_ids?: number[];
+            /**
+             * Occurrences
+             * @default 1
+             */
+            occurrences: number;
             /** Payload */
             payload: {
                 [key: string]: unknown;
@@ -6627,6 +6684,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_alert_states_batch_api_alerts_state_batch_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertBatchStateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertBatchStateResponse"];
                 };
             };
             /** @description Validation Error */

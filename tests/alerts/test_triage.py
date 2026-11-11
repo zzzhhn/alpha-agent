@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from alpha_agent.alerts.triage import assess_alert
 
 
@@ -50,3 +52,27 @@ def test_market_alert_gets_market_relevance_without_portfolio_link():
 
     assert result["relevance"] == "market"
     assert result["triage_score"] == 60
+
+
+@pytest.mark.parametrize(("n_24h", "sources", "expected"), [
+    (12, 1, 44),  # info + low: formerly 70 for a held position
+    (20, 1, 80),  # warning + low retains its full score
+    (30, 1, 90),  # critical + low retains its full score
+    (12, 2, 75),  # info + medium is unchanged
+    (12, 3, 80),  # info + high is unchanged
+])
+def test_alert_info_low_cap_preserves_other_scores(n_24h, sources, expected):
+    now = datetime.now(UTC)
+    result = assess_alert(
+        alert_type="news_velocity",
+        payload={"n_24h": n_24h, "source_count": sources},
+        ticker="AAPL",
+        created_at=now,
+        in_position=True,
+        in_recommendation=False,
+        in_watchlist=False,
+        now=now,
+    )
+    assert result["triage_score"] == expected
+    assert result["freshness_score"] == 20
+    assert result["confidence_score"] == {1: 5, 2: 10, 3: 15}[sources]

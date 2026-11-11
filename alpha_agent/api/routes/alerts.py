@@ -9,11 +9,12 @@ Always returns 200; an empty list is "no alerts yet", not an error.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from alpha_agent.alerts.triage import assess_alert
 from alpha_agent.api.dependencies import get_db_pool
@@ -53,6 +54,10 @@ class AlertTriageState(BaseModel):
 
 
 class AlertInboxItem(Alert):
+    occurrences: int = 1
+    first_seen_at: str | None = None
+    last_seen_at: str | None = None
+    member_ids: list[int] = Field(default_factory=list)
     severity: Literal["critical", "warning", "info"]
     relevance: Literal["position", "recommendation", "market", "watchlist", "record"]
     triage_score: int
@@ -85,6 +90,22 @@ class AlertStateRequest(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+class AlertBatchStateRequest(AlertStateRequest):
+    alert_ids: list[int] = Field(min_length=1, max_length=200)
+
+    @field_validator("alert_ids")
+    @classmethod
+    def unique_alert_ids(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value):
+            raise ValueError("alert_ids must be unique")
+        return value
+
+
+class AlertBatchStateResponse(BaseModel):
+    updated: int
+    states: dict[int, AlertTriageState]
+
+
 class AlertAttentionResponse(BaseModel):
     """Compact private count for the sidebar badge.
 
@@ -105,6 +126,7 @@ class AlertAttentionResponse(BaseModel):
 _ATTENTION_WINDOW = 50
 # Inbox queue boundary: triage_score >= 45 is "needs action".
 _NEEDS_ACTION_SCORE = 45
+_NEW_YORK = ZoneInfo("America/New_York")
 
 
 def _parse_payload(raw):
@@ -285,6 +307,9 @@ async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxRespons
         created_at = row["created_at"]
         if not isinstance(created_at, datetime):
             created_at = datetime.fromisoformat(str(created_at))
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        created_at = created_at.astimezone(UTC)
         payload = _parse_payload(row["payload"])
         payload_dict = payload if isinstance(payload, dict) else {}
         recommendation = recommendations.get(ticker)
@@ -324,6 +349,31 @@ async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxRespons
             ),
         ))
 
+    groups: dict[tuple[str, str, date], list[AlertInboxItem]] = {}
+    for item in items:
+        ny_date = datetime.fromisoformat(item.created_at).astimezone(_NEW_YORK).date()
+        groups.setdefault((item.ticker, item.type, ny_date), []).append(item)
+
+    items = []
+    for members in groups.values():
+        members.sort(key=lambda item: (item.created_at, item.id), reverse=True)
+        representative = members[0]
+        # An older open occurrence keeps the group actionable even when the
+        # newest occurrence is resolved or snoozed. Use that open member's
+        # state so resolved/snoozed timestamps are not attached to an open group.
+        state = next(
+            (member.state for member in members if member.state.status == "open"),
+            representative.state,
+        )
+        items.append(representative.model_copy(update={
+            "occurrences": len(members),
+            "first_seen_at": members[-1].created_at,
+            "last_seen_at": representative.created_at,
+            "member_ids": [member.id for member in members],
+            "triage_score": max(member.triage_score for member in members),
+            "state": state,
+        }))
+
     items.sort(key=lambda item: (item.triage_score, item.created_at), reverse=True)
     open_items = [item for item in items if item.state.status == "open"]
     snoozed_items = [item for item in items if item.state.status == "snoozed"]
@@ -351,24 +401,25 @@ async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxRespons
     )
 
 
-@router.post("/{alert_id}/state", response_model=AlertTriageState)
-async def set_alert_state(
-    alert_id: int,
-    body: AlertStateRequest,
-    user_id: int = Depends(require_user),
-) -> AlertTriageState:
-    """Persist a reversible per-user triage decision."""
-    now = datetime.now(UTC)
+def _validated_snooze_until(body: AlertStateRequest, now: datetime) -> datetime | None:
     snooze_until = body.snooze_until
     if snooze_until is not None and snooze_until.tzinfo is None:
         snooze_until = snooze_until.replace(tzinfo=UTC)
     if body.status == "snoozed":
         if snooze_until is None or snooze_until <= now:
             raise HTTPException(status_code=422, detail="snooze_until must be in the future")
-    pool = await get_db_pool()
-    if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM alert_queue WHERE id=$1)", alert_id):
-        raise HTTPException(status_code=404, detail="alert not found")
-    row = await pool.fetchrow(
+    return snooze_until
+
+
+async def _upsert_alert_state(
+    connection: Any,
+    user_id: int,
+    alert_id: int,
+    body: AlertStateRequest,
+    now: datetime,
+    snooze_until: datetime | None,
+) -> AlertTriageState:
+    row = await connection.fetchrow(
         """
         INSERT INTO alert_triage_state
             (user_id, alert_id, status, snooze_until, resolved_at, note, updated_at)
@@ -395,3 +446,46 @@ async def set_alert_state(
         note=row["note"],
         updated_at=_iso(row["updated_at"]),
     )
+
+
+@router.post("/state/batch", response_model=AlertBatchStateResponse)
+async def set_alert_states_batch(
+    body: AlertBatchStateRequest,
+    user_id: int = Depends(require_user),
+) -> AlertBatchStateResponse:
+    """Atomically update 1–200 unique alerts for this user.
+
+    Any missing alert returns 404 without writes. Revert a decision by calling
+    again with status ``open`` (clears snooze_until and resolved_at).
+    """
+    now = datetime.now(UTC)
+    snooze_until = _validated_snooze_until(body, now)
+    pool = await get_db_pool()
+    async with pool.acquire() as connection, connection.transaction():
+        rows = await connection.fetch(
+            "SELECT id FROM alert_queue WHERE id = ANY($1::bigint[]) FOR KEY SHARE",
+            body.alert_ids,
+        )
+        if len(rows) != len(body.alert_ids):
+            raise HTTPException(status_code=404, detail="alert not found")
+        states = {}
+        for alert_id in body.alert_ids:
+            states[alert_id] = await _upsert_alert_state(
+                connection, user_id, alert_id, body, now, snooze_until,
+            )
+    return AlertBatchStateResponse(updated=len(states), states=states)
+
+
+@router.post("/{alert_id}/state", response_model=AlertTriageState)
+async def set_alert_state(
+    alert_id: int,
+    body: AlertStateRequest,
+    user_id: int = Depends(require_user),
+) -> AlertTriageState:
+    """Persist a reversible per-user triage decision; status open reverts it."""
+    now = datetime.now(UTC)
+    snooze_until = _validated_snooze_until(body, now)
+    pool = await get_db_pool()
+    if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM alert_queue WHERE id=$1)", alert_id):
+        raise HTTPException(status_code=404, detail="alert not found")
+    return await _upsert_alert_state(pool, user_id, alert_id, body, now, snooze_until)
