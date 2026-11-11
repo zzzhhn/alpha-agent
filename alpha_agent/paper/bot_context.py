@@ -30,6 +30,40 @@ def recommendation_evidence(payload):
     }
 
 
+def ranking_context(recommendations, held, top_n, source):
+    """Current snapshot facts, not a reconstruction from previous model prose."""
+    ranks = {r['ticker']: r['rank'] for r in recommendations}
+    top = [r['ticker'] for r in recommendations
+           if type(r['rank']) is int and 1 <= r['rank'] <= top_n]
+    held_set = set(held)
+    top_set = set(top)
+    complete = len(top_set) == top_n
+    return {
+        'research_run_id': source['id'] if source else None,
+        'as_of': str(source['data_asof']) if source and source['data_asof'] else None,
+        'basis': 'current_snapshot_eligible_in_universe',
+        'top_n': top_n, 'top_n_complete': complete, 'top_tickers': top,
+        'held_ranks': {ticker: ranks.get(ticker) for ticker in sorted(held_set)},
+        'held_in_top_n': len(held_set & top_set),
+        'held_outside_top_n': sorted(t for t in held_set
+                                    if type(ranks.get(t)) is int and ranks[t] > top_n),
+        'held_rank_unknown': sorted(t for t in held_set if ranks.get(t) is None),
+        'top_n_not_held': [ticker for ticker in top if ticker not in held_set],
+        'holdings_equal_top_n': held_set == top_set if complete else None,
+    }
+
+
+def decision_history(history):
+    """Preserve outcomes, not self-reinforcing historical price/rank narratives."""
+    return [{
+        'run_id': str(row['id']), 'created_at': row['created_at'], 'status': row['status'],
+        'research_run_id': row.get('research_run_id'),
+        'decision': (unpack(row['result']).get('decision') or {}).get('decision'),
+        'outcome_reason': unpack(row['result']).get('outcome_reason'),
+        'basis': 'historical_decision_not_current_market_evidence',
+    } for row in history]
+
+
 async def quotes_for(tickers, now=None):
     now = now or datetime.now(UTC)
     market = market_session(now)
@@ -94,7 +128,8 @@ async def build_context(pool, run, research_tickers=None):
     notes = await pool.fetch('SELECT ticker,note,metadata,updated_at FROM sim_bot_position_note WHERE account_id=$1 ORDER BY updated_at DESC LIMIT 20', account['id'])
     orders = await pool.fetch("SELECT id,ticker,side,qty,status,accepted_at,expires_at FROM sim_order WHERE account_id=$1 AND status='pending' ORDER BY id LIMIT 40", account['id'])
     history = await pool.fetch(
-        "SELECT id,created_at,status,summary,result FROM sim_bot_run WHERE account_id=$1 AND id<>$2 "
+        "SELECT id,created_at,status,result,context->>'research_run_id' AS research_run_id "
+        "FROM sim_bot_run WHERE account_id=$1 AND id<>$2 "
         "AND status NOT IN ('queued','running') ORDER BY created_at DESC LIMIT 3", account['id'], run['id'])
     prior = []
     if source and rows:
@@ -122,12 +157,12 @@ async def build_context(pool, run, research_tickers=None):
     evidence.update({f"order:{o['id']}": {'ticker': o['ticker'], 'kind': 'order', 'usable_for_new_buy': False} for o in orders})
     missing_research = [t for t in (research_tickers or []) if t not in symbols]
     return {
-        'schema_version': 2, 'context_id': str(run['id']), 'created_at': datetime.now(UTC).isoformat(),
+        'schema_version': 3, 'context_id': str(run['id']), 'created_at': datetime.now(UTC).isoformat(),
         'config_version': run['config_version'], 'market': market_session(),
         'account': book, 'instruments': instruments, 'open_orders': [dict(o) for o in orders],
         'position_memory': [dict(n) for n in notes], 'recommendations': recommendations,
-        'recent_decisions': [{'run_id': str(h['id']), 'created_at': h['created_at'], 'status': h['status'],
-                              'summary': h['summary'][:400], 'outcome_reason': unpack(h['result']).get('outcome_reason')} for h in history],
+        'ranking_context': ranking_context(recommendations, held, config.max_positions, source),
+        'recent_decisions': decision_history(history),
         'evidence_ids': list(evidence), 'evidence_map': evidence, 'quotes': quotes,
         'quote_coverage': {'requested': len(quotes), 'fresh': sum(q['quality'] == 'fresh' for q in quotes.values()),
                            'unavailable': sum(q['quality'] != 'fresh' for q in quotes.values())},

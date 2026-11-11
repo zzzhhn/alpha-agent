@@ -8,8 +8,9 @@ on:
         default: run
         options: [run, market_probe, valuation_refresh]
   schedule:
-    # A second small window catches delayed dispatch. The NYSE calendar
-    # filters ordinary vs half-day close; no every-minute polling.
+    # Best-effort backup clock, NOT a punctuality guarantee. Vercel is the
+    # primary clock. Late arrivals must not backfill an expired trading slot.
+    # NYSE calendar filters ordinary vs half-day close; no extra polling.
     - cron: '2,12 10 * * 1-5'
       timezone: America/New_York
     - cron: '32,42 12,15 * * 1-5'
@@ -39,5 +40,6 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           BOT_SCHEDULE: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
+          BOT_CRON_EXPRESSION: ${{ github.event.schedule }}
           BOT_OPERATION: ${{ inputs.bot_operation || 'run' }}
         run: python3 scripts/run_paper_bot_worker.py
