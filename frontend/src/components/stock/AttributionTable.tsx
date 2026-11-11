@@ -15,6 +15,7 @@ import { useFactorMode } from "@/hooks/useFactorMode";
 import { applyFactorMode } from "@/lib/picks-mode";
 import { useWeightsOverride } from "@/hooks/useWeightsOverride";
 import { applyWeightsToBreakdown } from "@/lib/weights-override";
+import { factorSourceNote, readFactorSource } from "@/lib/factor-source";
 import {
   TmTable,
   TmTableBody,
@@ -256,6 +257,14 @@ export default function AttributionTable({
                     )}
                   />
                 </span>
+                {b.signal === "factor" ? (() => {
+                  const note = factorSourceNote(readFactorSource(b.raw), card.market_date ?? card.as_of ?? null, locale);
+                  return note ? (
+                    <span className={clsx("block text-xs", note.stale ? "text-tm-warn" : "text-tm-muted")}>
+                      {note.text}
+                    </span>
+                  ) : null;
+                })() : null}
               </TmTableCell>
               <TmTableCell numeric textAlign="right" className="px-2 py-1 text-tm-fg">
                 {(() => {

@@ -1124,7 +1124,7 @@ const translations = {
       "仓位百分比 (相对于组合总资金)。\n公式: Kelly_fraction × confidence,限制在 [1%, 10%]\n根据信号置信度动态决定下注大小,避免过度集中。",
     /* Signal row tooltips (AttributionTable) */
     "signal_tooltip.factor":
-      "动量减波动率的横截面 z-score。顶部 toggle 切短线(12d/60d)或长线(252d/126d)。\n数据: factor_engine",
+      "当前生效因子表达式的横截面 z-score。未设置自定义表达式时为动量减波动率（短线 12d/60d，读每日行情；长线 252d/126d）。设置了自定义表达式时按该表达式在冻结研究面板上计算，行下方注明表达式类型与数据截止日。\n数据: factor_engine",
     "signal_tooltip.technicals":
       "RSI、MACD、ATR/价、50/200 日均线距离的等权 z 复合。\n数据: yfinance 日线",
     "signal_tooltip.analyst":
@@ -2838,7 +2838,7 @@ const translations = {
       "Position size as % of portfolio.\nFormula: Kelly_fraction × confidence, clipped to [1%, 10%]\nBet sizing scales with signal confidence to avoid over-concentration.",
     /* Signal row tooltips (AttributionTable) */
     "signal_tooltip.factor":
-      "Cross-sectional z of momentum minus volatility. Top toggle = short (12d/60d) or long (252d/126d).\nData: factor_engine",
+      "Cross-sectional z of the active factor expression. Without a custom expression this is momentum minus volatility (short 12d/60d on daily prices; long 252d/126d). A custom expression is evaluated on the frozen research panel; the note under this row shows the expression type and data date.\nData: factor_engine",
     "signal_tooltip.technicals":
       "Equal-weight z of RSI, MACD, ATR/price and 50/200-day MA distance.\nData: yfinance daily",
     "signal_tooltip.analyst":

@@ -93,6 +93,27 @@ def _resolve_default_expr() -> str:
 DEFAULT_FACTOR_EXPR = _resolve_default_expr()
 
 
+# Provenance of the most recent universe evaluation, so each emitted signal can
+# disclose which expression it used and which panel row (data date) it read.
+# A custom expression is evaluated on the frozen research parquet, not the live
+# daily_prices panel; without this the UI cannot tell the factor is stale.
+# Keyed by expression so the universe-wide long-mode evaluation in the same
+# cron shard cannot overwrite the provenance of the default expression.
+_LAST_EVAL: dict[str, dict[str, object]] = {}
+
+
+def factor_provenance(expr: str, panel, *, live: bool) -> dict[str, object]:
+    """Pure helper: describe the expression and panel row actually evaluated."""
+    dates = getattr(panel, "dates", None)
+    data_date = str(dates[-1])[:10] if dates is not None and len(dates) else None
+    return {
+        "expression": expr,
+        "is_custom": expr not in (SHORT_TERM_FACTOR_EXPR, LONG_TERM_FACTOR_EXPR),
+        "panel": "live_daily_prices" if live else "frozen_research_parquet",
+        "data_date": data_date,
+    }
+
+
 def _evaluate_for_universe(as_of: datetime, expr: str | None = None) -> dict[str, float]:
     """Returns {ticker: z_score} on as_of's date row.
     Wraps factor_engine.kernel.evaluate_cross_section.
@@ -113,10 +134,13 @@ def _evaluate_for_universe(as_of: datetime, expr: str | None = None) -> dict[str
     # parquet (it was ~50 trading days stale). Custom exprs and LONG mode (252d,
     # needs more history than daily_prices holds yet) stay on the parquet.
     panel = None
+    live = False
     if expr == SHORT_TERM_FACTOR_EXPR:
         panel = load_live_panel(min_days=65)
+        live = panel is not None
     if panel is None:
         panel = _load_panel()
+    provenance = factor_provenance(expr, panel, live=live)
     # FactorSpec requires 6 fields beyond expression. Surfaced by F1 smoke
     # against deployed /api/stock/AAPL: factor.raw was always null because
     # FactorSpec(expression=...) raised ValidationError, caught silently by
@@ -133,6 +157,7 @@ def _evaluate_for_universe(as_of: datetime, expr: str | None = None) -> dict[str
         justification="Default factor for Phase 1 fast cron when no user override is provided.",
     )
     scores = evaluate_cross_section(panel, spec, as_of_index=-1)
+    _LAST_EVAL[expr] = provenance
     arr = np.array(list(scores.values()), dtype=float)
     mu, sigma = np.nanmean(arr), np.nanstd(arr)
     if sigma == 0 or np.isnan(sigma):
@@ -147,7 +172,8 @@ def _fetch_info_for(ticker: str) -> dict:
 
 
 def _fetch(ticker: str, as_of: datetime) -> SignalScore:
-    scores = _evaluate_for_universe(as_of)
+    expr = _resolve_default_expr()
+    scores = _evaluate_for_universe(as_of, expr=expr)
     if ticker not in scores:
         raise KeyError(f"{ticker} not in panel universe")
     z = scores[ticker]
@@ -163,7 +189,9 @@ def _fetch(ticker: str, as_of: datetime) -> SignalScore:
 
     return SignalScore(
         ticker=ticker, z=z,
-        raw={"z": z, "fundamentals": fundamentals},
+        # factor_source discloses the evaluated expression and panel data date
+        # (disclosure only; it does not change z or the fusion weights).
+        raw={"z": z, "fundamentals": fundamentals, "factor_source": dict(_LAST_EVAL.get(expr) or {}) or None},
         confidence=0.95, as_of=as_of, source="factor_engine", error=None,
     )
 
