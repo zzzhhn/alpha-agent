@@ -8153,6 +8153,58 @@
         ]
       }
     },
+    "/api/brain/runs/summary": {
+      "get": {
+        "description": "All-time run totals and a 30-day UTC series for the authenticated owner.",
+        "operationId": "get_runs_summary_api_brain_runs_summary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Runs Summary Api Brain Runs Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Runs Summary",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
     "/api/brain/runs/{run_id}/candidates": {
       "get": {
         "description": "Return the generated-candidate audit ledger for one owned run.\n\nA foreign or unknown run is deliberately indistinguishable and returns 404.\nThis prevents candidate-count and expression leakage across authenticated\nusers while retaining stable pagination within the selected run.",

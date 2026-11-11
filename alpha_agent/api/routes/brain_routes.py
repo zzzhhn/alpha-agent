@@ -230,6 +230,16 @@ async def list_runs(
         return {"runs": [], "total": 0}
 
 
+@router.get("/runs/summary")
+async def get_runs_summary(
+    user_id: int = Depends(require_user), pool=Depends(get_db_pool)
+) -> dict:
+    """All-time run totals and a 30-day UTC series for the authenticated owner."""
+    from alpha_agent.brain import store
+
+    return await store.summarize_brain_runs(pool, user_id)
+
+
 @router.get("/runs/{run_id}/candidates")
 async def list_run_candidates(
     run_id: int,

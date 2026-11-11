@@ -26,6 +26,40 @@ import { familyLabel } from "./brain-review";
 
 type AuditFilter = "all" | "selected" | "withheld";
 
+export function BrainStatusLegend({ zh }: { zh: boolean }) {
+  const entries: Array<[string, string]> = [
+    ["passed · 通过", zh ? "通过 BRAIN 绩效检查及本地筛选；不代表未来收益，也不表示已提交。" : "Cleared BRAIN performance checks and local screening; no proof of future returns or submission."],
+    ["flagged · 存疑", zh ? "绩效达标，但相关性、边际贡献或家族名额需复核。" : "Performance gates cleared; correlation, contribution or family capacity needs review."],
+    ["rejected · 淘汰", zh ? "未通过样本内绩效门槛。" : "Did not clear in-sample performance gates."],
+    ["sim_error · 仿真错误", zh ? "仿真请求或结果获取失败，不能据此判断收益。" : "Simulation or result retrieval failed; returns cannot be judged."],
+    ["queued / running", zh ? "等待执行 / 正在执行。" : "Waiting to execute / executing."],
+    ["completed / failed", zh ? "运行结束 / 异常结束；完成不等于存在通过的因子。" : "Run finished / failed; completion does not guarantee a passing factor."],
+    ["screen: pending / screening", zh ? "等待筛选 / 正在筛选。" : "Screen pending / in progress."],
+    ["screen: completed", zh ? "LLM 已完成评分，候选仍需规则筛选和真实仿真。" : "LLM scoring finished; rule screening and real simulation still apply."],
+    ["screen: partial", zh ? "仅返回部分 LLM 评分，其余候选使用规则证据筛选。" : "Partial LLM scores; remaining candidates use rule evidence."],
+    ["screen: timeout / error", zh ? "LLM 超时 / 调用失败，使用规则证据补位。" : "LLM timed out / failed; rule evidence is used as fallback."],
+    ["screen: fallback / fallback_partial", zh ? "规则证据筛选 / 规则筛选但证据不完整。" : "Rule evidence screening / rule screening with incomplete evidence."],
+    ["screen: bypassed / failed / legacy", zh ? "未配置 LLM，跳过模型评分 / 筛选失败 / 旧数据回填。" : "No LLM configured / screening failed / legacy backfill."],
+    ["selected / withheld / generated", zh ? "入选仿真 / 未入选，不占仿真预算 / 已生成，等待筛选。" : "Selected for simulation / withheld, no simulation budget used / generated, awaiting screen."],
+    ["LLM: scored / unscored / unavailable / not_configured", zh ? "已评分 / 未返回评分 / 服务不可用 / 未配置模型；均不是仿真结论。" : "Scored / no score returned / unavailable / not configured; these are not simulation outcomes."],
+  ];
+  return (
+    <details className="w-full font-tm-mono text-xs text-tm-muted">
+      <summary className="w-fit cursor-pointer focus-visible:outline focus-visible:outline-tm-accent">
+        {zh ? "状态图例" : "Status legend"}
+      </summary>
+      <dl className="mt-2 grid gap-2 border border-tm-rule bg-tm-bg-2 p-3 lg:grid-cols-2">
+        {entries.map(([label, description]) => (
+          <div key={label}>
+            <dt className="text-tm-fg">{zh ? label : label.split(" · ")[0]}</dt>
+            <dd className="mt-1 leading-relaxed">{description}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
 const REASON_LABELS: Record<string, [string, string]> = {
   selected: ["入选仿真", "selected"],
   below_evidence_threshold: ["证据分不足", "below evidence floor"],
@@ -378,6 +412,7 @@ export function BrainCandidateAudit({
   return (
     <section aria-label={zh ? "候选审计" : "candidate audit"}>
       <div className="flex flex-wrap items-center gap-2 border-b border-tm-rule px-3 py-2">
+        <BrainStatusLegend zh={zh} />
         <TmToggleGroup<AuditFilter>
           value={filter}
           onChange={(value) => { setFilter(value); setPage(1); }}
