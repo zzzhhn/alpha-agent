@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
-import { TmButton } from "@/components/tm/TmButton";
+import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
 import { TmKpi, TmKpiGrid } from "@/components/tm/TmKpi";
 import { TmPagination } from "@/components/tm/TmPagination";
@@ -22,7 +22,7 @@ import { t } from "@/lib/i18n";
 import { sectorLabel } from "@/lib/sector-label";
 import type { CoverageResponse, OperandCatalogResponse, OperatorInfo, UniverseListResponse } from "@/lib/types";
 
-type Tab = "data" | "operators" | "backtest";
+type Tab = "data" | "operators" | "backtest" | "evidence";
 type OperatorWithSignature = OperatorInfo & { readonly source_snippet?: string };
 type LocalText = { readonly zh: string; readonly en: string };
 const text = (zh: string, en: string): LocalText => ({ zh, en });
@@ -113,7 +113,7 @@ const METRIC_ROWS: readonly MetricRow[] = [
   { category: "REGIME", keyBase: "regime", formula: "Days classified by SPY 60d return: bull >+5%, bear <−5%, sideways otherwise; SR/IC/α reported per regime", ref: "factor_backtest.py:_classify_regimes" },
 ];
 
-const TABS = ["data", "operators", "backtest"] as const;
+const TABS = ["data", "operators", "backtest", "evidence"] as const;
 const UNIVERSE_ID = "SP500_subset";
 const PAGE_SIZE = 10;
 
@@ -216,8 +216,9 @@ export default function MethodologyPage() {
     : activeErrors.length && (tab !== "data" || !hasData) ? text("读取失败", "Unavailable")
     : activeErrors.length || incomplete ? text("数据不完整", "Partial")
     : text("已读取", "Loaded");
-  const sourceLabel = tab === "backtest" ? text("静态定义", "Static definitions") : fetchState;
-  const tone = tab === "backtest" || activeLoading ? "default" : activeErrors.length || incomplete ? "warning" : "positive";
+  const staticTab = tab === "backtest" || tab === "evidence";
+  const sourceLabel = staticTab ? text("静态定义", "Static definitions") : fetchState;
+  const tone = staticTab || activeLoading ? "default" : activeErrors.length || incomplete ? "warning" : "positive";
 
   return (
     <TmScreen className="h-auto min-h-full">
@@ -234,10 +235,10 @@ export default function MethodologyPage() {
           </TmChip>
         ))}
         <TmSubbarSpacer />
-        {tab !== "backtest" && (activeLoading || activeErrors.length > 0 || incomplete) && (
+        {!staticTab && (activeLoading || activeErrors.length > 0 || incomplete) && (
           <TmStatusPill tone={activeErrors.length ? "err" : "warn"}>{fetchState[locale]}</TmStatusPill>
         )}
-        {tab !== "backtest" && (
+        {!staticTab && (
           <TmButton variant="ghost" size="xs" onClick={() => tab === "data" ? loadDataTab(true) : loadOperatorsTab()} disabled={activeLoading}>
             {activeLoading ? t(locale, "methodology.retrying") : activeErrors.length ? t(locale, "methodology.retry") : zh ? "刷新" : "Refresh"}
           </TmButton>
@@ -263,7 +264,35 @@ export default function MethodologyPage() {
         ? <OperatorsTab catalog={catalog} />
         : activeLoading && <TmStatePane state="loading" title={zh ? "正在读取算子目录" : "Loading operator catalog"} />)}
       {tab === "backtest" && <BacktestTab />}
+      {tab === "evidence" && <EvidenceTab />}
     </TmScreen>
+  );
+}
+
+const REPO_DOC = "https://github.com/zzzhhn/alpha-agent/blob/main/docs/research/";
+
+/** P0 trading-methodology status. Static by design: it changes only when the audit is revised. */
+function EvidenceTab() {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const rows: readonly (readonly [string, ReactNode])[] = [
+    [zh ? "当前结论" : "Current verdict", <span key="v" className="font-semibold text-tm-warn">Evidence insufficient</span>],
+    [zh ? "含义" : "Meaning", zh ? "目前不能验证成本后赚钱能力，也不能凭短期亏损判定信号无效。晋升策略、扩大风险预算和盈利宣传均为 No-go。" : "Cost-adjusted profitability cannot be verified yet, and short-term losses do not prove the signal useless. Promoting the strategy, raising risk or claiming profits is No-go."],
+    [zh ? "冻结协议" : "Frozen protocol", "quant-p0-v1.0.0-20261111"],
+    [zh ? "前瞻窗口" : "Forward window", zh ? "2026-11-12 → 2027-11-12，至少 252 个可比交易日；到期前不提前挑窗口、不延长。" : "2026-11-12 → 2027-11-12, at least 252 comparable sessions; no early window picking or extension."],
+    [zh ? "对照组" : "Controls", zh ? "SPY、现金、eligible 等权月度、12–1 动量 Top50 月度；全部含买卖双边成本。" : "SPY, cash, eligible equal-weight monthly and 12–1 momentum Top-50 monthly; all with two-sided costs."],
+    [zh ? "主要已知问题" : "Known issues", zh ? "线上因子信号读 2026-10-30 的冻结面板；快照未记录价格下载时间；成交价与当前价格表因复权不一致；可执行看板首次读数为多头双边成本后 −4.89%，同期 SPY +1.52%（20 个区间，只作描述）。" : "The live factor signal reads a panel frozen at 2026-10-30; snapshots do not record price download time; fills differ from the revised price table; the first executable scoreboard read is −4.89% net long vs SPY +1.52% (20 intervals, descriptive only)."],
+  ];
+  return (
+    <TmPane title={zh ? "交易方法论证据（P0）" : "Trading methodology evidence (P0)"} meta={zh ? "审计 2026-11-11" : "Audit 2026-11-11"}>
+      <dl className="grid grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] gap-x-6 gap-y-3 px-4 py-4 text-sm leading-6">
+        {rows.map(([label, value]) => <div key={String(label)} className="contents"><dt className="text-tm-muted">{label}</dt><dd className="text-tm-fg-2 [overflow-wrap:anywhere]">{value}</dd></div>)}
+      </dl>
+      <div className="flex flex-wrap gap-2 border-t border-tm-rule px-4 py-3">
+        <TmLinkButton href={`${REPO_DOC}2026-11-11-quant-p0-evidence-audit.md`} variant="secondary" size="sm" target="_blank" rel="noreferrer">{zh ? "证据审计" : "Evidence audit"}</TmLinkButton>
+        <TmLinkButton href={`${REPO_DOC}2026-11-11-quant-p0-baseline-protocol.md`} variant="secondary" size="sm" target="_blank" rel="noreferrer">{zh ? "冻结协议" : "Frozen protocol"}</TmLinkButton>
+      </div>
+    </TmPane>
   );
 }
 
