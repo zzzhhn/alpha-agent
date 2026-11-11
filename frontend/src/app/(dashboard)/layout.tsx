@@ -12,7 +12,7 @@
  *   │ Topbar (titlebar: brand · status · toggles)│  ← auto height
  *   ├────────┬─────────────────────────────────┤
  *   │ Sidebar│  <main> (page content)          │  ← flex: 1, scrolls
- *   │ 200px  │                                 │
+ *   │200/56px│                                 │
  *   └────────┴─────────────────────────────────┘
  *
  * Replaces the previous 260px Sidebar + 48px Topbar grid. Page bodies
@@ -25,13 +25,15 @@
  */
 
 import { type ReactNode } from "react";
-import { MobileNav, Sidebar } from "@/components/layout/Sidebar";
+import { cookies } from "next/headers";
 import { Topbar } from "@/components/layout/Topbar";
+import { WorkstationShell } from "@/components/layout/WorkstationShell";
 import { SystemHealthProvider } from "@/components/layout/SystemHealth";
 import { LocaleProvider } from "@/components/layout/LocaleProvider";
 import VersionWatcher from "@/components/layout/VersionWatcher";
 import { ToastProvider, ToastViewport } from "@/components/ui/toast";
 import { getServerLocale } from "@/lib/server-locale";
+import { parseSidebarMode, SIDEBAR_COOKIE } from "@/lib/sidebar-state";
 
 interface DashboardLayoutProps {
   readonly children: ReactNode;
@@ -41,21 +43,14 @@ export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
   const locale = await getServerLocale();
+  const sidebar = parseSidebarMode((await cookies()).get(SIDEBAR_COOKIE)?.value);
   return (
     <ToastProvider>
       <LocaleProvider initialLocale={locale}>
         <SystemHealthProvider>
         <div className="flex h-screen flex-col bg-tm-bg text-tm-fg">
           <Topbar />
-          <MobileNav />
-          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[200px_1fr]">
-            <Sidebar />
-            {/* No padding on <main> — pages render edge-to-edge as
-                workstation screens (TmScreen establishes the bg-tm-bg
-                "floor" itself). Pages still using the legacy layout can
-                add their own px/py inside their root. */}
-            <main className="min-w-0 overflow-y-auto">{children}</main>
-          </div>
+          <WorkstationShell initialSidebar={sidebar}>{children}</WorkstationShell>
         </div>
         <VersionWatcher />
         <ToastViewport />

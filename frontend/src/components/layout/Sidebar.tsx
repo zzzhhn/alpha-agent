@@ -1,176 +1,267 @@
 "use client";
 
 /**
- * Sidebar — workstation lifecycle nav (Variation C, Stage 2).
+ * Sidebar — workstation lifecycle navigation.
  *
- * 200-wide terminal panel with a single LIFECYCLE section (9 items
- * matching the existing routes). Each item:
- *   - 11.5px JetBrains Mono text
- *   - Marker glyph: ▶ for current page, · for others
- *   - Hover: bg-tm-bg-2 + text-tm-fg
- *   - Current: bg-tm-accent-soft + text-tm-accent
+ * Each route shows the active-locale name first and the other locale beneath
+ * it in the existing mono body size; English is never shrunk to fit. A route
+ * shows a status marker only when the shared nav-status contract can explain a
+ * concrete next step (see lib/nav-status.ts); unknown states stay neutral.
  *
- * Routing is unchanged from Stage 1 — same `<Link prefetch>` behavior
- * (explicit `prefetch={true}` was set in the prior phase 11 perf pass
- * to force RSC prefetch on dynamic routes; preserved here).
- *
- * Brand block + locale/theme toggles moved OUT of the sidebar in Stage
- * 2 and now live in the Topbar titlebar above. The footer "system
- * online" pulse stays as a subtle liveness indicator at the bottom.
- *
- * The design's second sidebar section ("FACTORS" — list of recently
- * used factors) is deliberately dropped for now: it duplicates the
- * /factors page and adds maintenance overhead with no clear win at
- * 200px width. Re-evaluate during Stage 3 Factors port.
+ * Desktop users can collapse the panel to a 56px rail. The preference lives in
+ * a cookie read by the server layout, so the first paint already has the right
+ * width; collapsing never remounts the page content (only the grid track
+ * changes), so filters, pagination and scroll position are preserved.
  */
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
+import {
+  BellRing, BookOpen, ChartLine, Cpu, Database, FileText, Filter, FlaskConical,
+  History, Library, ListOrdered, Network, PanelLeftClose, PanelLeftOpen,
+  Settings, Sigma, Wallet, type LucideIcon,
+} from "lucide-react";
 import { useLocale } from "./LocaleProvider";
-import { t } from "@/lib/i18n";
 import SidebarAuthSlot from "./SidebarAuthSlot";
-import { SystemHealthIndicator } from "./SystemHealth";
+import { SystemHealthIndicator, useNavStatus } from "./SystemHealth";
+import { TmTooltip } from "@/components/tm/TmTooltip";
+import { TmIconButton } from "@/components/tm/TmButton";
+import { NAV_GROUPS, isNavActive, navLabels, type NavItem, type NavItemId } from "@/lib/nav-items";
+import {
+  alertsSignal, evolutionSignal, picksSignal, type NavSignal, type NavSignals,
+} from "@/lib/nav-status";
+import type { SidebarMode } from "@/lib/sidebar-state";
 
-interface NavItem {
-  readonly id: string;
-  readonly href: string;
-  readonly labelKey: string;
-}
+const ICONS: Record<NavItemId, LucideIcon> = {
+  picks: ListOrdered, paper: Wallet, alerts: BellRing,
+  alpha: FlaskConical, backtest: ChartLine, screener: Filter, report: FileText,
+  zoo: Library, evolution: History, brain: Cpu,
+  guide: BookOpen, data: Database, methodology: Sigma, reference: Network, settings: Settings,
+};
 
-interface NavGroup {
-  readonly titleKey: string;
-  readonly items: ReadonlyArray<NavItem>;
-  readonly secondary?: boolean;
-}
+const TONE: Record<NavSignal["tone"], string> = {
+  attention: "border-tm-accent/50 text-tm-accent",
+  info: "border-tm-info/50 text-tm-info",
+  warning: "border-tm-warn/60 text-tm-warn",
+  negative: "border-tm-neg/60 text-tm-neg",
+  muted: "border-tm-rule-2 text-tm-muted",
+};
 
-// P2-1: regrouped from a flat LIFECYCLE list into a value-prop information
-// architecture. RESEARCH leads (Alpha / Hypothesis Lab is the platform's
-// differentiator), then DECISIONS (the act-on-it surfaces), then REFERENCE.
-// `id` is informational; the active marker is pathname === item.href.
-const NAV_GROUPS: ReadonlyArray<NavGroup> = [
-  {
-    titleKey: "nav.group.workflow",
-    items: [
-      { id: "picks", href: "/picks", labelKey: "nav.picks" },
-      { id: "paper", href: "/paper", labelKey: "nav.paper" },
-      { id: "alerts", href: "/alerts", labelKey: "nav.alerts" },
-    ],
-  },
-  {
-    titleKey: "nav.group.research",
-    items: [
-      { id: "alpha", href: "/alpha", labelKey: "lifecycle.alpha" },
-      { id: "backtest", href: "/backtest", labelKey: "lifecycle.backtest" },
-      { id: "screener", href: "/screener", labelKey: "lifecycle.screener" },
-      { id: "report", href: "/report", labelKey: "lifecycle.report" },
-    ],
-  },
-  {
-    titleKey: "nav.group.advanced",
-    secondary: true,
-    items: [
-      { id: "zoo", href: "/factors", labelKey: "lifecycle.zoo" },
-      { id: "evolution", href: "/evolution", labelKey: "nav.evolution" },
-      { id: "brain", href: "/brain", labelKey: "nav.brain" },
-    ],
-  },
-  {
-    titleKey: "nav.group.reference",
-    items: [
-      { id: "guide", href: "/guide", labelKey: "lifecycle.guide" },
-      { id: "data", href: "/data", labelKey: "lifecycle.data" },
-      { id: "methodology", href: "/methodology", labelKey: "lifecycle.methodology" },
-      { id: "reference", href: "/reference", labelKey: "lifecycle.reference" },
-      { id: "settings", href: "/settings", labelKey: "lifecycle.settings" },
-    ],
-  },
-];
+const DOT: Record<NavSignal["tone"], string> = {
+  attention: "bg-tm-accent", info: "bg-tm-info", warning: "bg-tm-warn",
+  negative: "bg-tm-neg", muted: "bg-tm-muted",
+};
 
-export function Sidebar() {
-  const pathname = usePathname();
+function useNavSignals(): NavSignals {
   const { locale } = useLocale();
+  const nav = useNavStatus();
+  const signals: NavSignals = {};
+  const picks = picksSignal(nav.status?.picks ?? null, nav.statusFailed, locale);
+  const alerts = alertsSignal(nav.attention, nav.attentionState, locale);
+  const evolution = evolutionSignal(nav.status?.evolution ?? null, nav.statusFailed, locale);
+  // Before the first response settles, show nothing rather than a guess.
+  if (nav.status || nav.statusFailed) {
+    if (picks) signals.picks = picks;
+    if (evolution) signals.evolution = evolution;
+  }
+  if (alerts) signals.alerts = alerts;
+  return signals;
+}
+
+export function Sidebar({
+  mode,
+  onToggle,
+}: {
+  readonly mode: SidebarMode;
+  readonly onToggle: () => void;
+}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const collapsed = mode === "collapsed";
+  const signals = useNavSignals();
+
+  const navigateWithHash = (event: React.MouseEvent<HTMLAnchorElement>, item: NavItem, signal?: NavSignal) => {
+    if (!signal?.hash || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (isNavActive(pathname, item.href)) {
+      const target = document.getElementById(signal.hash);
+      if (target) {
+        target.scrollIntoView({ block: "start" });
+        target.focus({ preventScroll: true });
+        return;
+      }
+    }
+    router.push(`${item.href}#${signal.hash}`);
+  };
+
+  const toggleLabel = collapsed
+    ? (zh ? "展开侧栏 Expand sidebar" : "Expand sidebar 展开侧栏")
+    : (zh ? "收起侧栏 Collapse sidebar" : "Collapse sidebar 收起侧栏");
+  const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
     <aside
-      className="hidden h-full w-[200px] flex-col overflow-y-auto border-r border-tm-rule bg-tm-bg font-tm-mono text-[12px] md:flex"
-      role="navigation"
-      aria-label="Lifecycle navigation"
+      className="hidden h-full min-w-0 flex-col overflow-y-auto overflow-x-hidden border-r border-tm-rule bg-tm-bg font-tm-mono text-[12px] md:flex"
+      aria-label={zh ? "主导航 Main navigation" : "Main navigation 主导航"}
+      data-sidebar={mode}
     >
-      <div className="border-b border-tm-rule p-3 space-y-3">
+      <div className={clsx("flex border-b border-tm-rule", collapsed ? "justify-center py-2" : "justify-end px-2 py-1.5")}>
+        <TmIconButton
+          label={toggleLabel}
+          title={toggleLabel}
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          size="sm"
+          icon={<ToggleIcon aria-hidden className="h-4 w-4" strokeWidth={1.75} />}
+        />
+      </div>
+
+      <nav className={clsx("space-y-2.5 border-b border-tm-rule", collapsed ? "px-1.5 py-3" : "p-3")}>
         {NAV_GROUPS.map((group) => {
-          const containsActive = group.items.some((item) => pathname === item.href);
+          const containsActive = group.items.some((item) => isNavActive(pathname, item.href));
+          const groupSignal = group.items.map((item) => signals[item.id]).find(Boolean);
           const links = group.items.map((item) => {
-            const isActive = pathname === item.href;
-            return (
+            const active = isNavActive(pathname, item.href);
+            const signal = signals[item.id];
+            const { primary, secondary } = navLabels(item, locale);
+            const Icon = ICONS[item.id];
+            const statusText = signal ? `${signal.badge}. ${signal.detail}` : "";
+            const accessibleName = `${primary} ${secondary}${statusText ? `, ${statusText}` : ""}`;
+            const link = (
               <Link
                 key={item.id}
                 href={item.href}
                 prefetch={false}
-                aria-current={isActive ? "page" : undefined}
+                aria-current={active ? "page" : undefined}
+                aria-label={accessibleName}
+                onClick={(event) => navigateWithHash(event, item, signal)}
                 className={clsx(
-                  "flex w-full items-center gap-2 px-1.5 py-1 text-xs transition-colors",
-                  isActive
-                    ? "bg-tm-accent-soft text-tm-accent"
-                    : "text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg",
+                  "group relative flex w-full items-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-tm-accent motion-reduce:transition-none",
+                  collapsed ? "h-9 justify-center" : "min-h-[36px] gap-2 px-1.5 py-0.5",
+                  active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg",
                 )}
               >
-                <span className={clsx("w-[10px] text-center", isActive ? "text-tm-accent" : "text-tm-muted")} aria-hidden="true">
-                  {isActive ? "▶" : "·"}
-                </span>
-                <span>{t(locale, item.labelKey as Parameters<typeof t>[1])}</span>
+                {active ? <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 bg-tm-accent" /> : null}
+                <Icon aria-hidden className={clsx("h-4 w-4 shrink-0", active ? "text-tm-accent" : "text-tm-muted group-hover:text-tm-fg-2")} strokeWidth={1.75} />
+                {collapsed ? (
+                  signal ? <span aria-hidden className={clsx("absolute right-2 top-1.5 h-2 w-2 ring-2 ring-tm-bg", DOT[signal.tone])} /> : null
+                ) : (
+                  <>
+                    <span className="flex min-w-0 flex-1 flex-col leading-4">
+                      <span className="truncate text-xs">{primary}</span>
+                      <span className={clsx("truncate text-xs", active ? "text-tm-accent/70" : "text-tm-muted")}>{secondary}</span>
+                    </span>
+                    {signal ? (
+                      <span aria-hidden className={clsx("shrink-0 border px-1 text-xs leading-4 tabular-nums", TONE[signal.tone])}>
+                        {signal.badge}
+                      </span>
+                    ) : null}
+                  </>
+                )}
               </Link>
             );
+            // Tooltip only where it adds information: the collapsed rail needs
+            // the names; an expanded row needs it only to explain a marker.
+            if (!collapsed && !signal) return link;
+            return (
+              <NavTooltip key={item.id} content={
+                <span className="block">
+                  <span className="block text-tm-fg">{primary} · {secondary}</span>
+                  {signal ? <span className="mt-1 block text-tm-fg-2">{signal.detail}</span> : null}
+                </span>
+              }>
+                {link}
+              </NavTooltip>
+            );
           });
+
+          const groupLabel = zh ? `${group.zh} ${group.en}` : `${group.en} ${group.zh}`;
+          if (collapsed) {
+            return (
+              <div key={group.id} role="group" aria-label={groupLabel} className="space-y-0.5 border-t border-tm-rule pt-2 first:border-t-0 first:pt-0">
+                {links}
+              </div>
+            );
+          }
+          // Group headings stay single-language so they never wrap at 200px;
+          // the bilingual name remains available to assistive technology.
+          const heading = (
+            <span className="min-w-0 truncate text-xs font-semibold tracking-[0.08em] text-tm-muted">
+              {zh ? group.zh : group.en}
+            </span>
+          );
           if (group.secondary) {
             return (
-              <details key={group.titleKey} open={containsActive}>
-                <summary className="cursor-pointer list-none px-1.5 py-1 text-xs font-semibold tracking-[0.12em] text-tm-muted hover:text-tm-fg-2">
-                  {containsActive ? "▾" : "▸"} {t(locale, group.titleKey as Parameters<typeof t>[1])}
+              <details key={group.id} open={containsActive || undefined}>
+                <summary aria-label={groupLabel} className="flex cursor-pointer list-none items-center gap-1.5 px-1.5 py-1 text-tm-muted hover:text-tm-fg-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-tm-accent">
+                  <span aria-hidden className="w-2.5">{containsActive ? "▾" : "▸"}</span>
+                  {heading}
+                  {groupSignal && !containsActive ? (
+                    <span aria-hidden className={clsx("ml-auto h-1.5 w-1.5 shrink-0", DOT[groupSignal.tone])} />
+                  ) : null}
                 </summary>
-                <div className="mt-1">{links}</div>
+                <div className="mt-1 space-y-0.5">{links}</div>
               </details>
             );
           }
           return (
-            <div key={group.titleKey}>
-              <div className="mb-1 px-1.5 text-xs font-semibold tracking-[0.12em] text-tm-muted">
-                {t(locale, group.titleKey as Parameters<typeof t>[1])}
-              </div>
-              {links}
+            <div key={group.id} role="group" aria-label={groupLabel}>
+              <div className="mb-1 px-1.5">{heading}</div>
+              <div className="space-y-0.5">{links}</div>
             </div>
           );
         })}
+      </nav>
+
+      <div className={clsx("mt-auto flex items-center gap-1.5 border-t border-tm-rule py-2 text-xs text-tm-muted", collapsed ? "justify-center px-1" : "px-3")}>
+        <SystemHealthIndicator compact={collapsed} />
       </div>
 
-      <div className="mt-auto flex items-center gap-1.5 border-t border-tm-rule px-3 py-2 text-xs text-tm-muted">
-        <SystemHealthIndicator />
-      </div>
-
-      <SidebarAuthSlot />
+      <SidebarAuthSlot compact={collapsed} />
     </aside>
+  );
+}
+
+/** Tooltip wrapper that keeps the link itself as the only tab stop. */
+function NavTooltip({ content, children }: { readonly content: React.ReactNode; readonly children: React.ReactNode }) {
+  return (
+    <TmTooltip content={content} placement="right" width={260} focusTarget="child" className="flex w-full">
+      {children}
+    </TmTooltip>
   );
 }
 
 export function MobileNav() {
   const pathname = usePathname();
   const { locale } = useLocale();
+  const zh = locale === "zh";
+  const signals = useNavSignals();
   return (
     <details className="relative z-50 border-b border-tm-rule bg-tm-bg md:hidden">
       <summary className="cursor-pointer list-none px-3 py-2 font-tm-mono text-xs uppercase tracking-[0.08em] text-tm-accent">
-        {t(locale, "nav.mobile_menu")}
+        {zh ? "导航菜单 Navigation" : "Navigation 导航菜单"}
       </summary>
-      <nav className="absolute inset-x-0 top-full grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto border-b border-tm-rule bg-tm-bg p-3 shadow-[var(--tm-shadow-floating)]" aria-label={t(locale, "nav.mobile_menu")}>
+      <nav className="absolute inset-x-0 top-full grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto border-b border-tm-rule bg-tm-bg p-3 shadow-[var(--tm-shadow-floating)]" aria-label={zh ? "导航菜单" : "Navigation menu"}>
         {NAV_GROUPS.map((group) => (
-          <div key={group.titleKey}>
-            <div className="mb-1 font-tm-mono text-xs uppercase tracking-[0.1em] text-tm-muted">
-              {t(locale, group.titleKey as Parameters<typeof t>[1])}
+          <div key={group.id}>
+            <div className="mb-1 font-tm-mono text-xs tracking-[0.08em] text-tm-muted">
+              {zh ? group.zh : group.en}
             </div>
             {group.items.map((item) => {
-              const active = pathname === item.href;
+              const active = isNavActive(pathname, item.href);
+              const signal = signals[item.id];
+              const { primary, secondary } = navLabels(item, locale);
               return (
-                <Link key={item.id} href={item.href} prefetch={false} className={clsx("block px-2 py-1.5 font-tm-mono text-xs", active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2")}>
-                  {t(locale, item.labelKey as Parameters<typeof t>[1])}
+                <Link key={item.id} href={item.href} prefetch={false} aria-current={active ? "page" : undefined}
+                  className={clsx("flex items-center justify-between gap-2 px-2 py-1.5 font-tm-mono text-xs", active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2")}>
+                  <span className="min-w-0">
+                    <span className="block truncate">{primary}</span>
+                    <span className="block truncate text-tm-muted">{secondary}</span>
+                  </span>
+                  {signal ? <span className={clsx("shrink-0 border px-1", TONE[signal.tone])}>{signal.badge}</span> : null}
                 </Link>
               );
             })}

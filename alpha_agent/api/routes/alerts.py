@@ -12,7 +12,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from alpha_agent.alerts.triage import assess_alert
@@ -83,6 +83,28 @@ class AlertStateRequest(BaseModel):
     status: Literal["open", "snoozed", "resolved"]
     snooze_until: datetime | None = None
     note: str | None = Field(default=None, max_length=500)
+
+
+class AlertAttentionResponse(BaseModel):
+    """Compact private count for the sidebar badge.
+
+    ``needs_action`` and ``critical`` use exactly the inbox's triage rules over
+    the same bounded window, so the badge and the alerts page agree. It is the
+    open work in that window, not a count of all historical alerts.
+    """
+
+    needs_action: int
+    critical: int
+    window: int
+    newest_at: str | None
+    as_of: str
+    source_status: Literal["fresh", "stale", "empty"]
+
+
+# Same bounded window the alerts workbench loads (AlertWorkbench fetches 50).
+_ATTENTION_WINDOW = 50
+# Inbox queue boundary: triage_score >= 45 is "needs action".
+_NEEDS_ACTION_SCORE = 45
 
 
 def _parse_payload(raw):
@@ -200,6 +222,32 @@ async def alerts_inbox(
 ) -> AlertInboxResponse:
     """Decision-ranked alert inbox for the authenticated user."""
     pool = await get_db_pool()
+    return await _build_inbox(pool, user_id, limit)
+
+
+@router.get("/attention", response_model=AlertAttentionResponse)
+async def alerts_attention(
+    response: Response,
+    user_id: int = Depends(require_user),
+) -> AlertAttentionResponse:
+    """Private pending-work count for the sidebar; never shared-cached."""
+    pool = await get_db_pool()
+    inbox = await _build_inbox(pool, user_id, _ATTENTION_WINDOW)
+    open_items = [item for item in inbox.alerts if item.state.status == "open"]
+    needs = [item for item in open_items if item.triage_score >= _NEEDS_ACTION_SCORE]
+    newest = max((item.created_at for item in inbox.alerts), default=None)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return AlertAttentionResponse(
+        needs_action=inbox.counts.needs_action,
+        critical=sum(item.severity == "critical" for item in needs),
+        window=len(inbox.alerts),
+        newest_at=newest,
+        as_of=inbox.as_of,
+        source_status=inbox.source_status,
+    )
+
+
+async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxResponse:
     rows = await pool.fetch(
         """
         SELECT id, ticker, type, payload, dedup_bucket, created_at
@@ -280,8 +328,10 @@ async def alerts_inbox(
     open_items = [item for item in items if item.state.status == "open"]
     snoozed_items = [item for item in items if item.state.status == "snoozed"]
     counts = AlertInboxCounts(
-        needs_action=sum(item.triage_score >= 45 for item in open_items),
-        watch=len(snoozed_items) + sum(25 <= item.triage_score < 45 for item in open_items),
+        needs_action=sum(item.triage_score >= _NEEDS_ACTION_SCORE for item in open_items),
+        watch=len(snoozed_items) + sum(
+            25 <= item.triage_score < _NEEDS_ACTION_SCORE for item in open_items
+        ),
         record=sum(item.triage_score < 25 for item in open_items),
         resolved=sum(item.state.status == "resolved" for item in items),
     )

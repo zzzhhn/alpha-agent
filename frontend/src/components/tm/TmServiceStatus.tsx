@@ -6,7 +6,7 @@ const TONES: Record<ServiceState, string> = {
   partial: "bg-tm-warn", unknown: "bg-tm-muted",
 };
 
-export function TmServiceStatus({ state, locale }: { state: ServiceState; locale: Locale }) {
+export function TmServiceStatus({ state, locale, compact = false }: { state: ServiceState; locale: Locale; compact?: boolean }) {
   const labels = {
     checking: locale === "zh" ? "检查运行状态" : "Checking status",
     healthy: locale === "zh" ? "系统运行正常" : "System healthy",
@@ -32,6 +32,6 @@ export function TmServiceStatus({ state, locale }: { state: ServiceState; locale
   };
   return <span title={hints[state]} className="inline-flex items-center gap-1.5 text-xs text-tm-muted">
     <span aria-hidden="true" className={`h-1.5 w-1.5 ${TONES[state]}`} />
-    <span role="status">{labels[state]}</span>
+    <span role="status" className={compact ? "sr-only" : undefined}>{labels[state]}</span>
   </span>;
 }
