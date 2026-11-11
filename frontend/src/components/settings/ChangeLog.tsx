@@ -22,6 +22,22 @@ const PAGE_SIZE = 5;
 // Provider changes also require re-entering the matching key; the endpoint rejects them.
 const ROLLBACK_SAFE_FIELDS = new Set(["byok.model", "byok.base_url"]);
 
+const FIELD_LABELS: Record<string, readonly [string, string]> = {
+  "byok.provider": ["模型服务商", "Model provider"],
+  "byok.model": ["模型", "Model"],
+  "byok.base_url": ["模型 API 地址", "Model endpoint"],
+  "byok.api_key": ["模型密钥（不显示内容）", "Model key (value hidden)"],
+  "factor.custom_expression": ["线上因子表达式", "Live factor expression"],
+  "factor.mode": ["因子模式", "Factor mode"],
+  "signal_weights": ["信号权重", "Signal weights"],
+};
+
+/** Readable label for a config field; unknown fields fall back to the raw key. */
+export function changeFieldLabel(field: string, zh: boolean): string {
+  const label = FIELD_LABELS[field];
+  return label ? label[zh ? 0 : 1] : field;
+}
+
 function relTime(iso: string, locale: "zh" | "en"): string {
   const ms = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(ms / 60000);
@@ -132,7 +148,7 @@ export default function ChangeLog({
           <li key={r.id} className="flex min-w-0 items-start gap-3 px-3 py-2 text-xs">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="font-tm-mono text-tm-fg [overflow-wrap:anywhere]">{r.field}</span>
+                <span className="text-tm-fg [overflow-wrap:anywhere]" title={r.field}>{changeFieldLabel(r.field, zh)}</span>
                 <time dateTime={r.changed_at} className="text-tm-muted">{relTime(r.changed_at, locale)}</time>
                 {r.source === "rollback" ? <span className="bg-tm-warn/20 px-1.5 text-tm-warn">
                   {zh ? "回滚" : "Rollback"}{r.rollback_of !== null ? ` #${r.rollback_of}` : ""}
