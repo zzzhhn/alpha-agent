@@ -50,7 +50,9 @@ export default function DataPage() {
         title={zh ? "数据" : "Data"}
         subtitle={zh ? "核验股票池、字段覆盖与数据来源。" : "Verify universe, field coverage, and provenance."}
         statuses={active ? [{
-          label: zh ? "样本截止" : "Sample through",
+          // The bundled research panel (backtest, screener, factor validation)
+          // is frozen; live recommendations use daily feeds shown under sources.
+          label: zh ? "研究面板截止" : "Research panel through",
           value: active.end_date || "—",
         }] : undefined}
       />
@@ -67,6 +69,11 @@ export default function DataPage() {
         </TmButton>
       </TmSubbar>
 
+      <p className="border-b border-tm-rule px-4 py-2 text-xs leading-5 text-tm-muted">
+        {zh
+          ? "本页上半部分是仓库内的研究面板（回测、选股、报告和因子验证使用），截止日期固定，需要重新打包才会更新。今日推荐与模拟仓使用下方“数据来源”中的每日行情，两者日期不同是正常的。"
+          : "The upper part of this page is the bundled research panel used by Backtest, Screener, Report and factor validation; its end date is fixed until the bundle is rebuilt. Picks and paper trading use the daily feeds under Data sources, so the two dates differ by design."}
+      </p>
       <DataRequestState locale={locale} label={zh ? "股票池" : "universes"} request={universes} />
       {active ? (
         <>

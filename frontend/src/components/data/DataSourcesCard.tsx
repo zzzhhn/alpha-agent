@@ -6,6 +6,8 @@ import { TmPane } from "@/components/tm/TmPane";
 import { TmTable, TmTableFrame } from "@/components/tm/TmTable";
 import { fetchDataSources, type DataSourceStat } from "@/lib/api/data_sources";
 import { DataRequestState, useDataRequest } from "./DataControls";
+import { useTimezonePreference } from "@/hooks/useTimezonePreference";
+import { formatZonedDateTime } from "@/lib/format-datetime";
 
 const SOURCES = [
   { name: "yfinance", key: "yfinance", feeds: "data.src.yf", cadence: "data.cadence.intraday" },
@@ -22,6 +24,7 @@ export function DataSourcesCard({ version }: { version: number }) {
   const zh = locale === "zh";
   const title = zh ? "数据来源" : "Data sources";
   const request = useDataRequest("sources", version, readSources);
+  const { timeZone } = useTimezonePreference();
 
   return (
     <TmPane title={title} meta={zh ? `${SOURCES.length} 个来源` : `${SOURCES.length} sources`}>
@@ -40,7 +43,7 @@ export function DataSourcesCard({ version }: { version: number }) {
               <th scope="row" className="break-words px-2 py-2 font-tm-mono font-semibold text-tm-fg sm:px-3">{source.name}</th>
               <td className="break-words px-2 py-2 text-tm-fg-2 sm:px-3">{t(locale, source.feeds)}</td>
               <td className="break-words px-2 py-2 text-tm-muted sm:px-3">{source.cadence ? t(locale, source.cadence) : zh ? "按需拉取" : "On demand"}</td>
-              <td className="break-words px-2 py-2 sm:px-3"><Observation stat={request.data?.[source.key]} locale={locale} tickers={source.key === "yfinance"} /></td>
+              <td className="break-words px-2 py-2 sm:px-3"><Observation stat={request.data?.[source.key]} locale={locale} tickers={source.key === "yfinance"} timeZone={timeZone} /></td>
             </tr>
           ))}
         </tbody>
@@ -49,9 +52,9 @@ export function DataSourcesCard({ version }: { version: number }) {
   );
 }
 
-function Observation({ stat, locale, tickers }: { stat: DataSourceStat | null | undefined; locale: Locale; tickers: boolean }) {
+function Observation({ stat, locale, tickers, timeZone }: { stat: DataSourceStat | null | undefined; locale: Locale; tickers: boolean; timeZone: string }) {
   const zh = locale === "zh";
-  if (stat === null) return <span className="text-tm-muted">{zh ? "未返回时间戳" : "No timestamp returned"}</span>;
+  if (stat === null) return <span className="text-tm-muted">{zh ? "未记录（按需拉取，不入库）" : "Not recorded (fetched on demand, not stored)"}</span>;
   if (stat?.error) return <span className="text-tm-warn">{zh ? "观测不可用" : "Observation unavailable"}</span>;
   if (!stat) return <span className="text-tm-muted">—</span>;
   const timestamp = stat.last_fetched_at ? new Date(stat.last_fetched_at) : null;
@@ -60,7 +63,7 @@ function Observation({ stat, locale, tickers }: { stat: DataSourceStat | null | 
   return (
     <span className="flex flex-wrap items-baseline gap-x-2 font-tm-mono tabular-nums">
       <span className="text-tm-fg">{stat.rows === null ? "—" : `${stat.rows.toLocaleString()} ${unit}`}</span>
-      {utc ? <time className="text-tm-muted" dateTime={utc} title={utc}>{utc.slice(0, 10)} {utc.slice(11, 16)} UTC</time> : <span className="text-tm-muted">—</span>}
+      {utc ? <time className="text-tm-muted" dateTime={utc} title={utc}>{formatZonedDateTime(utc, timeZone)} · {timeZone}</time> : <span className="text-tm-muted">—</span>}
     </span>
   );
 }
