@@ -364,7 +364,7 @@ async def _build_canonical_view(
             SELECT * FROM research_run
             WHERE run_type=$1 AND status='complete' AND id<>$2
               AND scheduled_for_date < $3
-              AND (($4 = 'short' AND weight_policy_id IS NOT DISTINCT FROM $5)
+              AND (($4 = 'short' AND weight_policy_id=$5)
                    OR ($4 = 'long' AND EXISTS (SELECT 1 FROM rating_snapshot rs
                        WHERE rs.run_id=research_run.id AND rs.eligible
                          AND rs.user_visible_payload_json->'_mode_payloads'->'long'->>'policy_id'=$6)))

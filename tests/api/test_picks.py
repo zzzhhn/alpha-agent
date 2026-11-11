@@ -253,3 +253,17 @@ async def test_search_has_no_percentile_population(client_with_db, applied_db):
     assert body['rank_score_method']['status'] == 'unavailable_exploratory_view'
     assert all(card['rank_score'] is None for card in body['picks'])
     assert all(card['dimension_scores'] is not None for card in body['picks'])
+
+
+async def test_changes_do_not_infer_same_policy_from_missing_ids(client_with_db, applied_db):
+    first = await _seed_canonical_run(applied_db, market_date=date(2026, 11, 9))
+    second = await _seed_canonical_run(applied_db, market_date=date(2026, 11, 10))
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute('UPDATE research_run SET weight_policy_id=NULL WHERE id=ANY($1::bigint[])', [first, second])
+    finally:
+        await conn.close()
+    changes = client_with_db.get('/api/picks/lean').json()['changes']
+    assert changes['available'] is False
+    assert changes['prior_run_id'] is None
+    assert changes['prior_market_date'] is None
