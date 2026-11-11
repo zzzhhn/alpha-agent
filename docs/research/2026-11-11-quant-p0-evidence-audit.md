@@ -229,3 +229,41 @@ COMMIT;
 ## 本地验证回执
 
 `PYTHONPATH=.`确认`alpha_agent`与`research_eval`均解析到本worktree；指定pytest **23 passed**，指定ruff **All checks passed**。pytest只有仓库既有asyncio fixture loop scope未配置的deprecation warning；没有改全局配置。额外以显式2023-10-30→2027-11-12范围的离线XNYS日历确认前瞻窗口252sessions；现有`market_session`默认日历范围截至2027-11-11，不能用它的默认边界悄悄截掉未来最后一天。未执行数据库测试，故不需要pg_ctl参数。
+
+## 补记（2026-11-11 晚）：生产只读 SQL 结果与因子新鲜度
+
+执行方式：主 agent 用生产库 owner 连接，但每块都在 `REPEATABLE READ READ ONLY` 事务内、`statement_timeout=5s`，查询后回滚；原始结果只留在本机 `/tmp`，不入库、不进 PR。下文只记脱敏结论，不含用户邮箱、账户余额以外的个人数据或任何凭据。
+
+### A–I（审计原 SQL，机器人账户号与 cohort 用子查询自动取）
+
+| 块 | 结论 |
+| --- | --- |
+| A | 11-05、11-06、11-09 三个市场日各有一个 complete run（#77/#78/#79），均在次日发布；**11-10 没有 run**（推荐暂停），code_version 依次为 `4d54ab4a4c0f`、`651bdaf4c2ea`、`e8caf3d92852`。 |
+| B | 机器人账户 1 个（reset_count 0），配置版本 4（11-06 修改），fee 10 + slippage 5 bps，最多 8 只、单只 ≤25%、换手上限 2.0、研究过期上限 3 个交易日，定时开启。模型供应商字段为 openai 兼容，模型 `kimi-for-coding`。 |
+| C | #77–#79 各 240 个快照、239 eligible、240 in_universe；**`price_downloaded_at` 全部为空**（原审计 P2 结论成立，快照写入方没有填价格下载时间）；无“数据截止晚于发布”。 |
+| D | strategic(28)：397 filled、105 `dead_feed_at_fill`（09-15→09-22 信号）、100 `superseded_by_account_progress`（08-03→08-10）、93 pending（11-09 信号）；tactical(159) 只有 50 个 11-09 pending，尚无成交。没有“信号发布一天后才生成订单”的行。 |
+| E | 11-02 以来机器人 8 轮：2 轮 completed/`orders_settled`、4 轮 `keep_positions`、1 轮 `invalid_output` 失败、1 轮 no_trade 无原因；动作 9 accepted + 1 existing；订单 10 笔全部 filled。 |
+| F | 10 笔成交均为 `raw_unadjusted` 分钟线价格，fill 在受理后下一分钟 bar，确认时间晚于 bar 结束约 1 分钟；费用按 fee 10 + slip 5 计。 |
+| G | 11-10 04:43 UTC 发布 #79（市场日 11-09），04:44 `l2_cycle` 运行；之后 **`l2_cycle` 没有再运行**（QUANT-1 修复，PR #90）。11-10 17:01 的发布请求为同市场日 no-op。`daily_prices` 每晚 8 片均成功，每片跳过 1–5 个已退市代码。 |
+| H | PARA 在 strategy 1/27（旧书）有 09-15 成交与 10-30 pending，新书无 PARA；strategy 28 有 162 笔成交价与 `daily_prices` 当前收盘价不同，最大相对差 85%，说明价格表被复权或修订覆盖，**冻结成交价 ≠ 当前价格表**，收益复算必须用账本成交价而不是重新 join 价格表。 |
+| I | strategy 28 共 39 个估值点（08-18→11-09），NAV 999,004 → 963,803；missing_count 合计 105，stale_count 为 0。tactical(159) 无估值行。机器人账户 11-02→11-05 全现金、11-06 起有持仓，至 11-10 共 7 个估值点（其中 3 个有持仓）；具体金额属私有账户数据，不写入公开仓库。 |
+
+### J：线上因子表达式（QUANT-0 的直接证据）
+
+- `engine_config` 中 `factor.custom_expression` = `group_neutralize(zscore(ts_zscore(volume,20)),sector)`，**2026-08-19 11:35 UTC 由管理员手动设置**（`config_change_log` #26，source=manual，前值 `rank(ts_mean(returns, 12))`）。5 月以来该键共改过 9 次，其中 5 次来自批准的提案，4 次手动。
+- `alpha_agent/signals/factor.py` 只有预设短线表达式读每日行情；自定义表达式读仓库内冻结研究面板，其最后一行是 **2026-10-30**。本地用冻结面板最后一行复算的 NVDA/AAPL/MSFT 因子 z 与线上 `/api/stock/{ticker}` 返回值逐位相同。
+- 因此 10-30 之后，因子信号（NVDA 有效权重约 0.52）不随行情更新。本批（PR `codex/factor-signal-freshness`）只做披露：信号 `raw.factor_source` 记录表达式、面板与数据日，详情页因子行显示“自定义表达式 · 冻结研究面板 · 数据截至 2026-10-30”。**表达式本身没有改**；是否改回预设由用户决定，改动须登记协议新版本。
+- 同一表达式在研究面板上：扣 10bps 与 100bps 融券后三折 OOS Sharpe −4.12/−6.08/−10.85（均值 −7.02），零成本时 5.20/1.88/−1.89；日均 L1 换手约 2.0。这就是演化页基线 Sharpe −7.01 的来源。
+
+### K：11-02 每日因子循环失败
+
+最后一次运行 11-02 16:52 UTC：GA 一路成功并提了 3 个候选（`adv20`、`adv60`、`normalize(volume)`，均凭 −4.2 的负基线门槛通过）；**失败来自 LLM 一路**——生成 5 个，其中 `lf_robust_zscore` 自定义算子单测失败、`winsorize(...)` 内核报 `Quantiles must be in the range [0, 1]`，按规则 kernel_exception 使整轮 `ok=false`，熔断器随后停用工作流。循环保持停用，恢复条件见优化计划 Session C。
+
+### L：5 日校准置信度为何只有 3 个值
+
+- 11-11 01:45 新拟合的映射只有 95 个样本、4 级；但 #77–#79 快照里的 `confidence` 只有 3 个值（0.3384/0.3718/0.4032），它们来自 **09-26 那版映射**（981 个样本、7 级，含这三档）。11-03 至 11-10 的几次重拟合样本只有 2–40 个、`applied=false`，所以发布时一直沿用 09-26 的旧映射。
+- 同时 `daily_signals_fast` 的原始一致度每天有 230+ 个不同值。也就是说，校准把 0.40–0.95 的原始值压成 3 档，且这套映射已经 6 周未更新。详情页（读当前映射）与推荐页（读快照）因此给出不同数值。本批不改校准算法，只在模拟仓表格改用排名分、在详情页注明样本数与档位数（QUANT-4）。
+
+### 可执行看板首次读数（QUANT-2，PR #91，只读）
+
+top 10、21 个快照：评估 20 个区间（08-28 → 11-10），多头毛 −1.00%、双边 10bps 后 −4.89%，同区间 SPY +1.52%；420 个候选中 28 个缺价记 unknown。样本短且重叠，只作描述，结论仍为 **Evidence insufficient**。
