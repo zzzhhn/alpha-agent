@@ -127,7 +127,7 @@ export default function StockCardLayout({
         <ActionBox card={card} />
         {/* Company "About" card directly below the Action card, per request.
             key remounts it on ticker change so its async state never bleeds. */}
-        <CompanyProfile key={card.ticker} ticker={card.ticker} />
+        <CompanyProfile key={`profile-${card.ticker}`} ticker={card.ticker} />
         <div className="text-xs text-tm-muted space-y-0.5">
           <div>{t(locale, "stock_layout.as_of")} {`${formatZonedDateTime(card.as_of, timeZone)} · ${timeZone}`}</div>
           {stale ? (
@@ -156,7 +156,7 @@ export default function StockCardLayout({
         {/* in-flight SSE stream is aborted via the unmount path. Without the */}
         {/* key, useState carries over and the stale brief from the prior */}
         {/* ticker renders briefly under the new ticker's heading. */}
-        <RichThesis key={card.ticker} ticker={card.ticker} />
+        <RichThesis key={`thesis-${card.ticker}`} ticker={card.ticker} />
         <InvestmentNotebook key={`notebook-${card.ticker}`} ticker={card.ticker} />
         <section>
           <h2 className="text-lg font-semibold mb-3 text-tm-fg">{t(locale, "stock_layout.signal_attribution")}</h2>
@@ -171,9 +171,9 @@ export default function StockCardLayout({
         </section>
         {/* Same remount-on-ticker discipline as RichThesis: persona result */}
         {/* state must not bleed across tickers. */}
-        <PersonaPanel key={card.ticker} ticker={card.ticker} />
+        <PersonaPanel key={`persona-${card.ticker}`} ticker={card.ticker} />
         <PriceChart
-          key={card.ticker}
+          key={`chart-${card.ticker}`}
           ticker={card.ticker}
           bars={bars}
           events={chartEvents}
