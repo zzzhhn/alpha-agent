@@ -7,10 +7,10 @@ import InvestmentEvidence from "../InvestmentEvidence";
 describe("optional compact panels on Picks", () => {
   it("keeps the plan entry while deferring its explanation; default consumers stay unchanged", () => {
     const compact = renderToStaticMarkup(<InvestmentProfile compact />);
-    expect(compact).toContain("我的投资计划");
+    expect(compact).toContain("全局投资约束");
     expect(compact).toContain('aria-expanded="false"');
-    expect(compact).not.toContain("先明确期限与现有持仓");
-    expect(renderToStaticMarkup(<InvestmentProfile />)).toContain("先明确期限与现有持仓");
+    expect(compact).not.toContain("期限、风险和持仓约束");
+    expect(renderToStaticMarkup(<InvestmentProfile />)).toContain("期限、风险和持仓约束");
   });
 
   it("keeps the notebook accessible without rendering a closed form", () => {
@@ -24,7 +24,7 @@ describe("optional compact panels on Picks", () => {
   it("shows truthful loading in the evidence summary without mounting hidden charts", () => {
     const compact = renderToStaticMarkup(<InvestmentEvidence sleeve="tactical" compact />);
     expect(compact).toContain("正在读取策略账本");
-    expect(compact).toContain('aria-controls="picks-evidence-details"');
+    expect(compact).toContain('aria-haspopup="dialog"');
     expect(compact).not.toContain("0.00%");
     expect(compact).not.toContain("同区间策略净收益");
     expect(renderToStaticMarkup(<InvestmentEvidence sleeve="tactical" />)).toContain("跟随这套策略，结果怎样");

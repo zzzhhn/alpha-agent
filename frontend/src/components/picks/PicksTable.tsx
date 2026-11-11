@@ -1,6 +1,6 @@
 "use client";
 
-import type { RatingCard } from "@/lib/api/picks";
+import type { RatingCard, GradeMethod, RankScoreMethod } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -19,12 +19,14 @@ import {
 import { TmStatePane } from "@/components/tm/TmStatePane";
 import { TmPagination } from "@/components/tm/TmPagination";
 import PicksEvidenceDialog from "./PicksEvidenceDialog";
+import GradeLegend from "./GradeLegend";
+import { TmTooltip } from "@/components/tm/TmTooltip";
 import styles from "./PicksTable.module.css";
 
 const HEADER_CLASS = "text-[12px] select-none";
 
 export default function PicksTable({
-  picks,
+  picks, gradeMethod, rankMethod, pagination, onPaginationChange, onResearchOpen,
   isWatched,
   simPositions,
   cash,
@@ -34,6 +36,11 @@ export default function PicksTable({
   pending = false,
 }: {
   picks: RatingCard[];
+  gradeMethod?: GradeMethod;
+  rankMethod?: RankScoreMethod;
+  pagination?: { page: number; pageSize: number };
+  onPaginationChange?: (next: { page: number; pageSize: number }) => void;
+  onResearchOpen?: (card: RatingCard) => void;
   isWatched?: (ticker: string) => boolean;
   simPositions?: ReadonlyMap<string, number>;
   cash?: number;
@@ -45,13 +52,16 @@ export default function PicksTable({
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [compact, setCompact] = useState(false);
-  const [pageSize, setPageSize] = useState(10);
+  const [localPageSize, setPageSize] = useState(10);
+  const pageSize = pagination?.pageSize ?? localPageSize;
+  const pageSizeRef = useRef(pageSize);
+  pageSizeRef.current = pageSize;
   const [paging, setPaging] = useState({ source: picks, page: 1 });
   const [evidence, setEvidence] = useState<{ source: RatingCard[]; card: RatingCard } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   // A new result set starts on page one immediately, including search recovery.
   const pageCount = Math.max(1, Math.ceil(picks.length / pageSize));
-  const page = paging.source === picks ? Math.min(paging.page, pageCount) : 1;
+  const page = Math.min(pagination?.page ?? (paging.source === picks ? paging.page : 1), pageCount);
   const offset = (page - 1) * pageSize;
   const visiblePicks = picks.slice(offset, offset + pageSize);
   const pageKey = `${page}:${pageSize}:${picks[0]?.ticker}:${picks.at(-1)?.ticker}:${picks.length}:${picks[0]?.as_of}`;
@@ -89,8 +99,8 @@ export default function PicksTable({
     <div className="border-b border-tm-rule px-3 py-2 text-xs text-tm-muted">
       {zh ? "点击方向一致度数值，查看样本与统计说明" : "Select direction-hit values for sample details and definitions"}
     </div>
-    {compact ? <div key={pageKey} className={styles.pageEnter}><PicksCards picks={visiblePicks} rankOffset={offset} ranked={ranked} ordersDisabled={ordersDisabled} onEvidenceOpen={card => setEvidence({ source: picks, card })} /></div> : <TmTableFrame data-picks-scroll role="region" aria-label={zh ? "候选表滚动区" : "Candidate table scroll area"} tabIndex={0} className="max-h-[min(68vh,44rem)] overflow-y-auto overscroll-contain">
-    <TmTable density="standard" caption={locale === "zh" ? "今日推荐明细" : "Today's recommendations"} className="min-w-[1060px]">
+    {compact ? <div key={pageKey} className={styles.pageEnter}><PicksCards onResearchOpen={onResearchOpen} picks={visiblePicks} rankOffset={offset} ranked={ranked} ordersDisabled={ordersDisabled} onEvidenceOpen={card => setEvidence({ source: picks, card })} /></div> : <TmTableFrame data-picks-scroll role="region" aria-label={zh ? "候选表滚动区" : "Candidate table scroll area"} tabIndex={0} className="max-h-[min(68vh,44rem)] overflow-y-auto overscroll-contain">
+    <TmTable density="standard" caption={locale === "zh" ? "今日推荐明细" : "Today's recommendations"} className="w-full">
       <TmTableHead className="sticky top-0 z-10 shadow-[0_1px_0_var(--tm-rule)]">
         <TmTableRow>
           <TmTableHeaderCell className={`${HEADER_CLASS} w-8`}>
@@ -110,9 +120,9 @@ export default function PicksTable({
             </HoverTip>
           </TmTableHeaderCell>
           <TmTableHeaderCell textAlign="right" className={HEADER_CLASS}>
-            <HoverTip content={t(locale, "picks_table.col_composite_tip")} placement="bottom" width={260}>
-              <span className="cursor-help">{t(locale, "picks_table.col_composite")}</span>
-            </HoverTip>
+            <TmTooltip width={300} content={<>{zh ? "同一快照、可比股票池内的横截面百分位，不是胜率、置信度或预期收益。高分更偏多；做空榜不反转。" : "Cross-sectional percentile within one snapshot's comparable population; not win probability, confidence or expected return. Higher is more bullish; shorts are not inverted."}<br />n={rankMethod?.population ?? "—"} · {rankMethod?.version ?? "—"}{rankMethod?.status !== "available" ? <><br />{zh ? "搜索／非标准视图或样本不足时不可用。" : "Unavailable for exploratory views or insufficient population."}</> : null}</>}>
+              <span className="cursor-help">{zh ? "排名分" : "Rank score"}</span>
+            </TmTooltip>
           </TmTableHeaderCell>
           <TmTableHeaderCell textAlign="right" className={HEADER_CLASS}>
             <HoverTip content={zh ? "次日方向的历史一致度，不是未来胜率。点击行内数值查看样本详情。" : "Historical next-day direction agreement, not future win probability. Select a row's values for sample details."} placement="bottom" width={280}>
@@ -125,12 +135,8 @@ export default function PicksTable({
             </HoverTip>
           </TmTableHeaderCell>
           <TmTableHeaderCell className={HEADER_CLASS}>
-            <HoverTip content={t(locale, "picks_table.col_grades_tip")} placement="bottom" width={260}>
-              <span className="flex flex-col gap-0.5 cursor-help">
-                <span>{t(locale, "picks_table.col_grades")}</span>
-                <GradeStripHeader locale={locale} hidden={hiddenDims} />
-              </span>
-            </HoverTip>
+            <GradeLegend method={gradeMethod} hidden={hiddenDims} locale={locale} />
+            <GradeStripHeader locale={locale} hidden={hiddenDims} />
           </TmTableHeaderCell>
           <TmTableHeaderCell className={HEADER_CLASS}>
             <HoverTip content={t(locale, "picks_table.col_drivers_drags_tip")} placement="bottom" width={260}>
@@ -146,6 +152,8 @@ export default function PicksTable({
             key={card.ticker}
             rank={ranked ? offset + i + 1 : null}
             card={card}
+            gradeMethod={gradeMethod}
+            onResearchOpen={onResearchOpen}
             watched={isWatched?.(card.ticker) ?? false}
             locale={locale}
             hiddenDims={hiddenDims}
@@ -161,8 +169,8 @@ export default function PicksTable({
     </TmTable>
     </TmTableFrame>}
     <TmPagination page={page} pageSize={pageSize} totalItems={picks.length} pageSizeOptions={[10, 25, 50]} loading={pending}
-      onPageChange={next => setPaging({ source: picks, page: next })}
-      onPageSizeChange={next => { setPageSize(next); setPaging({ source: picks, page: 1 }); }}
+      onPageChange={next => { setPaging({ source: picks, page: next }); onPaginationChange?.({ page: next, pageSize: pageSizeRef.current }); }}
+      onPageSizeChange={next => { pageSizeRef.current = next; setPageSize(next); setPaging({ source: picks, page: 1 }); onPaginationChange?.({ page: 1, pageSize: next }); }}
       labels={{
         navigation: zh ? "候选分页" : "Candidate pagination",
         previous: zh ? "上一页" : "Previous", previousAriaLabel: zh ? "上一页候选" : "Previous candidates",

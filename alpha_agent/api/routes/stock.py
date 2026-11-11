@@ -28,7 +28,8 @@ from alpha_agent.api.signal_lookup import fetch_latest_signal
 from alpha_agent.auth.dependencies import require_user
 from alpha_agent.backtest.confidence_calibration import load_active_calibration
 from alpha_agent.fusion.attribution import top_drivers, top_drags
-from alpha_agent.fusion.grades import grade_dimensions, score_dimensions
+from alpha_agent.fusion.grades import grade_dimensions, score_dimensions, grade_method_metadata
+from alpha_agent.api.routes.picks import GradeMethod
 from alpha_agent.fusion.grade_thresholds import get_dimension_thresholds
 from alpha_agent.llm.base import LLMClient, Message
 from alpha_agent.signals.yf_helpers import (
@@ -91,6 +92,7 @@ class FullCard(BaseModel):
     # standardized z-scores for the fixed-axis attribution radar. None means
     # unavailable / not comparable, never a synthetic neutral zero.
     dimension_scores: dict[str, float | None] = {}
+    grade_method: GradeMethod = GradeMethod(**grade_method_metadata())
 
 
 class StockResponse(BaseModel):

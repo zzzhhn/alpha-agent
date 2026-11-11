@@ -216,3 +216,54 @@ async def test_search_is_unranked_and_not_tradable(client_with_db, applied_db):
     assert body["canonical"] is False
     assert body["ranked"] is False
     assert body["tradable"] is False
+
+
+async def test_rank_and_grade_http_contract(client_with_db, applied_db):
+    from alpha_agent.market_session import latest_completed_xnys_session
+    await _seed_canonical_run(applied_db, market_date=latest_completed_xnys_session())
+    body = client_with_db.get('/api/picks/lean?side=short&limit=1').json()
+    assert body['picks'][0]['rank_score'] == 0
+    assert body['rank_score_method']['population'] == 2
+    assert body['rank_score_method']['version'] == 'xs_pct_avg_rank_v1'
+    assert body['grade_method']['min_universe'] == 20
+    assert body['picks'][0]['dimension_scores'] is None
+
+
+async def test_changes_dates_skip_different_policy_run(client_with_db, applied_db):
+    prior_date = date(2026, 11, 6)
+    prior_id = await _seed_canonical_run(applied_db, market_date=prior_date)
+    different_id = await _seed_canonical_run(applied_db, market_date=date(2026, 11, 9))
+    conn = await asyncpg.connect(applied_db)
+    try:
+        # Test-fixture setup only: the read path must skip this policy.
+        await conn.execute("UPDATE research_run SET weight_policy_id='different' WHERE id=$1", different_id)
+    finally:
+        await conn.close()
+    await _seed_canonical_run(applied_db, market_date=date(2026, 11, 10))
+    body = client_with_db.get('/api/picks/lean').json()
+    assert body['changes']['prior_run_id'] == prior_id
+    assert body['changes']['prior_market_date'] == '2026-11-06'
+    assert body['changes']['current_market_date'] == '2026-11-10'
+    assert body['changes']['prior_generated_at'] is not None
+
+
+async def test_search_has_no_percentile_population(client_with_db, applied_db):
+    await _seed_fast_rows(applied_db)
+    body = client_with_db.get('/api/picks/lean?search=T0').json()
+    assert body['rank_score_method']['status'] == 'unavailable_exploratory_view'
+    assert all(card['rank_score'] is None for card in body['picks'])
+    assert all(card['dimension_scores'] is not None for card in body['picks'])
+
+
+async def test_changes_do_not_infer_same_policy_from_missing_ids(client_with_db, applied_db):
+    first = await _seed_canonical_run(applied_db, market_date=date(2026, 11, 9))
+    second = await _seed_canonical_run(applied_db, market_date=date(2026, 11, 10))
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute('UPDATE research_run SET weight_policy_id=NULL WHERE id=ANY($1::bigint[])', [first, second])
+    finally:
+        await conn.close()
+    changes = client_with_db.get('/api/picks/lean').json()['changes']
+    assert changes['available'] is False
+    assert changes['prior_run_id'] is None
+    assert changes['prior_market_date'] is None

@@ -46,10 +46,10 @@ export default function InvestmentProfile({ compact = false }: { compact?: boole
   };
   const update = (setter: (v: string) => void) => (v: string) => { setter(v); setDirty(true); setReview(null); };
   const toggle = <TmButton variant="secondary" size={compact ? "sm" : undefined} loading={loading} aria-expanded={open} aria-label={zh ? "查看或收起投资计划" : "View or collapse investment plan"} onClick={() => open ? setOpen(false) : void load()}>{open ? (zh ? "收起" : "Collapse") : (zh ? "查看与编辑" : "View / edit")}</TmButton>;
-  return <TmPane title={zh ? "我的投资计划" : "My investment plan"} meta={compact ? toggle : undefined} bodyClassName={compact && !open ? undefined : "gap-3 p-4"}>
+  return <TmPane title={zh ? "全局投资约束" : "Global investment constraints"} meta={compact ? toggle : undefined} bodyClassName={compact && !open ? undefined : "gap-3 p-4"}>
     {!compact || open ? <>
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-xs text-tm-muted">{zh ? "先明确期限与现有持仓，再讨论候选。未填写时不生成个性化仓位。" : "Start with your horizon and holdings. No personalized allocation without a profile."}</p>
+      <p className="text-xs text-tm-muted">{zh ? "期限、风险和持仓约束；未填写不影响浏览推荐。" : "Horizon, risk and holdings constraints. Browsing works without a profile."}</p>
       {!compact ? toggle : null}
     </div>
     {open ? <>

@@ -2199,6 +2199,75 @@
             ],
             "title": "Gex Info"
           },
+          "grade_method": {
+            "$ref": "#/components/schemas/GradeMethod",
+            "default": {
+              "bands": [
+                {
+                  "grade": "A+",
+                  "min_z": 1.5
+                },
+                {
+                  "grade": "A",
+                  "min_z": 1.0
+                },
+                {
+                  "grade": "B",
+                  "min_z": 0.5
+                },
+                {
+                  "grade": "C+",
+                  "min_z": 0.0
+                },
+                {
+                  "grade": "C",
+                  "min_z": -0.5
+                },
+                {
+                  "grade": "D",
+                  "min_z": -1.0
+                },
+                {
+                  "grade": "F"
+                }
+              ],
+              "definition": "Mean of present live member signals, re-standardized across the full universe.",
+              "dimensions": {
+                "Catalyst": [
+                  "earnings",
+                  "calendar"
+                ],
+                "Flow": [
+                  "options",
+                  "premarket",
+                  "macro"
+                ],
+                "Insider": [
+                  "insider"
+                ],
+                "Momentum": [
+                  "factor"
+                ],
+                "Sentiment": [
+                  "news",
+                  "political_impact",
+                  "geopolitical_impact"
+                ],
+                "Technical": [
+                  "technicals"
+                ]
+              },
+              "flatness_floor": 1e-06,
+              "min_universe": 20,
+              "missing_semantics": [
+                "no_live_member",
+                "fewer_than_min_universe",
+                "no_spread",
+                "ticker_lacks_live_member"
+              ],
+              "version": "dimension_rez_v1"
+            }
+          },
           "news_items": {
             "default": [],
             "items": {
@@ -2251,6 +2320,86 @@
           "breakdown"
         ],
         "title": "FullCard",
+        "type": "object"
+      },
+      "GradeBand": {
+        "properties": {
+          "grade": {
+            "title": "Grade",
+            "type": "string"
+          },
+          "min_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Z"
+          }
+        },
+        "required": [
+          "grade",
+          "min_z"
+        ],
+        "title": "GradeBand",
+        "type": "object"
+      },
+      "GradeMethod": {
+        "properties": {
+          "bands": {
+            "items": {
+              "$ref": "#/components/schemas/GradeBand"
+            },
+            "title": "Bands",
+            "type": "array"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "dimensions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Dimensions",
+            "type": "object"
+          },
+          "flatness_floor": {
+            "title": "Flatness Floor",
+            "type": "number"
+          },
+          "min_universe": {
+            "title": "Min Universe",
+            "type": "integer"
+          },
+          "missing_semantics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Semantics",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "bands",
+          "dimensions",
+          "min_universe",
+          "flatness_floor",
+          "definition",
+          "missing_semantics"
+        ],
+        "title": "GradeMethod",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2785,8 +2934,15 @@
             "title": "Company Name Zh"
           },
           "composite_score": {
-            "title": "Composite Score",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Composite Score"
           },
           "confidence": {
             "anyOf": [
@@ -2864,6 +3020,35 @@
             "title": "Dimension Grades",
             "type": "object"
           },
+          "dimension_missing_reasons": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Dimension Missing Reasons",
+            "type": "object"
+          },
+          "dimension_scores": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension Scores"
+          },
           "horizon_days": {
             "default": 5,
             "title": "Horizon Days",
@@ -2928,6 +3113,19 @@
               }
             ],
             "title": "Price Date"
+          },
+          "rank_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Score"
           },
           "rating": {
             "title": "Rating",
@@ -3902,12 +4100,18 @@
               }
             ]
           },
+          "grade_method": {
+            "$ref": "#/components/schemas/GradeMethod"
+          },
           "picks": {
             "items": {
               "$ref": "#/components/schemas/LeanCard"
             },
             "title": "Picks",
             "type": "array"
+          },
+          "rank_score_method": {
+            "$ref": "#/components/schemas/RankScoreMethod"
           },
           "ranked": {
             "default": false,
@@ -4103,6 +4307,59 @@
         "title": "PositionOut",
         "type": "object"
       },
+      "RankScoreMethod": {
+        "properties": {
+          "definition": {
+            "default": "Ascending average rank over all finite eligible same-policy snapshot composites; ROUND_HALF_UP(100*(average_rank-1)/(n-1)). High is more bullish; shorts are not inverted. Not probability, confidence or expected return.",
+            "title": "Definition",
+            "type": "string"
+          },
+          "population": {
+            "default": 0,
+            "title": "Population",
+            "type": "integer"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "sleeve": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sleeve"
+          },
+          "status": {
+            "default": "unavailable_exploratory_view",
+            "enum": [
+              "available",
+              "unavailable_exploratory_view",
+              "insufficient_population"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": "xs_pct_avg_rank_v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "title": "RankScoreMethod",
+        "type": "object"
+      },
       "Recommendation": {
         "properties": {
           "cap": {
@@ -4169,6 +4426,40 @@
           "available": {
             "title": "Available",
             "type": "boolean"
+          },
+          "current_market_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Market Date"
+          },
+          "prior_generated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Generated At"
+          },
+          "prior_market_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Market Date"
           },
           "prior_run_id": {
             "anyOf": [

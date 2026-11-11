@@ -20,19 +20,20 @@ export default function PicksCards({
   ranked,
   ordersDisabled,
   rankOffset = 0,
-  onEvidenceOpen,
+  onEvidenceOpen, onResearchOpen,
 }: {
   readonly picks: readonly RatingCard[];
   readonly ranked: boolean;
   readonly ordersDisabled: boolean;
   readonly rankOffset?: number;
+  readonly onResearchOpen?: (card: RatingCard) => void;
   readonly onEvidenceOpen: (card: RatingCard) => void;
 }) {
   const { locale } = useLocale();
   return (
     <div className="divide-y divide-tm-rule" role="list">
       {picks.map((card, index) => {
-        const score = typeof card.composite_score === "number" ? card.composite_score : null;
+        const score = card.rank_score ?? null;
         const d5 = consistencyEvidence(card, "d5", locale);
         const drivers = (card.top_drivers ?? []).slice(0, 2).map((name) => getSignalDisplayLabel(name, locale)).join(" · ");
         const name = locale === "zh" ? card.company_name_zh || card.company_name : card.company_name;
@@ -48,7 +49,7 @@ export default function PicksCards({
                 {name ? <p className="mt-1 truncate text-xs text-tm-muted">{name}</p> : null}
               </div>
               <div className="text-right font-tm-mono tabular-nums">
-                <div className="text-sm text-tm-fg">{score === null ? "—" : `${score >= 0 ? "+" : ""}${score.toFixed(2)}`}</div>
+                <div className="text-sm text-tm-fg">{score === null ? "—" : String(score)}</div>
                 <div className="mt-1 text-xs text-tm-muted">{card.latest_price == null ? (locale === "zh" ? "收盘价未知" : "Close unavailable") : `$${card.latest_price.toFixed(2)}`}</div>
               </div>
             </div>
@@ -61,6 +62,7 @@ export default function PicksCards({
             <p className="min-h-5 text-xs leading-5 text-tm-fg-2">{drivers || (locale === "zh" ? "当前没有足够的有效驱动信号" : "Not enough active drivers")}</p>
             <div className="flex items-center justify-between gap-3">
               <span className="font-tm-mono text-xs text-tm-muted">{card.price_date ?? card.market_date ?? "—"}</span>
+              {onResearchOpen ? <TmButton variant="ghost" size="sm" onClick={() => onResearchOpen(card)}>{locale === "zh" ? "研究记录" : "Research records"}</TmButton> : null}
               <TmButton variant="ghost" aria-haspopup="dialog" onClick={() => onEvidenceOpen(card)}>{locale === "zh" ? "证据说明" : "Evidence"}</TmButton>
               <Link
                 href={ordersDisabled ? `/stock/${card.ticker}` : `/paper?ticker=${card.ticker}`}

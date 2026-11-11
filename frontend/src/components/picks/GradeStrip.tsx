@@ -1,18 +1,10 @@
+"use client";
+import type { GradeMethod } from "@/lib/api/picks";
+import { gradeExplanation, gradeDimensionLabel } from "@/lib/grade-method";
+import { TmTooltip } from "@/components/tm/TmTooltip";
 import clsx from "clsx";
 import { DIMENSION_ORDER, gradeChipClass } from "@/lib/grade-colors";
-import { t, type Locale } from "@/lib/i18n";
-
-// Per-dimension i18n key for the chip tooltip. Keys live in i18n.ts under
-// picks_table.dim_*; the strip stays single-line and the M/T/S/C/I/F legend
-// is carried once by GradeStripHeader so every row's chips align under it.
-const DIM_I18N: Record<string, string> = {
-  Momentum: "picks_table.dim_momentum",
-  Technical: "picks_table.dim_technical",
-  Sentiment: "picks_table.dim_sentiment",
-  Catalyst: "picks_table.dim_catalyst",
-  Insider: "picks_table.dim_insider",
-  Flow: "picks_table.dim_flow",
-};
+import { type Locale } from "@/lib/i18n";
 
 // Shared chip geometry so header legend + row chips line up to the pixel.
 const CHIP_BASE =
@@ -51,7 +43,7 @@ export function GradeStripHeader({
         <span
           key={d.key}
           className={clsx(CHIP_BASE, "text-tm-muted")}
-          title={t(locale, DIM_I18N[d.key] as never)}
+          title={gradeDimensionLabel(d.key, locale === "zh")}
         >
           {d.initial}
         </span>
@@ -61,11 +53,13 @@ export function GradeStripHeader({
 }
 
 export default function GradeStrip({
-  grades,
+  grades, scores, method,
   locale,
   hidden,
 }: {
   grades: Record<string, string>;
+  scores?: Record<string, number | null> | null;
+  method?: GradeMethod;
   locale: Locale;
   hidden?: ReadonlySet<string>;
 }) {
@@ -73,15 +67,11 @@ export default function GradeStrip({
     <div className="flex gap-0.5">
       {DIMENSION_ORDER.filter((d) => !hidden?.has(d.key)).map((d) => {
         const g = grades?.[d.key] ?? "—";
-        const dimName = t(locale, DIM_I18N[d.key] as never);
+        const dimName = gradeDimensionLabel(d.key, locale === "zh");
         return (
-          <span
-            key={d.key}
-            className={clsx(CHIP_BASE, gradeChipClass(g))}
-            title={`${dimName}: ${g}`}
-          >
-            {g === "—" ? "·" : g}
-          </span>
+          <TmTooltip key={d.key} width={280} content={gradeExplanation(dimName, g, scores?.[d.key], method, locale === "zh")}>
+            <span className={clsx(CHIP_BASE, gradeChipClass(g))}>{g}</span>
+          </TmTooltip>
         );
       })}
     </div>

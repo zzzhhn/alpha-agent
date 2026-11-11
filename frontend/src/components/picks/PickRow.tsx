@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { RatingCard } from "@/lib/api/picks";
+import type { RatingCard, GradeMethod } from "@/lib/api/picks";
 import clsx from "clsx";
 import { consistencyEvidence } from "@/lib/picks-evidence";
 import WatchlistStar from "@/components/ui/WatchlistStar";
 import { HoverTip } from "@/components/ui/HoverTip";
+import { TmTooltip } from "@/components/tm/TmTooltip";
 import GradeStrip from "./GradeStrip";
 import { t, type Locale } from "@/lib/i18n";
 // Reuse the app-wide signal→label map (also used by the stock-detail Radar
@@ -28,7 +29,7 @@ const TIER_COLOR: Record<string, string> = {
 
 export default function PickRow({
   rank,
-  card,
+  card, gradeMethod, onResearchOpen,
   watched = false,
   locale = "zh",
   hiddenDims,
@@ -41,6 +42,8 @@ export default function PickRow({
 }: {
   rank: number | null;
   card: RatingCard;
+  gradeMethod?: GradeMethod;
+  onResearchOpen?: (card: RatingCard) => void;
   watched?: boolean;
   locale?: Locale;
   hiddenDims?: ReadonlySet<string>;
@@ -66,12 +69,12 @@ export default function PickRow({
   const composite =
     typeof card.composite_score === "number" && isFinite(card.composite_score)
       ? card.composite_score
-      : 0;
+      : null;
   const hit =
     typeof card.confidence === "number" && isFinite(card.confidence)
       ? card.confidence
       : 0;
-  const sign = composite >= 0 ? "+" : "";
+  const rawZ = composite === null ? "—" : `${composite >= 0 ? "+" : ""}${composite.toFixed(3)}σ`;
 
   // Descriptive 1-day direction agreement: predicted tier vs next-day actual
   // move over trailing windows. null -> "—" (insufficient realized history).
@@ -182,9 +185,7 @@ export default function PickRow({
         })()}
       </TmTableCell>
       <TmTableCell numeric textAlign="right" className="text-sm">
-        {sign}
-        {composite.toFixed(2)}
-        <span className="text-tm-muted">σ</span>
+        <TmTooltip content={`${locale === "zh" ? "原始综合分" : "Raw composite"}: ${rawZ} · ${locale === "zh" ? "快照" : "Run"} #${card.run_id ?? "—"}`}><span>{card.rank_score ?? "—"}</span></TmTooltip>
       </TmTableCell>
       <TmTableCell numeric textAlign="right" className="text-xs">
         <TmButton
@@ -218,7 +219,7 @@ export default function PickRow({
         </TmButton>
       </TmTableCell>
       <TmTableCell>
-        <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} hidden={hiddenDims} />
+        <GradeStrip grades={card.dimension_grades ?? {}} scores={card.dimension_scores} method={gradeMethod} locale={locale} hidden={hiddenDims} />
       </TmTableCell>
       <TmTableCell className="font-tm-sans text-[12px]">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -238,6 +239,7 @@ export default function PickRow({
         </span>
       </TmTableCell>
       <TmTableCell className="px-2">
+        {onResearchOpen ? <TmButton variant="ghost" size="xs" aria-haspopup="dialog" aria-label={`${card.ticker} ${locale === "zh" ? "研究记录" : "research records"}`} onClick={() => onResearchOpen(card)}>{locale === "zh" ? "记录" : "Record"}</TmButton> : null}
         <TmButton
           type="button"
           variant="secondary"

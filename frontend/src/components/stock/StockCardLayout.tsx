@@ -1,5 +1,9 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
+import { clearPicksView, loadPicksView } from "@/lib/picks-view-state";
+import { useTimezonePreference } from "@/hooks/useTimezonePreference";
+import { formatZonedDateTime } from "@/lib/format-datetime";
 import type {
   ChartEvent,
   GexInfo,
@@ -53,6 +57,7 @@ export default function StockCardLayout({
   chartEvents: ChartEvent[];
 }) {
   const { isWatched } = useWatchlist();
+  const { timeZone } = useTimezonePreference();
   const watched = isWatched(card.ticker);
   const { locale } = useLocale();
   // Personal weight override (settings → WeightsEditor): recompute the header
@@ -92,7 +97,7 @@ export default function StockCardLayout({
             tone: typeof agreement === "number" && agreement < 0.5 ? "warning" : "default",
           },
         ]}
-        action={<TmLinkButton href="/picks" variant="secondary" size="sm">← {locale === "zh" ? "返回今日推荐" : "Back to picks"}</TmLinkButton>}
+        action={<TmLinkButton href="/picks" variant="secondary" size="md" className="!h-[56px] !items-end pb-2" onClick={() => { if (loadPicksView()?.ticker !== card.ticker) clearPicksView(); }}><ArrowRight aria-hidden="true" className="h-4 w-4 rotate-180" strokeWidth={1.75} />{locale === "zh" ? "返回今日推荐" : "Back to picks"}</TmLinkButton>}
       />
       {/* P3-5: single column on mobile, 3+9 split from lg up. The sidebar is
           only sticky on lg; when stacked above the main column on mobile,
@@ -117,14 +122,14 @@ export default function StockCardLayout({
           <GexBadge info={card.gex_info} locale={locale} />
         ) : null}
         {card.dimension_grades && Object.keys(card.dimension_grades).length > 0 ? (
-          <LetterGradeRibbon grades={card.dimension_grades} locale={locale} />
+          <LetterGradeRibbon grades={card.dimension_grades} scores={card.dimension_scores} method={card.grade_method} locale={locale} />
         ) : null}
         <ActionBox card={card} />
         {/* Company "About" card directly below the Action card, per request.
             key remounts it on ticker change so its async state never bleeds. */}
-        <CompanyProfile key={card.ticker} ticker={card.ticker} />
+        <CompanyProfile key={`profile-${card.ticker}`} ticker={card.ticker} />
         <div className="text-xs text-tm-muted space-y-0.5">
-          <div>{t(locale, "stock_layout.as_of")} {formatAsOf(card.as_of)}</div>
+          <div>{t(locale, "stock_layout.as_of")} {`${formatZonedDateTime(card.as_of, timeZone)} · ${timeZone}`}</div>
           {stale ? (
             <div className="rounded-[2px] bg-tm-warn-soft px-2 py-1 text-tm-warn">
               ⚠ {t(locale, "stock_layout.stale_warning")}
@@ -151,7 +156,7 @@ export default function StockCardLayout({
         {/* in-flight SSE stream is aborted via the unmount path. Without the */}
         {/* key, useState carries over and the stale brief from the prior */}
         {/* ticker renders briefly under the new ticker's heading. */}
-        <RichThesis key={card.ticker} ticker={card.ticker} />
+        <RichThesis key={`thesis-${card.ticker}`} ticker={card.ticker} />
         <InvestmentNotebook key={`notebook-${card.ticker}`} ticker={card.ticker} />
         <section>
           <h2 className="text-lg font-semibold mb-3 text-tm-fg">{t(locale, "stock_layout.signal_attribution")}</h2>
@@ -166,9 +171,9 @@ export default function StockCardLayout({
         </section>
         {/* Same remount-on-ticker discipline as RichThesis: persona result */}
         {/* state must not bleed across tickers. */}
-        <PersonaPanel key={card.ticker} ticker={card.ticker} />
+        <PersonaPanel key={`persona-${card.ticker}`} ticker={card.ticker} />
         <PriceChart
-          key={card.ticker}
+          key={`chart-${card.ticker}`}
           ticker={card.ticker}
           bars={bars}
           events={chartEvents}
@@ -195,18 +200,6 @@ export default function StockCardLayout({
   );
 }
 
-
-/**
- * Guard against malformed / empty as_of strings. A stale cached response
- * from before a schema change can land with an empty string, and
- * `new Date("").toLocaleString()` renders the literal "Invalid Date" on
- * every browser — visible to the user as a broken sidebar.
- */
-function formatAsOf(raw: string | null | undefined): string {
-  if (!raw) return "—";
-  const d = new Date(raw);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleString();
-}
 
 /**
  * Human-readable lag from `as_of` to now, e.g. " · 滞后 3 天" / " · 3d behind".

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/api/client";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmPane } from "@/components/tm/TmPane";
-import { TmButton, TmDisclosureButton, TmLinkButton } from "@/components/tm/TmButton";
+import { TmButton, TmLinkButton } from "@/components/tm/TmButton";
+import { TmDialog } from "@/components/tm/TmDialog";
 import { TmTable } from "@/components/tm/TmTable";
 import TurnoverStudy from "./TurnoverStudy";
 import RecommendationNavChart, { type RecommendationNavPoint } from "@/components/charts/RecommendationNavChart";
@@ -90,7 +91,12 @@ export default function InvestmentEvidence({ sleeve, policyId, showStudy = true,
       </>}
   </TmPane>;
   return compact ? <>
-    <TmDisclosureButton expanded={expanded} onClick={() => setExpanded(v => !v)} aria-controls="picks-evidence-details" label={zh ? "策略跟随验证" : "Policy-following evidence"} meta={<span role="status">{summary}</span>} className="!h-auto min-h-8 flex-wrap py-2" />
-    <div id="picks-evidence-details" hidden={!expanded}>{expanded ? content : null}</div>
+    <TmButton variant="ghost" size="sm" onClick={() => setExpanded(true)} aria-haspopup="dialog" className="!h-auto min-h-7 flex-wrap justify-start !font-normal !tracking-normal">
+      <span>{zh ? "策略跟随验证" : "Policy-following evidence"}</span><span className="text-tm-muted">{summary}</span>
+    </TmButton>
+    <TmDialog open={expanded} onClose={() => setExpanded(false)} title={zh ? "策略跟随验证" : "Policy-following evidence"} closeLabel={zh ? "关闭验证" : "Close evidence"}>
+      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-tm-muted"><span>{zh ? "固定规则验证账本，独立于个人与机器人账户。" : "Fixed-rule validation book, separate from personal and bot accounts."}</span><TmButton variant="secondary" size="sm" onClick={() => setRetry(n => n + 1)}>{zh ? "重新读取证据" : "Reload evidence"}</TmButton></div>
+      {expanded ? content : null}
+    </TmDialog>
   </> : content;
 }

@@ -4521,6 +4521,75 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /**
+             * @default {
+             *       "bands": [
+             *         {
+             *           "grade": "A+",
+             *           "min_z": 1.5
+             *         },
+             *         {
+             *           "grade": "A",
+             *           "min_z": 1
+             *         },
+             *         {
+             *           "grade": "B",
+             *           "min_z": 0.5
+             *         },
+             *         {
+             *           "grade": "C+",
+             *           "min_z": 0
+             *         },
+             *         {
+             *           "grade": "C",
+             *           "min_z": -0.5
+             *         },
+             *         {
+             *           "grade": "D",
+             *           "min_z": -1
+             *         },
+             *         {
+             *           "grade": "F"
+             *         }
+             *       ],
+             *       "definition": "Mean of present live member signals, re-standardized across the full universe.",
+             *       "dimensions": {
+             *         "Catalyst": [
+             *           "earnings",
+             *           "calendar"
+             *         ],
+             *         "Flow": [
+             *           "options",
+             *           "premarket",
+             *           "macro"
+             *         ],
+             *         "Insider": [
+             *           "insider"
+             *         ],
+             *         "Momentum": [
+             *           "factor"
+             *         ],
+             *         "Sentiment": [
+             *           "news",
+             *           "political_impact",
+             *           "geopolitical_impact"
+             *         ],
+             *         "Technical": [
+             *           "technicals"
+             *         ]
+             *       },
+             *       "flatness_floor": 0.000001,
+             *       "min_universe": 20,
+             *       "missing_semantics": [
+             *         "no_live_member",
+             *         "fewer_than_min_universe",
+             *         "no_spread",
+             *         "ticker_lacks_live_member"
+             *       ],
+             *       "version": "dimension_rez_v1"
+             *     }
+             */
+            grade_method: components["schemas"]["GradeMethod"];
+            /**
              * News Items
              * @default []
              */
@@ -4543,6 +4612,32 @@ export interface components {
             top_drags: string[];
             /** Top Drivers */
             top_drivers: string[];
+        };
+        /** GradeBand */
+        GradeBand: {
+            /** Grade */
+            grade: string;
+            /** Min Z */
+            min_z: number | null;
+        };
+        /** GradeMethod */
+        GradeMethod: {
+            /** Bands */
+            bands: components["schemas"]["GradeBand"][];
+            /** Definition */
+            definition: string;
+            /** Dimensions */
+            dimensions: {
+                [key: string]: string[];
+            };
+            /** Flatness Floor */
+            flatness_floor: number;
+            /** Min Universe */
+            min_universe: number;
+            /** Missing Semantics */
+            missing_semantics: string[];
+            /** Version */
+            version: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -4736,7 +4831,7 @@ export interface components {
             /** Company Name Zh */
             company_name_zh?: string | null;
             /** Composite Score */
-            composite_score: number;
+            composite_score: number | null;
             /** Confidence */
             confidence: number | null;
             /**
@@ -4777,6 +4872,17 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Dimension Missing Reasons
+             * @default {}
+             */
+            dimension_missing_reasons: {
+                [key: string]: string;
+            };
+            /** Dimension Scores */
+            dimension_scores?: {
+                [key: string]: number | null;
+            } | null;
+            /**
              * Horizon Days
              * @default 5
              */
@@ -4796,6 +4902,8 @@ export interface components {
             policy_rank?: number | null;
             /** Price Date */
             price_date?: string | null;
+            /** Rank Score */
+            rank_score?: number | null;
             /** Rating */
             rating: string;
             /** Run Id */
@@ -5120,8 +5228,10 @@ export interface components {
              */
             canonical: boolean;
             changes?: components["schemas"]["RecommendationChanges"] | null;
+            grade_method?: components["schemas"]["GradeMethod"];
             /** Picks */
             picks: components["schemas"]["LeanCard"][];
+            rank_score_method?: components["schemas"]["RankScoreMethod"];
             /**
              * Ranked
              * @default false
@@ -5174,6 +5284,34 @@ export interface components {
             /** Unrealized Pnl */
             unrealized_pnl: number | null;
         };
+        /** RankScoreMethod */
+        RankScoreMethod: {
+            /**
+             * Definition
+             * @default Ascending average rank over all finite eligible same-policy snapshot composites; ROUND_HALF_UP(100*(average_rank-1)/(n-1)). High is more bullish; shorts are not inverted. Not probability, confidence or expected return.
+             */
+            definition: string;
+            /**
+             * Population
+             * @default 0
+             */
+            population: number;
+            /** Run Id */
+            run_id?: number | null;
+            /** Sleeve */
+            sleeve?: string | null;
+            /**
+             * Status
+             * @default unavailable_exploratory_view
+             * @enum {string}
+             */
+            status: "available" | "unavailable_exploratory_view" | "insufficient_population";
+            /**
+             * Version
+             * @default xs_pct_avg_rank_v1
+             */
+            version: string;
+        };
         /** Recommendation */
         Recommendation: {
             /** Cap */
@@ -5198,6 +5336,12 @@ export interface components {
             added: components["schemas"]["PickChange"][];
             /** Available */
             available: boolean;
+            /** Current Market Date */
+            current_market_date?: string | null;
+            /** Prior Generated At */
+            prior_generated_at?: string | null;
+            /** Prior Market Date */
+            prior_market_date?: string | null;
             /** Prior Run Id */
             prior_run_id?: number | null;
             /** Reason */

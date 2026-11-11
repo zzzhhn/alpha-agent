@@ -11,14 +11,20 @@ import {
   type FactorMode,
   type PicksResponse,
   type PicksSide,
+  type RatingCard,
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
 import { fetchPaperAccount } from "@/lib/api/paper";
 import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
 import InvestmentEvidence from "./InvestmentEvidence";
-import InvestmentProfile from "./InvestmentProfile";
-import InvestmentNotebook from "./InvestmentNotebook";
+import ResearchRecords from "./ResearchRecords";
+import TimezoneMenu from "./TimezoneMenu";
+import { useTimezonePreference } from "@/hooks/useTimezonePreference";
+import { formatZonedDateTime } from "@/lib/format-datetime";
+import { loadPicksView, storePicksView, clearPicksView, type PicksViewState } from "@/lib/picks-view-state";
+import { TmTooltip } from "@/components/tm/TmTooltip";
+import { Info } from "lucide-react";
 import ConvictionBand from "./ConvictionBand";
 import { TmPane } from "@/components/tm/TmPane";
 import { TmStatePane } from "@/components/tm/TmStatePane";
@@ -71,6 +77,13 @@ export default function PicksBrowser({
   const [simPositions, setSimPositions] = useState<ReadonlyMap<string, number>>(new Map());
   const [paperCash, setPaperCash] = useState<number | undefined>();
   const [showResearch, setShowResearch] = useState(false);
+  const [records, setRecords] = useState<{ card?: RatingCard } | null>(null);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 10 });
+  const paginationRef = useRef(pagination);
+  paginationRef.current = pagination;
+  const restoreRef = useRef<PicksViewState | null>(null);
+  const restoringRef = useRef(false);
+  const { timeZone, preference, localZone, ready: zoneReady } = useTimezonePreference();
   const [showMethod, setShowMethod] = useState(false);
   const [resultQuery, setResultQuery] = useState({ search: "", mode: "short", side: "long" });
 
@@ -121,6 +134,7 @@ export default function PicksBrowser({
           sideArg,
         );
         if (reqId !== reqIdRef.current) return;
+        setPagination({ page: 1, pageSize: paginationRef.current.pageSize });
         setData(next);
         setResultQuery({ search: trimmed.toUpperCase(), mode, side: sideArg });
         setRequestError(null);
@@ -135,11 +149,35 @@ export default function PicksBrowser({
     [],
   );
 
+  useEffect(() => {
+    const saved = loadPicksView();
+    if (!saved) return;
+    clearPicksView();
+    restoreRef.current = saved;
+    restoringRef.current = true;
+    setSearch(saved.search); setSide(saved.side); setFactorMode(saved.mode);
+    setData(saved.data); setResultQuery({ search: saved.search.trim().toUpperCase(), mode: saved.mode, side: saved.side });
+    setPagination({ page: saved.page, pageSize: saved.pageSize });
+    const frame = requestAnimationFrame(() => {
+      const scrollHost = document.querySelector<HTMLElement>("main.overflow-y-auto") ?? document.scrollingElement;
+      if (scrollHost) scrollHost.scrollTop = saved.scroll;
+      const table = document.querySelector<HTMLElement>("[data-picks-scroll]");
+      if (table) table.scrollTop = saved.tableScroll;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [setFactorMode]);
+
   // Debounce the search input + re-fire when factorMode / side flips. Skip
   // the mount fire so initialData renders immediately without a redundant
   // re-fetch — but a post-hydration flip away from the SSR defaults
   // (factorMode="short", side="long") DOES fire a re-fetch.
   useEffect(() => {
+    const saved = restoreRef.current;
+    if (restoringRef.current && saved) {
+      mounted.current = true;
+      if (search === saved.search && side === saved.side && factorMode === saved.mode) restoringRef.current = false;
+      return;
+    }
     if (!mounted.current) {
       mounted.current = true;
       if (factorMode === "long" || side !== "long" || initialData.stale) {
@@ -229,11 +267,20 @@ export default function PicksBrowser({
   const count = data.picks.length;
   const snapshotStatus = picksSnapshotStatus(data.as_of, data.stale);
   const snapshotStale = !data.tradable || snapshotStatus !== "current";
-  const asOf = data.as_of
-    ? data.as_of.replace("T", " ").replace(/:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/, "") + " UTC"
-    : locale === "zh"
-      ? "暂无"
-      : "n/a";
+  const zoneLabel = !zoneReady ? "UTC" : preference === "local"
+    ? (locale === "zh" ? `本地 ${localZone}` : `Local ${localZone}`)
+    : preference === "Asia/Shanghai" ? (locale === "zh" ? "北京时间" : "Beijing")
+    : preference === "America/New_York" ? (locale === "zh" ? "纽约交易所" : "New York exchange") : "UTC";
+  const asOf = `${formatZonedDateTime(data.as_of, timeZone)} · ${zoneLabel}`;
+  const rememberView = (event: React.MouseEvent) => {
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[href^='/stock/']");
+    if (!anchor || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const scrollHost = document.querySelector<HTMLElement>("main.overflow-y-auto") ?? document.scrollingElement;
+    storePicksView({ version: 1, ticker: decodeURIComponent(anchor.pathname.split("/").at(-1) ?? ""),
+      search, mode: factorMode, side, ...pagination, data,
+      scroll: scrollHost?.scrollTop ?? window.scrollY,
+      tableScroll: document.querySelector<HTMLElement>("[data-picks-scroll]")?.scrollTop ?? 0 });
+  };
 
   const copy =
     locale === "zh"
@@ -241,7 +288,7 @@ export default function PicksBrowser({
           picks: "选股",
           signals: resultQuery.search ? `${count} 条匹配` : `${count} 条信号`,
           asOf: "数据时间",
-          marketDate: "市场日",
+          marketDate: "交易所交易日",
           run: "快照",
           coverage: "覆盖率",
           stale: "推荐快照不可交易",
@@ -271,7 +318,7 @@ export default function PicksBrowser({
           picks: "PICKS",
           signals: resultQuery.search ? `${count} matches` : `${count} signals`,
           asOf: "AS OF",
-          marketDate: "MARKET DATE",
+          marketDate: "EXCHANGE SESSION",
           run: "RUN",
           coverage: "COVERAGE",
           stale: "SNAPSHOT NOT TRADABLE",
@@ -303,7 +350,7 @@ export default function PicksBrowser({
   ).length;
 
   return (
-    <>
+    <div onClickCapture={rememberView}>
       <WorkbenchHeader
         eyebrow={`01 · ${locale === "zh" ? "理解变化" : "UNDERSTAND CHANGES"}`}
         title={locale === "zh" ? "今日组合决策" : "Today’s Portfolio Decision"}
@@ -334,7 +381,7 @@ export default function PicksBrowser({
       <TmSubbar>
         <TmSubbarKV label={copy.picks} value={copy.signals} />
         <TmSubbarSep />
-        <TmSubbarKV label={copy.asOf} value={asOf} />
+        <TimezoneMenu zh={locale === "zh"} />
         {data.run ? (
           <>
             <TmSubbarSep />
@@ -403,10 +450,11 @@ export default function PicksBrowser({
           <section className="border-b border-tm-rule bg-tm-bg px-4 py-3" aria-labelledby="changes-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="changes-heading" className="font-tm-mono text-xs font-semibold uppercase tracking-[0.08em] text-tm-fg">
-                {locale === "zh" ? "相对上一快照的组合变化" : "PORTFOLIO CHANGES VS PRIOR SNAPSHOT"}
+                <span className="inline-flex items-center gap-2">{locale === "zh" ? "相对上一快照的组合变化 · 评级变化" : "PORTFOLIO / TIER CHANGES VS PRIOR SNAPSHOT"}<TmTooltip ariaLabel={locale === "zh" ? "评级变化定义" : "Tier-change definition"} width={300} content={locale === "zh" ? "同一股票在当前与上一份同政策快照各自 Top-50 中，BUY/OW/HOLD/UW/SELL 档位改变。不是 A–F 维度评级、价格涨跌、盈利或交易指令。" : "The same stock changed BUY/OW/HOLD/UW/SELL tier within each comparable same-policy snapshot’s Top-50. Not A–F grades, price moves, profit or orders."}><Info className="h-3.5 w-3.5" strokeWidth={1.75} /></TmTooltip></span>
               </h2>
               {data.changes.available && data.changes.turnover != null ? <span className="font-tm-mono text-xs text-tm-muted">{locale === "zh" ? "名单换手" : "NAME TURNOVER"} {(data.changes.turnover * 100).toFixed(1)}%</span> : null}
             </div>
+            <p className="mt-1 text-xs text-tm-muted">{data.changes.prior_market_date ?? "—"} → {data.changes.current_market_date ?? data.run?.market_date ?? "—"} · {locale === "zh" ? "交易所交易日 · 同政策 · 各快照 Top-50" : "Exchange sessions · same policy · each snapshot’s Top-50"}</p>
             {data.changes.available ? (
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <ChangeList tone="text-tm-pos" title={locale === "zh" ? "新增" : "ADDED"} empty={locale === "zh" ? "无新增" : "No additions"} items={data.changes.added.map((item) => `${item.ticker} #${item.current_rank ?? "—"}`)} />
@@ -420,14 +468,15 @@ export default function PicksBrowser({
         ) : null}
         {/* Keep personal context and policy evidence reachable without
             placing closed panel bodies ahead of the candidate table. */}
-        <InvestmentProfile compact />
-        <InvestmentNotebook compact />
-        <InvestmentEvidence compact sleeve={data.run?.sleeve === "strategic" ? "strategic" : "tactical"} policyId={data.run?.policy_id} />
+        <div className="flex flex-wrap items-center gap-3 border-b border-tm-rule px-4 py-2">
+          <TmButton variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setRecords({})}>{locale === "zh" ? "研究记录" : "Research records"}</TmButton>
+          <InvestmentEvidence compact sleeve={data.run?.sleeve === "strategic" ? "strategic" : "tactical"} policyId={data.run?.policy_id} showPaperLink={false} />
+        </div>
 
           {/* ★ Highest-Conviction hero band — top-3 of the current board as
               decision-first cards (ALPHACORE design). Hidden during an active
               search, where the result set is a lookup, not a conviction ranking. */}
-          {!searching && !snapshotStale && !queryPending ? <ConvictionBand picks={data.picks} /> : null}
+
 
           <TmPane
             title={copy.paneTitle}
@@ -512,6 +561,11 @@ export default function PicksBrowser({
             ) : (
               <PicksTable
                 picks={data.picks}
+                gradeMethod={data.grade_method}
+                rankMethod={data.rank_score_method}
+                pagination={pagination}
+                onPaginationChange={setPagination}
+                onResearchOpen={card => setRecords({ card })}
                 pending={queryPending}
                 isWatched={isWatched}
                 simPositions={simPositions}
@@ -522,13 +576,15 @@ export default function PicksBrowser({
               />
             )}
           </TmPane>
+          {!searching && !snapshotStale && !queryPending ? <ConvictionBand picks={data.picks} gradeMethod={data.grade_method} /> : null}
           <TmDisclosureButton expanded={showResearch} aria-controls="picks-research" onClick={() => setShowResearch(v => !v)} label={locale === "zh" ? "辅助研究指标" : "Research diagnostics"} meta={locale === "zh" ? "非当前策略跟随收益" : "Not this policy's following return"} />
           {showResearch ? <div id="picks-research"><BasketEdgeStrip /></div> : null}
         </>
-    </>
+      <ResearchRecords open={records !== null} onClose={() => setRecords(null)} card={records?.card} run={data.run} zh={locale === "zh"} />
+    </div>
   );
 }
 
-function ChangeList({ title, items, empty, tone }: { readonly title: string; readonly items: readonly string[]; readonly empty: string; readonly tone: string }) {
+function ChangeList({ title, items, empty, tone }: { readonly title: React.ReactNode; readonly items: readonly string[]; readonly empty: string; readonly tone: string }) {
   return <div className="rounded-[2px] border border-tm-rule bg-tm-bg-2 px-3 py-2"><div className={`font-tm-mono text-xs font-semibold uppercase ${tone}`}>{title}</div><p className="mt-1 truncate font-tm-mono text-xs text-tm-fg-2" title={items.join(" · ")}>{items.length ? items.slice(0, 5).join(" · ") : empty}</p></div>;
 }

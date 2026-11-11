@@ -3,6 +3,8 @@
 import type { RatingCard } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { useTimezonePreference } from "@/hooks/useTimezonePreference";
+import { formatZonedDateTime } from "@/lib/format-datetime";
 import {
   TmTable,
   TmTableBody,
@@ -15,6 +17,8 @@ import {
 
 export default function SourcesBlock({ card }: { card: RatingCard }) {
   const { locale } = useLocale();
+  // Deterministic UTC during SSR/hydration, then the persisted display zone.
+  const { timeZone } = useTimezonePreference();
   return (
     <section className="rounded-[2px] border border-tm-rule bg-tm-bg-2 p-4">
       <h2 className="text-lg font-semibold mb-2 text-tm-fg">{t(locale, "sources.title")}</h2>
@@ -37,7 +41,7 @@ export default function SourcesBlock({ card }: { card: RatingCard }) {
               <TmTableCell className="px-2 py-1 text-tm-fg">{b.signal}</TmTableCell>
               <TmTableCell className="px-2 py-1 text-tm-muted">{b.source}</TmTableCell>
               <TmTableCell className="px-2 py-1 text-tm-muted">
-                {new Date(b.timestamp).toLocaleString()}
+                {`${formatZonedDateTime(b.timestamp, timeZone)} · ${timeZone}`}
               </TmTableCell>
             </TmTableRow>
           ))}
