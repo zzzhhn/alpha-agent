@@ -128,6 +128,7 @@ _load("brain",         "alpha_agent.api.routes.brain_routes")
 _load("paper",         "alpha_agent.api.routes.paper")
 _load("paper_bot",     "alpha_agent.api.routes.paper_bot")
 _load("l2",            "alpha_agent.api.routes.l2")
+_load("nav_status",    "alpha_agent.api.routes.nav_status")
 
 # Probe asyncpg directly so we know it's installed in the runtime.
 try:
