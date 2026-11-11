@@ -109,13 +109,14 @@ async def step(pool, run_id=None):
             await pool.execute("UPDATE sim_bot_run SET context=$3::jsonb WHERE id=$1 AND lease_token=$2 AND status='running'", run['id'], run['lease_token'], store.dump(context))
             await store.diagnose(pool, run, {'context_bytes': len(store.dump(context).encode()),
                                            'quote_coverage': context['quote_coverage'],
-                                           'ranking_context': context.get('ranking_context'),
                                            'research_age_sessions': context['research_age_sessions'],
                                            'queue_wait_seconds': max(0, round((run['_step_started_at']-run['created_at']).total_seconds()))})
             await store.release(pool, run, 'deciding')
         elif run['stage'] in ('deciding', 'researching'):
+            context = store.unpack(run['context'])
             budget = model_budget(run)
-            await store.diagnose(pool, run, {'budget': budget})
+            await store.diagnose(pool, run, {'budget': budget,
+                                           'ranking_context': context.get('ranking_context')})
             if not market_session()['is_open']:
                 await complete_run(pool, run, 'skipped', '市场已离开交易时段，未继续调用模型。', {'outcome_reason': 'market_closed', 'actions': []})
             elif not budget['can_call_model']:
@@ -123,7 +124,6 @@ async def step(pool, run_id=None):
             elif run['llm_calls'] >= 3:
                 await complete_run(pool, run, 'no_trade', '补查额度已用完，证据仍不足，保留现有持仓。', {'outcome_reason': 'evidence_insufficient', 'actions': []})
             else:
-                context = store.unpack(run['context'])
                 # Reserve budget BEFORE the network call. Recovery never gets
                 # unlimited calls when the result was lost after billing.
                 reserved = await pool.fetchval("UPDATE sim_bot_run SET llm_calls=llm_calls+1 WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now() AND llm_calls<3 RETURNING llm_calls", run['id'], run['lease_token'])
@@ -164,7 +164,11 @@ async def step(pool, run_id=None):
                     # SQL restricts this to the existing eligible universe;
                     # it never fetches a model-invented URL/ticker remotely.
                     expanded = await build_context(pool, run, decision.research_tickers)
-                    expanded['previous_research_request'] = decision.summary
+                    expanded['previous_research_request'] = {
+                        'tickers': decision.research_tickers,
+                        'research_run_id': context.get('research_run_id'),
+                        'basis': 'historical_request_not_current_ranking_evidence',
+                    }
                     if len(store.dump(expanded).encode()) > 64000:
                         raise ValueError('研究上下文超过大小预算')
                     await pool.execute("UPDATE sim_bot_run SET context=$3::jsonb WHERE id=$1 AND lease_token=$2 AND status='running'", run['id'], run['lease_token'], store.dump(expanded))
