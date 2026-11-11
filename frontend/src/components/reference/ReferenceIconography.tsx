@@ -5,6 +5,8 @@ import {
   History, Inbox, Info, LayoutGrid, Library, Loader2, Lock, LogIn, LogOut,
   MousePointerClick, Pencil, Play, RefreshCw, RotateCcw, Save, Send, ShieldAlert,
   ShieldCheck, Sparkles, Square, Star, Trash2, UserCircle, Wallet, X, XCircle,
+  BookOpen, ChartLine, Database, FileText, ListOrdered, Network, PanelLeftClose,
+  PanelLeftOpen, Settings, Sigma,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { t, type Locale } from "@/lib/i18n";
@@ -35,6 +37,12 @@ const ICONS: ReadonlyArray<{ readonly name: string; readonly icon: LucideIcon }>
   { name: "Square", icon: Square }, { name: "Star", icon: Star },
   { name: "Trash2", icon: Trash2 }, { name: "UserCircle", icon: UserCircle },
   { name: "Wallet", icon: Wallet }, { name: "X", icon: X }, { name: "XCircle", icon: XCircle },
+  // Sidebar route and collapse icons (2026-11-11 navigation refinement).
+  { name: "BookOpen", icon: BookOpen }, { name: "ChartLine", icon: ChartLine },
+  { name: "Database", icon: Database }, { name: "FileText", icon: FileText },
+  { name: "ListOrdered", icon: ListOrdered }, { name: "Network", icon: Network },
+  { name: "PanelLeftClose", icon: PanelLeftClose }, { name: "PanelLeftOpen", icon: PanelLeftOpen },
+  { name: "Settings", icon: Settings }, { name: "Sigma", icon: Sigma },
 ];
 
 export function ReferenceIconography({ locale }: { readonly locale: Locale }) {

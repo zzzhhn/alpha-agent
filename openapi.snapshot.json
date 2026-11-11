@@ -245,6 +245,57 @@
         "title": "Alert",
         "type": "object"
       },
+      "AlertAttentionResponse": {
+        "description": "Compact private count for the sidebar badge.\n\n``needs_action`` and ``critical`` use exactly the inbox's triage rules over\nthe same bounded window, so the badge and the alerts page agree. It is the\nopen work in that window, not a count of all historical alerts.",
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "critical": {
+            "title": "Critical",
+            "type": "integer"
+          },
+          "needs_action": {
+            "title": "Needs Action",
+            "type": "integer"
+          },
+          "newest_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest At"
+          },
+          "source_status": {
+            "enum": [
+              "fresh",
+              "stale",
+              "empty"
+            ],
+            "title": "Source Status",
+            "type": "string"
+          },
+          "window": {
+            "title": "Window",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "needs_action",
+          "critical",
+          "window",
+          "newest_at",
+          "as_of",
+          "source_status"
+        ],
+        "title": "AlertAttentionResponse",
+        "type": "object"
+      },
       "AlertContext": {
         "properties": {
           "in_position": {
@@ -6401,6 +6452,56 @@
         ]
       }
     },
+    "/api/alerts/attention": {
+      "get": {
+        "description": "Private pending-work count for the sidebar; never shared-cached.",
+        "operationId": "alerts_attention_api_alerts_attention_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertAttentionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alerts Attention",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
     "/api/alerts/inbox": {
       "get": {
         "description": "Decision-ranked alert inbox for the authenticated user.",
@@ -11386,6 +11487,30 @@
         "summary": "Macro Context",
         "tags": [
           "news"
+        ]
+      }
+    },
+    "/api/nav/status": {
+      "get": {
+        "description": "Global sidebar status in one round trip of four indexed reads.",
+        "operationId": "nav_status_api_nav_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Nav Status Api Nav Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Nav Status",
+        "tags": [
+          "nav"
         ]
       }
     },

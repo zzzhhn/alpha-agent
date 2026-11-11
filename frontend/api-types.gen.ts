@@ -283,6 +283,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/alerts/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alerts Attention
+         * @description Private pending-work count for the sidebar; never shared-cached.
+         */
+        get: operations["alerts_attention_api_alerts_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/alerts/inbox": {
         parameters: {
             query?: never;
@@ -1895,6 +1915,26 @@ export interface paths {
         };
         /** Macro Context */
         get: operations["macro_context_api_macro_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/nav/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Nav Status
+         * @description Global sidebar status in one round trip of four indexed reads.
+         */
+        get: operations["nav_status_api_nav_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3707,6 +3747,31 @@ export interface components {
             ticker: string;
             /** Type */
             type: string;
+        };
+        /**
+         * AlertAttentionResponse
+         * @description Compact private count for the sidebar badge.
+         *
+         *     ``needs_action`` and ``critical`` use exactly the inbox's triage rules over
+         *     the same bounded window, so the badge and the alerts page agree. It is the
+         *     open work in that window, not a count of all historical alerts.
+         */
+        AlertAttentionResponse: {
+            /** As Of */
+            as_of: string;
+            /** Critical */
+            critical: number;
+            /** Needs Action */
+            needs_action: number;
+            /** Newest At */
+            newest_at: string | null;
+            /**
+             * Source Status
+             * @enum {string}
+             */
+            source_status: "fresh" | "stale" | "empty";
+            /** Window */
+            window: number;
         };
         /** AlertContext */
         AlertContext: {
@@ -6234,6 +6299,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefreshResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_attention_api_alerts_attention_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertAttentionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9023,6 +9119,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    nav_status_api_nav_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

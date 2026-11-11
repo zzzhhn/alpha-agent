@@ -21,6 +21,12 @@ interface TmTooltipProps {
   readonly width?: number;
   readonly ariaLabel?: string;
   readonly className?: string;
+  /**
+   * "self" (default) makes the wrapper its own tab stop. "child" keeps the
+   * wrapped interactive element as the only tab stop; focus inside it still
+   * opens the tooltip, and the child should carry its own accessible name.
+   */
+  readonly focusTarget?: "self" | "child";
 }
 
 const VIEWPORT_GAP = 8;
@@ -34,6 +40,7 @@ export function TmTooltip({
   width = 240,
   ariaLabel,
   className,
+  focusTarget = "self",
 }: TmTooltipProps) {
   const tooltipId = useId();
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -87,9 +94,9 @@ export function TmTooltip({
   return (
     <span
       ref={triggerRef}
-      tabIndex={0}
+      tabIndex={focusTarget === "self" ? 0 : undefined}
       aria-label={ariaLabel}
-      aria-describedby={open ? tooltipId : undefined}
+      aria-describedby={open && focusTarget === "self" ? tooltipId : undefined}
       className={clsx("inline-flex items-center", className)}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
