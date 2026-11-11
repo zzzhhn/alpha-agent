@@ -52,7 +52,8 @@ on:
     # moved to read-time path triggered by user with their own key.
     # Methodology proposal scheduling is quarantined until its legacy
     # synthetic-input validator is replaced. See research-validation-quarantine.md.
-    # L2 depends on successful complete research publication below.
+    # L2 runs on the 23:00 schedule after publication is attempted; it values
+    # existing holdings even when no new snapshot is published.
   workflow_dispatch:
     inputs:
       job:
@@ -437,10 +438,16 @@ jobs:
           [ "$HTTP" = "200" ] || exit 1
 
   l2_cycle:
+    # Valuation of existing L2 holdings must not depend on a new recommendation
+    # being published: a paused/late publication would otherwise freeze marks and
+    # pending fills. The driver itself never back-creates targets for a signal
+    # whose execution session has already closed, so running without a fresh
+    # snapshot only marks, fills already-pending intents, and records stale prices.
+    # Still ordered after fast_intraday so a same-evening publication is seen.
     needs: [preflight, fast_intraday]
     if: |
       always() && needs.preflight.outputs.ready == 'true' && (
-      (github.event.schedule == '0 23 * * 1-5' && needs.fast_intraday.outputs.published == 'true') ||
+      github.event.schedule == '0 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'l2_cycle')
       )
     runs-on: ubuntu-latest
