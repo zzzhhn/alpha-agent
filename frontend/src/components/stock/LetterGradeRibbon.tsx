@@ -15,7 +15,7 @@
  */
 
 import type { GradeMethod } from "@/lib/api/picks";
-import { gradeExplanation } from "@/lib/grade-method";
+import { gradeExplanation, gradeDimensionLabel } from "@/lib/grade-method";
 import { TmTooltip } from "@/components/tm/TmTooltip";
 import GradeLegend from "@/components/picks/GradeLegend";
 import type { Locale } from "@/lib/i18n";
@@ -71,7 +71,7 @@ export default function LetterGradeRibbon({
           const tone = GRADE_TONE[grade] ?? GRADE_TONE["—"];
           const label = DIMENSION_LABELS[dim]?.[locale] ?? dim;
           return (
-            <TmTooltip key={dim} width={280} content={gradeExplanation(label, grade, scores?.[dim], method, locale === "zh")} className="justify-center">
+            <TmTooltip key={dim} width={280} content={gradeExplanation(gradeDimensionLabel(dim, locale === "zh"), grade, scores?.[dim], method, locale === "zh")} className="justify-center">
             <div className={`flex w-full flex-col items-center rounded-[2px] border ${tone} px-1 py-0.5`}>
               <span className="whitespace-nowrap text-xs font-tm-sans text-tm-fg-2">{label}</span>
               <span className="text-sm font-semibold font-tm-sans">{grade}</span>

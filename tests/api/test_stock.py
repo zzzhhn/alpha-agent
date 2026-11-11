@@ -33,6 +33,9 @@ async def test_stock_returns_full_card(client_with_db, applied_db):
     body = r.json()
     assert body["card"]["ticker"] == "AAPL"
     assert body["card"]["rating"] == "OW"
+    from alpha_agent.fusion.grades import grade_method_metadata
+    assert body["card"]["grade_method"] == grade_method_metadata()
+    assert body["card"]["grade_method"]["bands"][-1] == {"grade": "F", "min_z": None}
     assert set(body["card"]["dimension_scores"]) == {
         "Momentum", "Technical", "Sentiment", "Catalyst", "Insider", "Flow",
     }

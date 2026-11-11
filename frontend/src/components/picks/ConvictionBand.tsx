@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { RatingCard } from "@/lib/api/picks";
+import type { RatingCard, GradeMethod } from "@/lib/api/picks";
 import clsx from "clsx";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSuggestion } from "@/lib/suggestion";
@@ -30,8 +30,9 @@ const TIER_COLOR: Record<string, string> = {
 };
 
 export default function ConvictionBand({
-  picks,
+  picks, gradeMethod,
 }: {
+  readonly gradeMethod?: GradeMethod;
   readonly picks: readonly RatingCard[];
 }) {
   const { locale } = useLocale();
@@ -50,11 +51,6 @@ export default function ConvictionBand({
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {top.map((card, i) => {
-          const composite =
-            typeof card.composite_score === "number" &&
-            isFinite(card.composite_score)
-              ? card.composite_score
-              : 0;
           const hit =
             typeof card.confidence === "number" && isFinite(card.confidence)
               ? card.confidence
@@ -89,8 +85,7 @@ export default function ConvictionBand({
                   {card.ticker}
                 </span>
                 <span className="font-tm-mono text-base tabular-nums text-tm-accent">
-                  {composite >= 0 ? "+" : ""}
-                  {composite.toFixed(2)}σ
+                  {card.rank_score ?? "—"}
                 </span>
               </div>
               <div className="font-tm-sans text-sm leading-5 text-tm-fg-2">
@@ -103,7 +98,7 @@ export default function ConvictionBand({
                   <span className="text-tm-muted">—</span>
                 )}
               </div>
-              <GradeStrip grades={card.dimension_grades ?? {}} locale={locale} />
+              <GradeStrip grades={card.dimension_grades ?? {}} scores={card.dimension_scores} method={gradeMethod} locale={locale} />
               <div className="flex items-center justify-between border-t border-tm-rule pt-2">
                 <span
                   className={clsx("font-tm-mono text-[12px] font-semibold", sugTone)}

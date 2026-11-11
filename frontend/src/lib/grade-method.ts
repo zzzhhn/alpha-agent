@@ -16,3 +16,9 @@ export function gradeExplanation(dimension: string, grade: string, score: number
     : (zh ? "不可评级：有效成员／样本／截面差异不足，或该股票缺少成员" : "Not gradeable: insufficient live members, observations, spread, or ticker members");
   return `${dimension} · ${grade} · ${gradeBand(grade, method)} · ${value}`;
 }
+
+
+export function gradeDimensionLabel(dimension: string, zh: boolean): string {
+  const names: Record<string, string> = { Momentum: "动量", Technical: "技术", Sentiment: "情绪", Catalyst: "催化", Insider: "内部交易", Flow: "资金流" };
+  return zh ? names[dimension] ?? dimension : dimension;
+}
