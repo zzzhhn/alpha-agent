@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { useTimezonePreference } from "@/hooks/useTimezonePreference";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 import { TmPane, TmScreen } from "@/components/tm/TmPane";
 import { TmButton, TmDisclosureButton, TmLinkButton } from "@/components/tm/TmButton";
@@ -17,7 +18,7 @@ import {
   isActivePaperRun, canWakePaperBot, type PaperAccountSummary, type PaperBotConfig, type PaperBotRun, type PaperBotRunList, type PaperBotPerformance,
 } from "@/lib/api/paper-bot";
 import PaperBotConfigDrawer from "./PaperBotConfigDrawer";
-import { PaperBotState, PaperBotPagination, PaperBotRunDrawer, PaperBotOrderDrawer, PaperBotExecutionSummary, PaperBotOutcome, botTime, botRunLabel, botStageLabel, botTriggerLabel, botModelLabel } from "./PaperBotUi";
+import { PaperBotState, PaperBotPagination, PaperBotRunDrawer, PaperBotOrderDrawer, PaperBotExecutionSummary, PaperBotDecisionSummary, botZonedTime, botZoneLabel, botOutcomeLabel, botStageLabel, botTriggerLabel, botModelLabel, humanizeBotText } from "./PaperBotUi";
 import { PaperBotReadiness, PaperBotPerformanceSummary, PaperBotPerformanceDrawer, PaperBotScheduleDrawer, PaperBotScheduleNotice } from "./PaperBotEvidence";
 import PaperPositionsWithSource from "./PaperPositionsWithSource";
 import PaperCurvePane from "./PaperCurvePane";
@@ -57,6 +58,7 @@ const pending = <T,>(): Resource<T> => ({data:null,error:null,loading:true});
 
 function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccountSummary; readonly accountTabs: ReactNode }) {
   const { locale } = useLocale();
+  const { timeZone } = useTimezonePreference();
   const id = summary.account_id;
   const [account,setAccount] = useState<Resource<AccountResponse>>(pending);
   const [config,setConfig] = useState<Resource<PaperBotConfig>>(pending);
@@ -221,7 +223,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
     <WorkbenchHeader title={summary.name || t(locale,"sim.bot.title")} subtitle={t(locale,"sim.bot.subtitle")} statuses={[
       {label:t(locale,"sim.bot.model"),value:cfg ? botModelLabel(cfg.provider,cfg.model) : "—"},
       {label:t(locale,"sim.bot.readiness"),value:cfg?.readiness ? t(locale,cfg.readiness.can_wake ? "sim.bot.can_wake" : "sim.bot.cannot_wake") : "—",tone:cfg?.readiness && !cfg.readiness.can_wake ? "warning" : "default"},
-      {label:t(locale,currentWindow ? "sim.bot.schedule.current_window" : "sim.bot.next"),value:cfg?.schedule_enabled && wakeTime ? `${botTime(wakeTime,locale)} CST` : cfg && !cfg.schedule_enabled ? t(locale,"sim.bot.paused") : "—"},
+      {label:t(locale,currentWindow ? "sim.bot.schedule.current_window" : "sim.bot.next"),value:cfg?.schedule_enabled && wakeTime ? `${botZonedTime(wakeTime,locale,timeZone)}` : cfg && !cfg.schedule_enabled ? t(locale,"sim.bot.paused") : "—"},
     ]} action={<div className="flex flex-wrap gap-2">
       <TmButton variant="secondary" onClick={refresh} disabled={busy} loading={refreshing}>{t(locale,"sim.bot.refresh")}</TmButton>
       <TmButton variant="secondary" onClick={()=>setConfigDraft(cfg)} disabled={!cfg || busy}>{t(locale,"sim.bot.configure")}</TmButton>
@@ -236,17 +238,16 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
     </TmPane>
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
       <div className="min-w-0 lg:border-r lg:border-tm-rule">
-        <TmPane title={t(locale,active ? "sim.bot.decision" : "sim.bot.last_decision")} meta={current ? `${botTime(current.created_at,locale)} CST` : "—"}>
+        <TmPane title={t(locale,active ? "sim.bot.decision" : "sim.bot.last_decision")} meta={current ? `${botZonedTime(current.created_at,locale,timeZone)}` : "—"}>
           {(latest.loading && !current) || latest.error ? (
             <PaperBotState loading={latest.loading} error={latest.error} onRetry={refresh} />
           ) : current ? <div className="space-y-3 px-6 py-5">
-            <div role="status" aria-live="polite" className="flex flex-wrap justify-between gap-2 font-tm-mono text-xs text-tm-accent"><span>{botStageLabel(locale,current)}</span><span className="text-tm-muted">{botTriggerLabel(locale,current.trigger)}</span></div>
+            <div role="status" aria-live="polite" className="flex flex-wrap justify-between gap-2 font-tm-mono text-xs text-tm-accent"><span>{botOutcomeLabel(locale,current)}{active ? ` · ${botStageLabel(locale,current)}` : ""}</span><span className="text-tm-muted">{botTriggerLabel(locale,current.trigger)}</span></div>
             <PaperBotExecutionSummary run={current} />
-            <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-tm-fg">{current.summary || (active ? t(locale,"sim.bot.running_hint") : current.status === "no_trade" ? t(locale,"sim.bot.no_trade") : current.status === "failed" ? t(locale,"sim.bot.run_error") : t(locale,"sim.bot.no_result"))}</p>
-            <PaperBotOutcome run={current} />
+            <PaperBotDecisionSummary run={current} timeZone={timeZone} />
             {active && current.summary ? <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.running_hint")}</p> : null}
             <TmButton variant="secondary" onClick={()=>void inspectRun(current)}>{t(locale,"sim.bot.details")}</TmButton>
-            {active ? <p role={pollError ? "alert" : undefined} className={`text-xs ${pollError ? "text-tm-warn" : "text-tm-muted"}`}>{t(locale,pollError ? "sim.bot.stale_poll" : "sim.bot.status_synced")}{lastPollAt ? ` · ${botTime(lastPollAt,locale)} CST` : null}</p> : null}
+            {active ? <p role={pollError ? "alert" : undefined} className={`text-xs ${pollError ? "text-tm-warn" : "text-tm-muted"}`}>{t(locale,pollError ? "sim.bot.stale_poll" : "sim.bot.status_synced")}{lastPollAt ? ` · ${botZonedTime(lastPollAt,locale,timeZone)}` : null}</p> : null}
           </div> : <TmStatePane state="empty" title={t(locale,"sim.bot.no_runs")} description={t(locale,"sim.bot.no_runs_hint")} className="border-0 !bg-transparent" />}
         </TmPane>
       </div>
@@ -255,7 +256,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
           <PaperBotReadiness config={cfg} />
           <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-tm-fg">{t(locale,cfg.schedule_enabled ? "sim.bot.scheduled" : "sim.bot.paused")}</span><TmButton variant="secondary" disabled={busy || (!cfg.schedule_enabled && !cfg.credential_configured)} onClick={()=>void mutate(()=>patchPaperBotConfig(id,{schedule_enabled:!cfg.schedule_enabled}))}>{t(locale,cfg.schedule_enabled ? "sim.bot.pause" : "sim.bot.resume")}</TmButton></div>
           <p>{t(locale,"sim.bot.open_slot")} {cfg.open_enabled ? `${cfg.open_offset_minutes} ${t(locale,"sim.bot.minutes")}` : "—"} · {t(locale,"sim.bot.close_slot")} {cfg.close_enabled ? `${cfg.close_offset_minutes} ${t(locale,"sim.bot.minutes")}` : "—"}</p>
-          <div className="border-t border-tm-rule pt-3"><p className="text-tm-fg">{t(locale,currentWindow ? "sim.bot.schedule.current_window" : "sim.bot.next")} · {wakeTime ? `${botTime(wakeTime,locale)} CST` : "—"}</p>{wakeTime ? <p>{botTime(wakeTime,locale,"America/New_York")} ET</p> : null}</div>
+          <div className="border-t border-tm-rule pt-3"><p className="text-tm-fg">{t(locale,currentWindow ? "sim.bot.schedule.current_window" : "sim.bot.next")} · {wakeTime ? botZonedTime(wakeTime,locale,timeZone) : "—"}</p>{wakeTime && timeZone !== "America/New_York" ? <p>{botZonedTime(wakeTime,locale,"America/New_York")}</p> : null}</div>
           <p>{cfg.market.session_date} · {t(locale,cfg.market.is_open ? "sim.bot.market_open" : "sim.bot.market_closed_hint")}</p>
           <TmButton variant="secondary" size="xs" onClick={()=>setScheduleOpen(true)}>{t(locale,"sim.bot.schedule_observations")}</TmButton>
           <PaperBotScheduleNotice config={cfg} />
@@ -270,7 +271,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
       {(curve.loading && !curve.data) || curve.error ? <PaperBotState loading={curve.loading} error={curve.error} onRetry={refresh} /> : <PaperCurvePane curve={curve.data} compact showDisclaimer={false} />}
       <p className="px-6 pb-3 text-xs text-tm-muted">{t(locale,"sim.bot.curve_basis")}</p>
     </TmPane>
-    <TmPane title={t(locale,ledger === "runs" ? "sim.bot.history" : "sim.bot.orders")} meta={t(locale,ledger === "runs" ? "sim.bot.records_timezone" : "sim.bot.orders_timezone")}>
+    <TmPane title={t(locale,ledger === "runs" ? "sim.bot.history" : "sim.bot.orders")} meta={t(locale,ledger === "runs" ? "sim.bot.timezone.records" : "sim.bot.timezone.orders").replace("{zone}",botZoneLabel(timeZone,locale))}>
       <SegmentedTabs<"runs" | "orders"> active={ledger} onChange={setLedger} ariaLabel={t(locale,"sim.bot.history")} items={[{key:"runs",label:t(locale,"sim.bot.history")},{key:"orders",label:t(locale,"sim.bot.orders")}]} />
       <div key={`${ledger}-${ledger === "runs" ? runPage : orderPage}`} className="paper-bot-appear">
       {ledger === "runs" ? (
@@ -281,11 +282,11 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
               <TmTableHeaderCell>{t(locale,"sim.bot.details")}</TmTableHeaderCell>
             </TmTableRow></TmTableHead>
             <TmTableBody>{runs.data?.runs.map(run=><TmTableRow key={run.id}>
-              <TmTableCell className="whitespace-nowrap">{botTime(run.created_at,locale)}</TmTableCell>
-              <TmTableCell className="whitespace-nowrap">{botRunLabel(locale,run.status)}</TmTableCell>
+              <TmTableCell className="whitespace-nowrap">{botZonedTime(run.created_at,locale,timeZone)}</TmTableCell>
+              <TmTableCell className="whitespace-nowrap">{botOutcomeLabel(locale,run)}</TmTableCell>
               <TmTableCell>{botTriggerLabel(locale,run.trigger)}</TmTableCell>
-              <TmTableCell className="max-w-sm truncate">{run.summary || "—"}</TmTableCell>
-              <TmTableCell><TmButton variant="ghost" size="xs" aria-label={`${t(locale,"sim.bot.details")} ${botTime(run.created_at,locale)}`} onClick={()=>void inspectRun(run)}>{t(locale,"sim.bot.details")}</TmButton></TmTableCell>
+              <TmTableCell className="max-w-sm truncate">{run.summary ? humanizeBotText(run.summary,locale) : "—"}</TmTableCell>
+              <TmTableCell><TmButton variant="ghost" size="xs" aria-label={`${t(locale,"sim.bot.details")} ${botZonedTime(run.created_at,locale,timeZone)}`} onClick={()=>void inspectRun(run)}>{t(locale,"sim.bot.details")}</TmButton></TmTableCell>
             </TmTableRow>)}</TmTableBody>
           </TmTable></TmTableFrame>
           {runs.data?.total === 0 ? <p className="px-4 py-6 text-sm text-tm-muted">{t(locale,"sim.bot.no_runs")}</p> : null}

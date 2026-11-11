@@ -28,7 +28,8 @@ describe("paper bot v2 evidence boundaries",()=>{
     const historical=renderToStaticMarkup(<PaperBotValuation account={account} />);
     expect(historical).toContain("$1,200");
     expect(historical).toContain("+20.00%");
-    expect(historical).toContain("04:32");
+    // The timezone hook uses UTC during SSR, before reading the saved preference.
+    expect(historical).toContain("20:32 UTC");
     expect(historical).toContain("历史快照，非当前报价");
     expect(historical).toContain("当前可用现金");
     expect(account.portfolio_value).toBeNull();
@@ -44,8 +45,8 @@ describe("paper bot v2 evidence boundaries",()=>{
     expect(indicative).toContain("$1,230");
     expect(indicative).toContain("不作为成交依据或正式收益记录");
     expect(indicative).toContain("ERIE");
-    expect(indicative).toContain("23:16");
-    expect(indicative).toContain("23:21");
+    expect(indicative).toContain("15:16 UTC");
+    expect(indicative).toContain("15:21 UTC");
     expect(indicative).not.toContain("$1,200");
   });
   it("labels stale bot marks as dated snapshots without changing human labels",()=>{
@@ -54,7 +55,9 @@ describe("paper bot v2 evidence boundaries",()=>{
     expect(bot).toContain("快照市值");
     expect(bot).toContain("快照浮盈亏");
     expect(bot).toContain("报价已过期");
-    expect(bot).toContain("04:31");
+    // SSR renders the deterministic UTC zone; the preference applies after hydration.
+    expect(bot).toContain("20:31 UTC");
+    expect(bot).not.toContain(" CST");
     expect(bot).not.toContain("当前市值");
     const missing=renderToStaticMarkup(<PaperPositionsWithSource positions={[{...positions[0],current_price:null,mark_at:null}]} attribution={[]} accountKind="bot" />);
     expect(missing).not.toContain("$100");

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useLocale } from "@/components/layout/LocaleProvider";
+import { useTimezonePreference } from "@/hooks/useTimezonePreference";
 import { TmStatePane } from "@/components/tm/TmStatePane";
 import { TmPagination } from "@/components/tm/TmPagination";
 import { TmDrawer } from "@/components/tm/TmDrawer";
@@ -18,6 +19,39 @@ export function botModelLabel(provider: string | null, model: string | null) {
 
 export function botRunLabel(locale: Locale, status: PaperBotRunStatus) {
   return t(locale, `sim.bot.status.${status}`);
+}
+
+export function botOutcomeLabel(locale: Locale, run: PaperBotRun) {
+  if (run.status === "partial") return t(locale, "sim.bot.outcome.partial");
+  if (run.status === "completed") {
+    switch (run.result?.outcome_reason) {
+      case "orders_settled": return t(locale, "sim.bot.outcome.orders_settled");
+      case "targets_unchanged": return t(locale, "sim.bot.outcome.targets_unchanged");
+      case "execution_partial": return t(locale, "sim.bot.outcome.partial");
+    }
+  }
+  return botRunLabel(locale, run.status);
+}
+
+const botTextKeys: Record<string, TranslationKey> = {
+  keep_positions: "sim.bot.text.keep_positions",
+  keep_cash: "sim.bot.text.keep_cash",
+  target_weight: "sim.bot.text.target_weight",
+  max_positions: "sim.bot.text.max_positions",
+  max_position_weight: "sim.bot.text.max_position_weight",
+  horizon_sessions: "sim.bot.text.horizon_sessions",
+  research_run_id: "sim.bot.text.research_run_id",
+  evidence_ids: "sim.bot.text.evidence_ids",
+  top_n: "sim.bot.text.top_n",
+  held_outside_top_n: "sim.bot.text.held_outside_top_n",
+  rebalance: "sim.bot.text.rebalance",
+  no_trade_reason: "sim.bot.text.no_trade_reason",
+};
+const botTextPattern = new RegExp(`\\b(${Object.keys(botTextKeys).join("|")})\\b`, "g");
+
+/** Translate known field tokens without rewriting the model's reasoning or values. */
+export function humanizeBotText(text: string, locale: Locale) {
+  return text.replace(botTextPattern, token => t(locale, botTextKeys[token]));
 }
 
 export function botStageLabel(locale: Locale, run: PaperBotRun) {
@@ -37,13 +71,24 @@ export function botTriggerLabel(locale: Locale, trigger: string) {
   return t(locale, "sim.bot.schedule_trigger");
 }
 
-export function botTime(value: string | null | undefined, locale: Locale, zone = "Asia/Shanghai") {
+export function botZoneLabel(zone: string, locale: Locale) {
+  if (zone === "Asia/Shanghai") return t(locale, "sim.bot.zone.beijing");
+  if (zone === "America/New_York") return t(locale, "sim.bot.zone.new_york");
+  return zone;
+}
+
+export function botTime(value: string | null | undefined, locale: Locale, zone: string) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
     timeZone: zone, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).format(date);
+}
+
+export function botZonedTime(value: string | null | undefined, locale: Locale, zone: string) {
+  const time = botTime(value, locale, zone);
+  return time === "—" ? time : `${time} ${botZoneLabel(zone, locale)}`;
 }
 
 const reasonKeys: Record<string, TranslationKey> = {
@@ -95,8 +140,41 @@ export function botRecord(value: unknown): Record<string, unknown> | null {
 export function recordedBotActions(run: PaperBotRun) {
   const decision=botRecord(run.result?.decision);
   const planned=Array.isArray(decision?.actions) ? decision.actions.map(botRecord).filter((row): row is Record<string,unknown>=>row!==null) : [];
-  const raw=run.result?.actions ?? run.result?.action_results ?? decision?.actions;
+  const actual=run.result?.actions ?? run.result?.action_results;
+  const raw=Array.isArray(actual) && actual.length ? actual : decision?.actions ?? actual;
   return Array.isArray(raw) ? raw.map(botRecord).filter((row): row is Record<string,unknown>=>row!==null).map(action=>({...planned.find(plan=>plan.action_id === action.action_id),...action})) : [];
+}
+
+export function PaperBotDecisionSummary({ run, timeZone: explicitZone, actionLimit = 4 }: {
+  readonly run: PaperBotRun; readonly timeZone?: string; readonly actionLimit?: number;
+}) {
+  const { locale } = useLocale();
+  const { timeZone: preferredZone } = useTimezonePreference();
+  const timeZone = explicitZone ?? preferredZone;
+  const result = run.result;
+  const decision = botRecord(result?.decision);
+  const context = botRecord(result?.context) ?? botRecord(botRecord(run)?.context);
+  const sources = [result, decision, context];
+  const evidenceIds = [...new Set([
+    ...sources.flatMap(source => Array.isArray(source?.evidence_ids) ? source.evidence_ids.filter((id): id is string => typeof id === "string" && !!id) : []),
+    ...recordedBotActions(run).flatMap(action => Array.isArray(action.evidence_ids) ? action.evidence_ids.filter((id): id is string => typeof id === "string" && !!id) : []),
+  ])];
+  const researchId = sources.map(source => source?.research_run_id).find(value => typeof value === "string" && !!value || typeof value === "number");
+  const snapshot = sources.flatMap(source => [source?.snapshot_date, source?.research_as_of]).find((value): value is string => typeof value === "string" && !!value);
+  const reason = result?.outcome_reason ?? decision?.no_trade_reason;
+  const active = run.status === "queued" || run.status === "running";
+  const headingClass = "text-xs font-semibold text-tm-muted";
+  return <div className="space-y-4 text-sm leading-6 text-tm-fg">
+    <section className="space-y-1"><h3 className={headingClass}>{t(locale, "sim.bot.summary.conclusion")}</h3><p>{botOutcomeLabel(locale, run)}</p><p className="text-xs text-tm-muted">{botReason(locale, typeof reason === "string" ? reason : null)}</p></section>
+    <section className="space-y-1"><h3 className={headingClass}>{t(locale, "sim.bot.summary.actions")}</h3>{recordedBotActions(run).length ? <PaperBotActions run={run} limit={actionLimit} showHeading={false} timeZone={timeZone} /> : <p className="text-xs text-tm-muted">{active ? "—" : t(locale, "sim.bot.no_order_evidence")}</p>}</section>
+    <section className="space-y-1"><h3 className={headingClass}>{t(locale, "sim.bot.summary.reason")}</h3><p className="whitespace-pre-wrap break-words">{run.summary ? humanizeBotText(run.summary, locale) : t(locale, active ? "sim.bot.running_hint" : "sim.bot.no_result")}</p></section>
+    <section className="space-y-1"><h3 className={headingClass}>{t(locale, "sim.bot.summary.evidence")}</h3><dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs text-tm-muted">
+      <dt>{t(locale, "sim.bot.text.evidence_ids")}</dt><dd className="break-words font-tm-mono">{evidenceIds.length ? evidenceIds.join(", ") : "—"}</dd>
+      <dt>{t(locale, "sim.bot.text.research_run_id")}</dt><dd className="break-words font-tm-mono">{researchId == null ? "—" : String(researchId)}</dd>
+      <dt>{t(locale, "sim.bot.summary.snapshot_date")}</dt><dd>{snapshot ? /^\d{4}-\d{2}-\d{2}$/.test(snapshot) ? snapshot : botZonedTime(snapshot, locale, timeZone) : "—"}</dd>
+    </dl></section>
+    <details className="text-xs text-tm-muted"><summary className="cursor-pointer">{t(locale, "sim.bot.summary.original")}</summary><p className="mt-2 whitespace-pre-wrap break-words">{run.summary || "—"}</p></details>
+  </div>;
 }
 
 export function PaperBotOutcome({ run }: { readonly run: PaperBotRun }) {
@@ -124,7 +202,7 @@ export function PaperBotExecutionSummary({ run }: { readonly run: PaperBotRun })
   const summary=run.order_summary;
   if(!summary) return <p className="text-xs text-tm-muted">{t(locale,"sim.bot.execution_unknown")}</p>;
   return <section aria-label={t(locale,"sim.bot.execution_summary")} className="space-y-3 border-y border-tm-rule py-3">
-    <div className="flex items-center justify-between text-xs text-tm-muted"><span>{t(locale,"sim.bot.execution_summary")} · {summary.total}</span>{summary.cancelled>0 ? <span>{t(locale,"sim.bot.execution_cancelled")} {summary.cancelled}</span> : null}</div>
+    <div className="flex items-center justify-between text-xs text-tm-muted"><span>{t(locale,"sim.bot.execution_summary")} · {t(locale,"sim.bot.scope.run")} · {summary.total}</span>{summary.cancelled>0 ? <span>{t(locale,"sim.bot.execution_cancelled")} {summary.cancelled}</span> : null}</div>
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <Metric label={t(locale,"sim.status.filled")} value={String(summary.filled)} />
       <Metric label={t(locale,"sim.status.pending")} value={String(summary.pending)} tone={summary.pending>0 ? "text-tm-warn" : "text-tm-fg"} />
@@ -135,8 +213,10 @@ export function PaperBotExecutionSummary({ run }: { readonly run: PaperBotRun })
 }
 
 /** Only render recorded actions. Unknown result shapes remain available in details. */
-export function PaperBotActions({ run, limit, page }: { readonly run: PaperBotRun; readonly limit?: number; readonly page?: number }) {
+export function PaperBotActions({ run, limit, page, showHeading = true, timeZone: explicitZone }: { readonly run: PaperBotRun; readonly limit?: number; readonly page?: number; readonly showHeading?: boolean; readonly timeZone?: string }) {
   const { locale } = useLocale();
+  const { timeZone: preferredZone } = useTimezonePreference();
+  const timeZone = explicitZone ?? preferredZone;
   const allActions=recordedBotActions(run);
   const actions=page != null ? allActions.slice((page-1)*5,page*5) : limit == null ? allActions : allActions.slice(0,limit);
   if(!actions.length) return null;
@@ -149,17 +229,18 @@ export function PaperBotActions({ run, limit, page }: { readonly run: PaperBotRu
   const reasons:Record<string,TranslationKey> = {
     ticker_has_pending_order:"sim.bot.reason.ticker_has_pending_order", awaiting_settled_cash:"sim.bot.reason.awaiting_settled_cash", bot_order_not_found:"sim.bot.reason.bot_order_not_found",
   };
-  return <div className="space-y-2"><h3 className="text-xs font-semibold text-tm-muted">{t(locale,"sim.bot.actions")}</h3><ul className="divide-y divide-tm-rule border-y border-tm-rule">{actions.map((action,index)=>{
+  return <div className="space-y-2">{showHeading ? <h3 className="text-xs font-semibold text-tm-muted">{t(locale,"sim.bot.actions")}</h3> : null}<ul className="divide-y divide-tm-rule border-y border-tm-rule">{actions.map((action,index)=>{
     const status=typeof action.status === "string" ? action.status : "";
     const orderStatus=typeof action.order_status === "string" ? action.order_status : null;
     const reason=typeof action.reason === "string" ? action.reason : "";
     const symbol=typeof action.ticker === "string" ? action.ticker : typeof action.instrument_id === "string" ? action.instrument_id : "—";
-    return <li key={typeof action.action_id === "string" ? action.action_id : index} className="space-y-1 py-3 text-xs leading-5"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-tm-mono font-semibold text-tm-fg">{symbol}</span><span className={status === "rejected" || status === "failed" ? "text-tm-neg" : "text-tm-muted"}>{t(locale,"sim.bot.action_result")} · {t(locale,statusKeys[status] ?? "sim.bot.action.unknown")}</span></div><div className="flex flex-wrap gap-3 text-tm-fg-2">{action.side === "buy" || action.side === "sell" ? <span>{t(locale,action.side === "buy" ? "sim.order_side.buy" : "sim.order_side.sell")}{typeof action.qty === "number" ? ` · ${action.qty}` : ""}</span> : null}{typeof action.target_weight === "number" ? <span>{t(locale,"sim.bot.target")} {(action.target_weight*100).toFixed(1)}%</span> : null}{action.type === "cancel_order" ? <span>{t(locale,"sim.bot.action.cancel_order")}</span> : null}</div>{orderStatus ? <p className={orderStatus === "failed" || orderStatus === "rejected" ? "text-tm-neg" : "text-tm-fg-2"}>{t(locale,"sim.bot.actual_order_status")} · {t(locale,statusKeys[orderStatus] ?? "sim.bot.action.unknown")}{typeof action.filled_at === "string" ? ` · ${botTime(action.filled_at,locale)} CST` : ""}{typeof action.filled_price === "number" ? ` · $${action.filled_price.toFixed(2)}` : ""}{typeof action.fee === "number" ? ` · ${t(locale,"sim.bot.fee")} $${action.fee.toFixed(2)}` : ""}</p> : status === "accepted" ? <p>{t(locale,"sim.bot.order_status_unknown")}</p> : null}{reason ? <p className="break-words text-tm-muted">{reasons[reason] ? t(locale,reasons[reason]) : reason}</p> : null}</li>;
+    return <li key={typeof action.action_id === "string" ? action.action_id : index} className="space-y-1 py-3 text-xs leading-5"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-tm-mono font-semibold text-tm-fg">{symbol}</span><span className={status === "rejected" || status === "failed" ? "text-tm-neg" : "text-tm-muted"}>{t(locale,"sim.bot.action_result")} · {t(locale,statusKeys[status] ?? "sim.bot.action.unknown")}</span></div><div className="flex flex-wrap gap-3 text-tm-fg-2">{action.side === "buy" || action.side === "sell" ? <span>{t(locale,action.side === "buy" ? "sim.order_side.buy" : "sim.order_side.sell")}{typeof action.qty === "number" ? ` · ${action.qty}` : ""}</span> : null}{typeof action.target_weight === "number" ? <span>{t(locale,"sim.bot.target")} {(action.target_weight*100).toFixed(1)}%</span> : null}{action.type === "cancel_order" ? <span>{t(locale,"sim.bot.action.cancel_order")}</span> : null}</div>{orderStatus ? <p className={orderStatus === "failed" || orderStatus === "rejected" ? "text-tm-neg" : "text-tm-fg-2"}>{t(locale,"sim.bot.actual_order_status")} · {t(locale,statusKeys[orderStatus] ?? "sim.bot.action.unknown")}{typeof action.filled_at === "string" ? ` · ${botZonedTime(action.filled_at,locale,timeZone)}` : ""}{typeof action.filled_price === "number" ? ` · $${action.filled_price.toFixed(2)}` : ""}{typeof action.fee === "number" ? ` · ${t(locale,"sim.bot.fee")} $${action.fee.toFixed(2)}` : ""}</p> : status === "accepted" ? <p>{t(locale,"sim.bot.order_status_unknown")}</p> : null}{reason ? <p className="break-words text-tm-muted">{reasons[reason] ? t(locale,reasons[reason]) : reason}</p> : null}</li>;
   })}</ul>{page == null && allActions.length>actions.length ? <p className="text-xs text-tm-muted">{t(locale,"sim.bot.more_actions").replace("{shown}",String(actions.length)).replace("{total}",String(allActions.length))}</p> : null}</div>;
 }
 
 export function PaperBotRunDrawer({ run, open, onClose, loading, error, onRetry }: { readonly run: PaperBotRun | null; readonly open?: boolean; readonly onClose: () => void; readonly loading?: boolean; readonly error?: unknown; readonly onRetry?: () => void }) {
   const { locale } = useLocale();
+  const { timeZone } = useTimezonePreference();
   const [tab,setTab]=useState<"overview" | "actions" | "reviews" | "evidence">("overview");
   const [actionPage,setActionPage]=useState(1);
   const [reviewPage,setReviewPage]=useState(1);
@@ -171,14 +252,13 @@ export function PaperBotRunDrawer({ run, open, onClose, loading, error, onRetry 
   return <TmDrawer open={open ?? !!run} onClose={onClose} closeLabel={t(locale,"sim.bot.close")} title={t(locale,"sim.bot.decision")} width="xl">
     {!run ? <PaperBotState loading={loading} error={error} onRetry={onRetry} /> : <div className="space-y-5 text-sm leading-6 text-tm-fg">
       {loading ? <p role="status" className="text-xs text-tm-muted">{t(locale,"sim.bot.refreshing_details")}</p> : error ? <div><p className="text-xs text-tm-warn">{t(locale,"sim.bot.details_stale")}</p><PaperBotState error={error} onRetry={onRetry} /></div> : null}
-      <div className="flex flex-wrap gap-3 font-tm-mono text-xs text-tm-muted"><span>{botStageLabel(locale,run)}</span><span>{botTriggerLabel(locale,run.trigger)}</span><span>{botModelLabel(run.provider,run.model)}</span></div>
+      <div className="flex flex-wrap gap-3 font-tm-mono text-xs text-tm-muted"><span>{botOutcomeLabel(locale,run)}{run.status === "queued" || run.status === "running" ? ` · ${botStageLabel(locale,run)}` : ""}</span><span>{botTriggerLabel(locale,run.trigger)}</span><span>{botModelLabel(run.provider,run.model)}</span></div>
       <SegmentedTabs active={tab} onChange={setTab} ariaLabel={t(locale,"sim.bot.details")} items={[{key:"overview",label:t(locale,"sim.bot.run_overview")},{key:"actions",label:`${t(locale,"sim.bot.actions")} (${recordedBotActions(run).length})`},{key:"reviews",label:`${t(locale,"sim.bot.holding_review")} (${notes.length})`},{key:"evidence",label:t(locale,"sim.bot.run_diagnostics")}]} />
       {tab === "overview" ? <>
       <PaperBotExecutionSummary run={run} />
-      <p className="whitespace-pre-wrap break-words">{run.summary || t(locale,"sim.bot.no_result")}</p>
-      <PaperBotOutcome run={run} />
+      <PaperBotDecisionSummary run={run} timeZone={timeZone} />
       {decision?.target_semantics === "patch_targets" ? <p className="text-xs text-tm-muted">{t(locale,"sim.bot.patch_targets")}</p> : null}
-      <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 font-tm-mono text-xs"><dt>{t(locale,"sim.bot.started")}</dt><dd>{run.started_at ? `${botTime(run.started_at,locale)} CST` : "—"}</dd><dt>{t(locale,"sim.bot.finished")}</dt><dd>{run.finished_at ? `${botTime(run.finished_at,locale)} CST` : "—"}</dd><dt>{t(locale,"sim.bot.tokens")}</dt><dd>{run.prompt_tokens == null && run.completion_tokens == null ? t(locale,"sim.bot.tokens_unknown") : `${run.prompt_tokens ?? "—"} / ${run.completion_tokens ?? "—"} tokens`}</dd></dl>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 font-tm-mono text-xs"><dt>{t(locale,"sim.bot.started")}</dt><dd>{run.started_at ? `${botZonedTime(run.started_at,locale,timeZone)}` : "—"}</dd><dt>{t(locale,"sim.bot.finished")}</dt><dd>{run.finished_at ? `${botZonedTime(run.finished_at,locale,timeZone)}` : "—"}</dd><dt>{t(locale,"sim.bot.tokens")}</dt><dd>{run.prompt_tokens == null && run.completion_tokens == null ? t(locale,"sim.bot.tokens_unknown") : `${run.prompt_tokens ?? "—"} / ${run.completion_tokens ?? "—"} tokens`}</dd></dl>
       </> : null}
       {tab === "actions" ? <><PaperBotActions run={run} page={actionPage} />{recordedBotActions(run).length ? <PaperBotPagination page={actionPage} total={recordedBotActions(run).length} loading={false} onChange={setActionPage} /> : <PaperBotOutcome run={run} />}</> : null}
       {tab === "reviews" ? notes.length ? <section><p className="text-xs text-tm-muted">{t(locale,"sim.bot.position_notes")}</p><ul className="divide-y divide-tm-rule">{notes.slice((reviewPage-1)*5,reviewPage*5).map((note,index)=><li key={index} className="space-y-1 py-3 text-sm leading-6"><span className="font-tm-mono font-semibold">{String(note.ticker)}</span>{(["note","thesis","invalidation","review_after"] as const).map(field=>typeof note[field] === "string" ? <p key={field} className="whitespace-pre-wrap break-words text-tm-muted">{field === "note" ? "" : `${t(locale,`sim.bot.position_${field}`)} · `}{String(note[field])}</p> : null)}</li>)}</ul><PaperBotPagination page={reviewPage} total={notes.length} loading={false} onChange={setReviewPage} /></section> : <p className="text-sm text-tm-muted">{t(locale,"sim.bot.review_missing")}</p> : null}
@@ -195,14 +275,15 @@ export function PaperBotRunDrawer({ run, open, onClose, loading, error, onRetry 
 
 export function PaperBotOrderDrawer({ order, onClose, onRun }: { readonly order: OrderOut | null; readonly onClose: () => void; readonly onRun: (runId: string) => void }) {
   const { locale } = useLocale();
+  const { timeZone } = useTimezonePreference();
   const price=(value:number | null | undefined)=>value == null ? "—" : `$${value.toFixed(2)}`;
   return <TmDrawer open={!!order} onClose={onClose} closeLabel={t(locale,"sim.bot.close")} title={order ? `${order.ticker} · #${order.id}` : t(locale,"sim.bot.orders")} width="lg">
     {order ? <div className="space-y-5 text-xs leading-5 text-tm-muted">
       <div className="flex flex-wrap items-center gap-4 text-sm text-tm-fg"><span>{t(locale,order.side === "buy" ? "sim.order_side.buy" : "sim.order_side.sell")} · {order.qty}</span><span>{["pending","filled","failed","cancelled"].includes(order.status) ? t(locale,`sim.status.${order.status}` as "sim.status.filled") : order.status === "expired" ? t(locale,"sim.bot.order.expired") : t(locale,"sim.bot.action.unknown")}</span></div>
       <p>{t(locale,"sim.bot.execution_note")}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 font-tm-mono">
-        <dt>{t(locale,"sim.bot.accepted_at")}</dt><dd>{order.accepted_at ? `${botTime(order.accepted_at,locale)} CST` : "—"}</dd>
-        <dt>{t(locale,"sim.bot.filled_at")}</dt><dd>{order.filled_at ? `${botTime(order.filled_at,locale)} CST` : "—"}</dd>
+        <dt>{t(locale,"sim.bot.accepted_at")}</dt><dd>{order.accepted_at ? `${botZonedTime(order.accepted_at,locale,timeZone)}` : "—"}</dd>
+        <dt>{t(locale,"sim.bot.filled_at")}</dt><dd>{order.filled_at ? `${botZonedTime(order.filled_at,locale,timeZone)}` : "—"}</dd>
         <dt>{t(locale,"sim.bot.reference_price")}</dt><dd>{price(order.reference_price)}</dd>
         <dt>{t(locale,"sim.bot.fill_price")}</dt><dd>{price(order.fill_price)}</dd>
         <dt>{t(locale,"sim.bot.fee")}</dt><dd>{price(order.transaction_cost)}{order.fee_bps == null ? "" : ` · ${order.fee_bps} bps`}</dd>
