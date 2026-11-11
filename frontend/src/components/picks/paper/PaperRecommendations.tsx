@@ -60,7 +60,7 @@ export default function PaperRecommendations({
           const company = locale === "zh"
             ? pick.company_name_zh ?? pick.company_name
             : pick.company_name;
-          const confidence = pick.confidence;
+          const rankScore = pick.rank_score;
           const rationale = (pick.top_drivers ?? [])
             .slice(0, 2)
             .map((name) => getSignalDisplayLabel(name, locale))
@@ -87,10 +87,10 @@ export default function PaperRecommendations({
               </div>
               <div
                 className="font-tm-mono text-xs text-tm-muted"
-                title={t(locale, "sim.workspace.confidence_5d")}
-                aria-label={t(locale, "sim.workspace.confidence_5d")}
+                title={t(locale, "sim.workspace.rank_score_tip")}
+                aria-label={t(locale, "sim.workspace.rank_score")}
               >
-                {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
+                {typeof rankScore === "number" ? rankScore : "—"}
               </div>
               <div className="min-w-0 truncate text-xs text-tm-muted">{rationale || "—"}</div>
               <TmButton variant="secondary" className="px-2 py-1" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
@@ -108,7 +108,7 @@ export default function PaperRecommendations({
       >
         <TmTableHead>
           <TmTableRow>
-            {[t(locale, "sim.workspace.company_ticker"), locale === "zh" ? "评级" : "Rating", t(locale, "sim.workspace.latest_close"), t(locale, "sim.workspace.day_change"), t(locale, "sim.workspace.confidence_5d"), t(locale, "sim.workspace.rationale"), ""].map((label) => (
+            {[t(locale, "sim.workspace.company_ticker"), locale === "zh" ? "评级" : "Rating", t(locale, "sim.workspace.latest_close"), t(locale, "sim.workspace.day_change"), t(locale, "sim.workspace.rank_score"), t(locale, "sim.workspace.rationale"), ""].map((label) => (
               <TmTableHeaderCell key={label || "action"} className={!label ? "sticky right-0 z-10 bg-tm-bg-2" : undefined}>{label || <span className="sr-only">{locale === "zh" ? "操作" : "Action"}</span>}</TmTableHeaderCell>
             ))}
           </TmTableRow>
@@ -119,7 +119,7 @@ export default function PaperRecommendations({
             const company = locale === "zh"
               ? pick.company_name_zh ?? pick.company_name
               : pick.company_name;
-            const confidence = pick.confidence;
+            const rankScore = pick.rank_score;
             const rationale = (pick.top_drivers ?? [])
               .slice(0, 2)
               .map((name) => getSignalDisplayLabel(name, locale))
@@ -143,8 +143,8 @@ export default function PaperRecommendations({
                   "text-xs",
                   (pick.daily_change_pct ?? 0) >= 0 ? "text-tm-pos" : "text-tm-neg",
                 )}>{pct(pick.daily_change_pct)}</TmTableCell>
-                <TmTableCell numeric className="text-xs text-tm-fg-2">
-                  {typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "—"}
+                <TmTableCell numeric className="text-xs text-tm-fg-2" title={t(locale, "sim.workspace.rank_score_tip")}>
+                  {typeof rankScore === "number" ? rankScore : "—"}
                 </TmTableCell>
                 <TmTableCell className="max-w-48 text-xs leading-4 text-tm-muted">{rationale || "—"}</TmTableCell>
                 <TmTableCell className="sticky right-0 border-l border-tm-rule bg-tm-bg-2 text-right">

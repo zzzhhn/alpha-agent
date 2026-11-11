@@ -1298,6 +1298,10 @@ export interface paths {
         /**
          * Calibration
          * @description Most-recent confidence-calibration snapshot (isotonic map + buckets).
+         *
+         *     ``active`` describes the latest APPLIED map, which is what the live
+         *     confidence path uses; the top-level fields keep describing the most recent
+         *     fit attempt (which may be unapplied when the sample was too small).
          */
         get: operations["calibration_api_evolution_calibration_get"];
         put?: never;
