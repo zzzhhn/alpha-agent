@@ -45,6 +45,12 @@ export interface AlertTriageState {
 }
 
 export interface AlertInboxItem extends AlertRow {
+  // Same ticker + type + New York date are folded into one group; the item
+  // carries the newest member and every member id so actions cover them all.
+  occurrences?: number;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
+  member_ids?: number[];
   severity: AlertSeverity;
   relevance: AlertRelevance;
   triage_score: number;
@@ -90,3 +96,20 @@ export const setAlertState = (
     note?: string | null;
   },
 ) => apiPost<AlertTriageState, typeof body>(`/api/alerts/${alertId}/state`, body);
+
+export interface AlertBatchStateResponse {
+  updated: number;
+  states: Record<string, AlertTriageState>;
+}
+
+/** Apply one reversible triage decision to every alert in a group (own rows only). */
+export const setAlertStatesBatch = (body: {
+  alert_ids: number[];
+  status: AlertWorkflowStatus;
+  snooze_until?: string | null;
+  note?: string | null;
+}) => apiPost<AlertBatchStateResponse, typeof body>("/api/alerts/state/batch", body);
+
+/** Member ids of a (possibly grouped) inbox item; legacy items fall back to their own id. */
+export const alertMemberIds = (item: Pick<AlertInboxItem, "id" | "member_ids">): number[] =>
+  item.member_ids && item.member_ids.length ? item.member_ids : [item.id];

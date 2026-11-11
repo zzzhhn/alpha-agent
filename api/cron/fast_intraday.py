@@ -42,7 +42,7 @@ from alpha_agent.fusion.policy import get_active_policy
 # (not a bare DEFAULT_WEIGHTS reference), and fusion is coverage-aware (missing
 # core signals damp conviction instead of silently redistributing weight).
 _POLICY = get_active_policy()
-from alpha_agent.orchestrator.alert_detector import detect_alerts
+from alpha_agent.orchestrator.alert_detector import alert_dedup_bucket, detect_alerts
 from alpha_agent.orchestrator.batch_runner import run_batched
 from alpha_agent.signals import earnings, insider, supply_chain
 from alpha_agent.signals.base import SignalScore
@@ -187,7 +187,6 @@ async def _run_handler(
     today = now.date().isoformat()
     started_at = now
     errors: list[dict] = []
-    bucket = int(now.timestamp()) // 1800
 
     # Rank-based coverage: refresh the highest-conviction names (|composite|
     # DESC) the picks page actually surfaces, NOT the alphabetical SP500 head.
@@ -373,7 +372,10 @@ async def _run_handler(
         )
 
         for alert in detect_alerts(prev_card, curr_card):
-            await enqueue_alert(pool, t, alert["type"], alert["payload"], bucket)
+            await enqueue_alert(
+                pool, t, alert["type"], alert["payload"],
+                alert_dedup_bucket(alert["type"], now),
+            )
 
         return t
 

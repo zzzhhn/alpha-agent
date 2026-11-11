@@ -3,7 +3,20 @@ dicts, returns a list of alert dicts (type, payload). The cron handler
 enqueues these to alert_queue with the appropriate dedup_bucket."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
+
+
+def alert_dedup_bucket(alert_type: str, now: datetime) -> int:
+    """State alerts dedupe per UTC day; discrete events keep 30-minute buckets.
+
+    The numeric bucket spaces differ intentionally: alert_queue uniqueness also
+    includes the alert type (and ticker). Existing rows are left untouched.
+    Naive datetimes are treated as UTC, consistently with alert triage.
+    """
+    current = now if now.tzinfo else now.replace(tzinfo=UTC)
+    seconds = 86400 if alert_type in {"news_velocity", "iv_spike"} else 1800
+    return int(current.timestamp()) // seconds
 
 
 def _find_signal(card: dict, name: str) -> dict | None:

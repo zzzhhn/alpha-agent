@@ -1,5 +1,5 @@
 """Fast intraday cron tests. Mocks all signal fetches; uses real ephemeral Postgres."""
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import asyncpg
@@ -9,6 +9,49 @@ from alpha_agent.signals.base import SignalScore
 from alpha_agent.signals.registry import all_signal_names, module_path
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_fast_intraday_alerts_use_daily_state_and_half_hour_event_buckets(applied_db, monkeypatch):
+    from api.cron import fast_intraday
+
+    monkeypatch.setenv("DATABASE_URL", applied_db)
+    monkeypatch.setattr(
+        "alpha_agent.storage.queries.get_priority_universe",
+        AsyncMock(return_value=["AAPL"]),
+    )
+    alert_types = ["news_velocity", "iv_spike", "rating_change", "gap_3sigma", "score_spike"]
+    monkeypatch.setattr(fast_intraday, "detect_alerts", lambda prev, curr: [
+        {"type": kind, "payload": {}} for kind in alert_types
+    ])
+    current = datetime(2026, 11, 11, 12, tzinfo=UTC)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return current
+
+    monkeypatch.setattr(fast_intraday, "datetime", Clock)
+    patches = _patch_all_signals()
+    for p in patches:
+        p.start()
+    try:
+        for minutes in (0, 30, 1440):
+            current = datetime(2026, 11, 11, 12, tzinfo=UTC) + timedelta(minutes=minutes)
+            result = await fast_intraday.handler()
+            assert result["ok"] is True
+    finally:
+        for p in patches:
+            p.stop()
+
+    conn = await asyncpg.connect(applied_db)
+    try:
+        rows = await conn.fetch("SELECT type, count(*) AS n FROM alert_queue GROUP BY type")
+        assert {row["type"]: row["n"] for row in rows} == {
+            "news_velocity": 2, "iv_spike": 2,
+            "rating_change": 3, "gap_3sigma": 3, "score_spike": 3,
+        }
+    finally:
+        await conn.close()
 
 
 def _patch_all_signals():

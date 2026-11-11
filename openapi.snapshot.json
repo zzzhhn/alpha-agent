@@ -296,6 +296,79 @@
         "title": "AlertAttentionResponse",
         "type": "object"
       },
+      "AlertBatchStateRequest": {
+        "properties": {
+          "alert_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Alert Ids",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snooze Until"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "snoozed",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "alert_ids"
+        ],
+        "title": "AlertBatchStateRequest",
+        "type": "object"
+      },
+      "AlertBatchStateResponse": {
+        "properties": {
+          "states": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AlertTriageState"
+            },
+            "title": "States",
+            "type": "object"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated",
+          "states"
+        ],
+        "title": "AlertBatchStateResponse",
+        "type": "object"
+      },
       "AlertContext": {
         "properties": {
           "in_position": {
@@ -406,12 +479,46 @@
             "title": "Dedup Bucket",
             "type": "integer"
           },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
           "freshness_score": {
             "title": "Freshness Score",
             "type": "integer"
           },
           "id": {
             "title": "Id",
+            "type": "integer"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "member_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Member Ids",
+            "type": "array"
+          },
+          "occurrences": {
+            "default": 1,
+            "title": "Occurrences",
             "type": "integer"
           },
           "payload": {
@@ -7096,9 +7203,69 @@
         ]
       }
     },
+    "/api/alerts/state/batch": {
+      "post": {
+        "description": "Atomically update 1\u2013200 unique alerts for this user.\n\nAny missing alert returns 404 without writes. Revert a decision by calling\nagain with status ``open`` (clears snooze_until and resolved_at).",
+        "operationId": "set_alert_states_batch_api_alerts_state_batch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertBatchStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertBatchStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Alert States Batch",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
     "/api/alerts/{alert_id}/state": {
       "post": {
-        "description": "Persist a reversible per-user triage decision.",
+        "description": "Persist a reversible per-user triage decision; status open reverts it.",
         "operationId": "set_alert_state_api_alerts__alert_id__state_post",
         "parameters": [
           {
