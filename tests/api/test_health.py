@@ -29,6 +29,9 @@ async def test_health_signals_returns_all_rows(client_with_db, applied_db):
 
     r = client_with_db.get("/api/_health/signals")
     assert r.status_code == 200
+    assert r.headers["cache-control"] == (
+        "public, s-maxage=300, stale-while-revalidate=600"
+    )
     sigs = r.json()["signals"]
     names = {s["name"] for s in sigs}
     assert names == set(all_signal_names())
