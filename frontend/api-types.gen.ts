@@ -4148,6 +4148,84 @@ export interface components {
             /** Valued At */
             valued_at?: string | null;
         };
+        /** ExecutableDayCoverage */
+        ExecutableDayCoverage: {
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Evaluated */
+            evaluated: boolean;
+            /**
+             * Exit Date
+             * Format: date
+             */
+            exit_date: string;
+            /** Long Candidate Count */
+            long_candidate_count: number;
+            /** Long Coverage */
+            long_coverage: number;
+            /** Long Known Count */
+            long_known_count: number;
+            /**
+             * Scheduled For Date
+             * Format: date
+             */
+            scheduled_for_date: string;
+            /** Short Candidate Count */
+            short_candidate_count: number;
+            /** Short Coverage */
+            short_coverage: number;
+            /** Short Known Count */
+            short_known_count: number;
+            /** Snapshot Run Id */
+            snapshot_run_id: number;
+        };
+        /** ExecutableScoreboardResponse */
+        ExecutableScoreboardResponse: {
+            /**
+             * Basis
+             * @default executable_v1
+             */
+            basis: string;
+            /** Candidate Count */
+            candidate_count: number;
+            /** Cost Bps Used */
+            cost_bps_used: number;
+            /** Daily Coverage */
+            daily_coverage: components["schemas"]["ExecutableDayCoverage"][];
+            /** Days Evaluated */
+            days_evaluated: number;
+            /** Excluded Days */
+            excluded_days: number;
+            /**
+             * First Entry Date
+             * Format: date
+             */
+            first_entry_date: string;
+            /**
+             * Last Exit Date
+             * Format: date
+             */
+            last_exit_date: string;
+            /** Long Gross Cum */
+            long_gross_cum: number;
+            /** Long Minus Spy */
+            long_minus_spy: number;
+            /** Long Net Cum */
+            long_net_cum: number;
+            /** Short Gross Cum */
+            short_gross_cum: number;
+            /** Snapshot Run Ids */
+            snapshot_run_ids: number[];
+            /** Spy Cum */
+            spy_cum: number;
+            /** Top N */
+            top_n: number;
+            /** Unknown Count */
+            unknown_count: number;
+        };
         /** ExplainAstRequest */
         ExplainAstRequest: {
             /** Expression */
@@ -5483,6 +5561,11 @@ export interface components {
             alpha_t?: number | null;
             /** Base Rate */
             base_rate?: number | null;
+            /**
+             * Basis
+             * @default retrospective_v0
+             */
+            basis: string;
             /** Beta */
             beta?: number | null;
             /** Breakeven Cost Bps */
@@ -5494,6 +5577,7 @@ export interface components {
             cost_bps_used: number;
             /** Days */
             days: number;
+            executable?: components["schemas"]["ExecutableScoreboardResponse"] | null;
             /** Long Cum */
             long_cum: number;
             /** Long Hit Rate */

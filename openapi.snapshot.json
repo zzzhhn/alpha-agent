@@ -1441,6 +1441,168 @@
         "title": "EquityPoint",
         "type": "object"
       },
+      "ExecutableDayCoverage": {
+        "properties": {
+          "entry_date": {
+            "format": "date",
+            "title": "Entry Date",
+            "type": "string"
+          },
+          "evaluated": {
+            "title": "Evaluated",
+            "type": "boolean"
+          },
+          "exit_date": {
+            "format": "date",
+            "title": "Exit Date",
+            "type": "string"
+          },
+          "long_candidate_count": {
+            "title": "Long Candidate Count",
+            "type": "integer"
+          },
+          "long_coverage": {
+            "title": "Long Coverage",
+            "type": "number"
+          },
+          "long_known_count": {
+            "title": "Long Known Count",
+            "type": "integer"
+          },
+          "scheduled_for_date": {
+            "format": "date",
+            "title": "Scheduled For Date",
+            "type": "string"
+          },
+          "short_candidate_count": {
+            "title": "Short Candidate Count",
+            "type": "integer"
+          },
+          "short_coverage": {
+            "title": "Short Coverage",
+            "type": "number"
+          },
+          "short_known_count": {
+            "title": "Short Known Count",
+            "type": "integer"
+          },
+          "snapshot_run_id": {
+            "title": "Snapshot Run Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshot_run_id",
+          "scheduled_for_date",
+          "entry_date",
+          "exit_date",
+          "long_candidate_count",
+          "long_known_count",
+          "short_candidate_count",
+          "short_known_count",
+          "long_coverage",
+          "short_coverage",
+          "evaluated"
+        ],
+        "title": "ExecutableDayCoverage",
+        "type": "object"
+      },
+      "ExecutableScoreboardResponse": {
+        "properties": {
+          "basis": {
+            "default": "executable_v1",
+            "title": "Basis",
+            "type": "string"
+          },
+          "candidate_count": {
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "cost_bps_used": {
+            "title": "Cost Bps Used",
+            "type": "number"
+          },
+          "daily_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutableDayCoverage"
+            },
+            "title": "Daily Coverage",
+            "type": "array"
+          },
+          "days_evaluated": {
+            "title": "Days Evaluated",
+            "type": "integer"
+          },
+          "excluded_days": {
+            "title": "Excluded Days",
+            "type": "integer"
+          },
+          "first_entry_date": {
+            "format": "date",
+            "title": "First Entry Date",
+            "type": "string"
+          },
+          "last_exit_date": {
+            "format": "date",
+            "title": "Last Exit Date",
+            "type": "string"
+          },
+          "long_gross_cum": {
+            "title": "Long Gross Cum",
+            "type": "number"
+          },
+          "long_minus_spy": {
+            "title": "Long Minus Spy",
+            "type": "number"
+          },
+          "long_net_cum": {
+            "title": "Long Net Cum",
+            "type": "number"
+          },
+          "short_gross_cum": {
+            "title": "Short Gross Cum",
+            "type": "number"
+          },
+          "snapshot_run_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Snapshot Run Ids",
+            "type": "array"
+          },
+          "spy_cum": {
+            "title": "Spy Cum",
+            "type": "number"
+          },
+          "top_n": {
+            "title": "Top N",
+            "type": "integer"
+          },
+          "unknown_count": {
+            "title": "Unknown Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days_evaluated",
+          "excluded_days",
+          "top_n",
+          "long_gross_cum",
+          "long_net_cum",
+          "short_gross_cum",
+          "spy_cum",
+          "long_minus_spy",
+          "unknown_count",
+          "candidate_count",
+          "cost_bps_used",
+          "first_entry_date",
+          "last_exit_date",
+          "snapshot_run_ids",
+          "daily_coverage"
+        ],
+        "title": "ExecutableScoreboardResponse",
+        "type": "object"
+      },
       "ExplainAstRequest": {
         "properties": {
           "expression": {
@@ -4822,6 +4984,11 @@
             ],
             "title": "Base Rate"
           },
+          "basis": {
+            "default": "retrospective_v0",
+            "title": "Basis",
+            "type": "string"
+          },
           "beta": {
             "anyOf": [
               {
@@ -4852,6 +5019,16 @@
           "days": {
             "title": "Days",
             "type": "integer"
+          },
+          "executable": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutableScoreboardResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "long_cum": {
             "title": "Long Cum",
