@@ -81,6 +81,9 @@ async def model_decision(pool, run, context, config):
         close = getattr(client, 'close', None)
         if close:
             await close()
+    # Settings shows "last used"; bot calls are real uses of the stored key.
+    await pool.execute('UPDATE user_byok SET last_used_at=now() WHERE user_id=$1 AND provider=$2',
+                       owner, config.provider)
     return response
 
 

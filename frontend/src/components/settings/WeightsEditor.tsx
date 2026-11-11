@@ -33,6 +33,12 @@ export default function WeightsEditor() {
         setError(zh ? "请输入由信号名和权重组成的 JSON 对象。" : "Enter a JSON object mapping signals to weights.");
         return;
       }
+      const known = new Set(Object.keys(DEFAULT_WEIGHTS));
+      const unknown = Object.keys(parsed).filter((name) => !known.has(name));
+      if (unknown.length) {
+        setError(zh ? `未知信号：${unknown.join(", ")}。可用信号见“恢复默认”后的列表。` : `Unknown signals: ${unknown.join(", ")}. Restore defaults to see valid names.`);
+        return;
+      }
       const values = Object.values(parsed);
       if (
         values.length === 0 ||
@@ -90,7 +96,7 @@ export default function WeightsEditor() {
     <div className="flex flex-col gap-3 px-3 py-3">
       <TmTextarea
         label={zh ? "信号权重（JSON）" : "Signal weights (JSON)"}
-        hint={zh ? "仅保存在此浏览器。系统自动归一化，只比较权重的相对大小。" : "Stored in this browser. Weights are normalized automatically, so only relative values matter."}
+        hint={zh ? "仅本机预览：只改变本浏览器里卡片的显示排序，不影响线上权重、推荐快照、机器人或回测。系统自动归一化，只比较相对大小。" : "Local preview only: changes how cards are ordered in this browser; live weights, recommendation snapshots, the bot and backtests are unaffected. Weights are normalized, so only relative values matter."}
         error={error ?? undefined}
         id="settings-weight-json"
         value={text}

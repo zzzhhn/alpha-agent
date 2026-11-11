@@ -46,6 +46,7 @@ import { t } from "@/lib/i18n";
 import WeightsEditor from "@/components/settings/WeightsEditor";
 import WatchlistEditor from "@/components/settings/WatchlistEditor";
 import ChangeLog from "@/components/settings/ChangeLog";
+import { connectionTestStatus, providerDisplay, readLastConnectionTest, writeLastConnectionTest, type LastConnectionTest } from "@/components/settings/connection-state";
 import { BrainCredentialsCard } from "@/components/settings/BrainCredentialsCard";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
@@ -79,6 +80,8 @@ export default function SettingsPage() {
   const [model, setModel] = useState("");
   const [revealKey, setRevealKey] = useState(false);
   const [testState, setTestState] = useState<TestState>({ kind: "idle" });
+  const [lastTest, setLastTest] = useState<LastConnectionTest | null>(null);
+  useEffect(() => { setLastTest(readLastConnectionTest()); }, []);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   // Server-side BYOK state
   const [serverLast4, setServerLast4] = useState<string | null>(null);
@@ -264,6 +267,7 @@ export default function SettingsPage() {
       }
       const data = await testByok();
       const elapsed = Math.max(data.latency_ms, Math.round(performance.now() - started));
+      setLastTest(writeLastConnectionTest(true));
       setTestState({
         kind: "ok",
         ms: elapsed,
@@ -275,6 +279,7 @@ export default function SettingsPage() {
       // Read back usage metadata without replacing the user's editable draft.
       try { setSavedConnection(await getByok()); } catch { /* Test succeeded; metadata refresh is non-critical. */ }
     } catch (exc) {
+      setLastTest(writeLastConnectionTest(false));
       setTestState({
         kind: "fail",
         status: null,
@@ -297,7 +302,7 @@ export default function SettingsPage() {
       statuses={[
         {label:zh ? "已保存服务商" : "Saved provider",value:savedConnection?.provider.toUpperCase() ?? "—"},
         {label:zh ? "服务端凭据" : "Server credential",value:connectionLoading ? (zh ? "读取中" : "Loading") : connectionError ? (zh ? "待确认" : "Unknown") : serverLast4 ? (zh ? "已加密保存" : "Encrypted") : (zh ? "未配置" : "None"),tone:!connectionError && serverLast4 ? "positive" : "warning"},
-        {label:zh ? "连接测试" : "Connection test",value:testState.kind === "ok" ? (zh ? "通过" : "Passed") : testState.kind === "running" ? (zh ? "测试中" : "Running") : (zh ? "未确认" : "Unconfirmed"),tone:testState.kind === "ok" ? "positive" : "default"},
+        {label:zh ? "连接测试" : "Connection test",...connectionTestStatus(testState, lastTest, zh)},
       ]}/>
     <SegmentedTabs items={sectionItems} active={section} onChange={next=>{if(!connectionBusy)setSection(next);}} idBase="settings-section" ariaLabel={zh ? "设置分类" : "Settings sections"}/>
     <section id="settings-section-panel-llm" role="tabpanel" aria-labelledby="settings-section-tab-llm" hidden={section !== "llm"}>
@@ -352,7 +357,7 @@ export default function SettingsPage() {
           <TmPane title={zh ? "已保存连接" : "Saved connection"} bodyClassName="p-5 space-y-4">
             <TmStatusPill tone={serverLast4 && !connectionError ? "ok" : "warn"}>{connectionLoading ? (zh ? "读取中" : "Loading") : connectionError ? (zh ? "状态待确认" : "Status unknown") : serverLast4 ? (zh ? "凭据已保存，连接另行测试" : "Stored; test connectivity separately") : (zh ? "尚未配置" : "Not configured")}</TmStatusPill>
             <dl className="space-y-3 font-tm-mono text-xs">{[
-              [zh ? "服务商" : "Provider",savedConnection ? PROVIDER_PRESETS[savedConnection.provider as LLMProvider]?.label ?? savedConnection.provider : "—"],
+              [zh ? "服务商" : "Provider",savedConnection ? providerDisplay(savedConnection.provider, savedConnection.base_url, zh) : "—"],
               [zh ? "模型" : "Model",savedConnection ? savedConnection.model || PROVIDER_PRESETS[savedConnection.provider as LLMProvider]?.defaultModel || "—" : "—"],
               [zh ? "API 地址" : "Endpoint",savedConnection ? savedConnection.base_url || PROVIDER_PRESETS[savedConnection.provider as LLMProvider]?.defaultBase || "—" : "—"],
               [zh ? "密钥尾号" : "Key suffix",serverLast4 ? "•••• "+serverLast4 : "—"],
@@ -380,8 +385,8 @@ export default function SettingsPage() {
       </div>
     </section>
     <section id="settings-section-panel-history" role="tabpanel" aria-labelledby="settings-section-tab-history" hidden={section !== "history"}>
-      <TmPane title={zh ? "连接配置变更" : "Connection changes"} meta={zh ? "最近 50 条" : "Latest 50 records"}>
-        <p className="px-5 py-3 text-xs leading-6 text-tm-muted">{zh ? "回滚会产生一条新记录，不恢复或展示旧密钥。" : "A rollback creates a new record. It never restores or reveals an old key."}</p>
+      <TmPane title={zh ? "系统配置变更" : "Configuration changes"} meta={zh ? "最近 50 条" : "Latest 50 records"}>
+        <p className="px-5 py-3 text-xs leading-6 text-tm-muted">{zh ? "包括模型连接与线上因子表达式等系统配置。只有模型名称和 API 地址可在此回滚；回滚会产生一条新记录，不恢复或展示旧密钥。" : "Includes model connection and system settings such as the live factor expression. Only model and endpoint can be rolled back here; a rollback adds a record and never restores or reveals an old key."}</p>
         {dirtyConnection && <p className="px-5 pb-3 text-sm text-tm-warn">{zh ? "模型连接有未保存修改，请先保存或撤销，再执行回滚。" : "Save or discard connection edits before applying a rollback."}</p>}
         <ChangeLog disabled={connectionBusy || dirtyConnection} onBusyChange={setHistoryBusy} onApplied={()=>{resetFeedback();void loadConnection();}}/>
       </TmPane>
