@@ -119,7 +119,7 @@ export function Sidebar({
         />
       </div>
 
-      <nav className={clsx("space-y-3 border-b border-tm-rule", collapsed ? "px-1.5 py-3" : "p-3")}>
+      <nav className={clsx("space-y-2.5 border-b border-tm-rule", collapsed ? "px-1.5 py-3" : "p-3")}>
         {NAV_GROUPS.map((group) => {
           const containsActive = group.items.some((item) => isNavActive(pathname, item.href));
           const groupSignal = group.items.map((item) => signals[item.id]).find(Boolean);
@@ -140,7 +140,7 @@ export function Sidebar({
                 onClick={(event) => navigateWithHash(event, item, signal)}
                 className={clsx(
                   "group relative flex w-full items-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-tm-accent motion-reduce:transition-none",
-                  collapsed ? "h-9 justify-center" : "min-h-[40px] gap-2 px-1.5 py-1",
+                  collapsed ? "h-9 justify-center" : "min-h-[36px] gap-2 px-1.5 py-0.5",
                   active ? "bg-tm-accent-soft text-tm-accent" : "text-tm-fg-2 hover:bg-tm-bg-2 hover:text-tm-fg",
                 )}
               >
