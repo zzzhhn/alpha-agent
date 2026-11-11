@@ -16,9 +16,10 @@ import math
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 
+from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.core.types import RouterHealth
 from alpha_agent.signals.registry import all_signal_names as _all_signal_names
@@ -163,7 +164,7 @@ async def health() -> HealthResponse:
 
 
 @router.get("/signals", response_model=HealthSignalsResponse)
-async def health_signals() -> HealthSignalsResponse:
+async def health_signals(response: Response) -> HealthSignalsResponse:
     """Per-signal error summary + live IC, current weight, and tier color.
 
     Tier rule:
@@ -282,6 +283,7 @@ async def health_signals() -> HealthSignalsResponse:
                 n_obs_30d=metrics_30d["n_obs"],
             )
         )
+    set_public_cache(response, s_maxage=300, swr=600)
     return HealthSignalsResponse(signals=out)
 
 

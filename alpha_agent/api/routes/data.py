@@ -5,8 +5,8 @@ endpoints that tell the UI what raw material is available for factor constructio
 
 Design principles:
   * Honest: return actual panel stats, never fabricate a "fuller" universe.
-  * Cheap: all endpoints reuse the lru_cached panel loader from factor_backtest,
-    so a warm process answers in <5ms.
+  * Cheap: universe/sector metadata reads only three bundle columns and is
+    cached by file version; coverage reuses the full backtest panel loader.
   * Upstream: nothing here depends on Signal or Report layers — safe to deploy
     independently.
 """
@@ -25,6 +25,8 @@ from pydantic import BaseModel
 
 from alpha_agent.factor_engine.factor_backtest import (
     BENCHMARK_TICKER,
+    BENCHMARK_TICKERS,
+    PARQUET_PATH,
     _load_panel,
 )
 
@@ -82,6 +84,67 @@ class UniverseListResponse(BaseModel):
     universes: list[UniverseInfo]
 
 
+_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "data" / "research_dataset.json"
+
+
+def _bundle_signature() -> tuple:
+    """Stat is cheap on every request; replacing either file invalidates cache."""
+    signature = []
+    for path in (PARQUET_PATH, _MANIFEST_PATH):
+        try:
+            stat = path.stat()
+            signature.append((str(path), stat.st_mtime_ns, stat.st_size))
+        except FileNotFoundError:
+            signature.append((str(path), None, None))
+    return tuple(signature)
+
+
+def _read_bundle_metadata() -> tuple[UniverseListResponse, dict]:
+    """Project metadata without building price/fundamental backtest arrays."""
+    from pyarrow.parquet import ParquetFile
+
+    parquet = ParquetFile(PARQUET_PATH)
+    has_sector = "sector" in parquet.schema_arrow.names
+    columns = ["ticker", "date"] + (["sector"] if has_sector else [])
+    frame = parquet.read(columns=columns).to_pandas()
+    tickers = sorted(set(frame["ticker"]) - set(BENCHMARK_TICKERS))
+    dates = sorted(frame.loc[frame["ticker"] == BENCHMARK_TICKER, "date"].unique())
+    if not dates:
+        raise ValueError(f"primary benchmark {BENCHMARK_TICKER!r} missing from parquet")
+    raw_sectors = None
+    sectors = None
+    if has_sector:
+        snapshot = (frame.sort_values("date").drop_duplicates("ticker", keep="last")
+                    .set_index("ticker")["sector"].reindex(tickers))
+        raw_sectors = [str(value) for value in snapshot]
+        sectors = [None if value in ("None", "", "Unknown", "nan") else value for value in raw_sectors]
+    manifest = json.loads(_MANIFEST_PATH.read_text()) if _MANIFEST_PATH.exists() else {}
+    start = str(dates[0])[:10]
+    end = str(dates[-1])[:10]
+    name = (
+        # Tradable count: the manifest's ticker total includes the benchmarks.
+        f"S&P 500 historical members · {len(tickers)} tickers · "
+        f"{manifest.get('start_date', start)}→{manifest.get('market_data_through', end)}"
+    )
+    return UniverseListResponse(universes=[UniverseInfo(
+        id="SP500_subset", name=name, ticker_count=len(tickers),
+        benchmark=BENCHMARK_TICKER, tickers=tickers, sectors=sectors,
+        start_date=start, end_date=end, n_days=len(dates), currency="USD",
+    )]), {"sectors": sorted(set(raw_sectors or [])), "panel_has_sector": has_sector}
+
+
+@lru_cache(maxsize=1)
+def _cached_bundle_metadata(signature: tuple) -> tuple[UniverseListResponse, dict]:
+    return _read_bundle_metadata()
+
+
+def _bundle_metadata() -> tuple[UniverseListResponse, dict]:
+    try:
+        return _cached_bundle_metadata(_bundle_signature())
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 class OperandCatalogResponse(BaseModel):
     """Augmented WorldQuant catalog. Each item carries `tier` and `implemented`.
 
@@ -131,41 +194,11 @@ class CoverageResponse(BaseModel):
 
 
 @router.get("/universe", response_model=UniverseListResponse)
-def list_universes() -> UniverseListResponse:
+def list_universes(response: Response) -> UniverseListResponse:
     """List all available universes with their panel statistics."""
-    try:
-        panel = _load_panel()
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    # Sector vector (one entry per ticker, latest-day snapshot). Sectors
-    # are snapshot-broadcast so the last row is canonical; nothing is
-    # gained by averaging or majority-voting across rows. Coerce numpy
-    # strings to plain str + filter out the legacy "Unknown" / "" / "nan"
-    # markers that already appear in the AST whitelist's degenerate set.
-    sectors: list[str | None] | None
-    if panel.sector is None:
-        sectors = None
-    else:
-        last_row = panel.sector[-1]
-        sectors = [
-            (None if (s is None or str(s) in ("", "Unknown", "nan")) else str(s))
-            for s in last_row
-        ]
-
-    info = UniverseInfo(
-        id="SP500_subset",
-        name="SP500 Megacap Subset (1Y)",
-        ticker_count=len(panel.tickers),
-        benchmark=BENCHMARK_TICKER,
-        tickers=list(panel.tickers),
-        sectors=sectors,
-        start_date=str(panel.dates[0]),
-        end_date=str(panel.dates[-1]),
-        n_days=len(panel.dates),
-        currency="USD",
-    )
-    return UniverseListResponse(universes=[info])
+    universes, _ = _bundle_metadata()
+    set_public_cache(response, s_maxage=86400, swr=604800)
+    return universes
 
 
 @router.get("/operands", response_model=OperandCatalogResponse)
@@ -264,18 +297,9 @@ def list_sectors(response: Response) -> dict:
       * the Screener UniverseFilter UI to populate an autocomplete (so users
         don't type "Tech" and hit a 422)
     """
-    try:
-        from alpha_agent.factor_engine.factor_backtest import _load_panel
-    except ImportError as exc:
-        raise HTTPException(503, f"factor_engine import failed: {exc}") from exc
-
-    panel = _load_panel()
-    set_public_cache(response, s_maxage=300, swr=60)
-    if panel.sector is None:
-        return {"sectors": [], "panel_has_sector": False}
-
-    sectors = sorted({str(s) for s in panel.sector[-1]})
-    return {"sectors": sectors, "panel_has_sector": True}
+    _, sectors = _bundle_metadata()
+    set_public_cache(response, s_maxage=86400, swr=604800)
+    return sectors
 
 
 @router.get("/coverage", response_model=CoverageResponse)
