@@ -18,6 +18,7 @@ import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { nativeHorizon } from "@/lib/signal-horizons";
 import { formatIcAnnotation } from "@/lib/ic-annotation-format";
 import { TM_CHART_SERIES_CSS } from "@/components/charts";
+import { hasEnoughIcObservations } from "./observatory-model";
 
 // A weight-config change event drawn as a dashed vertical marker on the chart,
 // so every promote / rollback / inversion-guard flip is visible ON the IC
@@ -92,6 +93,7 @@ function mergeIcSeries(series: IcTrendSeries[]): MergedRow[] {
 function annotationDot(
   signal: string,
   annByKey: Map<string, IcAnnotation>,
+  showAll: boolean,
   // recharts dot render props (loosely typed — the lib's types are partial).
   props: { cx?: number; cy?: number; payload?: MergedRow; stroke?: string },
 ) {
@@ -99,9 +101,10 @@ function annotationDot(
   const ts = payload?._ts;
   const ann = ts ? annByKey.get(`${signal}@${ts}`) : undefined;
   const key = `${signal}-${ts ?? "x"}`;
-  if (ann === undefined || cx === undefined || cy === undefined) {
+  if (cx === undefined || cy === undefined || !payload || typeof payload[signal] !== "number") {
     return <g key={key} />;
   }
+  if (!ann) return showAll ? <circle key={key} cx={cx} cy={cy} r={3.5} fill={stroke} /> : <g key={key} />;
   // Sign-flips (crossing zero) get a hollow ring on top to stand out more.
   return (
     <g key={key}>
@@ -178,6 +181,7 @@ function IcTooltip(props: {
 }
 
 export function IcTrendChart({ series, locale, annotations, events, height = 320 }: IcTrendChartProps) {
+  const zh = locale === "zh";
   const hasData = series.length > 0 && series.some((s) => s.points.length > 0);
 
   const merged = useMemo(() => mergeIcSeries(series), [series]);
@@ -225,8 +229,15 @@ export function IcTrendChart({ series, locale, annotations, events, height = 320
   }
 
   return (
-    <div className="w-full px-1 pb-2 pt-2" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full px-1 pb-2 pt-2">
+      {series.filter((s) => !hasEnoughIcObservations(s.points.length)).map((s) => (
+        <p key={s.signal_name} className="mb-1 font-tm-mono text-xs text-tm-warn">
+          {getSignalDisplayLabel(s.signal_name, locale)} · {zh
+            ? `观测不足（${s.points.length} 个点），不构成趋势`
+            : `Too few observations (${s.points.length}); not a trend`}
+        </p>
+      ))}
+      <ResponsiveContainer width="100%" height={height}>
         <LineChart data={merged} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="2 4" stroke="var(--tm-rule)" />
           <XAxis
@@ -285,8 +296,9 @@ export function IcTrendChart({ series, locale, annotations, events, height = 320
               dataKey={s.signal_name}
               name={`${getSignalDisplayLabel(s.signal_name, locale)} (${nativeHorizon(s.signal_name)}d)`}
               stroke={SIGNAL_COLORS[i % SIGNAL_COLORS.length]}
-              strokeWidth={2}
-              dot={(props) => annotationDot(s.signal_name, annByKey, props)}
+              strokeWidth={hasEnoughIcObservations(s.points.length) ? 2 : 0}
+              legendType={hasEnoughIcObservations(s.points.length) ? "line" : "circle"}
+              dot={(props) => annotationDot(s.signal_name, annByKey, !hasEnoughIcObservations(s.points.length), props)}
               isAnimationActive={false}
               connectNulls={false}
             />
