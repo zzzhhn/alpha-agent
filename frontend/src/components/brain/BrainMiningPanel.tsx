@@ -16,7 +16,7 @@ import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { BrainPnLChart, type ChartKind } from "@/components/brain/BrainPnLChart";
-import { BrainCandidateAudit } from "@/components/brain/BrainCandidateAudit";
+import { BrainCandidateAudit, BrainStatusLegend } from "@/components/brain/BrainCandidateAudit";
 import { TmPagination } from "@/components/tm/TmPagination";
 import { TmSelectMenu } from "@/components/tm/TmSelectMenu";
 import { TmStatePane } from "@/components/tm/TmStatePane";
@@ -39,6 +39,7 @@ import { Play } from "lucide-react";
 import {
   fetchBrainAlphas,
   fetchBrainRuns,
+  fetchBrainRunsSummary,
   fetchAlphaPnl,
   fetchAlphaYearly,
   fetchMineStatus,
@@ -47,11 +48,12 @@ import {
   type BrainAlpha,
   type BrainAlphaQuery,
   type BrainMiningRun,
+  type BrainRunsSummary,
   type BrainOutcome,
   type PnlPoint,
   type YearlyRow,
 } from "@/lib/api/brain";
-import { DEFAULT_BRAIN_PAGE_SIZE, brainSubmissionState, familyLabel, hasUnsimulatedCandidates, nextExpandedAlpha, runFailureAction, type BrainSubmissionState } from "./brain-review";
+import { DEFAULT_BRAIN_PAGE_SIZE, brainSubmissionState, familyLabel, hasUnsimulatedCandidates, nextExpandedAlpha, runFailureAction, translateBrainDiagnostic, type BrainSubmissionState } from "./brain-review";
 
 type WorkbenchView = "results" | "audit";
 
@@ -184,7 +186,7 @@ function candidateVerdict(alpha: BrainAlpha): CandidateVerdict {
   return {
     labelZh: outcomeLabel(alpha.outcome, true),
     labelEn: outcomeLabel(alpha.outcome, false),
-    detailZh: alpha.detail || "暂无额外诊断。",
+    detailZh: alpha.detail ? translateBrainDiagnostic(alpha.detail, "zh") : "暂无额外诊断。",
     detailEn: alpha.detail || "No additional diagnosis.",
     cls: OUTCOME_CLS[alpha.outcome],
   };
@@ -645,9 +647,9 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
         </div>
         <div className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] px-3 py-2 font-tm-mono text-xs leading-relaxed text-tm-fg-2">
           {zh ? verdict.detailZh : verdict.detailEn}
-          {alpha.detail && alpha.detail !== verdict.detailEn ? (
+          {alpha.detail ? (
             <details className="mt-1 text-tm-muted">
-              <summary className="cursor-pointer">{zh ? "原始诊断" : "Raw diagnosis"}</summary>
+              <summary className="cursor-pointer">{zh ? "原始日志" : "Raw log"}</summary>
               {alpha.detail}
             </details>
           ) : null}
@@ -999,6 +1001,7 @@ function MineButton({
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
+  const requestedSimulations = Math.trunc(Math.max(1, Math.min(30, Number(n) || 12)));
 
   const [job, setJob] = useState<ActiveJob | null>(null);
   const [mined, setMined] = useState(0);
@@ -1237,11 +1240,16 @@ function MineButton({
           {zh ? "开始挖矿" : "Start mining"}
         </TmButton>
       </div>
+      <p className="basis-full font-tm-mono text-xs leading-relaxed text-tm-muted">
+        {zh
+          ? `本次请求 ${requestedSimulations} 次仿真预算，消耗你的 BRAIN 账户仿真配额，由 GitHub Actions 执行；金额成本未知，此处不追踪。`
+          : `Requests a budget of ${requestedSimulations} simulations from your BRAIN account quota, run on GitHub Actions; monetary cost is unknown and not tracked here.`}
+      </p>
       <div className="min-w-0 max-w-lg self-end pb-1 text-xs leading-4">
         {state === "error" && errMsg ? (
           <details className="font-tm-mono text-tm-neg">
             <summary className="cursor-pointer">{zh ? "挖矿未能完成，查看错误" : "Mining did not complete. View error."}</summary>
-            <p className="mt-1 [overflow-wrap:anywhere]">{errMsg}</p>
+            <BrainDiagnostic line={errMsg} zh={zh} />
           </details>
         ) : doneMsg ? (
           <span className="inline-flex items-start gap-1.5 font-tm-mono text-tm-pos">
@@ -1662,6 +1670,7 @@ function RunLedger({
             {screenStatusLabel(run.screen_status, zh)}
           </span>
         ) : null}
+        <BrainStatusLegend zh={zh} />
       </div>
       <p className={`text-xs leading-relaxed ${isEmptyCompletedRun(run) || ["failed", "error"].includes((run.status ?? "").toLowerCase()) ? "text-tm-neg" : "text-tm-fg-2"}`}>
         {runNextStep(run, zh)}
@@ -1682,13 +1691,66 @@ function RunLedger({
           </div>
         ))}
         </dl>
-        {run.error_detail ? <p className="mt-2 whitespace-pre-wrap text-tm-neg [overflow-wrap:anywhere]">{run.error_detail}</p> : null}
-        {run.screen_detail ? <p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{run.screen_detail}</p> : null}
+        {run.error_detail ? <BrainDiagnostic line={run.error_detail} zh={zh} /> : null}
+        {run.screen_detail ? <BrainDiagnostic line={run.screen_detail} zh={zh} /> : null}
       </details>
     </div>
   );
 }
 
+
+export function BrainDiagnostic({ line, zh }: { line: string; zh: boolean }) {
+  return (
+    <div className="mt-2 font-tm-mono text-xs text-tm-muted">
+      <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{translateBrainDiagnostic(line, zh ? "zh" : "en")}</p>
+      <details className="mt-1">
+        <summary className="w-fit cursor-pointer focus-visible:outline focus-visible:outline-tm-accent">{zh ? "原始日志" : "Raw log"}</summary>
+        <p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{line}</p>
+      </details>
+    </div>
+  );
+}
+
+export function BrainRunSummaryStrip({ summary, loading, error, zh }: {
+  summary: BrainRunsSummary | null;
+  loading: boolean;
+  error: boolean;
+  zh: boolean;
+}) {
+  const data = !loading && !error ? summary : null;
+  const metrics: Array<[string, number | undefined]> = [
+    [zh ? "总运行" : "Total runs", data?.total_runs],
+    [zh ? "已完成" : "Completed", data?.by_status.completed],
+    [zh ? "失败" : "Failed", data?.by_status.failed],
+    [zh ? "通过" : "Passed", data?.totals.passed],
+    [zh ? "存疑" : "Flagged", data?.totals.flagged],
+    [zh ? "淘汰" : "Rejected", data?.totals.rejected],
+    [zh ? "仿真错误" : "Sim errors", data?.totals.sim_error],
+  ];
+  const recentRuns = data?.last_30d.reduce((total, day) => total + day.runs, 0);
+  return (
+    <section aria-label={zh ? "跨运行汇总" : "Cross-run summary"} aria-busy={loading} className="border border-tm-rule bg-tm-bg-2 px-3 py-2 font-tm-mono text-xs">
+      <dl className="flex flex-wrap gap-x-5 gap-y-2">
+        {metrics.map(([label, value]) => (
+          <div key={label} className="flex items-baseline gap-2">
+            <dt className="text-tm-muted">{label}</dt>
+            <dd className="tabular-nums text-tm-fg">{value ?? "—"}</dd>
+          </div>
+        ))}
+      </dl>
+      <div role="status" className="mt-2 text-tm-muted">
+        {loading ? (zh ? "正在读取跨运行汇总…" : "Loading run summary…")
+          : error || !summary ? (zh ? "汇总读取失败，点击运行回顾的刷新重试。" : "Summary unavailable. Use Run review refresh to retry.")
+          : summary.total_runs === 0 ? (zh ? "暂无挖矿运行。" : "No mining runs yet.")
+          : null}
+      </div>
+      <p className="mt-1 text-tm-fg-2">
+        {zh ? "近 30 天（UTC）" : "Last 30 days (UTC)"} · {recentRuns ?? "—"} {zh ? "轮运行" : "runs"}
+        {data?.last_30d.length === 0 ? (zh ? " · 期间无运行" : " · no runs in this period") : null}
+      </p>
+    </section>
+  );
+}
 
 export function BrainMiningPanel() {
   const { locale } = useLocale();
@@ -1715,6 +1777,26 @@ export function BrainMiningPanel() {
   const [runsTotal, setRunsTotal] = useState(0);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [runsLoading, setRunsLoading] = useState(true);
+  const [summary, setSummary] = useState<BrainRunsSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState(false);
+  const summarySequence = useRef(0);
+  const loadSummary = useCallback(async () => {
+    const sequence = ++summarySequence.current;
+    setSummaryLoading(true);
+    try {
+      const response = await fetchBrainRunsSummary();
+      if (sequence !== summarySequence.current) return;
+      setSummary(response);
+      setSummaryError(false);
+    } catch {
+      if (sequence !== summarySequence.current) return;
+      setSummary(null);
+      setSummaryError(true);
+    } finally {
+      if (sequence === summarySequence.current) setSummaryLoading(false);
+    }
+  }, []);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(
     () => loadActiveJob()?.runId ?? null,
   );
@@ -1724,6 +1806,7 @@ export function BrainMiningPanel() {
 
   const runLoadSequence = useRef(0);
   const loadRuns = useCallback(async () => {
+    void loadSummary();
     const sequence = ++runLoadSequence.current;
     setRunsLoading(true);
     setRuns(null);
@@ -1745,7 +1828,7 @@ export function BrainMiningPanel() {
     } finally {
       if (sequence === runLoadSequence.current) setRunsLoading(false);
     }
-  }, [runsPage]);
+  }, [runsPage, loadSummary]);
 
   const query = useMemo<BrainAlphaQuery>(
     () => ({
@@ -1851,7 +1934,7 @@ export function BrainMiningPanel() {
   const loadError = response?.query === query ? response.error : null;
   const total = data?.total ?? 0;
   const filtered = Boolean(query.outcome || query.family || query.q || query.sharpe_min != null);
-  const refreshing = runsLoading || resultsLoading;
+  const refreshing = runsLoading || resultsLoading || summaryLoading;
   const selectedRun = runs?.find((run) => run.id === selectedRunId) ?? null;
   const recentRuns = runs ?? [];
   const selectedRunFailed = Boolean(
@@ -1877,6 +1960,7 @@ export function BrainMiningPanel() {
         title={zh ? "BRAIN 因子挖掘" : "BRAIN Alpha Mining"}
         subtitle={zh ? "候选筛选与官方仿真" : "Candidate screening and official simulation"}
       />
+      <BrainRunSummaryStrip summary={summary} loading={summaryLoading} error={summaryError} zh={zh} />
       <TmPane title={zh ? "新建挖矿运行" : "New mining run"}>
         <MineButton
           selectedRun={selectedRun}

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+
+from asyncpg import UndefinedColumnError, UndefinedTableError
 
 from alpha_agent.brain.evolution import family_of
 
@@ -656,6 +658,65 @@ async def list_brain_runs(
         *params, lim, off,
     )
     return {"runs": [_decode_run(row) for row in rows], "total": int(total or 0)}
+
+
+async def summarize_brain_runs(pool, user_id: int) -> dict:
+    """Aggregate owned runs with two bounded results (one row + at most 30 days).
+
+    The series covers today and the preceding 29 UTC calendar days. Missing
+    migrations retain the same empty-state compatibility as the runs list;
+    other database failures propagate so clients can distinguish errors from 0.
+    """
+    statuses = ("queued", "running", "completed", "failed")
+    counters = ("generated", "simulated", "passed", "flagged", "rejected", "sim_error")
+    empty = {
+        "total_runs": 0,
+        "by_status": dict.fromkeys(statuses, 0),
+        "totals": dict.fromkeys(counters, 0),
+        "last_30d": [],
+        "first_run_at": None,
+        "last_run_at": None,
+    }
+    try:
+        row = await pool.fetchrow(
+            "SELECT count(*) AS total_runs, "
+            + ", ".join(
+                f"count(*) FILTER (WHERE status='{status}') AS {status}"
+                for status in statuses
+            )
+            + ", "
+            + ", ".join(f"coalesce(sum({key}_n), 0) AS {key}" for key in counters)
+            + ", min(created_at) AS first_run_at, max(created_at) AS last_run_at "
+            "FROM brain_runs WHERE user_id=$1",
+            int(user_id),
+        )
+        days = await pool.fetch(
+            "SELECT (created_at AT TIME ZONE 'UTC')::date AS date, count(*) AS runs, "
+            "coalesce(sum(passed_n), 0) AS passed, "
+            "coalesce(sum(flagged_n), 0) AS flagged, "
+            "coalesce(sum(rejected_n), 0) AS rejected, "
+            "coalesce(sum(sim_error_n), 0) AS sim_error "
+            "FROM brain_runs WHERE user_id=$1 "
+            "AND created_at >= (((now() AT TIME ZONE 'UTC')::date - 29)::timestamp) "
+            "AT TIME ZONE 'UTC' "
+            "AND created_at < (((now() AT TIME ZONE 'UTC')::date + 1)::timestamp) "
+            "AT TIME ZONE 'UTC' GROUP BY 1 ORDER BY 1 LIMIT 30",
+            int(user_id),
+        )
+    except (UndefinedTableError, UndefinedColumnError):
+        return empty
+    return {
+        "total_runs": int(row["total_runs"]),
+        "by_status": {key: int(row[key]) for key in statuses},
+        "totals": {key: int(row[key]) for key in counters},
+        "last_30d": [
+            {**dict(day), "date": day["date"].isoformat()} for day in days
+        ],
+        **{
+            key: row[key].astimezone(timezone.utc).isoformat() if row[key] else None
+            for key in ("first_run_at", "last_run_at")
+        },
+    }
 
 
 async def update_brain_run(pool, run_id: int, **fields) -> dict | None:

@@ -193,6 +193,18 @@ export interface BrainRunsPage {
   total: number;
 }
 
+export interface BrainRunsSummary {
+  total_runs: number;
+  by_status: Record<"queued" | "running" | "completed" | "failed", number>;
+  totals: Record<"generated" | "simulated" | BrainOutcome, number>;
+  last_30d: Array<{ date: string; runs: number } & Record<BrainOutcome, number>>;
+  first_run_at: string | null;
+  last_run_at: string | null;
+}
+
+export const fetchBrainRunsSummary = (opts?: ApiGetOptions) =>
+  apiGet<BrainRunsSummary>("/api/brain/runs/summary", opts);
+
 export const fetchBrainRuns = (limit = 12, opts?: ApiGetOptions, offset = 0) =>
   apiGet<BrainRunsPage>(`/api/brain/runs?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`, opts);
 
