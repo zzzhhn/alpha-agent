@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import clsx from "clsx";
-import { ChevronDown } from "lucide-react";
 import { TmButton } from "./TmButton";
+import { TmSelectMenu } from "./TmSelectMenu";
 
 export interface TmPaginationLabels {
   /** Accessible name for the pagination landmark. */
@@ -135,30 +135,20 @@ export function TmPagination({
         </TmButton>
 
         {options.length > 1 ? (
-          <label className="flex min-h-7 shrink-0 items-center gap-1 text-tm-muted">
-            <span>{labels.pageSize}</span>
-            <span className="relative inline-flex shrink-0">
-              <select
-                value={safePageSize}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                  changePageSize(Number(event.target.value))
-                }
-                disabled={isDisabled}
-                className="h-7 min-w-[4rem] appearance-none rounded-[2px] border border-tm-rule bg-tm-bg-2 py-0 pl-2 pr-7 font-tm-mono text-xs leading-normal text-tm-fg [background-image:none] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                aria-hidden="true"
-                className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-tm-muted"
-                strokeWidth={1.75}
-              />
-            </span>
-          </label>
+          <span className="flex min-h-7 shrink-0 items-center gap-1 text-tm-muted">
+            <span aria-hidden="true">{labels.pageSize}</span>
+            <TmSelectMenu
+              value={String(safePageSize)}
+              onChange={(next) => changePageSize(Number(next))}
+              options={options.map((option) => ({ value: String(option), label: String(option) }))}
+              ariaLabel={typeof labels.pageSize === "string" && labels.pageSize ? labels.pageSize : "Page size"}
+              disabled={isDisabled}
+              size="sm"
+              align="end"
+              className="shrink-0"
+              buttonClassName="min-w-[4rem]"
+            />
+          </span>
         ) : null}
       </div>
     </nav>

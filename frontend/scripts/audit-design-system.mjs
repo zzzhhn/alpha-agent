@@ -36,6 +36,11 @@ function relative(file) {
 }
 
 const rawControls = [];
+// Native dropdowns open OS popup menus (Safari/macOS) that ignore TM tokens.
+// Unlike other raw controls, they are banned everywhere, including inside the
+// canonical components/tm family: TmSelect and TmPagination use TmSelectMenu.
+const NATIVE_DROPDOWN_TAGS = new Set(["select", "option", "optgroup", "datalist"]);
+const nativeDropdowns = [];
 const nativeTables = [];
 const nativeTitles = [];
 const undersizedType = [];
@@ -127,6 +132,7 @@ for (const file of collectFiles(ROOT)) {
       const tag = node.tagName.getText(tree);
       const line = tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1;
       if (!canonicalInternal && CONTROL_TAGS.has(tag)) rawControls.push({ rel, line, tag });
+      if (NATIVE_DROPDOWN_TAGS.has(tag)) nativeDropdowns.push({ rel, line, tag });
       if (!canonicalInternal && tag === "table") nativeTables.push({ rel, line, tag });
       if (/^[a-z]/.test(tag)) {
         const title = node.attributes.properties.find(
@@ -164,6 +170,7 @@ const missingMigrationItems = REQUIRED_MIGRATION_IDS.filter((id) => !referencePa
 console.log("DESIGN.SYSTEM.AUDIT");
 console.log(`raw controls: ${rawControls.length} total, ${unexpectedControls.length} unexpected`);
 console.log(`native tables: ${nativeTables.length} total, ${unexpectedTables.length} unexpected`);
+console.log(`native dropdowns (select/option/datalist): ${nativeDropdowns.length}`);
 console.log(`native title attributes: ${nativeTitles.length}/${NATIVE_TITLE_BUDGET} compatibility budget`);
 console.log(`undersized visible type: ${undersizedType.length}`);
 console.log(`production icons: ${productionIcons.size}, reference icons: ${referenceIcons.size}, missing: ${missingIcons.length}`);
@@ -179,6 +186,7 @@ for (const [file, reason] of TABLE_EXCEPTIONS) console.log(`allowed table · ${f
 
 for (const item of unexpectedControls) console.error(`unexpected <${item.tag}> · ${item.rel}:${item.line}`);
 for (const item of unexpectedTables) console.error(`unexpected <table> · ${item.rel}:${item.line}`);
+for (const item of nativeDropdowns) console.error(`native dropdown <${item.tag}> · ${item.rel}:${item.line} · use TmSelect or TmSelectMenu`);
 for (const item of undersizedType) console.error(`undersized type · ${item.rel} · ${item.token}`);
 for (const name of missingIcons) console.error(`icon missing from reference · ${name}`);
 for (const glyph of missingTextGlyphs) console.error(`text glyph missing from reference · ${glyph}`);
@@ -192,7 +200,7 @@ if (nativeTitles.length > NATIVE_TITLE_BUDGET) {
 }
 
 if (
-  unexpectedControls.length || unexpectedTables.length || nativeTitles.length > NATIVE_TITLE_BUDGET ||
+  unexpectedControls.length || unexpectedTables.length || nativeDropdowns.length || nativeTitles.length > NATIVE_TITLE_BUDGET ||
   undersizedType.length || missingIcons.length || missingTextGlyphs.length || missingVisualizations.length || rawReferenceTaxonomy.length ||
   unlocalizedPaneTitles.length || missingMigrationItems.length
 ) {

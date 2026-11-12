@@ -4,6 +4,12 @@
   gap: 12px;
 }
 
+/* Keep the inline label on one line; the listbox trigger takes the slack. */
+.form .library > label {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* The number field owns the border; the nested input must not draw another. */
 .form input[type="number"] {
   border: 0;

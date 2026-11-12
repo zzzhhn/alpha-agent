@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -24,7 +25,11 @@ interface TmSelectMenuProps {
   readonly value: string;
   readonly options: readonly TmSelectMenuOption[];
   readonly onChange: (next: string) => void;
-  readonly ariaLabel: string;
+  /** Required unless a visible <label htmlFor={id}> names the trigger. */
+  readonly ariaLabel?: string;
+  readonly id?: string;
+  readonly ariaDescribedBy?: string;
+  readonly invalid?: boolean;
   readonly placeholder?: ReactNode;
   readonly size?: "xs" | "sm" | "md";
   readonly align?: "start" | "end";
@@ -32,7 +37,22 @@ interface TmSelectMenuProps {
   readonly disabled?: boolean;
   readonly className?: string;
   readonly buttonClassName?: string;
+  readonly buttonStyle?: CSSProperties;
   readonly menuClassName?: string;
+}
+
+/**
+ * Width a native <select> would reserve: the longest option label plus room
+ * for padding and the chevron. CJK glyphs are ~1.7ch in the mono stack.
+ * Capped so one long label cannot stretch a toolbar.
+ */
+export function tmSelectIntrinsicWidth(labels: readonly string[], maxCh = 30): string {
+  const longest = labels.reduce((widest, label) => {
+    let width = 0;
+    for (const char of label) width += /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(char) ? 1.7 : 1;
+    return Math.max(widest, width);
+  }, 0);
+  return `calc(${Math.min(maxCh, Math.ceil(longest))}ch + 2.25rem)`;
 }
 
 const SIZE_CLASSES = {
@@ -56,12 +76,20 @@ export function tmMenuVerticalPosition(top: number, bottom: number, viewportHeig
   };
 }
 
-/** Portal-backed listbox for styled selection when native Safari controls fail. */
+/**
+ * The only dropdown in the product: a portal-backed listbox styled by the
+ * design system. Native <select> popups render as OS menus (Safari/macOS) and
+ * ignore TM tokens, so they are banned by `npm run audit:design-system`.
+ * Labelled form fields use TmSelect, which wraps this component.
+ */
 export function TmSelectMenu({
   value,
   options,
   onChange,
   ariaLabel,
+  id,
+  ariaDescribedBy,
+  invalid,
   placeholder = "Select",
   size = "sm",
   align = "start",
@@ -69,9 +97,11 @@ export function TmSelectMenu({
   disabled,
   className,
   buttonClassName,
+  buttonStyle,
   menuClassName,
 }: TmSelectMenuProps) {
-  const buttonId = useId();
+  const generatedButtonId = useId();
+  const buttonId = id ?? generatedButtonId;
   const listboxId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -182,9 +212,12 @@ export function TmSelectMenu({
         type="button"
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        data-invalid={invalid || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
+        style={buttonStyle}
         onClick={() => (open ? closeMenu() : openMenu())}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -198,6 +231,7 @@ export function TmSelectMenu({
         className={clsx(
           "flex min-w-0 items-center justify-between gap-2 border border-tm-rule bg-tm-bg-2 px-2 font-tm-mono text-tm-fg outline-none transition-colors hover:border-tm-rule-2 focus-visible:border-tm-accent disabled:cursor-not-allowed disabled:text-tm-muted",
           SIZE_CLASSES[size],
+          invalid && "border-tm-neg focus-visible:border-tm-neg",
           buttonClassName,
         )}
       >
