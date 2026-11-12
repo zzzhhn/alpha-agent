@@ -164,6 +164,38 @@ async def test_target_creates_market_order_and_reserves_fee_slippage_buffer():
     assert ledger.account['cash'] == 10000
 
 
+@pytest.mark.parametrize('quality', ['stale', 'unavailable', 'fresh'])
+async def test_execution_context_preserves_quote_gate_as_action_receipt(monkeypatch, quality):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from alpha_agent.api.routes import paper
+    from alpha_agent.paper import bot_context
+
+    ledger = Ledger()
+    ledger.account['user_id'] = 1
+    ledger.positions['AAPL'] = {'ticker': 'AAPL', 'qty': 10}
+    book = {'cash': 10000.0, 'reset_count': 0,
+            'positions': [{'ticker': 'AAPL', 'qty': 10}]}
+    quotes = context()['quotes']
+    quotes['AAPL']['quality'] = quality
+    if quality == 'unavailable':
+        quotes['AAPL']['price'] = None
+    monkeypatch.setattr(paper, '_read_account', AsyncMock(
+        return_value=SimpleNamespace(model_dump=lambda: copy.deepcopy(book))))
+    monkeypatch.setattr(bot_context, 'quotes_for', AsyncMock(return_value=quotes))
+    refreshed = await bot_context.execution_context(ledger, ledger.run, context(), decision())
+    results = await submit(ledger, ctx=refreshed)
+    if quality == 'fresh':
+        assert refreshed['account']['portfolio_value'] == 11000
+        assert results[0]['status'] == 'accepted'
+    else:
+        assert refreshed['account']['portfolio_value'] is None
+        assert results[0]['status'] == 'rejected'
+        assert results[0]['reason'] == 'portfolio_mark_unavailable'
+        assert not ledger.orders
+        assert ledger.account['cash'] == 10000
+
+
 async def test_same_action_retry_returns_one_order():
     ledger = Ledger()
     await submit(ledger)
