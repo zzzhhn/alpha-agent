@@ -1698,6 +1698,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/factor-lab/live-expression/restore-preset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Restore Preset Expression
+         * @description Clear the custom live expression so the factor signal uses its preset.
+         *
+         *     Journals through set_config (source='manual', old value -> null) exactly
+         *     like a manual edit, so the change is auditable and reversible by setting
+         *     the old expression again. Idempotent: an already-cleared value is reported
+         *     without writing a duplicate journal row.
+         */
+        post: operations["post_restore_preset_expression_api_factor_lab_live_expression_restore_preset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/factor-lab/proposals": {
         parameters: {
             query?: never;
@@ -9142,6 +9167,39 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_restore_preset_expression_api_factor_lab_live_expression_restore_preset_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

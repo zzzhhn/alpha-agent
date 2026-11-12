@@ -380,3 +380,69 @@ async def test_factor_lab_batch_reject_accepts_500_ids(authed_client, applied_db
         assert await conn.fetchval("SELECT count(DISTINCT decided_at) FROM factor_proposals") == 1
     finally:
         await conn.close()
+
+
+async def _set_custom_expression(applied_db, expression):
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute(
+            "INSERT INTO engine_config (key, value, updated_at, updated_by) "
+            "VALUES ('factor.custom_expression', $1::jsonb, now(), 2) "
+            "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+            json.dumps(expression),
+        )
+    finally:
+        await conn.close()
+
+
+async def test_restore_preset_clears_custom_expression_and_journals(authed_client, applied_db):
+    from alpha_agent.signals.factor import SHORT_TERM_FACTOR_EXPR
+
+    custom = "group_neutralize(zscore(ts_zscore(volume,20)),sector)"
+    await _set_custom_expression(applied_db, custom)
+    response = authed_client.post("/api/factor-lab/live-expression/restore-preset", headers=_auth())
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["changed"] is True
+    assert body["previous_expression"] == custom
+    assert body["expression"] == SHORT_TERM_FACTOR_EXPR
+    conn = await asyncpg.connect(applied_db)
+    try:
+        value = await conn.fetchval("SELECT value FROM engine_config WHERE key='factor.custom_expression'")
+        assert value is None or json.loads(value) is None
+        log = await conn.fetch(
+            "SELECT field, old_value, new_value, source FROM config_change_log "
+            "WHERE field='factor.custom_expression' ORDER BY id"
+        )
+        assert [dict(r) for r in log] == [{
+            "field": "factor.custom_expression", "old_value": json.dumps(custom),
+            "new_value": "null", "source": "manual",
+        }]
+    finally:
+        await conn.close()
+
+
+async def test_restore_preset_is_idempotent(authed_client, applied_db):
+    first = authed_client.post("/api/factor-lab/live-expression/restore-preset", headers=_auth())
+    assert first.status_code == 200, first.text
+    assert first.json()["changed"] is False
+    conn = await asyncpg.connect(applied_db)
+    try:
+        assert await conn.fetchval("SELECT count(*) FROM config_change_log") == 0
+    finally:
+        await conn.close()
+
+
+@pytest.mark.parametrize("sub", [None, "2"])
+async def test_restore_preset_requires_admin(authed_client, applied_db, sub):
+    await _set_custom_expression(applied_db, "rank(returns)")
+    response = authed_client.post(
+        "/api/factor-lab/live-expression/restore-preset", headers=_auth(sub) if sub else {},
+    )
+    assert response.status_code == (403 if sub else 401)
+    conn = await asyncpg.connect(applied_db)
+    try:
+        assert json.loads(await conn.fetchval(
+            "SELECT value FROM engine_config WHERE key='factor.custom_expression'")) == "rank(returns)"
+    finally:
+        await conn.close()

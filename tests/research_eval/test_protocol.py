@@ -56,3 +56,29 @@ def test_offline_cli_roundtrip_and_missing_refusal(tmp_path):
     report = json.loads(result.stdout)
     assert report["status"] == "complete"
     assert report["comparisons"][0]["horizons"]["1"][0]["dsr"]["probability"] is None
+
+
+def test_v1_0_0_registration_is_preserved_byte_for_byte():
+    from alpha_agent.research_eval.protocol import PROTOCOL_V1_0_0, PROTOCOLS
+    assert PROTOCOL_V1_0_0.version == "quant-p0-v1.0.0-20261111"
+    assert PROTOCOL_V1_0_0.fingerprint == "b56a596ca324b9bced92100bb8b151c156125bb44ae9320d575d865d16a6057b"
+    assert set(PROTOCOLS) == {"quant-p0-v1.0.0-20261111", "quant-p0-v1.1.0-20261112"}
+
+
+def test_v1_1_0_records_factor_restore_and_forbids_splicing():
+    from alpha_agent.research_eval.protocol import PROTOCOL_V1_0_0
+    import exchange_calendars as xcals
+    assert PROTOCOL.version == "quant-p0-v1.1.0-20261112"
+    assert PROTOCOL.supersedes == PROTOCOL_V1_0_0.version
+    assert PROTOCOL.splice_with_superseded is False
+    regime = PROTOCOL.factor_regime
+    assert regime.expression == "subtract(rank(ts_mean(returns, 12)), rank(ts_std(returns, 60)))"
+    assert regime.panel == "live_daily_prices" and regime.previous_panel == "frozen_research_parquet"
+    assert PROTOCOL.final_forward.start > regime.effective_after >= PROTOCOL.frozen_on
+    calendar = xcals.get_calendar("XNYS", start="2026-11-01", end="2027-12-31")
+    sessions = calendar.sessions_in_range(PROTOCOL.final_forward.start.isoformat(), PROTOCOL.final_forward.end.isoformat())
+    assert len(sessions) >= PROTOCOL.minimum_forward_sessions
+    # Evaluation rules are unchanged; only registration, window and regime differ.
+    changed = {k for k, v in PROTOCOL.to_dict().items() if PROTOCOL_V1_0_0.to_dict().get(k, object()) != v}
+    assert changed == {"version", "frozen_on", "final_forward", "factor_regime", "supersedes", "splice_with_superseded"}
+    assert PROTOCOL.fingerprint != PROTOCOL_V1_0_0.fingerprint

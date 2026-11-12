@@ -273,6 +273,20 @@ export interface SetLiveExpressionResult {
   updated_at: string;
 }
 
+export interface RestorePresetResult {
+  changed: boolean;
+  previous_expression: string | null;
+  expression: string;
+  updated_at: string;
+}
+
+/** Admin: clear the custom live expression so the factor uses its preset. */
+export const restorePresetExpression = () =>
+  apiPost<RestorePresetResult, Record<string, never>>(
+    "/api/factor-lab/live-expression/restore-preset",
+    {},
+  );
+
 export const setLiveExpression = (expression: string) =>
   apiPost<SetLiveExpressionResult, { expression: string }>(
     "/api/factor-lab/live-expression",

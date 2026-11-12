@@ -132,3 +132,23 @@ PYTHONPATH=. /Users/bobby/Desktop/alpha-agent/.venv/bin/pytest tests/research_ev
 ```
 
 本批测试全部为明确synthetic fixture，覆盖缺日不压缩、亏损保留、买卖费用、初始费用/DD、现金暴露、短样本/零variance、HAC手算、DSR公式参照、Holm、21session purge与CLI缺失拒绝。指定pytest **23 passed**，指定ruff **All checks passed**。没有DB测试、模型调用或真实收益回测；单元通过不能证明赚钱。
+
+## 版本 v1.1.0（2026-11-12）：线上因子恢复预设
+
+**为什么改版本**：经用户批准，线上因子从自定义成交量表达式恢复为平台预设。v1.0.0 冻结时，线上因子是 `group_neutralize(zscore(ts_zscore(volume,20)),sector)`，在冻结研究面板（截至 2026-10-30）上计算。该表达式扣成本后 3 折验证均为负，换手约 200%/日。恢复后改为 `subtract(rank(ts_mean(returns, 12)), rank(ts_std(returns, 60)))`，读每日行情。tactical、strategic 和 bot 三臂的输入都受影响，按本协议“任何字段变化均须新版本”的规定，另立 v1.1.0。
+
+| 字段 | v1.0.0（存档，不改） | v1.1.0 |
+| --- | --- | --- |
+| version | quant-p0-v1.0.0-20261111 | quant-p0-v1.1.0-20261112 |
+| frozen_on | 2026-11-11 | 2026-11-12 |
+| final_forward | 2026-11-12 → 2027-11-12 | **2026-11-13 → 2027-11-15**，按 XNYS 日历正好 252 个交易日 |
+| factor_regime | 未记录（隐含：自定义成交量表达式，冻结面板） | 预设表达式，`live_daily_prices`，11-12 收盘后生效；前任表达式与面板一并记录 |
+| 其余全部评估规则 | — | 与 v1.0.0 相同（臂、持有期、对照、40 项家族、成本、purge/embargo、基线构造） |
+| fingerprint | `b56a596c…6057b` | 由 `alpha_agent/research_eval/protocol.py` 的 `FrozenProtocolV11` 计算，CLI 输出 |
+
+规则：
+
+1. **不拼接**（`splice_with_superseded=False`）：v1.0.0 窗口内的 11-12 交易日样本由自定义表达式产生，不并入 v1.1.0 的 252 日前瞻记录，只作为 v1.0.0 存档单独描述。
+2. **生效点**：以第一份使用预设表达式的研究快照为准。若 11-12 收盘后的研究运行未完成（定时任务延迟、价格覆盖不足），第一个合格快照之前的交易日按“technical_failure”记入分母，不顺延窗口终点，也不回补决策。
+3. **改动方式**：管理员接口 `POST /api/factor-lab/live-expression/restore-preset`，写入 `config_change_log`（source=manual，旧值→null）。如需改回，再手动设置旧表达式，并按本协议另立版本。
+4. **不改变**：已发布快照、L2 两本账、bot 配置 v4、费用和调度均未改动。

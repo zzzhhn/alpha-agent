@@ -278,19 +278,21 @@ function EvidenceTab() {
   const rows: readonly (readonly [string, ReactNode])[] = [
     [zh ? "当前结论" : "Current verdict", <span key="v" className="font-semibold text-tm-warn">Evidence insufficient</span>],
     [zh ? "含义" : "Meaning", zh ? "目前不能验证成本后赚钱能力，也不能凭短期亏损判定信号无效。晋升策略、扩大风险预算和盈利宣传均为 No-go。" : "Cost-adjusted profitability cannot be verified yet, and short-term losses do not prove the signal useless. Promoting the strategy, raising risk or claiming profits is No-go."],
-    [zh ? "冻结协议" : "Frozen protocol", "quant-p0-v1.0.0-20261111"],
-    [zh ? "前瞻窗口" : "Forward window", zh ? "2026-11-12 → 2027-11-12，至少 252 个可比交易日；到期前不提前挑窗口、不延长。" : "2026-11-12 → 2027-11-12, at least 252 comparable sessions; no early window picking or extension."],
+    [zh ? "冻结协议" : "Frozen protocol", zh ? "quant-p0-v1.1.0-20261112（取代 v1.0.0-20261111，后者存档不改）" : "quant-p0-v1.1.0-20261112 (supersedes v1.0.0-20261111, which stays archived)"],
+    [zh ? "前瞻窗口" : "Forward window", zh ? "2026-11-13 → 2027-11-15，252 个 XNYS 交易日；到期前不提前挑窗口、不延长。" : "2026-11-13 → 2027-11-15, 252 XNYS sessions; no early window picking or extension."],
+    [zh ? "版本变更" : "Version change", zh ? "11-12 经你批准，线上因子从自定义成交量表达式（读冻结研究面板）恢复为预设 12 日动量减 60 日波动（读每日行情）。评估规则不变；改动前后的样本不拼接。" : "On 11-12, with your approval, the live factor moved from the custom volume expression (frozen research panel) back to the preset 12-day momentum minus 60-day volatility (live daily prices). Evaluation rules are unchanged; samples before and after are not spliced."],
     [zh ? "对照组" : "Controls", zh ? "SPY、现金、eligible 等权月度、12–1 动量 Top50 月度；全部含买卖双边成本。" : "SPY, cash, eligible equal-weight monthly and 12–1 momentum Top-50 monthly; all with two-sided costs."],
-    [zh ? "主要已知问题" : "Known issues", zh ? "线上因子信号读 2026-10-30 的冻结面板；快照未记录价格下载时间；成交价与当前价格表因复权不一致；可执行看板首次读数为多头双边成本后 −4.89%，同期 SPY +1.52%（20 个区间，只作描述）。" : "The live factor signal reads a panel frozen at 2026-10-30; snapshots do not record price download time; fills differ from the revised price table; the first executable scoreboard read is −4.89% net long vs SPY +1.52% (20 intervals, descriptive only)."],
+    [zh ? "主要已知问题" : "Known issues", zh ? "v1.0.0 期间线上因子信号读 2026-10-30 的冻结面板；快照未记录价格下载时间；成交价与当前价格表因复权不一致；可执行看板首次读数为多头双边成本后 −4.89%，同期 SPY +1.52%（20 个区间，只作描述）。" : "During v1.0.0 the live factor signal read a panel frozen at 2026-10-30; snapshots do not record price download time; fills differ from the revised price table; the first executable scoreboard read is −4.89% net long vs SPY +1.52% (20 intervals, descriptive only)."],
   ];
   return (
-    <TmPane title={zh ? "交易方法论证据（P0）" : "Trading methodology evidence (P0)"} meta={zh ? "审计 2026-11-11" : "Audit 2026-11-11"}>
+    <TmPane title={zh ? "交易方法论证据（P0）" : "Trading methodology evidence (P0)"} meta={zh ? "审计 2026-11-11 · 协议更新 11-12" : "Audit 2026-11-11 · protocol 11-12"}>
       <dl className="grid grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] gap-x-6 gap-y-3 px-4 py-4 text-sm leading-6">
         {rows.map(([label, value]) => <div key={String(label)} className="contents"><dt className="text-tm-muted">{label}</dt><dd className="text-tm-fg-2 [overflow-wrap:anywhere]">{value}</dd></div>)}
       </dl>
       <div className="flex flex-wrap gap-2 border-t border-tm-rule px-4 py-3">
         <TmLinkButton href={`${REPO_DOC}2026-11-11-quant-p0-evidence-audit.md`} variant="secondary" size="sm" target="_blank" rel="noreferrer">{zh ? "证据审计" : "Evidence audit"}</TmLinkButton>
         <TmLinkButton href={`${REPO_DOC}2026-11-11-quant-p0-baseline-protocol.md`} variant="secondary" size="sm" target="_blank" rel="noreferrer">{zh ? "冻结协议" : "Frozen protocol"}</TmLinkButton>
+        <TmLinkButton href={`${REPO_DOC}2026-11-12-methodology-deep-research.md`} variant="secondary" size="sm" target="_blank" rel="noreferrer">{zh ? "方法论研究" : "Methodology research"}</TmLinkButton>
       </div>
     </TmPane>
   );
