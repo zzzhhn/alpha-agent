@@ -300,7 +300,7 @@ export default function SettingsPage() {
       title={zh ? "设置" : "Settings"}
       subtitle={zh ? "连接你的研究工具，管理自己的偏好与数据。" : "Connect your research tools. Manage your preferences and data."}
       statuses={[
-        {label:zh ? "已保存服务商" : "Saved provider",value:savedConnection?.provider.toUpperCase() ?? "—"},
+        {label:zh ? "已保存服务商" : "Saved provider",value:savedConnection ? providerDisplay(savedConnection.provider, savedConnection.base_url, zh) : "—"},
         {label:zh ? "服务端凭据" : "Server credential",value:connectionLoading ? (zh ? "读取中" : "Loading") : connectionError ? (zh ? "待确认" : "Unknown") : serverLast4 ? (zh ? "已加密保存" : "Encrypted") : (zh ? "未配置" : "None"),tone:!connectionError && serverLast4 ? "positive" : "warning"},
         {label:zh ? "连接测试" : "Connection test",...connectionTestStatus(testState, lastTest, zh)},
       ]}/>
