@@ -5,8 +5,8 @@ name: insider-form4
 # signal crons read the insider_form4 table this writes. Scheduled before the
 # slow_daily signal cron (13:30 UTC) so the table is fresh when it primes.
 on:
-  schedule:
-    - cron: "0 12 * * 1-5"
+  # Clock moved to Vercel Cron (GET /api/cron/dispatch/insider-form4); GitHub
+  # schedules arrived hours late. Manual dispatch still works.
   workflow_dispatch: {}
 
 concurrency:
