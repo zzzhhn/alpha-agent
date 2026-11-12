@@ -10093,6 +10093,17 @@
         "operationId": "market_probe_api_cron_paper_bot_market_probe_post",
         "parameters": [
           {
+            "in": "query",
+            "name": "ticker",
+            "required": false,
+            "schema": {
+              "default": "SPY",
+              "pattern": "^[A-Z0-9][A-Z0-9.^=-]{0,19}$",
+              "title": "Ticker",
+              "type": "string"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
