@@ -9018,6 +9018,67 @@
         ]
       }
     },
+    "/api/cron/dispatch/{workflow}": {
+      "get": {
+        "description": "Start a long GitHub job at the Vercel clock's time.\n\nPython-script ingests and BRAIN mining run for 30-150 minutes, longer than\na function may live, so they stay GitHub jobs; only their trigger moves\noff GitHub's delayed `schedule:`. A dispatch event starts promptly. One\ndispatch per workflow per UTC day; a failed dispatch is recorded, not retried.",
+        "operationId": "cron_dispatch_api_cron_dispatch__workflow__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow",
+            "required": true,
+            "schema": {
+              "title": "Workflow",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Dispatch Api Cron Dispatch  Workflow  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron Dispatch",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/fast_intraday": {
       "get": {
         "description": "Run fast_intraday cron. `limit=N` caps watchlist (Hobby 300s budget).\n`offset=M` starts at SP500_UNIVERSE[M]; combined with limit, enables\nmulti-shot coverage of the top tickers.\n\n`tier`: which signal subset to refresh this run. full = all 10 modules\n(legacy bootstrap); tech / mid / slow refresh only their named subset\nand round-trip the rest from the previous breakdown (see\napi/cron/fast_intraday.py docstring for the schedule design).",
@@ -9978,6 +10039,54 @@
         ]
       }
     },
+    "/api/cron/paper_bot/drive": {
+      "get": {
+        "description": "One leased worker step, including due-slot enqueue; never a worker loop.",
+        "operationId": "scheduled_drive_api_cron_paper_bot_drive_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scheduled Drive",
+        "tags": [
+          "paper-bot"
+        ]
+      }
+    },
     "/api/cron/paper_bot/market_probe": {
       "post": {
         "description": "One public-symbol availability sample, not a trade or blanket SLA.",
@@ -10120,7 +10229,7 @@
     },
     "/api/cron/paper_bot/wake": {
       "get": {
-        "description": "Independent Vercel clock; reuse the durable queue and bounded GH worker.\n\nKeep this request short. A successful dispatch is not a completed decision.\nDuplicate clocks share slot keys, and dispatch failures leave queued work\navailable for the next carrier rather than erasing the obligation.",
+        "description": "Independent Vercel clock; drive cron carries the durable queue.\n\nKeep this request short. A successful dispatch is not a completed decision.\nDuplicate clocks share slot keys, and dispatch failures leave queued work\navailable for the next carrier rather than erasing the obligation.",
         "operationId": "scheduled_wake_api_cron_paper_bot_wake_get",
         "parameters": [
           {
@@ -10831,6 +10940,76 @@
           }
         },
         "summary": "Slow Daily",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
+    "/api/cron/tick/{job}": {
+      "get": {
+        "description": "Advance a bounded scheduled job from durable receipts; no in-tick retry.",
+        "operationId": "cron_tick_api_cron_tick__job__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "enum": [
+                "daily_close",
+                "slow_daily",
+                "fast_tech",
+                "news_per_ticker",
+                "news_macro",
+                "minute_bars",
+                "ic_backtest_monthly"
+              ],
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cron Tick Api Cron Tick  Job  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cron Tick",
         "tags": [
           "cron"
         ]

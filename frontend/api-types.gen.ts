@@ -818,6 +818,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/dispatch/{workflow}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Dispatch
+         * @description Start a long GitHub job at the Vercel clock's time.
+         *
+         *     Python-script ingests and BRAIN mining run for 30-150 minutes, longer than
+         *     a function may live, so they stay GitHub jobs; only their trigger moves
+         *     off GitHub's delayed `schedule:`. A dispatch event starts promptly. One
+         *     dispatch per workflow per UTC day; a failed dispatch is recorded, not retried.
+         */
+        get: operations["cron_dispatch_api_cron_dispatch__workflow__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/fast_intraday": {
         parameters: {
             query?: never;
@@ -1034,6 +1059,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/paper_bot/drive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scheduled Drive
+         * @description One leased worker step, including due-slot enqueue; never a worker loop.
+         */
+        get: operations["scheduled_drive_api_cron_paper_bot_drive_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/paper_bot/market_probe": {
         parameters: {
             query?: never;
@@ -1081,7 +1126,7 @@ export interface paths {
         };
         /**
          * Scheduled Wake
-         * @description Independent Vercel clock; reuse the durable queue and bounded GH worker.
+         * @description Independent Vercel clock; drive cron carries the durable queue.
          *
          *     Keep this request short. A successful dispatch is not a completed decision.
          *     Duplicate clocks share slot keys, and dispatch failures leave queued work
@@ -1286,6 +1331,26 @@ export interface paths {
          *     GH-Actions multi-shot full SP500 coverage (e.g. 4 × {limit:140, offset:0/140/280/420}).
          */
         post: operations["slow_daily_api_cron_slow_daily_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/tick/{job}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cron Tick
+         * @description Advance a bounded scheduled job from durable receipts; no in-tick retry.
+         */
+        get: operations["cron_tick_api_cron_tick__job__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7664,6 +7729,41 @@ export interface operations {
             };
         };
     };
+    cron_dispatch_api_cron_dispatch__workflow__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                workflow: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     fast_intraday_api_cron_fast_intraday_get: {
         parameters: {
             query?: {
@@ -8120,6 +8220,37 @@ export interface operations {
             query?: {
                 schedule?: boolean;
             };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scheduled_drive_api_cron_paper_bot_drive_get: {
+        parameters: {
+            query?: never;
             header?: {
                 authorization?: string | null;
             };
@@ -8619,6 +8750,41 @@ export interface operations {
                 authorization?: string | null;
             };
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_tick_api_cron_tick__job__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job: "daily_close" | "slow_daily" | "fast_tech" | "news_per_ticker" | "news_macro" | "minute_bars" | "ic_backtest_monthly";
+            };
             cookie?: never;
         };
         requestBody?: never;

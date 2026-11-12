@@ -1,7 +1,7 @@
 """QUANT-1: L2 valuation must not depend on a fresh recommendation publication.
 
 Two layers are covered:
-  * the scheduled workflow no longer gates ``l2_cycle`` on ``published``;
+  * the manual workflow and the Vercel tick never gate ``l2_cycle`` on ``published``;
   * with no new research run, the continuous driver still marks existing
     holdings (stale when quotes are missing), creates no new targets, and keeps
     the original execution window (a pending intent is never filled on a later
@@ -25,12 +25,13 @@ def _l2_job() -> dict:
     return workflow["jobs"]["l2_cycle"]
 
 
-def test_scheduled_l2_cycle_is_not_gated_on_publication():
+def test_l2_cycle_is_not_gated_on_publication():
     job = _l2_job()
     condition = job["if"]
     assert "published" not in condition
-    assert "github.event.schedule == '0 23 * * 1-5'" in condition
-    # Still ordered after the publication attempt and still preflight-gated.
+    # The clock moved to Vercel (tick/daily_close runs L2 after the publish
+    # attempt); GitHub keeps the manual dispatch path, still preflight-gated.
+    assert "github.event.schedule" not in condition
     assert job["needs"] == ["preflight", "fast_intraday"]
     assert "always()" in condition
     assert "needs.preflight.outputs.ready == 'true'" in condition
