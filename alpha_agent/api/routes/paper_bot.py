@@ -168,7 +168,7 @@ async def context(account_id: int, user_id: int = Depends(require_user)):
 
 @router.get('/api/cron/paper_bot/wake', dependencies=[Depends(require_cron)])
 async def scheduled_wake():
-    """Independent Vercel clock; reuse the durable queue and bounded GH worker.
+    """Independent Vercel clock; drive cron carries the durable queue.
 
     Keep this request short. A successful dispatch is not a completed decision.
     Duplicate clocks share slot keys, and dispatch failures leave queued work
@@ -179,7 +179,7 @@ async def scheduled_wake():
     active = await pool.fetchval(
         "SELECT EXISTS(SELECT 1 FROM sim_bot_run WHERE status IN ('queued','running')) "
         "OR EXISTS(SELECT 1 FROM sim_order WHERE execution_model='intraday_next_bar_v1' AND status='pending')")
-    if not active:
+    if not active or os.environ.get('PAPER_BOT_GH_FALLBACK') != '1':
         log_clock('vercel_cron', scheduled, dispatched=False)
         return {'ok': True, 'scheduled': scheduled, 'dispatched': False}
     attempted = datetime.now(UTC).isoformat()
@@ -190,12 +190,19 @@ async def scheduled_wake():
         await pool.execute(
             "UPDATE sim_bot_run SET diagnostics=diagnostics || $1::jsonb WHERE status IN ('queued','running')",
             store.dump({'dispatch': {'source': 'vercel_cron', 'at': attempted, 'status': 'failed'}}))
-        raise HTTPException(503, {'reason': 'runner_dispatch_failed', 'scheduled': scheduled}) from None
+        return {'ok': True, 'scheduled': scheduled, 'dispatched': False,
+                'reason': 'runner_dispatch_failed'}
     await pool.execute(
         "UPDATE sim_bot_run SET diagnostics=diagnostics || $1::jsonb WHERE status IN ('queued','running')",
         store.dump({'dispatch': {'source': 'vercel_cron', 'at': attempted, 'status': 'requested'}}))
     log_clock('vercel_cron', scheduled, dispatched=True)
     return {'ok': True, 'scheduled': scheduled, 'dispatched': True}
+
+
+@router.get('/api/cron/paper_bot/drive', dependencies=[Depends(require_cron)])
+async def scheduled_drive():
+    """One leased worker step, including due-slot enqueue; never a worker loop."""
+    return await worker(schedule=True)
 
 
 @router.post('/api/cron/paper_bot', dependencies=[Depends(require_cron)])

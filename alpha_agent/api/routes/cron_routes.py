@@ -23,6 +23,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 
 from alpha_agent.auth.dependencies import require_cron
+from alpha_agent.scheduling.ticks import Job
 from alpha_agent.storage.postgres import get_pool
 
 router = APIRouter(
@@ -30,6 +31,30 @@ router = APIRouter(
     tags=["cron"],
     dependencies=[Depends(require_cron)],
 )
+
+
+@router.get("/tick/{job}")
+async def cron_tick(job: Job) -> dict[str, Any]:
+    """Advance a bounded scheduled job from durable receipts; no in-tick retry."""
+    from alpha_agent.api.dependencies import get_db_pool
+    from alpha_agent.scheduling.runner import run_tick
+
+    return await run_tick(job, await get_db_pool())
+
+
+@router.get("/dispatch/{workflow}")
+async def cron_dispatch(workflow: str) -> dict[str, Any]:
+    """Start a long GitHub job at the Vercel clock's time.
+
+    Python-script ingests and BRAIN mining run for 30-150 minutes, longer than
+    a function may live, so they stay GitHub jobs; only their trigger moves
+    off GitHub's delayed `schedule:`. A dispatch event starts promptly. One
+    dispatch per workflow per UTC day; a failed dispatch is recorded, not retried.
+    """
+    from alpha_agent.api.dependencies import get_db_pool
+    from alpha_agent.scheduling.dispatch import dispatch_workflow
+
+    return await dispatch_workflow(await get_db_pool(), workflow)
 
 
 @router.get("/auth_check")

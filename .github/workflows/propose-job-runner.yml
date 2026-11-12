@@ -15,11 +15,7 @@ name: propose-job-runner
 
 on:
   workflow_dispatch:
-  schedule:
-    # Fallback only. Instant dispatch is the primary path; this catches misses.
-    # Was */15 24/7 (96/day) for a path that only catches dispatch misses —
-    # cut to hourly as part of the 2026-07-24 Neon egress-quota remediation.
-    - cron: "0 * * * *"
+  # Hourly fallback drain moved to Vercel Cron (GET /api/cron/run_propose_jobs).
 
 # Serialize runners: the DB claim is race-safe (FOR UPDATE SKIP LOCKED), but
 # serializing avoids piling up runner invocations when a user clicks repeatedly.

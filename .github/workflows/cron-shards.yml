@@ -15,45 +15,10 @@ name: cron-shards
 #   between shots so the Vercel function stays warm but uncontended.
 
 on:
-  schedule:
-    # Daily SP500 slow refresh — 13:30 UTC = 09:30 ET pre-open (weekdays).
-    - cron: '30 13 * * 1-5'
-    # One complete Top-240 signal run after settled daily prices.  Its final
-    # step publishes the immutable recommendation snapshot atomically.
-    - cron: '0 23 * * 1-5'
-    # Intraday is deliberately narrow: watchlist + top names, twice per day.
-    - cron: '30 15,19 * * 1-5'
-    # Headline ingest is independent from ranking and runs twice per day.
-    - cron: '0 15,19 * * 1-5'
-    # News: macro (Truth/Fed/OFAC). Was '*/5 * * * *' 24/7 = 288 triggers/day,
-    # 82% of this workflow's entire schedule — it exhausted the Neon free-tier
-    # DATA TRANSFER quota on 2026-07-24 and took every DB-touching workflow down
-    # with it. The system trades on daily close-to-close signals, so 5-min macro
-    # granularity at 03:00 has no decision value. Market-adjacent weekdays only
-    # (12-21 UTC = 08:00-17:00 ET covers pre-market through post-close).
-    - cron: '0 12,16,20 * * 1-5'
-    # News: Fed + OFAC hourly, 24/7
-    # Off-hours backstop: Fed/OFAC headlines do land overnight and on weekends,
-    # so keep a sparse 24/7 sweep rather than going fully dark. 4/day, not 24.
-    - cron: '0 2 * * *'
-    # Minute bars are an event-study aid, not a full-market critical feed.
-    - cron: '15 18 * * 1-5'
-    # IC backtest monthly, 1st of month 04:00 UTC
-    - cron: '0 4 1 * *'
-    # Self-loop daily: append today's daily_prices (forward-return source)
-    # then run the walk-forward IC backtest so signal_ic_history +
-    # signal_weight_current stay current. 22:00 UTC is after the US close in
-    # both DST regimes (20:00/21:00 UTC), so the day's close is settled, and
-    # it sits outside the 14-20 UTC intraday window so it does not contend
-    # with the fast_intraday jobs for yfinance. Weekdays only.
-    - cron: '0 22 * * 1-5'
-    # NOTE: news_llm_enrich cron removed 2026-05-17. BYOK architecture
-    # means cron has no user-context to source an LLM key. Enrichment
-    # moved to read-time path triggered by user with their own key.
-    # Methodology proposal scheduling is quarantined until its legacy
-    # synthetic-input validator is replaced. See research-validation-quarantine.md.
-    # L2 runs on the 23:00 schedule after publication is attempted; it values
-    # existing holdings even when no new snapshot is published.
+  # Scheduling moved to Vercel Cron on 2026-11-12 (GET /api/cron/tick/*, see
+  # docs/runbooks/vercel-cron-ticks.md): GitHub delayed these schedules by
+  # hours and broke the same-UTC-day research window. This workflow is now a
+  # manual/admin dispatch path only (in-app refresh, recovery).
   workflow_dispatch:
     inputs:
       job:
@@ -116,7 +81,6 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '0 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.job == 'fast_intraday' || inputs.job == 'both'))
       )
@@ -143,7 +107,6 @@ jobs:
     needs: [preflight, research_prices]
     if: |
       needs.preflight.outputs.ready == 'true' && needs.research_prices.outputs.ready == 'true' && (
-      github.event.schedule == '0 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.job == 'fast_intraday' || inputs.job == 'both'))
       )
@@ -215,7 +178,6 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '30 15,19 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'fast_tech')
       )
     runs-on: ubuntu-latest
@@ -342,7 +304,6 @@ jobs:
     needs: [preflight, fast_intraday]
     if: |
       always() && needs.preflight.outputs.ready == 'true' && (
-        github.event.schedule == '30 13 * * 1-5' ||
         (github.event_name == 'workflow_dispatch' &&
          (inputs.job == 'slow_daily' || inputs.job == 'both'))
       )
@@ -399,7 +360,6 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '0 15,19 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'news_per_ticker')
       )
     runs-on: ubuntu-latest
@@ -422,8 +382,6 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '0 12,16,20 * * 1-5' ||
-      github.event.schedule == '0 2 * * *' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'news_macro')
       )
     runs-on: ubuntu-latest
@@ -447,7 +405,6 @@ jobs:
     needs: [preflight, fast_intraday]
     if: |
       always() && needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '0 23 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'l2_cycle')
       )
     runs-on: ubuntu-latest
@@ -466,7 +423,6 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '15 18 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'minute_bars_puller')
       )
     runs-on: ubuntu-latest
@@ -489,7 +445,6 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '0 4 1 * *' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'ic_backtest_monthly')
       )
     runs-on: ubuntu-latest
@@ -513,7 +468,6 @@ jobs:
     needs: [preflight]
     if: |
       needs.preflight.outputs.ready == 'true' && (
-      github.event.schedule == '0 22 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' && inputs.job == 'daily_prices_puller')
       )
     runs-on: ubuntu-latest

@@ -7,14 +7,7 @@ on:
         type: choice
         default: run
         options: [run, market_probe, valuation_refresh]
-  schedule:
-    # Best-effort backup clock, NOT a punctuality guarantee. Vercel is the
-    # primary clock. Late arrivals must not backfill an expired trading slot.
-    # NYSE calendar filters ordinary vs half-day close; no extra polling.
-    - cron: '2,12 10 * * 1-5'
-      timezone: America/New_York
-    - cron: '32,42 12,15 * * 1-5'
-      timezone: America/New_York
+  # Backup clock removed: Vercel drives the bot (GET /api/cron/paper_bot/drive).
 
 permissions:
   contents: read

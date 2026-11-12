@@ -30,8 +30,8 @@ on:
       seed:
         description: "deterministic generator seed"
         default: "1234"
-  schedule:
-    - cron: "0 8 * * *" # daily 08:00 UTC
+  # Clock moved to Vercel Cron (GET /api/cron/dispatch/brain-mining-loop); GitHub
+  # schedules arrived hours late. Manual dispatch still works.
 
 concurrency:
   group: brain-mining-loop

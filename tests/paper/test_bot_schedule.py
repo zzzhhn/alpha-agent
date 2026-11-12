@@ -59,11 +59,17 @@ def test_queue_receipt_survives_missing_schedule_observation_write():
     assert opening['observed_at'] == run['created_at'] and not opening.get('inferred')
 
 
-@pytest.mark.parametrize('active,dispatch_error,expected_status', [(False, False, 200), (True, False, 200), (True, True, 503)])
-async def test_authenticated_fallback_only_dispatches_existing_work(monkeypatch, active, dispatch_error, expected_status):
+@pytest.mark.parametrize('fallback,active,dispatch_error,dispatched', [
+    (False, True, False, False),   # default: Vercel drive cron is the carrier
+    (True, False, False, False),   # fallback on, nothing queued
+    (True, True, False, True),
+    (True, True, True, False),     # fallback dispatch failure is non-fatal
+])
+async def test_wake_only_dispatches_github_when_fallback_enabled(monkeypatch, fallback, active, dispatch_error, dispatched):
     from alpha_agent.api.routes import paper_bot
     pool = type('Pool', (), {'fetchval': AsyncMock(return_value=active), 'execute': AsyncMock()})()
     monkeypatch.setenv('CRON_SECRET', 'test-cron-only')
+    monkeypatch.setenv('PAPER_BOT_GH_FALLBACK', '1' if fallback else '0')
     monkeypatch.setattr(paper_bot, 'get_db_pool', AsyncMock(return_value=pool))
     enqueue = AsyncMock(return_value={'enqueued': int(active), 'reason': 'slots_checked'})
     dispatch = AsyncMock(side_effect=HTTPException(503, 'test failure') if dispatch_error else None)
@@ -75,12 +81,9 @@ async def test_authenticated_fallback_only_dispatches_existing_work(monkeypatch,
         assert (await api.get('/api/cron/paper_bot/wake')).status_code == 401
         assert enqueue.await_count == 0
         response = await api.get('/api/cron/paper_bot/wake', headers={'Authorization': 'Bearer test-cron-only'})
-    assert response.status_code == expected_status
-    assert dispatch.await_count == int(active)
-    if not dispatch_error:
-        assert response.json()['dispatched'] is active
-    else:
-        assert response.json()['detail']['reason'] == 'runner_dispatch_failed'
+    assert response.status_code == 200
+    assert dispatch.await_count == int(fallback and active)
+    assert response.json()['dispatched'] is dispatched
 
 
 @pytest.mark.parametrize('created', [True, False])

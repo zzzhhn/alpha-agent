@@ -1,15 +1,40 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "regions": ["iad1"],
+  "regions": [
+    "iad1"
+  ],
   "build": {
-    "env": { "VERCEL_PYTHON_COMPILEALL": "0" }
+    "env": {
+      "VERCEL_PYTHON_COMPILEALL": "0"
+    }
   },
-  "functions": { "api/index.py": { "maxDuration": 300 } },
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300
+    }
+  },
   "crons": [
     { "path": "/api/cron/paper_bot/valuation", "schedule": "7,37 13-21 * * 1-5" },
     { "path": "/api/cron/paper_fill", "schedule": "0 1 * * *" },
     { "path": "/api/cron/paper_bot/wake", "schedule": "1,4 14,15 * * 1-5" },
-    { "path": "/api/cron/paper_bot/wake", "schedule": "31,34 16,17,19,20 * * 1-5" }
+    { "path": "/api/cron/paper_bot/wake", "schedule": "31,34 16,17,19,20 * * 1-5" },
+    { "path": "/api/cron/tick/daily_close", "schedule": "10-59/5 20 * * 1-5" },
+    { "path": "/api/cron/tick/daily_close", "schedule": "*/5 21-23 * * 1-5" },
+    { "path": "/api/cron/tick/slow_daily", "schedule": "30-59/5 13 * * 1-5" },
+    { "path": "/api/cron/tick/slow_daily", "schedule": "0-25/5 14 * * 1-5" },
+    { "path": "/api/cron/tick/fast_tech", "schedule": "30 15,19 * * 1-5" },
+    { "path": "/api/cron/tick/news_per_ticker", "schedule": "0 15,19 * * 1-5" },
+    { "path": "/api/cron/tick/news_macro", "schedule": "0 12,16,20 * * 1-5" },
+    { "path": "/api/cron/tick/news_macro", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/tick/minute_bars", "schedule": "15 18 * * 1-5" },
+    { "path": "/api/cron/tick/ic_backtest_monthly", "schedule": "0 4 1 * *" },
+    { "path": "/api/cron/paper_bot/drive", "schedule": "1-25 14,15 * * 1-5" },
+    { "path": "/api/cron/paper_bot/drive", "schedule": "31-55 16,17,19,20 * * 1-5" },
+    { "path": "/api/cron/dispatch/brain-mining-loop", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/dispatch/brain-backfill-selfcorr", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/dispatch/earnings-finnhub", "schedule": "30 11 * * 1-5" },
+    { "path": "/api/cron/dispatch/insider-form4", "schedule": "0 12 * * 1-5" },
+    { "path": "/api/cron/run_propose_jobs", "schedule": "0 * * * *" }
   ]
 }
