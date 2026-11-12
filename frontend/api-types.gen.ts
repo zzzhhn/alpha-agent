@@ -8281,7 +8281,9 @@ export interface operations {
     };
     market_probe_api_cron_paper_bot_market_probe_post: {
         parameters: {
-            query?: never;
+            query?: {
+                ticker?: string;
+            };
             header?: {
                 authorization?: string | null;
             };

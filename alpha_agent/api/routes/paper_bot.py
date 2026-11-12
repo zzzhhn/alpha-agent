@@ -238,7 +238,7 @@ async def refresh_valuation():
 
 
 @router.post('/api/cron/paper_bot/market_probe', dependencies=[Depends(require_cron)])
-async def market_probe():
+async def market_probe(ticker: str = Query('SPY', pattern=r'^[A-Z0-9][A-Z0-9.^=-]{0,19}$')):
     """One public-symbol availability sample, not a trade or blanket SLA."""
     from datetime import UTC, datetime
     from alpha_agent.paper.bot_valuation import valuation_session
@@ -247,10 +247,15 @@ async def market_probe():
     now = datetime.now(UTC)
     session = valuation_session(now)
     try:
-        bars = await fetch_bars('SPY', now if session['is_open'] else as_utc(session['close_at']))
+        cutoff = now if session['is_open'] else as_utc(session['close_at'])
+        bars = await fetch_bars(ticker, cutoff)
+        bars = [bar for bar in bars if as_utc(bar['end']) <= cutoff]
         last = bars[-1] if bars else {}
-        return {'ok': True, 'available': bool(bars), 'ticker': 'SPY', 'bars': len(bars),
+        return {'ok': True, 'available': bool(bars), 'ticker': ticker, 'bars': len(bars),
                 'last_bar': last.get('end'), 'price_basis': last.get('price_basis'),
+                'observed_at': now.isoformat(),
+                'last_bar_age_seconds': (now-as_utc(last['end'])).total_seconds() if last else None,
+                'recent_bars': [{'end': bar['end'], 'volume': bar.get('volume')} for bar in bars[-5:]],
                 'session_date': session['session_date'], 'is_open': session['is_open']}
     except Exception as exc:
-        return {'ok': True, 'available': False, 'ticker': 'SPY', 'reason': type(exc).__name__}
+        return {'ok': True, 'available': False, 'ticker': ticker, 'reason': type(exc).__name__}
