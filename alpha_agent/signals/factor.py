@@ -101,6 +101,39 @@ DEFAULT_FACTOR_EXPR = _resolve_default_expr()
 # cron shard cannot overwrite the provenance of the default expression.
 _LAST_EVAL: dict[str, dict[str, object]] = {}
 
+# Live panel primed by the async cron entry points (fast_intraday, slow_daily)
+# over the shared asyncpg pool. The serverless bundle has no psycopg, so the
+# synchronous loader below always failed in production and every preset
+# evaluation silently fell back to the frozen research parquet (2026-10-30).
+_PRIMED_LIVE: dict[str, object] = {"panel": None, "info": {}}
+# Cross-section scores per expression, valid only for the same panel object:
+# the cron calls _fetch once per ticker and the universe need not be re-ranked
+# each time. The panel itself is held so an identity match cannot be stale.
+_SCORE_CACHE: dict[str, tuple[object, dict[str, float]]] = {}
+
+
+async def prime_live_panel(pool) -> dict[str, object]:
+    """Load the live daily_prices panel once per cron invocation.
+
+    Returns a small receipt for logs. On failure the primed panel is cleared,
+    so evaluation falls back to the frozen parquet and discloses it through
+    ``factor_source.panel``."""
+    from alpha_agent.factor_engine.factor_backtest import aload_live_panel
+
+    _SCORE_CACHE.clear()
+    try:
+        panel, info = await aload_live_panel(pool, min_days=65)
+    except Exception as exc:  # noqa: BLE001 — degrade to the disclosed parquet
+        _PRIMED_LIVE.update(panel=None, info={})
+        return {"live": False, "error_type": type(exc).__name__}
+    _PRIMED_LIVE.update(panel=panel, info=info)
+    dates = getattr(panel, "dates", None)
+    return {
+        "live": panel is not None,
+        "data_date": str(dates[-1])[:10] if dates is not None and len(dates) else None,
+        "excluded_suspect_jumps": len(info.get("excluded_suspect_jumps", [])),
+    }
+
 
 def factor_provenance(expr: str, panel, *, live: bool) -> dict[str, object]:
     """Pure helper: describe the expression and panel row actually evaluated."""
@@ -136,11 +169,19 @@ def _evaluate_for_universe(as_of: datetime, expr: str | None = None) -> dict[str
     panel = None
     live = False
     if expr == SHORT_TERM_FACTOR_EXPR:
-        panel = load_live_panel(min_days=65)
+        panel = _PRIMED_LIVE["panel"] or load_live_panel(min_days=65)
         live = panel is not None
     if panel is None:
         panel = _load_panel()
     provenance = factor_provenance(expr, panel, live=live)
+    if live and panel is _PRIMED_LIVE["panel"]:
+        provenance["excluded_suspect_jumps"] = list(
+            _PRIMED_LIVE["info"].get("excluded_suspect_jumps", [])
+        )
+    cached = _SCORE_CACHE.get(expr)
+    if cached is not None and cached[0] is panel:
+        _LAST_EVAL[expr] = provenance
+        return cached[1]
     # FactorSpec requires 6 fields beyond expression. Surfaced by F1 smoke
     # against deployed /api/stock/AAPL: factor.raw was always null because
     # FactorSpec(expression=...) raised ValidationError, caught silently by
@@ -161,8 +202,11 @@ def _evaluate_for_universe(as_of: datetime, expr: str | None = None) -> dict[str
     arr = np.array(list(scores.values()), dtype=float)
     mu, sigma = np.nanmean(arr), np.nanstd(arr)
     if sigma == 0 or np.isnan(sigma):
-        return {t: 0.0 for t in scores}
-    return {t: float(np.clip((v - mu) / sigma, -3.0, 3.0)) for t, v in scores.items()}
+        out = {t: 0.0 for t in scores}
+    else:
+        out = {t: float(np.clip((v - mu) / sigma, -3.0, 3.0)) for t, v in scores.items()}
+    _SCORE_CACHE[expr] = (panel, out)
+    return out
 
 
 def _fetch_info_for(ticker: str) -> dict:
