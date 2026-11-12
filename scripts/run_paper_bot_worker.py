@@ -3,6 +3,7 @@ import json
 import os
 import time
 import urllib.request
+from urllib.parse import urlencode
 from datetime import UTC, datetime
 
 
@@ -26,6 +27,8 @@ def main():
     schedule = os.environ.get('BOT_SCHEDULE', 'false')
     operation = os.environ.get('BOT_OPERATION', 'run')
     suffix = {'market_probe': '/market_probe', 'valuation_refresh': '/valuation'}.get(operation, f'?schedule={schedule}')
+    if operation == 'market_probe':
+        suffix += '?' + urlencode({'ticker': os.environ.get('BOT_PROBE_TICKER') or 'SPY'})
     print(json.dumps(carrier_receipt(os.environ)), flush=True)
     while time.monotonic() < deadline:
         request = urllib.request.Request(
