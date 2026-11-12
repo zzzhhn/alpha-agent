@@ -31,3 +31,17 @@ def test_late_idle_carrier_stops_after_one_request(monkeypatch, capsys):
     assert requests[0].full_url.endswith('?schedule=true')
     output = capsys.readouterr().out
     assert 'outside_schedule_window' in output and 'test-only' not in output
+
+
+def test_symbol_probe_is_one_read_only_request(monkeypatch):
+    monkeypatch.setenv('BOT_OPERATION', 'market_probe')
+    monkeypatch.setenv('BOT_PROBE_TICKER', 'ERIE')
+    monkeypatch.setenv('CRON_SECRET', 'test-only')
+    requests = []
+    def respond(request, timeout):
+        requests.append(request)
+        return io.StringIO(json.dumps({'ok': True, 'ticker': 'ERIE'}))
+    monkeypatch.setattr(carrier.urllib.request, 'urlopen', respond)
+    carrier.main()
+    assert len(requests) == 1
+    assert requests[0].full_url.endswith('/market_probe?ticker=ERIE')

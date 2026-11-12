@@ -7,6 +7,10 @@ on:
         type: choice
         default: run
         options: [run, market_probe, valuation_refresh]
+      probe_ticker:
+        description: Symbol for read-only market_probe (ignored by other operations)
+        type: string
+        default: SPY
   # Backup clock removed: Vercel drives the bot (GET /api/cron/paper_bot/drive).
 
 permissions:
@@ -35,4 +39,5 @@ jobs:
           BOT_SCHEDULE: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
           BOT_CRON_EXPRESSION: ${{ github.event.schedule }}
           BOT_OPERATION: ${{ inputs.bot_operation || 'run' }}
+          BOT_PROBE_TICKER: ${{ inputs.probe_ticker || 'SPY' }}
         run: python3 scripts/run_paper_bot_worker.py
