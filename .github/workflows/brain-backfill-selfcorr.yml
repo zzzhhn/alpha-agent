@@ -4,12 +4,8 @@
 name: brain-backfill-selfcorr
 
 on:
-  schedule:
-    # Daily, one hour after brain-mining-loop (08:00) so freshly mined alphas
-    # get their official self-corr while BRAIN's lazy compute is warm. Scheduled
-    # runs use the LOW default limit below — 2026-07-13 evidence: ~45 rapid
-    # /correlations/self requests locked the endpoint into permanent empty-200.
-    - cron: "0 9 * * *"
+  # Clock moved to Vercel Cron (GET /api/cron/dispatch/brain-backfill-selfcorr); GitHub
+  # schedules arrived hours late. Manual dispatch still works.
   workflow_dispatch:
     inputs:
       limit:
