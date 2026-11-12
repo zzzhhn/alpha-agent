@@ -185,7 +185,12 @@ async def execution_context(pool, run, context, decision):
     tickers = [p['ticker'] for p in book['positions']] + [i['ticker'] for i in context['instruments'] if i['instrument_id'] in ids]
     quotes = await quotes_for(tickers)
     held = book['positions']
-    if any(quotes.get(p['ticker'], {}).get('quality') != 'fresh' for p in held):
-        raise ValueError('持仓缺少新鲜原始行情，不能可靠计算目标权重')
-    book['portfolio_value'] = book['cash'] + sum(quotes[p['ticker']]['price'] * p['qty'] for p in held)
+    # Missing marks are an execution precondition, not a crashed worker.
+    # submit_targets checks every held raw quote again under the ledger lock
+    # and records portfolio_mark_unavailable without accepting target orders.
+    complete = all(quotes.get(p['ticker'], {}).get('quality') == 'fresh' for p in held)
+    book['portfolio_value'] = (
+        book['cash'] + sum(quotes[p['ticker']]['price'] * p['qty'] for p in held)
+        if complete else None
+    )
     return {**context, 'account': book, 'quotes': quotes}
