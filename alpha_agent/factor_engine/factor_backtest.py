@@ -1093,7 +1093,11 @@ def load_live_panel(min_days: int = 65) -> "_Panel | None":
     unreachable or there are fewer than `min_days` trading days for the lookback.
     daily_prices carries only close, so open/high/low are filled with close and
     volume is NaN — harmless for the close-only default factor expression.
-    Cached by latest trading date so a new session busts the cache."""
+    Cached by latest trading date so a new session busts the cache.
+
+    Synchronous psycopg reader for scripts and local tools. The serverless
+    bundle does not ship psycopg (it is an optional [storage] extra), so the
+    production cron path must use ``aload_live_panel`` over the asyncpg pool."""
     url = _db_url_sync()
     if not url:
         return None
@@ -1111,24 +1115,85 @@ def load_live_panel(min_days: int = 65) -> "_Panel | None":
             flush=True,
         )
         return None
+    return live_panel_from_rows(rows, min_days=min_days)
+
+
+# The preset factor needs 60 sessions of returns plus a 12-session window; a
+# little slack keeps the row count bounded without touching the result.
+LIVE_PANEL_SESSIONS = 80
+# A one-day close move beyond this is far more often an unadjusted split or a
+# reused ticker in the yfinance feed than a real return (2026 examples: MNST and
+# APH 2:1 splits, KLAC, CTVA/DD spin-offs, PARA reuse). Such a ticker is left
+# out of the cross-section instead of being ranked on a fake return.
+LIVE_PANEL_MAX_ABS_DAILY_RETURN = 0.45
+
+
+async def aload_live_panel(pool, min_days: int = 65) -> tuple["_Panel | None", dict]:
+    """Async live panel over the shared asyncpg pool (the production path).
+
+    Returns ``(panel, info)``. ``panel`` is None when fewer than ``min_days``
+    sessions exist; the caller then falls back to the frozen parquet and must
+    disclose it. ``info`` lists tickers excluded for suspect price jumps so the
+    exclusion is visible rather than silent."""
+    rows = await pool.fetch(
+        """
+        WITH recent AS (
+            SELECT DISTINCT date FROM daily_prices
+            WHERE close IS NOT NULL ORDER BY date DESC LIMIT $1
+        )
+        SELECT p.date::text AS date, p.ticker, p.close
+        FROM daily_prices p JOIN recent r ON r.date = p.date
+        WHERE p.close IS NOT NULL
+        ORDER BY p.date
+        """,
+        LIVE_PANEL_SESSIONS,
+    )
+    info: dict = {"excluded_suspect_jumps": []}
+    panel = live_panel_from_rows(
+        [(r["date"], r["ticker"], r["close"]) for r in rows],
+        min_days=min_days,
+        max_abs_daily_return=LIVE_PANEL_MAX_ABS_DAILY_RETURN,
+        info=info,
+    )
+    return panel, info
+
+
+def live_panel_from_rows(
+    rows,
+    *,
+    min_days: int = 65,
+    max_abs_daily_return: float | None = None,
+    info: dict | None = None,
+) -> "_Panel | None":
+    """Build the close-only live panel from (date, ticker, close) rows."""
     if not rows:
         return None
-    latest = rows[-1][0]
+    latest = max(str(r[0]) for r in rows)
     cached = _LIVE_PANEL_CACHE.get(latest)
-    if cached is not None:
+    if cached is not None and max_abs_daily_return is None:
         return cached
 
     df = pd.DataFrame(rows, columns=["date", "ticker", "close"])
+    df["date"] = df["date"].astype(str)
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     dates = tuple(sorted(df["date"].unique()))
     if len(dates) < min_days:
         return None
     all_tickers = sorted(df["ticker"].unique())
     benches = tuple(t for t in BENCHMARK_TICKERS if t in all_tickers)
-    universe = tuple(t for t in all_tickers if t not in benches)
+    wide = df.pivot(index="date", columns="ticker", values="close").sort_index()
+    excluded: list[str] = []
+    if max_abs_daily_return is not None:
+        moves = wide.pct_change(fill_method=None).abs()
+        excluded = sorted(
+            t for t in moves.columns
+            if t not in benches and bool((moves[t] > max_abs_daily_return).any())
+        )
+    if info is not None:
+        info["excluded_suspect_jumps"] = excluded
+    universe = tuple(t for t in all_tickers if t not in benches and t not in excluded)
     if not universe:
         return None
-    wide = df.pivot(index="date", columns="ticker", values="close").sort_index()
     close = wide.reindex(columns=list(universe)).to_numpy(dtype=np.float64)
     bench_series = (
         wide[BENCHMARK_TICKER].to_numpy(dtype=np.float64)
@@ -1149,7 +1214,8 @@ def load_live_panel(min_days: int = 65) -> "_Panel | None":
         benchmark_close=bench_series,
         benchmark_alts=bench_alts or None,
     )
-    _LIVE_PANEL_CACHE[latest] = panel
-    for k in list(_LIVE_PANEL_CACHE)[:-2]:  # keep the cache tiny
-        _LIVE_PANEL_CACHE.pop(k, None)
+    if max_abs_daily_return is None:
+        _LIVE_PANEL_CACHE[latest] = panel
+        for k in list(_LIVE_PANEL_CACHE)[:-2]:  # keep the cache tiny
+            _LIVE_PANEL_CACHE.pop(k, None)
     return panel

@@ -183,6 +183,11 @@ async def _run_handler(
     # serenity supply-chain scorecards (written ad-hoc by research). Empty table
     # => every ticker z=None => dropped, so this is inert until a study exists.
     supply_chain.prime_cache(await load_all_supply_chain_scorecard(pool))
+    # The preset factor must read the live daily_prices panel through the
+    # shared asyncpg pool; without this it silently used the frozen parquet.
+    factor_panel: dict[str, Any] | None = None
+    if "factor" in tier_modules:
+        factor_panel = await _ALL_MODULES["factor"].prime_live_panel(pool)
     now = datetime.now(UTC)
     today = now.date().isoformat()
     started_at = now
@@ -407,6 +412,7 @@ async def _run_handler(
         len(errors) == 0, len(errors),
         json.dumps({
             "rows_written": rows_written, "tier": tier,
+            **({"factor_panel": factor_panel} if factor_panel is not None else {}),
         }),
     )
     return {

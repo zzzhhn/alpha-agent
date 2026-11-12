@@ -73,6 +73,8 @@ async def handler(
     insider.prime_cache(await load_all_insider_form4(pool))
     earnings.prime_cache(await load_all_earnings_finnhub(pool))
     supply_chain.prime_cache(await load_all_supply_chain_scorecard(pool))
+    # Same live panel as the fast cron (asyncpg pool; no psycopg on Vercel).
+    await factor.prime_live_panel(pool)
     today = datetime.now(UTC).date().isoformat()
     now = datetime.now(UTC)
     started_at = now
