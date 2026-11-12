@@ -5,8 +5,8 @@ name: earnings-finnhub
 # earnings_finnhub table this writes. Scheduled before the slow_daily signal
 # cron (13:30 UTC) so the table is fresh when it primes.
 on:
-  schedule:
-    - cron: "30 11 * * 1-5"
+  # Clock moved to Vercel Cron (GET /api/cron/dispatch/earnings-finnhub); GitHub
+  # schedules arrived hours late. Manual dispatch still works.
   workflow_dispatch: {}
 
 concurrency:
