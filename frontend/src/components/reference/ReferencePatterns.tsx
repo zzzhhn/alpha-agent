@@ -107,7 +107,7 @@ const MIGRATIONS: readonly MigrationItem[] = [
     consumers: { zh: "认证、回测、设置、警报、选股、推荐与 BRAIN", en: "Auth, Backtest, Settings, Alerts, Screener, Picks, and BRAIN" },
     owner: { zh: "设计系统", en: "Design system" },
     status: "canonical",
-    closure: { zh: "审计为 0 个未解释原生字段；持续执行无增长门禁。", en: "Audit reports zero unexplained native fields; retain the no-growth gate." },
+    closure: { zh: "审计为 0 个未解释原生字段；TmSelect 与分页每页条数也改用 TmSelectMenu，原生 select/option 在全仓（含 tm 内部）一律报错。", en: "Zero unexplained native fields; TmSelect and pagination page size now render TmSelectMenu, and native select/option fail the audit everywhere, including tm internals." },
   },
   {
     id: "exclusive-toggle",

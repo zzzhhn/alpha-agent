@@ -7,7 +7,7 @@
  * conventions:
  *
  *   - <TmInput>       text / password / number input
- *   - <TmSelect>      single-select dropdown
+ *   - <TmSelect>      labelled single-select (TmSelectMenu listbox, never native)
  *   - <TmFieldShell>  bare label + children wrapper, for callers that
  *                     need to inject a non-standard control (e.g. a
  *                     reveal-toggle next to a password input)
@@ -24,12 +24,11 @@ import {
   forwardRef,
   useId,
   type InputHTMLAttributes,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
   type ReactNode,
 } from "react";
 import clsx from "clsx";
-import { ChevronDown } from "lucide-react";
+import { TmSelectMenu, tmSelectIntrinsicWidth } from "./TmSelectMenu";
 
 type FieldSize = "sm" | "md";
 
@@ -240,18 +239,16 @@ export function TmNumberInput({
 }
 
 // ── TmSelect ─────────────────────────────────────────────────────────
+// Labelled field wrapper around TmSelectMenu. It deliberately renders no
+// native <select>: OS popups ignore the design system (see TmSelectMenu).
 
 interface TmSelectOption {
   readonly value: string;
   readonly label: string;
+  readonly disabled?: boolean;
 }
 
-type TmSelectBaseProps = Omit<
-  SelectHTMLAttributes<HTMLSelectElement>,
-  "value" | "onChange" | "className"
->;
-
-interface TmSelectProps extends TmSelectBaseProps {
+interface TmSelectProps {
   readonly label?: ReactNode;
   readonly hint?: ReactNode;
   readonly error?: ReactNode;
@@ -260,7 +257,14 @@ interface TmSelectProps extends TmSelectBaseProps {
   readonly onChange: (next: string) => void;
   readonly options: readonly TmSelectOption[];
   readonly className?: string;
+  /** Extra classes for the trigger button (width, accent text). */
   readonly selectClassName?: string;
+  readonly id?: string;
+  readonly required?: boolean;
+  readonly disabled?: boolean;
+  readonly "aria-label"?: string;
+  readonly align?: "start" | "end";
+  readonly menuMinWidth?: number;
 }
 
 export function TmSelect({
@@ -275,7 +279,10 @@ export function TmSelect({
   selectClassName,
   id,
   required,
-  ...rest
+  disabled,
+  "aria-label": ariaLabel,
+  align,
+  menuMinWidth,
 }: TmSelectProps) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
@@ -293,35 +300,22 @@ export function TmSelect({
       errorId={errorId}
       className={className}
     >
-      <div className="relative">
-        <select
-          id={controlId}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          required={required}
-          aria-invalid={Boolean(error) || undefined}
-          aria-describedby={describedBy}
-          className={clsx(
-            FIELD_BASE,
-            FIELD_SIZE[fieldSize],
-            "appearance-none py-0 pr-8 [background-image:none]",
-            error && "border-tm-neg focus:border-tm-neg",
-            selectClassName,
-          )}
-          {...rest}
-        >
-          {options.map((o) => (
-            <option key={o.value} value={o.value} className="bg-tm-bg-2 text-tm-fg">
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          aria-hidden="true"
-          className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-tm-muted"
-          strokeWidth={1.75}
-        />
-      </div>
+      <TmSelectMenu
+        id={controlId}
+        value={value}
+        onChange={onChange}
+        options={options}
+        ariaLabel={ariaLabel}
+        ariaDescribedBy={describedBy}
+        invalid={Boolean(error)}
+        disabled={disabled}
+        size={fieldSize}
+        align={align}
+        menuMinWidth={menuMinWidth}
+        className="w-full"
+        buttonClassName={clsx("w-full", selectClassName)}
+        buttonStyle={{ minWidth: tmSelectIntrinsicWidth(options.map((option) => option.label)) }}
+      />
     </TmFieldShell>
   );
 }

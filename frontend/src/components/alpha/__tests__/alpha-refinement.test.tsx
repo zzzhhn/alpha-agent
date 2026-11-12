@@ -12,8 +12,10 @@ const props = {text:"",onTextChange:noop,universe:"SP500" as const,onUniverseCha
 describe("Alpha in-place refinement", () => {
   it("localizes displayed parameters without altering request values", () => {
     const html = renderToStaticMarkup(<HypothesisInputCard {...props} />);
-    expect(html).toMatch(/<option value="long_short"[^>]*selected="">多空/);
-    expect(html).toMatch(/<option value="none"[^>]*selected="">不中性化/);
+    // Design-system listbox triggers show the localized label; no native <select>.
+    expect(html).toMatch(/aria-haspopup="listbox"[^>]*>[\s\S]*?>多空</);
+    expect(html).toMatch(/aria-haspopup="listbox"[^>]*>[\s\S]*?>不中性化</);
+    expect(html).not.toContain("<select");
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("按当前参数重测");
   });

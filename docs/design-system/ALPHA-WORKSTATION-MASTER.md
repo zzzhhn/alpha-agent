@@ -45,7 +45,7 @@ The current approved production page is the baseline for in-place refinement. Ge
 | Row density | 32 to 44 px for single-line tables; multi-line alert summaries use about 84 px with five-row pagination |
 | Primary action | One filled `--tm-accent` action per screen |
 | Secondary actions | Outline or text actions; refresh must not compete with the primary action |
-| Form controls | Use the canonical TM field family, including `TmRange` and rich-option `TmSelectMenu`; do not add route-local native styling |
+| Form controls | Use the canonical TM field family, including `TmRange` and rich-option `TmSelectMenu`; do not add route-local native styling. Every dropdown is a `TmSelectMenu` listbox (labelled fields use `TmSelect`, which wraps it); native `<select>`/`<option>`/`<datalist>` open OS popups that ignore TM tokens and fail `npm run audit:design-system` everywhere, including inside `components/tm/` |
 | Row actions | Use `TmRowButton` for a full interactive row and keep inline actions independently named |
 | Overlays | Dialogs and drawers share `useTmModalFocus`; Escape closes and focus returns to the trigger |
 | Charts | SVG and canvas colors resolve from shared semantic chart tokens; every chart retains a text summary |
