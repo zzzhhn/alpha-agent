@@ -11655,6 +11655,58 @@
         ]
       }
     },
+    "/api/factor-lab/live-expression/restore-preset": {
+      "post": {
+        "description": "Clear the custom live expression so the factor signal uses its preset.\n\nJournals through set_config (source='manual', old value -> null) exactly\nlike a manual edit, so the change is auditable and reversible by setting\nthe old expression again. Idempotent: an already-cleared value is reported\nwithout writing a duplicate journal row.",
+        "operationId": "post_restore_preset_expression_api_factor_lab_live_expression_restore_preset_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Restore Preset Expression Api Factor Lab Live Expression Restore Preset Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Restore Preset Expression",
+        "tags": [
+          "factor_lab"
+        ]
+      }
+    },
     "/api/factor-lab/proposals": {
       "get": {
         "description": "Public proposal list; group=expression adds groups over the newest 500 rows.\n\nWithout grouping, the existing 200-row response is preserved. Group counts\nand best evidence describe only the bounded, status-filtered result set.\nlatest_evidence is the newest member's evidence, including zero-only data.",

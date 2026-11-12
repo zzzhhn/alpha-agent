@@ -751,6 +751,41 @@ async def post_live_expression(
     }
 
 
+@router.post("/live-expression/restore-preset")
+async def post_restore_preset_expression(
+    request: Request,
+    user_id: int = Depends(require_admin),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Clear the custom live expression so the factor signal uses its preset.
+
+    Journals through set_config (source='manual', old value -> null) exactly
+    like a manual edit, so the change is auditable and reversible by setting
+    the old expression again. Idempotent: an already-cleared value is reported
+    without writing a duplicate journal row.
+    """
+    from datetime import datetime, timezone
+
+    from alpha_agent.signals.factor import _resolve_default_expr
+
+    await refresh_config(pool)
+    current = await pool.fetchval(
+        "SELECT value FROM engine_config WHERE key='factor.custom_expression'"
+    )
+    decoded = json.loads(current) if isinstance(current, str) else current
+    changed = bool(decoded)
+    if changed:
+        await set_config(
+            pool, "factor.custom_expression", None, user_id=user_id, source="manual",
+        )
+    return {
+        "changed": changed,
+        "previous_expression": decoded or None,
+        "expression": _resolve_default_expr(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.post("/_demo_seed")
 async def post_demo_seed(
     user_id: int = Depends(require_admin),

@@ -85,7 +85,51 @@ class FrozenProtocol:
         return sha256(json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-PROTOCOL = FrozenProtocol()
+# v1.0.0 stays importable and byte-identical (fingerprint b56a596c…) as the
+# archived registration. It must never be edited; later versions are new
+# objects so earlier evaluation outputs remain reproducible.
+PROTOCOL_V1_0_0 = FrozenProtocol()
+
+
+@dataclass(frozen=True)
+class FactorRegime:
+    """Live factor configuration in force for a protocol version's forward window."""
+    expression: str
+    panel: str
+    effective_after: date  # first forward session evaluated under this expression
+    previous_expression: str
+    previous_panel: str
+    approval: str
+
+
+@dataclass(frozen=True)
+class FrozenProtocolV11(FrozenProtocol):
+    """v1.1.0: the user-approved restore of the live factor to its preset.
+
+    All evaluation rules are unchanged from v1.0.0. Only the registration date,
+    the forward window and the recorded factor regime differ. Samples from the
+    v1.0.0 window (custom volume expression on the frozen research parquet) and
+    this window must not be spliced into one forward record.
+    """
+    version: str = "quant-p0-v1.1.0-20261112"
+    frozen_on: date = date(2026, 11, 12)
+    # First XNYS session after the restore can take effect (signals computed
+    # after the 2026-11-12 close); 252 sessions end on 2027-11-15.
+    final_forward: DateRange = DateRange(date(2026, 11, 13), date(2027, 11, 15))
+    factor_regime: FactorRegime = FactorRegime(
+        expression="subtract(rank(ts_mean(returns, 12)), rank(ts_std(returns, 60)))",
+        panel="live_daily_prices",
+        effective_after=date(2026, 11, 12),
+        previous_expression="group_neutralize(zscore(ts_zscore(volume,20)),sector)",
+        previous_panel="frozen_research_parquet",
+        approval="user-approved 2026-11-12; restore via admin endpoint, journaled in config_change_log",
+    )
+    supersedes: str = "quant-p0-v1.0.0-20261111"
+    splice_with_superseded: bool = False
+
+
+PROTOCOL = FrozenProtocolV11()
+PROTOCOLS = {p.version: p for p in (PROTOCOL_V1_0_0, PROTOCOL)}
 
 
 def purged_training_dates(
