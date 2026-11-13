@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 
 from alpha_agent.llm.base import LLMClient, LLMResponse, Message
+from alpha_agent.llm.model_profiles import generation_parameters
 
 
 class OpenAIClient(LLMClient):
@@ -38,8 +39,7 @@ class OpenAIClient(LLMClient):
         payload = {
             "model": self._model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+            **generation_parameters(f"openai/{self._model}", temperature, max_tokens),
         }
         response = await self._client.post("/chat/completions", json=payload)
         response.raise_for_status()
@@ -53,6 +53,9 @@ class OpenAIClient(LLMClient):
             model=data.get("model", self._model),
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
+            finish_reason=choice.get("finish_reason"),
+            cached_prompt_tokens=(usage.get("prompt_tokens_details") or {}).get("cached_tokens"),
+            reasoning_tokens=(usage.get("completion_tokens_details") or {}).get("reasoning_tokens"),
         )
 
     async def is_available(self) -> bool:
@@ -68,10 +71,12 @@ class OpenAIClient(LLMClient):
 
         # Fallback: some providers (e.g. Kimi) don't expose /models
         try:
+            parameters = generation_parameters(f"openai/{self._model}", 0.0, 1)
+            parameters.pop("temperature", None)  # Legacy probes never set sampling temperature.
             probe = {
                 "model": self._model,
                 "messages": [{"role": "user", "content": "ping"}],
-                "max_tokens": 1,
+                **parameters,
             }
             response = await self._client.post("/chat/completions", json=probe)
             return response.status_code == 200

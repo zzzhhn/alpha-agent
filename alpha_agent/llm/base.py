@@ -27,6 +27,10 @@ class LLMResponse:
     prompt_tokens: int
     completion_tokens: int
     finish_reason: str | None = None
+    # Optional breakdowns, included in the totals above (not extra tokens).
+    # None means the upstream did not report the breakdown, not zero usage.
+    cached_prompt_tokens: int | None = None
+    reasoning_tokens: int | None = None
 
 
 class LLMClient(ABC):
