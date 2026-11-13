@@ -14,7 +14,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
-from alpha_agent.backtest import l2_driver
+from alpha_agent.backtest import l2_driver, shadow_books
 from alpha_agent.storage.postgres import get_pool
 
 
@@ -44,7 +44,21 @@ async def handler() -> dict[str, Any]:
                         )
                     # Keep the original top-level counters for cron consumers while the
                     # two accounting generations remain separately inspectable.
-                    summary = {**legacy, "legacy": legacy, "continuous": continuous}
+                    summary = {**legacy, "legacy": legacy, "continuous": continuous, "shadow": {}}
+                    for name, rule in shadow_books.SHADOW_RULES.items():
+                        try:
+                            shadow_id = await shadow_books.ensure_shadow_book(pool, name=name)
+                            selection_info: dict = {}
+                            result = await l2_driver.run_continuous_driver(
+                                pool, strategy_id=shadow_id,
+                                cadence="iso_week_first_snapshot" if rule == "bot_rule_weekly" else None,
+                                selection_info=selection_info,
+                            )
+                            summary["shadow"][name] = {**result, "selection": selection_info}
+                        except Exception as exc:  # noqa: BLE001 — each shadow is isolated
+                            summary["shadow"][name] = {
+                                "error": f"{type(exc).__name__}: {str(exc) or repr(exc)}"[:200],
+                            }
                 finally:
                     await lock_conn.execute(
                         "SELECT pg_advisory_unlock(hashtext('l2_cycle_continuous_v2'))"

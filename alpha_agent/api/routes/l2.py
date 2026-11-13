@@ -6,8 +6,9 @@ import math
 from datetime import timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
+from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.api.cache import TTLCache
 from alpha_agent.backtest.investment_shadow import replay_targets
@@ -387,3 +388,53 @@ async def l2_summary() -> dict[str, Any]:
         "continuous_account": continuous,
         "strategic_continuous_account": strategic_continuous,
     }
+
+
+@router.get("/shadow")
+async def l2_shadow(response: Response) -> dict[str, Any]:
+    """Public paper-book metadata only; never reads private plans or accounts."""
+    from alpha_agent.backtest.shadow_books import SHADOW_RULES
+    pool = await get_db_pool()
+    books = []
+    live_id = await pool.fetchval(
+        "SELECT id FROM l2_strategy WHERE name='canonical_top50_continuous' AND version=3")
+    for name in SHADOW_RULES:
+        row = await pool.fetchrow(
+            "SELECT s.name,s.id,s.params_json,a.initial_cash,a.cash,a.nav,a.start_after_run_id,"
+            "(SELECT min(as_of_date) FROM l2_equity_daily WHERE strategy_id=s.id) AS start_date,"
+            "(SELECT max(as_of_date) FROM l2_equity_daily WHERE strategy_id=s.id) AS last_date,"
+            "(SELECT count(*) FROM l2_position WHERE strategy_id=s.id AND qty>0) AS positions,"
+            "(SELECT count(*) FROM l2_order WHERE strategy_id=s.id AND status='pending') AS pending,"
+            "(SELECT count(*) FROM l2_order WHERE strategy_id=s.id AND status='unfilled') AS unfilled "
+            "FROM l2_strategy s JOIN l2_account a ON a.strategy_id=s.id "
+            "WHERE s.name=$1 ORDER BY s.version DESC LIMIT 1", name)
+        if row is None:
+            continue
+        params = json.loads(row["params_json"]) if isinstance(row["params_json"], str) else row["params_json"]
+        start, end = row["start_date"], row["last_date"]
+        live_return = None
+        if live_id and start and end:
+            marks = await pool.fetch(
+                "SELECT as_of_date,net_return FROM l2_equity_daily "
+                "WHERE strategy_id=$1 AND as_of_date BETWEEN $2 AND $3 ORDER BY as_of_date",
+                live_id, start, end)
+            expected = xnys_sessions(start, end)
+            # Return null rather than compare different windows or hide gaps.
+            if ([m["as_of_date"] for m in marks] == list(expected)
+                    and all(m["net_return"] is not None and math.isfinite(m["net_return"]) for m in marks)):
+                live_return = _compound([m["net_return"] for m in marks])
+        books.append({
+            "name": name, "protocol": params["protocol"], "rule": params["rule"],
+            "rule_summary": params["rule_summary"], "preregistered": params["preregistered"],
+            "start_after_run_id": int(row["start_after_run_id"]),
+            "start_date": start.isoformat() if start else None,
+            "nav": float(row["nav"]), "cash": float(row["cash"]),
+            "n_positions": int(row["positions"]),
+            "cumulative_return": float(row["nav"]) / float(row["initial_cash"]) - 1,
+            "live_tactical_cumulative_return": live_return,
+            "last_valuation_date": end.isoformat() if end else None,
+            "pending_count": int(row["pending"]), "unfilled_count": int(row["unfilled"]),
+            "minimum_sessions": params["minimum_sessions"], "promotion": params["promotion"],
+        })
+    set_public_cache(response, s_maxage=60, swr=300)
+    return {"books": books, "paper_only": True, "personalized": False}

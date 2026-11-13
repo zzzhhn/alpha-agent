@@ -129,7 +129,8 @@ async def run_driver(
 
 
 async def run_continuous_driver(
-    pool, *, strategy_id: int, rebalance_days: int = DEFAULT_REBALANCE_DAYS
+    pool, *, strategy_id: int, rebalance_days: int = DEFAULT_REBALANCE_DAYS,
+    cadence: str | None = None, selection_info: dict | None = None,
 ) -> dict:
     """Advance the forward-only cash-and-shares book without legacy backfill."""
     from alpha_agent.data.security_identity import book_identity_issues
@@ -191,16 +192,30 @@ async def run_continuous_driver(
     generated = 0
     # A recovery invocation must not create a historical ladder of targets
     # after those targets' execution prices are already known.
-    for row in rows[-1:]:
+    candidates = rows[-1:]
+    if cadence == "iso_week_first_snapshot" and rows:
+        # Freeze the week's FIRST complete run, even if a later run arrives
+        # after its execution window was missed. Never substitute a later day.
+        week = rows[-1]["scheduled_for_date"].isocalendar()[:2]
+        candidates = [next(r for r in rows if r["scheduled_for_date"].isocalendar()[:2] == week)]
+    for row in candidates:
         signal_date = row["scheduled_for_date"]
         if next_xnys_session(signal_date) <= latest_completed_xnys_session():
             continue
-        if last_signal is not None and _trading_days_between(
+        if cadence == "iso_week_first_snapshot":
+            monday = signal_date - timedelta(days=signal_date.weekday())
+            if await pool.fetchval(
+                "SELECT 1 FROM l2_order WHERE strategy_id=$1 AND signal_date >= $2 "
+                "AND signal_date < $3 LIMIT 1", strategy_id, monday, monday + timedelta(days=7),
+            ):
+                continue
+        elif last_signal is not None and _trading_days_between(
             trading, last_signal, signal_date
         ) < rebalance_days:
             continue
+        kwargs = {"selection_info": selection_info} if selection_info is not None else {}
         created = await l2_continuous.generate_target_intent(
-            pool, strategy_id=strategy_id, run_id=int(row["id"])
+            pool, strategy_id=strategy_id, run_id=int(row["id"]), **kwargs
         )
         if created:
             generated += created

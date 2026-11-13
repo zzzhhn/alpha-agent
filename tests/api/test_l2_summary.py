@@ -136,3 +136,51 @@ async def test_critical_dag_does_not_hide_a_failed_shard(client_with_db, applied
     assert node["status"] == "failed"
     assert node["observed_runs"] == 8
     assert node["required_runs"] == 8
+
+
+async def test_shadow_read_shape_cache_and_same_date_comparison(client_with_db, applied_db):
+    from alpha_agent.backtest.shadow_books import ensure_shadow_book
+    conn = await asyncpg.connect(applied_db)
+    try:
+        # ensure_shadow_book requires the shared pool API; the route itself is read-only.
+        pool = await asyncpg.create_pool(applied_db)
+        try:
+            ids = [await ensure_shadow_book(pool, name=n) for n in (
+                "shadow_factor_12_1", "shadow_band_40_80", "shadow_bot_rule_weekly")]
+        finally:
+            await pool.close()
+        live = await conn.fetchval(
+            "INSERT INTO l2_strategy(name,version,params_json) "
+            "VALUES('canonical_top50_continuous',3,'{}') RETURNING id")
+        for sid, day, ret in (
+            (live, date(2026, 11, 11), 0.5),
+            (live, date(2026, 11, 12), 0.01), (live, date(2026, 11, 13), 0.02),
+            (ids[0], date(2026, 11, 12), 0), (ids[0], date(2026, 11, 13), 0),
+        ):
+            await conn.execute(
+                "INSERT INTO l2_equity_daily(strategy_id,as_of_date,net_return,nav) VALUES($1,$2,$3,1000000)",
+                sid, day, ret)
+        before = await conn.fetchval("SELECT count(*) FROM l2_strategy")
+    finally:
+        await conn.close()
+    with client_with_db as client:
+        response = client.get("/api/l2/shadow")
+        assert response.status_code == 200
+        assert "public, s-maxage=60" in response.headers["cache-control"]
+        body = response.json()
+        assert body["paper_only"] is True and body["personalized"] is False
+        assert len(body["books"]) == 3
+        book = body["books"][0]
+        assert {"name", "protocol", "rule_summary", "start_date", "nav", "cash", "n_positions",
+                "cumulative_return", "live_tactical_cumulative_return", "last_valuation_date",
+                "pending_count", "unfilled_count"} <= book.keys()
+        assert abs(book["live_tactical_cumulative_return"] - 0.0302) < 1e-9
+        assert body["books"][1]["live_tactical_cumulative_return"] is None
+        conn = await asyncpg.connect(applied_db)
+        try:
+            assert await conn.fetchval("SELECT count(*) FROM l2_strategy") == before
+            await conn.execute("DELETE FROM l2_equity_daily WHERE strategy_id=$1 AND as_of_date=$2",
+                               live, date(2026, 11, 12))
+        finally:
+            await conn.close()
+        assert client.get("/api/l2/shadow").json()["books"][0]["live_tactical_cumulative_return"] is None

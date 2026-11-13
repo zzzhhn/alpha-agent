@@ -2026,6 +2026,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/l2/shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * L2 Shadow
+         * @description Public paper-book metadata only; never reads private plans or accounts.
+         */
+        get: operations["l2_shadow_api_l2_shadow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/l2/summary": {
         parameters: {
             query?: never;
@@ -9701,6 +9721,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    l2_shadow_api_l2_shadow_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
