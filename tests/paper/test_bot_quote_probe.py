@@ -6,6 +6,15 @@ from alpha_agent.paper import intraday
 
 
 async def test_probe_reports_requested_symbol_and_only_complete_bars(monkeypatch):
+    # Pin an open session. With the real calendar this passed during US
+    # trading hours and failed outside them: a closed session cuts bars at the
+    # previous close (CI failure 2026-11-13 05:49 UTC).
+    from alpha_agent.paper import bot_valuation
+
+    monkeypatch.setattr(bot_valuation, 'valuation_session', lambda instant: {
+        'session_date': instant.date().isoformat(), 'is_open': True,
+        'open_at': (instant - timedelta(hours=1)).isoformat(),
+        'close_at': (instant + timedelta(hours=5)).isoformat()})
     now = datetime.now(UTC)
     old_end = (now - timedelta(minutes=10)).isoformat()
     fetch = AsyncMock(return_value=[

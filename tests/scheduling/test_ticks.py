@@ -158,3 +158,22 @@ def test_slot_windows():
     sunday = NOW.replace(day=15, hour=2)
     assert scheduled_slot("news_macro", sunday)
     assert scheduled_slot("news_per_ticker", sunday.replace(hour=15)) is None
+
+
+def test_daily_prices_ticker_skip_list_is_not_an_overlap_skip():
+    """Production 2026-11-12: daily_prices returned `skipped: [5 delisted
+    tickers]` and the tick treated the non-empty list as an overlap no-op,
+    failing three passes and skipping that night's research."""
+    from alpha_agent.scheduling.runner import _unit_outcome
+    from alpha_agent.scheduling.ticks import Unit
+
+    prices = Unit("daily_prices", 0, 75, price_pass=1)
+    real_shape = {"range": [0, 75], "errors": [], "skipped": ["ABC", "ANSS", "ATVI", "AVB", "BK"],
+                  "updated": 350, "error_count": 0, "fresh_count": 70}
+    assert _unit_outcome(prices, real_shape) == (True, None, 0)
+    # A genuine overlap response still fails the unit.
+    overlap = {"ok": True, "skipped": True, "reason": "duplicate_or_overlapping_shard"}
+    assert _unit_outcome(Unit("fast_intraday", 0, 40), overlap) == (False, "UnitSkipped", 0)
+    # The idempotent same-market-date publish stays a success.
+    no_op = {"ok": True, "skipped": True, "reason": "no_op_same_market_date"}
+    assert _unit_outcome(Unit("publish_recommendation"), no_op) == (True, None, 0)

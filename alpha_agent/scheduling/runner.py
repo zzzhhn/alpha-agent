@@ -68,8 +68,11 @@ def _unit_outcome(unit: Unit, result: dict) -> tuple[bool, str | None, int]:
     errors = result.get("error_count")
     if not isinstance(errors, int):
         errors = len(result.get("errors") or [])
-    # An existing handler's overlap response is NOT proof that its shard ran.
-    if result.get("skipped") and result.get("reason") != "no_op_same_market_date":
+    # An existing handler's overlap response (`skipped: True`) is NOT proof
+    # that its shard ran. daily_prices also returns `skipped`, but as the LIST
+    # of tickers the provider had no data for; that is a normal per-ticker
+    # miss, judged by the readiness gate. Only a literal True is an overlap.
+    if result.get("skipped") is True and result.get("reason") != "no_op_same_market_date":
         return False, "UnitSkipped", errors
     ok = result.get("ok") is True or (unit.name == "daily_prices" and "updated" in result)
     return ok, None if ok else "HandlerRejected", errors
