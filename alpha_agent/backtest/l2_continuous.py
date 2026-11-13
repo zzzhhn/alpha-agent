@@ -93,7 +93,9 @@ async def ensure_book(
     return int(strategy_id)
 
 
-async def generate_target_intent(pool, *, strategy_id: int, run_id: int) -> int:
+async def generate_target_intent(
+    pool, *, strategy_id: int, run_id: int, selection_info: dict | None = None
+) -> int:
     """Persist a full target, including explicit zero targets for removals."""
     run = await pool.fetchrow(
         "SELECT scheduled_for_date, status, weight_policy_id FROM research_run WHERE id=$1",
@@ -122,6 +124,8 @@ async def generate_target_intent(pool, *, strategy_id: int, run_id: int) -> int:
         "SELECT params_json FROM l2_strategy WHERE id=$1", strategy_id
     )
     params = {**DEFAULT_PARAMS, **(json.loads(params_raw) if params_raw else {})}
+    if params.get("shadow") and datetime.now(UTC) >= xnys_close(next_xnys_session(signal_date)):
+        return 0
     if params.get("not_before_signal_date") and signal_date < date.fromisoformat(params["not_before_signal_date"]):
         return 0
     snapshots = await get_run_snapshots(pool, run_id)
@@ -142,16 +146,28 @@ async def generate_target_intent(pool, *, strategy_id: int, run_id: int) -> int:
                 "tier": long_payload.get("rating"),
             })
         snapshots = projected
-    holdings = select_holdings(
-        snapshots,
-        top_n=int(params["top_n"]),
-        max_position=float(params["max_position"]),
-    )
+    if params.get("rule"):
+        from alpha_agent.backtest.shadow_books import select_shadow_holdings
+        positions = await pool.fetch(
+            "SELECT ticker, qty FROM l2_position WHERE strategy_id=$1 AND qty>0",
+            strategy_id,
+        )
+        holdings = await select_shadow_holdings(
+            pool, rule=params["rule"], snapshots=snapshots, positions=positions,
+            run_id=run_id, signal_date=signal_date,
+            info=selection_info if selection_info is not None else {},
+        )
+    else:
+        holdings = select_holdings(
+            snapshots,
+            top_n=int(params["top_n"]),
+            max_position=float(params["max_position"]),
+        )
+        positions = await pool.fetch(
+            "SELECT ticker, qty FROM l2_position WHERE strategy_id=$1 AND qty>0",
+            strategy_id,
+        )
     targets = {h["ticker"]: h for h in holdings}
-    positions = await pool.fetch(
-        "SELECT ticker, qty FROM l2_position WHERE strategy_id=$1 AND qty>0",
-        strategy_id,
-    )
     for position in positions:
         targets.setdefault(
             position["ticker"],

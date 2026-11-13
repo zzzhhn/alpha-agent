@@ -12385,6 +12385,30 @@
         ]
       }
     },
+    "/api/l2/shadow": {
+      "get": {
+        "description": "Public paper-book metadata only; never reads private plans or accounts.",
+        "operationId": "l2_shadow_api_l2_shadow_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response L2 Shadow Api L2 Shadow Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "L2 Shadow",
+        "tags": [
+          "l2"
+        ]
+      }
+    },
     "/api/l2/summary": {
       "get": {
         "description": "Cost, benchmark, risk and exception evidence from the frozen L2 book.",
