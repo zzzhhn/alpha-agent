@@ -18,13 +18,14 @@ it locally with the relevant API key set when validating a deploy.
 """
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
 
 import pytest
 
 from alpha_agent.llm.base import Message
 from alpha_agent.llm.litellm_client import LiteLLMClient
+from alpha_agent.api.byok import _build_byok_client
 
 
 def _fake_response(content: str = "hello", reasoning: str = "") -> SimpleNamespace:
@@ -161,3 +162,52 @@ async def test_is_available_returns_true_on_success() -> None:
     client = LiteLLMClient(model="ollama/gemma4-26b", api_base="http://localhost:11434")
     with patch("alpha_agent.llm.litellm_client.litellm.acompletion", new=_ok):
         assert await client.is_available() is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["chat", "stream", "probe"])
+@pytest.mark.parametrize("model", ["gpt-6.1-sol", "gpt-4o"])
+async def test_byok_generation_parameters_match_model(entry, model) -> None:
+    """Regression for the real Sol rejection, across all public call paths."""
+    client = _build_byok_client("openai", "test-key", "https://api.openai.com/v1", model)
+
+    async def chunks():
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="ok"))])
+
+    response = _fake_response("ok")
+    response.choices[0].finish_reason = "stop"
+    request = AsyncMock(return_value=chunks() if entry == "stream" else response)
+    with patch("alpha_agent.llm.litellm_client.litellm.acompletion", request):
+        if entry == "chat":
+            result = await client.chat([Message("user", "hi")], temperature=0.3, max_tokens=4096)
+            assert result.finish_reason == "stop"
+            assert (result.prompt_tokens, result.completion_tokens) == (42, 7)
+        elif entry == "stream":
+            assert [part async for part in client.stream_chat(
+                [Message("user", "hi")], temperature=0.3, max_tokens=4096,
+            )] == ["ok"]
+        else:
+            assert await client.is_available() is True
+    request.assert_awaited_once()
+    sent = request.call_args.kwargs
+    budget = 1 if entry == "probe" else 4096
+    if model == "gpt-6.1-sol":
+        assert sent["max_completion_tokens"] == budget
+        assert "temperature" not in sent
+        assert "max_tokens" not in sent
+        assert "reasoning_effort" not in sent  # Preserve the provider default.
+    else:
+        assert sent["max_tokens"] == budget
+        assert sent["temperature"] == (0.0 if entry == "probe" else 0.3)
+        assert "max_completion_tokens" not in sent
+    assert "drop_params" not in sent
+
+
+@pytest.mark.asyncio
+async def test_sol_failure_is_not_retried_by_adapter() -> None:
+    client = _build_byok_client("openai", "test-key", None, "gpt-6.1-sol")
+    request = AsyncMock(side_effect=RuntimeError("upstream rejected request"))
+    with patch("alpha_agent.llm.litellm_client.litellm.acompletion", request):
+        with pytest.raises(RuntimeError, match="upstream rejected"):
+            await client.chat([Message("user", "hi")])
+    request.assert_awaited_once()
