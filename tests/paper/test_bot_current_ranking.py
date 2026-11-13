@@ -37,3 +37,46 @@ def test_incomplete_ranks_are_not_presented_as_confirmed_portfolio_overlap():
     assert ranking_context([{'ticker': 'A', 'rank': 1}], ['A'], 1, {'id': 1, 'data_asof': None})['holdings_equal_top_n'] is True
     assert decision_history([{'id': 'failed', 'created_at': None, 'status': 'failed',
                               'result': None}])[0]['decision'] is None
+
+
+def test_fact_discipline_prompt_is_versioned_and_states_the_owner_rules():
+    from alpha_agent.paper.bot_runner import PROMPT_VERSION
+
+    assert PROMPT_VERSION.startswith('bot-system-v2-20261113')
+    # Owner-approved 2026-11-13 additions (bot-policy offline study): rank change
+    # alone is not a replacement reason, costs are stated in NAV terms, unknown
+    # net benefit is written as 未知, and imprecise marks are labelled.
+    assert 'rank change by itself is not a' in SYSTEM
+    assert 'round-trip cost' in SYSTEM
+    assert '未知' in SYSTEM
+    assert 'portfolio value is approximate' in SYSTEM
+    # The prompt still formats (schema placeholder intact, no stray braces).
+    rendered = SYSTEM.format(schema='{}')
+    assert '{schema}' not in rendered and 'FACT DISCIPLINE' in rendered
+
+
+async def test_prompt_version_is_recorded_in_run_diagnostics(monkeypatch):
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import AsyncMock
+
+    from alpha_agent.paper import bot_runner, bot_store
+    from alpha_agent.paper.bot_models import BotConfig
+
+    run = {'id': 'one', 'account_id': 1, 'stage': 'queued', 'config_version': 1,
+           'config_snapshot': BotConfig().model_dump(), 'context': {}, 'lease_token': 'lease',
+           'created_at': datetime.now(UTC), 'expires_at': datetime.now(UTC) + timedelta(minutes=10),
+           'llm_calls': 0}
+    monkeypatch.setattr(bot_store, 'claim', AsyncMock(return_value=run))
+    monkeypatch.setattr(bot_runner, 'market_session', lambda: {'is_open': True})
+    context = {'quote_coverage': {}, 'research_age_sessions': 0}
+    monkeypatch.setattr(bot_runner, 'build_context', AsyncMock(return_value=context))
+    diagnose, release = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(bot_store, 'diagnose', diagnose)
+    monkeypatch.setattr(bot_store, 'release', release)
+    pool = type('Pool', (), {'fetchval': AsyncMock(return_value=1), 'execute': AsyncMock(),
+                             'fetchrow': AsyncMock(return_value={'id': 'one', 'status': 'running',
+                                                                 'stage': 'deciding'})})()
+    await bot_runner.step(pool)
+    recorded = diagnose.call_args_list[0].args[2]
+    assert recorded['prompt_version'] == bot_runner.PROMPT_VERSION
+    release.assert_awaited_once()
