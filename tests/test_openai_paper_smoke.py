@@ -20,7 +20,7 @@ def fake_client(monkeypatch, response=None, error=None):
     client = SimpleNamespace(chat=AsyncMock(return_value=response or valid_response(), side_effect=error),
                              close=AsyncMock())
     build = Mock(return_value=client)
-    monkeypatch.setattr(smoke, "_build_byok_client", build)
+    monkeypatch.setattr(smoke, "build_client", build)
     monkeypatch.setattr(smoke, "read_key", lambda _: "fake-secret-never-print")
     return client, build
 
@@ -28,7 +28,7 @@ def fake_client(monkeypatch, response=None, error=None):
 async def test_dry_run_neither_reads_credential_nor_constructs_client(monkeypatch):
     key, build = Mock(side_effect=AssertionError("credential read")), Mock(side_effect=AssertionError("client built"))
     monkeypatch.setattr(smoke, "read_key", key)
-    monkeypatch.setattr(smoke, "_build_byok_client", build)
+    monkeypatch.setattr(smoke, "build_client", build)
     report, exit_code = await smoke.run_smoke(smoke.parser().parse_args([]))
     assert exit_code == 0 and report["status"] == "prepared_not_called"
     assert report["llm_calls"] == 0 and report["orders_submitted"] == 0
@@ -98,7 +98,7 @@ def test_error_report_never_echoes_provider_messages(monkeypatch, capsys, status
 async def test_missing_key_is_explicit_and_does_not_call(monkeypatch, tmp_path):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     build = Mock(side_effect=AssertionError("no client without credentials"))
-    monkeypatch.setattr(smoke, "_build_byok_client", build)
+    monkeypatch.setattr(smoke, "build_client", build)
     report, exit_code = await smoke.run_smoke(smoke.parser().parse_args(["--live", "--env-file", str(tmp_path/"absent")]))
     assert exit_code == 2 and report["status"] == "credential_missing"
     build.assert_not_called()
@@ -133,3 +133,29 @@ def test_stored_json_string_envelope_is_supported(tmp_path):
     path = tmp_path/"stored.json"
     path.write_text(json.dumps(value))
     assert smoke.prepare(path) == smoke.prepare(smoke.FIXTURE)
+
+
+def test_fresh_process_dry_run_never_imports_sdk_or_opens_network():
+    import subprocess
+    import sys
+
+    program = """
+import runpy, socket, sys
+attempts = []
+def deny(*args, **kwargs):
+    attempts.append(True)
+    raise AssertionError('network forbidden in dry run')
+socket.socket.connect = deny
+socket.create_connection = deny
+sys.argv = ['scripts/smoke_openai_paper.py']
+try:
+    runpy.run_path(sys.argv[0], run_name='__main__')
+except SystemExit as exc:
+    assert exc.code == 0
+assert not attempts
+assert 'litellm' not in sys.modules
+"""
+    result = subprocess.run([sys.executable, '-c', program], cwd=smoke.ROOT,
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)['status'] == 'prepared_not_called'

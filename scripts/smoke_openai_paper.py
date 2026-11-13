@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT))
 
 from dotenv import dotenv_values
 
-from alpha_agent.api.byok import _build_byok_client
 from alpha_agent.llm.model_profiles import SOL_PROFILE, estimate_standard_cost
 from alpha_agent.paper.bot_models import BotConfig, DecisionParseError, parse_decision
 from alpha_agent.paper.bot_policy import MODEL_TIMEOUT_SECONDS
@@ -25,6 +24,15 @@ from alpha_agent.paper.bot_prompt import PROMPT_VERSION, build_decision_messages
 API_BASE = "https://api.openai.com/v1"
 FIXTURE = ROOT / "tests/fixtures/openai_paper_smoke.json"
 TOKEN_LIMIT = 4096
+
+
+def build_client(provider, key, api_base, model, *, reasoning_effort=None):
+    # Even importing LiteLLM may fetch its remote price map. Keep the complete
+    # default CLI path offline and use the packaged map for explicit live runs.
+    os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "true"
+    from alpha_agent.api.byok import _build_byok_client
+
+    return _build_byok_client(provider, key, api_base, model, reasoning_effort=reasoning_effort)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -115,8 +123,8 @@ async def run_smoke(args) -> tuple[dict, int]:
 
     client = None
     try:
-        client = _build_byok_client("openai", key, API_BASE, SOL_PROFILE.model,
-                                    reasoning_effort=args.reasoning_effort)
+        client = build_client("openai", key, API_BASE, SOL_PROFILE.model,
+                              reasoning_effort=args.reasoning_effort)
         del key
         report["llm_calls"] = 1
         response = await asyncio.wait_for(
