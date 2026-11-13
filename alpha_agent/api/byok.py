@@ -91,6 +91,8 @@ def _build_byok_client(
     api_key: str,
     api_base: str | None,
     model: str | None,
+    *,
+    reasoning_effort: str | None = None,
 ) -> LLMClient:
     """Construct a per-request LLM client from raw header values.
 
@@ -127,6 +129,8 @@ def _build_byok_client(
         or "kimi.com" in resolved_base.lower()
     )
     if is_kimi_endpoint:
+        if reasoning_effort is not None:
+            raise ValueError("Reasoning effort is not configured for the Kimi client")
         from alpha_agent.llm._legacy.kimi import KimiClient
         return KimiClient(
             api_key=api_key,
@@ -142,6 +146,7 @@ def _build_byok_client(
         api_key=api_key,
         api_base=resolved_base,
         thinking_fallback=thinking_fallback,
+        reasoning_effort=reasoning_effort,
     )
 
 

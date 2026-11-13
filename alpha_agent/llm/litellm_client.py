@@ -38,6 +38,7 @@ from collections.abc import AsyncIterator
 import litellm
 
 from alpha_agent.llm.base import LLMClient, LLMResponse, Message
+from alpha_agent.llm.model_profiles import generation_parameters, model_profile
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class LiteLLMClient(LLMClient):
         extra_headers: dict[str, str] | None = None,
         thinking_fallback: bool = False,
         timeout: float = 120.0,
+        reasoning_effort: str | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
@@ -74,6 +76,9 @@ class LiteLLMClient(LLMClient):
         self._extra_headers = dict(extra_headers) if extra_headers else None
         self._thinking_fallback = thinking_fallback
         self._timeout = timeout
+        # Reject unsupported explicit settings before making any network call.
+        generation_parameters(model, 0.7, 4096, reasoning_effort=reasoning_effort)
+        self._reasoning_effort = reasoning_effort
 
     def _kwargs(self) -> dict[str, object]:
         kw: dict[str, object] = {"model": self._model, "timeout": self._timeout}
@@ -83,15 +88,14 @@ class LiteLLMClient(LLMClient):
             kw["api_base"] = self._api_base
         if self._extra_headers is not None:
             kw["extra_headers"] = self._extra_headers
+        if model_profile(self._model):
+            kw["num_retries"] = 0
         return kw
 
     def _generation_kwargs(self, temperature: float, max_tokens: int) -> dict[str, object]:
-        # Sol always reasons: sampling temperature is unsupported. Keep its
-        # completion budget (reasoning + answer) explicit, with no retry or
-        # global drop_params switch. Other providers retain their contract.
-        if self._model == "openai/gpt-6.1-sol":
-            return {"max_completion_tokens": max_tokens}
-        return {"temperature": temperature, "max_tokens": max_tokens}
+        return generation_parameters(
+            self._model, temperature, max_tokens, reasoning_effort=self._reasoning_effort,
+        )
 
     async def chat(
         self,
@@ -131,6 +135,8 @@ class LiteLLMClient(LLMClient):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             finish_reason=getattr(choice, "finish_reason", None),
+            cached_prompt_tokens=getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", None),
+            reasoning_tokens=getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None),
         )
 
     async def stream_chat(
