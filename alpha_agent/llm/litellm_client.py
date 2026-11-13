@@ -85,6 +85,14 @@ class LiteLLMClient(LLMClient):
             kw["extra_headers"] = self._extra_headers
         return kw
 
+    def _generation_kwargs(self, temperature: float, max_tokens: int) -> dict[str, object]:
+        # Sol always reasons: sampling temperature is unsupported. Keep its
+        # completion budget (reasoning + answer) explicit, with no retry or
+        # global drop_params switch. Other providers retain their contract.
+        if self._model == "openai/gpt-6.1-sol":
+            return {"max_completion_tokens": max_tokens}
+        return {"temperature": temperature, "max_tokens": max_tokens}
+
     async def chat(
         self,
         messages: list[Message],
@@ -94,8 +102,7 @@ class LiteLLMClient(LLMClient):
         payload_messages = [{"role": m.role, "content": m.content} for m in messages]
         response = await litellm.acompletion(
             messages=payload_messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
+            **self._generation_kwargs(temperature, max_tokens),
             **self._kwargs(),
         )
 
@@ -144,8 +151,7 @@ class LiteLLMClient(LLMClient):
         payload_messages = [{"role": m.role, "content": m.content} for m in messages]
         response = await litellm.acompletion(
             messages=payload_messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
+            **self._generation_kwargs(temperature, max_tokens),
             stream=True,
             **self._kwargs(),
         )
@@ -169,8 +175,7 @@ class LiteLLMClient(LLMClient):
         try:
             await litellm.acompletion(
                 messages=[{"role": "user", "content": "."}],
-                temperature=0.0,
-                max_tokens=1,
+                **self._generation_kwargs(0.0, 1),
                 **self._kwargs(),
             )
         except Exception as exc:  # noqa: BLE001 — availability probe by design
