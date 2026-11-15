@@ -77,6 +77,10 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
     if (!open) {setApiKey(""); initialized.current=false;}
   },[open]);
 
+  function changeProvider(value: string) {
+    setProvider(value); setApiKey(""); setBaseUrl("");
+  }
+
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy || byokLoading) return;
     if (schedule && !atOpen && !atClose) {setError(t(locale,"sim.bot.schedule_select"));return;}
@@ -105,7 +109,7 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
       {!account ? <fieldset disabled={busy || !!created} className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmInput label={t(locale,"sim.bot.name")} value={name} onChange={setName} required maxLength={80} /><TmInput label={t(locale,"sim.bot.initial_cash")} value={cash} onChange={setCash} type="number" min={0.01} step={0.01} required /></fieldset> : null}
       <fieldset disabled={busy} className="space-y-3"><legend className="mb-3 text-sm font-semibold text-tm-fg">{t(locale,"sim.bot.model_strategy")}</legend>
         <TmSelect label={t(locale,"sim.bot.credential_source")} value={credentialSource} onChange={value=>{setCredentialSource(value);setApiKey("");}} options={[{value:"user",label:t(locale,"sim.bot.credential_user")},{value:"account",label:t(locale,"sim.bot.credential_account")}]} />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmSelect label={t(locale,"sim.bot.provider")} value={provider} onChange={setProvider} options={[{value:"",label:t(locale,"sim.bot.saved_model")},{value:"kimi",label:"Kimi"},{value:"openai",label:t(locale,"sim.bot.openai_compatible")},{value:"anthropic",label:"Anthropic"},{value:"ollama",label:"Ollama"}]} /><TmInput label={t(locale,"sim.bot.model")} value={model} onChange={setModel} placeholder={t(locale,"sim.bot.saved_model")} maxLength={120} /></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmSelect label={t(locale,"sim.bot.provider")} value={provider} onChange={changeProvider} options={[{value:"",label:t(locale,"sim.bot.saved_model")},{value:"kimi",label:"Kimi"},{value:"openai",label:t(locale,"sim.bot.openai_compatible")},{value:"anthropic",label:"Anthropic"},{value:"ollama",label:"Ollama"}]} /><TmInput label={t(locale,"sim.bot.model")} value={model} onChange={setModel} placeholder={t(locale,"sim.bot.saved_model")} maxLength={120} /></div>
         {credentialSource === "account" ? <div className="space-y-3">
           <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.credential_isolated")}{config?.credential_source === "account" && config.credential_last4 ? ` · ••••${config.credential_last4}` : ""}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
