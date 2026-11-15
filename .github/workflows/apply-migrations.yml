@@ -6,6 +6,12 @@ name: apply-migrations
 
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: "Maintenance operation; OpenAI smoke never writes production or orders"
+        type: choice
+        options: [migrate, openai-smoke]
+        default: migrate
 
 jobs:
   migrate:
@@ -18,6 +24,12 @@ jobs:
       - name: Install
         run: pip install -e ".[storage]"
       - name: Apply pending migrations
+        if: inputs.operation == 'migrate' || inputs.operation == ''
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python scripts/apply_migrations.py
+      - name: Validate OpenAI without trading
+        if: inputs.operation == 'openai-smoke'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python scripts/smoke_openai_paper.py --live
