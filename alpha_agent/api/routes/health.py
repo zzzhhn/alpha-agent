@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Request, Response
@@ -300,6 +300,31 @@ _DAG_REQUIREMENTS = {
 }
 
 
+_SESSION_DAG_NODES = {
+    "daily_prices", "fast_intraday", "recommendation_publish", "l2_cycle",
+}
+
+
+def _dag_windows(now: datetime) -> tuple[dict[str, datetime], str]:
+    """Daily-close work is due by UTC midnight, not during market holidays.
+
+    The tick runner intentionally stops at the UTC day boundary. Evaluate the
+    last XNYS session completed before that boundary, including shortened days
+    and DST. Current-day failures still count; a holiday never erases evidence.
+    Calendar-daily fills and the monthly job retain wall-clock windows.
+    """
+    from alpha_agent.market_session import latest_completed_xnys_session
+
+    boundary = datetime.combine(now.astimezone(UTC).date(), time.min, UTC)
+    session = latest_completed_xnys_session(boundary)
+    session_start = datetime.combine(session, time.min, UTC)
+    return {
+        name: session_start if name in _SESSION_DAG_NODES
+        else now - timedelta(hours=requirement["cadence_hours"])
+        for name, requirement in _DAG_REQUIREMENTS.items()
+    }, session.isoformat()
+
+
 @router.get("/dag")
 async def health_dag() -> dict[str, Any]:
     """Critical decision DAG, evaluated from durable DB evidence.
@@ -307,40 +332,40 @@ async def health_dag() -> dict[str, Any]:
     One bounded query returns the latest successful or failed execution for
     each scheduled node plus the latest immutable recommendation publication.
     """
+    now = datetime.now(UTC)
+    windows, required_session = _dag_windows(now)
     pool = await get_db_pool()
     rows = await pool.fetch(
         """
         WITH requirements AS (
-            SELECT * FROM unnest($1::text[], $2::int[], $3::int[])
-                AS r(name, cadence_hours, required_runs)
+            SELECT * FROM unnest($1::text[], $2::timestamptz[], $3::int[])
+                AS r(name, window_start, required_runs)
         ), cron_window AS (
             SELECT r.name, MAX(cr.finished_at) AS observed_at,
                    COALESCE(
                        BOOL_AND(cr.ok) FILTER (
-                           WHERE cr.started_at >= now()
-                             - make_interval(hours => r.cadence_hours)
+                           WHERE cr.started_at >= r.window_start
                              AND cr.finished_at IS NOT NULL
                        ), false
                    ) AS ok,
                    COALESCE(SUM(cr.error_count) FILTER (
-                       WHERE cr.started_at >= now()
-                         - make_interval(hours => r.cadence_hours)
+                       WHERE cr.started_at >= r.window_start
                    ), 0) AS error_count,
                    COUNT(*) FILTER (
-                       WHERE cr.started_at >= now()
-                         - make_interval(hours => r.cadence_hours)
+                       WHERE cr.started_at >= r.window_start
                          AND cr.finished_at IS NOT NULL
                    ) AS observed_runs,
-                   r.required_runs
+                   r.required_runs, NULL::date AS scheduled_for_date
             FROM requirements r
             LEFT JOIN cron_runs cr ON cr.cron_name=r.name
-            GROUP BY r.name, r.cadence_hours, r.required_runs
+            GROUP BY r.name, r.window_start, r.required_runs
         ), latest_publish AS (
             SELECT 'recommendation_publish'::text AS name,
                    finished_at AS observed_at,
                    (status='complete') AS ok,
                    CASE WHEN status='complete' THEN 0 ELSE 1 END AS error_count,
-                   1::bigint AS observed_runs, 1 AS required_runs
+                   1::bigint AS observed_runs, 1 AS required_runs,
+                   scheduled_for_date
             FROM research_run
             ORDER BY finished_at DESC NULLS LAST, id DESC
             LIMIT 1
@@ -351,8 +376,8 @@ async def health_dag() -> dict[str, Any]:
         """,
         [name for name in _DAG_REQUIREMENTS if name != "recommendation_publish"],
         [
-            item["cadence_hours"]
-            for name, item in _DAG_REQUIREMENTS.items()
+            windows[name]
+            for name in _DAG_REQUIREMENTS
             if name != "recommendation_publish"
         ],
         [
@@ -362,7 +387,6 @@ async def health_dag() -> dict[str, Any]:
         ],
     )
     by_name = {row["name"]: row for row in rows}
-    now = datetime.now(UTC)
     nodes: list[dict[str, Any]] = []
     for name, requirement in _DAG_REQUIREMENTS.items():
         cadence_hours = int(requirement["cadence_hours"])
@@ -380,7 +404,10 @@ async def health_dag() -> dict[str, Any]:
             "missing"
             if row is None or observed_at is None
             else "stale"
-            if age_hours is not None and age_hours > cadence_hours
+            if observed_at < windows[name] or (
+                name == "recommendation_publish"
+                and str(row["scheduled_for_date"]) < required_session
+            )
             else "failed"
             if not row["ok"]
             else "incomplete"
@@ -393,6 +420,9 @@ async def health_dag() -> dict[str, Any]:
             "last_observed_at": observed_at.isoformat() if observed_at else None,
             "age_hours": round(age_hours, 2) if age_hours is not None else None,
             "expected_within_hours": cadence_hours,
+            "window_start": windows[name].isoformat(),
+            "required_market_date": required_session if name in _SESSION_DAG_NODES else None,
+            "freshness_basis": "xnys_session" if name in _SESSION_DAG_NODES else "wall_clock",
             "error_count": int(row["error_count"] or 0) if row else None,
             "observed_runs": int(row["observed_runs"] or 0) if row else 0,
             "required_runs": required_runs,
