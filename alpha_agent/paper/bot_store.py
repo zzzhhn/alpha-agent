@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException
 
 from alpha_agent.api.byok import fetch_user_llm_credential, _PROVIDER_DEFAULTS
+from alpha_agent.auth.crypto_box import CryptoError, encrypt
 from alpha_agent.paper.accounts import resolve_account
 from alpha_agent.paper.bot_models import BotConfig
 from alpha_agent.paper.market_clock import market_session, target_slot_times
@@ -80,9 +83,17 @@ async def bot_account(pool, user_id, account_id):
     return account
 
 
-async def credential(pool, user_id, provider):
+async def credential(pool, user_id, provider, *, account_id=None, source='user'):
+    if source == 'account':
+        return await pool.fetchrow(
+            'SELECT c.provider,c.base_url,c.ciphertext,c.nonce,c.last4 FROM sim_bot_credential c '
+            'JOIN sim_account a ON a.id=c.account_id '
+            "WHERE a.id=$1 AND a.user_id=$2 AND a.kind='bot' AND c.provider=$3",
+            account_id, user_id, provider)
+    if source != 'user':
+        raise ValueError('invalid credential source')
     return await pool.fetchrow(
-        'SELECT provider,model,base_url,ciphertext,nonce FROM user_byok '
+        'SELECT provider,model,base_url,ciphertext,nonce,last4 FROM user_byok '
         'WHERE user_id=$1 AND provider=$2', user_id, provider)
 
 
@@ -111,23 +122,65 @@ async def get_config(pool, user_id, account_id):
         model = (stored['model'] if stored else None) or _PROVIDER_DEFAULTS[provider]['model']
         config = BotConfig(provider=provider, model=model)
         version = 0
-    stored = await credential(pool, user_id, config.provider)
+    stored = await credential(pool, user_id, config.provider, account_id=account_id,
+                              source=config.credential_source)
     return {**config.model_dump(), 'account_id': account_id, 'config_version': version,
             'config_updated_at': row['updated_at'].isoformat() if row else None,
             'credential_configured': bool(stored), 'next_wake_at': next_wake(config),
+            'credential_last4': stored.get('last4') if stored else None,
+            'credential_base_url': stored.get('base_url') if stored else None,
             'market': market_session()}
 
 
 async def save_config(pool, user_id, account_id, patch):
     current = await get_config(pool, user_id, account_id)
+    patch = dict(patch)
+    supplied = patch.pop('credential', None)
     config = BotConfig.model_validate({**{k: current[k] for k in BotConfig.model_fields}, **patch})
-    if not await credential(pool, user_id, config.provider):
+    encrypted = None
+    if supplied is not None:
+        if (config.credential_source != 'account' or not isinstance(supplied, dict)
+                or set(supplied) - {'api_key', 'base_url'}):
+            raise HTTPException(422, '独立密钥格式不正确')
+        key = supplied.get('api_key')
+        base_url = supplied.get('base_url') or None
+        if (not isinstance(key, str) or not key.strip() or len(key) > 4096
+                or (base_url is not None and (not isinstance(base_url, str) or len(base_url) > 500))):
+            raise HTTPException(422, '独立密钥或服务地址格式不正确')
+        if base_url:
+            try:
+                url = urlsplit(base_url)
+                valid_url = (url.scheme == 'https' or (config.provider == 'ollama' and url.scheme == 'http'))
+                valid_url = valid_url and bool(url.hostname) and not (url.username or url.password or url.query or url.fragment)
+            except ValueError:
+                valid_url = False
+            if not valid_url:
+                raise HTTPException(422, '服务地址须为不含账号、查询参数的 HTTPS 地址')
+        master = os.environ.get('BYOK_MASTER_KEY')
+        if not master:
+            raise HTTPException(503, '服务器尚未配置密钥加密服务')
+        try:
+            ciphertext, nonce = encrypt(key.strip(), master.encode())
+        except CryptoError:
+            raise HTTPException(503, '服务器密钥加密服务配置异常') from None
+        encrypted = (ciphertext, nonce, key.strip()[-4:], base_url)
+    if encrypted is None and not await credential(
+            pool, user_id, config.provider, account_id=account_id, source=config.credential_source):
         raise HTTPException(400, '所选模型服务尚未保存 BYOK，请先前往设置')
     if not config.model.strip():
         config.model = _PROVIDER_DEFAULTS[config.provider]['model']
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.fetchrow('SELECT id FROM sim_account WHERE id=$1 AND user_id=$2 FOR UPDATE', account_id, user_id)
+            locked = await conn.fetchrow('SELECT id FROM sim_account WHERE id=$1 AND user_id=$2 FOR UPDATE', account_id, user_id)
+            if not locked:
+                raise HTTPException(404, '机器人账户不存在')
+            if encrypted is not None:
+                await conn.execute(
+                    'INSERT INTO sim_bot_credential(account_id,provider,ciphertext,nonce,last4,base_url) '
+                    'VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(account_id) DO UPDATE SET '
+                    'provider=EXCLUDED.provider,ciphertext=EXCLUDED.ciphertext,nonce=EXCLUDED.nonce,'
+                    'last4=EXCLUDED.last4,base_url=EXCLUDED.base_url,encrypted_at=now(),last_used_at=NULL',
+                    account_id, config.provider, *encrypted)
             await conn.execute(
                 'INSERT INTO sim_bot_config(account_id,config) VALUES($1,$2::jsonb) '
                 'ON CONFLICT(account_id) DO UPDATE SET config=EXCLUDED.config, '

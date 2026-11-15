@@ -53,3 +53,21 @@ async def test_failed_model_call_does_not_mark_used(monkeypatch):
     except RuntimeError:
         pass
     assert calls == []
+
+
+async def test_bot_only_key_records_usage_only_on_that_account(monkeypatch):
+    pool = type('Pool', (), {'fetchval': AsyncMock(return_value=7), 'execute': AsyncMock()})()
+    lookup = AsyncMock(return_value={'ciphertext': b'c', 'nonce': b'n', 'base_url': None})
+    monkeypatch.setattr(bot_store, 'credential', lookup)
+    monkeypatch.setenv('BYOK_MASTER_KEY', 'unused')
+    monkeypatch.setattr(bot_runner, 'decrypt', lambda *a: 'test-only')
+    fake = type('Client', (), {})()
+    fake.chat = AsyncMock(return_value=LLMResponse('{}', 'gpt-6.1-sol', 1, 1))
+    fake.close = AsyncMock()
+    monkeypatch.setattr(bot_runner, '_build_byok_client', lambda *a: fake)
+    await bot_runner.model_decision(pool, {'account_id': 3, 'llm_calls': 0}, {},
+                                    BotConfig(provider='openai', model='gpt-6.1-sol', credential_source='account'))
+    lookup.assert_awaited_once_with(pool, 7, 'openai', account_id=3, source='account')
+    sql, *args = pool.execute.call_args.args
+    assert 'UPDATE sim_bot_credential' in sql and 'user_byok' not in sql
+    assert args == [3, 'openai', b'n']

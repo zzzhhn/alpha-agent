@@ -12,6 +12,9 @@ export interface PaperBotConfig {
   readonly account_id: number;
   readonly provider: string;
   readonly model: string;
+  readonly credential_source?: "user" | "account";
+  readonly credential_last4?: string | null;
+  readonly credential_base_url?: string | null;
   readonly instructions: string;
   readonly schedule_enabled: boolean;
   readonly open_enabled: boolean;
@@ -69,8 +72,8 @@ export type PaperBotConfigPatch = Partial<Pick<PaperBotConfig,
   "provider" | "model" | "instructions" | "schedule_enabled" | "open_enabled" | "close_enabled" |
   "open_offset_minutes" | "close_offset_minutes" | "max_daily_runs" | "max_positions" |
   "max_position_weight" | "fee_bps" | "slippage_bps" | "horizon_sessions" |
-  "max_research_age_sessions" | "min_trade_weight_delta" | "max_turnover_weight" | "cash_policy"
->>;
+  "max_research_age_sessions" | "min_trade_weight_delta" | "max_turnover_weight" | "cash_policy" | "credential_source"
+>> & { readonly credential?: { readonly api_key: string; readonly base_url?: string } };
 
 export type PaperBotRunStatus = "queued" | "running" | "completed" | "no_trade" | "partial" | "failed" | "skipped" | "stopped";
 
