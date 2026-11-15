@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 class BotConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    credential_source: Literal['user', 'account'] = 'user'
     provider: Literal['kimi', 'openai', 'anthropic', 'ollama'] = 'kimi'
     model: str = Field(default='', max_length=120)
     instructions: str = Field(default='根据平台证据管理长期模拟组合；允许继续持有或保持现金。', max_length=2000)

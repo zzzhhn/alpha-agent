@@ -19,6 +19,9 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
   const [cash,setCash] = useState("100000");
   const [provider,setProvider] = useState("");
   const [model,setModel] = useState("");
+  const [credentialSource,setCredentialSource] = useState("user");
+  const [apiKey,setApiKey] = useState("");
+  const [baseUrl,setBaseUrl] = useState("");
   const [instructions,setInstructions] = useState("");
   const [schedule,setSchedule] = useState(false);
   const [atOpen,setAtOpen] = useState(true);
@@ -47,6 +50,8 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
     setName(account?.name ?? t(locale,"sim.bot.account_default"));
     setCash(String(account?.initial_cash ?? 100000));
     setProvider(config?.provider ?? ""); setModel(config?.model ?? "");
+    setCredentialSource(config?.credential_source ?? "user"); setApiKey("");
+    setBaseUrl(config?.credential_source === "account" ? config.credential_base_url ?? "" : "");
     setInstructions(config?.instructions ?? ""); setSchedule(config?.schedule_enabled ?? false);
     setAtOpen(config?.open_enabled ?? true); setAtClose(config?.close_enabled ?? true);
     setOpenMinutes(String(config?.open_offset_minutes ?? 30)); setCloseMinutes(String(config?.close_offset_minutes ?? 30));
@@ -68,6 +73,14 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
     return ()=>{cancelled=true;};
   },[open,account]);
 
+  useEffect(() => {
+    if (!open) {setApiKey(""); initialized.current=false;}
+  },[open]);
+
+  function changeProvider(value: string) {
+    setProvider(value); setApiKey(""); setBaseUrl("");
+  }
+
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy || byokLoading) return;
     if (schedule && !atOpen && !atClose) {setError(t(locale,"sim.bot.schedule_select"));return;}
@@ -77,13 +90,15 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
       if (!target) { target = await createPaperBotAccount({name:name.trim(),initial_cash:Number(cash)}); setCreated(target); }
       await patchPaperBotConfig(target.account_id, {
         ...(provider.trim() ? {provider:provider.trim()} : {}), model:model.trim(),
+        credential_source:credentialSource as "user" | "account",
+        ...(credentialSource === "account" && apiKey.trim() ? {credential:{api_key:apiKey.trim(),base_url:baseUrl.trim()}} : {}),
         instructions, schedule_enabled:schedule, open_enabled:atOpen, close_enabled:atClose,
         open_offset_minutes:Number(openMinutes), close_offset_minutes:Number(closeMinutes), max_daily_runs:Number(daily),
         max_positions:Number(positions), max_position_weight:Number(weight)/100, fee_bps:Number(fees), slippage_bps:Number(slippage),
         horizon_sessions:Number(horizon), max_research_age_sessions:Number(researchAge),
         min_trade_weight_delta:Number(tradeDelta)/100, max_turnover_weight:Number(turnover)/100, cash_policy:"discretionary",
       });
-      onSaved(target); onClose();
+      setApiKey(""); onSaved(target); onClose();
     } catch (reason) {
       setError(!account && target ? t(locale,"sim.bot.create_partial") : reason instanceof Error ? reason.message : t(locale,"sim.bot.unavailable"));
     } finally { setBusy(false); }
@@ -93,8 +108,15 @@ export default function PaperBotConfigDrawer({ open, onClose, account, config, o
     <form id="paper-bot-config" onSubmit={event => void save(event)} className="space-y-6">
       {!account ? <fieldset disabled={busy || !!created} className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmInput label={t(locale,"sim.bot.name")} value={name} onChange={setName} required maxLength={80} /><TmInput label={t(locale,"sim.bot.initial_cash")} value={cash} onChange={setCash} type="number" min={0.01} step={0.01} required /></fieldset> : null}
       <fieldset disabled={busy} className="space-y-3"><legend className="mb-3 text-sm font-semibold text-tm-fg">{t(locale,"sim.bot.model_strategy")}</legend>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmSelect label={t(locale,"sim.bot.provider")} value={provider} onChange={setProvider} options={[{value:"",label:t(locale,"sim.bot.saved_model")},{value:"kimi",label:"Kimi"},{value:"openai",label:t(locale,"sim.bot.openai_compatible")},{value:"anthropic",label:"Anthropic"},{value:"ollama",label:"Ollama"}]} /><TmInput label={t(locale,"sim.bot.model")} value={model} onChange={setModel} placeholder={t(locale,"sim.bot.saved_model")} maxLength={120} /></div>
-        <p className="text-xs leading-5 text-tm-muted">{config && provider && provider !== config.provider ? t(locale,"sim.bot.byok_provider_changed") : config?.credential_configured ? t(locale,"sim.bot.byok_ready") : !config ? t(locale,"sim.bot.saved_model") : t(locale,"sim.bot.byok_missing")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p>
+        <TmSelect label={t(locale,"sim.bot.credential_source")} value={credentialSource} onChange={value=>{setCredentialSource(value);setApiKey("");}} options={[{value:"user",label:t(locale,"sim.bot.credential_user")},{value:"account",label:t(locale,"sim.bot.credential_account")}]} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmSelect label={t(locale,"sim.bot.provider")} value={provider} onChange={changeProvider} options={[{value:"",label:t(locale,"sim.bot.saved_model")},{value:"kimi",label:"Kimi"},{value:"openai",label:t(locale,"sim.bot.openai_compatible")},{value:"anthropic",label:"Anthropic"},{value:"ollama",label:"Ollama"}]} /><TmInput label={t(locale,"sim.bot.model")} value={model} onChange={setModel} placeholder={t(locale,"sim.bot.saved_model")} maxLength={120} /></div>
+        {credentialSource === "account" ? <div className="space-y-3">
+          <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.credential_isolated")}{config?.credential_source === "account" && config.credential_last4 ? ` · ••••${config.credential_last4}` : ""}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <TmInput label="API Key" value={apiKey} onChange={setApiKey} type="password" autoComplete="new-password" maxLength={4096} placeholder={t(locale,"sim.bot.credential_keep")} />
+            <TmInput label="Base URL" value={baseUrl} onChange={setBaseUrl} maxLength={500} placeholder={t(locale,"sim.bot.credential_default_url")} disabled={!apiKey.trim()} />
+          </div>
+        </div> : <p className="text-xs leading-5 text-tm-muted">{config && provider && provider !== config.provider ? t(locale,"sim.bot.byok_provider_changed") : config?.credential_configured && config.credential_source !== "account" ? t(locale,"sim.bot.byok_ready") : t(locale,"sim.bot.credential_user_hint")} <TmLinkButton href="/settings">{t(locale,"sim.bot.settings")}</TmLinkButton></p>}
         <TmTextarea label={t(locale,"sim.bot.instructions")} hint={t(locale,"sim.bot.instructions_hint")} value={instructions} onChange={setInstructions} rows={5} maxLength={2000} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><TmInput label={t(locale,"sim.bot.horizon_sessions")} value={horizon} onChange={setHorizon} type="number" min={1} max={252} step={1} required /><TmInput label={t(locale,"sim.bot.research_age_limit")} value={researchAge} onChange={setResearchAge} type="number" min={0} max={20} step={1} required /></div>
         <p className="text-xs leading-5 text-tm-muted">{t(locale,"sim.bot.cash_discretionary")}</p>

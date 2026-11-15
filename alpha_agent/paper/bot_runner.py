@@ -18,7 +18,8 @@ from alpha_agent.paper.market_clock import market_session
 
 async def model_decision(pool, run, context, config):
     owner = await pool.fetchval('SELECT user_id FROM sim_account WHERE id=$1', run['account_id'])
-    cred = await store.credential(pool, owner, config.provider)
+    cred = await store.credential(pool, owner, config.provider, account_id=run['account_id'],
+                                  source=config.credential_source)
     if not cred:
         raise ValueError('BYOK 凭据不存在，请在设置中重新保存')
     master = os.environ.get('BYOK_MASTER_KEY')
@@ -36,8 +37,13 @@ async def model_decision(pool, run, context, config):
         if close:
             await close()
     # Settings shows "last used"; bot calls are real uses of the stored key.
-    await pool.execute('UPDATE user_byok SET last_used_at=now() WHERE user_id=$1 AND provider=$2',
-                       owner, config.provider)
+    if config.credential_source == 'account':
+        await pool.execute('UPDATE sim_bot_credential SET last_used_at=now() '
+                           'WHERE account_id=$1 AND provider=$2 AND nonce=$3',
+                           run['account_id'], config.provider, cred['nonce'])
+    else:
+        await pool.execute('UPDATE user_byok SET last_used_at=now() WHERE user_id=$1 AND provider=$2',
+                           owner, config.provider)
     return response
 
 
