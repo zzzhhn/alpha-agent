@@ -24,6 +24,7 @@ from alpha_agent.core.factor_ast import (
 )
 from alpha_agent.core.factor_ast import validate_expression as _validate_expression
 from alpha_agent.core.types import FactorSpec
+from alpha_agent.factor_engine.portfolio import quantile_weights, realized_basket_returns
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/zoo", tags=["zoo"])
@@ -43,7 +44,7 @@ class CorrelationRequest(BaseModel):
     bottom_pct: float = Field(default=0.30, ge=0.01, le=0.50)
     warn_threshold: float = Field(
         default=0.8, ge=0.5, le=0.99,
-        description="|corr| above this counts as a near-duplicate warning.",
+        description="A pair warns when its |correlation| meets or exceeds this value.",
     )
 
 
@@ -54,13 +55,15 @@ class _CorrWarning(BaseModel):
 
 
 class CorrelationResponse(BaseModel):
-    """Square matrix returned as a list-of-lists in `names` order. Diagonal
-    is 1.0; off-diagonal entries can be NaN if a pair has insufficient
-    overlapping non-NaN data — those are encoded as 0.0 to keep JSON valid
-    (clients should use n_overlap to detect)."""
+    """Square matrix in `names` order; null means Pearson is undefined.
+
+    A pair needs at least two shared observed returns and nonconstant returns
+    for both factors. An available measured zero is always returned as 0.0.
+    """
     names: list[str]
-    matrix: list[list[float]]
+    matrix: list[list[float | None]]
     warnings: list[_CorrWarning]
+    warn_threshold: float
     n_sessions: int  # number of trading days each factor's daily return spans
 
 
@@ -75,34 +78,8 @@ def _factor_daily_returns(
     Same logic as factor_backtest.py's portfolio construction but stripped to
     just the daily PnL series — no metrics, no equity curve.
     """
-    T, N = factor.shape
-    weights = np.zeros((T, N), dtype=np.float64)
-    for t in range(T):
-        row = factor[t]
-        mask = ~np.isnan(row)
-        valid = int(mask.sum())
-        if valid < 10:
-            continue
-        ranks = np.full_like(row, np.nan)
-        ranks[mask] = (row[mask].argsort().argsort() + 1.0) / valid
-        long_mask = ranks >= (1.0 - top_pct)
-        short_mask = ranks <= bottom_pct
-        nl = int(long_mask.sum())
-        ns = int(short_mask.sum())
-        if nl > 0:
-            weights[t, long_mask] = 1.0 / nl
-        if ns > 0:
-            weights[t, short_mask] = -1.0 / ns
-
-    daily_ret = np.full(T, np.nan)
-    for t in range(T - 1):
-        row_w = weights[t]
-        row_r = fwd_returns[t]
-        mask = ~np.isnan(row_r)
-        if not mask.any():
-            continue
-        daily_ret[t + 1] = float((row_w[mask] * row_r[mask]).sum())
-    return daily_ret
+    weights = quantile_weights(factor, top_pct, bottom_pct)
+    return realized_basket_returns(weights, fwd_returns, require_exposure=True)
 
 
 @router.post("/correlation", response_model=CorrelationResponse)
@@ -160,23 +137,15 @@ def run_zoo_correlation(body: CorrelationRequest) -> CorrelationResponse:
         )
         returns_by_label[label] = daily_ret
 
-    names, corr, warnings = cross_correlation_matrix(returns_by_label)
-
-    # Replace NaN entries (from low-overlap pairs) with 0 for JSON safety.
-    # The client should infer "no signal" not "uncorrelated" when this happens.
-    clean = np.where(np.isnan(corr), 0.0, corr)
-    matrix_list = [[float(v) for v in row] for row in clean]
-
-    # Threshold the warnings list per request param (default 0.8).
-    threshold_warnings = [
-        _CorrWarning(a=a, b=b, corr=c)
-        for (a, b, c) in warnings
-        if abs(c) >= body.warn_threshold
-    ]
+    names, corr, warnings = cross_correlation_matrix(
+        returns_by_label, warn_threshold=body.warn_threshold,
+    )
+    matrix_list = [[float(v) if np.isfinite(v) else None for v in row] for row in corr]
 
     return CorrelationResponse(
         names=names,
         matrix=matrix_list,
-        warnings=threshold_warnings,
+        warnings=[_CorrWarning(a=a, b=b, corr=c) for a, b, c in warnings],
+        warn_threshold=body.warn_threshold,
         n_sessions=int(panel.close.shape[0]),
     )

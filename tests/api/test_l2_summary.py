@@ -76,12 +76,42 @@ async def test_l2_summary_does_not_report_missing_rsp_as_flat(
     assert body["series"][0]["rsp"] is None
 
 
+async def test_l2_summary_keeps_missing_benchmark_periods_as_gaps(client_with_db, applied_db):
+    conn = await asyncpg.connect(applied_db)
+    try:
+        strategy_id = await conn.fetchval(
+            "INSERT INTO l2_strategy (name, version, params_json) "
+            "VALUES ('canonical_top50', 1, '{}'::jsonb) RETURNING id"
+        )
+        await conn.executemany(
+            "INSERT INTO l2_equity_daily "
+            "(strategy_id,as_of_date,net_return,benchmark_return,rsp_return) VALUES ($1,$2,$3,$4,$5)",
+            [
+                (strategy_id, date(2026, 7, 8), 0.01, 0.02, None),
+                (strategy_id, date(2026, 7, 15), 0.0, None, 0.03),
+                (strategy_id, date(2026, 7, 22), -0.01, 0.01, 0.0),
+            ],
+        )
+    finally:
+        await conn.close()
+
+    body = client_with_db.get("/api/l2/summary").json()
+    assert body["status"] == "ready"
+    assert body["benchmark_status"] == {"SPY": "partial", "RSP": "partial"}
+    assert body["spy_return"] is body["rsp_return"] is body["beta_spy"] is None
+    assert [point["spy"] for point in body["series"]] == [102.0, None, None]
+    assert [point["rsp"] for point in body["series"]] == [None, None, None]
+
+
 async def test_critical_dag_health_covers_each_required_node(
     client_with_db, applied_db
 ):
     conn = await asyncpg.connect(applied_db)
     try:
         now = datetime.now(UTC)
+        from alpha_agent.api.routes.health import _dag_windows
+        from tests.api.test_health_market_calendar import seed_receipt
+        windows, market_date = _dag_windows(now)
         required_runs = {
             "daily_prices": 8,
             "fast_intraday": 6,
@@ -90,12 +120,8 @@ async def test_critical_dag_health_covers_each_required_node(
             "ic_backtest_monthly": 1,
         }
         for name, count in required_runs.items():
-            await conn.executemany(
-                "INSERT INTO cron_runs "
-                "(cron_name, started_at, finished_at, ok, error_count) "
-                "VALUES ($1, $2, $2, true, 0)",
-                [(name, now)] * count,
-            )
+            for i in range(count):
+                await seed_receipt(conn, name, windows[name] if count > 1 else now, market_date, i)
         await conn.execute(
             "INSERT INTO research_run "
             "(scheduled_for_date, status, started_at, finished_at) "
@@ -120,12 +146,11 @@ async def test_critical_dag_does_not_hide_a_failed_shard(client_with_db, applied
     conn = await asyncpg.connect(applied_db)
     try:
         now = datetime.now(UTC)
-        await conn.executemany(
-            "INSERT INTO cron_runs "
-            "(cron_name, started_at, finished_at, ok, error_count) "
-            "VALUES ('daily_prices', $1, $1, $2, $3)",
-            [(now, True, 0)] * 7 + [(now, False, 1)],
-        )
+        from alpha_agent.api.routes.health import _dag_windows
+        from tests.api.test_health_market_calendar import seed_receipt
+        windows, market_date = _dag_windows(now)
+        for i in range(8):
+            await seed_receipt(conn, "daily_prices", windows["daily_prices"], market_date, i, i != 7)
     finally:
         await conn.close()
 

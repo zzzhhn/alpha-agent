@@ -359,7 +359,7 @@ async def translate_hypothesis(
         spec=spec,
         smoke=SmokeReport(
             rows_valid=smoke.rows_valid,
-            ic_spearman=smoke.ic_spearman,
+            ic_spearman=smoke.ic_spearman if math.isfinite(smoke.ic_spearman) else 0.0,
             runtime_ms=smoke.runtime_ms,
             factor_std=smoke.factor_std,
             # Constant output (std ≈ 0) or a non-finite IC both mean the
@@ -370,7 +370,7 @@ async def translate_hypothesis(
             or (not math.isfinite(smoke.ic_spearman)),
             turnover=smoke.turnover,
             high_turnover=smoke.turnover > _HIGH_TURNOVER_THRESHOLD,
-            robustness=smoke.robustness,
+            robustness=smoke.robustness if math.isfinite(smoke.robustness) else 0.0,
             # Only flag a finite, genuinely-low score: a NaN robustness means the
             # factor couldn't be ranked at all (already covered by `degenerate`),
             # so don't double-warn — fragility only makes sense for a factor that
@@ -379,7 +379,7 @@ async def translate_hypothesis(
                 math.isfinite(smoke.robustness)
                 and smoke.robustness < _LOW_ROBUSTNESS_THRESHOLD
             ),
-            rank_stability=smoke.rank_stability,
+            rank_stability=smoke.rank_stability if math.isfinite(smoke.rank_stability) else 0.0,
             low_stability=(
                 math.isfinite(smoke.rank_stability)
                 and smoke.rank_stability < _LOW_STABILITY_THRESHOLD

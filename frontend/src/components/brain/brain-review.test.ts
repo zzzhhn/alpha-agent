@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { reconcileBrainSubmission, submitBrainAlpha } from "@/lib/api/brain";
 import { DEFAULT_BRAIN_PAGE_SIZE, brainSubmissionState, familyLabel, hasUnsimulatedCandidates, nextExpandedAlpha, runFailureAction, translateBrainDiagnostic } from "./brain-review";
 
 describe("BRAIN diagnostic translation", () => {
@@ -45,12 +46,50 @@ describe("BRAIN diagnostic translation", () => {
 });
 
 describe("BRAIN run review", () => {
-  it("distinguishes rejected submissions from acceptance in both receipts and persisted rows", () => {
+  it("uses the 429 receipt and sends no follow-up POST", async () => {
+    const receipt = { ok: false, brain_status: "submit_rate_limited", alpha_id: "fixture", retry_after_sec: 8 };
+    const fetch = vi.fn().mockResolvedValue(Response.json(receipt, { status: 429 }));
+    vi.stubGlobal("fetch", fetch);
+    try {
+      expect(await submitBrainAlpha(7)).toEqual(receipt);
+      expect(fetch).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/\/alphas\/7\/submit$/), expect.objectContaining({ method: "POST" }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("uses a dedicated reconciliation request instead of invoking submit", async () => {
+    const receipt = { ok: false, brain_status: "submit_unknown", alpha_id: "fixture", retry_after_sec: null };
+    const fetch = vi.fn().mockResolvedValue(Response.json(receipt));
+    vi.stubGlobal("fetch", fetch);
+    try {
+      expect(await reconcileBrainSubmission(7)).toEqual(receipt);
+      expect(fetch).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/\/alphas\/7\/reconcile-submission$/), expect.objectContaining({ method: "POST" }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("distinguishes acceptance, active, rejection, unknown and rate limits", () => {
     const submitted_at = "2026-11-03T00:00:00Z";
-    expect(brainSubmissionState({ ok: false })).toBe("rejected");
-    expect(brainSubmissionState({ ok: true })).toBe("accepted");
-    expect(brainSubmissionState({ submitted_at, brain_status: "submit_rejected" })).toBe("rejected");
+    expect(brainSubmissionState({ ok: true, brain_status: "submitted" })).toBe("accepted");
+    expect(brainSubmissionState({ ok: true, brain_status: "active" })).toBe("active");
+    expect(brainSubmissionState({ ok: false, brain_status: "submit_rejected", retry_after_sec: null })).toBe("rejected");
+    expect(brainSubmissionState({ ok: false, brain_status: "submit_unknown" })).toBe("attempted");
+    expect(brainSubmissionState({ ok: false, brain_status: "submit_rate_limited", retry_after_sec: 1 })).toBe("rate_limited");
+    expect(brainSubmissionState({ ok: false, brain_status: null })).toBeNull();
     expect(brainSubmissionState({ submitted_at, brain_status: "submitted" })).toBe("accepted");
+    expect(brainSubmissionState({ submitted_at, brain_status: "active" })).toBe("active");
+    expect(brainSubmissionState({ submitted_at: null, brain_status: "submit_rejected" })).toBe("rejected");
+    expect(brainSubmissionState({ submitted_at: null, brain_status: "submit_unknown" })).toBe("attempted");
+    expect(brainSubmissionState({ submitted_at: null, brain_status: "submit_rate_limited" })).toBe("rate_limited");
+    expect(brainSubmissionState({ submitted_at: null, brain_status: "submitted" })).toBeNull();
+  });
+
+  it("does not infer successful submission or definitive rejection from legacy data", () => {
+    const submitted_at = "2026-11-03T00:00:00Z";
+    expect(brainSubmissionState({ ok: false, brain_status: "submit_rejected" })).toBe("attempted");
+    expect(brainSubmissionState({ submitted_at, brain_status: "submit_rejected" })).toBe("attempted");
     expect(brainSubmissionState({ submitted_at, brain_status: null })).toBe("attempted");
   });
   it("uses ten rows by default and opens only one result at a time", () => {

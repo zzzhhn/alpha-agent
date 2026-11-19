@@ -24,45 +24,40 @@ async def handler() -> dict[str, Any]:
     error: str | None = None
     summary: dict[str, Any] = {}
     try:
-        async with pool.acquire() as lock_conn:
+        async with pool.acquire() as lock_conn, lock_conn.transaction():
             acquired = await lock_conn.fetchval(
-                "SELECT pg_try_advisory_lock(hashtext('l2_cycle_continuous_v2'))"
+                "SELECT pg_try_advisory_xact_lock(hashtext('l2_cycle_continuous_v2'))"
             )
             if not acquired:
                 summary = {"skipped": True, "reason": "already_running"}
             else:
-                try:
-                    strategy_id = await l2_driver.ensure_strategy(pool)
-                    legacy = await l2_driver.run_driver(pool, strategy_id=strategy_id)
-                    continuous: dict[str, Any] = {}
-                    for sleeve in ("tactical", "strategic"):
-                        continuous_id = await l2_driver.l2_continuous.ensure_book(
-                            pool, sleeve=sleeve
-                        )
-                        continuous[sleeve] = await l2_driver.run_continuous_driver(
-                            pool, strategy_id=continuous_id
-                        )
-                    # Keep the original top-level counters for cron consumers while the
-                    # two accounting generations remain separately inspectable.
-                    summary = {**legacy, "legacy": legacy, "continuous": continuous, "shadow": {}}
-                    for name, rule in shadow_books.SHADOW_RULES.items():
-                        try:
-                            shadow_id = await shadow_books.ensure_shadow_book(pool, name=name)
-                            selection_info: dict = {}
-                            result = await l2_driver.run_continuous_driver(
-                                pool, strategy_id=shadow_id,
-                                cadence="iso_week_first_snapshot" if rule == "bot_rule_weekly" else None,
-                                selection_info=selection_info,
-                            )
-                            summary["shadow"][name] = {**result, "selection": selection_info}
-                        except Exception as exc:  # noqa: BLE001 — each shadow is isolated
-                            summary["shadow"][name] = {
-                                "error": f"{type(exc).__name__}: {str(exc) or repr(exc)}"[:200],
-                            }
-                finally:
-                    await lock_conn.execute(
-                        "SELECT pg_advisory_unlock(hashtext('l2_cycle_continuous_v2'))"
+                strategy_id = await l2_driver.ensure_strategy(pool)
+                legacy = await l2_driver.run_driver(pool, strategy_id=strategy_id)
+                continuous: dict[str, Any] = {}
+                for sleeve in ("tactical", "strategic"):
+                    continuous_id = await l2_driver.l2_continuous.ensure_book(
+                        pool, sleeve=sleeve
                     )
+                    continuous[sleeve] = await l2_driver.run_continuous_driver(
+                        pool, strategy_id=continuous_id
+                    )
+                # Keep the original top-level counters for cron consumers while the
+                # two accounting generations remain separately inspectable.
+                summary = {**legacy, "legacy": legacy, "continuous": continuous, "shadow": {}}
+                for name, rule in shadow_books.SHADOW_RULES.items():
+                    try:
+                        shadow_id = await shadow_books.ensure_shadow_book(pool, name=name)
+                        selection_info: dict = {}
+                        result = await l2_driver.run_continuous_driver(
+                            pool, strategy_id=shadow_id,
+                            cadence="iso_week_first_snapshot" if rule == "bot_rule_weekly" else None,
+                            selection_info=selection_info,
+                        )
+                        summary["shadow"][name] = {**result, "selection": selection_info}
+                    except Exception as exc:  # noqa: BLE001 — each shadow is isolated
+                        summary["shadow"][name] = {
+                            "error": f"{type(exc).__name__}: {str(exc) or repr(exc)}"[:200],
+                        }
     except Exception as exc:  # noqa: BLE001 — never let the cron raise
         error = f"{type(exc).__name__}: {str(exc) or repr(exc)}"[:200]
 

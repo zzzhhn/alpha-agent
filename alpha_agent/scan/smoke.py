@@ -19,7 +19,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from alpha_agent.scan.vectorized import evaluate, rank
+from alpha_agent.core.statistics import spearman_corr
+from alpha_agent.factor_engine.portfolio import quantile_weights
+from alpha_agent.scan.vectorized import evaluate
 
 
 @dataclass(frozen=True)
@@ -170,36 +172,18 @@ def _estimate_turnover(
     Mirrors the production engine exactly so the number is comparable to the
     backtest's reported turnover:
       - weights: long the top `top_pct`, short the bottom `bottom_pct`,
-        equal-weight within each leg (kernel.py:493-511);
-      - turnover: mean over days of the L1 weight change, Σ_n |w_t - w_{t-1}|
-        (kernel.py:344-348).
+        equal-weight within each leg;
+      - turnover: mean over days of the L1 weight change, Σ_n |w_t - w_{t-1}|.
 
     Returns 0.0 for a single-row panel (no day-over-day delta to measure).
     """
     factor = np.asarray(factor, dtype=np.float64)
     if factor.ndim == 1:
         factor = factor.reshape(-1, 1)
-    n_days, n_names = factor.shape
-    if n_days < 2:
+    if factor.shape[0] < 2:
         return 0.0
 
-    weights = np.zeros((n_days, n_names), dtype=np.float64)
-    for t in range(n_days):
-        row = factor[t]
-        mask = ~np.isnan(row)
-        valid = int(mask.sum())
-        if valid < 10:
-            continue
-        ranks = np.full_like(row, np.nan)
-        ranks[mask] = (row[mask].argsort().argsort() + 1.0) / valid
-        long_mask = ranks >= (1.0 - top_pct)
-        n_long = int(long_mask.sum())
-        if n_long > 0:
-            weights[t, long_mask] = 1.0 / n_long
-        short_mask = ranks <= bottom_pct
-        n_short = int(short_mask.sum())
-        if n_short > 0:
-            weights[t, short_mask] = -1.0 / n_short
+    weights = quantile_weights(factor, top_pct, bottom_pct)
 
     delta = np.abs(weights[1:] - weights[:-1])
     turnover = float(delta.sum(axis=1).mean())
@@ -214,20 +198,11 @@ _NOISE_SIGMA: float = 0.03
 _ROBUSTNESS_TAIL: int = 10
 
 
-def _row_rank_consistency(rank_a: np.ndarray, rank_b: np.ndarray) -> float | None:
-    """Mean per-row Pearson correlation of two cross-sectional rank arrays
-    (== Spearman of the underlying values). Rows with <3 valid pairs or zero
-    variance are skipped. Returns None if no row qualifies."""
+def _row_rank_consistency(values_a: np.ndarray, values_b: np.ndarray) -> float | None:
+    """Mean per-row Spearman correlation, excluding undefined samples."""
     corrs: list[float] = []
-    for t in range(rank_a.shape[0]):
-        x, y = rank_a[t], rank_b[t]
-        m = ~(np.isnan(x) | np.isnan(y))
-        if int(m.sum()) < 3:
-            continue
-        xv, yv = x[m], y[m]
-        if xv.std() == 0 or yv.std() == 0:
-            continue
-        c = float(np.corrcoef(xv, yv)[0, 1])
+    for x, y in zip(values_a, values_b):
+        c = spearman_corr(x, y, min_count=3)
         if np.isfinite(c):
             corrs.append(c)
     return float(np.mean(corrs)) if corrs else None
@@ -256,7 +231,7 @@ def _estimate_robustness(
         clean = clean.reshape(-1, 1)
     if clean.shape[0] < _ROBUSTNESS_TAIL + 1:
         return float("nan")
-    clean_rank = rank(clean[-(_ROBUSTNESS_TAIL + 1) : -1])
+    clean_tail = clean[-(_ROBUSTNESS_TAIL + 1) : -1]
 
     numeric_keys = [k for k, v in data.items() if v.dtype.kind in "fiu"]
     rng = np.random.default_rng(seed + 1)  # distinct stream from the panel's
@@ -280,8 +255,8 @@ def _estimate_robustness(
                 noisy_factor = noisy_factor.reshape(-1, 1)
             if noisy_factor.shape[0] < _ROBUSTNESS_TAIL + 1:
                 continue
-            noisy_rank = rank(noisy_factor[-(_ROBUSTNESS_TAIL + 1) : -1])
-            consistency = _row_rank_consistency(clean_rank, noisy_rank)
+            noisy_tail = noisy_factor[-(_ROBUSTNESS_TAIL + 1) : -1]
+            consistency = _row_rank_consistency(clean_tail, noisy_tail)
             if consistency is not None:
                 scores.append(consistency)
     return float(np.mean(scores)) if scores else float("nan")
@@ -301,8 +276,8 @@ def _estimate_rank_stability(clean_factor: np.ndarray) -> float:
         clean = clean.reshape(-1, 1)
     if clean.shape[0] < _ROBUSTNESS_TAIL + 1:
         return float("nan")
-    ranks = rank(clean[-(_ROBUSTNESS_TAIL + 1) :])  # tail+1 days -> tail pairs
-    consistency = _row_rank_consistency(ranks[:-1], ranks[1:])
+    tail = clean[-(_ROBUSTNESS_TAIL + 1) :]  # tail+1 days -> tail pairs
+    consistency = _row_rank_consistency(tail[:-1], tail[1:])
     return consistency if consistency is not None else float("nan")
 
 
@@ -361,27 +336,11 @@ def smoke_test(expression: str, lookback: int, seed: int = 42) -> SmokeResult:
 
     factor_tail = factor[-(tail + 1) : -1]
     fwd_tail = fwd_ret[-(tail + 1) : -1]
-    factor_rank = rank(factor_tail)
-    fwd_rank = rank(fwd_tail)
-
-    valid = ~(np.isnan(factor_rank) | np.isnan(fwd_rank))
-    daily_ics: list[float] = []
-    for t in range(factor_rank.shape[0]):
-        m = valid[t]
-        if int(m.sum()) < 3:
-            continue
-        x = factor_rank[t, m]
-        y = fwd_rank[t, m]
-        if x.std() == 0 or y.std() == 0:
-            continue
-        corr = float(np.corrcoef(x, y)[0, 1])
-        if np.isfinite(corr):
-            daily_ics.append(corr)
-
-    ic = float(np.mean(daily_ics)) if daily_ics else float("nan")
+    valid = np.isfinite(factor_tail) & np.isfinite(fwd_tail)
+    ic = _row_rank_consistency(factor_tail, fwd_tail)
     return SmokeResult(
         rows_valid=int(valid.sum()),
-        ic_spearman=ic,
+        ic_spearman=ic if ic is not None else float("nan"),
         runtime_ms=float(runtime_ms),
         factor_std=factor_std,
         turnover=turnover,

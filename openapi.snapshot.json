@@ -1299,7 +1299,7 @@
           },
           "warn_threshold": {
             "default": 0.8,
-            "description": "|corr| above this counts as a near-duplicate warning.",
+            "description": "A pair warns when its |correlation| meets or exceeds this value.",
             "maximum": 0.99,
             "minimum": 0.5,
             "title": "Warn Threshold",
@@ -1313,12 +1313,19 @@
         "type": "object"
       },
       "CorrelationResponse": {
-        "description": "Square matrix returned as a list-of-lists in `names` order. Diagonal\nis 1.0; off-diagonal entries can be NaN if a pair has insufficient\noverlapping non-NaN data \u2014 those are encoded as 0.0 to keep JSON valid\n(clients should use n_overlap to detect).",
+        "description": "Square matrix in `names` order; null means Pearson is undefined.\n\nA pair needs at least two shared observed returns and nonconstant returns\nfor both factors. An available measured zero is always returned as 0.0.",
         "properties": {
           "matrix": {
             "items": {
               "items": {
-                "type": "number"
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "type": "array"
             },
@@ -1336,6 +1343,10 @@
             "title": "Names",
             "type": "array"
           },
+          "warn_threshold": {
+            "title": "Warn Threshold",
+            "type": "number"
+          },
           "warnings": {
             "items": {
               "$ref": "#/components/schemas/_CorrWarning"
@@ -1348,6 +1359,7 @@
           "names",
           "matrix",
           "warnings",
+          "warn_threshold",
           "n_sessions"
         ],
         "title": "CorrelationResponse",
@@ -4234,12 +4246,26 @@
             "type": "integer"
           },
           "raw": {
-            "title": "Raw",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw"
           },
           "z": {
-            "title": "Z",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z"
           }
         },
         "required": [
@@ -7352,7 +7378,7 @@
     },
     "/api/brain/alphas": {
       "get": {
-        "description": "The user's BRAIN mining results, server-side paginated + filtered. Returns\n{alphas, total} (total = rows matching the filters, for page controls).\nDegrades to empty if V028 isn't applied yet.",
+        "description": "The user's BRAIN mining results, server-side paginated + filtered. Returns\n{alphas, total} (total = rows matching the filters, for page controls).",
         "operationId": "list_alphas_api_brain_alphas_get",
         "parameters": [
           {
@@ -7626,6 +7652,67 @@
           }
         },
         "summary": "Get Alpha Pnl",
+        "tags": [
+          "brain"
+        ]
+      }
+    },
+    "/api/brain/alphas/{row_id}/reconcile-submission": {
+      "post": {
+        "description": "Manually verify an unresolved receipt using a BRAIN read, never another submit.",
+        "operationId": "reconcile_alpha_submission_api_brain_alphas__row_id__reconcile_submission_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "title": "Row Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reconcile Alpha Submission Api Brain Alphas  Row Id  Reconcile Submission Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Alpha Submission",
         "tags": [
           "brain"
         ]
@@ -16482,16 +16569,13 @@
     },
     "/api/v1/portfolio/positions": {
       "get": {
+        "deprecated": true,
         "operationId": "portfolio_positions_api_v1_portfolio_positions_get",
         "responses": {
-          "200": {
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "items": {},
-                  "title": "Response Portfolio Positions Api V1 Portfolio Positions Get",
-                  "type": "array"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -16505,16 +16589,13 @@
     },
     "/api/v1/portfolio/risk": {
       "get": {
+        "deprecated": true,
         "operationId": "portfolio_risk_api_v1_portfolio_risk_get",
         "responses": {
-          "200": {
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Portfolio Risk Api V1 Portfolio Risk Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -16528,7 +16609,7 @@
     },
     "/api/v1/screener/run": {
       "post": {
-        "description": "Evaluate factors \u2192 filter universe \u2192 z-score \u2192 combine \u2192 rank.\n\nDirection handling per factor:\n  long_only / long_short \u2192 use raw (higher = better)\n  short_only             \u2192 invert score (lower = better)\n\nCombine methods:\n  equal_z         \u2192 mean of z-scores across factors\n  ic_weighted     \u2192 weight each z-score by its in-window mean IC (clipped \u2265 0)\n  user_weighted   \u2192 use per-factor weights from the request (normalized to sum=1)",
+        "description": "Evaluate factors \u2192 filter universe \u2192 z-score \u2192 combine \u2192 rank.\n\nDirection handling per factor:\n  long_only / long_short \u2192 use raw (higher = better)\n  short_only             \u2192 invert score (lower = better)\n\nCombine methods:\n  equal_z         \u2192 mean of z-scores across factors\n  ic_weighted     \u2192 weight by direction-adjusted in-window IC (clipped \u2265 0)\n  user_weighted   \u2192 use per-factor weights from the request (normalized to sum=1)",
         "operationId": "run_screener_api_v1_screener_run_post",
         "requestBody": {
           "content": {

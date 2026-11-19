@@ -324,17 +324,18 @@ async def test_no_retry_for_hopeless_miss(applied_db):
 
 
 @pytest.mark.asyncio
-async def test_mark_submitted(applied_db):
+async def test_confirmed_submission_keeps_mining_result(applied_db):
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:
         rid = await store.record_brain_alpha(
             pool, user_id=1, expression="rank(returns)", settings={"decay": 0},
             outcome="passed", alpha_id="A1", sharpe=1.5, fitness=1.2, turnover=0.1,
         )
-        await store.mark_submitted(pool, rid, brain_status="ACTIVE")
+        assert await store.claim_brain_submission(pool, 1, rid)
+        await store.confirm_brain_submission(pool, 1, rid, status="active")
         row = (await store.list_brain_alphas(pool, 1))[0]
         assert row["submitted_at"] is not None
-        assert row["brain_status"] == "ACTIVE"
+        assert row["brain_status"] == "active"
         assert row["settings"] == {"decay": 0}  # jsonb decoded
     finally:
         await pool.close()

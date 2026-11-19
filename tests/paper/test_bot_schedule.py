@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
+import asyncpg
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
@@ -121,4 +122,40 @@ async def test_late_github_arrival_is_explicit_and_never_backfills(monkeypatch):
     assert not result['window_open'] and not result['market_open']
     assert result['enqueued'] == 0
     enqueue.assert_not_called()
+
+
+async def test_scheduler_reaches_account_23_after_first_bounded_batch(monkeypatch, applied_db):
+    from alpha_agent.paper.bot_models import BotConfig
+
+    conn = await asyncpg.connect(applied_db)
+    try:
+        await conn.execute(
+            "INSERT INTO users(email) SELECT 'schedule-' || id || '@test.com' FROM generate_series(1,23) AS id"
+        )
+        await conn.execute("INSERT INTO sim_account(user_id,kind) SELECT id,'bot' FROM users")
+        await conn.execute(
+            "INSERT INTO sim_bot_config (account_id,config,updated_at) "
+            "SELECT id,$1,$2 FROM sim_account",
+            BotConfig(schedule_enabled=True).model_dump_json(),
+            datetime(2026, 11, 6, tzinfo=UTC),
+        )
+        account_ids = [r['id'] for r in await conn.fetch("SELECT id FROM sim_account ORDER BY id")]
+        monkeypatch.setattr(bot_schedule, 'read_capacity', AsyncMock(return_value={'allow_writes': True}))
+        enqueue_attempts = []
+
+        async def enqueue(pool, user_id, account_id, *, trigger, slot_key, now):
+            enqueue_attempts.append(account_id)
+            raise HTTPException(400, 'fixture blocks without accessing any credential')
+
+        monkeypatch.setattr(bot_schedule.store, 'enqueue', enqueue)
+        first = await bot_schedule.enqueue_due(conn, datetime(2026, 11, 9, 20, 31, tzinfo=UTC))
+        second = await bot_schedule.enqueue_due(conn, datetime(2026, 11, 9, 20, 32, tzinfo=UTC))
+        assert first['observed_accounts'] == second['observed_accounts'] == 20
+        assert enqueue_attempts[:20] == account_ids[:20]
+        assert enqueue_attempts[20:23] == account_ids[20:]
+        assert await conn.fetchval(
+            "SELECT count(*) FROM sim_bot_schedule_slot WHERE slot='close_before' AND status='blocked'"
+        ) == 23
+    finally:
+        await conn.close()
 

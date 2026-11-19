@@ -88,7 +88,8 @@ async def test_query_submitted_filter(applied_db):
             pool, user_id=1, expression="y", settings={}, outcome="passed",
             alpha_id="A2", sharpe=1.6,
         )
-        await store.mark_submitted(pool, rid, brain_status="ACTIVE")
+        assert await store.claim_brain_submission(pool, 1, rid)
+        await store.confirm_brain_submission(pool, 1, rid, status="active")
         assert (await store.query_brain_alphas(pool, 1, submitted=True))["total"] == 1
         assert (await store.query_brain_alphas(pool, 1, submitted=False))["total"] == 1
     finally:

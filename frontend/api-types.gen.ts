@@ -398,7 +398,6 @@ export interface paths {
          * List Alphas
          * @description The user's BRAIN mining results, server-side paginated + filtered. Returns
          *     {alphas, total} (total = rows matching the filters, for page controls).
-         *     Degrades to empty if V028 isn't applied yet.
          */
         get: operations["list_alphas_api_brain_alphas_get"];
         put?: never;
@@ -425,6 +424,26 @@ export interface paths {
         get: operations["get_alpha_pnl_api_brain_alphas__row_id__pnl_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/brain/alphas/{row_id}/reconcile-submission": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Alpha Submission
+         * @description Manually verify an unresolved receipt using a BRAIN read, never another submit.
+         */
+        post: operations["reconcile_alpha_submission_api_brain_alphas__row_id__reconcile_submission_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3591,7 +3610,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Portfolio Positions */
+        /**
+         * Portfolio Positions
+         * @deprecated
+         */
         get: operations["portfolio_positions_api_v1_portfolio_positions_get"];
         put?: never;
         post?: never;
@@ -3608,7 +3630,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Portfolio Risk */
+        /**
+         * Portfolio Risk
+         * @deprecated
+         */
         get: operations["portfolio_risk_api_v1_portfolio_risk_get"];
         put?: never;
         post?: never;
@@ -3637,7 +3662,7 @@ export interface paths {
          *
          *     Combine methods:
          *       equal_z         → mean of z-scores across factors
-         *       ic_weighted     → weight each z-score by its in-window mean IC (clipped ≥ 0)
+         *       ic_weighted     → weight by direction-adjusted in-window IC (clipped ≥ 0)
          *       user_weighted   → use per-factor weights from the request (normalized to sum=1)
          */
         post: operations["run_screener_api_v1_screener_run_post"];
@@ -4281,25 +4306,27 @@ export interface components {
             top_pct: number;
             /**
              * Warn Threshold
-             * @description |corr| above this counts as a near-duplicate warning.
+             * @description A pair warns when its |correlation| meets or exceeds this value.
              * @default 0.8
              */
             warn_threshold: number;
         };
         /**
          * CorrelationResponse
-         * @description Square matrix returned as a list-of-lists in `names` order. Diagonal
-         *     is 1.0; off-diagonal entries can be NaN if a pair has insufficient
-         *     overlapping non-NaN data — those are encoded as 0.0 to keep JSON valid
-         *     (clients should use n_overlap to detect).
+         * @description Square matrix in `names` order; null means Pearson is undefined.
+         *
+         *     A pair needs at least two shared observed returns and nonconstant returns
+         *     for both factors. An available measured zero is always returned as 0.0.
          */
         CorrelationResponse: {
             /** Matrix */
-            matrix: number[][];
+            matrix: (number | null)[][];
             /** N Sessions */
             n_sessions: number;
             /** Names */
             names: string[];
+            /** Warn Threshold */
+            warn_threshold: number;
             /** Warnings */
             warnings: components["schemas"]["_CorrWarning"][];
         };
@@ -5478,9 +5505,9 @@ export interface components {
             /** Factor Idx */
             factor_idx: number;
             /** Raw */
-            raw: number;
+            raw: number | null;
             /** Z */
-            z: number;
+            z: number | null;
         };
         /** PersonaExplainResponse */
         PersonaExplainResponse: {
@@ -6974,6 +7001,41 @@ export interface operations {
         };
     };
     get_alpha_pnl_api_brain_alphas__row_id__pnl_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                row_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconcile_alpha_submission_api_brain_alphas__row_id__reconcile_submission_post: {
         parameters: {
             query?: never;
             header?: {
@@ -12240,12 +12302,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown[];
+                    "application/json": unknown;
                 };
             };
         };
@@ -12260,14 +12322,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
                 };
             };
         };

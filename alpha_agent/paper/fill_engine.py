@@ -5,24 +5,26 @@ The cron handler and API layer call these and own the DB mutations.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
+from math import isfinite
+
+from alpha_agent.market_session import next_xnys_session, xnys_sessions
 
 
 def compute_market_fill(
     signal_date: date,
     prices: dict[date, float],
+    *,
+    as_of: date,
 ) -> tuple[date, float] | None:
-    """Return (fill_date, fill_price) for a market order, or None if T+1 price
-    is not yet available.
-
-    fill_date = earliest date in prices that is strictly after signal_date.
-    fill_price = that date's close.
-    """
-    candidates = sorted(d for d in prices if d > signal_date)
-    if not candidates:
+    """Fill at the exact next completed XNYS close, not a substitute quote."""
+    if as_of <= signal_date:
         return None
-    fill_date = candidates[0]
-    return fill_date, prices[fill_date]
+    fill_date = next_xnys_session(signal_date)
+    price = prices.get(fill_date)
+    if fill_date > as_of or price is None or not isfinite(price) or price <= 0:
+        return None
+    return fill_date, price
 
 
 def compute_limit_fill(
@@ -31,14 +33,15 @@ def compute_limit_fill(
     signal_date: date,
     prices: dict[date, float],
     expire_after_days: int,
+    *,
+    as_of: date,
 ) -> tuple[date, float] | None | str:
-    """Evaluate a DAY-validity limit order against available close prices.
+    """Evaluate a limit order over completed XNYS sessions after the signal.
 
     Returns:
         (fill_date, limit_price)  — if the close strictly crossed limit_price
-        None                      — still pending (fewer than expire_after_days
-                                   days have elapsed without a cross)
-        "expired"                 — expire_after_days days elapsed, no fill
+        None                      — fewer than expire_after_days sessions elapsed
+        "expired"                 — the window elapsed without a verified cross
 
     Cross rule (not touch):
         buy:  daily_prices.close < limit_price  (strictly below)
@@ -47,19 +50,21 @@ def compute_limit_fill(
     Fill price is always limit_price (not the close), because the close already
     crossed, making a limit-price execution plausible intraday.
     """
-    candidates = sorted(d for d in prices if d > signal_date)
-    checked = 0
-    for d in candidates:
-        checked += 1
-        close = prices[d]
+    first_calendar_day = signal_date + timedelta(days=1)
+    if first_calendar_day > as_of:
+        return None
+    window = max(expire_after_days, 1)
+    sessions = xnys_sessions(first_calendar_day, as_of)[:window]
+    for d in sessions:
+        close = prices.get(d)
+        if close is None or not isfinite(close) or close <= 0:
+            continue
         crossed = (
             close < limit_price if side == "buy" else close > limit_price
         )
         if crossed:
             return d, limit_price
-        if checked >= expire_after_days:
-            return "expired"
-    return None  # still pending
+    return "expired" if len(sessions) >= window else None
 
 
 def new_avg_cost(

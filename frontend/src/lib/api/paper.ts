@@ -164,8 +164,15 @@ export interface L2Summary {
   readonly status: "empty" | "accumulating" | "ready" | "identity_quarantined";
   readonly periods?: number;
   readonly net_return?: number;
-  readonly spy_return?: number;
+  readonly spy_return?: number | null;
   readonly rsp_return?: number | null;
+  readonly benchmark_status?: Readonly<Record<"SPY" | "RSP", "complete" | "partial" | "missing">>;
+  readonly series: readonly {
+    readonly date: string;
+    readonly nav: number;
+    readonly spy: number | null;
+    readonly rsp: number | null;
+  }[];
   readonly beta_spy?: number | null;
   readonly max_drawdown?: number;
   readonly mean_turnover?: number | null;

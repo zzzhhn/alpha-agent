@@ -46,17 +46,24 @@ export function translateBrainDiagnostic(line: string, locale: Locale): string {
   }).join("");
 }
 
-export type BrainSubmissionState = "accepted" | "rejected" | "attempted";
+export type BrainSubmissionState = "accepted" | "active" | "rejected" | "attempted" | "rate_limited";
 
 export function brainSubmissionState(
-  receipt: Pick<BrainSubmitResult, "ok"> | Pick<BrainAlpha, "submitted_at" | "brain_status">,
+  receipt: Pick<BrainSubmitResult, "ok" | "brain_status" | "retry_after_sec"> | Pick<BrainAlpha, "submitted_at" | "brain_status">,
 ): BrainSubmissionState | null {
-  if ("ok" in receipt) return receipt.ok ? "accepted" : "rejected";
-  if (!receipt.submitted_at) return null;
   const status = receipt.brain_status?.toLowerCase();
-  if (status === "submit_rejected") return "rejected";
-  if (status === "submitted" || status === "active") return "accepted";
-  return "attempted";
+  const confirmed = "ok" in receipt ? receipt.ok : Boolean(receipt.submitted_at);
+  if (confirmed && status === "submitted") return "accepted";
+  if (confirmed && status === "active") return "active";
+  // The legacy backend used the same response/record for real rejection and
+  // uncertain outcomes. The new backend never stamps a rejection as submitted.
+  if (confirmed) return "attempted";
+  if (status === "submit_rejected") {
+    return "ok" in receipt && !("retry_after_sec" in receipt) ? "attempted" : "rejected";
+  }
+  if (status === "submit_unknown") return "attempted";
+  if (status === "submit_rate_limited") return "rate_limited";
+  return null;
 }
 
 const FAMILIES: Record<string, [string, string]> = {

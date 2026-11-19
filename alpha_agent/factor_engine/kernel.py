@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
+from alpha_agent.core.statistics import nav_max_drawdown, spearman_corr
+from alpha_agent.factor_engine.portfolio import quantile_weights, realized_basket_returns
 from alpha_agent.scan.vectorized import evaluate as eval_factor
 from alpha_agent.scan.vectorized import ts_mean as _ts_mean
 
@@ -151,25 +153,16 @@ def evaluate_factor_full(panel: "_Panel", spec: "FactorSpec",
     return factor
 
 
-def spearman_ic(factor_row: np.ndarray, fwd_ret_row: np.ndarray) -> float:
-    """Single-day cross-sectional Spearman IC. NaN-safe.
+def spearman_ic(
+    factor_row: np.ndarray, fwd_ret_row: np.ndarray, *, undefined: float = 0.0,
+) -> float:
+    """Daily Spearman IC. Undefined samples default to the public value 0.
 
-    Returns 0.0 when fewer than 3 valid observations, or the rank-vector
-    has zero variance. The result lives in [-1, 1].
+    Aggregators can pass ``undefined=np.nan`` to exclude those observations
+    without throwing away a legitimately measured zero.
     """
-    mask = ~(np.isnan(factor_row) | np.isnan(fwd_ret_row))
-    if int(mask.sum()) < 3:
-        return 0.0
-    f = factor_row[mask]
-    r = fwd_ret_row[mask]
-    f_rank = f.argsort().argsort().astype(np.float64)
-    r_rank = r.argsort().argsort().astype(np.float64)
-    f_centered = f_rank - f_rank.mean()
-    r_centered = r_rank - r_rank.mean()
-    denom = float(np.sqrt((f_centered**2).sum() * (r_centered**2).sum()))
-    if denom == 0.0:
-        return 0.0
-    return float((f_centered * r_centered).sum() / denom)
+    ic = spearman_corr(factor_row, fwd_ret_row, min_count=3)
+    return undefined if np.isnan(ic) else ic
 
 
 def window_ic(
@@ -178,17 +171,17 @@ def window_ic(
     start: int,
     end: int,
 ) -> float:
-    """Mean Spearman IC over rows [start, end). Skips NaN-only rows.
+    """Mean Spearman IC over rows [start, end), excluding undefined ICs.
 
     `factor` and `fwd_returns` are (T, N) aligned arrays. Used by the
     screener's ic-weighted combiner to estimate each factor's recent
-    informativeness.
+    informativeness (zero if the window contains no defined IC).
     """
     samples: list[float] = []
     T = factor.shape[0]
     end = min(end, T, fwd_returns.shape[0])
     for t in range(max(0, start), end):
-        ic = spearman_ic(factor[t], fwd_returns[t])
+        ic = spearman_ic(factor[t], fwd_returns[t], undefined=np.nan)
         if not np.isnan(ic):
             samples.append(ic)
     return float(np.mean(samples)) if samples else 0.0
@@ -255,13 +248,8 @@ class SplitMetrics:
 
 
 def max_drawdown(returns: np.ndarray) -> float:
-    """Largest peak-to-trough percent drop on a daily-return series."""
-    if returns.size == 0:
-        return 0.0
-    eq = np.cumprod(1.0 + returns)
-    peak = np.maximum.accumulate(eq)
-    dd = (eq - peak) / peak
-    return float(dd.min()) if dd.size else 0.0
+    """Largest peak-to-trough drop, including the opening NAV of 1.0."""
+    return nav_max_drawdown(returns)
 
 
 def split_metrics(
@@ -280,13 +268,13 @@ def split_metrics(
     stationary block-bootstrap CIs for both Sharpe and IC mean.
     """
     slice_ret = daily_returns[start:end]
-    clean = slice_ret[~np.isnan(slice_ret)]
-    if clean.size < 2:
-        return SplitMetrics(sharpe=0.0, total_return=0.0, ic_spearman=0.0, n_days=int(clean.size))
+    clean = slice_ret[np.isfinite(slice_ret)]
+    if not clean.size:
+        return SplitMetrics(sharpe=0.0, total_return=0.0, ic_spearman=0.0, n_days=0)
 
     total_return = float(np.prod(1.0 + clean) - 1.0)
     mean = float(clean.mean())
-    std = float(clean.std(ddof=1))
+    std = float(clean.std(ddof=1)) if clean.size >= 2 else 0.0
     sharpe = float(mean / std * np.sqrt(252)) if std > 0 else 0.0
     mdd = max_drawdown(clean)
 
@@ -294,7 +282,7 @@ def split_metrics(
     for t in range(start, end):
         if t >= factor.shape[0] or t >= fwd_returns.shape[0]:
             break
-        ic = spearman_ic(factor[t], fwd_returns[t])
+        ic = spearman_ic(factor[t], fwd_returns[t], undefined=np.nan)
         if not np.isnan(ic):
             ic_samples.append(ic)
     ic_mean = float(np.mean(ic_samples)) if ic_samples else 0.0
@@ -461,11 +449,6 @@ def run_kernel(
     classification, and DB persist all live in the wrapper -- they consume
     `KernelResult.daily_ret`, `factor`, `fwd_returns`, `weights`, `train_end`.
 
-    Numerical output is byte-equal to the pre-A5 in-line implementation in
-    `run_factor_backtest`: code blocks were moved here verbatim, only the
-    private helper names (`_split_metrics`, `_sector_neutralize_factor`,
-    `_spearman_ic`) were swapped for the public kernel exports.
-
     Phase 3c: extra_ops is forwarded through evaluate_factor_full -> vectorized.evaluate
     so LLM-authored operators can run inside the kernel pipeline. Default None
     preserves backward compatibility for all existing callers.
@@ -488,39 +471,14 @@ def run_kernel(
     fwd_returns = np.full_like(panel.close, np.nan)
     fwd_returns[:-1] = panel.close[1:] / panel.close[:-1] - 1.0
 
-    use_long = params.direction in ("long_short", "long_only")
-    use_short = params.direction in ("long_short", "short_only")
-    weights = np.zeros((T, N), dtype=np.float64)
-    for t in range(T):
-        row = factor[t]
-        mask = ~np.isnan(row)
-        valid = mask.sum()
-        if valid < 10:
-            continue
-        ranks = np.full_like(row, np.nan)
-        ranks[mask] = (row[mask].argsort().argsort() + 1.0) / valid
-        if use_long:
-            long_mask = ranks >= (1.0 - params.top_pct)
-            n_long = int(long_mask.sum())
-            if n_long > 0:
-                weights[t, long_mask] = 1.0 / n_long
-        if use_short:
-            short_mask = ranks <= params.bottom_pct
-            n_short = int(short_mask.sum())
-            if n_short > 0:
-                weights[t, short_mask] = -1.0 / n_short
-
+    weights = quantile_weights(
+        factor, params.top_pct, params.bottom_pct,
+        use_long=params.direction in ("long_short", "long_only"),
+        use_short=params.direction in ("long_short", "short_only"),
+    )
     if earnings_mask is not None:
         weights[earnings_mask] = 0.0
-
-    daily_ret = np.full(T, np.nan)
-    for t in range(T - 1):
-        row_w = weights[t]
-        row_r = fwd_returns[t]
-        mask = ~np.isnan(row_r)
-        if not mask.any():
-            continue
-        daily_ret[t + 1] = float((row_w[mask] * row_r[mask]).sum())
+    daily_ret = realized_basket_returns(weights, fwd_returns)
 
     flat_cost_per_unit = params.transaction_cost_bps / 10_000.0
     slip_k = float(params.slippage_bps_per_sqrt_pct)

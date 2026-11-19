@@ -43,6 +43,8 @@ import math
 
 import numpy as np
 
+from alpha_agent.core.statistics import pearson_corr
+
 
 _EULER_MASCHERONI = 0.5772156649015329
 
@@ -257,18 +259,21 @@ def stationary_block_bootstrap_ci(
 
 def cross_correlation_matrix(
     returns_by_factor: dict[str, np.ndarray],
+    *,
+    warn_threshold: float = 0.8,
 ) -> tuple[list[str], np.ndarray, list[tuple[str, str, float]]]:
     """Pearson correlation of daily strategy returns across factors.
 
     Args:
         returns_by_factor: {factor_name: 1D daily-return array}. Arrays must
-                           share length; NaNs are pairwise-dropped.
+                           share length; nonfinite data is dropped pairwise.
+        warn_threshold: Report pairs whose absolute correlation meets this value.
 
     Returns:
         (names, corr_matrix, warnings) where:
           names         — factor names in column order
-          corr_matrix   — (M, M) symmetric, diagonal = 1.0
-          warnings      — list of (name_a, name_b, corr) for pairs |corr| > 0.8,
+          corr_matrix   — (M, M) symmetric; NaN for every undefined entry
+          warnings      — list of (name_a, name_b, corr) meeting the threshold,
                           excluding self-pairs; sorted by |corr| descending.
 
     Empty input returns ([], 0×0 matrix, []).
@@ -279,34 +284,25 @@ def cross_correlation_matrix(
     names = list(returns_by_factor.keys())
     arrays = [np.asarray(returns_by_factor[n], dtype=np.float64) for n in names]
     m = len(names)
-    corr = np.eye(m, dtype=np.float64)
+    corr = np.full((m, m), np.nan, dtype=np.float64)
 
     for i in range(m):
-        for j in range(i + 1, m):
+        for j in range(i, m):
             a = arrays[i]
             b = arrays[j]
             length = min(a.size, b.size)
             if length < 2:
                 continue
-            a_slice = a[-length:]
-            b_slice = b[-length:]
-            mask = ~(np.isnan(a_slice) | np.isnan(b_slice))
-            if int(mask.sum()) < 2:
-                continue
-            x = a_slice[mask]
-            y = b_slice[mask]
-            sx = float(x.std(ddof=1))
-            sy = float(y.std(ddof=1))
-            if sx <= 1e-12 or sy <= 1e-12:
-                continue
-            c = float(((x - x.mean()) * (y - y.mean())).mean() / (sx * sy))
+            c = pearson_corr(a[-length:], b[-length:])
+            if i == j and np.isfinite(c):
+                c = 1.0
             corr[i, j] = c
             corr[j, i] = c
 
     warnings: list[tuple[str, str, float]] = []
     for i in range(m):
         for j in range(i + 1, m):
-            if abs(corr[i, j]) > 0.8:
+            if abs(corr[i, j]) >= warn_threshold:
                 warnings.append((names[i], names[j], float(corr[i, j])))
     warnings.sort(key=lambda t: -abs(t[2]))
     return (names, corr, warnings)
