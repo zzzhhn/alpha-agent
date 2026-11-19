@@ -453,7 +453,8 @@ async def test_fill_marks_order_failed_when_batch_exhausts_cash(applied_db):
             user_id,
         )
         signal_date = date(2026, 7, 10)
-        fill_date = date(2026, 7, 11)
+        # Jul 10 was Friday; a Saturday row is not an executable close.
+        fill_date = date(2026, 7, 13)
         order_ids = []
         for _ in range(2):
             oid = await conn.fetchval(
@@ -462,6 +463,11 @@ async def test_fill_marks_order_failed_when_batch_exhausts_cash(applied_db):
                 acct_id, signal_date,
             )
             order_ids.append(oid)
+        # A stray cheap weekend quote must not make both orders affordable.
+        await conn.execute(
+            "INSERT INTO daily_prices (ticker,date,close) VALUES ('AAPL',$1,50.0)",
+            date(2026, 7, 11),
+        )
         # 6 shares @ 100 = 600; two orders = 1200 > 1000 cash available.
         await conn.execute(
             "INSERT INTO daily_prices (ticker, date, close) VALUES ('AAPL', $1, 100.0) "
