@@ -25,6 +25,13 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
   const exceptionCount = exceptions
     ? exceptions.unfilled + exceptions.exited + exceptions.stale_marks + exceptions.missing_marks
     : 0;
+  const benchmarkGaps = (["SPY", "RSP"] as const).flatMap((ticker) => {
+    const status = summary.benchmark_status?.[ticker];
+    if (!status || status === "complete") return [];
+    return [locale === "zh"
+      ? `${ticker}：${status === "missing" ? "暂无基准数据" : "部分期间缺数据"}`
+      : `${ticker}: ${status === "missing" ? "no benchmark data" : "missing periods"}`];
+  });
   return (
     <div className="border-t border-tm-rule px-3 py-3">
       <p className="mb-3 text-xs text-tm-warn">{locale === "zh" ? `战术账本估值截至 ${continuous?.last_valuation_date ?? "—"}；战略账本估值截至 ${strategic?.last_valuation_date ?? "—"}。以下不是实时市值，历史回测与连续账户不可混作同一条收益。` : `Tactical valued through ${continuous?.last_valuation_date ?? "—"}; strategic through ${strategic?.last_valuation_date ?? "—"}. Not live market values; legacy and continuous books are distinct.`}</p>
@@ -56,6 +63,9 @@ export default function PaperL2Evidence({ summary }: { readonly summary: L2Summa
         <Metric label="5/10/20 bps" value={[5, 10, 20].map((bps) => pct(summary.cost_sensitivity?.[String(bps)])).join(" / ")} />
         <Metric label={t(locale, "sim.l2.exceptions")} value={String(exceptionCount)} />
       </div>
+      {benchmarkGaps.length > 0 ? (
+        <p className="mt-2 text-xs text-tm-muted">{benchmarkGaps.join(" · ")}</p>
+      ) : null}
       {summary.sector_exposure.length > 0 ? (
         <p className="mt-2 font-tm-mono text-xs text-tm-muted">
           {t(locale, "sim.l2.sectors")} {summary.sector_exposure.slice(0, 3).map((row) => `${row.sector} ${(row.weight * 100).toFixed(1)}%`).join(" · ")}

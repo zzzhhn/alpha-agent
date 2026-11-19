@@ -8,6 +8,8 @@ from alpha_agent.paper import bot_store as store
 from alpha_agent.paper.bot_models import BotConfig
 from alpha_agent.paper.market_clock import NEW_YORK, as_utc, market_session, target_slot_times
 
+_SCHEDULE_BATCH_SIZE = 20
+
 
 def schedule_observations(config, recorded, now=None, *, scheduled_runs=()):
     """Overlay bounded expected slots without pretending a worker observed them.
@@ -56,8 +58,32 @@ async def enqueue_due(pool, now=None):
     capacity = await read_capacity(pool)
     if not capacity['allow_writes']:
         return {'enqueued': 0, 'reason': 'storage_headroom_low'}
-    rows = await pool.fetch("SELECT a.id,a.user_id,c.config,c.config_version,c.updated_at FROM sim_account a JOIN sim_bot_config c ON c.account_id=a.id WHERE a.kind='bot' AND a.status='active' AND c.config->>'schedule_enabled'='true' ORDER BY a.id LIMIT 20")
     slots = target_slot_times(now)
+    # Bounded across carrier calls, not fixed to the lowest account IDs.
+    # Prioritize due obligations that have not been attempted; blocked
+    # accounts may retry with any remaining capacity inside the same window.
+    selection_slot = 'close_before' if as_utc(slots['close_before']) <= now else 'open_after'
+    selection_due = as_utc(slots[selection_slot])
+    enabled_key = 'open_enabled' if selection_slot == 'open_after' else 'close_enabled'
+    rows = await pool.fetch(
+        """
+        SELECT a.id,a.user_id,c.config,c.config_version,c.updated_at
+        FROM sim_account a
+        JOIN sim_bot_config c ON c.account_id=a.id
+        LEFT JOIN sim_bot_schedule_slot receipt ON receipt.account_id=a.id
+            AND receipt.session_date=$1 AND receipt.slot=$2
+        WHERE a.kind='bot' AND a.status='active'
+            AND c.config->>'schedule_enabled'='true'
+            AND COALESCE(c.config->>$3::text,'true')='true' AND c.updated_at<=$4
+            AND (receipt.status IS NULL OR receipt.status IN ('planned','blocked'))
+        ORDER BY CASE WHEN receipt.status IS NULL OR (receipt.status='planned' AND $4<=$5) THEN 0
+                      WHEN receipt.status='blocked' THEN 1 ELSE 2 END,
+                 receipt.observed_at NULLS FIRST,a.id
+        LIMIT $6
+        """,
+        datetime.fromisoformat(slots['session_date']).date(), selection_slot, enabled_key,
+        selection_due, now, _SCHEDULE_BATCH_SIZE,
+    )
     count, deduplicated, missed, skipped = 0, 0, 0, []
     window_open = market['is_open'] and any(
         as_utc(slots[slot]) <= now < as_utc(slots[slot]) + timedelta(minutes=20)
@@ -94,7 +120,7 @@ async def enqueue_due(pool, now=None):
             'observed_accounts': len(rows), 'missed_observations': missed,
             'observed_at': now.isoformat(), 'session_date': market['session_date'],
             'window_open': window_open, 'market_open': market['is_open'],
-            'reason': ('no_enabled_accounts' if not rows else
+            'reason': ('no_eligible_accounts_for_slot' if not rows else
                        'outside_schedule_window' if not window_open else 'slots_checked'),
             'skipped': skipped}
 
@@ -105,6 +131,9 @@ async def record_slot(pool, account, slots, slot, due, now, status, reason, run_
         'INSERT INTO sim_bot_schedule_slot(account_id,session_date,slot,planned_at,observed_at,config_version,status,reason,run_id) '
         'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(account_id,session_date,slot) DO UPDATE SET '
         'observed_at=EXCLUDED.observed_at,status=EXCLUDED.status,reason=EXCLUDED.reason,run_id=EXCLUDED.run_id '
-        "WHERE sim_bot_schedule_slot.status<>'enqueued' AND (sim_bot_schedule_slot.status<>EXCLUDED.status OR sim_bot_schedule_slot.reason IS DISTINCT FROM EXCLUDED.reason) RETURNING status",
+        "WHERE sim_bot_schedule_slot.status<>'enqueued' AND (EXCLUDED.status='enqueued' OR "
+        "(EXCLUDED.observed_at>=sim_bot_schedule_slot.observed_at AND "
+        "(sim_bot_schedule_slot.status<>EXCLUDED.status OR sim_bot_schedule_slot.reason IS DISTINCT FROM EXCLUDED.reason "
+        "OR (EXCLUDED.status='blocked' AND EXCLUDED.observed_at>sim_bot_schedule_slot.observed_at)))) RETURNING status",
         account['id'], datetime.fromisoformat(slots['session_date']).date(), slot, due, now,
         account['config_version'], status, reason, uuid.UUID(run_id) if run_id else None)

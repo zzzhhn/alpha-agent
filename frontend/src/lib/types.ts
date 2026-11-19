@@ -391,8 +391,9 @@ export interface ZooCorrelationWarning {
 
 export interface ZooCorrelationResponse {
   readonly names: readonly string[];
-  readonly matrix: readonly (readonly number[])[];
+  readonly matrix: readonly (readonly (number | null)[])[];
   readonly warnings: readonly ZooCorrelationWarning[];
+  readonly warn_threshold: number;
   readonly n_sessions: number;
 }
 
@@ -696,8 +697,8 @@ export interface ScreenerRequest {
 
 export interface PerFactorScore {
   readonly factor_idx: number;
-  readonly raw: number;
-  readonly z: number;
+  readonly raw: number | null;
+  readonly z: number | null;
   readonly contribution: number;
 }
 

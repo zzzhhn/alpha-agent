@@ -13,8 +13,11 @@ wq-alpha-research SKILL). Base: https://api.worldquantbrain.com.
 from __future__ import annotations
 
 import asyncio
+import math
 from dataclasses import dataclass
-from typing import Any, Optional
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import Any, Literal, Optional
 
 import httpx
 
@@ -59,6 +62,32 @@ class BrainError(Exception):
 
 class BrainAuthError(BrainError):
     """Authentication rejected (bad credentials / not authorized)."""
+
+    retry_after_sec: int | None = None
+
+
+@dataclass(frozen=True)
+class BrainSubmitReceipt:
+    status: Literal["submitted", "submit_rejected", "submit_unknown", "submit_rate_limited"]
+    retry_after_sec: int | None = None
+
+
+def _submit_retry_after(value: str | None) -> int:
+    """Convert a delay (including BRAIN fractions) or HTTP-date to seconds."""
+    # An untrusted header must not overflow Postgres interval or browser timers.
+    max_delay = 365 * 24 * 60 * 60
+    if value:
+        try:
+            return max(1, min(max_delay, math.ceil(float(value))))
+        except (ValueError, OverflowError):
+            try:
+                when = parsedate_to_datetime(value)
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=timezone.utc)
+                return max(1, min(max_delay, math.ceil((when - datetime.now(timezone.utc)).total_seconds())))
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return 60
 
 
 class BrainSimulationError(BrainError):
@@ -255,9 +284,12 @@ class BrainClient:
         """Prime the session. 201 = authorized; anything else is an auth error."""
         resp = await self._client.post("/authentication")
         if resp.status_code != 201:
-            raise BrainAuthError(
+            error = BrainAuthError(
                 f"BRAIN authentication failed: HTTP {resp.status_code}"
             )
+            if resp.status_code == 429:
+                error.retry_after_sec = _submit_retry_after(resp.headers.get("Retry-After"))
+            raise error
 
     async def simulate(
         self, expression: str, settings: Optional[dict] = None
@@ -546,12 +578,35 @@ class BrainClient:
             offset += page_size
         return out[:limit]
 
-    async def submit(self, alpha_id: str) -> bool:
-        """POST /alphas/{id}/submit. Returns True on 201 (accepted). NOTE: 201 is
-        NOT the same as going ACTIVE — the caller re-reads status to confirm.
-        Only called from a user-approved action, never automatically."""
-        resp = await self._client.post(f"/alphas/{alpha_id}/submit")
-        return resp.status_code in (200, 201)
+    async def submit(self, alpha_id: str) -> BrainSubmitReceipt:
+        """Send one user-approved POST. Never retry an uncertain outcome."""
+        try:
+            resp = await self._client.post(f"/alphas/{alpha_id}/submit", follow_redirects=False)
+        except httpx.RequestError:
+            return BrainSubmitReceipt("submit_unknown")
+
+        if resp.status_code in (200, 201):
+            return BrainSubmitReceipt("submitted")
+        if resp.status_code == 429:
+            return BrainSubmitReceipt("submit_rate_limited", _submit_retry_after(resp.headers.get("Retry-After")))
+        if resp.status_code in (400, 401, 403, 404, 405, 410, 412, 415, 422):
+            return BrainSubmitReceipt("submit_rejected")
+        # A conflict can mean already submitted; timeout, upstream error, and
+        # unrecognized responses do not prove that the action did not occur.
+        return BrainSubmitReceipt("submit_unknown")
+
+    async def get_confirmed_submission_status(self, alpha_id: str) -> Literal["active", "submitted"] | None:
+        """Read BRAIN state. Only a positive confirmation can resolve an unknown POST."""
+        resp = await self._client.get(f"/alphas/{alpha_id}")
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, dict) and data.get("id") == alpha_id:
+            status = str(data.get("status", "")).upper()
+            if status == "ACTIVE":
+                return "active"
+            if status == "SUBMITTED":
+                return "submitted"
+        return None
 
     async def aclose(self) -> None:
         await self._client.aclose()

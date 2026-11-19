@@ -948,12 +948,13 @@ function CorrelationPanel({
 }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
-  const { names, matrix, warnings } = data;
-  const ambiguousZero = matrix.some((row, i) => row.some((value, j) => i !== j && value === 0));
+  const { names, matrix, warnings, warn_threshold: threshold } = data;
+  const hasUndefined = matrix.some((row) => row.some((value) => value === null));
 
-  function cellTone(v: number): string {
-    if (Math.abs(v) >= 0.95) return "bg-tm-neg-soft text-tm-neg";
-    if (Math.abs(v) >= 0.8) return "bg-tm-warn-soft text-tm-warn";
+  function cellTone(v: number | null): string {
+    if (v === null) return "text-tm-muted";
+    if (Math.abs(v) >= Math.max(0.95, threshold)) return "bg-tm-neg-soft text-tm-neg";
+    if (Math.abs(v) >= threshold) return "bg-tm-warn-soft text-tm-warn";
     return "text-tm-fg-2";
   }
 
@@ -962,7 +963,7 @@ function CorrelationPanel({
       {warnings.length > 0 && (
         <details className="border-b border-tm-rule bg-tm-bg-2 px-3 py-2.5">
           <summary className="cursor-pointer font-tm-mono text-xs font-semibold text-tm-warn">
-            {zh ? `${warnings.length} 对需复查（|相关系数| ≥ 0.8）` : `${warnings.length} pairs to review (|correlation| ≥ 0.8)`}
+            {zh ? `${warnings.length} 对需复查（|相关系数| ≥ ${threshold}）` : `${warnings.length} pairs to review (|correlation| ≥ ${threshold})`}
           </summary>
           <ul className="mt-2 flex max-h-44 flex-col gap-1 overflow-y-auto">
             {warnings.map((w) => (
@@ -982,9 +983,9 @@ function CorrelationPanel({
           </ul>
         </details>
       )}
-      {ambiguousZero && (
+      {hasUndefined && (
         <p className="px-3 py-2 text-xs text-tm-muted">
-          {zh ? "—：接口的零值可能来自重叠数据不足，不能据此判断因子不相关。" : "—: The API also returns zero for insufficient overlap, so this does not establish no correlation."}
+          {zh ? "—：共同收益样本不足，或其中一组收益没有波动，无法计算相关系数。" : "—: Not enough shared returns, or one return series has no variation."}
         </p>
       )}
       <TmTableFrame className="max-h-96 overflow-y-auto px-3 py-3" tabIndex={0} role="region" aria-label={t(locale, "zoo.corr.title")}>
@@ -1016,7 +1017,7 @@ function CorrelationPanel({
                     textAlign="center"
                     className={`px-2 py-1 ${i === j ? "bg-tm-bg-2 text-tm-muted" : cellTone(v)}`}
                   >
-                    {i !== j && v === 0 ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}`}
+                    {v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(2)}`}
                   </TmTableCell>
                 ))}
               </TmTableRow>

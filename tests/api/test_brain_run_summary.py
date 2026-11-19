@@ -121,9 +121,8 @@ async def test_brain_summary_missing_migration(authed_client, applied_db, missin
     finally:
         await conn.close()
     response = authed_client.get("/api/brain/runs/summary", headers=_auth(1))
-    assert response.status_code == 200, response.text
-    assert response.json()["total_runs"] == 0
-    assert response.json()["last_30d"] == []
+    assert response.status_code == 503, response.text
+    assert response.json() == {"detail": "BRAIN run summary unavailable"}
 
 
 def test_brain_summary_unauthenticated(authed_client):

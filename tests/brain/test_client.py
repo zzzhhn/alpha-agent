@@ -289,9 +289,9 @@ async def test_fetch_data_field_metadata_preserves_coverage_and_provenance():
 
 
 @pytest.mark.asyncio
-async def test_submit_true_on_201():
+async def test_submit_receipt_accepted_on_201():
     c = _client(lambda req: httpx.Response(201))
-    assert await c.submit("A1") is True
+    assert (await c.submit("A1")).status == "submitted"
     await c.aclose()
 
 

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from alpha_agent.api.cache_headers import set_public_cache
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.core.types import RouterHealth
+from alpha_agent.scheduling.ticks import FAST_OFFSETS, PRICE_SLICE
 from alpha_agent.signals.registry import all_signal_names as _all_signal_names
 
 router = APIRouter(prefix="/api/_health", tags=["health"])
@@ -340,6 +341,35 @@ async def health_dag() -> dict[str, Any]:
         WITH requirements AS (
             SELECT * FROM unnest($1::text[], $2::timestamptz[], $3::int[])
                 AS r(name, window_start, required_runs)
+        ), shard_attempts AS (
+            SELECT DISTINCT ON (details->>'unit', details->>'offset')
+                   details->>'unit' AS name, (details->>'offset')::int AS shard_offset,
+                   COALESCE(finished_at,started_at) AS observed_at,
+                   finished_at IS NOT NULL AND ok AS ok,
+                   (details->>'expected_shards')::int AS expected_shards
+            FROM cron_runs
+            WHERE cron_name='tick_daily_close'
+              AND started_at >= $5 AND started_at < $5 + interval '1 day'
+              AND details->>'market_date'=$4
+              AND details->>'unit' IN ('daily_prices','fast_intraday')
+              AND details->>'offset' ~ '^[0-9]{1,3}$'
+            ORDER BY details->>'unit', details->>'offset', started_at DESC, id DESC
+        ), shard_sizes AS (
+            SELECT r.name, COALESCE(MAX(a.expected_shards), r.required_runs)::int AS required_runs
+            FROM requirements r LEFT JOIN shard_attempts a ON a.name=r.name
+            WHERE r.name IN ('daily_prices','fast_intraday')
+            GROUP BY r.name,r.required_runs
+        ), shard_window AS (
+            SELECT s.name, MAX(a.observed_at) AS observed_at,
+                   COALESCE(BOOL_AND(a.ok),false) AS ok,
+                   COUNT(*) FILTER (WHERE NOT a.ok) AS error_count,
+                   COUNT(a.shard_offset) AS observed_runs, s.required_runs,
+                   NULL::date AS scheduled_for_date
+            FROM shard_sizes s
+            LEFT JOIN shard_attempts a ON a.name=s.name AND a.shard_offset IN (
+                SELECT i * CASE WHEN s.name='daily_prices' THEN $6::int ELSE $7::int END
+                FROM generate_series(0,s.required_runs-1) AS i)
+            GROUP BY s.name,s.required_runs
         ), cron_window AS (
             SELECT r.name, MAX(cr.finished_at) AS observed_at,
                    COALESCE(
@@ -358,6 +388,7 @@ async def health_dag() -> dict[str, Any]:
                    r.required_runs, NULL::date AS scheduled_for_date
             FROM requirements r
             LEFT JOIN cron_runs cr ON cr.cron_name=r.name
+            WHERE r.name NOT IN ('daily_prices','fast_intraday')
             GROUP BY r.name, r.window_start, r.required_runs
         ), latest_publish AS (
             SELECT 'recommendation_publish'::text AS name,
@@ -371,6 +402,7 @@ async def health_dag() -> dict[str, Any]:
             LIMIT 1
         )
         SELECT * FROM cron_window
+        UNION ALL SELECT * FROM shard_window
         UNION ALL
         SELECT * FROM latest_publish
         """,
@@ -385,13 +417,14 @@ async def health_dag() -> dict[str, Any]:
             for name, item in _DAG_REQUIREMENTS.items()
             if name != "recommendation_publish"
         ],
+        required_session, windows["daily_prices"], PRICE_SLICE, FAST_OFFSETS[1],
     )
     by_name = {row["name"]: row for row in rows}
     nodes: list[dict[str, Any]] = []
     for name, requirement in _DAG_REQUIREMENTS.items():
         cadence_hours = int(requirement["cadence_hours"])
-        required_runs = int(requirement["required_runs"])
         row = by_name.get(name)
+        required_runs = int(row["required_runs"] if row else requirement["required_runs"])
         observed_at = row["observed_at"] if row else None
         if observed_at is not None and observed_at.tzinfo is None:
             observed_at = observed_at.replace(tzinfo=UTC)

@@ -43,6 +43,7 @@ import {
   fetchAlphaPnl,
   fetchAlphaYearly,
   fetchMineStatus,
+  reconcileBrainSubmission,
   submitBrainAlpha,
   triggerMining,
   type BrainAlpha,
@@ -53,6 +54,7 @@ import {
   type PnlPoint,
   type YearlyRow,
 } from "@/lib/api/brain";
+import { ApiException } from "@/lib/api/client";
 import { DEFAULT_BRAIN_PAGE_SIZE, brainSubmissionState, familyLabel, hasUnsimulatedCandidates, nextExpandedAlpha, runFailureAction, translateBrainDiagnostic, type BrainSubmissionState } from "./brain-review";
 
 type WorkbenchView = "results" | "audit";
@@ -193,45 +195,106 @@ function candidateVerdict(alpha: BrainAlpha): CandidateVerdict {
 }
 
 // ── submit control (two-step confirm, matches the app's forgiveness pattern) ──
-type SubmitState = "idle" | "confirm" | "sending" | "error" | BrainSubmissionState;
+type SubmitState = "idle" | "confirm" | "sending" | "checking";
 
 function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [state, setState] = useState<SubmitState>("idle");
   const [msg, setMsg] = useState<string | null>(null);
+  const [localResult, setLocalResult] = useState<BrainSubmissionState | null>(null);
+  const [localRetryAt, setLocalRetryAt] = useState(0);
+  const [, wakeRetryTimer] = useState(0);
   const recorded = brainSubmissionState(alpha);
-  const result = state === "accepted" || state === "rejected" ? state : recorded;
+  const result = recorded === "accepted" || recorded === "active" ? recorded : localResult ?? recorded;
+  const retryAt = Math.max(localRetryAt, Date.parse(alpha.submit_retry_at ?? "") || 0);
+  const coolingDown = result === "rate_limited" && retryAt > Date.now();
 
-  if (result) {
+  useEffect(() => {
+    if (!coolingDown) return;
+    let timer: number;
+    const wake = () => {
+      const remaining = retryAt - Date.now();
+      if (remaining > 0) timer = window.setTimeout(wake, Math.min(2_147_483_647, remaining));
+      else wakeRetryTimer((n) => n + 1);
+    };
+    wake();
+    return () => window.clearTimeout(timer);
+  }, [coolingDown, retryAt]);
+
+  async function checkStatus() {
+    setState("checking");
+    setMsg(null);
+    try {
+      const r = await reconcileBrainSubmission(alpha.id);
+      setLocalResult(brainSubmissionState(r));
+      onDone();
+    } catch {
+      setMsg(zh ? "暂时无法核对 BRAIN 状态。" : "Could not check the BRAIN status.");
+    } finally {
+      setState("idle");
+    }
+  }
+
+  if (result === "accepted" || result === "active") {
     return (
-      <span role="status" className={`inline-flex items-center gap-1.5 font-tm-mono text-xs ${result === "accepted" ? "text-tm-pos" : result === "rejected" ? "text-tm-neg" : "text-tm-muted"}`}>
-        {result === "accepted" ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> : null}
-        {result === "accepted"
-          ? (zh ? "BRAIN 已受理" : "Accepted by BRAIN")
-          : result === "rejected"
-            ? (zh ? "BRAIN 未接受本次提交" : "BRAIN rejected this submission")
-            : (zh ? "已尝试提交，未确认受理" : "Submission attempted; acceptance unconfirmed")}
+      <span role="status" className="inline-flex items-center gap-1.5 font-tm-mono text-xs text-tm-pos">
+        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+        {result === "active" ? (zh ? "BRAIN 已激活" : "Active on BRAIN") : (zh ? "BRAIN 已受理" : "Accepted by BRAIN")}
       </span>
+    );
+  }
+
+  if (result === "attempted") {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span role="status" className="font-tm-mono text-xs text-tm-warn">
+          {zh ? "未确认受理，请先核对状态。" : "Acceptance unconfirmed. Check BRAIN status before taking further action."}
+        </span>
+        <TmButton variant="secondary" size="xs" loading={state === "checking"} loadingLabel={zh ? "正在核对" : "Checking"} onClick={checkStatus}>
+          {zh ? "核对 BRAIN 状态" : "Check BRAIN status"}
+        </TmButton>
+        {msg ? <span role="alert" className="font-tm-mono text-xs text-tm-neg">{msg}</span> : null}
+      </div>
     );
   }
 
   async function doSubmit() {
     setState("sending");
+    setMsg(null);
     try {
       const r = await submitBrainAlpha(alpha.id);
-      setState(brainSubmissionState(r) ?? "attempted");
+      setLocalResult(brainSubmissionState(r));
+      setLocalRetryAt(r.retry_after_sec ? Date.now() + r.retry_after_sec * 1000 : 0);
       onDone();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
-      setState("error");
+      if (e instanceof ApiException && [400, 401, 403, 404, 422].includes(e.status)) {
+        setMsg(e.message);
+      } else {
+        // A lost browser/gateway response is indistinguishable from a sent POST.
+        setLocalResult("attempted");
+        onDone();
+      }
+    } finally {
+      setState("idle");
     }
   }
 
-  if (alpha.outcome !== "passed" && alpha.outcome !== "flagged") return null;
+  if (!alpha.alpha_id || (alpha.outcome !== "passed" && alpha.outcome !== "flagged")) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      {result === "rejected" ? (
+        <span role="status" className="font-tm-mono text-xs text-tm-neg">
+          {zh ? "BRAIN 未接受本次提交" : "BRAIN rejected this submission"}
+        </span>
+      ) : result === "rate_limited" ? (
+        <span role="status" className="font-tm-mono text-xs text-tm-warn">
+          {coolingDown
+            ? (zh ? "BRAIN 限流，请稍后重试。" : "BRAIN rate limit reached. Try again later.")
+            : (zh ? "上次提交因限流未送达，可以重试。" : "Last attempt was rate-limited. You can retry.")}
+        </span>
+      ) : null}
       {state === "confirm" ? (
         <>
           <TmButton
@@ -254,6 +317,7 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
         <TmButton
           onClick={() => setState("confirm")}
           loading={state === "sending"}
+          disabled={coolingDown}
           loadingLabel={zh ? "提交中" : "Submitting"}
           variant="secondary"
           size="xs"
@@ -263,11 +327,13 @@ function SubmitControl({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => voi
           ) : (
             <Send className="h-3 w-3" strokeWidth={1.75} />
           )}
-          {zh ? "提交到 BRAIN" : "Submit to BRAIN"}
+          {result === "rejected" || result === "rate_limited"
+            ? (zh ? "重新提交" : "Retry submission")
+            : (zh ? "提交到 BRAIN" : "Submit to BRAIN")}
         </TmButton>
       )}
-      {state === "error" && msg ? (
-        <span className="font-tm-mono text-xs text-tm-neg">{msg}</span>
+      {msg ? (
+        <span role="alert" className="font-tm-mono text-xs text-tm-neg">{msg}</span>
       ) : null}
     </div>
   );
@@ -2187,8 +2253,8 @@ export function BrainMiningPanel() {
                             <code className={`line-clamp-2 min-w-0 break-all leading-snug ${a.is_blend ? "text-tm-accent" : "text-tm-fg"}`}>
                               {a.expression}
                             </code>
-                            {submission === "accepted" ? (
-                              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-tm-pos" aria-label={zh ? "BRAIN 已受理" : "Accepted by BRAIN"} />
+                            {submission === "accepted" || submission === "active" ? (
+                              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-tm-pos" aria-label={submission === "active" ? (zh ? "BRAIN 已激活" : "Active on BRAIN") : (zh ? "BRAIN 已受理" : "Accepted by BRAIN")} />
                             ) : null}
                           </TmRowButton>
                           {a.family || a.alpha_id ? (

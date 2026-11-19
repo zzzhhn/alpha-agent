@@ -590,7 +590,10 @@ def _classify_regimes(
     T = len(benchmark_close)
     regimes = np.full(T, "warmup", dtype=object)
     for t in range(lookback, T):
-        ret = benchmark_close[t] / benchmark_close[t - lookback] - 1.0
+        current, previous = benchmark_close[t], benchmark_close[t - lookback]
+        if not (np.isfinite(current) and np.isfinite(previous) and current > 0 and previous > 0):
+            continue
+        ret = current / previous - 1.0
         if ret > threshold:
             regimes[t] = "bull"
         elif ret < -threshold:
@@ -617,21 +620,18 @@ def _compute_regime_metrics(
     test_bench = benchmark_daily_ret[test_slice]
 
     for regime in ("bull", "sideways", "bear"):
-        mask = (test_regimes == regime)
-        n = int(mask.sum())
+        realized = (test_regimes == regime) & np.isfinite(test_daily_ret)
+        n = int(realized.sum())
         if n < 20:  # too few obs for stable stats
             continue
 
-        rets = test_daily_ret[mask]
-        rets = rets[~np.isnan(rets)]
-        if len(rets) < 20:
-            continue
+        rets = test_daily_ret[realized]
         sr = float(np.mean(rets) / (np.std(rets, ddof=1) + 1e-12) * np.sqrt(252))
 
         # Mean Spearman IC across the days in this regime
         ic_samples = []
-        for i in np.where(mask)[0]:
-            ic = _spearman_ic(test_factor[i], test_fwd_returns[i])
+        for i in np.flatnonzero(realized):
+            ic = _spearman_ic(test_factor[i], test_fwd_returns[i], undefined=np.nan)
             if not np.isnan(ic):
                 ic_samples.append(ic)
         if len(ic_samples) < 10:
@@ -642,14 +642,13 @@ def _compute_regime_metrics(
         ic_p = float(math.erfc(abs(ic_t) / np.sqrt(2.0)))
 
         # Per-regime alpha via OLS on the regime's days only
-        bench_in = test_bench[mask]
-        valid = ~(np.isnan(rets) | np.isnan(bench_in[:len(rets)]))
-        if valid.sum() < 20:
+        paired = realized & np.isfinite(test_bench)
+        if paired.sum() < 20:
             alpha_a = alpha_t = 0.0
             alpha_p = 1.0
         else:
-            r = rets[valid]
-            b = bench_in[:len(rets)][valid]
+            r = test_daily_ret[paired]
+            b = test_bench[paired]
             n_obs = len(r)
             b_mean = b.mean()
             r_mean = r.mean()
@@ -870,13 +869,13 @@ def run_factor_backtest(
             ]
             longs.sort(key=lambda r: -r["weight"])
             shorts.sort(key=lambda r: r["weight"])
-            d_ic = _spearman_ic(factor[ti], fwd_returns[ti]) if ti < T else 0.0
+            d_ic = _spearman_ic(factor[ti], fwd_returns[ti])
             daily_breakdown.append({
                 "date": str(panel.dates[ti]),
                 "long_basket": longs,
                 "short_basket": shorts,
                 "daily_return": float(daily_ret[ti]) if not np.isnan(daily_ret[ti]) else 0.0,
-                "daily_ic": float(d_ic) if not np.isnan(d_ic) else 0.0,
+                "daily_ic": d_ic,
             })
 
     # A7 (v3): rolling per-window metrics. Static mode skips this so payload
@@ -937,7 +936,7 @@ def run_factor_backtest(
         fwd_returns=fwd_returns,
         benchmark_daily_ret=bench_daily,
         regimes=regimes,
-        test_slice=slice(train_end, T),
+        test_slice=slice(min(T - 1, train_end + embargo_days), T),
     )
 
     # Bundle B (T4.1) — persist the result to the Factor DB for cross-
@@ -952,7 +951,7 @@ def run_factor_backtest(
         from alpha_agent.factor_engine.kernel import spearman_ic
         test_daily_ic: list[float] = []
         for t in range(train_end, T - 1):
-            ic_t = spearman_ic(factor[t], fwd_returns[t])
+            ic_t = spearman_ic(factor[t], fwd_returns[t], undefined=np.nan)
             if not np.isnan(ic_t):
                 test_daily_ic.append(float(ic_t))
 

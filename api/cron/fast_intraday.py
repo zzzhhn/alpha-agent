@@ -128,9 +128,9 @@ async def handler(
     now = datetime.now(UTC)
     identity = run_key or f"{now.date()}:{int(now.timestamp()) // 1800}"
     lock_name = f"fast_intraday:{tier}:{offset or 0}:{identity}"
-    async with pool.acquire() as lock_conn:
+    async with pool.acquire() as lock_conn, lock_conn.transaction():
         acquired = await lock_conn.fetchval(
-            "SELECT pg_try_advisory_lock(hashtext($1))", lock_name
+            "SELECT pg_try_advisory_xact_lock(hashtext($1))", lock_name
         )
         if not acquired:
             return {
@@ -141,12 +141,7 @@ async def handler(
                 "rows_written": 0,
                 "errors": [],
             }
-        try:
-            return await _run_handler(limit=limit, offset=offset, tier=tier)
-        finally:
-            await lock_conn.execute(
-                "SELECT pg_advisory_unlock(hashtext($1))", lock_name
-            )
+        return await _run_handler(limit=limit, offset=offset, tier=tier)
 
 
 async def _run_handler(

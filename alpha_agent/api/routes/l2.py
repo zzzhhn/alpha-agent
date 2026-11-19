@@ -242,6 +242,26 @@ def _beta(strategy: list[float], benchmark: list[float]) -> float | None:
     return sum((s - s_mean) * (b - b_mean) for s, b in pairs) / variance
 
 
+def _benchmark_evidence(returns: list[float | None]) -> tuple[str, list[float | None], float | None]:
+    """Cumulative evidence stops after the first unknown link in the chain."""
+    nav: float | None = 100.0
+    path: list[float | None] = []
+    observed = 0
+    for ret in returns:
+        if ret is None or not math.isfinite(ret):
+            nav = None
+        else:
+            observed += 1
+            if nav is not None:
+                nav *= 1.0 + ret
+        path.append(nav)
+    if not observed:
+        return "missing", path, None
+    if nav is None:
+        return "partial", path, None
+    return "complete", path, nav / 100.0 - 1.0
+
+
 @router.get("/summary")
 async def l2_summary() -> dict[str, Any]:
     """Cost, benchmark, risk and exception evidence from the frozen L2 book."""
@@ -306,29 +326,21 @@ async def l2_summary() -> dict[str, Any]:
     )
 
     net = [float(row["net_return"]) for row in equity if row["net_return"] is not None]
-    spy = [
-        float(row["benchmark_return"])
-        for row in equity if row["benchmark_return"] is not None
-    ]
-    beta_pairs = [
-        (float(row["net_return"]), float(row["benchmark_return"]))
-        for row in equity
-        if row["net_return"] is not None and row["benchmark_return"] is not None
-    ]
+    spy = [float(row["benchmark_return"]) if row["benchmark_return"] is not None else None
+           for row in equity]
+    rsp = [float(row["rsp_return"]) if row["rsp_return"] is not None else None
+           for row in equity]
+    spy_status, spy_curve, spy_return = _benchmark_evidence(spy)
+    rsp_status, rsp_curve, rsp_return = _benchmark_evidence(rsp)
     series: list[dict[str, Any]] = []
-    nav = spy_nav = rsp_nav = 100.0
-    rsp_started = False
-    for row in equity:
+    nav = 100.0
+    for row, spy_nav, rsp_nav in zip(equity, spy_curve, rsp_curve):
         nav *= 1.0 + float(row["net_return"] or 0.0)
-        spy_nav *= 1.0 + float(row["benchmark_return"] or 0.0)
-        if row["rsp_return"] is not None:
-            rsp_nav *= 1.0 + float(row["rsp_return"])
-            rsp_started = True
         series.append({
             "date": row["as_of_date"].isoformat(),
             "nav": nav,
             "spy": spy_nav,
-            "rsp": rsp_nav if rsp_started else None,
+            "rsp": rsp_nav,
         })
 
     cost_sensitivity = {}
@@ -347,19 +359,12 @@ async def l2_summary() -> dict[str, Any]:
         "strategy_version": int(strategy["version"]),
         "periods": len(equity),
         "net_return": _compound(net),
-        "spy_return": _compound(spy),
-        "rsp_return": (
-            _compound([
-                float(row["rsp_return"])
-                for row in equity if row["rsp_return"] is not None
-            ])
-            if any(row["rsp_return"] is not None for row in equity)
-            else None
-        ),
+        "spy_return": spy_return,
+        "rsp_return": rsp_return,
+        "benchmark_status": {"SPY": spy_status, "RSP": rsp_status},
         "beta_spy": _beta(
-            [pair[0] for pair in beta_pairs],
-            [pair[1] for pair in beta_pairs],
-        ),
+            net, [ret for ret in spy if ret is not None],
+        ) if spy_status == "complete" and len(net) == len(equity) else None,
         "max_drawdown": _max_drawdown(net),
         "mean_turnover": (
             sum(float(row["turnover"] or 0.0) for row in equity) / len(equity)

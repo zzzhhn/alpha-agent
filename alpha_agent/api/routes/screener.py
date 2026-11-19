@@ -80,8 +80,8 @@ class ScreenerRequest(BaseModel):
 
 class PerFactorScore(BaseModel):
     factor_idx: int
-    raw: float
-    z: float
+    raw: float | None  # direction-adjusted raw score, if observed
+    z: float | None
     contribution: float  # signed contribution to composite
 
 
@@ -97,7 +97,7 @@ class Recommendation(BaseModel):
 class FactorDiagnostic(BaseModel):
     factor_idx: int
     expression: str
-    in_window_ic: float                # mean Spearman IC over the lookback window
+    in_window_ic: float                # mean direction-adjusted Spearman IC over the window
     used_weight: float                 # actual weight applied in the combine step
     n_eligible: int                    # tickers with non-NaN score after universe filter
 
@@ -113,7 +113,7 @@ class ScreenerResponse(BaseModel):
 
 def _z_score(values: np.ndarray) -> np.ndarray:
     """Cross-sectional z-score, NaN-safe. Returns same shape; NaN preserved."""
-    mask = ~np.isnan(values)
+    mask = np.isfinite(values)
     if int(mask.sum()) < 2:
         return np.full_like(values, np.nan, dtype=np.float64)
     valid = values[mask]
@@ -188,7 +188,7 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
 
     Combine methods:
       equal_z         → mean of z-scores across factors
-      ic_weighted     → weight each z-score by its in-window mean IC (clipped ≥ 0)
+      ic_weighted     → weight by direction-adjusted in-window IC (clipped ≥ 0)
       user_weighted   → use per-factor weights from the request (normalized to sum=1)
     """
     # Lazy import: keeps the rest of the API alive if factor_engine breaks.
@@ -276,12 +276,14 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
 
         # Mask out filtered tickers BEFORE z-scoring — otherwise an excluded
         # outlier inflates the std and crushes everyone else's z.
-        row_raw[~keep_mask] = np.nan
+        row_raw[~keep_mask | ~np.isfinite(row_raw)] = np.nan
         row_z = _z_score(row_raw)
 
         # IC over the lookback window for diagnostics (and ic_weighted mode)
         ic_start = max(0, as_of_idx - body.lookback_days)
         ic_mean = window_ic(factor_full, fwd_returns, ic_start, as_of_idx)
+        if f.direction == "short_only":
+            ic_mean = -ic_mean
 
         z_matrix.append(row_z)
         raw_matrix.append(row_raw)
@@ -316,19 +318,20 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
     for d, w in zip(diagnostics, weights_used):
         d.used_weight = float(w)
 
-    # Composite = weighted sum of z-scores. NaN propagates (any missing
-    # factor → ticker dropped from ranking).
+    # A missing score contributes no evidence. A ticker must have at least
+    # one observed score with nonzero weight to be eligible for ranking.
     composite = np.zeros(N, dtype=np.float64)
+    has_active_score = np.zeros(N, dtype=bool)
     for w, z in zip(weights_used, z_matrix):
-        composite += w * np.nan_to_num(z, nan=0.0)
-    # Mark tickers as ineligible if EVERY factor was NaN for them
-    all_nan_mask = np.all(np.isnan(np.stack(z_matrix, axis=0)), axis=0)
-    composite_masked = composite.copy()
-    composite_masked[all_nan_mask | ~keep_mask] = np.nan
+        if w == 0.0:
+            continue
+        observed = np.isfinite(z)
+        composite[observed] += w * z[observed]
+        has_active_score |= observed
 
     # Top N by composite, descending; drop NaN
-    valid_indices = np.where(~np.isnan(composite_masked))[0]
-    sorted_indices = valid_indices[np.argsort(-composite_masked[valid_indices])]
+    valid_indices = np.flatnonzero(keep_mask & has_active_score)
+    sorted_indices = valid_indices[np.argsort(-composite[valid_indices], kind="stable")]
     top = sorted_indices[: body.top_n]
 
     sector_row = panel.sector[as_of_idx] if panel.sector is not None else None
@@ -345,13 +348,13 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
             )
             per_factor.append(PerFactorScore(
                 factor_idx=f_idx,
-                raw=float(raw_val) if not np.isnan(raw_val) else 0.0,
-                z=float(z_val) if not np.isnan(z_val) else 0.0,
+                raw=float(raw_val) if np.isfinite(raw_val) else None,
+                z=float(z_val) if np.isfinite(z_val) else None,
                 contribution=float(contribution),
             ))
         recs.append(Recommendation(
             ticker=str(panel.tickers[i]),
-            composite_score=float(composite_masked[i]),
+            composite_score=float(composite[i]),
             rank=rank,
             sector=str(sector_row[i]) if sector_row is not None else None,
             cap=(
@@ -367,7 +370,7 @@ def run_screener(body: ScreenerRequest) -> ScreenerResponse:
         factor_diagnostics=diagnostics,
         metadata={
             "as_of_date": str(panel.dates[as_of_idx]),
-            "n_eligible_tickers": int(keep_mask.sum()),
+            "n_eligible_tickers": int(valid_indices.size),
             "method": body.combine_method,
             "lookback_days": body.lookback_days,
             "neutralize": body.neutralize,

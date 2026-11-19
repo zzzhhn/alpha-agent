@@ -1,5 +1,6 @@
 """Bounded valuation and API/cron isolation without a database process/network."""
 import asyncio
+import asyncpg
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -62,6 +63,11 @@ class Book:
 
     async def fetchrow(self, sql, *args):
         self.queries.append(sql)
+        if 'FROM sim_equity_daily' in sql:
+            assert self.depth == 1
+            if self.snapshot and self.snapshot[:3] == args[:3] and self.snapshot[10] == args[3]:
+                return {'benchmark_close': self.snapshot[7]}
+            return None
         assert "kind='bot'" in sql
         return dict(self.account)
 
@@ -78,9 +84,60 @@ class Book:
         if sql.startswith('UPDATE sim_position'):
             row = next(row for row in self.positions if row['ticker'] == args[5])
             row.update(mark_price=args[0], mark_at=args[1], price_quality=args[2])
+        elif sql.startswith('UPDATE sim_equity_daily'):
+            assert self.snapshot[:3] == args[:3]
+            updated = list(self.snapshot)
+            updated[7], updated[10] = args[3:]
+            self.snapshot = tuple(updated)
         else:
             assert sql.startswith('INSERT INTO sim_equity_daily')
             self.snapshot = args
+
+
+async def test_cash_book_does_not_promote_fresh_intraday_spy_to_close(monkeypatch):
+    book = Book([])
+    monkeypatch.setattr(valuation, 'fetch_bars', AsyncMock(return_value=bars()))
+    result = await valuation.refresh_marks(book, 22, NOW)
+    assert result['benchmark_close'] is None
+    assert book.snapshot[7] is None
+
+
+async def test_cash_book_preserves_verified_close_when_retry_has_no_spy(monkeypatch):
+    closing = datetime(2026, 11, 2, 21, tzinfo=UTC)
+    book = Book([])
+    monkeypatch.setattr(valuation, 'fetch_bars', AsyncMock(side_effect=[bars(closing), []]))
+    first = await valuation.refresh_marks(book, 22, closing)
+    retried = await valuation.refresh_marks(book, 22, closing + timedelta(minutes=5))
+    assert first['benchmark_close'] == 100
+    assert retried['benchmark_close'] == book.snapshot[7] == 100
+    assert retried['benchmark_quality'] == 'session_close'
+
+
+async def test_close_provenance_persists_in_db_without_relabeling_legacy_intraday(monkeypatch, applied_db):
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    closing = datetime(2026, 11, 2, 21, tzinfo=UTC)
+    try:
+        uid = await pool.fetchval("INSERT INTO users (email) VALUES ('benchmark@test.com') RETURNING id")
+        aid = await pool.fetchval(
+            "INSERT INTO sim_account (user_id,kind,created_at) VALUES ($1,'bot',$2) RETURNING id", uid, NOW,
+        )
+        await pool.execute(
+            "INSERT INTO sim_equity_daily (account_id,as_of_date,portfolio_value,cash,realized_pnl,benchmark_close,valued_at) "
+            "VALUES ($1,$2,1000000,1000000,0,110,$3)",
+            aid, NOW.date(), NOW,
+        )
+        monkeypatch.setattr(valuation, 'fetch_bars', AsyncMock(side_effect=[[], bars(closing), []]))
+        unknown = await valuation.refresh_marks(pool, aid, closing)
+        known = await valuation.refresh_marks(pool, aid, closing + timedelta(minutes=1))
+        retained = await valuation.refresh_marks(pool, aid, closing + timedelta(minutes=2))
+        assert unknown['benchmark_close'] is None
+        assert known['benchmark_close'] == retained['benchmark_close'] == 100
+        record = await pool.fetchrow(
+            "SELECT benchmark_close,benchmark_close_at FROM sim_equity_daily WHERE account_id=$1", aid,
+        )
+        assert tuple(record) == (100, closing)
+    finally:
+        await pool.close()
 
 
 async def test_refresh_uses_raw_marks_and_cash_reread_without_network_locks(monkeypatch):
@@ -97,7 +154,7 @@ async def test_refresh_uses_raw_marks_and_cash_reread_without_network_locks(monk
     assert calls == ['SPY', 'AAPL']
     assert result['portfolio_value'] == 1000
     assert result['unrealized_pnl'] == 20
-    assert result['benchmark_close'] == 100
+    assert result['benchmark_close'] is None and result['benchmark_quality'] == 'not_closed'
     assert result['valuation_quality'] == 'fresh'
     assert book.snapshot[2].isoformat() == '2026-11-02'
     assert book.snapshot[4] == 800
@@ -175,7 +232,7 @@ async def test_real_clock_uses_post_fetch_instant_not_request_start(monkeypatch)
     )))
     result = await valuation.refresh_marks(book, 22)
     assert result['portfolio_value'] == 1200
-    assert result['benchmark_close'] == 100
+    assert result['benchmark_close'] is None
 
 
 async def test_explicit_asof_does_not_accept_evidence_from_future(monkeypatch):
@@ -314,13 +371,13 @@ async def test_empty_human_order_batch_still_writes_equity(monkeypatch):
 
     book = Book([])
     book.fetch = AsyncMock(return_value=[])
-    book.fetchval = AsyncMock(return_value=0)
+    book.fetchval = AsyncMock(side_effect=[None, 0])
     snapshot = AsyncMock()
     monkeypatch.setattr(cron_routes, '_write_paper_equity_snapshots', snapshot)
     result = await cron_routes._run_paper_fill_locked(book, NOW.date())
     assert result['filled'] == 0
     snapshot.assert_awaited_once_with(book, NOW.date())
-    sql = book.fetch.call_args.args[0]
+    sql = book.fetchval.call_args.args[0]
     assert "sa.kind='human'" in sql and "so.execution_model='daily_close_v1'" in sql
 
 

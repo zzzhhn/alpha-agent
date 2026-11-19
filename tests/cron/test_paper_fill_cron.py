@@ -24,7 +24,7 @@ async def test_paper_fill_market_order_fills_at_t1(applied_db):
             acct_id, signal_date,
         )
         # Seed: T+1 price
-        fill_date = date(2026, 7, 11)
+        fill_date = date(2026, 7, 13)  # Monday after the Friday signal
         await conn.execute(
             "INSERT INTO daily_prices (ticker, date, close) VALUES ('AAPL', $1, 185.0) "
             "ON CONFLICT DO NOTHING", fill_date
@@ -93,6 +93,51 @@ async def test_paper_fill_limit_order_expires(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_no_quote_expiry_and_cross_are_not_starved_by_missing_market_quotes(applied_db):
+    from alpha_agent.api.routes.cron_routes import _run_paper_fill_locked
+
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        async with pool.acquire() as conn:
+            uid = await conn.fetchval("INSERT INTO users(email) VALUES ('backlog@test.com') RETURNING id")
+            aid = await conn.fetchval("INSERT INTO sim_account(user_id) VALUES ($1) RETURNING id", uid)
+            await conn.execute(
+                "INSERT INTO sim_order(account_id,ticker,side,order_type,qty,signal_date) "
+                "SELECT $1,'STALE','buy','market',1,$2 FROM generate_series(1,205)",
+                aid, date(2026, 7, 2),
+            )
+            await conn.execute(
+                "INSERT INTO sim_order(account_id,ticker,side,order_type,qty,signal_date,limit_price,expire_after_days) "
+                "VALUES ($1,'MISSING','buy','limit',1,$2,100,2), "
+                "       ($1,'CROSS','buy','limit',1,$2,100,2), "
+                "       ($1,'LATE','buy','limit',1,$2,100,2)",
+                aid, date(2026, 7, 2),
+            )
+            await conn.executemany(
+                "INSERT INTO daily_prices(ticker,date,close) VALUES ($1,$2,$3)",
+                [
+                    ("STALE", date(2026, 7, 3), 99.0),  # market holiday
+                    ("STALE", date(2026, 7, 7), 99.0),  # not exact T+1
+                    ("CROSS", date(2026, 7, 7), 99.0),  # last eligible close
+                    ("LATE", date(2026, 7, 8), 99.0),  # after the expiry window
+                ],
+            )
+        result = await _run_paper_fill_locked(pool, date(2026, 7, 8))
+        assert (result["filled"], result["expired"], result["remaining_pending"]) == (1, 2, 205)
+        assert result["market_pending_policy"] == "await_exact_t1_close"
+        rows = await pool.fetch(
+            "SELECT ticker,status,fill_date,fill_price FROM sim_order WHERE order_type='limit' ORDER BY ticker"
+        )
+        assert [tuple(row) for row in rows] == [
+            ("CROSS", "filled", date(2026, 7, 7), 100.0),
+            ("LATE", "expired", None, None),
+            ("MISSING", "expired", None, None),
+        ]
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
 async def test_paper_fill_skips_when_another_invocation_holds_job_lock(applied_db):
     """The second invocation returns immediately instead of doubling DB work."""
     conn = await asyncpg.connect(applied_db)
@@ -142,7 +187,7 @@ async def test_paper_fill_skips_a_row_locked_by_another_worker(applied_db):
         )
         await conn.execute(
             "INSERT INTO daily_prices (ticker, date, close) VALUES ('MSFT', $1, 420.0)",
-            signal_date + timedelta(days=1),
+            date(2026, 7, 13),
         )
 
         async with conn.transaction():

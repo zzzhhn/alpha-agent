@@ -17,7 +17,8 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import UTC, datetime
+from bisect import bisect_right
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -459,6 +460,7 @@ async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
 
 async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
     """Process one bounded fill batch while the job advisory lock is held."""
+    from alpha_agent.market_session import xnys_sessions
     from alpha_agent.paper.fill_engine import (
         compute_limit_fill,
         compute_market_fill,
@@ -473,25 +475,65 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
     skipped_locked = 0
 
     async with pool.acquire() as conn:
-        pending_orders = await conn.fetch(
-            "SELECT so.* FROM sim_order so "
-            "JOIN sim_account sa ON sa.id=so.account_id "
-            "WHERE so.status='pending' AND so.cohort_id=sa.reset_count "
-            "AND sa.kind='human' AND so.execution_model='daily_close_v1' AND EXISTS ("
-            "  SELECT 1 FROM daily_prices dp "
-            "  WHERE dp.ticker=so.ticker AND dp.date>so.signal_date"
-            ") "
-            "ORDER BY CASE WHEN so.order_type='market' THEN 0 ELSE 1 END, "
-            "so.created_at, so.id LIMIT $1",
-            _PAPER_FILL_BATCH_SIZE,
+        pending_filter = (
+            "so.status='pending' AND so.cohort_id=sa.reset_count "
+            "AND sa.kind='human' AND so.execution_model='daily_close_v1'"
         )
+        first_signal: date | None = await conn.fetchval(
+            "SELECT min(so.signal_date) FROM sim_order so "
+            f"JOIN sim_account sa ON sa.id=so.account_id WHERE {pending_filter} "
+            "AND so.signal_date<$1", today,
+        )
+        completed = xnys_sessions(first_signal + timedelta(days=1), today) if first_signal else []
+        pending_orders = []
+        if completed:
+            assert first_signal is not None
+            # PostgreSQL's one-based array positions, indexed by signal
+            # calendar day, avoid scanning the session list for every order.
+            next_indices = [
+                bisect_right(completed, first_signal + timedelta(days=offset)) + 1
+                for offset in range((today - first_signal).days)
+            ]
+            # Select only actionable orders before the batch cap. Missing T+1
+            # quotes and unchecked limits must not crowd out expiry or fills.
+            pending_orders = await conn.fetch(
+                f"""
+                SELECT so.*, quote.date AS quote_date, quote.close AS quote_close
+                FROM sim_order so
+                JOIN sim_account sa ON sa.id=so.account_id
+                CROSS JOIN LATERAL (
+                    SELECT ($3::int[])[so.signal_date-$4::date+1] AS session_index
+                ) first
+                LEFT JOIN LATERAL (
+                    SELECT dp.date, dp.close
+                    FROM daily_prices dp
+                    WHERE dp.ticker=so.ticker
+                      AND dp.date=ANY(($2::date[])[first.session_index:
+                          (first.session_index + CASE WHEN so.order_type='market' THEN 0
+                              ELSE GREATEST(so.expire_after_days,1)-1 END)])
+                      AND dp.close>0 AND dp.close<'Infinity'::double precision
+                      AND (so.order_type='market'
+                          OR (so.side='buy' AND dp.close<so.limit_price)
+                          OR (so.side='sell' AND dp.close>so.limit_price))
+                    ORDER BY dp.date
+                    LIMIT 1
+                ) quote ON TRUE
+                WHERE {pending_filter}
+                  AND (quote.date IS NOT NULL OR (so.order_type='limit' AND
+                      first.session_index + GREATEST(so.expire_after_days,1)-1 <= cardinality($2::date[])))
+                ORDER BY CASE WHEN so.order_type='market' THEN 0 ELSE 1 END,
+                    so.created_at, so.id
+                LIMIT $1
+                """,
+                _PAPER_FILL_BATCH_SIZE, completed, next_indices, first_signal,
+            )
 
     if not pending_orders:
         async with pool.acquire() as conn:
             await _write_paper_equity_snapshots(conn, today)
             remaining_pending = await conn.fetchval(
                 "SELECT COUNT(*) FROM sim_order so JOIN sim_account sa ON sa.id=so.account_id "
-                "WHERE so.status='pending' AND sa.kind='human' AND so.execution_model='daily_close_v1'"
+                f"WHERE {pending_filter}"
             )
         return {
             "ok": True,
@@ -500,32 +542,17 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
             "failed": 0,
             "skipped_locked": 0,
             "remaining_pending": int(remaining_pending or 0),
+            "market_pending_policy": "await_exact_t1_close",
             "batch_limit": _PAPER_FILL_BATCH_SIZE,
         }
 
-    tickers = list({r["ticker"] for r in pending_orders})
-    first_signal_date = min(r["signal_date"] for r in pending_orders)
-    async with pool.acquire() as conn:
-        price_rows = await conn.fetch(
-            "SELECT ticker, date, close FROM daily_prices "
-            "WHERE ticker = ANY($1::text[]) AND date > $2 "
-            "ORDER BY ticker, date",
-            tickers,
-            first_signal_date,
-        )
-
-    # Build prices dict: ticker -> {date: close}
-    prices_by_ticker: dict[str, dict] = {}
-    for r in price_rows:
-        prices_by_ticker.setdefault(r["ticker"], {})[r["date"]] = r["close"]
-
     for order in pending_orders:
         ticker = order["ticker"]
-        prices = prices_by_ticker.get(ticker, {})
+        prices = {order["quote_date"]: order["quote_close"]} if order["quote_date"] else {}
         signal_date = order["signal_date"]
 
         if order["order_type"] == "market":
-            result = compute_market_fill(signal_date, prices)
+            result = compute_market_fill(signal_date, prices, as_of=today)
         else:
             result = compute_limit_fill(
                 order["side"],
@@ -533,6 +560,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                 signal_date,
                 prices,
                 order["expire_after_days"],
+                as_of=today,
             )
 
         if result is None:
@@ -675,7 +703,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
         await _write_paper_equity_snapshots(conn, today)
         remaining_pending = await conn.fetchval(
             "SELECT COUNT(*) FROM sim_order so JOIN sim_account sa ON sa.id=so.account_id "
-            "WHERE so.status='pending' AND sa.kind='human' AND so.execution_model='daily_close_v1'"
+            f"WHERE {pending_filter}"
         )
 
     return {
@@ -685,6 +713,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
         "failed": failed_count,
         "skipped_locked": skipped_locked,
         "remaining_pending": int(remaining_pending or 0),
+        "market_pending_policy": "await_exact_t1_close",
         "batch_limit": _PAPER_FILL_BATCH_SIZE,
     }
 
@@ -695,9 +724,9 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
     from alpha_agent.market_session import latest_completed_xnys_session
 
     today = latest_completed_xnys_session(datetime.now(UTC))
-    async with pool.acquire() as lock_conn:
+    async with pool.acquire() as lock_conn, lock_conn.transaction():
         acquired = await lock_conn.fetchval(
-            "SELECT pg_try_advisory_lock(hashtext($1))",
+            "SELECT pg_try_advisory_xact_lock(hashtext($1))",
             _PAPER_FILL_LOCK_NAME,
         )
         if not acquired:
@@ -709,13 +738,7 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                 "expired": 0,
                 "failed": 0,
             }
-        try:
-            return await _run_paper_fill_locked(pool, today)
-        finally:
-            await lock_conn.fetchval(
-                "SELECT pg_advisory_unlock(hashtext($1))",
-                _PAPER_FILL_LOCK_NAME,
-            )
+        return await _run_paper_fill_locked(pool, today)
 
 
 @router.post("/paper_fill")

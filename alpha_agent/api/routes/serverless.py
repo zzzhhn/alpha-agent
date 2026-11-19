@@ -14,7 +14,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(tags=["serverless"])
 logger = logging.getLogger(__name__)
@@ -434,29 +434,14 @@ async def alpha_factors_summary() -> dict:
 # Portfolio
 # ═══════════════════════════════════════════════════════════════════════════
 
-@router.get("/api/v1/portfolio/positions")
-async def portfolio_positions() -> list:
-    if _check_ml():
-        return [
-            {"ticker": "NVDA", "quantity": 150, "avg_price": 118.50, "current_price": 121.30, "pnl": 420.0, "pnl_pct": 2.36, "weight": 0.65},
-            {"ticker": "AAPL", "quantity": 80, "avg_price": 198.20, "current_price": 196.80, "pnl": -112.0, "pnl_pct": -0.71, "weight": 0.35},
-        ]
-    return []
+@router.get("/api/v1/portfolio/positions", deprecated=True, status_code=410)
+async def portfolio_positions() -> None:
+    raise HTTPException(410, "Legacy demo positions retired. For paper holdings, use /api/paper/accounts/{account_id}.")
 
 
-@router.get("/api/v1/portfolio/risk")
-async def portfolio_risk() -> dict:
-    ml_ok = _check_ml()
-    return {
-        "total_exposure": 0.85 if ml_ok else 0.0,
-        "diversification_score": 0.62 if ml_ok else 0.0,
-        "max_position_pct": 0.65 if ml_ok else 0.0,
-        "var_95": -0.032 if ml_ok else 0.0,
-        "sharpe_ratio": 1.45 if ml_ok else 0.0,
-        "max_drawdown": -0.078 if ml_ok else 0.0,
-        "beta": 1.12 if ml_ok else 0.0,
-        "timestamp": _now_iso(),
-    }
+@router.get("/api/v1/portfolio/risk", deprecated=True, status_code=410)
+async def portfolio_risk() -> None:
+    raise HTTPException(410, "Legacy demo risk metrics retired; no verified risk snapshot is served here.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

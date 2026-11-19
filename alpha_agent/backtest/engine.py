@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.backtest.metrics import BacktestResult
+from alpha_agent.core.statistics import nav_max_drawdown
 
 if TYPE_CHECKING:
     pass
@@ -130,12 +131,8 @@ def _long_short_returns(
 
 
 def _max_drawdown(returns: pd.Series) -> float:
-    """Maximum drawdown of a daily return series.  Returns value <= 0."""
-    cumulative = (1.0 + returns).cumprod()
-    running_max = cumulative.cummax()
-    drawdowns = cumulative / running_max - 1.0
-    mdd = float(drawdowns.min())
-    return min(mdd, 0.0)
+    """Maximum drawdown of a daily return series, including opening NAV."""
+    return nav_max_drawdown(returns.to_numpy(dtype=float, na_value=np.nan))
 
 
 def _average_turnover(

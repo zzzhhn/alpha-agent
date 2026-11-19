@@ -71,5 +71,7 @@ curl --fail-with-body --max-time 290 \
 ```
 
 - 核对时，只读查看 `cron_runs` 中 `cron_name LIKE 'tick_%' OR cron_name LIKE 'dispatch_%'` 的行，再结合 `/api/_health/dag`。
+- DAG 的日线和完整信号按到期交易日及不同 offset 核对，每个 offset 只看该日最后一次尝试。重复执行不能抵消另一分片缺失；成功补齐可以解除之前的失败。日线按当轮股票池和每片 75 个标的计算应有片数，旧回执未记录片数时沿用 8。没有新调度回执表示缺乏执行证据，不从手动调用次数推断完成。
+- tick、完整信号、模拟撮合和 L2 批次使用事务级 advisory lock；锁连接只负责互斥，业务写入仍使用各自短事务。不要改为分开执行的会话级加锁和解锁：Neon 事务池不保证它们落在同一后端连接。
 - HTTP 200 不代表已发布，也不代表机器人已完成决策。
 - 需要整条链路一次跑完时（例如补跑当天），仍可在 GitHub 手动运行 `cron-shards`，选择 `job=fast_intraday`。

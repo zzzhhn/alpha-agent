@@ -260,9 +260,9 @@ async def refresh_marks(
             summary = summarize_marks(updated, account['cash'], instant)
             spy = cache.get((session['session_date'], 'SPY'), {})
             benchmark = effective_mark(spy, instant)
-            benchmark_close = benchmark['price'] if benchmark['quality'] in {'fresh', 'session_close'} else None
+            closing = as_utc(session['close_at'])
             created_at = account.get('created_at')
-            if created_at is not None and as_utc(created_at) > as_utc(session['close_at']):
+            if created_at is not None and as_utc(created_at) > closing:
                 # Before this account's first market session, an older SPY
                 # close cannot date a portfolio history that did not exist.
                 return {'account_id': account_id, 'session_date': session['session_date'],
@@ -271,26 +271,50 @@ async def refresh_marks(
                         'valued_at': instant.isoformat(), 'benchmark_close': None,
                         'benchmark_quality': 'before_account_creation',
                         'sample_written': False, 'errors': errors}
+            session_date = date.fromisoformat(session['session_date'])
+            verified = benchmark['quality'] == 'session_close' and benchmark['as_of'] == closing
+            benchmark_close = benchmark['price'] if verified else None
+            benchmark_close_at = closing if verified else None
+            benchmark_quality = 'not_closed' if instant < closing else benchmark['quality']
+            if not verified and instant >= closing:
+                prior = await conn.fetchrow(
+                    'SELECT benchmark_close FROM sim_equity_daily '
+                    'WHERE account_id=$1 AND cohort_id=$2 AND as_of_date=$3 AND benchmark_close_at=$4',
+                    account_id, cohort, session_date, closing,
+                )
+                if prior is not None and prior['benchmark_close'] is not None:
+                    benchmark_close = prior['benchmark_close']
+                    benchmark_close_at = closing
+                    benchmark_quality = 'session_close'
             await conn.execute(
                 'INSERT INTO sim_equity_daily (account_id,cohort_id,as_of_date,portfolio_value,cash,'
-                'unrealized_pnl,realized_pnl,benchmark_close,valuation_quality,valued_at) '
-                'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) '
+                'unrealized_pnl,realized_pnl,benchmark_close,valuation_quality,valued_at,benchmark_close_at) '
+                'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) '
                 'ON CONFLICT (account_id,cohort_id,as_of_date) DO UPDATE SET '
                 'portfolio_value=EXCLUDED.portfolio_value,cash=EXCLUDED.cash,'
                 'unrealized_pnl=EXCLUDED.unrealized_pnl,realized_pnl=EXCLUDED.realized_pnl,'
                 'benchmark_close=EXCLUDED.benchmark_close,valuation_quality=EXCLUDED.valuation_quality,'
-                'valued_at=EXCLUDED.valued_at '
+                'valued_at=EXCLUDED.valued_at,benchmark_close_at=EXCLUDED.benchmark_close_at '
                 'WHERE (sim_equity_daily.valued_at IS NULL OR EXCLUDED.valued_at >= sim_equity_daily.valued_at) '
                 'AND (EXCLUDED.portfolio_value IS NOT NULL OR sim_equity_daily.portfolio_value IS NULL)',
-                account_id, cohort, date.fromisoformat(session['session_date']), summary['portfolio_value'],
+                account_id, cohort, session_date, summary['portfolio_value'],
                 account['cash'], summary['unrealized_pnl'], sum(row['realized_pnl'] or 0 for row in updated),
-                benchmark_close, summary['valuation_quality'], instant,
+                benchmark_close, summary['valuation_quality'], instant, benchmark_close_at,
             )
+            if verified:
+                # Quote quality is independent of NAV completeness. A newly
+                # verified close may improve an existing, otherwise better NAV.
+                await conn.execute(
+                    'UPDATE sim_equity_daily SET benchmark_close=$4,benchmark_close_at=$5 '
+                    'WHERE account_id=$1 AND cohort_id=$2 AND as_of_date=$3 '
+                    'AND (benchmark_close IS DISTINCT FROM $4 OR benchmark_close_at IS DISTINCT FROM $5)',
+                    account_id, cohort, session_date, benchmark_close, benchmark_close_at,
+                )
     summary['valued_at'] = summary['valued_at'].isoformat() if summary['valued_at'] else None
     summary['marks'] = {ticker: {**mark, 'as_of': mark['as_of'].isoformat() if mark['as_of'] else None}
                         for ticker, mark in summary['marks'].items()}
     return {'account_id': account_id, 'session_date': session['session_date'], **summary,
-            'benchmark_close': benchmark_close, 'benchmark_quality': benchmark['quality'], 'errors': errors}
+            'benchmark_close': benchmark_close, 'benchmark_quality': benchmark_quality, 'errors': errors}
 
 
 async def refresh_daily_valuations(

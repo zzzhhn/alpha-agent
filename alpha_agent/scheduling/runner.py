@@ -12,6 +12,7 @@ from alpha_agent.data.research_refresh import research_price_readiness
 from alpha_agent.market_session import latest_completed_xnys_session, xnys_close
 from alpha_agent.scheduling.ticks import (
     BUDGET_SECONDS,
+    PRICE_SLICE,
     Job,
     Unit,
     next_unit,
@@ -147,6 +148,8 @@ async def _run_locked(job: Job, pool, *, started: float, now: datetime) -> dict:
                    "price_pass": unit.price_pass, "ok": False,
                    "error_type": "UnitInterrupted",
                    "observed_at": datetime.now(UTC).isoformat()}
+        if unit.name == "daily_prices":
+            details["expected_shards"] = len(range(0, readiness["price_universe_count"], PRICE_SLICE))
         # Reserve one durable receipt before I/O. A killed request counts as a
         # failed attempt on the next tick, rather than retrying forever.
         row_id = await _insert(pool, job, details, finished=False)

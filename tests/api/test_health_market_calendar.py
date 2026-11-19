@@ -1,10 +1,24 @@
 """Health windows must follow the scheduler without hiding missing work."""
 from datetime import UTC, datetime, timedelta
+import json
 
 import asyncpg
 import pytest
 
 from alpha_agent.api.routes import health
+
+
+async def seed_receipt(conn, name, instant, market_date, i, ok=True, expected=8):
+    details = {}
+    if name in ("fast_intraday", "daily_prices"):
+        details = {"unit": name, "market_date": str(market_date),
+                   "offset": i * (75 if name == "daily_prices" else 40)}
+        if name == "daily_prices":
+            details["expected_shards"] = expected
+        name = "tick_daily_close"
+    await conn.execute(
+        "INSERT INTO cron_runs(cron_name,started_at,finished_at,ok,error_count,details) "
+        "VALUES($1,$2,$2,$3,$4,$5::jsonb)", name, instant, ok, int(not ok), json.dumps(details))
 
 
 @pytest.mark.parametrize(("instant", "session"), [
@@ -26,9 +40,12 @@ def test_session_window_and_wall_clock_jobs(instant, session):
 
 @pytest.mark.parametrize(("case", "expected"), [
     ("complete", "healthy"),
-    ("missing_friday", "stale"),
+    ("missing_friday", "missing"),
     ("failed_shard", "failed"),
     ("missing_shard", "incomplete"),
+    ("duplicate", "incomplete"),
+    ("recovered", "healthy"),
+    ("small_universe", "healthy"),
     ("late_old_publish", "stale"),
 ])
 async def test_weekend_dag_uses_durable_session_evidence(
@@ -51,14 +68,17 @@ async def test_weekend_dag_uses_durable_session_evidence(
             if name == "recommendation_publish":
                 continue
             count = requirement["required_runs"]
+            if name == "daily_prices" and case == "small_universe":
+                count = 3
             if name == "daily_prices" and case == "missing_shard":
                 count -= 1
             for i in range(count):
                 ok = not (name == "daily_prices" and case == "failed_shard" and i == 0)
-                await conn.execute(
-                    "INSERT INTO cron_runs(cron_name,started_at,finished_at,ok,error_count) "
-                    "VALUES($1,$2,$2,$3,$4)", name, observed, ok, int(not ok),
-                )
+                if case == "recovered" and i == 0 and name == "daily_prices":
+                    await seed_receipt(conn, name, observed, observed.date(), i, False)
+                offset_idx = 0 if name == "daily_prices" and case == "duplicate" else i
+                await seed_receipt(conn, name, observed, observed.date(), offset_idx, ok,
+                                   3 if case == "small_universe" else 8)
         market_date = observed.date()
         if case == "late_old_publish":
             market_date -= timedelta(days=1)
@@ -74,4 +94,4 @@ async def test_weekend_dag_uses_durable_session_evidence(
     target = "recommendation_publish" if case == "late_old_publish" else "daily_prices"
     assert nodes[target]["status"] == expected
     assert nodes[target]["required_market_date"] == "2026-11-13"
-    assert body["overall"] == ("healthy" if case == "complete" else "degraded")
+    assert body["overall"] == ("healthy" if expected == "healthy" else "degraded")

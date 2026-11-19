@@ -44,6 +44,13 @@ describe("paper workspace refinement", () => {
     expect(body.match(/<tr\b/g)).toHaveLength(5);
     expect(html).toContain("本次已载入 12 笔订单");
   });
+  it("explains a pending human market order without showing a later price or a fill", () => {
+    const order: OrderOut = {id:1,ticker:"STALE",side:"buy",order_type:"market",qty:1,limit_price:null,signal_date:"2026-07-02",fill_date:null,fill_price:null,status:"pending"};
+    const html = renderToStaticMarkup(<PaperOrdersPane orders={[order]} onCancel={async()=>{}} attribution={[]} attributionStatus="ready" showAttribution={false} showDisclaimer={false} />);
+    expect(html).toContain("缺价则继续待成交");
+    expect(html).toContain("STALE");
+    expect(html).not.toContain("$99");
+  });
   it("disables submission while account context is refreshing", () => {
     const html = renderToStaticMarkup(<SimOrderForm fixedTicker="TEST" locale="zh" layout="ticket" disabled availableCash={1000} onPlaced={() => {}} />);
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled/);

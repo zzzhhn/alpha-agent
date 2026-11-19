@@ -4,8 +4,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from asyncpg import UndefinedColumnError, UndefinedTableError
-
 from alpha_agent.brain.evolution import family_of
 
 
@@ -89,7 +87,7 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
         settings = d.get("settings")
         if isinstance(settings, str):
             d["settings"] = json.loads(settings)
-        for k in ("created_at", "submitted_at", "batch_started_at"):
+        for k in ("created_at", "submitted_at", "batch_started_at", "submit_retry_at"):
             if d.get(k) is not None:
                 d[k] = d[k].isoformat()
         bp = d.get("blend_parents")
@@ -110,7 +108,11 @@ _ROW_COLS = (
     "self_correlation_adj, self_correlation_adj_with, self_correlation_status, "
     "outcome, detail, "
     "grade, fail_checks, retried, batch_started_at, created_at, submitted_at, "
-    "brain_status, blend_parents, research_evidence"
+    "brain_status, submit_retry_at, blend_parents, research_evidence"
+)
+
+_SUBMISSION_CONFIRMED = (
+    "COALESCE(lower(brain_status) IN ('submitted', 'active') AND submitted_at IS NOT NULL, false)"
 )
 
 # Whitelisted sort columns (never interpolate user input into SQL).
@@ -123,7 +125,7 @@ def _decode_row(r) -> dict:
     d = dict(r)
     if isinstance(d.get("settings"), str):
         d["settings"] = json.loads(d["settings"])
-    for k in ("created_at", "submitted_at", "batch_started_at"):
+    for k in ("created_at", "submitted_at", "batch_started_at", "submit_retry_at"):
         if d.get(k) is not None:
             d[k] = d[k].isoformat()
     # Derived economic family — single source of truth for the UI badge + filter.
@@ -187,9 +189,9 @@ async def query_brain_alphas(
     if turnover_max is not None:
         add("turnover <= $?", turnover_max)
     if submitted is True:
-        where.append("submitted_at IS NOT NULL")
+        where.append(_SUBMISSION_CONFIRMED)
     elif submitted is False:
-        where.append("submitted_at IS NULL")
+        where.append(f"NOT {_SUBMISSION_CONFIRMED}")
 
     where_sql = " AND ".join(where)
     sort_col = sort if sort in _SORT_COLS else "created_at"
@@ -275,7 +277,7 @@ async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
     d = dict(r)
     if isinstance(d.get("settings"), str):
         d["settings"] = json.loads(d["settings"])
-    for k in ("created_at", "submitted_at", "batch_started_at"):
+    for k in ("created_at", "submitted_at", "batch_started_at", "submit_retry_at"):
         if d.get(k) is not None:
             d[k] = d[k].isoformat()
     bp = d.get("blend_parents")
@@ -527,11 +529,41 @@ async def sharpe_of_alpha_id(pool, user_id: int, alpha_id: str):
     )
 
 
-async def mark_submitted(pool, alpha_row_id: int, *, brain_status: str) -> None:
-    """Record that the user submitted this alpha to BRAIN + BRAIN's status."""
+async def claim_brain_submission(pool, user_id: int, row_id: int) -> bool:
+    """Fail closed before the POST, including if the process stops mid-request."""
+    claimed = await pool.fetchval(
+        "UPDATE brain_alphas SET brain_status='submit_unknown', submit_retry_at=NULL "
+        "WHERE user_id=$1 AND id=$2 AND outcome IN ('passed', 'flagged') "
+        "AND alpha_id IS NOT NULL AND submitted_at IS NULL "
+        "AND (brain_status IS NULL OR brain_status IN ('submit_rejected', 'submit_rate_limited')) "
+        "AND (submit_retry_at IS NULL OR submit_retry_at <= now()) RETURNING id",
+        user_id, row_id,
+    )
+    return claimed is not None
+
+
+async def finish_brain_submission(
+    pool, user_id: int, row_id: int, *, status: str, retry_after_sec: int | None = None,
+) -> dict | None:
+    """Record the receipt unless a concurrent reconciliation already confirmed it."""
+    row = await pool.fetchrow(
+        "UPDATE brain_alphas SET brain_status=$3, "
+        "submitted_at=CASE WHEN $3='submitted' THEN now() ELSE NULL END, "
+        "submit_retry_at=now() + $4::double precision * INTERVAL '1 second' "
+        "WHERE user_id=$1 AND id=$2 AND brain_status='submit_unknown' "
+        "RETURNING alpha_id, brain_status, submitted_at, submit_retry_at",
+        user_id, row_id, status, retry_after_sec,
+    )
+    return dict(row) if row else None
+
+
+async def confirm_brain_submission(pool, user_id: int, row_id: int, *, status: str) -> None:
+    """Confirm one uncertain row from upstream evidence, never backfill history."""
     await pool.execute(
-        "UPDATE brain_alphas SET submitted_at=now(), brain_status=$2 WHERE id=$1",
-        alpha_row_id, brain_status,
+        "UPDATE brain_alphas SET brain_status=$3, submitted_at=now(), submit_retry_at=NULL "
+        "WHERE user_id=$1 AND id=$2 AND (brain_status='submit_unknown' OR "
+        "(submitted_at IS NOT NULL AND NOT " + _SUBMISSION_CONFIRMED + "))",
+        user_id, row_id, status,
     )
 
 
@@ -663,48 +695,36 @@ async def list_brain_runs(
 async def summarize_brain_runs(pool, user_id: int) -> dict:
     """Aggregate owned runs with two bounded results (one row + at most 30 days).
 
-    The series covers today and the preceding 29 UTC calendar days. Missing
-    migrations retain the same empty-state compatibility as the runs list;
-    other database failures propagate so clients can distinguish errors from 0.
+    The series covers today and the preceding 29 UTC calendar days. Database
+    failures propagate so clients can distinguish an unavailable summary from 0.
     """
     statuses = ("queued", "running", "completed", "failed")
     counters = ("generated", "simulated", "passed", "flagged", "rejected", "sim_error")
-    empty = {
-        "total_runs": 0,
-        "by_status": dict.fromkeys(statuses, 0),
-        "totals": dict.fromkeys(counters, 0),
-        "last_30d": [],
-        "first_run_at": None,
-        "last_run_at": None,
-    }
-    try:
-        row = await pool.fetchrow(
-            "SELECT count(*) AS total_runs, "
-            + ", ".join(
-                f"count(*) FILTER (WHERE status='{status}') AS {status}"
-                for status in statuses
-            )
-            + ", "
-            + ", ".join(f"coalesce(sum({key}_n), 0) AS {key}" for key in counters)
-            + ", min(created_at) AS first_run_at, max(created_at) AS last_run_at "
-            "FROM brain_runs WHERE user_id=$1",
-            int(user_id),
+    row = await pool.fetchrow(
+        "SELECT count(*) AS total_runs, "
+        + ", ".join(
+            f"count(*) FILTER (WHERE status='{status}') AS {status}"
+            for status in statuses
         )
-        days = await pool.fetch(
-            "SELECT (created_at AT TIME ZONE 'UTC')::date AS date, count(*) AS runs, "
-            "coalesce(sum(passed_n), 0) AS passed, "
-            "coalesce(sum(flagged_n), 0) AS flagged, "
-            "coalesce(sum(rejected_n), 0) AS rejected, "
-            "coalesce(sum(sim_error_n), 0) AS sim_error "
-            "FROM brain_runs WHERE user_id=$1 "
-            "AND created_at >= (((now() AT TIME ZONE 'UTC')::date - 29)::timestamp) "
-            "AT TIME ZONE 'UTC' "
-            "AND created_at < (((now() AT TIME ZONE 'UTC')::date + 1)::timestamp) "
-            "AT TIME ZONE 'UTC' GROUP BY 1 ORDER BY 1 LIMIT 30",
-            int(user_id),
-        )
-    except (UndefinedTableError, UndefinedColumnError):
-        return empty
+        + ", "
+        + ", ".join(f"coalesce(sum({key}_n), 0) AS {key}" for key in counters)
+        + ", min(created_at) AS first_run_at, max(created_at) AS last_run_at "
+        "FROM brain_runs WHERE user_id=$1",
+        int(user_id),
+    )
+    days = await pool.fetch(
+        "SELECT (created_at AT TIME ZONE 'UTC')::date AS date, count(*) AS runs, "
+        "coalesce(sum(passed_n), 0) AS passed, "
+        "coalesce(sum(flagged_n), 0) AS flagged, "
+        "coalesce(sum(rejected_n), 0) AS rejected, "
+        "coalesce(sum(sim_error_n), 0) AS sim_error "
+        "FROM brain_runs WHERE user_id=$1 "
+        "AND created_at >= (((now() AT TIME ZONE 'UTC')::date - 29)::timestamp) "
+        "AT TIME ZONE 'UTC' "
+        "AND created_at < (((now() AT TIME ZONE 'UTC')::date + 1)::timestamp) "
+        "AT TIME ZONE 'UTC' GROUP BY 1 ORDER BY 1 LIMIT 30",
+        int(user_id),
+    )
     return {
         "total_runs": int(row["total_runs"]),
         "by_status": {key: int(row[key]) for key in statuses},

@@ -241,7 +241,7 @@ export default function ScreenerPage() {
       r.sector ?? "",
       r.cap != null ? r.cap.toFixed(0) : "",
       r.composite_score.toFixed(4),
-      ...r.per_factor_scores.map((p) => p.z.toFixed(4)),
+      ...r.per_factor_scores.map((p) => p.z?.toFixed(4) ?? ""),
     ]);
     const csv = [headers, ...rows]
       .map((row) => row.map((c) => `"${c.replace(/"/g, '""')}"`).join(","))
@@ -1158,7 +1158,7 @@ function ResultsPane({
         <TmKpi
           label={<GlossaryTip term="N_ELIGIBLE">{locale === "zh" ? "合格股票" : "N_ELIGIBLE"}</GlossaryTip>}
           value={eligible.toString()}
-          sub={locale === "zh" ? "筛选后股票池" : "post-filter universe"}
+          sub={locale === "zh" ? "有可用的加权因子评分" : "has a weighted factor score"}
         />
         <TmKpi
           label={<GlossaryTip term="ELIG_RATE">{locale === "zh" ? "合格率" : "ELIG_RATE"}</GlossaryTip>}
@@ -1385,7 +1385,7 @@ function ContributionBars({
               {s.contribution.toFixed(3)}
             </span>
             <span className="w-14 text-right tabular-nums text-tm-muted">
-              z={s.z.toFixed(2)}
+              z={s.z?.toFixed(2) ?? "—"}
             </span>
           </div>
         );

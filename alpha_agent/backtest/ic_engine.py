@@ -33,22 +33,14 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
+from alpha_agent.core.statistics import spearman_corr
 from alpha_agent.signals.horizons import DEFAULT_HORIZON_DAYS, native_horizon
 from alpha_agent.signals.registry import active_ic_signals as _active_ic_signals
 
 
 def _spearman_rho(xs, ys):
-    """Spearman rank correlation via numpy only (no scipy).
-    Returns NaN if degenerate (constant input)."""
-    xs = np.asarray(xs, dtype=float)
-    ys = np.asarray(ys, dtype=float)
-    if len(xs) < 2 or len(ys) < 2:
-        return float("nan")
-    rxs = np.argsort(np.argsort(xs)).astype(float)
-    rys = np.argsort(np.argsort(ys)).astype(float)
-    if np.std(rxs) == 0 or np.std(rys) == 0:
-        return float("nan")
-    return float(np.corrcoef(rxs, rys)[0, 1])
+    """Spearman rank correlation with tied ranks and no SciPy dependency."""
+    return spearman_corr(np.asarray(xs, dtype=float), np.asarray(ys, dtype=float))
 
 
 # Active signals to backtest. Derived from the single signal registry

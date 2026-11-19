@@ -1,6 +1,6 @@
 // WorldQuant BRAIN credential vault client (Phase E2). The password is only ever
 // sent on save; the status/test endpoints never return it.
-import { apiGet, apiPost, type ApiGetOptions } from "./client";
+import { ApiException, apiGet, apiPost, type ApiGetOptions } from "./client";
 
 export interface BrainStatus {
   connected: boolean;
@@ -65,6 +65,7 @@ export interface BrainAlpha {
   created_at: string | null;
   submitted_at: string | null;
   brain_status: string | null;
+  submit_retry_at?: string | null;
   /** Round this row was mined in (DB clock at dispatch); groups the batch-divider UI. */
   batch_started_at: string | null;
   // Blend provenance (family_focus == "blend" rounds only): the parent expressions
@@ -127,8 +128,9 @@ export interface BrainAlpha {
 
 export interface BrainSubmitResult {
   ok: boolean;
-  brain_status: string;
+  brain_status: string | null;
   alpha_id: string;
+  retry_after_sec?: number | null;
 }
 
 export interface BrainAlphaQuery {
@@ -280,11 +282,22 @@ export type YearlyRow = Record<string, string | number | null>;
 export const fetchAlphaYearly = (rowId: number, opts?: ApiGetOptions) =>
   apiGet<{ rows: YearlyRow[] }>(`/api/brain/alphas/${rowId}/yearly`, opts);
 
-export const submitBrainAlpha = (rowId: number) =>
-  apiPost<BrainSubmitResult, Record<string, never>>(
-    `/api/brain/alphas/${rowId}/submit`,
-    {},
-  );
+export async function submitBrainAlpha(rowId: number): Promise<BrainSubmitResult> {
+  try {
+    return await apiPost<BrainSubmitResult, Record<string, never>>(`/api/brain/alphas/${rowId}/submit`, {});
+  } catch (e) {
+    if (e instanceof ApiException && e.status === 429) {
+      const receipt = e.body as Partial<BrainSubmitResult>;
+      if (receipt.brain_status === "submit_rate_limited" && receipt.alpha_id && receipt.retry_after_sec) {
+        return { ...receipt, ok: false, alpha_id: receipt.alpha_id, brain_status: receipt.brain_status };
+      }
+    }
+    throw e;
+  }
+}
+
+export const reconcileBrainSubmission = (rowId: number) =>
+  apiPost<BrainSubmitResult, Record<string, never>>(`/api/brain/alphas/${rowId}/reconcile-submission`, {});
 
 export interface MineTriggerResult {
   ok: boolean;

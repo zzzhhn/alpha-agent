@@ -164,7 +164,10 @@ def score_expression(context: ResearchContext, expression: str, *, extra_ops=Non
             raise InvalidEvaluation("missing_held_returns", f"fold {start}:{end}")
         metrics = split_metrics(kr.daily_ret, kr.factor, kr.fwd_returns, kr.weights,
                                 start=start + 1, end=end, n_trials=1)
-        ic = [spearman_ic(kr.factor[t], kr.fwd_returns[t]) for t in range(start, end - 1)]
+        ic = [
+            spearman_ic(kr.factor[t], kr.fwd_returns[t], undefined=np.nan)
+            for t in range(start, end - 1)
+        ]
         ic = [v for v in ic if np.isfinite(v)]
         if not np.isfinite(metrics.sharpe) or len(ic) < MIN_FOLD_DAYS:
             raise InvalidEvaluation("invalid_fold_metrics", f"fold {start}:{end}")

@@ -5,10 +5,13 @@ connection test that actually authenticates to BRAIN. The plaintext password is
 accepted once on save and never returned. Every route requires the user's own
 auth — credentials are strictly per-user."""
 import logging
+import math
 import os
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.crypto_box import CryptoError
@@ -225,9 +228,9 @@ async def list_runs(
         return await store.list_brain_runs(
             pool, user_id, limit=limit, offset=offset, status=status
         )
-    except Exception as e:  # noqa: BLE001 — keep old deployments readable
-        logger.warning("list_brain_runs failed (migration missing?): %s", e)
-        return {"runs": [], "total": 0}
+    except Exception as e:  # noqa: BLE001 — surface unavailable storage
+        logger.warning("list_brain_runs failed: %s", type(e).__name__)
+        raise HTTPException(503, "BRAIN runs unavailable") from e
 
 
 @router.get("/runs/summary")
@@ -237,7 +240,11 @@ async def get_runs_summary(
     """All-time run totals and a 30-day UTC series for the authenticated owner."""
     from alpha_agent.brain import store
 
-    return await store.summarize_brain_runs(pool, user_id)
+    try:
+        return await store.summarize_brain_runs(pool, user_id)
+    except Exception as e:  # noqa: BLE001 — surface unavailable storage
+        logger.warning("summarize_brain_runs failed: %s", type(e).__name__)
+        raise HTTPException(503, "BRAIN run summary unavailable") from e
 
 
 @router.get("/runs/{run_id}/candidates")
@@ -258,10 +265,10 @@ async def list_run_candidates(
     """
     from alpha_agent.brain import store
 
-    run = await store.get_brain_run(pool, run_id, user_id)
-    if run is None:
-        raise HTTPException(404, "BRAIN run not found")
     try:
+        run = await store.get_brain_run(pool, run_id, user_id)
+        if run is None:
+            raise HTTPException(404, "BRAIN run not found")
         return await store.query_brain_run_candidates(
             pool,
             user_id,
@@ -271,6 +278,8 @@ async def list_run_candidates(
             selected=selected,
             status=status,
         )
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001 — migration/runtime state is explicit
         logger.warning(
             "query_brain_run_candidates failed for run %s: %s",
@@ -381,8 +390,7 @@ async def list_alphas(
     pool=Depends(get_db_pool),
 ) -> dict:
     """The user's BRAIN mining results, server-side paginated + filtered. Returns
-    {alphas, total} (total = rows matching the filters, for page controls).
-    Degrades to empty if V028 isn't applied yet."""
+    {alphas, total} (total = rows matching the filters, for page controls)."""
     from alpha_agent.brain import store
 
     try:
@@ -395,9 +403,9 @@ async def list_alphas(
             run_id=run_id,
             sort=sort, descending=descending,
         )
-    except Exception as e:  # noqa: BLE001 - table may not exist yet
-        logger.warning("query_brain_alphas failed (table missing?): %s", e)
-        return {"alphas": [], "total": 0}
+    except Exception as e:  # noqa: BLE001 — surface unavailable storage
+        logger.warning("query_brain_alphas failed: %s", type(e).__name__)
+        raise HTTPException(503, "BRAIN simulation results unavailable") from e
 
 
 @router.get("/alphas/{row_id}/pnl")
@@ -470,6 +478,45 @@ async def get_alpha_yearly(
     return {"rows": yearly_to_rows(raw)}
 
 
+def _brain_submit_receipt(row: dict) -> dict:
+    status = str(row.get("brain_status") or "").lower() or None
+    accepted = status in ("submitted", "active") and bool(row.get("submitted_at"))
+    if not accepted and row.get("submitted_at"):
+        # The old implementation stamped every HTTP failure as submitted,
+        # including both genuine rejection and transport-side ambiguity.
+        status = "submit_unknown"
+    retry = row.get("submit_retry_at")
+    if isinstance(retry, str):
+        retry = datetime.fromisoformat(retry)
+    retry_after = max(0, math.ceil((retry - datetime.now(timezone.utc)).total_seconds())) if retry else 0
+    return {
+        "ok": accepted,
+        "brain_status": status,
+        "alpha_id": row["alpha_id"],
+        "retry_after_sec": retry_after or None,
+    }
+
+
+def _brain_rate_limit(receipt: dict) -> JSONResponse:
+    return JSONResponse(
+        status_code=429, content=receipt,
+        headers={"Retry-After": str(receipt["retry_after_sec"])},
+    )
+
+
+async def _owned_submission_alpha(pool, user_id: int, row_id: int) -> dict:
+    from alpha_agent.brain import store
+
+    row = await store.get_brain_alpha(pool, user_id, row_id)
+    if row is None:
+        raise HTTPException(404, "alpha not found")
+    if not row.get("alpha_id"):
+        raise HTTPException(400, "this candidate has no BRAIN alpha id (sim failed)")
+    if row.get("outcome") not in ("passed", "flagged"):
+        raise HTTPException(400, "only passed/flagged alphas can be submitted")
+    return row
+
+
 @router.post("/alphas/{row_id}/submit")
 async def submit_alpha(
     row_id: int,
@@ -482,17 +529,14 @@ async def submit_alpha(
     carry a BRAIN alpha_id, and be a gate survivor (passed/flagged). Records the
     submit outcome; a 201 from BRAIN means accepted, not yet ACTIVE."""
     from alpha_agent.brain import store
-    from alpha_agent.brain.client import BrainClient
+    from alpha_agent.brain.client import BrainAuthError, BrainClient
 
-    row = await store.get_brain_alpha(pool, user_id, row_id)
-    if row is None:
-        raise HTTPException(404, "alpha not found")
-    if not row.get("alpha_id"):
-        raise HTTPException(400, "this candidate has no BRAIN alpha id (sim failed)")
-    if row.get("outcome") not in ("passed", "flagged"):
-        raise HTTPException(400, "only passed/flagged alphas can be submitted")
-    if row.get("submitted_at"):
-        raise HTTPException(409, "already submitted")
+    row = await _owned_submission_alpha(pool, user_id, row_id)
+    prior = _brain_submit_receipt(row)
+    if prior["ok"] or prior["brain_status"] == "submit_unknown":
+        return prior
+    if prior["retry_after_sec"]:
+        return _brain_rate_limit(prior)
 
     creds = await vault.load_brain_credentials(pool, user_id)
     if creds is None:
@@ -500,13 +544,63 @@ async def submit_alpha(
 
     client = BrainClient(creds[0], creds[1])
     try:
-        await client.authenticate()
-        accepted = await client.submit(row["alpha_id"])
-    except Exception as e:  # noqa: BLE001 — surface BRAIN failure as a clean 502
-        raise HTTPException(502, f"BRAIN submit failed: {type(e).__name__}: {e}") from e
+        try:
+            await client.authenticate()
+        except BrainAuthError as e:
+            if e.retry_after_sec is not None:
+                return _brain_rate_limit({
+                    **prior, "brain_status": "submit_rate_limited", "retry_after_sec": e.retry_after_sec,
+                })
+            raise HTTPException(400, "BRAIN authentication failed; no submission was sent") from e
+        except httpx.RequestError as e:
+            raise HTTPException(503, "BRAIN authentication unavailable; no submission was sent") from e
+
+        # Persist an unresolved outcome before sending the non-idempotent POST.
+        # A competing request or a process crash must never silently retry it.
+        if not await store.claim_brain_submission(pool, user_id, row_id):
+            current = _brain_submit_receipt(await _owned_submission_alpha(pool, user_id, row_id))
+            return _brain_rate_limit(current) if current["retry_after_sec"] else current
+
+        result = await client.submit(row["alpha_id"])
+        current_row = await store.finish_brain_submission(
+            pool, user_id, row_id, status=result.status, retry_after_sec=result.retry_after_sec,
+        )
+        current = _brain_submit_receipt(current_row or await _owned_submission_alpha(pool, user_id, row_id))
+        if result.status == "submit_rate_limited" and current["brain_status"] == result.status:
+            return _brain_rate_limit({**current, "retry_after_sec": result.retry_after_sec})
+        return current
     finally:
         await client.aclose()
 
-    status = "submitted" if accepted else "submit_rejected"
-    await store.mark_submitted(pool, row_id, brain_status=status)
-    return {"ok": accepted, "brain_status": status, "alpha_id": row["alpha_id"]}
+
+@router.post("/alphas/{row_id}/reconcile-submission")
+async def reconcile_alpha_submission(
+    row_id: int,
+    user_id: int = Depends(require_user),
+    pool=Depends(get_db_pool),
+) -> dict:
+    """Manually verify an unresolved receipt using a BRAIN read, never another submit."""
+    from alpha_agent.brain import store
+    from alpha_agent.brain.client import BrainClient
+
+    row = await _owned_submission_alpha(pool, user_id, row_id)
+    prior = _brain_submit_receipt(row)
+    if prior["brain_status"] != "submit_unknown":
+        return prior
+    creds = await vault.load_brain_credentials(pool, user_id)
+    if creds is None:
+        raise HTTPException(400, "no BRAIN credentials saved")
+
+    client = BrainClient(creds[0], creds[1])
+    try:
+        await client.authenticate()
+        confirmed = await client.get_confirmed_submission_status(row["alpha_id"])
+    except Exception as e:  # noqa: BLE001 — a failing read cannot change the receipt
+        logger.warning("BRAIN submission reconciliation failed: %s", type(e).__name__)
+        raise HTTPException(502, "BRAIN submission status unavailable; no submission was sent") from e
+    finally:
+        await client.aclose()
+
+    if confirmed is not None:
+        await store.confirm_brain_submission(pool, user_id, row_id, status=confirmed)
+    return _brain_submit_receipt(await _owned_submission_alpha(pool, user_id, row_id))

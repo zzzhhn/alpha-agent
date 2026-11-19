@@ -4,14 +4,12 @@ import type {
   PipelineLatency,
   ThroughputMetrics,
   AlphaSignal,
-  Position,
   Order,
   AuditEvent,
   MarketIndicators,
   FeatureState,
   AlphaFactor,
   AlphaFactorSummary,
-  PortfolioRisk,
   GatewayStatus,
   GateRule,
   SystemConfig,
@@ -180,10 +178,6 @@ export function getAlphaSignals() {
   return fetchJson<readonly AlphaSignal[]>("/alpha/signals");
 }
 
-export function getPositions() {
-  return fetchJson<readonly Position[]>("/portfolio/positions");
-}
-
 export function getOrders() {
   return fetchJson<readonly Order[]>("/orders");
 }
@@ -220,12 +214,6 @@ export function getAlphaFactors() {
 
 export function getAlphaFactorSummary() {
   return fetchJson<AlphaFactorSummary>("/alpha/factors/summary");
-}
-
-/* ═══════════════════ Portfolio ═══════════════════ */
-
-export function getPortfolioRisk() {
-  return fetchJson<PortfolioRisk>("/portfolio/risk");
 }
 
 /* ═══════════════════ Orders ═══════════════════ */

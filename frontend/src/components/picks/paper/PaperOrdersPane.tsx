@@ -51,6 +51,9 @@ export default function PaperOrdersPane({
   const [paging, setPaging] = useState({ source: orders, page: 1 });
   const page = paging.source === orders ? Math.min(paging.page, Math.max(1, Math.ceil(orders.length / pageSize))) : 1;
   const visibleOrders = orders.slice((page - 1) * pageSize, page * pageSize);
+  const waitingForClose = !botMode && visibleOrders.some((order) => (
+    order.status === "pending" && order.order_type === "market"
+  ));
 
   return (
     <div className="flex flex-col gap-5 px-3 py-3">
@@ -86,7 +89,7 @@ export default function PaperOrdersPane({
         <PaperAttributionTable rows={attribution} status={attributionStatus} />
       </div> : null}
 
-      {showDisclaimer ? <Disclaimer /> : null}
+      {showDisclaimer || waitingForClose ? <Disclaimer /> : null}
     </div>
   );
 }
