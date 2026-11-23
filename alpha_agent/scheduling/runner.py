@@ -49,6 +49,11 @@ async def execute_unit(unit: Unit, *, research_day: str, slot: str, request_id: 
         return await ic_backtest_monthly()
     if unit.name == "news_macro":
         return await routes.cron_news_macro()
+    if unit.name == "events_watch":
+        from alpha_agent.api.dependencies import get_db_pool
+        from alpha_agent.news.event_watch import collect_official_events
+
+        return await collect_official_events(await get_db_pool())
     if unit.name == "l2_cycle":
         return await routes.l2_cycle()
     raise ValueError("Unknown tick unit")
@@ -103,7 +108,10 @@ async def _run_locked(job: Job, pool, *, started: float, now: datetime) -> dict:
             "ok": True, "error_type": None}
 
     async def stop(reason, units):
-        await _insert(pool, job, {**base, "reason": reason})
+        # The high-frequency event collector already has durable unit/source
+        # receipts. Do not double its write rate with redundant completion rows.
+        if job != "events_watch" or reason not in ("complete", "scheduled_slot_ended"):
+            await _insert(pool, job, {**base, "reason": reason})
         return {"ok": True, "reason": reason, "research_day": day,
                 "market_date": market_date.isoformat(), "units": units}
 
@@ -160,6 +168,12 @@ async def _run_locked(job: Job, pool, *, started: float, now: datetime) -> dict:
             # Only known scalar correlation IDs, no arbitrary provider payloads.
             if isinstance(result.get("run_id"), (str, int)):
                 details["run_id"] = result["run_id"]
+            if unit.name == "events_watch":
+                for key in ("attempted", "events_inserted"):
+                    if type(result.get(key)) is int:
+                        details[key] = result[key]
+                if result.get("reason") in ("completed", "sec_cooldown", "poll_budget_exhausted"):
+                    details["collector_reason"] = result["reason"]
         except Exception as exc:  # noqa: BLE001 - recorded as a failed unit
             details["error_type"] = type(exc).__name__
         await pool.execute(

@@ -56,7 +56,7 @@ def detect_alerts(
     if opt:
         raw_opt = opt.get("raw")
         iv_pct = raw_opt.get("iv_percentile", 0) if isinstance(raw_opt, dict) else 0
-        if iv_pct > 90:
+        if isinstance(iv_pct, (float, int)) and iv_pct > 90:
             alerts.append({
                 "type": "iv_spike",
                 "payload": {"iv_percentile": iv_pct},

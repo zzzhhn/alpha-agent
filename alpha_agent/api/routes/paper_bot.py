@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import ValidationError
 
 from alpha_agent.api.dependencies import get_db_pool
@@ -111,6 +111,45 @@ async def run_detail(account_id: int, run_id: uuid.UUID, user_id: int = Depends(
 async def performance(account_id: int, user_id: int = Depends(require_user)):
     from alpha_agent.paper.bot_analytics import read_performance
     return await read_performance(await get_db_pool(), user_id, account_id)
+
+
+@router.get(BASE + '/runs/{run_id}/event-evidence')
+async def bot_event_evidence(account_id: int, run_id: uuid.UUID, response: Response,
+                             user_id: int = Depends(require_user)):
+    from alpha_agent.paper.decision_evidence import decision_evidence
+    response.headers['Cache-Control'] = 'private, no-store'
+    return await decision_evidence(await get_db_pool(), user_id, account_id, run_id)
+
+
+@router.get(BASE + '/bot/turnover-attribution')
+async def turnover_attribution(account_id: int, response: Response, start_date: date | None = None,
+                               end_date: date | None = None, user_id: int = Depends(require_user)):
+    from alpha_agent.market_session import latest_completed_xnys_session
+    from alpha_agent.paper.turnover_attribution import read_turnover_attribution
+
+    end = end_date or latest_completed_xnys_session()
+    start = start_date or end - timedelta(days=13)
+    try:
+        result = await read_turnover_attribution(await get_db_pool(), user_id, account_id, start, end)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc), headers={'Cache-Control': 'private, no-store'}) from None
+    response.headers['Cache-Control'] = 'private, no-store'
+    return result
+
+
+@router.get(BASE + '/bot/turnover-replay')
+async def turnover_replay(account_id: int, start_date: date, end_date: date, response: Response,
+                          user_id: int = Depends(require_user)):
+    pool = await get_db_pool()
+    await store.bot_account(pool, user_id, account_id)
+    row = await pool.fetchrow(
+        'SELECT r.metrics,r.provenance,r.recorded_at FROM paper_turnover_receipt r JOIN sim_account a '
+        'ON a.id=r.account_id AND a.reset_count=r.cohort_id WHERE a.id=$1 AND a.user_id=$2 '
+        'AND r.start_date=$3 AND r.end_date=$4', account_id, user_id, start_date, end_date)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return ({'status':'recorded','metrics':store.unpack(row['metrics']),
+             'provenance':row['provenance'],'recorded_at':row['recorded_at']}
+            if row else {'status':'not_recorded'})
 
 
 @router.get(BASE + '/bot/position-notes')

@@ -14,8 +14,9 @@
 | `tick/daily_close` | 工作日 20:10–23:55，每 5 分钟 | 价格 → IC → 6 个 full shard → 发布尝试 → L2 |
 | `tick/slow_daily` | 工作日 13:30–14:25，每 5 分钟 | offset 0–480，每片 80，然后 30 天 IC 标注 |
 | `tick/fast_tech` | 工作日 15:30、19:30 | tech，limit 40 |
-| `tick/news_per_ticker` | 工作日 15:00、19:00 | offset 0/75，limit 75 |
+| `tick/news_per_ticker` | 工作日 15:00、19:00 | XNYS 每交易日轮转 150 个标的；offset 0/75，limit 75，同一交易日重跑使用同一轮名单 |
 | `tick/news_macro` | 工作日 12/16/20:00，另每天 02:00 | 宏观新闻 |
+| `tick/events_watch` | 每日 12:02–23:57 每五分钟，其余每小时第 2 分钟 | 独立官方披露采集，最多 30 个标的；不调用模型、不触发下单 |
 | `tick/minute_bars` | 工作日 18:15 | limit 75 |
 | `tick/ic_backtest_monthly` | 每月 1 日 04:00 | 月度 IC 回测 |
 | `paper_bot/drive` | 工作日 14–15 时第 1–25 分、16/17/19/20 时第 31–55 分，每分钟 | 机器人一步（入队、带租约的 step；无事可做时结算订单） |
@@ -30,6 +31,10 @@
 - `wake` 只入队。仅当 `PAPER_BOT_GH_FALLBACK=1` 时才额外派遣 GitHub runner；派遣失败不再返回 503。
 - 用户手动唤起机器人仍走原来的 GitHub runner。
 - 运行 30–150 分钟的 Python 脚本任务（BRAIN、Finnhub、Form 4）超出函数时长，仍在 GitHub 上运行，只是由 Vercel 准时派遣。`workflow_dispatch` 事件即时启动，不受 schedule 延迟影响。
+
+`events_watch` 使用 V055。固定标的、当前持仓、已发布候选和自选共同确定最多 30 个标的，超额名单按小时轮转，优先补采最久未检查的 SEC 源。SEC 读取公司 submissions，IR 只配置经核实的 NVDA、AAPL、AMD 公司 feed，未登记 IR 显示不覆盖。轮询每次最多 35 秒、解析最多 8 MB、每源最多接受 12 条最近记录，有 HTTP 条件请求和 SEC 403/429 冷却；容量不足沿用定时任务入场门槛。五分钟是常规调度频率，不是数据源完整性或首条响应承诺。`GET /api/alerts/events` 只返回请求者有权见到的集合；媒体来自现有新闻表，明确为二手报道，不进入官方观察表。
+
+原 `news_per_ticker` 不再永久取字母排序前 150 个标的。每个交易日推进一片 150，周末和交易所节假日不消耗一个轮转位；正常覆盖当前 557 个标的时，连续四个交易日内每票至少有一轮排期。首片仍纳入用户自选。每票最多保留供应商最近 7 日返回的 20 条，供应商漏抓或本身只返回较短窗口时不承诺追齐。
 
 ## daily_close 的顺序与门槛
 

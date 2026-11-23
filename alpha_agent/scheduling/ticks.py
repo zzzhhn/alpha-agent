@@ -11,7 +11,7 @@ from typing import Literal
 
 Job = Literal[
     "daily_close", "slow_daily", "fast_tech", "news_per_ticker", "news_macro",
-    "minute_bars", "ic_backtest_monthly",
+    "minute_bars", "ic_backtest_monthly", "events_watch",
 ]
 FAST_OFFSETS = tuple(range(0, 240, 40))
 BUDGET_SECONDS = 240
@@ -63,6 +63,10 @@ def scheduled_slot(job: Job, now: datetime) -> str | None:
         return day
     if job == "ic_backtest_monthly":
         return f"{day}:04" if now.day == 1 and hour == 4 else None
+    if job == "events_watch":
+        # Always on, including weekends; 5m daytime/evening, hourly overnight.
+        start = minute - minute % 5 if 12 <= hour <= 23 else 0
+        return f"{day}:{hour:02}:{start:02}"
     if job == "news_macro" and hour == 2:
         return f"{day}:02"
     if now.weekday() >= 5:
@@ -115,6 +119,9 @@ def next_unit(
             units = [Unit("news_per_ticker", o, 75, 100, 10) for o in (0, 75)]
         elif job == "minute_bars":
             units = [Unit(job, 0, 75, 180)]
+        elif job == "events_watch":
+            # HTTP scheduler duplicates must not poll providers twice per slot.
+            return Plan(reason="complete") if attempted(job) else Plan(Unit(job, estimate=55))
         else:
             units = [Unit(job, estimate=180 if job == "ic_backtest_monthly" else 60)]
         return next((Plan(u) for u in units if not done(u.name, u.offset)), Plan(reason="complete"))

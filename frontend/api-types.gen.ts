@@ -303,6 +303,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/alerts/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alerts Events
+         * @description Return observed evidence separately from its source coverage.
+         */
+        get: operations["alerts_events_api_alerts_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/alerts/inbox": {
         parameters: {
             query?: never;
@@ -862,6 +882,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/event-shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Event Shadow Tick
+         * @description Research-only, always independent of the account runner and its BYOK budget.
+         */
+        get: operations["event_shadow_tick_api_cron_event_shadow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/fast_intraday": {
         parameters: {
             query?: never;
@@ -1055,6 +1095,23 @@ export interface paths {
          *     news_items. Limit + offset enable multi-shot sharding.
          */
         post: operations["cron_news_per_ticker_api_cron_news_per_ticker_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cron/option-observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Private Option Tick */
+        get: operations["private_option_tick_api_cron_option_observations_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2329,6 +2386,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/paper/accounts/{account_id}/bot/turnover-attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Turnover Attribution */
+        get: operations["turnover_attribution_api_paper_accounts__account_id__bot_turnover_attribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/bot/turnover-replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Turnover Replay */
+        get: operations["turnover_replay_api_paper_accounts__account_id__bot_turnover_replay_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/paper/accounts/{account_id}/capabilities": {
         parameters: {
             query?: never;
@@ -2424,6 +2515,23 @@ export interface paths {
         };
         /** Run Detail */
         get: operations["run_detail_api_paper_accounts__account_id__runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper/accounts/{account_id}/runs/{run_id}/event-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Bot Event Evidence */
+        get: operations["bot_event_evidence_api_paper_accounts__account_id__runs__run_id__event_evidence_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2642,6 +2750,40 @@ export interface paths {
          *     cached aggressively at the edge.
          */
         get: operations["picks_scoreboard_api_picks_scoreboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/event-shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Event Shadow */
+        get: operations["event_shadow_api_research_event_shadow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/option-observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Option Samples */
+        get: operations["option_samples_api_research_option_observations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4389,6 +4531,120 @@ export interface components {
             /** Valued At */
             valued_at?: string | null;
         };
+        /** EventReaction */
+        EventReaction: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Follow Reason */
+            follow_reason: string | null;
+            follow_through: components["schemas"]["FollowThrough"] | null;
+            gap: components["schemas"]["OpeningGap"] | null;
+            /** Gap Reason */
+            gap_reason: string | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "observed" | "partial" | "unavailable";
+            /**
+             * Timing
+             * @enum {string}
+             */
+            timing: "overnight" | "intraday" | "late_discovery";
+        };
+        /** EventWatchCoverage */
+        EventWatchCoverage: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Sources */
+            sources: components["schemas"]["EventWatchSourceCoverage"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "stale" | "unavailable" | "not_checked" | "unsupported" | "partial";
+            /** Tracked Tickers */
+            tracked_tickers: string[];
+        };
+        /** EventWatchItem */
+        EventWatchItem: {
+            /**
+             * Evidence Class
+             * @enum {string}
+             */
+            evidence_class: "official" | "media";
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "sec_filing" | "earnings" | "investor_release" | "management_change" | "guidance" | "merger_acquisition" | "regulatory" | "media_report";
+            /** Published At */
+            published_at: string | null;
+            /**
+             * Published At Quality
+             * @enum {string}
+             */
+            published_at_quality: "sec_accepted" | "source_timestamp" | "date_only" | "unavailable" | "unverified";
+            /** Published Date */
+            published_date: string | null;
+            reaction?: components["schemas"]["EventReaction"] | null;
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "observed" | "corrected" | "withdrawn";
+            /** Ticker */
+            ticker: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /** EventWatchResponse */
+        EventWatchResponse: {
+            coverage: components["schemas"]["EventWatchCoverage"];
+            /** Events */
+            events: components["schemas"]["EventWatchItem"][];
+        };
+        /** EventWatchSourceCoverage */
+        EventWatchSourceCoverage: {
+            /** Last Attempt At */
+            last_attempt_at: string | null;
+            /** Last Success At */
+            last_success_at: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "sec_edgar" | "investor_relations";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "stale" | "unavailable" | "not_checked" | "unsupported";
+            /** Ticker */
+            ticker: string;
+        };
         /** ExecutableDayCoverage */
         ExecutableDayCoverage: {
             /**
@@ -4803,6 +5059,32 @@ export interface components {
             name: string;
             /** Tier */
             tier: string;
+        };
+        /** FollowThrough */
+        FollowThrough: {
+            /**
+             * Anchor At
+             * Format: date-time
+             */
+            anchor_at: string;
+            /**
+             * End At
+             * Format: date-time
+             */
+            end_at: string;
+            /** Excess Return */
+            excess_return: number;
+            /**
+             * Price Basis
+             * @constant
+             */
+            price_basis: "raw_unadjusted";
+            /** Source */
+            source: string;
+            /** Spy Return */
+            spy_return: number;
+            /** Ticker Return */
+            ticker_return: number;
         };
         /** FullCard */
         FullCard: {
@@ -5372,6 +5654,32 @@ export interface components {
             period: string;
             /** Ticker */
             ticker: string;
+        };
+        /** OpeningGap */
+        OpeningGap: {
+            /** Excess Return */
+            excess_return: number;
+            /**
+             * Open At
+             * Format: date-time
+             */
+            open_at: string;
+            /**
+             * Price Basis
+             * @constant
+             */
+            price_basis: "raw_unadjusted";
+            /**
+             * Prior Close At
+             * Format: date-time
+             */
+            prior_close_at: string;
+            /** Source */
+            source: string;
+            /** Spy Return */
+            spy_return: number;
+            /** Ticker Return */
+            ticker_return: number;
         };
         /**
          * OperandCatalogResponse
@@ -6817,6 +7125,40 @@ export interface operations {
             };
         };
     };
+    alerts_events_api_alerts_events_get: {
+        parameters: {
+            query?: {
+                ticker?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventWatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     alerts_inbox_api_alerts_inbox_get: {
         parameters: {
             query?: {
@@ -7846,6 +8188,37 @@ export interface operations {
             };
         };
     };
+    event_shadow_tick_api_cron_event_shadow_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     fast_intraday_api_cron_fast_intraday_get: {
         parameters: {
             query?: {
@@ -8284,6 +8657,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    private_option_tick_api_cron_option_observations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -8867,7 +9271,7 @@ export interface operations {
                 authorization?: string | null;
             };
             path: {
-                job: "daily_close" | "slow_daily" | "fast_tech" | "news_per_ticker" | "news_macro" | "minute_bars" | "ic_backtest_monthly";
+                job: "daily_close" | "slow_daily" | "fast_tech" | "news_per_ticker" | "news_macro" | "minute_bars" | "ic_backtest_monthly" | "events_watch";
             };
             cookie?: never;
         };
@@ -10289,6 +10693,78 @@ export interface operations {
             };
         };
     };
+    turnover_attribution_api_paper_accounts__account_id__bot_turnover_attribution_get: {
+        parameters: {
+            query?: {
+                start_date?: string | null;
+                end_date?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    turnover_replay_api_paper_accounts__account_id__bot_turnover_replay_get: {
+        parameters: {
+            query: {
+                start_date: string;
+                end_date: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     capabilities_api_paper_accounts__account_id__capabilities_get: {
         parameters: {
             query?: never;
@@ -10495,6 +10971,40 @@ export interface operations {
         };
     };
     run_detail_api_paper_accounts__account_id__runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                account_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bot_event_evidence_api_paper_accounts__account_id__runs__run_id__event_evidence_get: {
         parameters: {
             query?: never;
             header?: {
@@ -10829,6 +11339,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScoreboardResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    event_shadow_api_research_event_shadow_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    option_samples_api_research_option_observations_get: {
+        parameters: {
+            query?: {
+                symbol?: "SPY" | "QQQ" | "NVDA";
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

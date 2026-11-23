@@ -1,4 +1,5 @@
 "use client";
+import { EventInbox } from "@/components/research/ForwardEvidence";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -325,6 +326,7 @@ export default function AlertWorkbench() {
         action={<TmLinkButton href="/methodology#alerts" variant="secondary" size="md">{zh ? "规则与阈值" : "Rules & thresholds"}</TmLinkButton>}
       />
 
+      <EventInbox />
       <div className="alerts-body">
         <div className="alerts-grid">
           <aside className="alerts-filters border-r border-tm-rule bg-tm-bg-2 p-3" aria-label={zh ? "警报队列与筛选" : "Alert queues and filters"}>

@@ -40,7 +40,7 @@ def _fetch_chain(ticker: str, as_of: datetime) -> dict:
     return {
         "calls_volume": int(chain.calls["volume"].fillna(0).sum()),
         "puts_volume": int(chain.puts["volume"].fillna(0).sum()),
-        "iv_percentile": 50.0,  # naive placeholder; full impl needs hist IV
+        "iv_percentile": None,  # No historical IV distribution in this adapter.
     }
 
 
@@ -53,7 +53,8 @@ def _fetch(ticker: str, as_of: datetime) -> SignalScore:
         )
     pcr = c["puts_volume"] / max(c["calls_volume"], 1)
     pcr_z = -float(np.tanh((pcr - 1.0) * 1.5))  # >1 (puts heavy) = negative
-    iv_z = -float(np.tanh((c["iv_percentile"] - 50) / 30))
+    pct = c.get("iv_percentile")
+    iv_z = -float(np.tanh((pct - 50) / 30)) if pct is not None else 0.0
     z = float(np.clip((pcr_z + iv_z) / 2 * 2, -3.0, 3.0))
     return SignalScore(
         ticker=ticker, z=z, raw=c, confidence=0.70,

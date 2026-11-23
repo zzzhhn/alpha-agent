@@ -19,6 +19,8 @@ from pydantic import BaseModel, Field, field_validator
 from alpha_agent.alerts.triage import assess_alert
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_user
+from alpha_agent.news.event_reaction import EventReaction
+from alpha_agent.news.event_watch import read_event_evidence
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
@@ -34,6 +36,55 @@ class Alert(BaseModel):
 
 class AlertsResponse(BaseModel):
     alerts: list[Alert]
+
+
+class EventWatchItem(BaseModel):
+    id: str
+    ticker: str
+    title: str
+    source: str
+    url: str
+    published_at: datetime | None
+    published_date: date | None
+    published_at_quality: Literal['sec_accepted', 'source_timestamp', 'date_only', 'unavailable', 'unverified']
+    first_seen_at: datetime
+    kind: Literal['sec_filing', 'earnings', 'investor_release', 'management_change',
+                  'guidance', 'merger_acquisition', 'regulatory', 'media_report']
+    status: Literal['observed', 'corrected', 'withdrawn']
+    evidence_class: Literal['official', 'media']
+    reaction: EventReaction | None = None
+
+
+class EventWatchSourceCoverage(BaseModel):
+    ticker: str
+    source: Literal['sec_edgar', 'investor_relations']
+    status: Literal['healthy', 'stale', 'unavailable', 'not_checked', 'unsupported']
+    last_attempt_at: datetime | None
+    last_success_at: datetime | None
+
+
+class EventWatchCoverage(BaseModel):
+    status: Literal['healthy', 'stale', 'unavailable', 'not_checked', 'unsupported', 'partial']
+    tracked_tickers: list[str]
+    sources: list[EventWatchSourceCoverage]
+    as_of: datetime
+
+
+class EventWatchResponse(BaseModel):
+    events: list[EventWatchItem]
+    coverage: EventWatchCoverage
+
+
+@router.get('/events', response_model=EventWatchResponse)
+async def alerts_events(
+    response: Response,
+    ticker: str | None = Query(None, min_length=1, max_length=12, pattern=r'^[A-Za-z][A-Za-z0-9.-]{0,11}$'),
+    limit: int = Query(20, ge=1, le=50),
+    user_id: int = Depends(require_user),
+) -> dict:
+    """Return observed evidence separately from its source coverage."""
+    response.headers['Cache-Control'] = 'private, no-store'
+    return await read_event_evidence(await get_db_pool(), user_id, ticker.upper() if ticker else None, limit)
 
 
 class AlertContext(BaseModel):
