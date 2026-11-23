@@ -11,6 +11,7 @@ import { PaperApiError, type OrderOut } from "@/lib/api/paper";
 import { type PaperBotRun, type PaperBotRunStatus } from "@/lib/api/paper-bot";
 import { t, type Locale, type TranslationKey } from "@/lib/i18n";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
+import { RunEventEvidence } from "@/components/research/ForwardEvidence";
 import { Metric } from "./PaperUi";
 
 export function botModelLabel(provider: string | null, model: string | null) {
@@ -263,6 +264,7 @@ export function PaperBotRunDrawer({ run, open, onClose, loading, error, onRetry 
       {tab === "actions" ? <><PaperBotActions run={run} page={actionPage} />{recordedBotActions(run).length ? <PaperBotPagination page={actionPage} total={recordedBotActions(run).length} loading={false} onChange={setActionPage} /> : <PaperBotOutcome run={run} />}</> : null}
       {tab === "reviews" ? notes.length ? <section><p className="text-xs text-tm-muted">{t(locale,"sim.bot.position_notes")}</p><ul className="divide-y divide-tm-rule">{notes.slice((reviewPage-1)*5,reviewPage*5).map((note,index)=><li key={index} className="space-y-1 py-3 text-sm leading-6"><span className="font-tm-mono font-semibold">{String(note.ticker)}</span>{(["note","thesis","invalidation","review_after"] as const).map(field=>typeof note[field] === "string" ? <p key={field} className="whitespace-pre-wrap break-words text-tm-muted">{field === "note" ? "" : `${t(locale,`sim.bot.position_${field}`)} · `}{String(note[field])}</p> : null)}</li>)}</ul><PaperBotPagination page={reviewPage} total={notes.length} loading={false} onChange={setReviewPage} /></section> : <p className="text-sm text-tm-muted">{t(locale,"sim.bot.review_missing")}</p> : null}
       {tab === "evidence" ? <>
+      <RunEventEvidence accountId={run.account_id} runId={run.id}/>
       <PaperBotOutputEvidence value={diagnostics?.model_output} />
       {run.error ? <details><summary className="cursor-pointer text-tm-neg">{t(locale,"sim.bot.diagnostics")}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs text-tm-muted">{run.error}</p></details> : null}
       {timings ? <details><summary className="cursor-pointer text-xs">{t(locale,"sim.bot.stage_timings")}</summary><dl className="mt-2 grid grid-cols-[1fr_auto] gap-2 font-tm-mono text-xs text-tm-muted">{Object.entries(timings).map(([stage,value])=><div key={stage} className="contents"><dt>{botStageLabel(locale,{...run,stage})}</dt><dd>{typeof value === "number" ? `${value.toLocaleString()} ms` : "—"}</dd></div>)}</dl></details> : null}

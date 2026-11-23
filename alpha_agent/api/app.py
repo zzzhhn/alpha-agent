@@ -333,6 +333,11 @@ def create_app() -> FastAPI:
     _load("evolution", _import_evolution)
     _load("factor_lab", _import_factor_lab)
     _load("admin", _import_admin)
+    def _import_private_research():
+        from alpha_agent.api.routes.private_research import router
+        return router
+
+    _load("private_research", _import_private_research)
     _load("alerts", _import_alerts)
     _load("brain", _import_brain)
     _load("paper", _import_paper)

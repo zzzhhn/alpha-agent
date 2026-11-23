@@ -15,6 +15,7 @@
     }
   },
   "crons": [
+    { "path": "/api/cron/event-shadow", "schedule": "3-59/5 13-21 * * 1-5" },
     { "path": "/api/cron/paper_bot/valuation", "schedule": "7,37 13-21 * * 1-5" },
     { "path": "/api/cron/paper_fill", "schedule": "0 1 * * *" },
     { "path": "/api/cron/paper_bot/wake", "schedule": "1,4 14,15 * * 1-5" },
@@ -27,6 +28,8 @@
     { "path": "/api/cron/tick/news_per_ticker", "schedule": "0 15,19 * * 1-5" },
     { "path": "/api/cron/tick/news_macro", "schedule": "0 12,16,20 * * 1-5" },
     { "path": "/api/cron/tick/news_macro", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/tick/events_watch", "schedule": "2-59/5 12-23 * * *" },
+    { "path": "/api/cron/tick/events_watch", "schedule": "2 0-11 * * *" },
     { "path": "/api/cron/tick/minute_bars", "schedule": "15 18 * * 1-5" },
     { "path": "/api/cron/tick/ic_backtest_monthly", "schedule": "0 4 1 * *" },
     { "path": "/api/cron/paper_bot/drive", "schedule": "1-25 14,15 * * 1-5" },

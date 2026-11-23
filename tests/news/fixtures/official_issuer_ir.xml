@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"><channel><title>Issuer fixture, synthetic</title><link>https://nvidianews.nvidia.com</link><description>Fixture</description>
+<item><title>Issuer Announces Financial Results</title><link>https://nvidianews.nvidia.com/news/results</link><guid isPermaLink="false">results</guid><pubDate>Tue, 24 Nov 2026 12:01:00 -0500</pubDate></item>
+<item><title>Correction: Issuer Announces Financial Results</title><link>https://nvidianews.nvidia.com/news/results</link><guid isPermaLink="false">results</guid><pubDate>Tue, 24 Nov 2026 12:10:00 EST</pubDate></item>
+<item><title>Withdrawal notice: earlier release</title><link>https://nvidianews.nvidia.com/news/withdrawal</link><guid isPermaLink="false">withdrawal</guid></item>
+<item><title>Issuer Announces Financial Results Conference Call</title><link>https://nvidianews.nvidia.com/news/preview</link><guid isPermaLink="false">preview</guid><pubDate>2026-11-24</pubDate></item>
+<item><title>Future release</title><link>https://nvidianews.nvidia.com/news/future</link><pubDate>Wed, 25 Nov 2026 12:10:00 EST</pubDate></item>
+<item><title>Untrusted origin</title><link>https://example.invalid/news</link></item>
+</channel></rss>

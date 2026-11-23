@@ -26,6 +26,7 @@ import PaperOrdersPane from "./PaperOrdersPane";
 import RecommendationPerformance from "../RecommendationPerformance";
 import PaperBotPositionReview from "./PaperBotPositionReview";
 import PaperBotValuation from "./PaperBotValuation";
+import { BotResearch } from "@/components/research/ForwardEvidence";
 
 export default function PaperBotScreen({ accountTabs }: { readonly accountTabs: ReactNode }) {
   const { locale } = useLocale();
@@ -266,6 +267,7 @@ function BotWorkspace({ summary, accountTabs }: { readonly summary: PaperAccount
       </TmPane></div>
     </div>
     <TmPane title={t(locale,"sim.bot.positions")} meta={acc ? `${acc.positions.length}` : "—"}>{(account.loading && !acc) || account.error ? <PaperBotState loading={account.loading} error={account.error} onRetry={refresh} /> : acc ? <><PaperPositionsWithSource accountKind="bot" positions={acc.positions.slice((shownPositionPage-1)*5,shownPositionPage*5)} attribution={[]} attributionAvailable={false} pendingOrders={acc.pending_orders} onReview={setReviewTicker} />{acc.positions.length>5 ? <PaperBotPagination page={shownPositionPage} total={acc.positions.length} loading={account.loading} onChange={setPositionPage} /> : null}</> : null}</TmPane>
+    <BotResearch id={id} />
     <TmPane title={t(locale,"sim.bot.performance.title")} meta={t(locale,"sim.bot.performance.current_cohort")}>
       {(performance.loading && !performance.data) || performance.error ? <PaperBotState loading={performance.loading} error={performance.error} onRetry={refresh} /> : performance.data ? <PaperBotPerformanceSummary data={performance.data} onDetails={()=>setPerformanceOpen(true)} /> : null}
       {(curve.loading && !curve.data) || curve.error ? <PaperBotState loading={curve.loading} error={curve.error} onRetry={refresh} /> : <PaperCurvePane curve={curve.data} compact showDisclaimer={false} />}

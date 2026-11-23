@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from alpha_agent.market_session import _xnys_calendar
 from alpha_agent.news.aggregator import MacroAggregator, PerTickerAggregator
 from alpha_agent.news.fed_adapter import FedRSSAdapter
 from alpha_agent.news.finnhub_adapter import FinnhubAdapter
@@ -26,6 +28,27 @@ from alpha_agent.news.rss_adapter import RSSAdapter
 from alpha_agent.news.truth_adapter import TruthSocialAdapter
 from alpha_agent.orchestrator.batch_runner import run_batched
 from alpha_agent.storage.postgres import get_pool
+
+_NEWS_ROTATION_SIZE = 150  # two scheduled 75-ticker shards
+_NEWS_WINDOW = timedelta(days=7)
+_PER_TICKER_CAP = 20
+_ROTATION_EPOCH = date(2026, 1, 2)
+_NEW_YORK = ZoneInfo('America/New_York')
+
+
+def rotating_news_universe(universe: list[str], at: datetime) -> tuple[date, list[str]]:
+    """Deterministic contiguous rotation by XNYS trading-day ordinal.
+
+    The fixed origin makes the same session repeatable across requests. Weekends
+    and exchange holidays do not consume a day's slice; manual runs reuse the
+    preceding session on non-trading days.
+    """
+    calendar = _xnys_calendar()
+    session = calendar.date_to_session(at.astimezone(_NEW_YORK).date(), direction='previous')
+    origin = calendar.date_to_session(_ROTATION_EPOCH)
+    ordinal = calendar.sessions.get_loc(session) - calendar.sessions.get_loc(origin)
+    start = (ordinal * _NEWS_ROTATION_SIZE) % len(universe) if universe else 0
+    return session.date(), universe[start:] + universe[:start]
 
 
 def _per_ticker_aggregator() -> PerTickerAggregator:
@@ -53,13 +76,13 @@ def _macro_aggregator() -> MacroAggregator:
 
 
 async def _record_cron(pool, name: str, started_at, rows_written: int,
-                       errors: list[dict]) -> None:
+                       errors: list[dict], **details) -> None:
     await pool.execute(
         "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, "
         "error_count, details) VALUES ($1, $2, $3, $4, $5, $6::jsonb)",
         name, started_at, datetime.now(UTC),
         len(errors) == 0, len(errors),
-        json.dumps({"rows_written": rows_written}),
+        json.dumps({"rows_written": rows_written, **details}),
     )
 
 
@@ -70,8 +93,10 @@ async def per_ticker_handler(
 
     pool = await get_pool(os.environ["DATABASE_URL"])
     started_at = datetime.now(UTC)
-    since = started_at - timedelta(hours=24)
-    universe = get_watchlist(top_n=limit if limit else 100, offset=offset or 0)
+    since = started_at - _NEWS_WINDOW
+    session_date, rotation = rotating_news_universe(get_watchlist(top_n=600), started_at)
+    shard_start = offset or 0
+    universe = rotation[shard_start:shard_start + (limit or 100)]
     if (offset or 0) == 0:
         wl_rows = await pool.fetch("SELECT DISTINCT ticker FROM user_watchlist")
         extras = {r["ticker"] for r in wl_rows} - set(universe)
@@ -87,12 +112,16 @@ async def per_ticker_handler(
         except Exception as exc:
             errors.append({"ticker": t, "err": f"{type(exc).__name__}: {exc}"[:200]})
             return 0
-        return await upsert_news_items(pool, items)
+        observed_at = datetime.now(UTC)
+        recent = sorted((item for item in items if since <= item.published_at <= observed_at),
+                        key=lambda item: item.published_at, reverse=True)[:_PER_TICKER_CAP]
+        return await upsert_news_items(pool, recent)
 
     results = await run_batched(universe, _one, batch_size=20)
     rows_written = sum(v for v in results.values() if isinstance(v, int))
     await agg.aclose()
-    await _record_cron(pool, "news_per_ticker", started_at, rows_written, errors)
+    await _record_cron(pool, "news_per_ticker", started_at, rows_written, errors,
+                       market_session=session_date.isoformat(), offset=shard_start, tickers_scanned=len(universe))
     return {"ok": True, "rows_written": rows_written, "errors": errors[:5]}
 
 

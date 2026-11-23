@@ -64,6 +64,34 @@ async def cron_auth_check() -> dict[str, bool]:
     return {"ok": True}
 
 
+@router.get("/event-shadow")
+async def event_shadow_tick():
+    """Research-only, always independent of the account runner and its BYOK budget."""
+    from alpha_agent.api.dependencies import get_db_pool
+    from alpha_agent.data.capacity import read_capacity
+    from alpha_agent.paper.event_shadow import run_event_shadow_cycle
+    if os.getenv("EVENT_SHADOW_ENABLED", "").lower() != "true":
+        return {"status": "disabled"}
+    pool = await get_db_pool()
+    if not (await read_capacity(pool))["allow_writes"]:
+        return {"status": "capacity_paused"}
+    from alpha_agent.paper.event_shadow_review import record_session_sample
+    from alpha_agent.paper.shadow_borrow_receipts import known_receipts
+    result = await run_event_shadow_cycle(pool, borrow=await known_receipts(pool))
+    await record_session_sample(pool)
+    from alpha_agent.news.event_reaction import observe_event_reactions
+    return {**result, "event_reactions": await observe_event_reactions(pool)}
+
+
+@router.get("/option-observations")
+async def private_option_tick():
+    from alpha_agent.api.dependencies import get_db_pool
+    from alpha_agent.data.option_observatory import enabled, sample_options
+    if not enabled():
+        return {"status": "disabled"}
+    return await sample_options(await get_db_pool())
+
+
 @router.get("/research_readiness")
 async def cron_research_readiness() -> dict[str, Any]:
     """Read-only actual-date coverage; no provider requests or model calls."""

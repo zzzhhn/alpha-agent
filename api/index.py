@@ -127,6 +127,7 @@ _load("factor_lab",    "alpha_agent.api.routes.factor_lab")
 _load("brain",         "alpha_agent.api.routes.brain_routes")
 _load("paper",         "alpha_agent.api.routes.paper")
 _load("paper_bot",     "alpha_agent.api.routes.paper_bot")
+_load("private_research", "alpha_agent.api.routes.private_research")
 _load("l2",            "alpha_agent.api.routes.l2")
 _load("nav_status",    "alpha_agent.api.routes.nav_status")
 
