@@ -9,13 +9,13 @@ import { TmButton, TmDisclosureButton } from "@/components/tm/TmButton";
 import { apiGet, ApiException } from "@/lib/api/client";
 import { useTimezonePreference } from "@/hooks/useTimezonePreference";
 
-function Fold({title,children}:{title:string;children:ReactNode}) {
+export function Fold({title,children}:{title:string;children:ReactNode}) {
   const [open,setOpen]=useState(false), id=useId();
   return <section><TmDisclosureButton label={title} expanded={open} aria-controls={id} onClick={()=>setOpen(!open)}/>
     <div id={id} hidden={!open} className="max-h-[42vh] space-y-3 overflow-y-auto overscroll-contain px-4 py-3 text-sm">{open&&children}</div></section>;
 }
 
-function Read<T>({path,children}:{path:string;children:(value:T)=>ReactNode}) {
+export function Read<T>({path,children}:{path:string;children:(value:T)=>ReactNode}) {
   const {locale}=useLocale(), zh=locale==="zh";
   const [result,setResult]=useState<{path:string;data?:T;error?:number}>();
   const [retry,setRetry]=useState(0);
