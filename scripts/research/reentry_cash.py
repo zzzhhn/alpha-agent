@@ -132,6 +132,24 @@ def replay(policy, cash, holdings, fills, marks, dividends):
     }
 
 
+def verify_opening(snapshot, account, cutoff, cash, positions, marks):
+    pos = {k: v for k, v in positions.items() if v}
+    if not (
+        snapshot["account"] == account["id"]
+        and snapshot["cohort"] == account["reset_count"]
+        and as_utc(snapshot["cutoff"]) == cutoff
+        and cutoff <= as_utc(snapshot["captured_at"]) < forward_open()
+        and snapshot["price_basis"] == "sip:1Min:raw"
+        and snapshot["positions"] == pos
+        and D(snapshot["cash"]) == cash
+        and set(snapshot["prices"]) == set(pos)
+        and all(k in marks and D(marks[k]["price"]) == D(snapshot["prices"][k]) for k in pos)
+        and D(snapshot["opening_nav"])
+        == cash + sum(n * D(snapshot["prices"][k]) for k, n in pos.items())
+    ):
+        raise ValueError("Forward opening checkpoint differs: reconcile before reporting returns")
+
+
 async def run(args):
     quotes = _archival_quotes(args.receipt, args.start, args.end)
     begin, end = _session_bounds(args.start, args.end)
@@ -179,6 +197,17 @@ async def run(args):
                     result=json.loads(o["result"] or "{}"),
                 )
             )
+    if args.start == FORWARD_START:
+        if not args.opening_checkpoint:
+            raise ValueError("Forward replay requires the private pre-open checkpoint")
+        verify_opening(
+            json.loads(args.opening_checkpoint.read_text()),
+            a,
+            begin,
+            cash,
+            pos,
+            quotes["opening"][begin],
+        )
     initial = cash + sum(n * D(quotes["opening"][begin][t]["price"]) for t, n in pos.items() if n)
     return {
         "start": str(args.start),
@@ -267,6 +296,9 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=date.fromisoformat)
     parser.add_argument("--end", type=date.fromisoformat)
     parser.add_argument("--forward-status", action="store_true")
+    parser.add_argument(
+        "--opening-checkpoint", type=Path, help="required for the enrolled forward window"
+    )
     args = parser.parse_args()
     if not args.forward_status and not all((args.start, args.end, args.receipt)):
         parser.error("replay requires --start --end and --receipt")

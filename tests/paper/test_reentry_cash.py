@@ -1,7 +1,28 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from scripts.research.reentry_cash import category, replay
+import pytest
+
+from scripts.research.reentry_cash import category, replay, verify_opening
+
+
+def test_forward_opening_accepts_matching_receipt_not_revised_marks():
+    cutoff = datetime(2026, 11, 24, 21, tzinfo=UTC)
+    snapshot = dict(
+        account=9,
+        cohort=2,
+        cutoff=cutoff.isoformat(),
+        captured_at="2026-11-25T07:00:00Z",
+        cash="60",
+        positions={"A": 2},
+        prices={"A": "20"},
+        opening_nav="100",
+        price_basis="sip:1Min:raw",
+    )
+    args = snapshot, {"id": 9, "reset_count": 2}, cutoff, Decimal(60), {"A": 2, "sold": 0}
+    verify_opening(*args, {"A": {"price": 20}})
+    with pytest.raises(ValueError, match="checkpoint differs"):
+        verify_opening(*args, {"A": {"price": 21}})
 
 
 def buy():
