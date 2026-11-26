@@ -32,11 +32,13 @@ export default function PremarketReview(){
       {records.map(({session_date,stage,captured_at,payload:p})=><section className="space-y-2 border-t border-tm-rule pt-2" key={stage}>
         <h3 className="font-semibold">{session_date} · {stage==="evaluation"?txt("收盘对照","Close comparison"):stage==="premarket"?"09:20 ET":"10:00 ET"} · {stamp(captured_at)}</h3>
         {stage==="evaluation"?<>
+          <p>{txt("两组都在观察和决策完成后建仓，并计入收盘退出成本。持有现金的名额可因节省费用产生正净差。","Both baskets enter after observation and decision, with closing exit costs. A cash slot can generate a positive difference through avoided costs.")}</p>
           {!Object.keys(p.results??{}).length&&<p>{txt("缺少当日复核快照，无法比较。","No review snapshots to compare.")}</p>}
           {Object.entries(p.results??{}).map(([k,v])=><p key={k}>{k==="premarket"?"09:20":"10:00"} ET · {v.status==="measured"?txt("相对正式榜，扣费后","Net difference vs baseline")+": "+v.delta_bps+" bp":reason[v.status]}</p>)}
         </>:<>
           <p>{txt("正式快照","Baseline")} {p.run_id?"#"+p.run_id:"—"} · {txt("近 20 分钟有监测更新","Sources updated in 20 min")} {p.recent}/{p.tracked} · Top 50 {p.top_covered}/50
             {p.truncated&&txt(" · 证据超限"," · Evidence limit reached")}</p>
+          {p.top_covered === 0 && p.comparable && <p className="text-tm-warn">{txt("候选股来源覆盖为零。此次比较依赖榜外来源的更新，解读净差时请计入这一缺口。","No candidate had recent source coverage. This observation qualified on updates outside the Top 50.")}</p>}
           <p>{!p.comparable?txt("证据不足，本轮不参与收益比较。","Insufficient evidence; excluded."):p.changes.length?
             p.changes.map(c=>c.out+" → "+(c.into??txt("现金","cash"))).join(" · "):txt("影子组合保持正式榜不变。","Shadow basket unchanged.")}</p>
           {p.notes.map(n=><div key={n.ticker}><strong>{n.ticker}</strong> · {n.tag==="risk"?txt("风险上升","Risk increased"):n.tag==="attention"?txt("新增关注","Watch"):txt("需复核","Review")}
