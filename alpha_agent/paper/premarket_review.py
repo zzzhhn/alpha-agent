@@ -65,6 +65,21 @@ def classify(ranked, holdings, events, complete):
     return notes, changes
 
 
+async def source_coverage(db, cutoff, top):
+    return await db.fetchrow(
+        """WITH recent AS (
+            SELECT DISTINCT ticker, source FROM official_source_coverage
+            WHERE first_success_at <= $1 AND last_success_at >= $1::timestamptz - interval '20 minutes'
+              AND (failed_at IS NULL OR failed_at > $1)
+        )
+        SELECT (SELECT count(*) FROM official_event_source WHERE tracked_since <= $1) AS tracked,
+               count(*) AS recent,
+               count(DISTINCT ticker) FILTER (WHERE ticker = ANY($2::text[])) AS top_covered
+        FROM recent""",
+        cutoff, top,
+    )
+
+
 async def capture(db, owner, day, cutoff, anchor):
     cal = _xnys_calendar()
     previous = cal.previous_session(day)
@@ -131,15 +146,7 @@ async def capture(db, owner, day, cutoff, anchor):
         cutoff,
         list(set(ranked) | holdings),
     )
-    sources = await db.fetchrow(
-        """SELECT count(*) AS tracked, count(*) FILTER (
-        WHERE last_error IS NULL AND last_success_at BETWEEN $1::timestamptz-interval '20 minutes' AND $1) AS recent,
-        count(DISTINCT ticker) FILTER (WHERE ticker=ANY($2::text[]) AND last_error IS NULL AND
-        last_success_at BETWEEN $1::timestamptz-interval '20 minutes' AND $1) AS top_covered
-        FROM official_event_source""",
-        cutoff,
-        ranked[:50],
-    )
+    sources = await source_coverage(db, cutoff, ranked[:50])
     complete = len(rows) <= 200 and len(ranked) >= 50 and sources["recent"] > 0
     notes, changes = classify(ranked, holdings, events, complete)
     return dict(
@@ -310,6 +317,15 @@ async def tick(pool, owner, clock=lambda: datetime.now(UTC)):
             ):
                 return {"status": "already_recorded"}
             if stage != "evaluation":
+                # Require one complete prospective window after the schema ships.
+                # This also keeps rolling deployments usable before the migration.
+                ready = await db.fetchval(
+                    "SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version=$1 "
+                    "AND applied_at <= $2::timestamptz - interval '20 minutes')",
+                    "V065__official_source_coverage", cutoff,
+                )
+                if not ready:
+                    return {"status": "source_history_warming", "stage": stage}
                 anchor = cutoff if stage == "premarket" else cutoff - 40 * MIN
                 payload = await capture(db, owner, day, cutoff, anchor)
     if stage == "evaluation":
