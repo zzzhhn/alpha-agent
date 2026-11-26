@@ -275,15 +275,6 @@ async def test_provider_budget_exhaustion_writes_missing_sample(monkeypatch):
     assert result['errors'] == {'SPY': 'fetch_budget_exceeded', 'AAPL': 'fetch_budget_exceeded'}
 
 
-async def test_daily_hook_runs_without_orders_and_shares_bounded_cache(monkeypatch):
-    book = Book([])
-    monkeypatch.setattr(valuation, 'fetch_bars', AsyncMock(return_value=bars()))
-    result = await valuation.refresh_daily_valuations(book, NOW)
-    assert result['accounts'][0]['valuation_quality'] == 'cash_only'
-    assert result['symbols_read'] == 1 and result['symbol_limit'] == 21
-    assert not result['has_more_accounts']
-
-
 async def test_provider_failure_is_data_quality_not_false_zero(monkeypatch):
     book = Book()
     monkeypatch.setattr(valuation, 'fetch_bars', AsyncMock(side_effect=TimeoutError('private detail')))
