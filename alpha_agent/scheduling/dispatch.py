@@ -27,18 +27,26 @@ async def dispatch_workflow(pool, workflow: str, *, now: datetime | None = None,
                             post=None) -> dict:
     if workflow not in WORKFLOWS:
         raise HTTPException(404, "unknown workflow")
-    now = now or datetime.now(UTC)
+    now = (now or datetime.now(UTC)).astimezone(UTC)
     day = now.date().isoformat()
     name = f"dispatch_{workflow}"
-    seen = await pool.fetchval(
-        "SELECT 1 FROM cron_runs WHERE cron_name=$1 AND started_at >= $2 "
-        "AND details->>'day'=$3 LIMIT 1",
-        name, datetime.combine(now.date(), datetime.min.time(), UTC), day,
-    )
-    if seen:
-        return {"ok": True, "workflow": workflow, "skipped": "already_dispatched_today"}
     details: dict = {"day": day, "workflow": workflow}
-    capacity = await read_capacity(pool)
+    # Commit ownership before contacting GitHub. An interrupted call keeps an
+    # unconfirmed receipt: a timeout cannot tell us whether GitHub enqueued it.
+    async with pool.acquire() as conn, conn.transaction(isolation="read_committed"):
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"{name}:{day}")
+        seen = await conn.fetchval(
+            "SELECT 1 FROM cron_runs WHERE cron_name=$1 AND started_at >= $2 "
+            "AND details->>'day'=$3 LIMIT 1",
+            name, datetime.combine(now.date(), datetime.min.time(), UTC), day,
+        )
+        if seen:
+            return {"ok": True, "workflow": workflow, "skipped": "already_dispatched_today"}
+        capacity = await read_capacity(conn)
+        receipt = await conn.fetchval(
+            "INSERT INTO cron_runs (cron_name, started_at, details) VALUES ($1, $2, $3::jsonb) RETURNING id",
+            name, now, json.dumps({**details, "status": "unconfirmed"}),
+        )
     if not capacity["allow_writes"]:
         details.update(status="paused", reason=capacity["reason"])
     else:
@@ -64,12 +72,13 @@ async def dispatch_workflow(pool, workflow: str, *, now: datetime | None = None,
             except httpx.HTTPError as exc:
                 status = None
                 details["error_type"] = type(exc).__name__
-            details.update(status="dispatched" if status == 204 else "failed",
-                           http_status=status)
+            if status is None:
+                details.update(status="unconfirmed", http_status=None)
+            else:
+                details.update(status="dispatched" if status == 204 else "failed", http_status=status)
     ok = details["status"] in ("dispatched", "paused")
     await pool.execute(
-        "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, error_count, details) "
-        "VALUES ($1, $2, now(), $3, $4, $5::jsonb)",
-        name, now, ok, 0 if ok else 1, json.dumps(details),
+        "UPDATE cron_runs SET finished_at=now(), ok=$2, error_count=$3, details=$4::jsonb WHERE id=$1",
+        receipt, ok, 0 if ok else 1, json.dumps(details),
     )
     return {"ok": ok, **details}

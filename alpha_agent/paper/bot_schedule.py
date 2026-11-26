@@ -130,9 +130,11 @@ async def record_slot(pool, account, slots, slot, due, now, status, reason, run_
     return await pool.fetchval(
         'INSERT INTO sim_bot_schedule_slot(account_id,session_date,slot,planned_at,observed_at,config_version,status,reason,run_id) '
         'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(account_id,session_date,slot) DO UPDATE SET '
-        'observed_at=EXCLUDED.observed_at,status=EXCLUDED.status,reason=EXCLUDED.reason,run_id=EXCLUDED.run_id '
+        'observed_at=EXCLUDED.observed_at,status=EXCLUDED.status,'
+        "reason=CASE WHEN EXCLUDED.status='missed' AND sim_bot_schedule_slot.status='blocked' "
+        "THEN COALESCE(sim_bot_schedule_slot.reason,EXCLUDED.reason) ELSE EXCLUDED.reason END,run_id=EXCLUDED.run_id "
         "WHERE sim_bot_schedule_slot.status<>'enqueued' AND (EXCLUDED.status='enqueued' OR "
-        "(EXCLUDED.observed_at>=sim_bot_schedule_slot.observed_at AND "
+        "(sim_bot_schedule_slot.status<>'missed' AND EXCLUDED.observed_at>=sim_bot_schedule_slot.observed_at AND "
         "(sim_bot_schedule_slot.status<>EXCLUDED.status OR sim_bot_schedule_slot.reason IS DISTINCT FROM EXCLUDED.reason "
         "OR (EXCLUDED.status='blocked' AND EXCLUDED.observed_at>sim_bot_schedule_slot.observed_at)))) RETURNING status",
         account['id'], datetime.fromisoformat(slots['session_date']).date(), slot, due, now,
