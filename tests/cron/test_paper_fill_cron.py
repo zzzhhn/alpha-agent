@@ -2,6 +2,7 @@
 import pytest
 import asyncpg
 from datetime import date, timedelta
+from pathlib import Path
 
 
 @pytest.mark.asyncio
@@ -271,7 +272,7 @@ async def test_equity_snapshot_includes_closed_realized_pnl_in_one_aggregate(app
             "INSERT INTO users (email) VALUES ('snapshot-pnl@test.com') RETURNING id"
         )
         acct_id = await conn.fetchval(
-            "INSERT INTO sim_account (user_id, cash) VALUES ($1, 1000.0) RETURNING id",
+            "INSERT INTO sim_account (user_id,cash,created_at) VALUES ($1,1000.0,'2026-07-10') RETURNING id",
             user_id,
         )
         await conn.execute(
@@ -282,12 +283,12 @@ async def test_equity_snapshot_includes_closed_realized_pnl_in_one_aggregate(app
         )
         await conn.execute(
             "INSERT INTO daily_prices (ticker, date, close) VALUES ('MSFT', $1, 110.0)",
-            date(2026, 7, 11),
+            date(2026, 7, 13),
         )
 
         from alpha_agent.api.routes.cron_routes import _write_paper_equity_snapshots
 
-        as_of = date(2026, 7, 12)
+        as_of = date(2026, 7, 13)
         await _write_paper_equity_snapshots(conn, as_of)
         snapshot = await conn.fetchrow(
             "SELECT * FROM sim_equity_daily WHERE account_id=$1 AND as_of_date=$2",
@@ -299,3 +300,112 @@ async def test_equity_snapshot_includes_closed_realized_pnl_in_one_aggregate(app
         assert snapshot["realized_pnl"] == pytest.approx(575.0)
     finally:
         await conn.close()
+
+
+async def test_human_valuation_distinguishes_daily_marks_and_benchmark_gap(applied_db):
+    from datetime import UTC, datetime
+
+    from alpha_agent.api.routes.cron_routes import _run_paper_fill_locked
+    from alpha_agent.api.routes.paper import _read_account, _read_equity_curve
+
+    day = date(2026, 7, 14)
+    prior = date(2026, 7, 13)
+    as_of = datetime(2026, 7, 14, 21, tzinfo=UTC)
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=2) as pool:
+        uid = await pool.fetchval("INSERT INTO users(email) VALUES('marks@test.example') RETURNING id")
+        aid = await pool.fetchval(
+            "INSERT INTO sim_account(user_id,initial_cash,cash,created_at) "
+            "VALUES($1,1000,800,$2) RETURNING id", uid, datetime(2026, 7, 10, tzinfo=UTC),
+        )
+        await pool.execute(
+            "INSERT INTO sim_position(account_id,ticker,qty,avg_cost) "
+            "VALUES($1,'AAPL',2,100),($1,'MSFT',1,100)", aid,
+        )
+        await pool.executemany(
+            "INSERT INTO daily_prices(ticker,date,close) VALUES($1,$2,$3)",
+            [('AAPL', day, 110), ('SPY', prior, 600), ('MSFT', date(2026, 7, 15), 200)],
+        )
+        await pool.execute(
+            "INSERT INTO sim_equity_daily(account_id,as_of_date,portfolio_value,cash,unrealized_pnl,"
+            "realized_pnl,benchmark_close) VALUES($1,$2,1100,800,0,0,600)", aid, prior,
+        )
+        await _run_paper_fill_locked(pool, day)
+        equity = await pool.fetchrow(
+            "SELECT * FROM sim_equity_daily WHERE account_id=$1 AND as_of_date=$2", aid, day,
+        )
+        assert equity['portfolio_value'] is None and equity['unrealized_pnl'] is None
+        assert equity['valuation_quality'] == 'partial'
+        assert equity['benchmark_close'] is None and equity['benchmark_close_at'] is None
+
+        account = await _read_account(pool, uid, aid, now=as_of)
+        assert account.portfolio_value is None and account.unrealized_pnl is None
+        assert account.valuation_quality == 'partial' and account.reference_valuation is None
+        positions = {pos.ticker: pos for pos in account.positions}
+        assert positions['AAPL'].unrealized_pnl == 20
+        assert positions['AAPL'].mark_at == '2026-07-14T20:00:00+00:00'
+        assert positions['MSFT'].unrealized_pnl is None
+        assert [(issue.ticker, issue.quality) for issue in account.valuation_issues] == [('MSFT', 'missing')]
+        legacy, point = (await _read_equity_curve(pool, uid, aid)).series
+        assert legacy.valuation_quality == 'legacy_unverified'
+        assert legacy.portfolio_value is None and legacy.benchmark_index is None
+        assert point.portfolio_value is None and point.benchmark_index is None
+        inventory = Path('scripts/audit_paper_equity_history.sql').read_text()
+        async with pool.acquire() as conn, conn.transaction(readonly=True):
+            listing = await conn.fetch(inventory.split('BEGIN READ ONLY;')[1].split('ROLLBACK;')[0])
+        assert [(row['as_of_date'], row['benchmark_evidence_gap']) for row in listing] == [
+            (prior, 'no_recorded_provenance'),
+        ]
+
+        await pool.execute("INSERT INTO daily_prices(ticker,date,close) VALUES('MSFT',$1,105)", prior)
+        account = await _read_account(pool, uid, aid, now=as_of)
+        assert account.portfolio_value is None
+        assert account.reference_valuation.portfolio_value == 1125
+        assert account.reference_valuation.valued_at == '2026-07-13T20:00:00+00:00'
+        await pool.execute("INSERT INTO daily_prices(ticker,date,close) VALUES('MSFT',$1,115)", day)
+        await _run_paper_fill_locked(pool, day)
+        point = (await _read_equity_curve(pool, uid, aid)).series[-1]
+        assert point.portfolio_value == 1135 and point.benchmark_index is None
+        assert (await _read_account(pool, uid, aid, now=as_of)).portfolio_value == point.portfolio_value
+
+
+async def test_equity_waits_for_all_251_due_orders_but_allows_future_pending(applied_db):
+    from datetime import UTC, datetime
+
+    from alpha_agent.api.routes.cron_routes import _run_paper_fill_locked
+
+    signal = date(2026, 7, 13)
+    day = date(2026, 7, 14)
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=2) as pool:
+        rows = await pool.fetch(
+            "INSERT INTO users(email) VALUES('backlog@test.example'),('future@test.example') RETURNING id",
+        )
+        due, future = [
+            await pool.fetchval(
+                "INSERT INTO sim_account(user_id,initial_cash,cash,created_at) "
+                "VALUES($1,1000,1000,$2) RETURNING id", row['id'], datetime(2026, 7, 10, tzinfo=UTC),
+            ) for row in rows
+        ]
+        await pool.execute(
+            "INSERT INTO sim_order(account_id,ticker,side,order_type,qty,signal_date,limit_price) "
+            "SELECT $1,'AAPL','buy','limit',1,$2,2 FROM generate_series(1,251)", due, signal,
+        )
+        await pool.execute(
+            "INSERT INTO sim_order(account_id,ticker,side,order_type,qty,signal_date) "
+            "VALUES($1,'AAPL','buy','market',1,$2)", future, day,
+        )
+        await pool.execute(
+            "INSERT INTO daily_prices(ticker,date,close) VALUES('AAPL',$1,1),('SPY',$1,600)", day,
+        )
+        first = await _run_paper_fill_locked(pool, day)
+        assert first['filled'] == 200
+        assert await pool.fetchval("SELECT portfolio_value FROM sim_equity_daily WHERE account_id=$1", due) is None
+        assert await pool.fetchval("SELECT portfolio_value FROM sim_equity_daily WHERE account_id=$1", future) == 1000
+
+        second = await _run_paper_fill_locked(pool, day)
+        assert second['filled'] == 51 and second['remaining_pending'] == 1
+        row = await pool.fetchrow(
+            "SELECT portfolio_value,benchmark_close,benchmark_close_at FROM sim_equity_daily WHERE account_id=$1", due,
+        )
+        assert row['portfolio_value'] == pytest.approx(1000 - 251 * 2.002 + 251)
+        assert row['benchmark_close'] == 600
+        assert row['benchmark_close_at'] == datetime(2026, 7, 14, 20, tzinfo=UTC)

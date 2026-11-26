@@ -88,6 +88,7 @@ export default function PaperPositionsWithSource({
             const markLabel = position.price_quality === "stale" ? "sim.bot.quote_stale"
               : position.price_quality === "session_close" ? "sim.bot.quote_close"
               : position.price_quality === "fresh" ? "sim.bot.quote_intraday" : "sim.bot.quote_unverified";
+            const showMark = accountKind === "bot" ? currentValue !== null : !!position.price_quality;
             return (
               <TmTableRow key={position.ticker}>
                 <TmTableRowHeader className="text-[12px] font-semibold text-tm-accent">{position.ticker}</TmTableRowHeader>
@@ -95,7 +96,7 @@ export default function PaperPositionsWithSource({
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">${position.avg_cost.toFixed(2)}</TmTableCell>
                 <TmTableCell numeric textAlign="right" className="text-xs text-tm-fg-2">
                   {currentValue === null ? "—" : `$${currentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-                  {accountKind === "bot" && currentValue !== null ? <span className={clsx("mt-1 block font-normal", position.price_quality === "stale" ? "text-tm-warn" : "text-tm-muted")}>
+                  {showMark ? <span className={clsx("mt-1 block font-normal", position.price_quality === "stale" ? "text-tm-warn" : "text-tm-muted")}>
                     {t(locale, markLabel)}{markTime && Number.isFinite(markTime.getTime()) ? <> · <time dateTime={position.mark_at!}>{botZonedTime(position.mark_at, locale, timeZone)}</time></> : null}
                   </span> : null}
                 </TmTableCell>

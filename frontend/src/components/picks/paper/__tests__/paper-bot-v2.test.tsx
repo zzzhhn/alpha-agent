@@ -49,7 +49,7 @@ describe("paper bot v2 evidence boundaries",()=>{
     expect(indicative).toContain("15:21 UTC");
     expect(indicative).not.toContain("$1,200");
   });
-  it("labels stale bot marks as dated snapshots without changing human labels",()=>{
+  it("labels stale marks while retaining distinct value headings",()=>{
     const positions=[{ticker:"TEST",qty:10,avg_cost:9,current_price:10,unrealized_pnl:10,unrealized_pct:11.11,price_quality:"stale",mark_at:"2026-11-06T20:31:00Z"}];
     const bot=renderToStaticMarkup(<PaperPositionsWithSource positions={positions} attribution={[]} accountKind="bot" />);
     expect(bot).toContain("快照市值");
@@ -64,7 +64,7 @@ describe("paper bot v2 evidence boundaries",()=>{
     expect(missing).not.toContain("Invalid Date");
     const human=renderToStaticMarkup(<PaperPositionsWithSource positions={positions} attribution={[]} />);
     expect(human).toContain("当前市值");
-    expect(human).not.toContain("报价已过期");
+    expect(human).toContain("报价已过期");
   });
   it("summarizes only server-confirmed ledger facts, retaining unknown fees",()=>{
     const planned={...run,result:{actions:[{ticker:"ABC",status:"accepted"}]}};
