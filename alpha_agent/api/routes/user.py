@@ -11,21 +11,28 @@ import json
 import os
 import re
 import time
+from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from alpha_agent.api.byok import (
     LLM_CREDENTIAL_PROVIDERS,
     fetch_user_llm_credential,
-    managed_llm_client,
+    llm_client_from_credential,
 )
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.api.routes.investment import router as investment_router
 from alpha_agent.auth.crypto_box import CryptoError, encrypt
 from alpha_agent.auth.dependencies import is_admin, require_user
-from alpha_agent.llm.base import LLMClient, Message
+from alpha_agent.llm.base import Message
+from alpha_agent.settings.byok_history import (
+    byok_evidence, credential_evidence, rollback_status, safe_endpoint,
+)
+from alpha_agent.settings.change_log import (
+    ROLLBACK_SAFE_FIELDS, fetch_change, fetch_history, record_change,
+)
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
@@ -93,104 +100,141 @@ async def get_me(user_id: int = Depends(require_user)) -> MeResponse:
     )
 
 
+# The account, provider and database revision bind a test to one saved connection.
+# Keep these in headers so older clients can use the existing response bodies.
+_BYOK_ACCOUNT = "X-BYOK-Account"
+_BYOK_PROVIDER = "X-BYOK-Provider"
+_BYOK_REVISION = "X-BYOK-Revision"
+_PRIVATE = {"Cache-Control": "private, no-store"}
+
+
+def _byok_headers(user_id: int, provider: str, revision: str) -> dict[str, str]:
+    return {
+        **_PRIVATE,
+        _BYOK_ACCOUNT: str(user_id),
+        _BYOK_PROVIDER: provider,
+        _BYOK_REVISION: revision,
+    }
+
+
+async def _lock_credential_owner(conn, user_id: int) -> None:
+    if await conn.fetchval("SELECT id FROM users WHERE id = $1 FOR UPDATE", user_id) is None:
+        raise HTTPException(404, "user not found")
+
+
 @router.post("/byok", response_model=ByokSaveResponse)
 async def save_byok(
-    body: ByokSaveRequest, user_id: int = Depends(require_user)
+    body: ByokSaveRequest, response: Response, user_id: int = Depends(require_user),
 ) -> ByokSaveResponse:
+    base_url = body.base_url or None
+    key_has_secret = not (body.provider == "ollama" and body.api_key == "ollama")
+    if not safe_endpoint(base_url) or (
+        base_url and key_has_secret and len(body.api_key) >= 5 and body.api_key in unquote(base_url)
+    ):
+        raise HTTPException(422, "API endpoint must be an HTTP(S) URL without embedded credentials, query or fragment")
+
     master = os.environ.get("BYOK_MASTER_KEY")
     if not master:
-        raise HTTPException(
-            status_code=500, detail="BYOK_MASTER_KEY not configured"
-        )
+        raise HTTPException(500, "BYOK_MASTER_KEY not configured")
     try:
         ciphertext, nonce = encrypt(body.api_key, master.encode("utf-8"))
     except CryptoError as e:
-        # A malformed BYOK_MASTER_KEY (e.g. a rotated key pasted with a stray
-        # newline) must surface its real reason, not an opaque 500 — the user
-        # can't fix what they can't see (project no-opaque-500 rule).
-        raise HTTPException(
-            status_code=400,
-            detail=f"server master key is misconfigured: {e}",
-        ) from e
+        raise HTTPException(400, f"server master key is misconfigured: {e}") from e
+
     last4 = body.api_key[-4:]
     pool = await get_db_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        await _lock_credential_owner(conn, user_id)
+        prior = await fetch_user_llm_credential(conn, user_id)
+        revision = await conn.fetchval(
+            """
+            INSERT INTO user_byok
+                (user_id, provider, ciphertext, nonce, last4, model, base_url, encrypted_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7,
+                    GREATEST(clock_timestamp(), $8::timestamptz + interval '1 microsecond'))
+            ON CONFLICT (user_id, provider) DO UPDATE SET
+                ciphertext = EXCLUDED.ciphertext, nonce = EXCLUDED.nonce,
+                last4 = EXCLUDED.last4, model = EXCLUDED.model,
+                base_url = EXCLUDED.base_url, encrypted_at = EXCLUDED.encrypted_at,
+                last_used_at = NULL
+            RETURNING encrypted_at
+            """,
+            user_id, body.provider, ciphertext, nonce, last4, body.model, base_url,
+            prior["encrypted_at"] if prior else None,
+        )
+        await conn.execute(
+            "DELETE FROM user_byok WHERE user_id = $1 "
+            "AND provider = ANY($2::text[]) AND provider <> $3",
+            user_id, list(LLM_CREDENTIAL_PROVIDERS), body.provider,
+        )
 
-    # B9 (2026-05-19): snapshot the prior non-secret BYOK coordinates so
-    # the change_log can render a diff card for the user. Secret material
-    # (ciphertext/nonce) is intentionally OUT of the log — only the
-    # operationally-rollback-safe fields (provider/model/base_url) are
-    # journaled.
-    prior = await fetch_user_llm_credential(pool, user_id)
-
-    await pool.execute(
-        """
-        INSERT INTO user_byok
-            (user_id, provider, ciphertext, nonce, last4, model, base_url, encrypted_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-        ON CONFLICT (user_id, provider) DO UPDATE SET
-            ciphertext = EXCLUDED.ciphertext,
-            nonce = EXCLUDED.nonce,
-            last4 = EXCLUDED.last4,
-            model = EXCLUDED.model,
-            base_url = EXCLUDED.base_url,
-            encrypted_at = now()
-        """,
-        user_id, body.provider, ciphertext, nonce, last4, body.model, body.base_url,
-    )
-    # One active LLM credential per user.  Preserve non-LLM rows such as
-    # ``worldquant_brain`` while removing stale provider choices that could
-    # otherwise be selected by old clients or future regressions.
-    await pool.execute(
-        "DELETE FROM user_byok WHERE user_id = $1 "
-        "AND provider = ANY($2::text[]) AND provider <> $3",
-        user_id,
-        list(LLM_CREDENTIAL_PROVIDERS),
-        body.provider,
-    )
-
-    # B9 change-log writes are best-effort (a logger failure must not
-    # block the BYOK save the user actually pressed Save on).
-    try:
-        from alpha_agent.settings.change_log import record_change
-
-        for field, old, new in [
-            ("byok.provider", prior["provider"] if prior else None, body.provider),
-            ("byok.model", prior["model"] if prior else None, body.model),
-            ("byok.base_url", prior["base_url"] if prior else None, body.base_url),
-        ]:
+        old_provider = prior["provider"] if prior else None
+        evidence = credential_evidence(body.provider, revision.isoformat(), old_provider)
+        for field, new in (
+            ("provider", body.provider), ("model", body.model), ("base_url", base_url),
+        ):
+            old = prior[field] if prior else None
             if old != new:
-                await record_change(pool, user_id, field, old, new)
-    except Exception:  # noqa: BLE001 — log-write failure is non-fatal
-        pass
-    from datetime import UTC, datetime
+                # Legacy endpoint URLs may contain auth. Do not copy them into a new journal entry.
+                if field == "base_url" and not safe_endpoint(old):
+                    old = "[redacted]"
+                await record_change(conn, user_id, f"byok.{field}", old, new, evidence=evidence)
 
-    return ByokSaveResponse(
-        provider=body.provider, last4=last4, encrypted_at=datetime.now(UTC).isoformat()
-    )
+    response.headers.update(_byok_headers(user_id, body.provider, revision.isoformat()))
+    return ByokSaveResponse(provider=body.provider, last4=last4, encrypted_at=revision.isoformat())
 
 
 @router.get("/byok", response_model=ByokGetResponse)
-async def get_byok(user_id: int = Depends(require_user)) -> ByokGetResponse:
+async def get_byok(response: Response, user_id: int = Depends(require_user)) -> ByokGetResponse:
     pool = await get_db_pool()
     row = await fetch_user_llm_credential(pool, user_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="no BYOK key set")
+        raise HTTPException(404, "no BYOK key set", headers=_PRIVATE)
+    revision = row["encrypted_at"].isoformat()
+    response.headers.update(_byok_headers(user_id, row["provider"], revision))
     return ByokGetResponse(
         provider=row["provider"],
         last4=row["last4"],
         model=row["model"],
         base_url=row["base_url"],
-        encrypted_at=row["encrypted_at"].isoformat(),
+        encrypted_at=revision,
         last_used_at=row["last_used_at"].isoformat() if row["last_used_at"] else None,
     )
 
 
+def _probe_failure(exc: Exception) -> str:
+    upstream_status = getattr(getattr(exc, "response", None), "status_code", None)
+    if upstream_status in (401, 403):
+        return "LLM provider rejected the API key or account access"
+    if upstream_status == 429:
+        return "LLM provider quota or rate limit was reached"
+    if upstream_status is not None:
+        return f"LLM provider returned HTTP {upstream_status}"
+    return f"LLM request failed ({type(exc).__name__})"
+
+
 @router.post("/byok/test", response_model=ByokTestResponse)
 async def test_byok(
-    user_id: int = Depends(require_user),
-    llm: LLMClient = Depends(managed_llm_client),
+    request: Request, response: Response, user_id: int = Depends(require_user),
 ) -> ByokTestResponse:
     """Exercise the configured provider without coupling health to factor JSON."""
+    # Bind the probe to its saved revision. Older clients can omit the headers.
+    pool = await get_db_pool()
+    credential = await fetch_user_llm_credential(pool, user_id)
+    expected = {key: request.headers[key] for key in (
+        _BYOK_ACCOUNT, _BYOK_PROVIDER, _BYOK_REVISION,
+    ) if key in request.headers}
+    changed = "Saved connection changed. Reload it before testing."
+    if credential is None:
+        raise HTTPException(409 if expected else 400,
+                            changed if expected else "No BYOK key set", headers=_PRIVATE)
+    headers = _byok_headers(user_id, credential["provider"], credential["encrypted_at"].isoformat())
+    if expected and expected != {key: headers[key] for key in (
+        _BYOK_ACCOUNT, _BYOK_PROVIDER, _BYOK_REVISION,
+    )}:
+        raise HTTPException(409, changed, headers=_PRIVATE)
+
+    llm = llm_client_from_credential(credential)
     started = time.monotonic()
     try:
         result = await llm.chat(
@@ -200,47 +244,38 @@ async def test_byok(
         )
         if not result.content.strip():
             raise RuntimeError("provider completed without user-visible text")
-    except Exception as exc:  # noqa: BLE001 - normalized into a safe status
-        response = getattr(exc, "response", None)
-        upstream_status = getattr(response, "status_code", None)
-        if upstream_status in (401, 403):
-            detail = "LLM provider rejected the API key or account access"
-        elif upstream_status == 429:
-            detail = "LLM provider quota or rate limit was reached"
-        elif upstream_status is not None:
-            detail = f"LLM provider returned HTTP {upstream_status}"
-        else:
-            detail = f"LLM request failed ({type(exc).__name__})"
-        raise HTTPException(status_code=502, detail=detail) from exc
-    pool = await get_db_pool()
-    credential = await fetch_user_llm_credential(pool, user_id)
-    if credential is None:
-        raise HTTPException(status_code=400, detail="No BYOK key set")
-    await pool.execute(
-        "UPDATE user_byok SET last_used_at = now() "
-        "WHERE user_id = $1 AND provider = $2",
-        user_id,
-        credential["provider"],
+    except Exception as exc:
+        raise HTTPException(502, _probe_failure(exc), headers=headers) from exc
+    finally:
+        close = getattr(llm, "close", None)
+        if close is not None:
+            await close()
+
+    used = await pool.fetchval(
+        "UPDATE user_byok SET last_used_at = clock_timestamp() "
+        "WHERE user_id = $1 AND provider = $2 AND encrypted_at = $3 RETURNING 1",
+        user_id, credential["provider"], credential["encrypted_at"],
     )
+    if used is None:
+        raise HTTPException(409, changed, headers=_PRIVATE)
+    response.headers.update(headers)
     return ByokTestResponse(
-        provider=credential["provider"],
-        model=result.model,
+        provider=credential["provider"], model=result.model,
         latency_ms=round((time.monotonic() - started) * 1000),
-        prompt_tokens=result.prompt_tokens,
-        completion_tokens=result.completion_tokens,
+        prompt_tokens=result.prompt_tokens, completion_tokens=result.completion_tokens,
     )
 
 
 @router.delete("/byok", status_code=204)
 async def delete_byok(user_id: int = Depends(require_user)) -> Response:
     pool = await get_db_pool()
-    await pool.execute(
-        "DELETE FROM user_byok WHERE user_id = $1 "
-        "AND provider = ANY($2::text[])",
-        user_id,
-        list(LLM_CREDENTIAL_PROVIDERS),
-    )
-    return Response(status_code=204)
+    async with pool.acquire() as conn, conn.transaction():
+        await _lock_credential_owner(conn, user_id)
+        await conn.execute(
+            "DELETE FROM user_byok WHERE user_id = $1 AND provider = ANY($2::text[])",
+            user_id, list(LLM_CREDENTIAL_PROVIDERS),
+        )
+    return Response(status_code=204, headers=_PRIVATE)
 
 
 @router.post("/account/delete", status_code=204)
@@ -420,15 +455,30 @@ async def _export_account_snapshot(conn, user_id: int) -> dict:
 
 @router.get("/settings/history")
 async def settings_history(
+    response: Response,
     limit: int = 50,
     user_id: int = Depends(require_user),
 ) -> dict:
     """Recent config edits for the authenticated user, newest first.
     Drives the diff card UI in /settings (mirrors AlertList.tsx pattern)."""
-    from alpha_agent.settings.change_log import fetch_history
-
     pool = await get_db_pool()
-    rows = await fetch_history(pool, user_id, limit=min(max(limit, 1), 200))
+    async with pool.acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+        credential = await fetch_user_llm_credential(conn, user_id)
+        rows = await fetch_history(conn, user_id, limit=min(max(limit, 1), 200))
+    for row in rows:
+        row["rollback_status"] = rollback_status(row, credential)
+        binding = byok_evidence(row) if row["field"].startswith("byok.") else {}
+        for key in ("provider", "old_provider"):
+            value = binding.get(key)
+            if value in LLM_CREDENTIAL_PROVIDERS:
+                row[key] = value
+        row.pop("already_rolled_back")
+        row.pop("evidence")
+        if row["field"] in {"byok.base_url", "byok.api_key"}:
+            for key in ("old_value", "new_value"):
+                if row["field"] == "byok.api_key" or not safe_endpoint(row[key]):
+                    row[key] = "[redacted]" if row[key] is not None else None
+    response.headers.update(_PRIVATE)
     return {"changes": rows}
 
 
@@ -445,52 +495,32 @@ async def settings_rollback(
     ciphertext) is never round-tripped through this path. To rotate a
     key, the user must re-enter it via /settings/byok manually.
     """
-    from alpha_agent.settings.change_log import (
-        ROLLBACK_SAFE_FIELDS, fetch_change, record_change,
-    )
-
     pool = await get_db_pool()
-    change = await fetch_change(pool, user_id, change_id)
-    if change is None:
-        raise HTTPException(status_code=404, detail=f"change {change_id} not found")
-    field = change["field"]
-    if field not in ROLLBACK_SAFE_FIELDS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"field {field!r} not rollback-safe; manual re-entry required",
-        )
-    target = change["old_value"]
+    async with pool.acquire() as conn, conn.transaction():
+        await _lock_credential_owner(conn, user_id)
+        change = await fetch_change(conn, user_id, change_id)
+        if change is None:
+            raise HTTPException(404, f"change {change_id} not found")
+        column = ROLLBACK_SAFE_FIELDS.get(change["field"])
+        if column is None:
+            raise HTTPException(400, "This field requires manual changes in Settings")
+        credential = await fetch_user_llm_credential(conn, user_id)
+        status = rollback_status(change, credential)
+        if status != "available":
+            raise HTTPException(409, f"Change cannot be rolled back ({status})")
 
-    credential = await fetch_user_llm_credential(pool, user_id)
-    if credential is None:
-        raise HTTPException(404, "no LLM credential to restore")
-
-    # Apply the rollback to the actual settings table. For now only
-    # byok.* fields are rollback-safe; weight-override rollback wires in
-    # at B9.1 when the weight UI ships.
-    if field == "byok.provider":
-        raise HTTPException(
-            400, "Provider changes require saving the matching API key in Settings",
+        target = change["old_value"]
+        provider = credential["provider"]
+        # Use the persisted timestamp as the connection revision for model/endpoint changes too.
+        revision = await conn.fetchval(
+            f"UPDATE user_byok SET {column} = $1, last_used_at = NULL, "
+            "encrypted_at = GREATEST(clock_timestamp(), encrypted_at + interval '1 microsecond') "
+            "WHERE user_id = $2 AND provider = $3 RETURNING encrypted_at",
+            target, user_id, provider,
         )
-    elif field == "byok.model":
-        await pool.execute(
-            "UPDATE user_byok SET model = $1 WHERE user_id = $2 AND provider = $3",
-            target, user_id, credential["provider"],
+        log_id = await record_change(
+            conn, user_id, change["field"], credential[column], target,
+            source="rollback", rollback_of=change_id,
+            evidence=credential_evidence(provider, revision.isoformat(), provider),
         )
-    elif field == "byok.base_url":
-        await pool.execute(
-            "UPDATE user_byok SET base_url = $1 WHERE user_id = $2 AND provider = $3",
-            target, user_id, credential["provider"],
-        )
-
-    # Journal the rollback as its own row (preserves append-only audit
-    # invariant). new_value here is the value we just re-applied; the
-    # natural diff = (current_value_before_rollback → target).
-    log_id = await record_change(
-        pool, user_id, field,
-        old_value=change["new_value"],
-        new_value=target,
-        source="rollback",
-        rollback_of=change_id,
-    )
     return {"ok": True, "rollback_change_id": log_id, "applied_value": target}

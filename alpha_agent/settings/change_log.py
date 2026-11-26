@@ -23,19 +23,12 @@ re-apply those without touching the ciphertext.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 
 
-# Fields whose old_value can be safely re-applied via the rollback
-# endpoint. Anything outside this set returns 400 from POST /rollback.
-ROLLBACK_SAFE_FIELDS: frozenset[str] = frozenset({
-    "byok.provider",
-    "byok.model",
-    "byok.base_url",
-    # Reserved for B9.1 (signal weight overrides UI):
-    # "weights.factor", "weights.technicals", ...
-})
+ROLLBACK_SAFE_FIELDS = {"byok.model": "model", "byok.base_url": "base_url"}
 
 
 async def record_change(
@@ -46,13 +39,14 @@ async def record_change(
     new_value: Any | None,
     source: str = "manual",
     rollback_of: int | None = None,
+    *,
+    evidence: dict[str, Any] | None = None,
 ) -> int:
     """Append a change_log row. Returns the new row id.
 
     Values are str-coerced; pass JSON-stringified payloads for complex
     types if the caller needs to round-trip them. None becomes SQL NULL.
-    Failures log + raise — the caller (save_byok) wraps in try/except
-    so a log-write failure doesn't break the underlying setting write.
+    Callers can share their settings transaction with the journal write.
     """
     def _to_text(v: Any | None) -> str | None:
         if v is None:
@@ -61,61 +55,45 @@ async def record_change(
 
     row = await pool.fetchrow(
         "INSERT INTO config_change_log "
-        "  (user_id, field, old_value, new_value, source, rollback_of) "
-        "VALUES ($1, $2, $3, $4, $5, $6) "
+        "  (user_id, field, old_value, new_value, source, rollback_of, evidence, changed_at) "
+        "VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, clock_timestamp()) "
         "RETURNING id",
         user_id, field, _to_text(old_value), _to_text(new_value),
-        source, rollback_of,
+        source, rollback_of, json.dumps(evidence) if evidence is not None else None,
     )
     return int(row["id"])
 
 
-async def fetch_history(
-    pool, user_id: int, limit: int = 50,
-) -> list[dict[str, Any]]:
-    """Recent changes for one user, newest first."""
+_CHANGE_COLUMNS = """
+    c.id, c.field, c.old_value, c.new_value, c.changed_at, c.source,
+    c.rollback_of, c.evidence, EXISTS (
+        SELECT 1 FROM config_change_log undone
+        WHERE undone.user_id = c.user_id AND undone.rollback_of = c.id
+    ) AS already_rolled_back
+"""
+
+
+def _change_dict(row) -> dict[str, Any]:
+    change = dict(row)
+    if isinstance(change["changed_at"], datetime):
+        change["changed_at"] = change["changed_at"].isoformat()
+    return change
+
+
+async def fetch_history(pool, user_id: int, limit: int = 50) -> list[dict[str, Any]]:
+    """Recent changes with rollback evidence for the settings route."""
     rows = await pool.fetch(
-        "SELECT id, field, old_value, new_value, changed_at, source, "
-        "       rollback_of "
-        "FROM config_change_log "
-        "WHERE user_id = $1 "
-        "ORDER BY changed_at DESC, id DESC "
-        "LIMIT $2",
-        user_id, int(limit),
+        f"SELECT {_CHANGE_COLUMNS} FROM config_change_log c "
+        "WHERE c.user_id = $1 ORDER BY c.changed_at DESC, c.id DESC LIMIT $2",
+        user_id, limit,
     )
-    return [
-        {
-            "id": int(r["id"]),
-            "field": r["field"],
-            "old_value": r["old_value"],
-            "new_value": r["new_value"],
-            "changed_at": r["changed_at"].isoformat()
-            if isinstance(r["changed_at"], datetime)
-            else str(r["changed_at"]),
-            "source": r["source"],
-            "rollback_of": int(r["rollback_of"]) if r["rollback_of"] else None,
-        }
-        for r in rows
-    ]
+    return [_change_dict(row) for row in rows]
 
 
 async def fetch_change(pool, user_id: int, change_id: int) -> dict[str, Any] | None:
-    """Fetch a single change row, scoped to the user (no cross-user leaks)."""
-    r = await pool.fetchrow(
-        "SELECT id, field, old_value, new_value, changed_at, source "
-        "FROM config_change_log "
-        "WHERE id = $1 AND user_id = $2",
-        int(change_id), user_id,
+    """Fetch a single change row, scoped to the user."""
+    row = await pool.fetchrow(
+        f"SELECT {_CHANGE_COLUMNS} FROM config_change_log c WHERE c.id = $1 AND c.user_id = $2",
+        change_id, user_id,
     )
-    if r is None:
-        return None
-    return {
-        "id": int(r["id"]),
-        "field": r["field"],
-        "old_value": r["old_value"],
-        "new_value": r["new_value"],
-        "changed_at": r["changed_at"].isoformat()
-        if isinstance(r["changed_at"], datetime)
-        else str(r["changed_at"]),
-        "source": r["source"],
-    }
+    return _change_dict(row) if row is not None else None

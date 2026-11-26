@@ -1,6 +1,7 @@
 # tests/api/test_user_routes.py
 import base64
 import time
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -51,10 +52,12 @@ def test_get_me_with_auth(client, monkeypatch):
 
 def test_post_byok_encrypts_and_stores(client, monkeypatch):
     pool = MagicMock()
-    pool.execute = AsyncMock()
-    # The route awaits pool.fetchrow to snapshot prior BYOK coords (B9) before
-    # the upsert; without an AsyncMock 'await MagicMock()' raises TypeError.
-    pool.fetchrow = AsyncMock(return_value=None)
+    conn = MagicMock()
+    pool.acquire.return_value.__aenter__.return_value = conn
+    conn.execute = AsyncMock()
+    revision = datetime(2026, 11, 26, tzinfo=UTC)
+    conn.fetchval = AsyncMock(side_effect=[42, revision])
+    conn.fetchrow = AsyncMock(side_effect=[None, {"id": 1}, {"id": 2}])
     monkeypatch.setattr("alpha_agent.api.routes.user.get_db_pool",
                         AsyncMock(return_value=pool))
     r = client.post(
@@ -66,12 +69,13 @@ def test_post_byok_encrypts_and_stores(client, monkeypatch):
     body = r.json()
     assert body["provider"] == "openai"
     assert body["last4"] == "1234"
+    assert body["encrypted_at"] == revision.isoformat()
     # The plaintext key must NEVER be echoed back.
     assert "api_key" not in body
     assert "sk-secret" not in r.text
     # The INSERT call must carry ciphertext bytes, not the plaintext.
     insert_call = next(
-        call for call in pool.execute.call_args_list
+        call for call in conn.fetchval.call_args_list
         if "INSERT INTO user_byok" in call.args[0]
     )
     insert_sql = insert_call.args[0]
@@ -80,7 +84,7 @@ def test_post_byok_encrypts_and_stores(client, monkeypatch):
     # Saving an LLM provider removes only obsolete LLM rows, never the
     # separately stored worldquant_brain credential.
     delete_call = next(
-        call for call in pool.execute.call_args_list
+        call for call in conn.execute.call_args_list
         if "provider <> $3" in call.args[0]
     )
     assert "provider = ANY" in delete_call.args[0]

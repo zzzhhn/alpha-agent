@@ -13,6 +13,29 @@ const API_BASE =
     ? process.env.NEXT_PUBLIC_API_URL ?? "https://alpha-agent.vercel.app"
     : "";
 
+export interface ByokRevision {
+  readonly userId: string;
+  readonly provider: string;
+  readonly encryptedAt: string;
+}
+
+const BYOK_ACCOUNT = "X-BYOK-Account";
+const BYOK_PROVIDER = "X-BYOK-Provider";
+const BYOK_REVISION = "X-BYOK-Revision";
+
+function responseRevision(headers: Headers): ByokRevision | null {
+  const userId = headers.get(BYOK_ACCOUNT);
+  const provider = headers.get(BYOK_PROVIDER);
+  const encryptedAt = headers.get(BYOK_REVISION);
+  return userId && provider && encryptedAt ? { userId, provider, encryptedAt } : null;
+}
+
+export class ByokProbeError extends Error {
+  constructor(message: string, readonly scope: ByokRevision | null) {
+    super(message);
+  }
+}
+
 export interface ByokGetResponse {
   provider: string;
   last4: string;
@@ -20,12 +43,14 @@ export interface ByokGetResponse {
   base_url: string | null;
   encrypted_at: string;
   last_used_at: string | null;
+  scope?: ByokRevision | null;
 }
 
 export interface ByokSaveResponse {
   provider: string;
   last4: string;
   encrypted_at: string;
+  scope: ByokRevision | null;
 }
 
 export interface ByokTestResponse {
@@ -34,15 +59,17 @@ export interface ByokTestResponse {
   latency_ms: number;
   prompt_tokens: number;
   completion_tokens: number;
+  scope: ByokRevision | null;
 }
 
 export async function getByok(): Promise<ByokGetResponse | null> {
   const r = await fetch(`${API_BASE}/api/user/byok`, {
     credentials: "include",
+    cache: "no-store",
   });
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`getByok failed: HTTP ${r.status}`);
-  return (await r.json()) as ByokGetResponse;
+  return { ...(await r.json()), scope: responseRevision(r.headers) } as ByokGetResponse;
 }
 
 export async function saveByok(body: {
@@ -69,12 +96,17 @@ export async function saveByok(body: {
       detail ? `saveByok failed: ${detail}` : `saveByok failed: HTTP ${r.status}`,
     );
   }
-  return (await r.json()) as ByokSaveResponse;
+  return { ...(await r.json()), scope: responseRevision(r.headers) } as ByokSaveResponse;
 }
 
-export async function testByok(): Promise<ByokTestResponse> {
+export async function testByok(scope?: ByokRevision): Promise<ByokTestResponse> {
   const r = await fetch(`${API_BASE}/api/user/byok/test`, {
     method: "POST",
+    headers: scope ? {
+      [BYOK_ACCOUNT]: scope.userId,
+      [BYOK_PROVIDER]: scope.provider,
+      [BYOK_REVISION]: scope.encryptedAt,
+    } : undefined,
     credentials: "include",
   });
   if (!r.ok) {
@@ -82,9 +114,9 @@ export async function testByok(): Promise<ByokTestResponse> {
       .json()
       .then((b) => (b as { detail?: string })?.detail)
       .catch(() => undefined);
-    throw new Error(detail ?? `LLM connection test failed: HTTP ${r.status}`);
+    throw new ByokProbeError(detail ?? `LLM connection test failed: HTTP ${r.status}`, responseRevision(r.headers));
   }
-  return (await r.json()) as ByokTestResponse;
+  return { ...(await r.json()), scope: responseRevision(r.headers) } as ByokTestResponse;
 }
 
 export async function deleteByok(): Promise<void> {

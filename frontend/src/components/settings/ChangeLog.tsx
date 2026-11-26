@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { apiGet, apiPost } from "@/lib/api/client";
+import { ApiException, apiGet, apiPost } from "@/lib/api/client";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmDialog } from "@/components/tm/TmDialog";
@@ -16,11 +16,23 @@ interface ChangeRow {
   changed_at: string;
   source: string;
   rollback_of: number | null;
+  rollback_status?: string;
+  provider?: string | null;
+  old_provider?: string | null;
 }
 
 const PAGE_SIZE = 5;
-// Provider changes also require re-entering the matching key; the endpoint rejects them.
-const ROLLBACK_SAFE_FIELDS = new Set(["byok.model", "byok.base_url"]);
+const ROLLBACK_STATUS_LABELS: Record<string, readonly [string, string]> = {
+  unverified: ["历史记录缺少可核实的凭据关联", "Credential link could not be verified"],
+  different_provider: ["服务商与当前凭据不一致", "Provider does not match the current credential"],
+  stale_revision: ["凭据版本已更新", "Credential revision has changed"],
+  value_changed: ["当前值已变化", "Current value has changed"],
+  already_rolled_back: ["已回滚", "Already rolled back"],
+};
+
+export function changeRollbackLabel(status: string | undefined, zh: boolean): string | null {
+  return ROLLBACK_STATUS_LABELS[status ?? ""]?.[zh ? 0 : 1] ?? null;
+}
 
 const FIELD_LABELS: Record<string, readonly [string, string]> = {
   "byok.provider": ["模型服务商", "Model provider"],
@@ -51,12 +63,16 @@ function relTime(iso: string, locale: "zh" | "en"): string {
 
 export default function ChangeLog({
   onApplied,
+  onConflict,
   disabled = false,
   onBusyChange,
+  revision,
 }: {
   readonly onApplied?: () => void;
+  readonly onConflict?: () => void;
   readonly disabled?: boolean;
   readonly onBusyChange?: (busy: boolean) => void;
+  readonly revision?: string | null;
 } = {}) {
   const { locale } = useLocale();
   const zh = locale === "zh";
@@ -70,29 +86,38 @@ export default function ChangeLog({
   const [rollbackError, setRollbackError] = useState("");
   const [applied, setApplied] = useState(false);
   const rollbackLock = useRef(false);
+  const readGeneration = useRef(0);
 
   const load = useCallback(async () => {
+    const generation = ++readGeneration.current;
     setLoading(true);
     setErr("");
     try {
       const r = await apiGet<{ changes: ChangeRow[] }>(
         "/api/user/settings/history?limit=50",
       );
+      if (generation !== readGeneration.current) return;
       setRows(r.changes);
       setPage((current) => Math.min(current, Math.max(1, Math.ceil(r.changes.length / PAGE_SIZE))));
     } catch (e) {
+      if (generation !== readGeneration.current) return;
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (generation === readGeneration.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
-  }, [load]);
+    return () => { ++readGeneration.current; };
+  }, [load, revision]);
+
+  const canRollbackPending = !loading && !err && rows.some(
+    row => row.id === pending?.id && row.rollback_status === "available",
+  );
 
   async function onRollback() {
-    if (disabled || rollbackLock.current || !pending || !ROLLBACK_SAFE_FIELDS.has(pending.field)) return;
+    if (disabled || rollbackLock.current || !pending || !canRollbackPending) return;
     rollbackLock.current = true;
     setRolling(true);
     setRollbackError("");
@@ -103,7 +128,13 @@ export default function ChangeLog({
       );
       if (!result.ok) throw new Error(zh ? "服务器未确认回滚。" : "The server did not confirm the rollback.");
     } catch (e) {
-      setRollbackError(e instanceof Error ? e.message : String(e));
+      if (e instanceof ApiException && e.status === 409) {
+        setRollbackError(zh ? "当前配置已变化，无法回滚这条记录。" : "The current configuration changed. This entry cannot be rolled back.");
+        void load();
+        onConflict?.();
+      } else {
+        setRollbackError(e instanceof Error ? e.message : String(e));
+      }
       return;
     } finally {
       rollbackLock.current = false;
@@ -150,6 +181,7 @@ export default function ChangeLog({
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="text-tm-fg [overflow-wrap:anywhere]" title={r.field}>{changeFieldLabel(r.field, zh)}</span>
                 <time dateTime={r.changed_at} className="text-tm-muted">{relTime(r.changed_at, locale)}</time>
+                {r.provider ? <span className="text-tm-muted">{r.old_provider && r.old_provider !== r.provider ? `${r.old_provider} → ` : ""}{r.provider}</span> : null}
                 {r.source === "rollback" ? <span className="bg-tm-warn/20 px-1.5 text-tm-warn">
                   {zh ? "回滚" : "Rollback"}{r.rollback_of !== null ? ` #${r.rollback_of}` : ""}
                 </span> : null}
@@ -161,8 +193,9 @@ export default function ChangeLog({
                 <span className="sr-only">{zh ? "新值：" : "New value: "}</span>
                 <span className="text-tm-fg">{r.new_value ?? emptyValue}</span>
               </p>
+              {changeRollbackLabel(r.rollback_status, zh) ? <p className="text-tm-muted">{changeRollbackLabel(r.rollback_status, zh)}</p> : null}
             </div>
-            {r.rollback_of === null && ROLLBACK_SAFE_FIELDS.has(r.field) ? <TmButton
+            {r.rollback_status === "available" ? <TmButton
               variant="secondary" size="xs" aria-haspopup="dialog" aria-disabled={disabled || loading || !!err}
               aria-label={zh ? `回滚 ${r.field}，变更 #${r.id}` : `Roll back ${r.field}, change #${r.id}`}
               onClick={() => {
@@ -191,7 +224,7 @@ export default function ChangeLog({
           {rollbackError ? <p role="alert" className="text-tm-neg [overflow-wrap:anywhere]">{rollbackError}</p> : null}
           <div className="flex justify-end gap-2">
             <TmButton variant="secondary" onClick={closeDialog} disabled={rolling}>{zh ? "取消" : "Cancel"}</TmButton>
-            <TmButton variant="danger" onClick={() => void onRollback()} loading={rolling} disabled={disabled}
+            <TmButton variant="danger" onClick={() => void onRollback()} loading={rolling} disabled={disabled || !canRollbackPending}
               loadingLabel={zh ? "回滚中…" : "Rolling back…"}>{zh ? "确认回滚" : "Confirm rollback"}</TmButton>
           </div>
         </div> : null}

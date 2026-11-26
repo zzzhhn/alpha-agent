@@ -119,6 +119,7 @@ def test_non_admin_cannot_mutate_global_policy(monkeypatch):
 
 async def test_byok_model_rollback_does_not_touch_brain_credential(applied_db, monkeypatch):
     from alpha_agent.api.routes import user
+    from alpha_agent.settings.byok_history import credential_evidence
     from alpha_agent.settings.change_log import record_change
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:
@@ -126,7 +127,13 @@ async def test_byok_model_rollback_does_not_touch_brain_credential(applied_db, m
         for provider, model in [("kimi", "current-model"), ("worldquant_brain", "brain-marker")]:
             await pool.execute("""INSERT INTO user_byok(user_id,provider,ciphertext,nonce,last4,model)
                 VALUES($1,$2,$3,$4,'test',$5)""", uid, provider, b"encrypted", b"nonce", model)
-        change = await record_change(pool, uid, "byok.model", "old-model", "current-model")
+        revision = await pool.fetchval(
+            "SELECT encrypted_at FROM user_byok WHERE user_id=$1 AND provider='kimi'", uid,
+        )
+        change = await record_change(
+            pool, uid, "byok.model", "old-model", "current-model",
+            evidence=credential_evidence("kimi", revision.isoformat(), "kimi"),
+        )
         monkeypatch.setattr(user, "get_db_pool", AsyncMock(return_value=pool))
         await user.settings_rollback(change, user_id=uid)
         rows = {r["provider"]: r["model"] for r in await pool.fetch("SELECT provider,model FROM user_byok")}
