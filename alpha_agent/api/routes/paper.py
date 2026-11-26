@@ -379,7 +379,7 @@ async def get_account(
 
 
 async def _read_account(
-    pool: Any, user_id: int, account_id: int | None = None,
+    pool: Any, user_id: int, account_id: int | None = None, *, now: datetime | None = None,
 ) -> AccountResponse:
     account = await resolve_account(pool, user_id, account_id)
     account_id: int = account["id"]
@@ -393,33 +393,39 @@ async def _read_account(
     positions = [row for row in position_rows if row["qty"] > 0]
     tickers = [r["ticker"] for r in positions]
     is_bot = account.get('kind') == 'bot'
-    valuation = None
-    last_valid = None
-    display = {}
-    if is_bot:
-        from alpha_agent.paper.bot_valuation import display_valuation, last_valid_valuation, summarize_marks
+    from alpha_agent.paper.bot_valuation import display_valuation, last_valid_valuation, summarize_marks
 
-        now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
+    session = None
+    if is_bot:
         valuation = summarize_marks([dict(row) for row in positions], account['cash'], now)
         display = display_valuation([dict(row) for row in positions], dict(account), valuation, now)
-        last_valid = await last_valid_valuation(pool, dict(account), now)
-        closes = {ticker: mark['price'] for ticker, mark in valuation['marks'].items()}
     else:
-        closes = await _current_closes(pool, tickers)
+        from alpha_agent.market_session import latest_completed_xnys_session
+        from alpha_agent.paper.daily_valuation import read_daily_closes, summarize_daily_closes
 
-    total_unrealized = 0.0
+        session = latest_completed_xnys_session(now)
+        closes = await read_daily_closes(pool, tickers, session, include_reference=True)
+        valuation = summarize_daily_closes(positions, closes, account['cash'], session)
+        reference = valuation['reference_valuation']
+        if reference:
+            initial_cash = account['initial_cash']
+            reference['total_return_pct'] = (
+                (reference['portfolio_value'] / initial_cash - 1) * 100 if initial_cash > 0 else None
+            )
+        display = {'valuation_issues': valuation['valuation_issues'], 'reference_valuation': reference}
+
     # Closed rows remain the durable realized-PnL ledger. Fetching all rows in
     # the same indexed query avoids both a correctness hole and another DB trip.
     total_realized_pnl = sum(row["realized_pnl"] or 0.0 for row in position_rows)
     pos_out: list[PositionOut] = []
     for p in positions:
         ticker = p["ticker"]
-        current = closes.get(ticker)
-        missing_pnl = None if is_bot else 0.0
-        unr = ((current - p["avg_cost"]) * p["qty"]) if current is not None else missing_pnl
-        unr_pct = ((current - p["avg_cost"]) / p["avg_cost"] * 100.0) if current and p["avg_cost"] else missing_pnl
-        total_unrealized += unr or 0.0
-        mark = valuation['marks'][ticker] if valuation else None
+        mark = valuation['marks'][ticker]
+        current = mark['price']
+        pnl_price = current if is_bot or mark['quality'] == 'session_close' else None
+        unr = (pnl_price - p["avg_cost"]) * p["qty"] if pnl_price is not None else None
+        unr_pct = (pnl_price / p["avg_cost"] - 1) * 100.0 if pnl_price and p["avg_cost"] else None
         pos_out.append(PositionOut(
             ticker=ticker,
             qty=p["qty"],
@@ -427,24 +433,31 @@ async def _read_account(
             current_price=current,
             unrealized_pnl=unr,
             unrealized_pct=unr_pct,
-            price_quality=mark['quality'] if mark else None,
-            mark_at=mark['as_of'].isoformat() if mark and mark['as_of'] else None,
+            price_quality=mark['quality'],
+            mark_at=mark['as_of'].isoformat() if mark['as_of'] else None,
         ))
 
-    position_mkt_value = sum(
-        closes.get(p["ticker"], p["avg_cost"]) * p["qty"] for p in positions
-    ) if not is_bot else 0.0
     cash = account["cash"]
-    portfolio_value = valuation['portfolio_value'] if valuation else cash + position_mkt_value
-    initial_cash = account["initial_cash"]
-    total_return_pct = (portfolio_value - initial_cash) / initial_cash * 100.0 if portfolio_value is not None else None
-
     pending_count = await pool.fetchval(
         "SELECT COUNT(*) FROM sim_order "
         "WHERE account_id = $1 AND cohort_id = $2 AND status = 'pending'",
         account_id,
         cohort_id,
     ) or 0
+    if pending_count and session is not None and await pool.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM sim_order WHERE account_id=$1 AND cohort_id=$2 "
+        "AND status='pending' AND execution_model='daily_close_v1' AND signal_date<$3)",
+        account_id, cohort_id, session,
+    ):
+        valuation.update(portfolio_value=None, unrealized_pnl=None, valuation_quality='orders_pending', valued_at=None)
+        display['reference_valuation'] = None
+    portfolio_value = valuation['portfolio_value']
+    last_valid = await last_valid_valuation(pool, dict(account), now) if is_bot or portfolio_value is None else None
+    initial_cash = account["initial_cash"]
+    total_return_pct = (
+        (portfolio_value - initial_cash) / initial_cash * 100.0
+        if portfolio_value is not None and initial_cash > 0 else None
+    )
     reserved_cash = await pool.fetchval(
         "SELECT COALESCE(SUM(reserved_notional), 0) FROM sim_order "
         "WHERE account_id=$1 AND cohort_id=$2 AND side='buy' AND status='pending'",
@@ -460,13 +473,13 @@ async def _read_account(
         initial_cash=initial_cash,
         portfolio_value=portfolio_value,
         total_return_pct=total_return_pct,
-        unrealized_pnl=valuation['unrealized_pnl'] if valuation else total_unrealized,
+        unrealized_pnl=valuation['unrealized_pnl'],
         realized_pnl=total_realized_pnl,
         positions=pos_out,
         pending_orders=int(pending_count),
         reset_count=account["reset_count"],
-        valuation_quality=valuation['valuation_quality'] if valuation else None,
-        valued_at=valuation['valued_at'].isoformat() if valuation and valuation['valued_at'] else None,
+        valuation_quality=valuation['valuation_quality'],
+        valued_at=valuation['valued_at'].isoformat() if valuation['valued_at'] else None,
         last_valid_valuation=last_valid,
         **display,
     )
@@ -790,8 +803,9 @@ async def _read_equity_curve(
     cohort_id = int(account["reset_count"] or 0)
 
     rows = await pool.fetch(
-        "SELECT as_of_date, portfolio_value, benchmark_close, valuation_quality, valued_at FROM sim_equity_daily "
-        "WHERE account_id=$1 AND cohort_id=$2 AND valuation_quality IS DISTINCT FROM 'pre_account_invalid' ORDER BY as_of_date ASC",
+        "SELECT as_of_date,portfolio_value,benchmark_close,benchmark_close_at,valuation_quality,valued_at "
+        "FROM sim_equity_daily WHERE account_id=$1 AND cohort_id=$2 "
+        "AND valuation_quality IS DISTINCT FROM 'pre_account_invalid' ORDER BY as_of_date ASC",
         account_id,
         cohort_id,
     )
@@ -799,21 +813,21 @@ async def _read_equity_curve(
         return EquityCurveResponse(series=[], base_date=None)
 
     is_bot = account.get('kind') == 'bot'
-    base_bench = rows[0]["benchmark_close"] or (None if is_bot else 1.0)
-    series = [
-        EquityPoint(
-            date=r["as_of_date"].isoformat(),
-            portfolio_value=r["portfolio_value"],
-            benchmark_index=(
-                (r["benchmark_close"] / base_bench * 100.0)
-                if r["benchmark_close"] and base_bench
-                else None if is_bot else 100.0
-            ),
-            valuation_quality=r.get('valuation_quality'),
-            valued_at=r['valued_at'].isoformat() if r.get('valued_at') else None,
-        )
-        for r in rows
-    ]
+    benchmarks = [r['benchmark_close'] if is_bot or r.get('benchmark_close_at') else None for r in rows]
+    base_bench = benchmarks[0] if is_bot else next((close for close in benchmarks if close), None)
+    series = []
+    for row, benchmark in zip(rows, benchmarks):
+        quality = row.get('valuation_quality')
+        portfolio = row['portfolio_value']
+        if not is_bot and quality is None:
+            quality, portfolio = 'legacy_unverified', None
+        series.append(EquityPoint(
+            date=row['as_of_date'].isoformat(),
+            portfolio_value=portfolio,
+            benchmark_index=benchmark / base_bench * 100.0 if benchmark and base_bench else None,
+            valuation_quality=quality,
+            valued_at=row['valued_at'].isoformat() if row.get('valued_at') else None,
+        ))
     return EquityCurveResponse(series=series, base_date=rows[0]["as_of_date"].isoformat())
 
 

@@ -38,6 +38,7 @@ import { Metric, TwoStepConfirm } from "./PaperUi";
 import PaperRecommendations from "./PaperRecommendations";
 import PaperPositionsWithSource from "./PaperPositionsWithSource";
 import PaperCurvePane from "./PaperCurvePane";
+import PaperDailyValuation from "./PaperDailyValuation";
 import PaperSourceSummary from "./PaperSourceSummary";
 import PaperOrdersPane from "./PaperOrdersPane";
 import PaperL2Evidence from "./PaperL2Evidence";
@@ -215,6 +216,7 @@ function HumanPaperScreen({ accountTabs, pickQuery, returnUrl }: {
           <Metric label={t(locale, "sim.account.unrealized")} value={!accountUnavailable && account.unrealized_pnl !== null ? `${account.unrealized_pnl > 0 ? "+" : account.unrealized_pnl < 0 ? "-" : ""}$${FMT.format(Math.abs(account.unrealized_pnl))}` : "—"} tone={accountUnavailable || !account.unrealized_pnl ? "text-tm-fg" : account.unrealized_pnl > 0 ? "text-tm-pos" : "text-tm-neg"} />
           <Metric label={t(locale, "sim.workspace.total_return")} value={!accountUnavailable && totalReturn != null ? `${totalReturn > 0 ? "+" : ""}${totalReturn.toFixed(2)}%` : "—"} tone={accountUnavailable || !totalReturn ? "text-tm-fg" : totalReturn > 0 ? "text-tm-pos" : "text-tm-neg"} />
         </div>
+        {!accountUnavailable ? <PaperDailyValuation account={account} locale={locale} /> : null}
         {guideOpen ? (
           <div id="paper-account-help" className="flex flex-wrap items-center justify-between gap-4 border-t border-tm-rule px-6 py-3 text-xs leading-5 text-tm-muted">
             <div><p>{t(locale, "sim.workspace.disclosure")}</p><p>{t(locale, "sim.workspace.source_note")}</p>{!accountUnavailable && account.reserved_cash > 0 ? <p>{zh ? "待成交订单预留现金" : "Cash reserved for pending orders"} ${FMT.format(account.reserved_cash)}</p> : null}</div>

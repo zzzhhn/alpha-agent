@@ -129,9 +129,11 @@ def test_equity_curve_returns_series(client, monkeypatch):
     }
     equity_rows = [
         {"as_of_date": datetime.date(2026, 7, 1), "portfolio_value": 1000000.0,
-         "benchmark_close": 540.0},
+         "benchmark_close": 540.0, "valuation_quality": "session_close",
+         "benchmark_close_at": datetime.datetime(2026, 7, 1, 20, tzinfo=datetime.UTC)},
         {"as_of_date": datetime.date(2026, 7, 2), "portfolio_value": 1010000.0,
-         "benchmark_close": 543.0},
+         "benchmark_close": 543.0, "valuation_quality": "session_close",
+         "benchmark_close_at": datetime.datetime(2026, 7, 2, 20, tzinfo=datetime.UTC)},
     ]
     pool = _mock_pool(monkeypatch, fetchrow_val=account_row, fetch_val=equity_rows)
     r = client.get("/api/paper/equity-curve", headers=_auth())

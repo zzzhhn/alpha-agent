@@ -419,90 +419,75 @@ _PAPER_FILL_LOCK_NAME = "alpha_agent.paper_fill"
 _PAPER_FILL_BATCH_SIZE = 200
 
 
-async def _write_paper_equity_snapshots(conn: Any, today: Any) -> None:
-    """Write every account snapshot with one aggregate read and one batch write.
+async def _write_paper_equity_snapshots(conn: Any, today: date) -> None:
+    """Publish one coherent daily read of human positions, orders and closes."""
+    from alpha_agent.market_session import xnys_close
+    from alpha_agent.paper.daily_valuation import read_daily_closes, summarize_daily_closes
 
-    This replaces the prior per-account N+1 query pattern. Closed positions are
-    intentionally included in realized PnL, while only live positions contribute
-    market value and unrealized PnL.
-    """
-    rows = await conn.fetch(
-        """
-        WITH active_tickers AS (
-            SELECT DISTINCT sp.ticker
-            FROM sim_position sp
-            JOIN sim_account sa ON sa.id=sp.account_id
-            WHERE sp.qty > 0 AND sp.cohort_id=sa.reset_count AND sa.kind='human'
-        ),
-        latest_prices AS (
-            SELECT DISTINCT ON (dp.ticker) dp.ticker, dp.close
-            FROM daily_prices dp
-            JOIN active_tickers active ON active.ticker = dp.ticker
-            ORDER BY dp.ticker, dp.date DESC
-        ),
-        position_agg AS (
-            SELECT sp.account_id,
-                   COALESCE(SUM(
-                       CASE WHEN sp.qty > 0
-                            THEN COALESCE(lp.close, sp.avg_cost) * sp.qty
-                            ELSE 0 END
-                   ), 0) AS market_value,
-                   COALESCE(SUM(
-                       CASE WHEN sp.qty > 0
-                            THEN (COALESCE(lp.close, sp.avg_cost) - sp.avg_cost) * sp.qty
-                            ELSE 0 END
-                   ), 0) AS unrealized_pnl,
-                   COALESCE(SUM(sp.realized_pnl), 0) AS realized_pnl
-            FROM sim_position sp
-            JOIN sim_account sa ON sa.id=sp.account_id
-            LEFT JOIN latest_prices lp ON lp.ticker = sp.ticker
-            WHERE sp.cohort_id=sa.reset_count AND sa.kind='human'
-            GROUP BY sp.account_id
-        ),
-        spy AS (
-            SELECT close FROM daily_prices
-            WHERE ticker = 'SPY' ORDER BY date DESC LIMIT 1
-        )
-        SELECT sa.id AS account_id,
-               sa.reset_count AS cohort_id,
-               sa.cash,
-               sa.cash + COALESCE(pa.market_value, 0) AS portfolio_value,
-               COALESCE(pa.unrealized_pnl, 0) AS unrealized_pnl,
-               COALESCE(pa.realized_pnl, 0) AS realized_pnl,
-               spy.close AS benchmark_close
-        FROM sim_account sa
-        LEFT JOIN position_agg pa ON pa.account_id = sa.id
-        LEFT JOIN spy ON TRUE
-        WHERE sa.kind='human'
-        """
-    )
-    if not rows:
-        return
-
-    await conn.executemany(
-        """
-        INSERT INTO sim_equity_daily
-            (account_id, cohort_id, as_of_date, portfolio_value, cash,
-             unrealized_pnl, realized_pnl, benchmark_close)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (account_id, cohort_id, as_of_date) DO UPDATE
-        SET portfolio_value=$4, cash=$5, unrealized_pnl=$6,
-            realized_pnl=$7, benchmark_close=$8
-        """,
-        [
-            (
-                row["account_id"],
-                row["cohort_id"],
-                today,
-                row["portfolio_value"],
-                row["cash"],
-                row["unrealized_pnl"],
-                row["realized_pnl"],
-                row["benchmark_close"],
+    closing = xnys_close(today)
+    async with conn.transaction(isolation="repeatable_read"):
+        rows = await conn.fetch(
+            """
+            WITH eligible_accounts AS MATERIALIZED (
+                SELECT sa.id,sa.reset_count,sa.cash,
+                       EXISTS (
+                           SELECT 1 FROM sim_order so
+                           WHERE so.account_id=sa.id AND so.cohort_id=sa.reset_count
+                             AND so.execution_model='daily_close_v1' AND so.status='pending'
+                             AND so.signal_date<$1
+                       ) AS settlement_pending
+                FROM sim_account sa
+                WHERE sa.kind='human' AND COALESCE(sa.reset_at,sa.created_at)<=$2
             )
-            for row in rows
-        ],
-    )
+            SELECT sa.*,sp.ticker,sp.qty,sp.avg_cost,sp.realized_pnl
+            FROM eligible_accounts sa
+            LEFT JOIN sim_position sp ON sp.account_id=sa.id AND sp.cohort_id=sa.reset_count
+            """,
+            today, closing,
+        )
+        if not rows:
+            return
+        books = {}
+        tickers = {'SPY'}
+        for row in rows:
+            book = books.setdefault(row['id'], {
+                'cohort': row['reset_count'], 'cash': row['cash'], 'realized': 0.0,
+                'settlement_pending': row['settlement_pending'], 'positions': [],
+            })
+            book['realized'] += row['realized_pnl'] or 0.0
+            if row['qty'] is not None and row['qty'] > 0:
+                book['positions'].append(dict(row))
+                tickers.add(row['ticker'])
+        quotes = await read_daily_closes(conn, list(tickers), today)
+        benchmark = quotes.get('SPY')
+        snapshots = []
+        for account_id, book in books.items():
+            if book['settlement_pending']:
+                nav, pnl, quality = None, None, 'orders_pending'
+            else:
+                valuation = summarize_daily_closes(book['positions'], quotes, book['cash'], today)
+                nav = valuation['portfolio_value']
+                pnl = valuation['unrealized_pnl']
+                quality = valuation['valuation_quality']
+            snapshots.append((
+                account_id, book['cohort'], today, nav, book['cash'], pnl, book['realized'],
+                benchmark['close'] if benchmark else None, quality, closing,
+                closing if benchmark else None,
+            ))
+        await conn.executemany(
+            """
+            INSERT INTO sim_equity_daily
+                (account_id,cohort_id,as_of_date,portfolio_value,cash,unrealized_pnl,
+                 realized_pnl,benchmark_close,valuation_quality,valued_at,benchmark_close_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            ON CONFLICT (account_id,cohort_id,as_of_date) DO UPDATE SET
+                portfolio_value=EXCLUDED.portfolio_value,cash=EXCLUDED.cash,
+                unrealized_pnl=EXCLUDED.unrealized_pnl,realized_pnl=EXCLUDED.realized_pnl,
+                benchmark_close=EXCLUDED.benchmark_close,valuation_quality=EXCLUDED.valuation_quality,
+                valued_at=EXCLUDED.valued_at,benchmark_close_at=EXCLUDED.benchmark_close_at
+            """,
+            snapshots,
+        )
 
 
 async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
@@ -607,6 +592,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
             "remaining_pending": int(remaining_pending or 0),
             "market_pending_policy": "await_exact_t1_close",
             "batch_limit": _PAPER_FILL_BATCH_SIZE,
+            "batch_full": False,
         }
 
     for order in pending_orders:
@@ -788,6 +774,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
         "remaining_pending": int(remaining_pending or 0),
         "market_pending_policy": "await_exact_t1_close",
         "batch_limit": _PAPER_FILL_BATCH_SIZE,
+        "batch_full": len(pending_orders) == _PAPER_FILL_BATCH_SIZE,
     }
 
 
@@ -811,7 +798,15 @@ async def _run_paper_fill(dsn: str) -> dict[str, Any]:
                 "expired": 0,
                 "failed": 0,
             }
-        return await _run_paper_fill_locked(pool, today)
+        result = await _run_paper_fill_locked(pool, today)
+        for _ in range(2):
+            if not result['batch_full'] or result['skipped_locked']:
+                break
+            next_batch = await _run_paper_fill_locked(pool, today)
+            for key in ('filled', 'expired', 'failed', 'skipped_locked'):
+                next_batch[key] += result[key]
+            result = next_batch
+        return result
 
 
 @router.post("/paper_fill")

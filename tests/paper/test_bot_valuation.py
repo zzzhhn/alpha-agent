@@ -388,7 +388,7 @@ async def test_legacy_equity_aggregate_is_human_only():
     conn.fetch = AsyncMock(return_value=[])
     await cron_routes._write_paper_equity_snapshots(conn, NOW.date())
     sql = conn.fetch.call_args.args[0]
-    assert sql.count("sa.kind='human'") == 3
+    assert "sa.kind='human'" in sql and 'so.signal_date<$1' in sql
 
 
 def test_daily_valuation_is_wired_after_human_fill_lease():
