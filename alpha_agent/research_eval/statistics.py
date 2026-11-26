@@ -69,6 +69,11 @@ def non_overlapping(
     return result
 
 
+def sharpe_moment_variance(sharpe: float, skew: float, pearson_kurtosis: float) -> float:
+    """Bailey–López de Prado variance numerator for a per-period sample Sharpe."""
+    return 1 - skew * sharpe + (pearson_kurtosis - 1) * sharpe**2 / 4
+
+
 def deflated_sharpe(
     returns: Sequence[float], *, trial_sharpes: Sequence[float],
     independent_trials: int | None = None,
@@ -106,7 +111,7 @@ def deflated_sharpe(
     m2 = mean(value**2 for value in centered)
     skew = mean(value**3 for value in centered)/m2**1.5
     kurt = mean(value**4 for value in centered)/m2**2
-    variance = 1-skew*sr+(kurt-1)*sr*sr/4
+    variance = sharpe_moment_variance(sr, skew, kurt)
     result.update(sharpe=sr, benchmark_sharpe=benchmark)
     if variance <= 0:
         return {**result, "reason": "invalid_moment_variance"}

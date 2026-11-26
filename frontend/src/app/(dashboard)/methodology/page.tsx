@@ -456,6 +456,12 @@ function BacktestTab() {
       detail: [
         { label: t(locale, "methodology.backtest.colFormula"), value: row.formula, code: true },
         { label: t(locale, "methodology.backtest.colRef"), value: row.ref, code: true },
+        ...(row.keyBase === "psr" ? [{
+          label: locale === "zh" ? "指标版本" : "Metric version",
+          value: locale === "zh"
+            ? "因子回测 PSR v2 使用原始峰度减 1。旧版保存值使用原始峰度减 3，重新运行可得到 v2。多次试验时，回测用样本长度估计零假设基准，研究协议使用完整试验登记的 Sharpe 离散度。"
+            : "Factor backtest PSR v2 uses Pearson kurtosis minus one. Earlier saved backtests used kurtosis minus three. Rerun to obtain v2. For multiple trials the backtest estimates its null from sample length, while the research protocol uses Sharpe dispersion across registered trials.",
+        }] : []),
       ],
     };
   });
