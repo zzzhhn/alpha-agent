@@ -21,6 +21,7 @@
     { "path": "/api/cron/event-shadow", "schedule": "3-59/5 13-21 * * 1-5" },
     { "path": "/api/cron/paper_bot/valuation", "schedule": "7,37 13-21 * * 1-5" },
     { "path": "/api/cron/paper_fill", "schedule": "0 1 * * *" },
+    { "path": "/api/cron/paper_fill", "schedule": "15,30,45 1 * * 2-6" },
     { "path": "/api/cron/paper_bot/wake", "schedule": "1,4 14,15 * * 1-5" },
     { "path": "/api/cron/paper_bot/wake", "schedule": "31,34 16,17,19,20 * * 1-5" },
     { "path": "/api/cron/tick/daily_close", "schedule": "10-59/5 20 * * 1-5" },
