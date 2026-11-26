@@ -116,3 +116,28 @@ async def test_proposer_caps_n_at_hard_limit(mock_llm, diagnostic):
     messages = call_kwargs.kwargs.get("messages") or (call_kwargs.args[0] if call_kwargs.args else [])
     prompt = messages[0].content
     assert "8" in prompt
+
+
+async def test_queued_worker_does_not_retry_malformed_paid_response(mock_llm, diagnostic):
+    from alpha_agent.llm.base import llm_retries_disabled
+
+    mock_llm.chat.return_value = _llm_resp("malformed synthetic response")
+    token = llm_retries_disabled.set(True)
+    try:
+        with pytest.raises(ValueError, match="could not parse LLM response:"):
+            await propose_factors(mock_llm, diagnostic)
+    finally:
+        llm_retries_disabled.reset(token)
+    mock_llm.chat.assert_awaited_once()
+
+
+async def test_generation_count_is_checkpointed_on_success(mock_llm, diagnostic):
+    from alpha_agent.evolution.llm_factor_proposer import proposal_generation_checkpoint
+
+    checkpoint = AsyncMock()
+    token = proposal_generation_checkpoint.set(checkpoint)
+    try:
+        proposals = await propose_factors(mock_llm, diagnostic)
+    finally:
+        proposal_generation_checkpoint.reset(token)
+    checkpoint.assert_awaited_once_with(len(proposals))

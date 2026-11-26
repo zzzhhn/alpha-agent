@@ -636,8 +636,7 @@ async def post_propose(
     if history_n < _MIN_HISTORY_ROWS:
         dormant_result = {"evaluated": 0, "proposed": 0, "dormant": True,
                           "duplicates_skipped": 0, "_diag": {"duplicates_skipped": 0}}
-        job_id = await propose_jobs.create_job(pool, user_id, n)
-        await propose_jobs.mark_done(pool, job_id, dormant_result)
+        job_id = await propose_jobs.create_completed_job(pool, user_id, n, dormant_result)
         return {"job_id": job_id, "status": "done", "inline_result": dormant_result}
 
     job_id = await propose_jobs.create_job(pool, user_id, n)
@@ -658,6 +657,7 @@ async def get_propose_job(
     Polled by the frontend every 3s for up to 5min. Each call is short
     (<100ms typical) so even an unstable connection has 100 chances to
     succeed before the client gives up."""
+    await propose_jobs.expire_interrupted(pool, job_id=job_id, user_id=user_id)
     job = await propose_jobs.get_job(pool, job_id)
     if job is None:
         raise HTTPException(404, "job not found")

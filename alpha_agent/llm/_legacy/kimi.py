@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from alpha_agent.core.exceptions import LLMEmptyResponseError
-from alpha_agent.llm.base import LLMClient, LLMResponse, Message
+from alpha_agent.llm.base import LLMClient, LLMResponse, Message, llm_retries_disabled
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class KimiClient(LLMClient):
 
         first_budget = max(max_tokens, _MIN_OUTPUT_BUDGET)
         budgets = [first_budget]
-        if first_budget < _RETRY_OUTPUT_BUDGET:
+        if not llm_retries_disabled.get() and first_budget < _RETRY_OUTPUT_BUDGET:
             budgets.append(_RETRY_OUTPUT_BUDGET)
 
         last_usage: dict = {}
@@ -115,8 +115,9 @@ class KimiClient(LLMClient):
                 last_usage.get("output_tokens", 0),
             )
 
+        retry_note = " after adaptive retry" if len(budgets) > 1 else ""
         raise LLMEmptyResponseError(
-            "Kimi completed without user-visible text after adaptive retry "
+            f"Kimi completed without user-visible text{retry_note} "
             f"(stop_reason={last_stop_reason}, "
             f"output_tokens={last_usage.get('output_tokens', 0)})"
         )
