@@ -8,9 +8,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from alpha_agent.api.cache import TTLCache
+from alpha_agent.api.cors import install_cors
+from alpha_agent.api.diagnostics import record_failure
 from alpha_agent.api.performance import install_performance
 from alpha_agent.config import get_settings
 from alpha_agent.core.exceptions import ProviderUnavailableError
@@ -117,11 +118,7 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
         try:
             await refresh_allowed_ops(db_url)
         except Exception as exc:  # noqa: BLE001 - surfaced via /healthz/ast
-            application.state.allowed_ops_refresh_error = f"{type(exc).__name__}: {exc}"
-            logger.warning(
-                "refresh_allowed_ops failed at startup: %s: %s",
-                type(exc).__name__, exc,
-            )
+            application.state.allowed_ops_refresh_error = record_failure("ast_refresh_failed", exc)
     yield
     llm = getattr(application.state, "llm", None)
     if llm and hasattr(llm, "close"):
@@ -151,30 +148,14 @@ def create_app() -> FastAPI:
             application.state.cache = _cache
             application.state.llm = None
 
-    application.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["GET", "POST"],
-        # Phase 1 BYOK — explicit allowlist of the X-LLM-* headers the
-        # browser needs to send. The "*" wildcard works in Chromium but
-        # Safari has historically been finicky with custom headers under
-        # CORS preflight; listing them avoids that class of bug.
-        allow_headers=[
-            "*",
-            "Authorization",
-            "X-LLM-Provider",
-            "X-LLM-API-Key",
-            "X-LLM-Base-URL",
-            "X-LLM-Model",
-        ],
-    )
-
     # Security middleware (skip in serverless — BaseHTTPMiddleware incompatible)
     if not SERVERLESS:
         from alpha_agent.api.security import SecurityMiddleware
 
         auth_enabled = os.environ.get("ALPHACORE_AUTH_ENABLED", "false").lower() == "true"
         application.add_middleware(SecurityMiddleware, auth_enabled=auth_enabled)
+
+    install_cors(application)
 
     # Router loading with per-router health tracking.
     # Silent ImportError is the root cause of ghost-route bugs (see
@@ -193,10 +174,9 @@ def create_app() -> FastAPI:
                 RouterHealth(
                     name=name,
                     loaded=False,
-                    error=f"{type(exc).__name__}: {exc}",
+                    error=record_failure(f"router_load_failed.{name}", exc),
                 )
             )
-            logger.error("router %s failed to load: %s: %s", name, type(exc).__name__, exc)
 
     def _import_system():
         from alpha_agent.api.routes.system import router
@@ -396,7 +376,7 @@ def create_app() -> FastAPI:
                 application.state.sandbox_runner = runner
                 application.state.sandbox_init_error = None
             except Exception as exc:  # noqa: BLE001 - surfaced in response per anti-silent rule
-                application.state.sandbox_init_error = f"{type(exc).__name__}: {exc}"
+                application.state.sandbox_init_error = record_failure("sandbox_initialization_failed", exc)
                 return {"init_error": application.state.sandbox_init_error}
         stat = runner.stat()
         stat["init_error"] = getattr(application.state, "sandbox_init_error", None)

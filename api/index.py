@@ -18,20 +18,16 @@ import traceback
 os.environ.setdefault("SERVERLESS", "true")
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from alpha_agent.core.types import RouterHealth
+from alpha_agent.api.cors import install_cors
+from alpha_agent.api.diagnostics import record_failure
 from alpha_agent.api.performance import install_performance
 
 app = FastAPI(title="AlphaCore Dashboard API", version="1.0.0")
 install_performance(app)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["*", "Authorization"],
-)
+install_cors(app)
 
 # ── app.state init ──────────────────────────────────────────────────────
 app.state.router_health = []
@@ -94,12 +90,12 @@ def _load(name: str, modpath: str) -> None:
         app.state.router_health.append(RouterHealth(name=name, loaded=True))
         print(f"✓ {name} routes loaded", file=sys.stderr, flush=True)
     except Exception as exc:
-        err = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+        reference = record_failure(f"router_load_failed.{name}", exc)
         app.state.router_health.append(
-            RouterHealth(name=name, loaded=False, error=err[:1500])
+            RouterHealth(name=name, loaded=False, error=reference)
         )
-        _m2_load_errors[name] = err
-        print(f"✗ {name} routes: {err}", file=sys.stderr, flush=True)
+        _m2_load_errors[name] = reference
+
 
 
 _load("serverless",   "alpha_agent.api.routes.serverless")
@@ -136,7 +132,7 @@ try:
     import asyncpg  # noqa: F401
     _m2_load_errors["_asyncpg_import"] = "OK"
 except Exception as e:
-    _m2_load_errors["_asyncpg_import"] = f"{type(e).__name__}: {e}"
+    _m2_load_errors["_asyncpg_import"] = record_failure("asyncpg_import_failed", e)
 
 app.state.m2_load_errors = _m2_load_errors
 
@@ -156,9 +152,7 @@ try:
     else:
         app.state.allowed_ops_refresh_error = "no DATABASE_URL: whitelist is builtin-only"
 except Exception as e:
-    app.state.allowed_ops_refresh_error = f"{type(e).__name__}: {e}"
-    print(f"⚠ AST whitelist refresh failed: {app.state.allowed_ops_refresh_error}",
-          file=sys.stderr, flush=True)
+    app.state.allowed_ops_refresh_error = record_failure("ast_refresh_failed", e)
 
 
 @app.get("/api/health")
@@ -180,7 +174,7 @@ async def healthz_ast() -> dict:
             "refresh_error": getattr(app.state, "allowed_ops_refresh_error", None),
         }
     except Exception as exc:  # noqa: BLE001 - surface to the response, not swallow
-        return {"error": f"{type(exc).__name__}: {exc}"}
+        return {"error": record_failure("ast_health_failed", exc)}
 
 
 @app.get("/api/healthz/sandbox")
@@ -194,7 +188,7 @@ async def healthz_sandbox() -> dict:
             app.state.sandbox_runner = runner
             app.state.sandbox_init_error = None
         except Exception as exc:
-            app.state.sandbox_init_error = f"{type(exc).__name__}: {exc}"
+            app.state.sandbox_init_error = record_failure("sandbox_initialization_failed", exc)
             return {"init_error": app.state.sandbox_init_error}
     stat = runner.stat()
     stat["init_error"] = getattr(app.state, "sandbox_init_error", None)
@@ -203,7 +197,7 @@ async def healthz_sandbox() -> dict:
 
 @app.get("/api/_debug/load-errors")
 async def debug_load_errors() -> dict:
-    """Surface every router cold-start ImportError + asyncpg probe result.
+    """Return router failure references and the asyncpg probe status.
     Kept for backward compat; prefer /api/_health/routers for the structured
     loaded/failed manifest."""
     return getattr(app.state, "m2_load_errors", {})

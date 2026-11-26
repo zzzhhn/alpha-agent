@@ -14,12 +14,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from alpha_agent.auth.dependencies import require_admin
 from alpha_agent.storage import (
     decay_alerts as _decay_alerts,
     delete_factor as _delete_factor,
+    get_factor as _get_factor,
     get_factor_runs as _get_factor_runs,
     init_schema,
     list_factors as _list_factors,
@@ -121,17 +123,17 @@ def decay_alerts(
 
 @router.get("/{factor_id}", response_model=FactorDetailResponse)
 def get_factor(factor_id: str) -> FactorDetailResponse:
-    matches = [f for f in _list_factors(limit=200) if f["id"] == factor_id]
-    if not matches:
+    factor = _get_factor(factor_id)
+    if factor is None:
         raise HTTPException(status_code=404, detail=f"factor {factor_id!r} not found")
     runs = _get_factor_runs(factor_id, limit=200)
     return FactorDetailResponse(
-        factor=FactorSummary(**matches[0]),
+        factor=FactorSummary(**factor),
         runs=[FactorRunSummary(**r) for r in runs],
     )
 
 
-@router.delete("/{factor_id}")
+@router.delete("/{factor_id}", dependencies=[Depends(require_admin)])
 def delete_factor(factor_id: str) -> dict[str, Any]:
     if not _delete_factor(factor_id):
         raise HTTPException(status_code=404, detail=f"factor {factor_id!r} not found")
