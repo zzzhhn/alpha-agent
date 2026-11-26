@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import logging
 import os
@@ -16,8 +15,6 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +60,53 @@ def _in_process_lock(lock_path: Path) -> threading.RLock:
         return lock
 
 
+def _lock_file_handle(fh) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        fh.seek(0)
+        # Ensure at least 1 byte exists in the lock file so region [0, 1) locks cleanly.
+        if fh.seek(0, os.SEEK_END) == 0:
+            fh.write(b"\0")
+            fh.flush()
+        fh.seek(0)
+        while True:
+            try:
+                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+                return
+            except OSError:
+                # msvcrt.LK_LOCK retries ~10 times (~10s) before raising EDEADLK/EACCES.
+                time.sleep(0.05)
+    else:
+        import fcntl
+
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file_handle(fh) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 @contextmanager
 def _exclusive_file_lock(lock_path: Path) -> Iterator[None]:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     thread_lock = _in_process_lock(lock_path)
     with thread_lock:
-        with lock_path.open("a+b") as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        mode = "r+b" if lock_path.exists() else "a+b"
+        with lock_path.open(mode) as fh:
+            _lock_file_handle(fh)
             try:
                 yield
             finally:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                _unlock_file_handle(fh)
 
 
 def _empty_like(columns: list[str] | tuple[str, ...]) -> pd.DataFrame:
@@ -129,13 +162,16 @@ def _expected_sessions(
     end: date,
     market: str | None,
 ) -> list[date] | None:
-    """Return trading sessions in ``[start, end]``, or ``None`` if calendar-out-of-bounds."""
+    """Return trading sessions in ``[start, end]``, or ``None`` if calendar-unavailable."""
     if start > end or market is None:
         return None
     cal_name = _MARKET_CALENDARS.get(market.upper())
     if cal_name is None:
         return None
-    cal = _exchange_calendar(cal_name)
+    try:
+        cal = _exchange_calendar(cal_name)
+    except ImportError:
+        return None
     first_session = cal.first_session.date()
     last_session = cal.last_session.date()
     if start < first_session or end > last_session:
@@ -158,11 +194,12 @@ def _trim_closed_days(
 
 
 def _derive_legacy_intervals(df: pd.DataFrame, market: str | None) -> list[tuple[date, date]]:
-    """Conservative coverage inference for pre-existing Parquet files without metadata.
+    """Conservative coverage inference for unscoped Parquet files without metadata.
 
-    Without stored request bounds, only observed trading dates are proven.
-    Adjacent trading sessions on a known exchange calendar can merge across
-    weekends/holidays, while missing trading sessions remain uncovered gaps.
+    Only used when neither ``market`` nor ``price_basis`` is required by the
+    caller.  Unproven legacy files without metadata are never trusted for
+    scoped ``(market, price_basis)`` reads because their adjustment basis and
+    exchange provenance cannot be verified.
     """
     if df.empty or "date" not in df.index.names:
         return []
@@ -198,10 +235,10 @@ def _derive_legacy_intervals(df: pd.DataFrame, market: str | None) -> list[tuple
 class ParquetCache:
     """Read/write Parquet files as a simple file-based cache.
 
-    Each stock code gets its own Parquet file alongside schema metadata
-    recording which ``(start_date, end_date)`` request intervals, ``market``,
-    and ``price_basis`` are covered.  Partial range coverage is treated as a
-    cache miss unless all missing trading sessions are fetched and merged.
+    Scoped callers (passing ``market`` and/or ``price_basis``) always read and
+    write deterministic scoped files (``{code}__{market}__{price_basis}.parquet``),
+    eliminating race conditions across different markets or adjustment bases
+    and refusing to trust unverified legacy files that lack provenance metadata.
     """
 
     def __init__(
@@ -296,7 +333,7 @@ class ParquetCache:
         market: str | None = None,
         price_basis: str | None = None,
     ) -> pd.DataFrame | None:
-        """Return cached rows in [start_date, end_date] without altering hit/miss stats."""
+        """Return cached rows in ``[start_date, end_date]`` without altering hit/miss stats."""
         req_start = _parse_day(start_date)
         req_end = _parse_day(end_date)
         if req_start > req_end:
@@ -368,6 +405,13 @@ class ParquetCache:
         if not has_rows and not (record_empty_range and start_date and end_date):
             return
 
+        try:
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+        except ImportError:
+            logger.debug("pyarrow unavailable; skipping Parquet cache write for %s.", stock_code)
+            return
+
         incoming = data.copy() if has_rows else _empty_like(
             list(data.columns) if data is not None and len(data.columns) > 0
             else ("open", "close", "high", "low", "volume", "amount")
@@ -411,6 +455,22 @@ class ParquetCache:
                     if eff_basis is None:
                         eff_basis = prev_basis
 
+            # If a verified legacy file exists (matching explicit market & price_basis
+            # in its metadata), carry its proven history into the canonical scoped file.
+            if (
+                existing_df is None
+                and (market is not None or price_basis is not None)
+            ):
+                legacy_path = self._legacy_path_for(stock_code)
+                if legacy_path != path and legacy_path.exists() and self._is_fresh(legacy_path):
+                    migrated = self._read_parquet_with_meta(
+                        legacy_path,
+                        expected_market=market,
+                        expected_price_basis=price_basis,
+                    )
+                    if migrated is not None:
+                        existing_df, existing_intervals, _, _ = migrated
+
             if existing_df is not None and not existing_df.empty and has_rows:
                 combined = pd.concat([existing_df, incoming])
                 combined = combined[~combined.index.duplicated(keep="last")].sort_index()
@@ -428,6 +488,8 @@ class ParquetCache:
                 intervals=merged_intervals,
                 market=eff_market,
                 price_basis=eff_basis,
+                pa=pa,
+                pq=pq,
             )
             logger.debug(
                 "Cached %d rows for %s (intervals=%s).",
@@ -448,6 +510,13 @@ class ParquetCache:
         with self._stats_lock:
             self._misses += 1
 
+    @staticmethod
+    def _safe_code(stock_code: str) -> str:
+        return stock_code.replace("/", "_").replace("\\", "_")
+
+    def _legacy_path_for(self, stock_code: str) -> Path:
+        return self._cache_dir / f"{self._safe_code(stock_code)}.parquet"
+
     def _path_for(
         self,
         stock_code: str,
@@ -455,27 +524,18 @@ class ParquetCache:
         market: str | None = None,
         price_basis: str | None = None,
     ) -> Path:
-        safe_code = stock_code.replace("/", "_")
+        """Return deterministic file path for *(stock_code, market, price_basis)*.
+
+        Scoped requests always map to ``{code}__{market}__{price_basis}.parquet``
+        without inspecting filesystem state, preventing TOCTOU collisions when
+        concurrent callers write different markets or adjustment bases first.
+        """
+        safe_code = self._safe_code(stock_code)
         if market is None and price_basis is None:
             return self._cache_dir / f"{safe_code}.parquet"
-        legacy = self._cache_dir / f"{safe_code}.parquet"
         m_tag = (market or "any").lower()
         b_tag = (price_basis or "any").lower()
-        scoped = self._cache_dir / f"{safe_code}__{m_tag}__{b_tag}.parquet"
-        if scoped.exists():
-            return scoped
-        if legacy.exists():
-            meta = self._peek_meta(legacy)
-            if meta is None:
-                return legacy
-            prev_market = meta.get("market")
-            prev_basis = meta.get("price_basis")
-            market_ok = prev_market is None or market is None or prev_market == market
-            basis_ok = prev_basis is None or price_basis is None or prev_basis == price_basis
-            if market_ok and basis_ok:
-                return legacy
-            return scoped
-        return legacy
+        return self._cache_dir / f"{safe_code}__{m_tag}__{b_tag}.parquet"
 
     @staticmethod
     def _slice_frame(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
@@ -503,21 +563,6 @@ class ParquetCache:
                 gaps.append(trimmed_gap)
         return gaps
 
-    def _peek_meta(self, path: Path) -> dict[str, object] | None:
-        try:
-            schema = pq.read_schema(path)
-        except Exception:
-            return None
-        raw_meta = schema.metadata or {}
-        payload = raw_meta.get(_METADATA_KEY)
-        if not payload:
-            return None
-        try:
-            parsed = json.loads(payload.decode("utf-8"))
-            return parsed if isinstance(parsed, dict) else None
-        except Exception:
-            return None
-
     def _load_state(
         self,
         stock_code: str,
@@ -530,20 +575,27 @@ class ParquetCache:
             market=expected_market,
             price_basis=expected_price_basis,
         )
-        if not path.exists():
-            return None
-        if not self._is_fresh(path):
-            logger.debug("Cache stale for %s, ignoring.", stock_code)
-            return None
-        loaded = self._read_parquet_with_meta(
-            path,
-            expected_market=expected_market,
-            expected_price_basis=expected_price_basis,
-        )
-        if loaded is None:
-            return None
-        df, intervals, _, _ = loaded
-        return df, intervals
+        candidates = [path]
+        if expected_market is not None or expected_price_basis is not None:
+            legacy = self._legacy_path_for(stock_code)
+            if legacy != path:
+                candidates.append(legacy)
+
+        for candidate in candidates:
+            if not candidate.exists():
+                continue
+            if not self._is_fresh(candidate):
+                logger.debug("Cache stale for %s at %s, ignoring.", stock_code, candidate)
+                continue
+            loaded = self._read_parquet_with_meta(
+                candidate,
+                expected_market=expected_market,
+                expected_price_basis=expected_price_basis,
+            )
+            if loaded is not None:
+                df, intervals, _, _ = loaded
+                return df, intervals
+        return None
 
     def _read_parquet_with_meta(
         self,
@@ -552,6 +604,12 @@ class ParquetCache:
         expected_market: str | None,
         expected_price_basis: str | None,
     ) -> tuple[pd.DataFrame, list[tuple[date, date]], str | None, str | None] | None:
+        try:
+            import pyarrow.parquet as pq
+        except ImportError:
+            logger.debug("pyarrow unavailable; skipping Parquet cache read for %s.", path)
+            return None
+
         try:
             table = pq.read_table(path, use_threads=False)
             df = table.to_pandas()
@@ -573,7 +631,7 @@ class ParquetCache:
             try:
                 meta = json.loads(payload.decode("utf-8"))
             except Exception:
-                logger.warning("Corrupt cache metadata in %s; falling back to row inference.", path)
+                logger.warning("Corrupt cache metadata in %s; ignoring metadata.", path)
                 meta = None
         else:
             meta = None
@@ -581,17 +639,9 @@ class ParquetCache:
         if isinstance(meta, dict):
             stored_market = meta.get("market")
             stored_basis = meta.get("price_basis")
-            if (
-                expected_market is not None
-                and stored_market is not None
-                and stored_market != expected_market
-            ):
+            if expected_market is not None and stored_market != expected_market:
                 return None
-            if (
-                expected_price_basis is not None
-                and stored_basis is not None
-                and stored_basis != expected_price_basis
-            ):
+            if expected_price_basis is not None and stored_basis != expected_price_basis:
                 return None
             raw_intervals = meta.get("intervals")
             if isinstance(raw_intervals, list):
@@ -606,8 +656,19 @@ class ParquetCache:
                     stored_basis if isinstance(stored_basis, str) else None,
                 )
 
-        inferred = _derive_legacy_intervals(df, expected_market)
-        return df, inferred, expected_market, expected_price_basis
+        # Unverified file (missing or corrupt provenance metadata): never treat
+        # as valid when the caller requires a specific market or price_basis.
+        if expected_market is not None or expected_price_basis is not None:
+            logger.debug(
+                "Ignoring unverified legacy cache %s for scoped request (market=%s, basis=%s).",
+                path,
+                expected_market,
+                expected_price_basis,
+            )
+            return None
+
+        inferred = _derive_legacy_intervals(df, None)
+        return df, inferred, None, None
 
     @staticmethod
     def _write_atomic(
@@ -617,7 +678,13 @@ class ParquetCache:
         intervals: list[tuple[date, date]],
         market: str | None,
         price_basis: str | None,
+        pa=None,
+        pq=None,
     ) -> None:
+        if pa is None or pq is None:
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+
         path.parent.mkdir(parents=True, exist_ok=True)
         table = pa.Table.from_pandas(df, preserve_index=True)
         meta = dict(table.schema.metadata or {})

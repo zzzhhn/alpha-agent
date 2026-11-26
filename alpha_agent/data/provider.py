@@ -167,9 +167,9 @@ class AKShareProvider(DataProvider):
                         record_empty_range=True,
                     )
 
+            if not all_segments_ok:
+                continue
             if self._cache is not None:
-                if not all_segments_ok:
-                    continue
                 merged = self._cache.peek_slice(
                     code,
                     start_date,
@@ -177,9 +177,11 @@ class AKShareProvider(DataProvider):
                     market=_CN_MARKET,
                     price_basis=_CN_PRICE_BASIS,
                 )
-                if merged is not None and not merged.empty:
-                    frames.append(merged)
-            elif all_segments_ok and fetched_segments:
+                if merged is not None:
+                    if not merged.empty:
+                        frames.append(merged)
+                    continue
+            if fetched_segments:
                 combined = pd.concat(fetched_segments)
                 combined = combined[~combined.index.duplicated(keep="last")].sort_index()
                 frames.append(combined)

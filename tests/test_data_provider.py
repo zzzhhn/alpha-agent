@@ -229,50 +229,228 @@ class TestParquetCache:
         pd.testing.assert_frame_equal(got_adj, adj)
         pd.testing.assert_frame_equal(got_raw, raw)
 
-    def test_legacy_parquet_without_metadata_backfills_uncovered_bounds_and_gaps(
+    def test_unverified_legacy_parquet_never_trusted_for_scoped_basis_and_unscoped_keeps_gaps(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Pre-existing Parquet files written via plain `df.to_parquet` must not
-        pretend uncovered leading/trailing or internal missing sessions are cached."""
+        """A pre-existing `{code}.parquet` without provenance metadata has unknown
+        adjustment basis/market: scoped reads/providers must NOT trust it, while
+        unscoped direct `get` only trusts observed calendar days (preserving gaps)."""
         monkeypatch.setattr(us_provider_mod, "_jittered_sleep", lambda: None)
 
-        # Legacy file has Fri 2026-11-06, Mon 2026-11-09, and Thu 2026-11-12
-        # (Tue 11-10 and Wed 11-11 are missing; weekend 11-07/11-08 is closed).
+        # Unverified legacy file has bogus prices (e.g. raw unadjusted 999.0) on
+        # 2026-11-06 and 2026-11-09, with a gap before 2026-11-12.
         legacy_df = _build_ohlcv_panel(
-            "AAPL", ["2026-11-06", "2026-11-09", "2026-11-12"]
+            "AAPL", ["2026-11-06", "2026-11-09", "2026-11-12"], base_price=999.0
         )
-        legacy_df.to_parquet(tmp_path / "AAPL.parquet", engine="pyarrow")
+        legacy_path = tmp_path / "AAPL.parquet"
+        legacy_df.to_parquet(legacy_path, engine="pyarrow")
 
         cache = ParquetCache(cache_dir=tmp_path)
-        # Fri -> Mon across weekend IS contiguous on XNYS, so [11-06, 11-09] hits.
-        weekend_span = cache.get(
-            "AAPL", "20261106", "20261109", market="US", price_basis="adjusted"
-        )
-        assert weekend_span is not None
-        assert len(weekend_span) == 2
 
-        # Requesting [11-05, 11-13] sees missing 11-05, 11-10..11-11, and 11-13.
+        # 1. Scoped read (`market="US", price_basis="adjusted"`) refuses unverified legacy.
+        assert (
+            cache.get("AAPL", "20261106", "20261106", market="US", price_basis="adjusted")
+            is None
+        )
         assert cache.missing_ranges(
             "AAPL", "20261105", "20261113", market="US", price_basis="adjusted"
-        ) == [
-            ("20261105", "20261105"),
-            ("20261110", "20261111"),
-            ("20261113", "20261113"),
-        ]
+        ) == [("20261105", "20261113")]
 
+        # 2. Unscoped read (`market=None, price_basis=None`) hits exact observed day
+        # but treats missing internal/boundary days as uncovered.
+        single_day = cache.get("AAPL", "20261106", "20261106")
+        assert single_day is not None and len(single_day) == 1
+        assert cache.get("AAPL", "20261106", "20261112") is None
+        assert cache.get("AAPL", "20261105", "20261106") is None
+
+        # 3. Provider fetch ignores unverified legacy, fetches clean adjusted panel,
+        # and writes deterministic scoped file `AAPL__us__adjusted.parquet`.
         full_dates = pd.bdate_range("2026-11-05", "2026-11-13")
-        fetcher = _SyntheticUSFetcher({"AAPL": _build_ohlcv_panel("AAPL", full_dates)})
+        clean_panel = _build_ohlcv_panel("AAPL", full_dates, base_price=100.0)
+        fetcher = _SyntheticUSFetcher({"AAPL": clean_panel})
         mgr = DataFetcherManager()
         mgr.register(fetcher)
         provider = YFinanceProvider(cache=cache, manager=mgr)
 
-        merged = provider.fetch(["AAPL"], "20261105", "20261113")
-        assert len(merged) == len(full_dates)
-        assert fetcher.calls == [
-            ("AAPL", "2026-11-05", "2026-11-05"),
-            ("AAPL", "2026-11-10", "2026-11-11"),
-            ("AAPL", "2026-11-13", "2026-11-13"),
+        fetched = provider.fetch(["AAPL"], "20261105", "20261113")
+        pd.testing.assert_frame_equal(fetched, clean_panel)
+        assert fetcher.calls == [("AAPL", "2026-11-05", "2026-11-13")]
+        assert (tmp_path / "AAPL__us__adjusted.parquet").exists()
+
+    def test_concurrent_first_writes_across_different_market_and_basis_use_distinct_scoped_paths(
+        self, tmp_path: Path
+    ) -> None:
+        """Simultaneous cold-cache first writes for the same symbol under different
+        `(market, price_basis)` pairs must deterministically target separate scoped
+        files without racing on `{code}.parquet` or overwriting one another."""
+        cache = ParquetCache(cache_dir=tmp_path)
+        specs = [
+            ("US", "adjusted", 100.0),
+            ("US", "raw_unadjusted", 200.0),
+            ("CN", "qfq", 300.0),
+            ("CN", "hfq", 400.0),
         ]
+        barrier = threading.Barrier(len(specs))
+
+        def _writer(spec: tuple[str, str, float]) -> Path:
+            mkt, basis, base = spec
+            df = _build_ohlcv_panel("DUAL", ["2026-11-10", "2026-11-11"], base_price=base)
+            barrier.wait(timeout=5.0)
+            cache.put(
+                "DUAL",
+                df,
+                start_date="20261110",
+                end_date="20261111",
+                market=mkt,
+                price_basis=basis,
+            )
+            return cache._path_for("DUAL", market=mkt, price_basis=basis)
+
+        with ThreadPoolExecutor(max_workers=len(specs)) as pool:
+            written_paths = list(pool.map(_writer, specs))
+
+        assert not (tmp_path / "DUAL.parquet").exists()
+        assert len(set(written_paths)) == len(specs)
+        for mkt, basis, base in specs:
+            expected_file = tmp_path / f"DUAL__{mkt.lower()}__{basis.lower()}.parquet"
+            assert expected_file.exists()
+            got = cache.get(
+                "DUAL", "20261110", "20261111", market=mkt, price_basis=basis
+            )
+            assert got is not None
+            expected_df = _build_ohlcv_panel(
+                "DUAL", ["2026-11-10", "2026-11-11"], base_price=base
+            )
+            pd.testing.assert_frame_equal(got, expected_df)
+
+    def test_cross_process_concurrent_merges_and_windows_lock_branch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify real cross-process file locking preserves disjoint writes, and
+        verify the `os.name == 'nt'` (`msvcrt.locking`) branch acquires/releases cleanly."""
+        import subprocess
+
+        worker_code = (
+            "import sys; from pathlib import Path; import pandas as pd; "
+            "from alpha_agent.data.cache import ParquetCache; "
+            "d, mkt, basis, day, price = sys.argv[1:]; "
+            "idx = pd.MultiIndex.from_tuples([(pd.Timestamp(day), 'PROC')], names=['date', 'stock_code']); "
+            "df = pd.DataFrame({'open':[float(price)], 'close':[float(price)], 'high':[float(price)], "
+            "'low':[float(price)], 'volume':[100], 'amount':[100.0]}, index=idx); "
+            "ParquetCache(Path(d)).put('PROC', df, start_date=day.replace('-',''), "
+            "end_date=day.replace('-',''), market=mkt, price_basis=basis)"
+        )
+        days = ["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"]
+        procs = [
+            subprocess.Popen(
+                [sys.executable, "-c", worker_code, str(tmp_path), "US", "adjusted", day, str(100 + i)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for i, day in enumerate(days)
+        ]
+        for proc in procs:
+            _, stderr = proc.communicate(timeout=15)
+            assert proc.returncode == 0, stderr
+
+        cache = ParquetCache(cache_dir=tmp_path)
+        merged = cache.get("PROC", "20261109", "20261112", market="US", price_basis="adjusted")
+        assert merged is not None
+        assert [d.strftime("%Y-%m-%d") for d in merged.index.get_level_values("date")] == days
+
+        # Also exercise the Windows `os.name == "nt"` branch using a stubbed `msvcrt`.
+        import alpha_agent.data.cache as cache_mod
+
+        events: list[tuple[int, int]] = []
+        fake_msvcrt = types.ModuleType("msvcrt")
+        fake_msvcrt.LK_LOCK = 1  # type: ignore[attr-defined]
+        fake_msvcrt.LK_UNLCK = 0  # type: ignore[attr-defined]
+        fake_msvcrt.locking = lambda fd, mode, nbytes: events.append((mode, nbytes))  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "msvcrt", fake_msvcrt)
+        monkeypatch.setattr(cache_mod.os, "name", "nt")
+
+        lock_file = tmp_path / ".win_test.lock"
+        with cache_mod._exclusive_file_lock(lock_file):
+            assert lock_file.stat().st_size >= 1
+        assert events == [(1, 1), (0, 1)]
+
+    def test_slim_deployment_import_and_provider_without_pyarrow_or_fcntl(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Simulates Vercel slim `requirements.txt` (no `pyarrow`) and Windows
+        (no `fcntl`): importing `cache`/`provider`/`us_provider` and fetching data
+        both without cache and with degraded cache must succeed without ImportError."""
+        import subprocess
+
+        slim_script = """
+import builtins
+import sys
+from pathlib import Path
+
+real_import = builtins.__import__
+blocked = {"pyarrow", "pyarrow.parquet", "fcntl", "exchange_calendars"}
+
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name in blocked or name.startswith("pyarrow."):
+        raise ImportError(f"blocked in slim runtime: {name}")
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guarded_import
+
+import pandas as pd
+
+from alpha_agent.data.cache import ParquetCache
+from alpha_agent.data.manager import DataFetcherManager
+from alpha_agent.data.provider import AKShareProvider
+from alpha_agent.data.us_provider import YFinanceProvider
+
+assert "pyarrow" not in sys.modules
+assert "fcntl" not in sys.modules
+
+class _MemFetcher:
+    name = "mem"
+    priority = 1
+    def fetch_ohlcv(self, ticker, start, end):
+        idx = pd.MultiIndex.from_tuples([(pd.Timestamp("2026-11-10"), ticker)], names=["date", "stock_code"])
+        return pd.DataFrame(
+            {"open": [10.0], "close": [11.0], "high": [12.0], "low": [9.5], "volume": [100], "amount": [1100.0]},
+            index=idx,
+        )
+
+mgr = DataFetcherManager()
+mgr.register(_MemFetcher())
+
+# 1. Uncached provider works cleanly without pyarrow/fcntl
+p_nocache = YFinanceProvider(cache=None, manager=mgr)
+df1 = p_nocache.fetch(["AAPL"], "20261110", "20261110")
+assert len(df1) == 1
+
+# 2. Even if ParquetCache is instantiated in a pyarrow-less runtime, provider
+# degrades gracefully to upstream fetch instead of crashing or dropping data.
+cache = ParquetCache(Path(sys.argv[1]))
+p_degraded = YFinanceProvider(cache=cache, manager=mgr)
+df2 = p_degraded.fetch(["AAPL"], "20261110", "20261110")
+assert len(df2) == 1
+
+import types
+fake_ak = types.ModuleType("akshare")
+fake_ak.stock_zh_a_hist = lambda symbol, period, start_date, end_date, adjust: pd.DataFrame(
+    {"日期": ["2026-10-12"], "开盘": [10.0], "收盘": [11.0], "最高": [12.0], "最低": [9.5], "成交量": [100], "成交额": [1100.0], "股票代码": [symbol]}
+)
+sys.modules["akshare"] = fake_ak
+cn_degraded = AKShareProvider(cache=cache)
+df3 = cn_degraded.fetch(["600519"], "20261012", "20261012")
+assert len(df3) == 1
+"""
+        proc = subprocess.run(
+            [sys.executable, "-c", slim_script, str(tmp_path)],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
 
     def test_concurrent_disjoint_ranges_merge_atomically(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
