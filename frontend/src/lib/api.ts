@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  TelemetryAvailability,
   ServiceHealthResponse,
   PipelineLatency,
   ThroughputMetrics,
@@ -156,22 +157,223 @@ async function fetchJson<T>(
 
 /* ═══════════════════ API Methods ═══════════════════ */
 
+function _nonNegativeFinite(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
+}
+
+function _telemetryAvailability(
+  raw: unknown,
+  hasMeasurements: boolean,
+): TelemetryAvailability {
+  if (raw === "demo" || raw === "unavailable" || raw === "measured") {
+    return raw;
+  }
+  return hasMeasurements ? "measured" : "unavailable";
+}
+
+function _nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+export function normalizeServiceHealthResponse(
+  raw: (Partial<ServiceHealthResponse> & Partial<{
+    service_id: string;
+    status: string;
+    availability: TelemetryAvailability;
+    source: string | null;
+    sampled_at: string | null;
+    latency_p95_ms: number | null;
+    uptime_pct_24h: number | null;
+    probe_latency_ms: number | null;
+    last_check_at: string | null;
+    last_error_at: string | null;
+  }>) | null | undefined,
+): ServiceHealthResponse {
+  const rawServices = Array.isArray(raw?.services)
+    ? raw.services
+    : raw && typeof raw.service_id === "string"
+      ? [raw]
+      : [];
+  const services = rawServices
+        .filter((svc): svc is NonNullable<typeof svc> => Boolean(svc && typeof svc.service_id === "string"))
+        .map((svc) => {
+          const latency = _nonNegativeFinite(svc.latency_p95_ms);
+          const uptime = _nonNegativeFinite(svc.uptime_pct_24h);
+          const sampledAt = _nonEmptyString(svc.sampled_at);
+          const availability = _telemetryAvailability(
+            svc.availability,
+            latency !== null || uptime !== null,
+          );
+          return {
+            service_id: svc.service_id,
+            status: svc.status === "green" || svc.status === "yellow" || svc.status === "red"
+              ? svc.status
+              : "yellow",
+            availability,
+            source: _nonEmptyString(svc.source),
+            sampled_at: sampledAt,
+            latency_p95_ms: availability === "unavailable" ? null : latency,
+            uptime_pct_24h: availability === "unavailable" ? null : uptime,
+            probe_latency_ms: _nonNegativeFinite(svc.probe_latency_ms),
+            last_check_at: _nonEmptyString(svc.last_check_at),
+            last_error_at: _nonEmptyString(svc.last_error_at),
+          };
+        });
+  const hasMeasuredService = services.some((svc) => svc.availability === "measured");
+  const hasDemoService = services.some((svc) => svc.availability === "demo");
+  const availability = _telemetryAvailability(
+    raw?.availability ?? (hasDemoService ? "demo" : undefined),
+    hasMeasuredService || hasDemoService,
+  );
+  const sampledAt = _nonEmptyString(raw?.sampled_at) ?? _nonEmptyString(raw?.timestamp);
+  return {
+    availability,
+    source: _nonEmptyString(raw?.source),
+    sampled_at: availability === "unavailable" ? null : sampledAt,
+    services,
+    timestamp: availability === "unavailable" ? null : (_nonEmptyString(raw?.timestamp) ?? sampledAt),
+  };
+}
+
+export function normalizePipelineLatency(
+  raw: Partial<PipelineLatency> | null | undefined,
+): PipelineLatency {
+  const segments = Array.isArray(raw?.segments)
+    ? raw.segments
+        .filter((seg): seg is NonNullable<typeof seg> => Boolean(seg && typeof seg.stage === "string"))
+        .flatMap((seg) => {
+          const latencyMs = _nonNegativeFinite(seg.latency_ms);
+          const percentage = _nonNegativeFinite(seg.percentage);
+          if (latencyMs === null) return [];
+          return [{
+            stage: seg.stage,
+            latency_ms: latencyMs,
+            percentage: percentage ?? 0,
+          }];
+        })
+    : [];
+  const totalMs = _nonNegativeFinite(raw?.total_ms);
+  const availability = _telemetryAvailability(
+    raw?.availability,
+    segments.length > 0 && totalMs !== null,
+  );
+  const sampledAt = _nonEmptyString(raw?.sampled_at) ?? _nonEmptyString(raw?.timestamp);
+  if (availability === "unavailable") {
+    return {
+      availability: "unavailable",
+      source: _nonEmptyString(raw?.source),
+      sampled_at: null,
+      segments: [],
+      total_ms: null,
+      timestamp: null,
+    };
+  }
+  return {
+    availability,
+    source: _nonEmptyString(raw?.source),
+    sampled_at: sampledAt,
+    segments,
+    total_ms: totalMs,
+    timestamp: _nonEmptyString(raw?.timestamp) ?? sampledAt,
+  };
+}
+
+export function normalizeThroughputMetrics(
+  raw: Partial<ThroughputMetrics> | null | undefined,
+): ThroughputMetrics {
+  const tickers = _nonNegativeFinite(raw?.tickers_per_sec);
+  const trades = _nonNegativeFinite(raw?.trades_per_sec);
+  const features = _nonNegativeFinite(raw?.features_per_sec);
+  const availability = _telemetryAvailability(
+    raw?.availability,
+    tickers !== null && trades !== null && features !== null,
+  );
+  const sampledAt = _nonEmptyString(raw?.sampled_at) ?? _nonEmptyString(raw?.timestamp);
+  if (availability === "unavailable") {
+    return {
+      availability: "unavailable",
+      source: _nonEmptyString(raw?.source),
+      sampled_at: null,
+      tickers_per_sec: null,
+      trades_per_sec: null,
+      features_per_sec: null,
+      timestamp: null,
+    };
+  }
+  return {
+    availability,
+    source: _nonEmptyString(raw?.source),
+    sampled_at: sampledAt,
+    tickers_per_sec: tickers,
+    trades_per_sec: trades,
+    features_per_sec: features,
+    timestamp: _nonEmptyString(raw?.timestamp) ?? sampledAt,
+  };
+}
+
+export function normalizeSystemConfig(
+  raw: Partial<SystemConfig> | null | undefined,
+): SystemConfig {
+  const apiCalls = _nonNegativeFinite(raw?.api_calls_24h);
+  const hitRate = _nonNegativeFinite(raw?.cache_hit_rate);
+  const avgLatency = _nonNegativeFinite(raw?.avg_latency_ms);
+  const errorCount = _nonNegativeFinite(raw?.error_count_24h);
+  const alerts = Array.isArray(raw?.alerts) ? raw.alerts : [];
+  const availability = _telemetryAvailability(
+    raw?.availability,
+    apiCalls !== null && hitRate !== null && avgLatency !== null && errorCount !== null,
+  );
+  const sampledAt = _nonEmptyString(raw?.sampled_at);
+  if (availability === "unavailable") {
+    return {
+      availability: "unavailable",
+      source: _nonEmptyString(raw?.source),
+      sampled_at: null,
+      api_calls_24h: null,
+      cache_hit_rate: null,
+      avg_latency_ms: null,
+      error_count_24h: null,
+      alerts,
+    };
+  }
+  return {
+    availability,
+    source: _nonEmptyString(raw?.source),
+    sampled_at: sampledAt,
+    api_calls_24h: apiCalls,
+    cache_hit_rate: hitRate,
+    avg_latency_ms: avgLatency,
+    error_count_24h: errorCount,
+    alerts,
+  };
+}
+
 export function getServiceHealth() {
-  return fetchJson<ServiceHealthResponse>("/services/health");
+  return fetchJson<Partial<ServiceHealthResponse>>("/services/health").then((res) =>
+    res.data ? { ...res, data: normalizeServiceHealthResponse(res.data) } : { ...res, data: null },
+  );
 }
 
 export function getServiceHealthById(serviceId: string) {
-  return fetchJson<ServiceHealthResponse>(
+  return fetchJson<Partial<ServiceHealthResponse>>(
     `/services/${encodeURIComponent(serviceId)}/health`
+  ).then((res) =>
+    res.data ? { ...res, data: normalizeServiceHealthResponse(res.data) } : { ...res, data: null },
   );
 }
 
 export function getPipelineLatency() {
-  return fetchJson<PipelineLatency>("/pipelines/latency");
+  return fetchJson<Partial<PipelineLatency>>("/pipelines/latency").then((res) =>
+    res.data ? { ...res, data: normalizePipelineLatency(res.data) } : { ...res, data: null },
+  );
 }
 
 export function getThroughput() {
-  return fetchJson<ThroughputMetrics>("/metrics/throughput");
+  return fetchJson<Partial<ThroughputMetrics>>("/metrics/throughput").then((res) =>
+    res.data ? { ...res, data: normalizeThroughputMetrics(res.data) } : { ...res, data: null },
+  );
 }
 
 export function getAlphaSignals() {
@@ -235,7 +437,9 @@ export function getGatewayRules() {
 /* ═══════════════════ System ═══════════════════ */
 
 export function getSystemConfig() {
-  return fetchJson<SystemConfig>("/system/config");
+  return fetchJson<Partial<SystemConfig>>("/system/config").then((res) =>
+    res.data ? { ...res, data: normalizeSystemConfig(res.data) } : { ...res, data: null },
+  );
 }
 
 /* ═══════════════════ Interactive (POST) ═══════════════════ */
