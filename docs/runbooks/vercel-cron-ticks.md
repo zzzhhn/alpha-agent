@@ -52,9 +52,10 @@
 
 ## 进度、锁与失败预算
 
-- **锁**：每个 job 在一条专用连接上持有事务级 advisory lock（`pg_try_advisory_xact_lock(hashtext('tick:<job>'))`）。重叠的调用返回 `skipped=overlap`。
-  - Neon 连接池是事务模式的 pgbouncer，会话级锁可能残留在服务端连接上，所以不用会话锁。
-  - 事务锁在提交、回滚或函数被终止时都会释放。
+- **租约协调（V066）**：每个 job 通过 `scheduler_job_lease` 在独立短事务中原子领取带到期时间的执行租约（`owner_token` + 数据库时钟 `clock_timestamp()`，租期 `330s`，覆盖 Vercel 函数 `300s` 硬上限）。重叠调用返回 `skipped=overlap`，正常结束时按 `(job, owner_token)` 归还租约；函数被强杀时无需残留连接，租约到期后自动恢复可领取。
+  - 不再在单元执行期间长持一条池连接，避免小连接池（`max_size=1,2`）或同进程多 tick 并发时协调连接饿死业务查询（V02）。同时保持不使用会话级 advisory lock，兼容 Neon 事务模式 pgbouncer。
+  - **晚到/过期围栏（fencing）**：预占与回写 `cron_runs` 均在 SQL 内校验当前活跃 `(job, owner_token, lease_until > clock_timestamp())`；过期或已被新实例接管的旧 worker 返回 `lease_expired`，不得覆写既有 `UnitInterrupted` 回执、不得推进下一单元，也不会清掉新 owner 的租约。
+  - **跨版本发布与回退窗口**：`claim_job_lease` 在短事务内探测旧版 `pg_try_advisory_xact_lock(hashtext('tick:<job>'))`，这**只能保护“旧版 worker 已先持锁、新版后到”单向顺序**；一旦新版短事务提交，advisory lock 即释放，而旧版代码不识别 `scheduler_job_lease`，若新版先持租约且仍有请求打到旧版实例，旧版仍能拿到 advisory lock 造成重叠。因此迁移顺序须为：（1）先执行 `V066` 建表（对旧代码透明）；（2）切流/部署新版前停止向旧实例派发（包括手动 curl 预览/旧部署 URL）并等待在途旧版 tick 排空（最长 `300s`），如需回退旧版代码，同样先等待在途新版租约结束或排空后再恢复触发。
 - **进度**：每个执行单元在 `cron_runs` 写一行 `tick_<job>`，字段包括 research_day、market_date、slot、unit、offset、price_pass、ok、error_type、handler_errors、tick_id、observed_at，以及可选的 run_id。
   - 单元开始前先写入 `UnitInterrupted`，完成后更新同一行。函数被杀掉的单元在下次 tick 计为失败，不会无限重试。
   - 不记录密钥或原始供应商响应。原有 handler 仍写各自的 cron_name，健康 DAG 照常可用。
@@ -77,6 +78,6 @@ curl --fail-with-body --max-time 290 \
 
 - 核对时，只读查看 `cron_runs` 中 `cron_name LIKE 'tick_%' OR cron_name LIKE 'dispatch_%'` 的行，再结合 `/api/_health/dag`。
 - DAG 的日线和完整信号按到期交易日及不同 offset 核对，每个 offset 只看该日最后一次尝试。重复执行不能抵消另一分片缺失；成功补齐可以解除之前的失败。日线按当轮股票池和每片 75 个标的计算应有片数，旧回执未记录片数时沿用 8。没有新调度回执表示缺乏执行证据，不从手动调用次数推断完成。
-- tick、完整信号、模拟撮合和 L2 批次使用事务级 advisory lock；锁连接只负责互斥，业务写入仍使用各自短事务。不要改为分开执行的会话级加锁和解锁：Neon 事务池不保证它们落在同一后端连接。
+- `tick` 使用 `scheduler_job_lease` 短事务持久租约，完整信号、模拟撮合和 L2 批次仍保留各自的事务级 advisory lock；业务写入均使用短事务。不要改为分开执行的会话级加锁和解锁：Neon 事务池不保证它们落在同一后端连接。
 - HTTP 200 不代表已发布，也不代表机器人已完成决策。
 - 需要整条链路一次跑完时（例如补跑当天），仍可在 GitHub 手动运行 `cron-shards`，选择 `job=fast_intraday`。
