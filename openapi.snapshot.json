@@ -11126,6 +11126,53 @@
         ]
       }
     },
+    "/api/cron/premarket-review": {
+      "get": {
+        "operationId": "premarket_review_tick_api_cron_premarket_review_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Premarket Review Tick",
+        "tags": [
+          "cron"
+        ]
+      }
+    },
     "/api/cron/publish_recommendation": {
       "get": {
         "description": "Publish one immutable recommendation only after every shard finished.",
@@ -15292,6 +15339,53 @@
           }
         },
         "summary": "Option Samples",
+        "tags": [
+          "private-research"
+        ]
+      }
+    },
+    "/api/research/premarket-review": {
+      "get": {
+        "operationId": "premarket_review_api_research_premarket_review_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Premarket Review",
         "tags": [
           "private-research"
         ]

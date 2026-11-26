@@ -83,6 +83,25 @@ async def event_shadow_tick():
     return {**result, "event_reactions": await observe_event_reactions(pool)}
 
 
+@router.get("/premarket-review")
+async def premarket_review_tick():
+    from alpha_agent.api.dependencies import get_db_pool
+    from alpha_agent.data.capacity import read_capacity
+    from alpha_agent.paper.premarket_review import slot, tick
+
+    if os.getenv("PREMARKET_REVIEW_ENABLED", "").lower() != "true":
+        return {"status": "disabled"}
+    if not slot(datetime.now(UTC)):
+        return {"status": "outside_window"}
+    owners = {s.strip() for s in os.getenv("ALPHACORE_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    if len(owners) != 1 or not next(iter(owners)).isdecimal():
+        return {"status": "single_research_owner_required"}
+    pool = await get_db_pool()
+    if not (await read_capacity(pool))["allow_writes"]:
+        return {"status": "capacity_paused"}
+    return await tick(pool, int(next(iter(owners))))
+
+
 @router.get("/option-observations")
 async def private_option_tick():
     from alpha_agent.api.dependencies import get_db_pool

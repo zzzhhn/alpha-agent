@@ -1269,6 +1269,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cron/premarket-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Premarket Review Tick */
+        get: operations["premarket_review_tick_api_cron_premarket_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cron/publish_recommendation": {
         parameters: {
             query?: never;
@@ -2784,6 +2801,23 @@ export interface paths {
         };
         /** Option Samples */
         get: operations["option_samples_api_research_option_observations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/premarket-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Premarket Review */
+        get: operations["premarket_review_api_research_premarket_review_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8990,6 +9024,37 @@ export interface operations {
             };
         };
     };
+    premarket_review_tick_api_cron_premarket_review_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     publish_recommendation_api_cron_publish_recommendation_get: {
         parameters: {
             query?: {
@@ -11391,6 +11456,37 @@ export interface operations {
                 symbol?: "SPY" | "QQQ" | "NVDA";
                 limit?: number;
             };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    premarket_review_api_research_premarket_review_get: {
+        parameters: {
+            query?: never;
             header?: {
                 authorization?: string | null;
             };

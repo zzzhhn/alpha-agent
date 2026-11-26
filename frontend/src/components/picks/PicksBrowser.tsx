@@ -14,6 +14,7 @@ import {
   type RatingCard,
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
+import PremarketReview from "./PremarketReview";
 import { fetchPaperAccount } from "@/lib/api/paper";
 import RefreshButton from "./RefreshButton";
 import BasketEdgeStrip from "./BasketEdgeStrip";
@@ -435,6 +436,7 @@ export default function PicksBrowser({
         ) : null}
 
       </TmSubbar>
+      {!searching && !queryPending && data.canonical && resultQuery.mode === "short" && resultQuery.side === "long" && <PremarketReview />}
 
       <>
         {requestError ? (
