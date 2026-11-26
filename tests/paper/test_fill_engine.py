@@ -2,6 +2,7 @@
 from datetime import date
 import pytest
 from alpha_agent.paper.fill_engine import (
+    LimitExpiry,
     compute_market_fill,
     compute_limit_fill,
     new_avg_cost,
@@ -41,8 +42,17 @@ class TestComputeLimitFill:
         signal = date(2026, 7, 2)
         prices = {date(2026, 7, 3): 99.0, date(2026, 7, 8): 99.0}
         assert compute_limit_fill("buy", 100.0, signal, prices, 2, as_of=date(2026, 7, 6)) is None
-        assert compute_limit_fill("buy", 100.0, signal, prices, 2, as_of=date(2026, 7, 7)) == "expired"
-        assert compute_limit_fill("buy", 100.0, signal, prices, 2, as_of=date(2026, 7, 8)) == "expired"
+        expiry = LimitExpiry((date(2026, 7, 6), date(2026, 7, 7)))
+        assert compute_limit_fill("buy", 100.0, signal, prices, 2, as_of=date(2026, 7, 7)) == expiry
+        assert compute_limit_fill("buy", 100.0, signal, prices, 2, as_of=date(2026, 7, 8)) == expiry
+
+    def test_three_session_limit_expiry_identifies_missing_quote(self):
+        first, second, third = (date(2026, 7, day) for day in (14, 15, 16))
+        signal = date(2026, 7, 13)
+        prices = {first: 101.0, third: 100.0}  # A touch is not a cross.
+        assert compute_limit_fill('buy', 100.0, signal, prices, 3, as_of=second) is None
+        expired = compute_limit_fill('buy', 100.0, signal, prices, 3, as_of=third)
+        assert expired == LimitExpiry((second,))
 
     def test_buy_fills_when_close_strictly_below_limit(self):
         prices = {date(2026, 7, 14): 124.99}
@@ -69,7 +79,7 @@ class TestComputeLimitFill:
             date(2026, 7, 20): 128.0,
         }
         result = compute_limit_fill("buy", 125.0, date(2026, 7, 13), prices, 5, as_of=max(prices))
-        assert result == "expired"
+        assert result == LimitExpiry(())
 
     def test_pending_when_fewer_than_n_days_available(self):
         prices = {date(2026, 7, 14): 126.0, date(2026, 7, 15): 126.5}

@@ -1,4 +1,4 @@
-"""Focused simulated ledger tests. No provider requests or database process."""
+"""Synthetic bot ledger regressions with provider requests stubbed."""
 from __future__ import annotations
 
 import copy
@@ -194,6 +194,153 @@ async def test_execution_context_preserves_quote_gate_as_action_receipt(monkeypa
         assert results[0]['reason'] == 'portfolio_mark_unavailable'
         assert not ledger.orders
         assert ledger.account['cash'] == 10000
+
+
+def frozen_position():
+    return {'ticker': 'AAPL', 'qty': 10, 'avg_cost': 80.0, 'realized_pnl': 7.0,
+            'price_quality': 'corporate_action_blocked', 'mark_price': None,
+            'mark_at': NOW - timedelta(days=3)}
+
+
+async def test_frozen_position_blocks_planning_nav_on_next_session(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from alpha_agent.api.routes import paper
+    from alpha_agent.paper import bot_context
+
+    ledger = Ledger()
+    ledger.account['user_id'] = 1
+    book = {'cash': 10000.0, 'reset_count': 0, 'positions': [frozen_position()]}
+    monkeypatch.setattr(paper, '_read_account', AsyncMock(
+        return_value=SimpleNamespace(model_dump=lambda: copy.deepcopy(book))))
+    monkeypatch.setattr(bot_context, 'quotes_for', AsyncMock(return_value=context()['quotes']))
+
+    refreshed = await bot_context.execution_context(ledger, ledger.run, context(), decision())
+
+    assert refreshed['account']['portfolio_value'] is None
+    assert refreshed['quotes']['AAPL']['price'] is None
+    assert refreshed['quotes']['AAPL']['reason'] == 'corporate_action_requires_reconciliation'
+
+
+async def test_frozen_position_blocks_acceptance_with_pre_freeze_context():
+    ledger = Ledger()
+    ledger.positions['AAPL'] = frozen_position()
+
+    results = await submit(ledger)
+
+    assert results[0]['status'] == 'rejected'
+    assert results[0]['reason'] == 'corporate_action_requires_reconciliation'
+    assert not ledger.orders
+    assert ledger.account['cash'] == 10000
+
+
+async def test_frozen_position_blocks_existing_order_with_normal_bar(monkeypatch, applied_db):
+    import asyncpg
+
+    from alpha_agent.api.routes.paper import _read_orders
+    from alpha_agent.paper import bot_valuation
+
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=2) as pool:
+        uid = await pool.fetchval(
+            "INSERT INTO users(email) VALUES ('split-freeze@example.test') RETURNING id",
+        )
+        aid = await pool.fetchval(
+            "INSERT INTO sim_account(user_id,kind,initial_cash,cash,created_at) "
+            "VALUES($1,'bot',10000,10000,$2) RETURNING id",
+            uid, NOW - timedelta(days=7),
+        )
+        instrument = await pool.fetchval(
+            "INSERT INTO sim_instrument(ticker) VALUES('AAPL') RETURNING id",
+        )
+        await pool.execute(
+            "INSERT INTO sim_position(account_id,ticker,instrument_id,qty,avg_cost,realized_pnl) "
+            "VALUES($1,'AAPL',$2,10,80,7)", aid, instrument,
+        )
+        config = BotConfig()
+        await pool.execute(
+            "INSERT INTO sim_bot_config(account_id,config) VALUES($1,$2::jsonb)",
+            aid, config.model_dump_json(),
+        )
+        ctx = context()
+        ctx['instruments'][0]['instrument_id'] = str(instrument)
+        await pool.execute(
+            "INSERT INTO sim_bot_run(id,account_id,trigger,trading_session,status,expires_at,"
+            "config_version,config_snapshot,context) VALUES($1,$2,'manual',$3,'running',$4,1,$5,$6)",
+            RUN_ID, aid, NOW.date(), NOW + timedelta(minutes=30), config.model_dump_json(), json.dumps(ctx),
+        )
+        run = dict(await pool.fetchrow("SELECT * FROM sim_bot_run WHERE id=$1", RUN_ID))
+        run.pop('lease_token')
+
+        def sell(action_id):
+            return decision({'action_id': action_id, 'instrument_id': str(instrument),
+                             'target_weight': 0, 'evidence_ids': ['e1']})
+
+        prior = NOW - timedelta(days=3)
+
+        async def valuation_bars(ticker, now):
+            return [bar(start=(now - timedelta(minutes=1)).isoformat(), end=now.isoformat(),
+                        fetched_at=now.isoformat(), stock_splits=2 if ticker == 'AAPL' and now == prior else 0)]
+
+        monkeypatch.setattr(bot_valuation, 'fetch_bars', valuation_bars)
+        assert (await bot_valuation.refresh_marks(pool, aid, prior))['valuation_quality'] == 'corporate_action_blocked'
+        assert (await bot_valuation.refresh_marks(pool, aid, NOW))['valuation_quality'] == 'corporate_action_blocked'
+        assert (await execution.submit_targets(pool, run, sell('new'), ctx, config, NOW))[0]['status'] == 'rejected'
+
+        # Seed the order that an older worker accepted using the pre-reconciliation quantity.
+        await pool.execute(
+            "INSERT INTO sim_order(account_id,ticker,side,order_type,qty,signal_date,bot_run_id,"
+            "action_id,instrument_id,execution_model,accepted_at,expires_at,reference_price,slippage_bps) "
+            "VALUES($1,'AAPL','sell','market',10,$2,$3,'legacy',$4,$5,$6,$7,100,5)",
+            aid, NOW.date(), RUN_ID, instrument, execution.EXECUTION_MODEL, NOW, run['expires_at'],
+        )
+
+        async def fetch(*args):
+            return [bar()]
+
+        monkeypatch.setattr(execution, 'fetch_bars', fetch)
+        result = await execution.settle_orders(pool, aid, NOW + timedelta(minutes=3))
+        assert result['errors'] == [] and result['filled'] == 0 and result['failed'] == 1
+        history = (await _read_orders(pool, uid, account_id=aid)).orders
+        assert history[0].fail_reason == 'corporate_action_requires_reconciliation'
+        assert history[0].fill_price is None
+        frozen = await pool.fetchrow(
+            "SELECT qty,avg_cost,realized_pnl,price_quality,mark_at FROM sim_position WHERE account_id=$1",
+            aid,
+        )
+        assert tuple(frozen) == (10, 80, 7, 'corporate_action_blocked', prior)
+        assert await pool.fetchval("SELECT cash FROM sim_account WHERE id=$1", aid) == 10000
+
+        # Simulate explicit 2:1 split reconciliation under the ledger's account lock.
+        async with pool.acquire() as conn, conn.transaction():
+            await conn.fetchval("SELECT id FROM sim_account WHERE id=$1 FOR UPDATE", aid)
+            await conn.execute(
+                "UPDATE sim_position SET qty=20,avg_cost=40,price_quality='missing',mark_at=NULL "
+                "WHERE account_id=$1 AND ticker='AAPL'", aid,
+            )
+
+        reconciled_at = NOW + timedelta(minutes=4)
+        submitted = await execution.submit_targets(pool, run, sell('reconciled'), ctx, config, reconciled_at)
+        assert submitted[0]['status'] == 'accepted' and submitted[0]['qty'] == 20
+        retry = await execution.submit_targets(pool, run, sell('legacy'), ctx, config, reconciled_at)
+        assert retry[0]['order_status'] == 'failed'
+
+        async def next_fetch(*args):
+            return [bar(start=(reconciled_at + timedelta(minutes=1)).isoformat(),
+                        end=(reconciled_at + timedelta(minutes=2)).isoformat(),
+                        fetched_at=(reconciled_at + timedelta(minutes=2)).isoformat())]
+
+        monkeypatch.setattr(execution, 'fetch_bars', next_fetch)
+        result = await execution.settle_orders(pool, aid, reconciled_at + timedelta(minutes=3))
+        assert result['errors'] == [] and result['filled'] == 1
+        qty, avg_cost, pnl = await pool.fetchrow(
+            "SELECT qty,avg_cost,realized_pnl FROM sim_position WHERE account_id=$1", aid,
+        )
+        assert (qty, avg_cost) == (0, 40)
+        assert pnl == pytest.approx(7 + (99.95 - 40) * 20 - 1.999)
+        assert await pool.fetchval("SELECT cash FROM sim_account WHERE id=$1", aid) == pytest.approx(
+            10000 + 99.95 * 20 - 1.999,
+        )
 
 
 async def test_same_action_retry_returns_one_order():

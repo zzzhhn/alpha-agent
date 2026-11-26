@@ -509,6 +509,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
     """Process one bounded fill batch while the job advisory lock is held."""
     from alpha_agent.market_session import xnys_sessions
     from alpha_agent.paper.fill_engine import (
+        LimitExpiry,
         compute_limit_fill,
         compute_market_fill,
         has_sufficient_cash,
@@ -543,34 +544,49 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
             ]
             # Select only actionable orders before the batch cap. Missing T+1
             # quotes and unchecked limits must not crowd out expiry or fills.
+            # Load full quote coverage only for selected expiries.
             pending_orders = await conn.fetch(
                 f"""
-                SELECT so.*, quote.date AS quote_date, quote.close AS quote_close
-                FROM sim_order so
-                JOIN sim_account sa ON sa.id=so.account_id
-                CROSS JOIN LATERAL (
-                    SELECT ($3::int[])[so.signal_date-$4::date+1] AS session_index
-                ) first
-                LEFT JOIN LATERAL (
-                    SELECT dp.date, dp.close
+                WITH actionable AS (
+                    SELECT so.*, quote.date AS quote_date, quote.close AS quote_close,
+                        eligible.sessions AS quote_sessions
+                    FROM sim_order so
+                    JOIN sim_account sa ON sa.id=so.account_id
+                    CROSS JOIN LATERAL (
+                        SELECT ($3::int[])[so.signal_date-$4::date+1] AS session_index
+                    ) first
+                    CROSS JOIN LATERAL (
+                        SELECT ($2::date[])[first.session_index:
+                            (first.session_index + CASE WHEN so.order_type='market' THEN 0
+                                ELSE GREATEST(so.expire_after_days,1)-1 END)] AS sessions
+                    ) eligible
+                    LEFT JOIN LATERAL (
+                        SELECT dp.date, dp.close
+                        FROM daily_prices dp
+                        WHERE dp.ticker=so.ticker
+                          AND dp.date=ANY(eligible.sessions)
+                          AND dp.close>0 AND dp.close<'Infinity'::double precision
+                          AND (so.order_type='market'
+                              OR (so.side='buy' AND dp.close<so.limit_price)
+                              OR (so.side='sell' AND dp.close>so.limit_price))
+                        ORDER BY dp.date
+                        LIMIT 1
+                    ) quote ON TRUE
+                    WHERE {pending_filter}
+                      AND (quote.date IS NOT NULL OR (so.order_type='limit' AND
+                          first.session_index + GREATEST(so.expire_after_days,1)-1 <= cardinality($2::date[])))
+                    ORDER BY CASE WHEN so.order_type='market' THEN 0 ELSE 1 END,
+                        so.created_at, so.id
+                    LIMIT $1
+                )
+                SELECT a.*, CASE WHEN a.quote_date IS NULL THEN (
+                    SELECT jsonb_object_agg(to_char(dp.date, 'YYYY-MM-DD'), dp.close)
                     FROM daily_prices dp
-                    WHERE dp.ticker=so.ticker
-                      AND dp.date=ANY(($2::date[])[first.session_index:
-                          (first.session_index + CASE WHEN so.order_type='market' THEN 0
-                              ELSE GREATEST(so.expire_after_days,1)-1 END)])
+                    WHERE dp.ticker=a.ticker AND dp.date=ANY(a.quote_sessions)
                       AND dp.close>0 AND dp.close<'Infinity'::double precision
-                      AND (so.order_type='market'
-                          OR (so.side='buy' AND dp.close<so.limit_price)
-                          OR (so.side='sell' AND dp.close>so.limit_price))
-                    ORDER BY dp.date
-                    LIMIT 1
-                ) quote ON TRUE
-                WHERE {pending_filter}
-                  AND (quote.date IS NOT NULL OR (so.order_type='limit' AND
-                      first.session_index + GREATEST(so.expire_after_days,1)-1 <= cardinality($2::date[])))
-                ORDER BY CASE WHEN so.order_type='market' THEN 0 ELSE 1 END,
-                    so.created_at, so.id
-                LIMIT $1
+                ) END AS window_quotes
+                FROM actionable a
+                ORDER BY CASE WHEN a.order_type='market' THEN 0 ELSE 1 END, a.created_at, a.id
                 """,
                 _PAPER_FILL_BATCH_SIZE, completed, next_indices, first_signal,
             )
@@ -596,6 +612,9 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
     for order in pending_orders:
         ticker = order["ticker"]
         prices = {order["quote_date"]: order["quote_close"]} if order["quote_date"] else {}
+        if order["window_quotes"]:
+            prices = {date.fromisoformat(day): close
+                      for day, close in json.loads(order["window_quotes"]).items()}
         signal_date = order["signal_date"]
 
         if order["order_type"] == "market":
@@ -626,10 +645,17 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                     skipped_locked += 1
                     continue
 
-                if result == "expired":
+                if isinstance(result, LimitExpiry):
+                    reason = ("limit_expired_missing_quotes" if result.missing_quote_dates
+                              else "limit_expired_no_cross")
+                    evidence = {
+                        "execution_model": "daily_close_v1", "status": "expired", "reason": reason,
+                        "missing_quote_dates": [day.isoformat() for day in result.missing_quote_dates],
+                    }
                     await conn.execute(
-                        "UPDATE sim_order SET status='expired' WHERE id=$1",
-                        locked_order["id"],
+                        "UPDATE sim_order SET status='expired', fail_reason=$1, "
+                        "execution_evidence=$2::jsonb WHERE id=$3",
+                        reason, json.dumps(evidence), locked_order["id"],
                     )
                     expired_count += 1
                     continue
