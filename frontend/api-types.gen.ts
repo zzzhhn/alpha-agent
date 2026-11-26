@@ -332,7 +332,7 @@ export interface paths {
         };
         /**
          * Alerts Inbox
-         * @description Decision-ranked alert inbox for the authenticated user.
+         * @description Return a page of newest groups, ranked for the user's decisions.
          */
         get: operations["alerts_inbox_api_alerts_inbox_get"];
         put?: never;
@@ -381,6 +381,46 @@ export interface paths {
          *     again with status ``open`` (clears snooze_until and resolved_at).
          */
         post: operations["set_alert_states_batch_api_alerts_state_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts/state/group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Alert Group State
+         * @description Update the exact user-scoped group membership observed at inbox read.
+         */
+        post: operations["set_alert_group_state_api_alerts_state_group_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts/state/group/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Alert Group State
+         * @description Restore the prior per-member states if this decision is still current.
+         */
+        post: operations["undo_alert_group_state_api_alerts_state_group_undo_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4192,6 +4232,35 @@ export interface components {
             /** Recommendation Run Id */
             recommendation_run_id?: number | null;
         };
+        /** AlertGroupStateRequest */
+        AlertGroupStateRequest: {
+            /** Group Token */
+            group_token: string;
+            /** Note */
+            note?: string | null;
+            /** Snooze Until */
+            snooze_until?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "snoozed" | "resolved";
+        };
+        /** AlertGroupStateResponse */
+        AlertGroupStateResponse: {
+            state: components["schemas"]["AlertTriageState"];
+            /** Undo Token */
+            undo_token?: string | null;
+            /** Updated */
+            updated: number;
+        };
+        /** AlertGroupUndoRequest */
+        AlertGroupUndoRequest: {
+            /** Group Token */
+            group_token: string;
+            /** Undo Token */
+            undo_token: string;
+        };
         /** AlertInboxCounts */
         AlertInboxCounts: {
             /** Needs Action */
@@ -4221,6 +4290,10 @@ export interface components {
             first_seen_at?: string | null;
             /** Freshness Score */
             freshness_score: number;
+            /** Group Id */
+            group_id?: string | null;
+            /** Group Token */
+            group_token?: string | null;
             /** Id */
             id: number;
             /** Last Seen At */
@@ -4265,6 +4338,8 @@ export interface components {
             /** As Of */
             as_of: string;
             counts: components["schemas"]["AlertInboxCounts"];
+            /** Next Offset */
+            next_offset?: number | null;
             /**
              * Source Status
              * @enum {string}
@@ -7207,6 +7282,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
             };
             header?: {
                 authorization?: string | null;
@@ -7290,6 +7366,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertBatchStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_alert_group_state_api_alerts_state_group_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertGroupStateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertGroupStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_alert_group_state_api_alerts_state_group_undo_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertGroupUndoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertGroupStateResponse"];
                 };
             };
             /** @description Validation Error */
