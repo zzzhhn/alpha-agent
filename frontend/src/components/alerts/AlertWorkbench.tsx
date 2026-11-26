@@ -25,9 +25,9 @@ import { TmScreen } from "@/components/tm/TmPane";
 import { ApiException } from "@/lib/api/client";
 import {
   fetchAlertInbox,
-  setAlertState,
-  setAlertStatesBatch,
-  alertMemberIds,
+  appendAlertInboxPage,
+  applyInboxAlertState,
+  type AlertTriageState,
   type AlertInboxItem,
   type AlertInboxResponse,
   type AlertWorkflowStatus,
@@ -46,6 +46,7 @@ import {
   selectedAlert,
   type AlertQueue,
 } from "./alertPresentation";
+import { AlertGroupReadWindow } from "./AlertGroupReadWindow";
 import "./alerts-workbench.css";
 
 const QUEUES: Array<{
@@ -82,31 +83,6 @@ function queueCount(data: AlertInboxResponse | null, queue: AlertQueue): number 
   return data.alerts.filter((item) => queueFor(item) === queue).length;
 }
 
-function replaceState(
-  data: AlertInboxResponse,
-  alertId: number,
-  status: AlertWorkflowStatus,
-  snoozeUntil: string | null,
-): AlertInboxResponse {
-  return {
-    ...data,
-    alerts: data.alerts.map((item) =>
-      item.id === alertId
-        ? {
-            ...item,
-            state: {
-              ...item.state,
-              status,
-              snooze_until: snoozeUntil,
-              resolved_at: status === "resolved" ? new Date().toISOString() : null,
-              updated_at: new Date().toISOString(),
-            },
-          }
-        : item,
-    ),
-  };
-}
-
 export default function AlertWorkbench() {
   const { locale } = useLocale();
   const zh = locale === "zh";
@@ -124,16 +100,23 @@ export default function AlertWorkbench() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 5;
+  const inboxRef = useRef(data);
+  useEffect(() => { inboxRef.current = data; }, [data]);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (offset = 0) => {
     setLoading(true);
     setError(null);
     setAuthRequired(false);
     try {
-      const next = await fetchAlertInbox(50);
+      const next = await fetchAlertInbox(50, offset);
+      if (offset > 0) {
+        setData(current => current ? appendAlertInboxPage(current, next) : next);
+        return;
+      }
       setData(next);
+      setPage(1);
       const first = next.alerts.find((item) => queueFor(item) === "needs_action")
         ?? next.alerts.find((item) => item.state.status !== "resolved")
         ?? next.alerts[0];
@@ -224,47 +207,58 @@ export default function AlertWorkbench() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedId, pageItems]);
 
+  function applySavedState(item: AlertInboxItem, saved: AlertTriageState) {
+    const displayed = inboxRef.current?.alerts.find(row =>
+      item.group_id ? row.group_id === item.group_id : row.id === item.id,
+    );
+    if (displayed && displayed.group_token !== item.group_token) {
+      // A refreshed page can include new members whose states were outside this decision.
+      void load();
+      return;
+    }
+    setData(current => current ? {
+      ...current,
+      alerts: current.alerts.map(row =>
+        row.id === item.id && row.group_token === item.group_token ? { ...row, state: saved } : row),
+    } : current);
+  }
+
   async function persistState(
     item: AlertInboxItem,
     status: AlertWorkflowStatus,
     snoozeUntil: string | null = null,
-    withUndo = true,
   ) {
-    if (!data) return;
-    const previous = item.state;
-    const ids = alertMemberIds(item);
     setBusyId(item.id);
-    setData((current) => current ? replaceState(current, item.id, status, snoozeUntil) : current);
     try {
-      // A grouped item stands for every same-day repeat; one decision covers
-      // all of them so an older open member cannot keep the group open.
-      const saved = ids.length > 1
-        ? (await setAlertStatesBatch({ alert_ids: ids, status, snooze_until: snoozeUntil })).states[String(item.id)]
-        : await setAlertState(item.id, { status, snooze_until: snoozeUntil });
-      setData(current => current ? {...current, alerts: current.alerts.map(row => row.id === item.id && saved ? {...row, state:saved} : row)} : current);
-      if (withUndo && status !== "open") {
-        toast.success(
-          status === "resolved"
-            ? (ids.length > 1 ? (zh ? `已处理本组 ${ids.length} 条` : `Resolved ${ids.length} grouped alerts`) : (zh ? "已标记为已处理" : "Marked resolved"))
-            : (zh ? "已稍后提醒" : "Snoozed"),
-          {
-            duration: 8000,
-            action: {
-              label: zh ? "撤销" : "Undo",
-              onClick: () => {
-                void persistState(item, previous.status, previous.snooze_until, false);
-              },
+      const receipt = await applyInboxAlertState(item, { status, snooze_until: snoozeUntil });
+      applySavedState(item, receipt.state);
+      const undo = receipt.undo;
+      if (undo) {
+        const count = receipt.updated;
+        const label = status === "resolved"
+          ? (count > 1 ? (zh ? `已处理本次读取的 ${count} 条` : `Resolved ${count} observed alerts`)
+            : (zh ? "已标记为已处理" : "Marked resolved"))
+          : status === "open" ? (zh ? "已重新打开" : "Reopened")
+            : (zh ? "已稍后提醒" : "Snoozed");
+        toast.success(label, {
+          duration: 8000,
+          action: {
+            label: zh ? "撤销" : "Undo",
+            onClick: async () => {
+              setBusyId(item.id);
+              try {
+                applySavedState(item, await undo());
+              } catch (cause) {
+                toast.error(zh ? `撤销失败：${String(cause)}` : `Undo failed: ${String(cause)}`);
+              } finally {
+                setBusyId(null);
+              }
             },
           },
-        );
+        });
       }
     } catch (cause) {
-      setData(current => current ? {...current, alerts: current.alerts.map(row => row.id === item.id ? {...row, state:previous} : row)} : current);
-      toast.error(
-        zh
-          ? `状态保存失败：${cause instanceof Error ? cause.message : String(cause)}`
-          : `Failed to save state: ${cause instanceof Error ? cause.message : String(cause)}`,
-      );
+      toast.error(zh ? `状态保存失败：${String(cause)}` : `Failed to save state: ${String(cause)}`);
     } finally {
       setBusyId(null);
     }
@@ -448,7 +442,7 @@ export default function AlertWorkbench() {
                   const active = selected?.id === item.id;
                   return (
                     <TmRowButton
-                      key={item.id}
+                      key={item.group_id ?? item.id}
                       data-alert-row
                       aria-pressed={active}
                       aria-controls="alert-inspector"
@@ -464,6 +458,13 @@ export default function AlertWorkbench() {
               </div>
             )}
             </div>
+            {data?.next_offset != null ? (
+              <div className="flex justify-end border-t border-tm-rule px-3 py-2">
+                <TmButton size="xs" variant="secondary" loading={loading} onClick={() => void load(data.next_offset ?? 0)}>
+                  {zh ? "加载更早的警报组" : "Load older alert groups"}
+                </TmButton>
+              </div>
+            ) : null}
             <TmPagination page={currentPage} pageSize={pageSize} totalItems={visible.length} pageSizeOptions={[5]} onPageChange={setPage} onPageSizeChange={()=>{}} disabled={!data || authRequired} labels={{navigation:zh ? "警报分页" : "Alert pagination",previous:zh ? "上一页" : "Previous",previousAriaLabel:zh ? "上一页警报" : "Previous alerts",next:zh ? "下一页" : "Next",nextAriaLabel:zh ? "下一页警报" : "Next alerts",page:(current,total)=>`${current} / ${total}`,pageSize:zh ? "每页" : "Per page",total:total=>zh ? `共 ${total} 条 · 每页 5 条` : `${total} alerts · 5 per page`}} className="shrink-0" />
           </section>
 
@@ -489,7 +490,7 @@ export default function AlertWorkbench() {
                     <TmButton disabled={busyId !== null} onClick={()=>void persistState(selected,"snoozed",new Date(Date.now()+4*3600_000).toISOString())} variant="secondary" size="sm"><Clock3 className="h-3 w-3" />{zh ? "稍后 4 小时" : "Snooze 4h"}</TmButton>
                     <TmLinkButton href={`/stock/${selected.ticker}#news`} variant="secondary" size="sm"><ExternalLink className="h-3 w-3" />{zh ? "打开研究" : "Research"}</TmLinkButton>
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-tm-muted">{(selected.occurrences ?? 1) > 1 ? (zh ? `本组为同一标的、同类、美东同一天的 ${selected.occurrences} 条重复警报（首次 ${stamp(selected.first_seen_at ?? selected.created_at)}）；处理与稍后提醒作用于整组，可撤销。` : `${selected.occurrences} repeats of this ticker and type on one New York date (first ${stamp(selected.first_seen_at ?? selected.created_at)}); actions apply to the whole group and can be undone.`) : null}{zh ? "处理后可撤销，不会触发交易。" : "Actions support undo and never place trades."}</p>
+                  <AlertGroupReadWindow item={selected} locale={locale} formatTime={stamp} />
                 </section>
 
                 <section className="border-b border-r border-tm-rule p-4 min-[1680px]:border-r-0">

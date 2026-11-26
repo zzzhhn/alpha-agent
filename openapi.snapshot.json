@@ -425,6 +425,102 @@
         "title": "AlertContext",
         "type": "object"
       },
+      "AlertGroupStateRequest": {
+        "properties": {
+          "group_token": {
+            "minLength": 1,
+            "title": "Group Token",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snooze Until"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "snoozed",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "group_token"
+        ],
+        "title": "AlertGroupStateRequest",
+        "type": "object"
+      },
+      "AlertGroupStateResponse": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/AlertTriageState"
+          },
+          "undo_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undo Token"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated",
+          "state"
+        ],
+        "title": "AlertGroupStateResponse",
+        "type": "object"
+      },
+      "AlertGroupUndoRequest": {
+        "properties": {
+          "group_token": {
+            "minLength": 1,
+            "title": "Group Token",
+            "type": "string"
+          },
+          "undo_token": {
+            "minLength": 1,
+            "title": "Undo Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_token",
+          "undo_token"
+        ],
+        "title": "AlertGroupUndoRequest",
+        "type": "object"
+      },
       "AlertInboxCounts": {
         "properties": {
           "needs_action": {
@@ -493,6 +589,28 @@
           "freshness_score": {
             "title": "Freshness Score",
             "type": "integer"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "group_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Token"
           },
           "id": {
             "title": "Id",
@@ -617,6 +735,17 @@
           },
           "counts": {
             "$ref": "#/components/schemas/AlertInboxCounts"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
           },
           "source_status": {
             "enum": [
@@ -7667,7 +7796,7 @@
     },
     "/api/alerts/inbox": {
       "get": {
-        "description": "Decision-ranked alert inbox for the authenticated user.",
+        "description": "Return a page of newest groups, ranked for the user's decisions.",
         "operationId": "alerts_inbox_api_alerts_inbox_get",
         "parameters": [
           {
@@ -7679,6 +7808,18 @@
               "maximum": 100,
               "minimum": 1,
               "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Offset",
               "type": "integer"
             }
           },
@@ -7846,6 +7987,126 @@
           }
         },
         "summary": "Set Alert States Batch",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/alerts/state/group": {
+      "post": {
+        "description": "Update the exact user-scoped group membership observed at inbox read.",
+        "operationId": "set_alert_group_state_api_alerts_state_group_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertGroupStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertGroupStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Alert Group State",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/alerts/state/group/undo": {
+      "post": {
+        "description": "Restore the prior per-member states if this decision is still current.",
+        "operationId": "undo_alert_group_state_api_alerts_state_group_undo_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertGroupUndoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertGroupStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo Alert Group State",
         "tags": [
           "alerts"
         ]
