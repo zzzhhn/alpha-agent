@@ -170,6 +170,11 @@ async def get_llm_client(
             detail="No BYOK key set; visit /settings to add one",
         )
 
+    return llm_client_from_credential(row)
+
+
+def llm_client_from_credential(row: Any) -> LLMClient:
+    """Build a client from the exact credential row selected for this request."""
     master = os.environ.get("BYOK_MASTER_KEY")
     if not master:
         raise HTTPException(status_code=500, detail="BYOK_MASTER_KEY not configured")

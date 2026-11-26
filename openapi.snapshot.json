@@ -16282,7 +16282,24 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "X-BYOK-Account": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-BYOK-Provider": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-BYOK-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "content": {
@@ -16339,7 +16356,24 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "X-BYOK-Account": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-BYOK-Provider": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-BYOK-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "content": {
@@ -16363,6 +16397,54 @@
         "description": "Exercise the configured provider without coupling health to factor JSON.",
         "operationId": "test_byok_api_user_byok_test_post",
         "parameters": [
+          {
+            "in": "header",
+            "name": "X-BYOK-Account",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Byok-Account"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-BYOK-Provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Byok-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-BYOK-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Byok-Revision"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -16389,7 +16471,24 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "headers": {
+              "X-BYOK-Account": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-BYOK-Provider": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-BYOK-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "content": {

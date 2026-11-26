@@ -16,8 +16,8 @@
  * business logic preserved verbatim.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { signOut } from "next-auth/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmStatusPill } from "@/components/tm/TmSubbar";
@@ -33,6 +33,7 @@ import {
   loadByok,
 } from "@/lib/byok";
 import {
+  ByokProbeError,
   getByok,
   saveByok as saveByokServer,
   testByok,
@@ -40,13 +41,23 @@ import {
   deleteAccount,
   exportAccount,
   type ByokGetResponse,
+  type ByokSaveResponse,
 } from "@/lib/api/user";
-import { savedConnectionMatches } from "@/components/settings/connection-state";
 import { t } from "@/lib/i18n";
 import WeightsEditor from "@/components/settings/WeightsEditor";
 import WatchlistEditor from "@/components/settings/WatchlistEditor";
 import ChangeLog from "@/components/settings/ChangeLog";
-import { connectionTestStatus, providerDisplay, readLastConnectionTest, writeLastConnectionTest, type LastConnectionTest } from "@/components/settings/connection-state";
+import {
+  announceConnectionChange,
+  connectionTestStatus,
+  openConnectionChangeChannel,
+  providerDisplay,
+  readLastConnectionTest,
+  sameConnectionRevision,
+  savedConnectionMatches,
+  writeLastConnectionTest,
+  type LastConnectionTest,
+} from "@/components/settings/connection-state";
 import { BrainCredentialsCard } from "@/components/settings/BrainCredentialsCard";
 import { WorkbenchHeader } from "@/components/workbench/WorkbenchHeader";
 
@@ -54,12 +65,20 @@ type TestState =
   | { kind: "idle" }
   | { kind: "running" }
   | { kind: "ok"; ms: number; tokens: { prompt: number; completion: number } }
-  | { kind: "fail"; status: number | null; message: string };
+  | { kind: "fail"; message: string };
 
 const PROVIDER_VALUES: ReadonlyArray<LLMProvider> = ["openai", "kimi", "ollama", "anthropic"];
 type SettingsSection = "llm" | "brain" | "preferences" | "history" | "account";
 
 export default function SettingsPage() {
+  const { data: session, status } = useSession();
+  const { locale } = useLocale();
+  const userId = session?.user?.id;
+  if (status === "loading") return <TmScreen><p role="status" className="p-5">{t(locale, "common.loading")}</p></TmScreen>;
+  return <AccountSettings key={userId ?? "signed-out"} userId={userId ?? null} />;
+}
+
+function AccountSettings({ userId }: { readonly userId: string | null }) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [section, setSection] = useState<SettingsSection>("llm");
@@ -81,10 +100,12 @@ export default function SettingsPage() {
   const [revealKey, setRevealKey] = useState(false);
   const [testState, setTestState] = useState<TestState>({ kind: "idle" });
   const [lastTest, setLastTest] = useState<LastConnectionTest | null>(null);
-  useEffect(() => { setLastTest(readLastConnectionTest()); }, []);
   const [savedAt, setSavedAt] = useState<string | null>(null);
-  // Server-side BYOK state
-  const [serverLast4, setServerLast4] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const readGeneration = useRef(0);
+  const mounted = useRef(false);
+  const draftDirty = useRef(false);
+  const serverLast4 = savedConnection?.last4 ?? null;
   // Import banner: shown when localStorage has a key but server does not
   const [showImportBanner, setShowImportBanner] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
@@ -93,26 +114,43 @@ export default function SettingsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [exportInProgress, setExportInProgress] = useState(false);
 
-  const loadConnection = useCallback(async () => {
+  const loadConnection = useCallback(async (resetDraft = true) => {
+    const generation = ++readGeneration.current;
     setConnectionLoading(true);
     setConnectionError("");
     try {
       const resp = await getByok();
+      if (generation !== readGeneration.current) return;
+      if (resp?.scope && resp.scope.userId !== userId) throw new Error("Signed-in account changed");
       setSavedConnection(resp);
-      setServerLast4(resp?.last4 ?? null);
-      setApiKey(""); setRevealKey(false);
-      if (resp && PROVIDER_VALUES.includes(resp.provider as LLMProvider)) {
-        setProvider(resp.provider as LLMProvider);
-        setBaseUrl(resp.base_url ?? "");
-        setModel(resp.model ?? "");
+      setLastTest(readLastConnectionTest(resp?.scope));
+      if (resetDraft || !draftDirty.current) {
+        const savedProvider = resp?.provider as LLMProvider | undefined;
+        setProvider(savedProvider && PROVIDER_VALUES.includes(savedProvider) ? savedProvider : "openai");
+        setBaseUrl(resp?.base_url ?? "");
+        setModel(resp?.model ?? "");
+        setApiKey("");
+        setRevealKey(false);
       }
-      // Never load a legacy plaintext key into a visible editing field.
       setShowImportBanner(!resp && Boolean(loadByok()));
+      return resp;
     } catch (error) {
+      if (generation !== readGeneration.current) return;
+      setSavedConnection(null);
+      setLastTest(null);
       setConnectionError(error instanceof Error ? error.message : String(error));
-    } finally { setConnectionLoading(false); }
-  }, []);
-  useEffect(() => { void loadConnection(); }, [loadConnection]);
+    } finally {
+      if (generation === readGeneration.current) setConnectionLoading(false);
+    }
+  }, [userId]);
+  useEffect(() => {
+    mounted.current = true;
+    void loadConnection();
+    return () => {
+      mounted.current = false;
+      ++readGeneration.current;
+    };
+  }, [loadConnection]);
 
   const preset = PROVIDER_PRESETS[provider];
   const effectiveBase = baseUrl.trim() || preset.defaultBase;
@@ -121,21 +159,41 @@ export default function SettingsPage() {
   const sameSavedConnection = savedConnectionMatches(savedConnection, provider, effectiveBase, effectiveModel);
   const connectionBusy = saving || clearing || importBusy || historyBusy || testState.kind === "running";
   const dirtyConnection = Boolean(apiKey.trim()) || (savedConnection !== null ? !sameSavedConnection : provider !== "openai" || Boolean(baseUrl.trim()) || Boolean(model.trim()));
+  draftDirty.current = dirtyConnection;
+  const savedReceipt = sameConnectionRevision(lastTest, savedConnection?.scope) ? lastTest : null;
   const canTest = !connectionLoading && !connectionError && (canSave || (sameSavedConnection && !apiKey.trim()));
-  function resetFeedback() { setTestState({kind:"idle"}); setSavedAt(null); }
+  useEffect(() => {
+    if (!userId || connectionBusy) return;
+    const refresh = () => { void loadConnection(false); };
+    window.addEventListener("focus", refresh);
+    const channel = openConnectionChangeChannel();
+    if (channel) channel.onmessage = (event) => { if (event.data === userId) refresh(); };
+    return () => { window.removeEventListener("focus", refresh); channel?.close(); };
+  }, [connectionBusy, loadConnection, userId]);
+
+  function resetFeedback() { setTestState({kind:"idle"}); setSavedAt(null); setActionError(""); }
   function clearLocalCredential() {
     try { clearByok(); setLocalCleanupWarning(false); }
     catch { setLocalCleanupWarning(true); }
   }
-  function recordSaved(resp: {provider: string; last4: string; encrypted_at: string}) {
-    setSavedConnection({...resp, model:model.trim() || null, base_url:baseUrl.trim() || null, last_used_at:savedConnection?.provider === resp.provider ? savedConnection.last_used_at : null});
-    setServerLast4(resp.last4); setApiKey(""); setRevealKey(false);
-    clearLocalCredential(); setShowImportBanner(false);
+  function recordSaved(resp: ByokSaveResponse) {
+    if (!mounted.current) return;
+    if (resp.scope && resp.scope.userId !== userId) throw new Error("Signed-in account changed");
+    ++readGeneration.current;
+    setConnectionLoading(false);
+    setSavedConnection({...resp, model:model.trim() || null, base_url:baseUrl.trim() || null, last_used_at:null});
+    setLastTest(null);
+    setApiKey("");
+    setRevealKey(false);
+    clearLocalCredential();
+    setShowImportBanner(false);
     setSavedAt(new Date().toLocaleTimeString());
+    if (userId) announceConnectionChange(userId);
   }
 
   async function handleSave() {
     if (!canSave || connectionBusy) return;
+    resetFeedback();
     setSaving(true);
     // Store server-side; clear the editing field after a successful save.
     try {
@@ -147,12 +205,7 @@ export default function SettingsPage() {
       });
       recordSaved(resp);
     } catch (err) {
-      setSavedAt(null);
-      setTestState({
-        kind: "fail",
-        status: null,
-        message: err instanceof Error ? err.message : String(err),
-      });
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally { setSaving(false); }
   }
 
@@ -163,24 +216,22 @@ export default function SettingsPage() {
       setShowImportBanner(false);
       return;
     }
+    resetFeedback();
     setImportBusy(true);
     try {
-      const resp = await saveByokServer({
+      await saveByokServer({
         provider: local.provider,
         api_key: local.apiKey,
         base_url: local.baseUrl,
         model: local.model,
       });
-      setServerLast4(resp.last4);
+      if (!mounted.current) return;
+      if (userId) announceConnectionChange(userId);
       clearLocalCredential();
       setShowImportBanner(false);
       await loadConnection();
     } catch (err) {
-      setTestState({
-        kind: "fail",
-        status: null,
-        message: err instanceof Error ? err.message : zh ? "导入失败" : "Import failed",
-      });
+      setActionError(err instanceof Error ? err.message : zh ? "导入失败" : "Import failed");
     } finally {
       setImportBusy(false);
     }
@@ -227,64 +278,75 @@ export default function SettingsPage() {
 
   async function handleClear() {
     if (connectionBusy) return;
+    resetFeedback();
     setClearing(true);
     try {
       await deleteByokServer();
+      if (!mounted.current) return;
+      ++readGeneration.current;
+      setConnectionLoading(false);
       clearLocalCredential();
       setProvider("openai");
       setApiKey("");
+      setRevealKey(false);
       setBaseUrl("");
       setModel("");
-      setServerLast4(null);
       setSavedConnection(null);
-      setSavedAt(null);
-      setTestState({ kind: "idle" });
+      setLastTest(null);
+      if (userId) announceConnectionChange(userId);
     } catch (exc) {
-      setTestState({
-        kind: "fail",
-        status: null,
-        message: exc instanceof Error ? exc.message : String(exc),
-      });
+      setActionError(exc instanceof Error ? exc.message : String(exc));
     } finally { setClearing(false); setConfirmClear(false); }
   }
 
-  // Live test: save first, then exercise a dedicated minimal chat probe.
-  // Connectivity is intentionally decoupled from factor JSON generation so
-  // schema/prompt failures are not misreported as credential failures.
   async function handleTest() {
     if (!canTest || connectionBusy) return;
+    setActionError("");
     setTestState({ kind: "running" });
     const started = performance.now();
+    const changed = zh ? "已保存连接已变更，请重新读取后测试。" : "Saved connection changed. Reload before testing.";
     try {
+      let target = savedConnection?.scope;
       if (!sameSavedConnection || apiKey.trim()) {
-      const resp = await saveByokServer({
-        provider,
-        api_key: apiKey.trim() || "ollama",
-        base_url: baseUrl.trim() || undefined,
-        model: model.trim() || undefined,
-      });
-      recordSaved(resp);
+        const resp = await saveByokServer({
+          provider,
+          api_key: apiKey.trim() || "ollama",
+          base_url: baseUrl.trim() || undefined,
+          model: model.trim() || undefined,
+        });
+        recordSaved(resp);
+        target = resp.scope;
       }
-      const data = await testByok();
-      const elapsed = Math.max(data.latency_ms, Math.round(performance.now() - started));
-      setLastTest(writeLastConnectionTest(true));
+      if (!mounted.current) return;
+      if (!target || target.userId !== userId) throw new Error(changed);
+
+      const outcome = await testByok(target).then(
+        data => ({ ok: true, scope: data.scope, data } as const),
+        error => ({ ok: false, scope: error instanceof ByokProbeError ? error.scope : null, error } as const),
+      );
+      if (!mounted.current) return;
+      const current = await loadConnection(false);
+      if (!mounted.current) return;
+      if (!sameConnectionRevision(current?.scope, target) || !sameConnectionRevision(outcome.scope, target)) {
+        throw new Error(!outcome.ok && outcome.error instanceof Error ? outcome.error.message : changed);
+      }
+
+      setLastTest(writeLastConnectionTest(target, outcome.ok));
+      announceConnectionChange(target.userId);
+      if (!outcome.ok) {
+        setTestState({ kind: "fail", message: outcome.error instanceof Error ? outcome.error.message : String(outcome.error) });
+        return;
+      }
+      const data = outcome.data;
       setTestState({
         kind: "ok",
-        ms: elapsed,
-        tokens: {
-          prompt: data.prompt_tokens,
-          completion: data.completion_tokens,
-        },
+        ms: Math.max(data.latency_ms, Math.round(performance.now() - started)),
+        tokens: { prompt: data.prompt_tokens, completion: data.completion_tokens },
       });
-      // Read back usage metadata without replacing the user's editable draft.
-      try { setSavedConnection(await getByok()); } catch { /* Test succeeded; metadata refresh is non-critical. */ }
     } catch (exc) {
-      setLastTest(writeLastConnectionTest(false));
-      setTestState({
-        kind: "fail",
-        status: null,
-        message: exc instanceof Error ? exc.message : String(exc),
-      });
+      if (!mounted.current) return;
+      setTestState({ kind: "idle" });
+      setActionError(exc instanceof Error ? exc.message : String(exc));
     }
   }
 
@@ -302,7 +364,12 @@ export default function SettingsPage() {
       statuses={[
         {label:zh ? "已保存服务商" : "Saved provider",value:savedConnection ? providerDisplay(savedConnection.provider, savedConnection.base_url, zh) : "—"},
         {label:zh ? "服务端凭据" : "Server credential",value:connectionLoading ? (zh ? "读取中" : "Loading") : connectionError ? (zh ? "待确认" : "Unknown") : serverLast4 ? (zh ? "已加密保存" : "Encrypted") : (zh ? "未配置" : "None"),tone:!connectionError && serverLast4 ? "positive" : "warning"},
-        {label:zh ? "连接测试" : "Connection test",...connectionTestStatus(testState, lastTest, zh)},
+        {label:zh ? "已保存连接测试" : "Saved connection test",
+          ...(connectionLoading && testState.kind !== "running"
+            ? { value: zh ? "读取中" : "Loading", tone: "default" as const }
+            : connectionError && testState.kind !== "running"
+              ? { value: zh ? "待确认" : "Unknown", tone: "default" as const }
+              : connectionTestStatus(testState.kind === "running" ? testState : { kind: "idle" }, savedReceipt, zh))},
       ]}/>
     <SegmentedTabs items={sectionItems} active={section} onChange={next=>{if(!connectionBusy)setSection(next);}} idBase="settings-section" ariaLabel={zh ? "设置分类" : "Settings sections"}/>
     <section id="settings-section-panel-llm" role="tabpanel" aria-labelledby="settings-section-tab-llm" hidden={section !== "llm"}>
@@ -325,7 +392,7 @@ export default function SettingsPage() {
               <TmFieldShell label={zh ? "API 密钥" : "API key"} htmlFor="settings-api-key">
                 <div className="flex gap-2">
                   <TmInput id="settings-api-key" type={revealKey ? "text" : "password"} value={apiKey} onChange={value=>{setApiKey(value);resetFeedback();}} autoComplete="off"
-                    placeholder={provider === "ollama" ? (zh ? "无需密钥" : "No key required") : serverLast4 ? (zh ? "留空保留已保存密钥；替换时填入新密钥" : "Leave blank to retain; enter a new key to replace") : "sk-…"} className="min-w-0 flex-1"/>
+                    placeholder={provider === "ollama" ? (zh ? "无需密钥" : "No key required") : savedConnection?.provider === provider ? (zh ? "留空保留已保存密钥；替换时填入新密钥" : "Leave blank to retain; enter a new key to replace") : "sk-…"} className="min-w-0 flex-1"/>
                   <TmButton variant="secondary" onClick={()=>setRevealKey(value=>!value)} disabled={!apiKey} aria-pressed={revealKey}>{revealKey ? (zh ? "隐藏" : "Hide") : (zh ? "显示" : "Show")}</TmButton>
                 </div>
               </TmFieldShell>
@@ -344,14 +411,15 @@ export default function SettingsPage() {
           {localCleanupWarning && <p role="alert" className="px-5 pb-3 text-sm text-tm-warn">{zh ? "服务端操作已完成，但浏览器禁止清除本机旧凭据。请允许本地存储后重试清理。" : "The server operation completed, but this browser blocked legacy-key cleanup. Allow local storage, then retry cleanup."}<TmButton variant="ghost" onClick={clearLocalCredential}>{zh ? "重试本机清理" : "Retry local cleanup"}</TmButton></p>}
           <div className="flex flex-wrap items-center gap-2 border-t border-tm-rule bg-tm-bg-2/40 px-5 py-3">
             <TmButton variant="primary" onClick={()=>void handleSave()} disabled={!canSave || connectionBusy || importBusy} loading={saving} loadingLabel={zh ? "保存中…" : "Saving…"}>{zh ? "保存连接" : "Save connection"}</TmButton>
-            <TmButton variant="secondary" onClick={()=>void handleTest()} disabled={!canTest || connectionBusy || importBusy} loading={testState.kind === "running"} loadingLabel={zh ? "测试中…" : "Testing…"}>{canSave && (dirtyConnection || !savedConnection) ? (zh ? "保存并测试" : "Save & test") : (zh ? "测试已保存连接" : "Test saved connection")}</TmButton>
+            <TmButton variant="secondary" onClick={()=>void handleTest()} disabled={!canTest || connectionBusy || importBusy} loading={testState.kind === "running"} loadingLabel={zh ? "测试中…" : "Testing…"}>{dirtyConnection || !savedConnection ? (zh ? "保存并测试" : "Save & test") : (zh ? "测试已保存连接" : "Test saved connection")}</TmButton>
             {dirtyConnection && savedConnection && <TmButton variant="ghost" disabled={connectionBusy} onClick={()=>{setApiKey("");setRevealKey(false);resetFeedback();void loadConnection();}}>{zh ? "撤销修改" : "Discard edits"}</TmButton>}
             {serverLast4 && <TmButton variant="ghost" className="ml-auto" disabled={connectionBusy} onClick={()=>setConfirmClear(true)}>{zh ? "移除凭据" : "Remove credential"}</TmButton>}
             {savedAt && <span role="status" className="text-xs text-tm-pos">{zh ? "已保存" : "Saved"} {savedAt}</span>}
           </div>
           {testState.kind === "running" && <p role="status" className="border-t border-tm-rule px-5 py-3 text-sm text-tm-muted">{zh ? "正在向模型发送最小请求；服务商可能需要一些响应时间。" : "Sending a minimal request; your provider may need some response time."}</p>}
-          {testState.kind === "ok" && <p role="status" className="border-t border-tm-rule px-5 py-3 font-tm-mono text-xs text-tm-pos">{zh ? "连接测试通过" : "Connection test passed"} · {testState.ms.toLocaleString()} ms · {(testState.tokens.prompt+testState.tokens.completion).toLocaleString()} tokens</p>}
-          {testState.kind === "fail" && <p role="alert" className="break-words border-t border-tm-rule px-5 py-3 text-sm leading-6 text-tm-neg">{testState.message}</p>}
+          {testState.kind === "ok" && savedReceipt?.ok && <p role="status" className="border-t border-tm-rule px-5 py-3 font-tm-mono text-xs text-tm-pos">{zh ? "连接测试通过" : "Connection test passed"} · {testState.ms.toLocaleString()} ms · {(testState.tokens.prompt+testState.tokens.completion).toLocaleString()} tokens</p>}
+          {testState.kind === "fail" && savedReceipt && !savedReceipt.ok && <p role="alert" className="break-words border-t border-tm-rule px-5 py-3 text-sm leading-6 text-tm-neg">{testState.message}</p>}
+          {actionError && <p role="alert" className="break-words border-t border-tm-rule px-5 py-3 text-sm text-tm-neg">{actionError}</p>}
         </TmPane>
         <aside className="min-w-0">
           <TmPane title={zh ? "已保存连接" : "Saved connection"} bodyClassName="p-5 space-y-4">
@@ -386,9 +454,15 @@ export default function SettingsPage() {
     </section>
     <section id="settings-section-panel-history" role="tabpanel" aria-labelledby="settings-section-tab-history" hidden={section !== "history"}>
       <TmPane title={zh ? "系统配置变更" : "Configuration changes"} meta={zh ? "最近 50 条" : "Latest 50 records"}>
-        <p className="px-5 py-3 text-xs leading-6 text-tm-muted">{zh ? "包括模型连接与线上因子表达式等系统配置。只有模型名称和 API 地址可在此回滚；回滚会产生一条新记录，不恢复或展示旧密钥。" : "Includes model connection and system settings such as the live factor expression. Only model and endpoint can be rolled back here; a rollback adds a record and never restores or reveals an old key."}</p>
+        <p className="px-5 py-3 text-xs leading-6 text-tm-muted">{zh ? "当前凭据版本的模型或 API 地址变更可回滚。回滚会写入一条新记录并使旧连接测试回执失效。" : "Model and endpoint changes for the current credential revision can be rolled back. A rollback adds a history entry and expires the previous connection test."}</p>
         {dirtyConnection && <p className="px-5 pb-3 text-sm text-tm-warn">{zh ? "模型连接有未保存修改，请先保存或撤销，再执行回滚。" : "Save or discard connection edits before applying a rollback."}</p>}
-        <ChangeLog disabled={connectionBusy || dirtyConnection} onBusyChange={setHistoryBusy} onApplied={()=>{resetFeedback();void loadConnection();}}/>
+        <ChangeLog
+          disabled={connectionBusy || dirtyConnection || connectionLoading || Boolean(connectionError)}
+          revision={savedConnection?.encrypted_at ?? null}
+          onBusyChange={setHistoryBusy}
+          onConflict={() => { void loadConnection(false); }}
+          onApplied={() => { resetFeedback(); if (userId) announceConnectionChange(userId); void loadConnection(); }}
+        />
       </TmPane>
     </section>
     <section id="settings-section-panel-account" role="tabpanel" aria-labelledby="settings-section-tab-account" hidden={section !== "account"}>
