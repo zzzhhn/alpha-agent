@@ -5,7 +5,9 @@ import asyncio
 import json
 import time
 import uuid
-from datetime import UTC, datetime
+from asyncio import shield as _shield
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from alpha_agent.data.capacity import read_capacity
 from alpha_agent.data.research_refresh import research_price_readiness
@@ -19,6 +21,113 @@ from alpha_agent.scheduling.ticks import (
     scheduled_slot,
     within_research_day,
 )
+
+# Vercel Python functions have a 300s hard ceiling (BUDGET_SECONDS=240s leaves
+# shutdown margin). A 330s lease outlives any still-running invocation so a
+# successor never overlaps live work while recovering within ~5.5m of a kill.
+VERCEL_MAX_DURATION_SECONDS = 300
+LEASE_TTL = timedelta(seconds=VERCEL_MAX_DURATION_SECONDS + 30)
+_ACTIVE_LEASE_SQL = (
+    "job=$1 AND owner_token=$2 AND lease_until > clock_timestamp()"
+)
+
+
+@dataclass(frozen=True)
+class JobLease:
+    job: Job
+    owner_token: uuid.UUID
+
+    async def is_active(self, pool) -> bool:
+        return bool(await pool.fetchval(
+            f"SELECT true FROM scheduler_job_lease WHERE {_ACTIVE_LEASE_SQL}",
+            self.job, self.owner_token,
+        ))
+
+    async def release(self, pool) -> bool:
+        return bool(await pool.fetchval(
+            "UPDATE scheduler_job_lease "
+            "SET owner_token=NULL, leased_at=NULL, lease_until=NULL, updated_at=clock_timestamp() "
+            "WHERE job=$1 AND owner_token=$2 RETURNING true",
+            self.job, self.owner_token,
+        ))
+
+
+async def claim_job_lease(job: Job, pool) -> JobLease | None:
+    """Claim a durable per-job lease in one short transaction without holding a
+    pool connection across unit execution.
+
+    Migration note: probing `pg_try_advisory_xact_lock(hashtext('tick:<job>'))`
+    inside this short claim transaction only blocks a new worker when a legacy
+    (pre-V066) worker is already holding the transaction-scoped advisory lock.
+    Once this transaction commits, the advisory lock is released; legacy code
+    does not read `scheduler_job_lease`, so if a new worker claims first and
+    any instance is still receiving legacy traffic, that legacy worker can
+    still acquire the advisory lock and overlap. Rollout must therefore stop
+    dispatching to / drain pre-V066 instances rather than relying on
+    bidirectional mixed-version exclusion.
+    """
+    owner = uuid.uuid4()
+    async with pool.acquire() as conn, conn.transaction():
+        if not await conn.fetchval(
+            "SELECT pg_try_advisory_xact_lock(hashtext($1))", f"tick:{job}",
+        ):
+            return None
+        claimed = await conn.fetchval(
+            "INSERT INTO scheduler_job_lease (job, owner_token, leased_at, lease_until, updated_at) "
+            "VALUES ($1, $2, clock_timestamp(), clock_timestamp() + $3::interval, clock_timestamp()) "
+            "ON CONFLICT (job) DO UPDATE SET "
+            "owner_token = EXCLUDED.owner_token, "
+            "leased_at = EXCLUDED.leased_at, "
+            "lease_until = EXCLUDED.lease_until, "
+            "updated_at = EXCLUDED.updated_at "
+            "WHERE scheduler_job_lease.owner_token IS NULL "
+            "   OR scheduler_job_lease.lease_until <= clock_timestamp() "
+            "RETURNING true",
+            job, owner, LEASE_TTL,
+        )
+    return JobLease(job=job, owner_token=owner) if claimed else None
+
+
+async def _insert_fenced(
+    pool, lease: JobLease, details: dict, *, finished: bool = True,
+) -> int | None:
+    return await pool.fetchval(
+        "WITH valid_lease AS ("
+        f"  SELECT 1 FROM scheduler_job_lease WHERE {_ACTIVE_LEASE_SQL} FOR SHARE"
+        ") "
+        "INSERT INTO cron_runs (cron_name, started_at, finished_at, ok, error_count, details) "
+        "SELECT $3, $4, CASE WHEN $5 THEN clock_timestamp() ELSE NULL END, $6, $7, $8::jsonb "
+        "FROM valid_lease RETURNING id",
+        lease.job,
+        lease.owner_token,
+        f"tick_{lease.job}",
+        datetime.now(UTC),
+        finished,
+        details["ok"],
+        int(not details["ok"]),
+        json.dumps(details),
+    )
+
+
+async def _finish_fenced(pool, lease: JobLease, row_id: int, details: dict) -> bool:
+    return bool(await pool.fetchval(
+        "WITH valid_lease AS ("
+        f"  SELECT 1 FROM scheduler_job_lease WHERE {_ACTIVE_LEASE_SQL} FOR SHARE"
+        ") "
+        "UPDATE cron_runs "
+        "SET finished_at=clock_timestamp(), ok=$4, error_count=$5, details=$6::jsonb "
+        "FROM valid_lease "
+        "WHERE cron_runs.id=$3 AND cron_runs.finished_at IS NULL "
+        "  AND cron_runs.details->>'tick_id'=$7 "
+        "RETURNING true",
+        lease.job,
+        lease.owner_token,
+        row_id,
+        details["ok"],
+        int(not details["ok"]),
+        json.dumps(details),
+        str(lease.owner_token),
+    ))
 
 
 async def execute_unit(unit: Unit, *, research_day: str, slot: str, request_id: str) -> dict:
@@ -59,14 +168,6 @@ async def execute_unit(unit: Unit, *, research_day: str, slot: str, request_id: 
     raise ValueError("Unknown tick unit")
 
 
-async def _insert(conn, job, details, *, finished=True):
-    return await conn.fetchval(
-        "INSERT INTO cron_runs (cron_name,started_at,finished_at,ok,error_count,details) "
-        "VALUES ($1,$2,CASE WHEN $3 THEN now() ELSE NULL END,$4,$5,$6::jsonb) RETURNING id",
-        f"tick_{job}", datetime.now(UTC), finished, details["ok"], int(not details["ok"]), json.dumps(details),
-    )
-
-
 def _unit_outcome(unit: Unit, result: dict) -> tuple[bool, str | None, int]:
     """Match the old workflow: a unit fails on an exception or an explicit
     rejection, not on per-ticker provider errors. Those are counted, and the
@@ -87,31 +188,40 @@ def _unit_outcome(unit: Unit, result: dict) -> tuple[bool, str | None, int]:
 async def run_tick(job: Job, pool) -> dict:
     started = time.monotonic()
     now = datetime.now(UTC)
-    # Neon's pooler runs pgbouncer in transaction mode, where a session
-    # advisory lock can stay pinned to a server connection and block later
-    # ticks. Hold a transaction-scoped lock on one dedicated connection; it
-    # is released on commit, rollback or a killed function. Receipts are
-    # written through the pool so each one commits immediately.
-    async with pool.acquire() as lock_conn, lock_conn.transaction():
-        if not await lock_conn.fetchval("SELECT pg_try_advisory_xact_lock(hashtext($1))", f"tick:{job}"):
-            return {"ok": True, "skipped": "overlap"}
-        return await _run_locked(job, pool, started=started, now=now)
+    lease = await claim_job_lease(job, pool)
+    if lease is None:
+        return {"ok": True, "skipped": "overlap"}
+    try:
+        return await _run_leased(job, pool, lease=lease, started=started, now=now)
+    finally:
+        try:
+            await _shield(lease.release(pool))
+        except Exception:  # noqa: BLE001 - TTL still bounds recovery if DB is unreachable
+            pass
 
 
-async def _run_locked(job: Job, pool, *, started: float, now: datetime) -> dict:
+async def _run_leased(
+    job: Job, pool, *, lease: JobLease, started: float, now: datetime,
+) -> dict:
     day = now.date().isoformat()
     slot = scheduled_slot(job, now)
     market_date = latest_completed_xnys_session(now)
-    tick_id = str(uuid.uuid4())
+    tick_id = str(lease.owner_token)
     base = {"research_day": day, "market_date": market_date.isoformat(), "slot": slot,
             "tick_id": tick_id, "request_id": tick_id, "unit": None, "offset": None,
             "ok": True, "error_type": None}
 
     async def stop(reason, units):
+        if reason == "lease_expired":
+            return {"ok": False, "reason": reason, "research_day": day,
+                    "market_date": market_date.isoformat(), "units": units}
         # The high-frequency event collector already has durable unit/source
         # receipts. Do not double its write rate with redundant completion rows.
         if job != "events_watch" or reason not in ("complete", "scheduled_slot_ended"):
-            await _insert(pool, job, {**base, "reason": reason})
+            inserted = await _insert_fenced(pool, lease, {**base, "reason": reason})
+            if inserted is None:
+                return {"ok": False, "reason": "lease_expired", "research_day": day,
+                        "market_date": market_date.isoformat(), "units": units}
         return {"ok": True, "reason": reason, "research_day": day,
                 "market_date": market_date.isoformat(), "units": units}
 
@@ -146,6 +256,8 @@ async def _run_locked(job: Job, pool, *, started: float, now: datetime) -> dict:
             return await stop("time_budget", executed)
         if cooldown:
             await asyncio.sleep(cooldown)
+            if not await lease.is_active(pool):
+                return await stop("lease_expired", executed)
         # Same UTC guard is re-evaluated after the pause, before work.
         if job == "daily_close" and not within_research_day(day, datetime.now(UTC)):
             return await stop("research_day_window_ended", executed)
@@ -160,7 +272,9 @@ async def _run_locked(job: Job, pool, *, started: float, now: datetime) -> dict:
             details["expected_shards"] = len(range(0, readiness["price_universe_count"], PRICE_SLICE))
         # Reserve one durable receipt before I/O. A killed request counts as a
         # failed attempt on the next tick, rather than retrying forever.
-        row_id = await _insert(pool, job, details, finished=False)
+        row_id = await _insert_fenced(pool, lease, details, finished=False)
+        if row_id is None:
+            return await stop("lease_expired", executed)
         try:
             async with asyncio.timeout(max(0, BUDGET_SECONDS - (time.monotonic() - started))):
                 result = await execute_unit(unit, research_day=day, slot=slot, request_id=tick_id)
@@ -176,10 +290,8 @@ async def _run_locked(job: Job, pool, *, started: float, now: datetime) -> dict:
                     details["collector_reason"] = result["reason"]
         except Exception as exc:  # noqa: BLE001 - recorded as a failed unit
             details["error_type"] = type(exc).__name__
-        await pool.execute(
-            "UPDATE cron_runs SET finished_at=now(),ok=$2,error_count=$3,details=$4::jsonb WHERE id=$1",
-            row_id, details["ok"], int(not details["ok"]), json.dumps(details),
-        )
+        if not await _finish_fenced(pool, lease, row_id, details):
+            return await stop("lease_expired", executed)
         receipts.append(details)
         executed.append({"unit": unit.name, "offset": unit.offset, "ok": details["ok"],
                          "error_type": details["error_type"], "request_id": tick_id})

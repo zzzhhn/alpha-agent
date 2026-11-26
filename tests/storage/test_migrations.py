@@ -18,6 +18,7 @@ async def test_apply_migrations_creates_all_tables(applied_db):
             "daily_signals_fast",
             "daily_signals_slow",
             "error_log",
+            "scheduler_job_lease",
         }
     finally:
         await conn.close()
