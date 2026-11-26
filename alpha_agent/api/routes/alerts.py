@@ -8,12 +8,16 @@ Always returns 200; an empty list is "no alerts yet", not an error.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import os
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator
 
 from alpha_agent.alerts.triage import assess_alert
@@ -109,6 +113,8 @@ class AlertInboxItem(Alert):
     first_seen_at: str | None = None
     last_seen_at: str | None = None
     member_ids: list[int] = Field(default_factory=list)
+    group_id: str | None = None
+    group_token: str | None = None
     severity: Literal["critical", "warning", "info"]
     relevance: Literal["position", "recommendation", "market", "watchlist", "record"]
     triage_score: int
@@ -133,6 +139,7 @@ class AlertInboxResponse(BaseModel):
     counts: AlertInboxCounts
     as_of: str
     source_status: Literal["fresh", "stale", "empty"]
+    next_offset: int | None = None
 
 
 class AlertStateRequest(BaseModel):
@@ -157,6 +164,21 @@ class AlertBatchStateResponse(BaseModel):
     states: dict[int, AlertTriageState]
 
 
+class AlertGroupStateRequest(AlertStateRequest):
+    group_token: str = Field(min_length=1)
+
+
+class AlertGroupUndoRequest(BaseModel):
+    group_token: str = Field(min_length=1)
+    undo_token: str = Field(min_length=1)
+
+
+class AlertGroupStateResponse(BaseModel):
+    updated: int
+    state: AlertTriageState
+    undo_token: str | None = None
+
+
 class AlertAttentionResponse(BaseModel):
     """Compact private count for the sidebar badge.
 
@@ -173,7 +195,7 @@ class AlertAttentionResponse(BaseModel):
     source_status: Literal["fresh", "stale", "empty"]
 
 
-# Same bounded window the alerts workbench loads (AlertWorkbench fetches 50).
+# Same first page of 50 groups the alerts workbench loads.
 _ATTENTION_WINDOW = 50
 # Inbox queue boundary: triage_score >= 45 is "needs action".
 _NEEDS_ACTION_SCORE = 45
@@ -290,12 +312,14 @@ async def _decision_context(pool: Any, user_id: int) -> tuple[
 
 @router.get("/inbox", response_model=AlertInboxResponse)
 async def alerts_inbox(
+    response: Response,
     limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=2**63 - 1),
     user_id: int = Depends(require_user),
 ) -> AlertInboxResponse:
-    """Decision-ranked alert inbox for the authenticated user."""
-    pool = await get_db_pool()
-    return await _build_inbox(pool, user_id, limit)
+    """Return a page of newest groups, ranked for the user's decisions."""
+    response.headers["Cache-Control"] = "private, no-store"
+    return await _build_inbox(await get_db_pool(), user_id, limit, offset)
 
 
 @router.get("/attention", response_model=AlertAttentionResponse)
@@ -305,7 +329,7 @@ async def alerts_attention(
 ) -> AlertAttentionResponse:
     """Private pending-work count for the sidebar; never shared-cached."""
     pool = await get_db_pool()
-    inbox = await _build_inbox(pool, user_id, _ATTENTION_WINDOW)
+    inbox = await _build_inbox(pool, user_id, _ATTENTION_WINDOW, sign_groups=False)
     open_items = [item for item in inbox.alerts if item.state.status == "open"]
     needs = [item for item in open_items if item.triage_score >= _NEEDS_ACTION_SCORE]
     newest = max((item.created_at for item in inbox.alerts), default=None)
@@ -320,16 +344,62 @@ async def alerts_attention(
     )
 
 
-async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxResponse:
+def _alert_token_key() -> bytes:
+    secret = os.environ.get("NEXTAUTH_SECRET")
+    if not secret:
+        raise HTTPException(status_code=503, detail="alert group signing unavailable")
+    return hmac.digest(secret.encode(), b"alpha-agent:alert-group:v1", "sha256")
+
+
+def _alert_token(user_id: int, kind: str, **claims: Any) -> str:
+    return jwt.encode({"sub": str(user_id), "kind": kind, **claims}, _alert_token_key(), algorithm="HS256")
+
+
+def _alert_claims(token: str, user_id: int, kind: str) -> dict:
+    try:
+        claims = jwt.decode(token, _alert_token_key(), algorithms=["HS256"])
+    except JWTError as exc:
+        raise HTTPException(status_code=422, detail="invalid alert group credential") from exc
+    if claims.get("kind") != kind:
+        raise HTTPException(status_code=422, detail="invalid alert group credential")
+    if claims.get("sub") != str(user_id):
+        raise HTTPException(status_code=403, detail="alert group credential belongs to another user")
+    return claims
+
+
+def _group_state(states: list[AlertTriageState]) -> AlertTriageState:
+    # An older open occurrence still makes the group actionable.
+    return next((state for state in states if state.status == "open"), states[0])
+
+
+async def _build_inbox(
+    pool: Any, user_id: int, limit: int, offset: int = 0, *, sign_groups: bool = True,
+) -> AlertInboxResponse:
+    # One statement observes both page selection and member expansion in the
+    # same database snapshot. Rank only after fetching every member of the page.
     rows = await pool.fetch(
         """
-        SELECT id, ticker, type, payload, dedup_bucket, created_at
-        FROM alert_queue
-        ORDER BY created_at DESC
-        LIMIT $1
+        WITH page AS (
+            SELECT upper(ticker) AS group_ticker, type,
+                   (created_at AT TIME ZONE 'America/New_York')::date AS group_day,
+                   max(created_at) AS latest, max(id) AS tie_breaker
+            FROM alert_queue
+            WHERE created_at IS NOT NULL
+            GROUP BY group_ticker, type, group_day
+            ORDER BY latest DESC, tie_breaker DESC
+            LIMIT $1 OFFSET $2
+        )
+        SELECT a.id, a.ticker, a.type, a.payload, a.dedup_bucket, a.created_at,
+               statement_timestamp() AS read_at
+        FROM page p
+        JOIN alert_queue a ON upper(a.ticker)=p.group_ticker AND a.type=p.type
+            AND a.created_at >= (p.group_day::timestamp AT TIME ZONE 'America/New_York')
+            AND a.created_at < ((p.group_day + 1)::timestamp AT TIME ZONE 'America/New_York')
+        ORDER BY p.latest DESC, p.tie_breaker DESC, a.created_at DESC, a.id DESC
         """,
-        limit,
+        limit + 1, offset,
     )
+    now = (rows[0].get("read_at") if rows else None) or datetime.now(UTC)
     positions, watchlist, recommendations = await _decision_context(pool, user_id)
     alert_ids = [int(row["id"]) for row in rows]
     state_rows = (
@@ -351,7 +421,6 @@ async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxRespons
         else []
     )
     states = {int(row["alert_id"]): row for row in state_rows}
-    now = datetime.now(UTC)
     items: list[AlertInboxItem] = []
     for row in rows:
         ticker = str(row["ticker"]).upper()
@@ -406,26 +475,25 @@ async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxRespons
         groups.setdefault((item.ticker, item.type, ny_date), []).append(item)
 
     items = []
-    for members in groups.values():
+    for (ticker, alert_type, ny_date), members in list(groups.items())[:limit]:
         members.sort(key=lambda item: (item.created_at, item.id), reverse=True)
         representative = members[0]
-        # An older open occurrence keeps the group actionable even when the
-        # newest occurrence is resolved or snoozed. Use that open member's
-        # state so resolved/snoozed timestamps are not attached to an open group.
-        state = next(
-            (member.state for member in members if member.state.status == "open"),
-            representative.state,
-        )
+        ids = [member.id for member in members]
+        group_id = json.dumps([ticker, alert_type, ny_date.isoformat()], separators=(",", ":"))
         items.append(representative.model_copy(update={
             "occurrences": len(members),
             "first_seen_at": members[-1].created_at,
             "last_seen_at": representative.created_at,
-            "member_ids": [member.id for member in members],
+            "member_ids": ids,
+            "group_id": group_id,
+            "group_token": _alert_token(
+                user_id, "window", group_id=group_id, ids=ids, as_of=now.isoformat(),
+            ) if sign_groups else None,
             "triage_score": max(member.triage_score for member in members),
-            "state": state,
+            "state": _group_state([member.state for member in members]),
         }))
 
-    items.sort(key=lambda item: (item.triage_score, item.created_at), reverse=True)
+    items.sort(key=lambda item: (item.triage_score, item.created_at, item.id), reverse=True)
     open_items = [item for item in items if item.state.status == "open"]
     snoozed_items = [item for item in items if item.state.status == "snoozed"]
     counts = AlertInboxCounts(
@@ -449,6 +517,7 @@ async def _build_inbox(pool: Any, user_id: int, limit: int) -> AlertInboxRespons
         counts=counts,
         as_of=now.isoformat(),
         source_status=source_status,
+        next_offset=offset + limit if len(groups) > limit else None,
     )
 
 
@@ -514,7 +583,7 @@ async def set_alert_states_batch(
     pool = await get_db_pool()
     async with pool.acquire() as connection, connection.transaction():
         rows = await connection.fetch(
-            "SELECT id FROM alert_queue WHERE id = ANY($1::bigint[]) FOR KEY SHARE",
+            "SELECT id FROM alert_queue WHERE id = ANY($1::bigint[]) ORDER BY id FOR KEY SHARE",
             body.alert_ids,
         )
         if len(rows) != len(body.alert_ids):
@@ -527,6 +596,131 @@ async def set_alert_states_batch(
     return AlertBatchStateResponse(updated=len(states), states=states)
 
 
+async def _lock_group_members(connection: Any, ids: list[int]) -> None:
+    # Take the same row order as legacy batch writes. A group decision must
+    # capture prior state and write atomically even for previously untouched rows.
+    rows = await connection.fetch(
+        "SELECT id FROM alert_queue WHERE id=ANY($1::bigint[]) ORDER BY id FOR UPDATE", ids,
+    )
+    if len(rows) != len(ids):
+        raise HTTPException(status_code=404, detail="alert group member not found")
+
+
+async def _stored_group_states(connection: Any, user_id: int, ids: list[int]) -> dict[int, Any]:
+    rows = await connection.fetch(
+        "SELECT alert_id,status,snooze_until,resolved_at,note,updated_at "
+        "FROM alert_triage_state WHERE user_id=$1 AND alert_id=ANY($2::bigint[])",
+        user_id, ids,
+    )
+    return {row["alert_id"]: row for row in rows}
+
+
+def _effective_group_state(states: dict[int, Any], ids: list[int], now: datetime) -> AlertTriageState:
+    views = []
+    for alert_id in ids:
+        row = states.get(alert_id)
+        if row is None:
+            views.append(AlertTriageState())
+            continue
+        status = row["status"]
+        if status == "snoozed" and row["snooze_until"] is not None and row["snooze_until"] <= now:
+            status = "open"
+        views.append(AlertTriageState(
+            status=status, snooze_until=_iso(row["snooze_until"]),
+            resolved_at=_iso(row["resolved_at"]), note=row["note"], updated_at=_iso(row["updated_at"]),
+        ))
+    return _group_state(views)
+
+
+@router.post("/state/group", response_model=AlertGroupStateResponse)
+async def set_alert_group_state(
+    body: AlertGroupStateRequest,
+    user_id: int = Depends(require_user),
+) -> AlertGroupStateResponse:
+    """Update the exact user-scoped group membership observed at inbox read."""
+    ids = _alert_claims(body.group_token, user_id, "window")["ids"]
+    requested_at = datetime.now(UTC)
+    snooze_until = _validated_snooze_until(body, requested_at) if body.status == "snoozed" else None
+    pool = await get_db_pool()
+    async with pool.acquire() as connection, connection.transaction():
+        await _lock_group_members(connection, ids)
+        prior = await _stored_group_states(connection, user_id, ids)
+        applied_at = datetime.now(UTC)
+        if snooze_until is not None and snooze_until <= applied_at:
+            raise HTTPException(status_code=422, detail="snooze_until must be in the future")
+        resolved_at = applied_at if body.status == "resolved" else None
+        await connection.execute(
+            """
+            INSERT INTO alert_triage_state
+                (user_id,alert_id,status,snooze_until,resolved_at,note,updated_at)
+            SELECT $1,member,$3,$4,$5,$6,$7 FROM unnest($2::bigint[]) AS member
+            ON CONFLICT (user_id,alert_id) DO UPDATE SET
+                status=EXCLUDED.status,snooze_until=EXCLUDED.snooze_until,
+                resolved_at=EXCLUDED.resolved_at,note=EXCLUDED.note,updated_at=EXCLUDED.updated_at
+            """,
+            user_id, ids, body.status, snooze_until, resolved_at, body.note, applied_at,
+        )
+        undo = _alert_token(
+            user_id, "undo", window=hashlib.sha256(body.group_token.encode()).hexdigest(),
+            applied_at=applied_at.isoformat(),
+            prior=[
+                {"alert_id": alert_id, "status": row["status"], "note": row["note"],
+                 "snooze_until": _iso(row["snooze_until"]), "resolved_at": _iso(row["resolved_at"])}
+                for alert_id, row in prior.items()
+            ],
+        )
+    return AlertGroupStateResponse(
+        updated=len(ids), undo_token=undo,
+        state=AlertTriageState(
+            status=body.status, snooze_until=_iso(snooze_until), resolved_at=_iso(resolved_at),
+            note=body.note, updated_at=_iso(applied_at),
+        ),
+    )
+
+
+@router.post("/state/group/undo", response_model=AlertGroupStateResponse)
+async def undo_alert_group_state(
+    body: AlertGroupUndoRequest,
+    user_id: int = Depends(require_user),
+) -> AlertGroupStateResponse:
+    """Restore the prior per-member states if this decision is still current."""
+    ids = _alert_claims(body.group_token, user_id, "window")["ids"]
+    undo = _alert_claims(body.undo_token, user_id, "undo")
+    if undo["window"] != hashlib.sha256(body.group_token.encode()).hexdigest():
+        raise HTTPException(status_code=422, detail="undo credential does not match the original group window")
+    applied_at = datetime.fromisoformat(undo["applied_at"])
+    pool = await get_db_pool()
+    async with pool.acquire() as connection, connection.transaction():
+        await _lock_group_members(connection, ids)
+        current = await _stored_group_states(connection, user_id, ids)
+        if len(current) != len(ids) or any(row["updated_at"] != applied_at for row in current.values()):
+            raise HTTPException(status_code=409, detail="alert group state changed after this decision")
+        prior = undo["prior"]
+        prior_ids = [row["alert_id"] for row in prior]
+        await connection.execute(
+            "DELETE FROM alert_triage_state WHERE user_id=$1 AND alert_id=ANY($2::bigint[]) "
+            "AND alert_id<>ALL($3::bigint[])",
+            user_id, ids, prior_ids,
+        )
+        if prior:
+            await connection.execute(
+                """
+                UPDATE alert_triage_state state SET
+                    status=prior.status,note=prior.note,snooze_until=prior.snooze_until,
+                    resolved_at=prior.resolved_at,updated_at=clock_timestamp()
+                FROM jsonb_to_recordset($2::jsonb) AS prior(
+                    alert_id bigint,status text,note text,snooze_until timestamptz,resolved_at timestamptz
+                )
+                WHERE state.user_id=$1 AND state.alert_id=prior.alert_id
+                """,
+                user_id, json.dumps(prior),
+            )
+        restored = await _stored_group_states(connection, user_id, ids)
+    return AlertGroupStateResponse(
+        updated=len(ids), state=_effective_group_state(restored, ids, datetime.now(UTC)),
+    )
+
+
 @router.post("/{alert_id}/state", response_model=AlertTriageState)
 async def set_alert_state(
     alert_id: int,
@@ -537,6 +731,7 @@ async def set_alert_state(
     now = datetime.now(UTC)
     snooze_until = _validated_snooze_until(body, now)
     pool = await get_db_pool()
-    if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM alert_queue WHERE id=$1)", alert_id):
-        raise HTTPException(status_code=404, detail="alert not found")
-    return await _upsert_alert_state(pool, user_id, alert_id, body, now, snooze_until)
+    async with pool.acquire() as connection, connection.transaction():
+        if not await connection.fetchval("SELECT id FROM alert_queue WHERE id=$1 FOR KEY SHARE", alert_id):
+            raise HTTPException(status_code=404, detail="alert not found")
+        return await _upsert_alert_state(connection, user_id, alert_id, body, now, snooze_until)
