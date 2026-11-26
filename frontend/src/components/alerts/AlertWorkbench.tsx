@@ -307,7 +307,7 @@ export default function AlertWorkbench() {
       />
 
       <DecisionStrip
-        headline={<span className="inline-flex items-center gap-2"><AlertTriangle className={`h-5 w-5 ${needsAction > 0 ? "text-tm-warn" : "text-tm-muted"}`} />{data ? (zh ? `${needsAction} 条待复核` : `${needsAction} to review`) : (zh ? "正在读取警报" : "Loading alerts")}</span>}
+        headline={<span className="inline-flex items-center gap-2"><AlertTriangle className={`h-5 w-5 ${needsAction > 0 ? "text-tm-warn" : "text-tm-muted"}`} />{data ? (zh ? `${needsAction} 组待复核` : `${needsAction} to review`) : (zh ? "正在读取警报" : "Loading alerts")}</span>}
         description={data?.source_status === "stale"
           ? (zh ? "最新事件已超过 24 小时，以下为历史记录，并非今日新增。" : "Latest event is over 24 hours old. These are historical records, not new alerts today.")
           : data?.source_status === "empty" ? (zh ? "尚无事件记录，不能据此判断没有风险。" : "No events recorded yet; this does not establish an absence of risk.")
@@ -315,7 +315,7 @@ export default function AlertWorkbench() {
         metrics={[
           { label: zh ? "关联持仓" : "Holdings", value: data ? positionCount : "—" },
           { label: zh ? "关联候选" : "Picks", value: data ? recommendationCount : "—" },
-          { label: zh ? "本次载入（最近 50 条内）" : "Loaded (latest 50)", value: data?.alerts.length ?? "—" },
+          { label: zh ? "已载入警报组" : "Alert groups loaded", value: data?.alerts.length ?? "—" },
         ]}
         action={<TmLinkButton href="/methodology#alerts" variant="secondary" size="md">{zh ? "规则与阈值" : "Rules & thresholds"}</TmLinkButton>}
       />
@@ -449,7 +449,7 @@ export default function AlertWorkbench() {
                       onClick={() => setSelectedId(item.id)}
                       className={`alerts-inbox-row w-full border-l-2 px-4 py-3 text-left transition-colors ${active ? "border-tm-accent bg-tm-accent-soft" : "border-transparent hover:bg-tm-bg-2"}`}
                     >
-                      <div className="flex flex-wrap items-center gap-2"><span className="min-w-16 font-semibold text-lg">{item.ticker}</span><span className={`border px-1.5 py-0.5 text-xs ${SEVERITY_CLASS[item.severity]}`}>{severityLabel(item.severity, locale)}</span><span className="text-xs text-tm-muted">{alertTypeLabel(item, locale)}</span>{(item.occurrences ?? 1) > 1 ? <span className="border border-tm-rule px-1.5 py-0.5 text-xs text-tm-fg-2" title={zh ? `同一标的同类警报在美东同一天出现 ${item.occurrences} 次，已合并显示` : `${item.occurrences} same-type alerts for this ticker on one New York date, shown as one`}>{zh ? `同日 ${item.occurrences} 次` : `${item.occurrences}× today`}</span> : null}<time dateTime={item.created_at} className="ml-auto shrink-0 text-xs tabular-nums text-tm-muted">{stamp(item.created_at)} · {relativeTime(item.created_at, locale)}</time></div>
+                      <div className="flex flex-wrap items-center gap-2"><span className="min-w-16 font-semibold text-lg">{item.ticker}</span><span className={`border px-1.5 py-0.5 text-xs ${SEVERITY_CLASS[item.severity]}`}>{severityLabel(item.severity, locale)}</span><span className="text-xs text-tm-muted">{alertTypeLabel(item, locale)}</span>{(item.occurrences ?? 1) > 1 ? <span className="border border-tm-rule px-1.5 py-0.5 text-xs text-tm-fg-2" title={zh ? `同一标的同类警报在美东同一天出现 ${item.occurrences} 次，已合并显示` : `${item.occurrences} same-type alerts for this ticker on one New York date, shown as one`}>{zh ? `同日 ${item.occurrences} 次` : `${item.occurrences}× that day`}</span> : null}<time dateTime={item.created_at} className="ml-auto shrink-0 text-xs tabular-nums text-tm-muted">{stamp(item.created_at)} · {relativeTime(item.created_at, locale)}</time></div>
                       <p className="mt-1.5 text-sm leading-5 text-tm-fg">{changeSummary(item, locale)}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-tm-muted"><span>{relevanceLabel(item.relevance, locale)}{item.context.recommendation_rank ? ` #${item.context.recommendation_rank}` : ""}</span><span className={item.confidence === "low" ? "text-tm-warn" : ""}>{zh ? "证据" : "Evidence"} {confidenceLabel(item.confidence,locale)} · {item.confidence_score}/100</span><span>{item.source_count} {zh ? "个来源" : "source(s)"}</span><span className="ml-auto">{workflowLabel(item.state.status,locale)}{active ? " · ✓" : ""}</span></div>
                     </TmRowButton>
@@ -465,7 +465,7 @@ export default function AlertWorkbench() {
                 </TmButton>
               </div>
             ) : null}
-            <TmPagination page={currentPage} pageSize={pageSize} totalItems={visible.length} pageSizeOptions={[5]} onPageChange={setPage} onPageSizeChange={()=>{}} disabled={!data || authRequired} labels={{navigation:zh ? "警报分页" : "Alert pagination",previous:zh ? "上一页" : "Previous",previousAriaLabel:zh ? "上一页警报" : "Previous alerts",next:zh ? "下一页" : "Next",nextAriaLabel:zh ? "下一页警报" : "Next alerts",page:(current,total)=>`${current} / ${total}`,pageSize:zh ? "每页" : "Per page",total:total=>zh ? `共 ${total} 条 · 每页 5 条` : `${total} alerts · 5 per page`}} className="shrink-0" />
+            <TmPagination page={currentPage} pageSize={pageSize} totalItems={visible.length} pageSizeOptions={[5]} onPageChange={setPage} onPageSizeChange={()=>{}} disabled={!data || authRequired} labels={{navigation:zh ? "警报分页" : "Alert pagination",previous:zh ? "上一页" : "Previous",previousAriaLabel:zh ? "上一页警报" : "Previous alerts",next:zh ? "下一页" : "Next",nextAriaLabel:zh ? "下一页警报" : "Next alerts",page:(current,total)=>`${current} / ${total}`,pageSize:zh ? "每页" : "Per page",total:total=>zh ? `共 ${total} 组 · 每页 5 组` : `${total} groups · 5 per page`}} className="shrink-0" />
           </section>
 
           <aside ref={inspectorRef} id="alert-inspector" className="alerts-inspector min-w-0 bg-tm-bg-2" aria-label={zh ? "警报详情" : "Alert details"}>

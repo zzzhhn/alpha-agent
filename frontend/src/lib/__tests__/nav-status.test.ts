@@ -76,7 +76,7 @@ describe("alerts attention signal", () => {
   it("caps the badge but keeps the full count in the description", () => {
     const signal = alertsSignal(attention(140), "ok", "zh");
     expect(signal?.badge).toBe(`${ALERT_BADGE_CAP}+`);
-    expect(signal?.detail).toContain("140");
+    expect(signal?.detail).toContain("140 组需处理");
   });
   it("escalates tone only for critical items", () => {
     expect(alertsSignal(attention(3), "ok", "en")?.tone).toBe("attention");
