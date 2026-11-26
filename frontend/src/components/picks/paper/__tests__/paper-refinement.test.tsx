@@ -37,6 +37,20 @@ describe("paper workspace refinement", () => {
     expect(curve).toContain("等待首个净值记录");
     expect(curve).toContain("没有数据不代表零收益");
   });
+  it("distinguishes an incomplete limit window from a verified expiry", () => {
+    const order: OrderOut = {
+      id: 1, ticker: "XYZ", side: "buy", order_type: "limit", qty: 1,
+      limit_price: 10, signal_date: "2026-10-30", fill_date: null, fill_price: null, status: "expired",
+    };
+    const orders = [
+      {...order, fail_reason: "limit_expired_missing_quotes", execution_evidence: {missing_quote_dates: ["2026-11-02"]}},
+      {...order, id: 2, fail_reason: "limit_expired_no_cross"},
+    ];
+    const html = renderToStaticMarkup(<PaperOrdersPane orders={orders} onCancel={async () => {}} attribution={[]} attributionStatus="ready" />);
+    expect(html).toContain("窗口内缺少报价");
+    expect(html).toContain("2026-11-02");
+    expect(html).toContain("窗口内收盘价未穿过限价");
+  });
   it("bounds loaded order history while preserving its total", () => {
     const orders:OrderOut[] = Array.from({length:12},(_,i)=>({id:i+1,ticker:`TEST${i+1}`,side:"buy",order_type:"market",qty:1,limit_price:null,signal_date:"2026-10-30",fill_date:null,fill_price:null,status:"pending"}));
     const html = renderToStaticMarkup(<PaperOrdersPane orders={orders} onCancel={async()=>{}} attribution={[]} attributionStatus="ready" showAttribution={false} />);

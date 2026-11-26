@@ -113,6 +113,16 @@ function OrderRow({
       : ["accepted", "pending_market_data", "expired", "rejected", "cancel_requested"].includes(o.status)
         ? t(locale, `sim.bot.order.${o.status}` as "sim.bot.order.accepted")
         : ["pending", "filled", "cancelled"].includes(o.status) ? t(locale, `sim.status.${o.status}` as "sim.status.pending") : (locale === "zh" ? "状态待确认" : "Status unavailable");
+  const missingDates = o.execution_evidence?.missing_quote_dates;
+  let expiryDetail: string | undefined;
+  if (!botMode && o.status === "expired" && o.order_type === "limit") {
+    if (o.fail_reason === "limit_expired_missing_quotes") {
+      const dates = Array.isArray(missingDates) ? missingDates.filter(day => typeof day === "string") : [];
+      expiryDetail = [t(locale, "sim.expiry.missing_quotes"), ...dates].join(" · ");
+    } else if (o.fail_reason === "limit_expired_no_cross") {
+      expiryDetail = t(locale, "sim.expiry.no_cross");
+    }
+  }
   return (
     <TmTableRow>
       <TmTableCell className="text-xs text-tm-muted">{o.signal_date}</TmTableCell>
@@ -143,6 +153,7 @@ function OrderRow({
       <TmTableCell className="text-xs">
         <div className="flex items-center gap-2">
           <StatusChip status={o.status} label={statusLabel} />
+          {expiryDetail ? <span className="text-xs text-tm-muted">{expiryDetail}</span> : null}
           {o.status === "failed" && o.fail_reason ? (
             <span className="font-tm-mono text-xs text-tm-muted" title={o.fail_reason}>
               {o.fail_reason}
