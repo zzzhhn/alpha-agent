@@ -125,7 +125,7 @@ export function alertsSignal(
     };
   }
   const n = attention.needs_action;
-  const scope = zh ? `最近 ${attention.window} 条内` : `within the latest ${attention.window}`;
+  const scope = zh ? `最近 ${attention.window} 组警报中` : `within the latest ${attention.window} alert groups`;
   if (n === 0) {
     return attention.source_status === "stale"
       ? {
@@ -139,7 +139,7 @@ export function alertsSignal(
     tone: attention.critical > 0 ? "negative" : "attention",
     badge: shown,
     detail: zh
-      ? `${scope}有 ${n} 条需处理${attention.critical ? `，其中 ${attention.critical} 条高严重度` : ""}。已处理和暂缓的不计入。`
+      ? `${scope}有 ${n} 组需处理${attention.critical ? `，其中 ${attention.critical} 组高严重度` : ""}。已处理和暂缓的不计入。`
       : `${n} to review ${scope}${attention.critical ? `, ${attention.critical} critical` : ""}. Resolved and snoozed alerts are excluded.`,
   };
 }
