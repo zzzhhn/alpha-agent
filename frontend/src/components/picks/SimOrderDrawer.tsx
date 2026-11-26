@@ -7,18 +7,18 @@ import { TmDrawer } from "@/components/tm/TmDrawer";
 import SimOrderForm from "./SimOrderForm";
 import { Disclaimer } from "./paper/PaperUi";
 import { t } from "@/lib/i18n";
+import type { PickOrderSource } from "./paper-order-source";
 
 interface Props {
-  readonly ticker: string;
+  readonly source: PickOrderSource;
   readonly card: RatingCard;
   readonly cash?: number;
   readonly onClose: () => void;
   readonly onOrderPlaced: () => void;
 }
 
-export default function SimOrderDrawer({ ticker, card, cash, onClose, onOrderPlaced }: Props) {
+export default function SimOrderDrawer({ source, card, cash, onClose, onOrderPlaced }: Props) {
   const { locale } = useLocale();
-  const pickDate = card.market_date ?? undefined;
 
   return (
     <TmDrawer
@@ -35,12 +35,11 @@ export default function SimOrderDrawer({ ticker, card, cash, onClose, onOrderPla
       width="sm"
     >
       <SimOrderForm
-        fixedTicker={ticker}
+        fixedTicker={source.ticker}
         locale={locale}
         onPlaced={() => { onOrderPlaced(); onClose(); }}
-        pickDate={pickDate}
-        pickTicker={card.ticker}
-        pickRunId={card.run_id ?? undefined}
+        pickSource={source}
+        initialSide={card.rating === "SELL" || card.rating === "UW" ? "sell" : "buy"}
         latestPrice={card.latest_price}
         priceDate={card.price_date}
         availableCash={cash}

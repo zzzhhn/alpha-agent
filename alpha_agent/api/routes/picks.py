@@ -20,7 +20,7 @@ from math import isfinite
 from typing import Literal
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from alpha_agent.api.cache_headers import set_public_cache
@@ -52,6 +52,9 @@ _STALE_THRESHOLD_HOURS = 24
 # from the default ranking only — an explicit ticker search still surfaces it
 # (so you can look one up). Reversible: raise to re-admit slower-updating names.
 _PRICE_FRESH_TRADING_DAYS = 3
+
+_POLICY_TOP_N = 50
+_QUOTE_HEALTH_VERSION = "policy_top50_close_v1"
 
 
 class LeanCard(BaseModel):
@@ -265,7 +268,7 @@ def _strategic_projection(raw_breakdown) -> dict:
     )
 
 
-def _top_policy_rows(rows, *, mode: str, policy_id: str, top_n: int = 50) -> dict[str, dict]:
+def _top_policy_rows(rows, *, mode: str, policy_id: str, top_n: int = _POLICY_TOP_N) -> dict[str, dict]:
     from alpha_agent.data.security_identity import valid_research_symbol
     result: dict[str, dict] = {}
     for row in rows:
@@ -342,6 +345,135 @@ def _recommendation_changes(
     )
 
 
+def _mode_payload(payload: dict, mode: str) -> dict:
+    if mode == "long":
+        return _json_object(_json_object(payload.get("_mode_payloads")).get("long"))
+    return payload
+
+
+def _project_canonical_cards(
+    run, snapshots, *, mode: str, policy_id: str | None,
+) -> tuple[list[LeanCard], int, int] | None:
+    """Build the same ranked population for the board and the order route."""
+    from alpha_agent.data.security_identity import valid_research_symbol
+    eligible = [row for row in snapshots if row["eligible"] and row["in_universe"]
+                and valid_research_symbol(row["ticker"])]
+    cards: list[LeanCard] = []
+    market_date: date = run["scheduled_for_date"]
+    rank_values: dict[str, float | None] = {}
+    for row in eligible:
+        payload = _json_object(row["user_visible_payload_json"])
+        if mode == "long":
+            long_payload = _mode_payload(payload, mode)
+            if long_payload.get("policy_id") != policy_id:
+                # Preserve the existing canonical-support gate: a mixed or
+                # legacy strategic run remains an exploratory fallback.
+                return None
+            payload = long_payload
+        raw_score = payload.get("composite_score") if mode == "long" else row["composite_z"]
+        value = float(raw_score) if isinstance(raw_score, (int, float)) and isfinite(raw_score) else None
+        rank_values[row["ticker"]] = value
+        payload = {**payload, "composite_score": value}
+        if row["rank"] is None:
+            continue
+        try:
+            if payload.get("ticker") != row["ticker"]:
+                raise ValueError("payload ticker does not match snapshot")
+            card = LeanCard.model_validate(payload)
+            if card.latest_price is not None and not isfinite(card.latest_price):
+                card.latest_price = None
+            card.run_id = int(run["id"])
+            card.market_date = market_date.isoformat()
+            card.sleeve = "strategic" if mode == "long" else "tactical"
+            card.policy_id = policy_id
+        except Exception as exc:
+            logger.warning(
+                "invalid canonical snapshot run=%s ticker=%s: %s",
+                run["id"],
+                row["ticker"],
+                exc,
+            )
+            return None
+        cards.append(card)
+
+    if mode == "long" and not cards:
+        return None
+
+    scores, population = snapshot_rank_scores(rank_values)
+    cards.sort(key=lambda card: (card.composite_score is None, -(card.composite_score or 0)))
+    return [
+        card.model_copy(update={"rank_score": scores.get(card.ticker)})
+        for card in cards
+    ], population, len(eligible)
+
+
+def _cards_for_side(cards: list[LeanCard], side: str) -> list[LeanCard]:
+    if side == "long":
+        return cards
+    return sorted(cards, key=lambda card: (card.composite_score is None, card.composite_score or 0))
+
+
+def _has_session_close(card: LeanCard, market_date: str) -> bool:
+    return (
+        card.price_date == market_date
+        and card.latest_price is not None
+        and isfinite(card.latest_price)
+        and card.latest_price > 0
+    )
+
+
+def _snapshot_health(run, cards: list[LeanCard]) -> tuple[dict, bool]:
+    # Check the sleeve's fixed top 50 before projecting a side or response limit.
+    # A bottom-board candidate outside that set still needs its own session close.
+    market_date = run["scheduled_for_date"]
+    strategy_cards = cards[:_POLICY_TOP_N]
+    missing_closes = sum(not _has_session_close(card, market_date.isoformat())
+                         for card in strategy_cards)
+    health = {
+        **_json_object(run["health_json"]),
+        "quote_coverage": {
+            "version": _QUOTE_HEALTH_VERSION,
+            "checked": len(strategy_cards),
+            "unavailable": missing_closes,
+        },
+    }
+    tradable = bool(
+        (run["finished_at"] or run["data_asof"]) is not None
+        and market_date == latest_completed_xnys_session()
+        and health.get("passed", False)
+        and strategy_cards
+        and missing_closes == 0
+    )
+    return health, tradable
+
+
+async def resolve_canonical_order_source(
+    conn, *, run_id: int, market_date: date, ticker: str, mode: str, side: str,
+) -> tuple[str | None, dict]:
+    """Resolve the current ranked card and exact stored mode payload for an order."""
+    from alpha_agent.storage.product_ledger import get_latest_canonical_run, get_run_snapshots
+
+    run = await get_latest_canonical_run(conn)
+    if run is None or run["id"] != run_id or run["scheduled_for_date"] != market_date:
+        raise HTTPException(status_code=409, detail="Pick snapshot has expired or been superseded")
+    policy_id = get_policy("strategic").policy_id if mode == "long" else run["weight_policy_id"]
+    snapshots = await get_run_snapshots(conn, run_id)
+    projection = _project_canonical_cards(run, snapshots, mode=mode, policy_id=policy_id)
+    if projection is None:
+        raise HTTPException(status_code=409, detail="Pick mode is unavailable in this snapshot")
+    cards, _, _ = projection
+    _, tradable = _snapshot_health(run, cards)
+    if not tradable:
+        raise HTTPException(status_code=409, detail="Pick snapshot is not tradable")
+    card = next((c for c in _cards_for_side(cards, side)[:_POLICY_TOP_N] if c.ticker == ticker), None)
+    if card is None:
+        raise HTTPException(status_code=409, detail="Ticker is not ranked in the source board")
+    if not _has_session_close(card, market_date.isoformat()):
+        raise HTTPException(status_code=409, detail="Ticker has no valid close for the pick session")
+    row = next(row for row in snapshots if row["ticker"] == ticker)
+    return policy_id, _mode_payload(_json_object(row["user_visible_payload_json"]), mode)
+
+
 async def _build_canonical_view(
     pool,
     *,
@@ -383,76 +515,22 @@ async def _build_canonical_view(
         await get_run_snapshots(pool, int(previous_run["id"]))
         if previous_run is not None else []
     )
-    from alpha_agent.data.security_identity import valid_research_symbol
-    eligible = [row for row in snapshots if row["eligible"] and row["in_universe"]
-                and valid_research_symbol(row["ticker"])]
-    cards: list[LeanCard] = []
-    mode_supported = True
-    market_date: date = run["scheduled_for_date"]
-    rank_values: dict[str, float | None] = {}
-    for row in eligible:
-        payload = _json_object(row["user_visible_payload_json"])
-        if mode == "long":
-            long_payload = _json_object(payload.get("_mode_payloads")).get("long")
-            if (
-                not isinstance(long_payload, dict)
-                or long_payload.get("policy_id") != selected_policy.policy_id
-            ):
-                # Preserve the existing canonical-support gate: a mixed or
-                # legacy strategic run remains an exploratory fallback.
-                mode_supported = False
-                break
-            payload = long_payload
-        raw_score = payload.get("composite_score") if mode == "long" else row["composite_z"]
-        value = float(raw_score) if isinstance(raw_score, (int, float)) and isfinite(raw_score) else None
-        rank_values[row["ticker"]] = value
-        payload = {**payload, "composite_score": value}
-        if row["rank"] is None:
-            continue
-        try:
-            card = LeanCard.model_validate(payload).model_copy(
-                update={"run_id": int(run["id"]), "market_date": market_date.isoformat()}
-            )
-        except Exception as exc:
-            logger.warning(
-                "invalid canonical snapshot run=%s ticker=%s: %s",
-                run["id"],
-                row["ticker"],
-                exc,
-            )
-            mode_supported = False
-            break
-        cards.append(card)
-
-    if not mode_supported or (mode == "long" and not cards):
+    policy_id = selected_policy.policy_id if mode == "long" else run["weight_policy_id"]
+    projection = _project_canonical_cards(run, snapshots, mode=mode, policy_id=policy_id)
+    if projection is None:
         return None
-
-    scores, population = snapshot_rank_scores(rank_values)
-    cards = [card.model_copy(update={"rank_score": scores.get(card.ticker)}) for card in cards]
-    cards.sort(key=lambda card: (card.composite_score is None,
-               (-(card.composite_score or 0) if side == "long" else (card.composite_score or 0))))
+    full_cards, population, eligible_count = projection
+    health, tradable = _snapshot_health(run, full_cards)
+    cards = _cards_for_side(full_cards, side)[:limit]
     if side == "long":
-        cards = [
-            card.model_copy(update={"policy_rank": index})
-            for index, card in enumerate(cards, start=1)
-        ]
-    cards = cards[:limit]
+        for index, card in enumerate(cards, start=1):
+            card.policy_rank = index
 
+    market_date = run["scheduled_for_date"]
     generated_at = run["finished_at"] or run["data_asof"]
     if generated_at is not None and generated_at.tzinfo is None:
         generated_at = generated_at.replace(tzinfo=UTC)
-    expected_market_date = latest_completed_xnys_session()
-    health = _json_object(run["health_json"])
-    same_market_date = bool(cards) and all(
-        card.price_date == market_date.isoformat() for card in cards
-    )
-    stale = bool(
-        generated_at is None
-        or market_date != expected_market_date
-        or not same_market_date
-        or not health.get("passed", False)
-    )
-    coverage = len(eligible) / len(snapshots) if snapshots else 0.0
+    coverage = eligible_count / len(snapshots) if snapshots else 0.0
     changes = _recommendation_changes(
         snapshots,
         previous_snapshots,
@@ -466,19 +544,16 @@ async def _build_canonical_view(
     return PicksResponse(
         picks=cards,
         as_of=generated_at,
-        stale=stale,
+        stale=not tradable,
         canonical=True,
         ranked=True,
-        tradable=not stale,
+        tradable=tradable,
         run=RecommendationRunState(
             run_id=int(run["id"]),
             market_date=market_date.isoformat(),
             generated_at=generated_at,
             data_cutoff=run["input_data_cutoff"],
-            policy_id=(
-                cards[0].policy_id if cards and cards[0].policy_id
-                else selected_policy.policy_id
-            ),
+            policy_id=policy_id,
             coverage=coverage,
             health=health,
             sleeve="strategic" if mode == "long" else "tactical",
@@ -554,6 +629,7 @@ class ScoreboardResponse(BaseModel):
     alpha_t: float | None = None
     basis: str = "retrospective_v0"
     executable: ExecutableScoreboardResponse | None = None
+    executable_status: Literal["available", "insufficient_history", "unavailable"] = "insufficient_history"
 
 
 def _safe_float(v: float | None, default: float = 0.0) -> float:
@@ -925,7 +1001,7 @@ async def build_lean_view(
 @router.get("/lean", response_model=PicksResponse)
 async def picks_lean(
     response: Response,
-    limit: int = Query(50, ge=1, le=600),
+    limit: int = Query(_POLICY_TOP_N, ge=1, le=600),
     search: str | None = Query(None, max_length=12),
     mode: str = Query("short", pattern="^(short|long)$"),
     side: str = Query("long", pattern="^(long|short)$"),
@@ -989,8 +1065,6 @@ async def picks_lean(
             tradable=False,
         )
     except Exception as e:
-        from fastapi import HTTPException
-
         request_id = uuid.uuid4().hex[:12]
         logger.exception("picks_lean failed request_id=%s", request_id)
         raise HTTPException(
@@ -1022,14 +1096,25 @@ async def picks_scoreboard(
 
     pool = await get_db_pool()
     sb = await compute_picks_scoreboard(pool, top_n=top_n, days=days)
-    set_public_cache(response, s_maxage=3600, swr=86400)
     executable = None
+    executable_status = "insufficient_history"
     try:
         result = await compute_executable_scoreboard(pool, top_n=top_n, days=days)
         if result is not None:
             executable = ExecutableScoreboardResponse(**asdict(result))
-    except Exception:
+            executable_status = "available"
+    except Exception as exc:
         logger.exception("Executable picks scoreboard failed")
+        if sb is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Executable picks scoreboard is temporarily unavailable",
+                headers={"Cache-Control": "no-store"},
+            ) from exc
+        executable_status = "unavailable"
+        response.headers["Cache-Control"] = "no-store"
+    else:
+        set_public_cache(response, s_maxage=3600, swr=86400)
     if sb is None:
         return None
     return ScoreboardResponse(
@@ -1047,4 +1132,5 @@ async def picks_scoreboard(
         alpha_ann=sb.alpha_ann,
         alpha_t=sb.alpha_t,
         executable=executable,
+        executable_status=executable_status,
     )

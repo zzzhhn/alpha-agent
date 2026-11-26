@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { RatingCard, GradeMethod } from "@/lib/api/picks";
+import type { RatingCard, GradeMethod, PicksSide } from "@/lib/api/picks";
 import clsx from "clsx";
 import { consistencyEvidence } from "@/lib/picks-evidence";
 import WatchlistStar from "@/components/ui/WatchlistStar";
@@ -16,6 +16,7 @@ import { t, type Locale } from "@/lib/i18n";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { getSuggestion } from "@/lib/suggestion";
 import SimOrderDrawer from "./SimOrderDrawer";
+import { pickOrderSource } from "./paper-order-source";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmTableCell, TmTableRow, TmTableRowHeader } from "@/components/tm/TmTable";
 
@@ -39,6 +40,7 @@ export default function PickRow({
   onOrderPlaced,
   onEvidenceOpen,
   ordersDisabled = false,
+  side = "long",
 }: {
   rank: number | null;
   card: RatingCard;
@@ -56,7 +58,10 @@ export default function PickRow({
   onOrderPlaced?: () => void;
   onEvidenceOpen: (card: RatingCard) => void;
   ordersDisabled?: boolean;
+  side?: PicksSide;
 }) {
+  const source = ordersDisabled ? null : pickOrderSource(card, side);
+
   // Days this row's data lags the freshest row in the list (0 if within ~20h).
   const staleDays = (() => {
     if (!freshestAsOf || !card.as_of) return 0;
@@ -245,11 +250,13 @@ export default function PickRow({
           variant="secondary"
           size="xs"
           onClick={() => setDrawerOpen(true)}
-          disabled={ordersDisabled}
-          title={ordersDisabled ? t(locale, "picks.stale_order_disabled") : undefined}
+          disabled={!source}
+          title={ordersDisabled ? t(locale, "picks.stale_order_disabled") : !source ? (
+            locale === "zh" ? "当前快照中该标的缺少可用于下单的收盘价或来源。" : "The ticker has no usable close or source in this snapshot."
+          ) : undefined}
           className={clsx(
             "px-1.5 text-xs",
-            ordersDisabled
+            !source
               ? "text-tm-muted"
               : heldQty > 0
               ? "border-tm-pos text-tm-pos hover:border-tm-accent hover:text-tm-accent"
@@ -260,9 +267,9 @@ export default function PickRow({
             ? t(locale, "sim.held_btn")
             : t(locale, "sim.order_btn")}
         </TmButton>
-        {drawerOpen && !ordersDisabled && (
+        {drawerOpen && source && (
           <SimOrderDrawer
-            ticker={card.ticker}
+            source={source}
             card={card}
             cash={cash}
             onClose={() => setDrawerOpen(false)}

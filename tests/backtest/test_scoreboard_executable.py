@@ -259,7 +259,11 @@ async def test_route_attaches_independently_and_preserves_legacy_null(monkeypatc
     response = Response()
     result = await picks.picks_scoreboard(response, top_n=3, days=5)
     loader.assert_awaited_once()
-    assert "s-maxage=3600" in response.headers["cache-control"]
+    if fail:
+        assert response.headers["cache-control"] == "no-store"
+        assert result.executable_status == "unavailable"
+    else:
+        assert "s-maxage=3600" in response.headers["cache-control"]
     if old is None:
         assert result is None
     else:

@@ -1,6 +1,6 @@
 "use client";
 
-import type { RatingCard, GradeMethod, RankScoreMethod } from "@/lib/api/picks";
+import type { RatingCard, GradeMethod, RankScoreMethod, PicksSide } from "@/lib/api/picks";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -33,6 +33,7 @@ export default function PicksTable({
   onOrderPlaced,
   ranked = true,
   ordersDisabled = false,
+  side = "long",
   pending = false,
 }: {
   picks: RatingCard[];
@@ -47,6 +48,7 @@ export default function PicksTable({
   onOrderPlaced?: () => void;
   ranked?: boolean;
   ordersDisabled?: boolean;
+  side?: PicksSide;
   pending?: boolean;
 }) {
   const { locale } = useLocale();
@@ -99,7 +101,7 @@ export default function PicksTable({
     <div className="border-b border-tm-rule px-3 py-2 text-xs text-tm-muted">
       {zh ? "点击方向一致度数值，查看样本与统计说明" : "Select direction-hit values for sample details and definitions"}
     </div>
-    {compact ? <div key={pageKey} className={styles.pageEnter}><PicksCards onResearchOpen={onResearchOpen} picks={visiblePicks} rankOffset={offset} ranked={ranked} ordersDisabled={ordersDisabled} onEvidenceOpen={card => setEvidence({ source: picks, card })} /></div> : <TmTableFrame data-picks-scroll role="region" aria-label={zh ? "候选表滚动区" : "Candidate table scroll area"} tabIndex={0} className="max-h-[min(68vh,44rem)] overflow-y-auto overscroll-contain">
+    {compact ? <div key={pageKey} className={styles.pageEnter}><PicksCards onResearchOpen={onResearchOpen} picks={visiblePicks} rankOffset={offset} ranked={ranked} ordersDisabled={ordersDisabled} side={side} onEvidenceOpen={card => setEvidence({ source: picks, card })} /></div> : <TmTableFrame data-picks-scroll role="region" aria-label={zh ? "候选表滚动区" : "Candidate table scroll area"} tabIndex={0} className="max-h-[min(68vh,44rem)] overflow-y-auto overscroll-contain">
     <TmTable density="standard" caption={locale === "zh" ? "今日推荐明细" : "Today's recommendations"} className="w-full">
       <TmTableHead className="sticky top-0 z-10 shadow-[0_1px_0_var(--tm-rule)]">
         <TmTableRow>
@@ -149,7 +151,7 @@ export default function PicksTable({
       <TmTableBody key={pageKey} className={styles.pageEnter}>
         {visiblePicks.map((card, i) => (
           <PickRow
-            key={card.ticker}
+            key={`${card.ticker}:${card.run_id}:${card.sleeve}:${side}`}
             rank={ranked ? offset + i + 1 : null}
             card={card}
             gradeMethod={gradeMethod}
@@ -163,6 +165,7 @@ export default function PicksTable({
             onOrderPlaced={onOrderPlaced}
             onEvidenceOpen={card => setEvidence({ source: picks, card })}
             ordersDisabled={ordersDisabled}
+            side={side}
           />
         ))}
       </TmTableBody>

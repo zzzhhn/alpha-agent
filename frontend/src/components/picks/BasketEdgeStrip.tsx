@@ -231,7 +231,7 @@ function HonestMetricsBlock({
   );
 }
 
-export default function BasketEdgeStrip() {
+export default function BasketEdgeStrip({ paperHref = "/paper" }: { readonly paperHref?: string }) {
   const { locale } = useLocale();
   const [data, setData] = useState<BasketEdgeResponse | null>(null);
   const [sb, setSb] = useState<PicksScoreboard | null>(null);
@@ -338,7 +338,7 @@ export default function BasketEdgeStrip() {
           (V2: no longer a modal). TmButton-primary styling on an <a> since
           this is a navigation, not an action. */}
       <Link
-        href="/paper"
+        href={paperHref}
         prefetch={false}
         className="flex w-full shrink-0 items-center justify-center gap-2 border border-tm-accent bg-tm-accent px-4 py-2 font-tm-mono text-sm font-semibold uppercase tracking-wide text-tm-bg transition-opacity hover:opacity-90 sm:ml-auto sm:w-auto"
       >

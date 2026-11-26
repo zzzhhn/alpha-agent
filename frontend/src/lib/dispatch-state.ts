@@ -11,7 +11,7 @@
 //
 // Same-tab coordination uses a CustomEvent (storage events only fire
 // cross-tab); cross-reload persistence uses localStorage.
-import type { PicksResponse } from "@/lib/api/picks";
+import type { FactorMode, PicksResponse, PicksSide } from "@/lib/api/picks";
 
 export const DISPATCH_KEY = "alpha-agent:dispatch";
 export const SNAPSHOT_KEY = "alpha-agent:picks-snapshot";
@@ -36,7 +36,11 @@ export type Dispatch = {
   serverDispatchedAt: string | null;
   requestId: string | null;
 };
-export type PicksSnapshot = PicksResponse;
+export type PicksSnapshot = {
+  data: PicksResponse;
+  mode: FactorMode;
+  side: PicksSide;
+};
 
 export function loadDispatch(): Dispatch | null {
   if (typeof window === "undefined") return null;
@@ -110,7 +114,10 @@ export function loadSnapshot(): PicksSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(SNAPSHOT_KEY);
-    return raw ? (JSON.parse(raw) as PicksSnapshot) : null;
+    if (!raw) return null;
+    const snapshot = JSON.parse(raw) as Partial<PicksSnapshot> | null;
+    return snapshot?.data && (snapshot.mode === "short" || snapshot.mode === "long") &&
+      (snapshot.side === "long" || snapshot.side === "short") ? snapshot as PicksSnapshot : null;
   } catch {
     return null;
   }

@@ -1,4 +1,6 @@
 // frontend/src/lib/api/paper.ts
+import type { FactorMode, PicksSide } from "./picks";
+
 // All calls go through same-origin /api/* so the Next.js middleware injects
 // the Authorization Bearer header automatically (see middleware.ts).
 
@@ -61,6 +63,8 @@ export interface PlaceOrderRequest {
   readonly pick_date?: string;
   readonly pick_ticker?: string;
   readonly pick_run_id?: number;
+  readonly pick_mode?: FactorMode;
+  readonly pick_side?: PicksSide;
 }
 
 export interface OrderResponse {

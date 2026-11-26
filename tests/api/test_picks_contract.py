@@ -26,7 +26,7 @@ def test_rank_ties_rounding_and_missing(values, expected, population):
 def snapshot(ticker, score, rank, *, strategic=None, eligible=True, in_universe=True):
     payload = dict(ticker=ticker, composite_score=score, rating='OW', confidence=.5,
                    as_of='2026-11-10T22:00:00+00:00', top_drivers=[], top_drags=[],
-                   price_date='2026-11-10')
+                   price_date='2026-11-10', latest_price=100.)
     if strategic is not None:
         payload['_mode_payloads'] = {'long': {
             **payload, 'composite_score': strategic, 'sleeve': 'strategic',
@@ -114,3 +114,42 @@ def test_changes_scope_dates_and_no_fabricated_previous():
 async def test_mixed_strategic_run_keeps_existing_exploratory_fallback(monkeypatch):
     rows = [snapshot('AAA', 1., 1, strategic=2.), snapshot('OLD', 3., 2)]
     assert await canonical(monkeypatch, rows, mode='long') is None
+
+
+@pytest.mark.parametrize("mode", ["short", "long"])
+async def test_snapshot_health_is_independent_of_limit_and_side(monkeypatch, mode):
+    from alpha_agent.api.routes import picks
+
+    monkeypatch.setattr(picks, "latest_completed_xnys_session", lambda: date(2026, 11, 10))
+    rows = [snapshot(f"T{i:02}", 61. - i, i, strategic=61. - i) for i in range(1, 61)]
+    payload = rows[5]["user_visible_payload_json"]
+    payload["price_date"] = "2026-11-09"
+    payload["_mode_payloads"]["long"]["price_date"] = "2026-11-09"
+    for limit, side in [(5, "long"), (50, "long"), (5, "short"), (50, "short")]:
+        result = await canonical(monkeypatch, rows, mode=mode, side=side, limit=limit)
+        assert result.stale is True
+        assert result.tradable is False
+        assert result.run.health["quote_coverage"] == {
+            "version": "policy_top50_close_v1", "checked": 50, "unavailable": 1,
+        }
+
+
+async def test_missing_close_outside_top_50_only_blocks_the_ticker(monkeypatch):
+    from alpha_agent.api.routes import picks
+
+    market_date = date(2026, 11, 10)
+    monkeypatch.setattr(picks, "latest_completed_xnys_session", lambda: market_date)
+    rows = [snapshot(f"T{i:02}", 61. - i, i) for i in range(1, 61)]
+    rows[-1]["user_visible_payload_json"]["latest_price"] = None
+    result = await canonical(monkeypatch, rows, side="short", limit=5)
+    assert result.tradable is True
+    assert result.picks[0].ticker == "T60"
+    assert result.picks[0].latest_price is None
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException, match="no valid close"):
+        await picks.resolve_canonical_order_source(
+            AsyncMock(), run_id=10, market_date=market_date, ticker="T60",
+            mode="short", side="short",
+        )

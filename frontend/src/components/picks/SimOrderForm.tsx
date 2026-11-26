@@ -22,6 +22,7 @@ import { CheckCircle } from "lucide-react";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import type { PickOrderSource } from "./paper-order-source";
 
 interface Props {
   /** When provided the ticker input is hidden and this value is used. */
@@ -31,9 +32,7 @@ interface Props {
   /** Attribution (V038): set together by SimOrderDrawer when the order
    *  originates from a picks-row quick action. Omitted from the /paper trade
    *  tab, where orders are manual by definition. */
-  readonly pickDate?: string;
-  readonly pickTicker?: string;
-  readonly pickRunId?: number;
+  readonly pickSource?: PickOrderSource;
   readonly latestPrice?: number | null;
   readonly priceDate?: string | null;
   readonly availableCash?: number | null;
@@ -87,9 +86,7 @@ export default function SimOrderForm({
   fixedTicker,
   locale,
   onPlaced,
-  pickDate,
-  pickTicker,
-  pickRunId,
+  pickSource,
   latestPrice,
   priceDate,
   availableCash,
@@ -153,12 +150,18 @@ export default function SimOrderForm({
       await placeOrder({
         ticker: effectiveTicker, side, order_type: orderType, qty: qtyNum,
         ...(orderType === "limit" ? { limit_price: limitNum } : {}),
-        ...(pickDate ? { pick_date: pickDate } : {}),
-        ...(pickTicker ? { pick_ticker: pickTicker } : {}),
-        ...(pickRunId ? { pick_run_id: pickRunId } : {}),
+        ...(pickSource ? {
+          pick_date: pickSource.marketDate,
+          pick_ticker: pickSource.ticker,
+          pick_run_id: pickSource.runId,
+          pick_mode: pickSource.mode,
+          pick_side: pickSource.side,
+        } : {}),
       });
       setPlaced(true);
-      fetchPaperAccount().then((a) => setCash(a.available_cash)).catch(() => {});
+      if (availableCash === undefined) {
+        fetchPaperAccount().then((a) => setCash(a.available_cash)).catch(() => {});
+      }
       onPlaced();
       setTimeout(() => setPlaced(false), 2000);
     } catch (err) {

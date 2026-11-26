@@ -14,6 +14,7 @@ import {
   type RatingCard,
 } from "@/lib/api/picks";
 import PicksTable from "./PicksTable";
+import { RECOMMENDATION_BOARD_SIZE } from "./paper-order-source";
 import PremarketReview from "./PremarketReview";
 import { fetchPaperAccount } from "@/lib/api/paper";
 import RefreshButton from "./RefreshButton";
@@ -59,8 +60,12 @@ type PicksData = PicksResponse;
 
 export default function PicksBrowser({
   initialData,
+  initialMode,
+  initialSide = "long",
 }: {
   initialData: PicksData;
+  initialMode?: FactorMode;
+  initialSide?: PicksSide;
 }) {
   const [data, setData] = useState<PicksData>(initialData);
   const [search, setSearch] = useState("");
@@ -69,12 +74,13 @@ export default function PicksBrowser({
   // SHORT (12d/60d, default — short-line/intraday-aligned) vs LONG (252d/126d,
   // academic). Hook handles SSR-safe hydration + cross-tab + same-tab storage
   // event broadcast so AttributionTable's pill on Stock detail flips here.
-  const [factorMode, setFactorMode] = useFactorMode();
+  const [preferredMode, setFactorMode] = useFactorMode();
+  const [linkedMode, setLinkedMode] = useState(initialMode);
+  const factorMode = linkedMode ?? preferredMode;
   // P1-2: long = top-N by composite (highest-conviction longs, the SSR
   // default), short = bottom-N (most bearish UW/SELL names the top view
-  // never surfaces). Local state — not persisted; each visit starts on
-  // the long board.
-  const [side, setSide] = useState<PicksSide>("long");
+  // never surfaces). A link from Paper can select either board.
+  const [side, setSide] = useState<PicksSide>(initialSide);
   const [simPositions, setSimPositions] = useState<ReadonlyMap<string, number>>(new Map());
   const [paperCash, setPaperCash] = useState<number | undefined>();
   const [showResearch, setShowResearch] = useState(false);
@@ -86,7 +92,9 @@ export default function PicksBrowser({
   const restoringRef = useRef(false);
   const { timeZone, preference, localZone, ready: zoneReady } = useTimezonePreference();
   const [showMethod, setShowMethod] = useState(false);
-  const [resultQuery, setResultQuery] = useState({ search: "", mode: "short", side: "long" });
+  const [resultQuery, setResultQuery] = useState<{ search: string; mode: FactorMode; side: PicksSide }>({
+    search: "", mode: initialMode ?? "short", side: initialSide,
+  });
 
   // Paper trading is now the standalone /paper route (V2), not an in-page
   // modal, so this is the sole source of the "held qty" badge on each pick
@@ -129,7 +137,7 @@ export default function PicksBrowser({
         // so the match is found wherever it ranks.
         const trimmed = q.trim();
         const next = await fetchPicks(
-          trimmed ? 600 : 50,
+          trimmed ? 600 : RECOMMENDATION_BOARD_SIZE,
           trimmed || undefined,
           mode,
           sideArg,
@@ -151,6 +159,7 @@ export default function PicksBrowser({
   );
 
   useEffect(() => {
+    if (initialMode !== undefined || initialSide !== "long") return;
     const saved = loadPicksView();
     if (!saved) return;
     clearPicksView();
@@ -166,7 +175,7 @@ export default function PicksBrowser({
       if (table) table.scrollTop = saved.tableScroll;
     });
     return () => cancelAnimationFrame(frame);
-  }, [setFactorMode]);
+  }, [initialMode, initialSide, setFactorMode]);
 
   // Debounce the search input + re-fire when factorMode / side flips. Skip
   // the mount fire so initialData renders immediately without a redundant
@@ -181,16 +190,17 @@ export default function PicksBrowser({
     }
     if (!mounted.current) {
       mounted.current = true;
-      if (factorMode === "long" || side !== "long" || initialData.stale) {
+      if (factorMode !== (initialMode ?? "short") || side !== initialSide || initialData.stale) {
         runSearch(search, factorMode, side);
       }
       return;
     }
     const id = setTimeout(() => runSearch(search, factorMode, side), 300);
     return () => clearTimeout(id);
-  }, [search, factorMode, side, runSearch, initialData.stale]);
+  }, [search, factorMode, side, runSearch, initialMode, initialSide, initialData.stale]);
 
   const onModeToggle = useCallback(() => {
+    setLinkedMode(undefined);
     setFactorMode(factorMode === "short" ? "long" : "short");
   }, [factorMode, setFactorMode]);
 
@@ -212,8 +222,8 @@ export default function PicksBrowser({
   // Gate localStorage-derived UI on mount so SSR and first client render agree
   // (loadDispatch returns null server-side but a value client-side -> mismatch).
   const [hydrated, setHydrated] = useState(false);
-  const liveRef = useRef({ data, search, factorMode, side });
-  liveRef.current = { data, search, factorMode, side };
+  const liveRef = useRef({ data, search, factorMode, side, resultQuery });
+  liveRef.current = { data, search, factorMode, side, resultQuery };
 
   useEffect(() => {
     setHydrated(true);
@@ -221,15 +231,15 @@ export default function PicksBrowser({
     // progressively-updating SSR data.
     if (isInFlight(loadDispatch())) {
       const snap = loadSnapshot();
-      if (snap) {
-        setData(snap);
+      if (snap?.mode === (initialMode ?? "short") && snap.side === initialSide) {
+        setData(snap.data);
       }
     }
     const onDispatch = () => {
       // Snapshot the default board (no active search) for reload-freeze.
       const l = liveRef.current;
-      if (!l.search.trim()) {
-        saveSnapshot(l.data);
+      if (!l.search.trim() && !l.resultQuery.search) {
+        saveSnapshot({ data: l.data, mode: l.resultQuery.mode, side: l.resultQuery.side });
       }
       setRefreshResult(null);
       setNow(Date.now());
@@ -254,7 +264,7 @@ export default function PicksBrowser({
     };
     // Mount-only: refs carry the latest values into the listener/interval.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runSearch]);
+  }, [runSearch, initialMode, initialSide]);
 
   const dispatch = hydrated ? loadDispatch() : null;
   const refreshing = isInFlight(dispatch, now);
@@ -574,13 +584,14 @@ export default function PicksBrowser({
                 cash={paperCash}
                 onOrderPlaced={loadSimPositions}
                 ranked={data.ranked && !searching}
+                side={resultQuery.side}
                 ordersDisabled={snapshotStale || !data.tradable || searching || queryPending || !!requestError}
               />
             )}
           </TmPane>
           {!searching && !snapshotStale && !queryPending ? <ConvictionBand picks={data.picks} gradeMethod={data.grade_method} /> : null}
           <TmDisclosureButton expanded={showResearch} aria-controls="picks-research" onClick={() => setShowResearch(v => !v)} label={locale === "zh" ? "辅助研究指标" : "Research diagnostics"} meta={locale === "zh" ? "非当前策略跟随收益" : "Not this policy's following return"} />
-          {showResearch ? <div id="picks-research"><BasketEdgeStrip /></div> : null}
+          {showResearch ? <div id="picks-research"><BasketEdgeStrip paperHref={`/paper?mode=${factorMode}&side=${side}`} /></div> : null}
         </>
       <ResearchRecords open={records !== null} onClose={() => setRecords(null)} card={records?.card} run={data.run} zh={locale === "zh"} />
     </div>

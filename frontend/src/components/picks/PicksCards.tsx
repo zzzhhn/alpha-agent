@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import type { RatingCard } from "@/lib/api/picks";
+import type { PicksSide, RatingCard } from "@/lib/api/picks";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { consistencyEvidence } from "@/lib/picks-evidence";
 import { TmButton } from "@/components/tm/TmButton";
+import { paperOrderHref, pickOrderSource } from "./paper-order-source";
 
 const TONE: Record<string, string> = {
   BUY: "text-tm-pos",
@@ -19,12 +20,14 @@ export default function PicksCards({
   picks,
   ranked,
   ordersDisabled,
+  side = "long",
   rankOffset = 0,
   onEvidenceOpen, onResearchOpen,
 }: {
   readonly picks: readonly RatingCard[];
   readonly ranked: boolean;
   readonly ordersDisabled: boolean;
+  readonly side?: PicksSide;
   readonly rankOffset?: number;
   readonly onResearchOpen?: (card: RatingCard) => void;
   readonly onEvidenceOpen: (card: RatingCard) => void;
@@ -33,6 +36,7 @@ export default function PicksCards({
   return (
     <div className="divide-y divide-tm-rule" role="list">
       {picks.map((card, index) => {
+        const source = ordersDisabled ? null : pickOrderSource(card, side);
         const score = card.rank_score ?? null;
         const d5 = consistencyEvidence(card, "d5", locale);
         const drivers = (card.top_drivers ?? []).slice(0, 2).map((name) => getSignalDisplayLabel(name, locale)).join(" · ");
@@ -65,11 +69,11 @@ export default function PicksCards({
               {onResearchOpen ? <TmButton variant="ghost" size="sm" onClick={() => onResearchOpen(card)}>{locale === "zh" ? "研究记录" : "Research records"}</TmButton> : null}
               <TmButton variant="ghost" aria-haspopup="dialog" onClick={() => onEvidenceOpen(card)}>{locale === "zh" ? "证据说明" : "Evidence"}</TmButton>
               <Link
-                href={ordersDisabled ? `/stock/${card.ticker}` : `/paper?ticker=${card.ticker}`}
+                href={source ? paperOrderHref(source) : `/stock/${card.ticker}`}
                 prefetch={false}
                 className="border border-tm-accent px-3 py-1.5 font-tm-mono text-xs text-tm-accent hover:bg-tm-accent hover:text-tm-bg"
               >
-                {ordersDisabled ? (locale === "zh" ? "查看研究" : "View research") : (locale === "zh" ? "进入组合决策" : "Open portfolio decision")}
+                {source ? (locale === "zh" ? "进入组合决策" : "Open portfolio decision") : (locale === "zh" ? "查看研究" : "View research")}
               </Link>
             </div>
           </article>

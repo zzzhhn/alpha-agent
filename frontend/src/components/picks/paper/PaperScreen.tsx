@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { fetchPicks, type PicksResponse } from "@/lib/api/picks";
+import { useFactorMode } from "@/hooks/useFactorMode";
 import {
-  fetchPicks,
-  type RatingCard,
-  type RecommendationRunState,
-} from "@/lib/api/picks";
+  PAPER_SHORTLIST_SIZE,
+  RECOMMENDATION_BOARD_SIZE,
+  pickOrderSource,
+  readPaperPickQuery,
+  resolvePaperPick,
+} from "../paper-order-source";
 import {
   PaperApiError,
   cancelOrder,
@@ -27,7 +31,6 @@ import { TmScreen, TmPane } from "@/components/tm/TmPane";
 import { TmButton, TmDisclosureButton, TmLinkButton } from "@/components/tm/TmButton";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
-import { isPicksSnapshotStale } from "@/lib/picks-freshness";
 import { shouldChartPaperCurve } from "@/lib/paper-curve";
 import { TmStatePane } from "@/components/tm/TmStatePane";
 import SimOrderForm from "../SimOrderForm";
@@ -51,31 +54,43 @@ export default function PaperScreen() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const [preferredMode] = useFactorMode();
+  const pickQuery = readPaperPickQuery(searchParams, preferredMode);
   const kind = searchParams.get("account") === "bot" ? "bot" : "human";
   const accountTabs = <SegmentedTabs<"human" | "bot"> className="paper-account-tabs shrink-0" active={kind} ariaLabel={t(locale, "sim.accounts.label")} items={[{key:"human",label:t(locale,"sim.accounts.human")},{key:"bot",label:t(locale,"sim.accounts.bot")}]} onChange={next => {
     const query = new URLSearchParams(searchParams.toString());
     query.set("account", next);
-    if (next === "bot") query.delete("ticker");
+    if (next === "bot") {
+      for (const key of ["ticker", "mode", "side", "run", "date"]) query.delete(key);
+    }
     router.replace(`${pathname}?${query}`, { scroll: false });
   }} />;
-  return kind === "bot" ? <PaperBotScreen accountTabs={accountTabs} /> : <HumanPaperScreen accountTabs={accountTabs} />;
+  const query = searchParams.toString();
+  return kind === "bot" ? <PaperBotScreen accountTabs={accountTabs} /> : (
+    <HumanPaperScreen
+      key={`${pickQuery.mode}:${query}`}
+      accountTabs={accountTabs}
+      pickQuery={pickQuery}
+      returnUrl={query ? `${pathname}?${query}` : pathname}
+    />
+  );
 }
 
-function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) {
+function HumanPaperScreen({ accountTabs, pickQuery, returnUrl }: {
+  readonly accountTabs: ReactNode;
+  readonly pickQuery: ReturnType<typeof readPaperPickQuery>;
+  readonly returnUrl: string;
+}) {
   const { locale } = useLocale();
-  const searchParams = useSearchParams();
-  const requestedTicker = searchParams.get("ticker")?.trim().toUpperCase() ?? null;
+  const { ticker, mode, side } = pickQuery;
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [orders, setOrders] = useState<readonly OrderOut[]>([]);
   const [curve, setCurve] = useState<EquityCurveResponse | null>(null);
   const [attribution, setAttribution] = useState<readonly TickerAttribution[]>([]);
   const [l2Summary, setL2Summary] = useState<L2Summary | null>(null);
-  const [picks, setPicks] = useState<readonly RatingCard[]>([]);
-  const [picksAsOf, setPicksAsOf] = useState<string | null>(null);
-  const [picksServerStale, setPicksServerStale] = useState(false);
-  const [picksTradable, setPicksTradable] = useState(false);
-  const [picksRun, setPicksRun] = useState<RecommendationRunState | null>(null);
-  const [selectedTicker, setSelectedTicker] = useState<string | null | undefined>(undefined);
+  const [snapshot, setSnapshot] = useState<PicksResponse | null>(null);
+  // Undefined follows the deep link or initial shortlist. Null clears the ticket.
+  const [selection, setSelection] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
@@ -86,30 +101,30 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
   const [researchOpen, setResearchOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const orderTicket = useRef<HTMLDivElement>(null);
+  const loadGeneration = useRef(0);
+  const mounted = useRef(false);
 
   const loadAll = useCallback(async (showLoading = true) => {
+    if (!mounted.current) return;
+    const generation = ++loadGeneration.current;
     if (showLoading) setLoading(true);
     setRefreshing(true);
     setPaperError(null);
     const [picksResult, accountResult, ordersResult, curveResult, attributionResult, l2Result] = await Promise.allSettled([
-      fetchPicks(5),
+      fetchPicks(ticker ? RECOMMENDATION_BOARD_SIZE : PAPER_SHORTLIST_SIZE, undefined, mode, side),
       fetchPaperAccount(),
       fetchOrders({ limit: 20 }),
       fetchEquityCurve(),
       fetchAttribution(),
       fetchL2Summary(),
     ]);
+    if (generation !== loadGeneration.current) return;
 
     const nextErrors: typeof resourceErrors = {};
     const reason = (value: unknown) => value instanceof Error ? value.message : String(value);
 
-    if (picksResult.status === "fulfilled") {
-      setPicks(picksResult.value.picks);
-      setPicksAsOf(picksResult.value.as_of);
-      setPicksServerStale(picksResult.value.stale);
-      setPicksTradable(picksResult.value.tradable);
-      setPicksRun(picksResult.value.run);
-    } else nextErrors.picks = reason(picksResult.reason);
+    if (picksResult.status === "fulfilled") setSnapshot(picksResult.value);
+    else nextErrors.picks = reason(picksResult.reason);
     if (accountResult.status === "fulfilled") {
       setAccount(accountResult.value);
       setAuthRequired(false);
@@ -117,6 +132,7 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
       setAuthRequired(true);
       setAccount(null);
     } else {
+      setAuthRequired(false);
       const accountError = accountResult.reason instanceof Error ? accountResult.reason.message : String(accountResult.reason);
       setPaperError(accountError);
       nextErrors.account = accountError;
@@ -132,33 +148,26 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
     setResourceErrors(nextErrors);
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [mode, side, ticker]);
 
   useEffect(() => {
+    mounted.current = true;
     void loadAll();
+    return () => {
+      mounted.current = false;
+      ++loadGeneration.current;
+    };
   }, [loadAll]);
 
-  const picksFrozen =
-    picks.length > 0 &&
-    (!picksTradable || isPicksSnapshotStale(picksAsOf, picksServerStale));
+  const picksRun = snapshot?.run;
+  const board = snapshot ? resolvePaperPick(snapshot, pickQuery, null) : null;
+  const picksFrozen = board?.status === "frozen" || board?.status === "mode_unavailable";
+  const ticket = snapshot ? resolvePaperPick(snapshot, pickQuery, selection) : null;
+  const selectedPick = ticket?.status === "ready" ? ticket.pick : null;
+  const selectedSource = selectedPick ? pickOrderSource(selectedPick, side) : null;
+  const picks = snapshot?.picks.slice(0, PAPER_SHORTLIST_SIZE) ?? [];
+  if (selectedPick && !picks.some(pick => pick.ticker === selectedPick.ticker)) picks.push(selectedPick);
 
-  useEffect(() => {
-    if (picks.length === 0) return;
-    if (picksFrozen) {
-      setSelectedTicker(null);
-      return;
-    }
-    if (selectedTicker === undefined) {
-      setSelectedTicker(
-        requestedTicker ? picks.find(pick => pick.ticker === requestedTicker)?.ticker ?? null : picks[0].ticker,
-      );
-    } else if (selectedTicker && !picks.some(pick => pick.ticker === selectedTicker)) setSelectedTicker(null);
-  }, [picks, picksFrozen, requestedTicker, selectedTicker]);
-
-  const selectedPick = useMemo(
-    () => picks.find((pick) => pick.ticker === selectedTicker) ?? null,
-    [picks, selectedTicker],
-  );
   async function handleCancel(orderId: number) {
     await cancelOrder(orderId);
     await loadAll(false);
@@ -172,6 +181,9 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
   const totalReturn = account?.total_return_pct;
   const zh = locale === "zh";
   const accountUnavailable = authRequired || !!resourceErrors.account || !account;
+  const modeLabel = mode === "long" ? (zh ? "战略" : "Strategic") : (zh ? "战术" : "Tactical");
+  const boardLabel = side === "short" ? (zh ? " · 偏空榜" : " · Bearish board") : "";
+  const picksHref = `/picks?mode=${mode}&side=${side}`;
   const showOrderTicket = () => {
     orderTicket.current?.scrollIntoView({ block: "center" });
     orderTicket.current?.focus({ preventScroll: true });
@@ -186,7 +198,7 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
         statuses={[
           { label: zh ? "账户状态" : "Account", value: loading ? (zh ? "读取中" : "Loading") : authRequired ? (zh ? "需登录" : "Sign in") : paperError ? (zh ? "待重试" : "Retry needed") : account ? (zh ? "就绪" : "Ready") : "—", tone: paperError ? "negative" : account ? "positive" : "warning" },
           { label: zh ? "持仓 / 待成交" : "Positions / pending", value: accountUnavailable ? "—" : `${account.positions.length} / ${account.pending_orders}` },
-          { label: locale === "zh" ? "推荐来源" : "Pick source", value: picksRun ? `RUN #${picksRun.run_id}` : "—", tone: picksFrozen ? "warning" : picksRun ? "positive" : "default" },
+          { label: locale === "zh" ? "推荐来源" : "Pick source", value: picksRun ? `${modeLabel} · RUN #${picksRun.run_id}${boardLabel}` : "—", tone: picksFrozen ? "warning" : picksRun ? "positive" : "default" },
         ]}
         action={<TmButton variant="secondary" loading={refreshing} loadingLabel={zh ? "更新中" : "Updating"} onClick={() => void loadAll(false)}>{zh ? "刷新账户" : "Refresh account"}</TmButton>}
       />
@@ -217,52 +229,57 @@ function HumanPaperScreen({ accountTabs }: { readonly accountTabs: ReactNode }) 
           className="min-w-0 lg:border-r lg:border-tm-rule"
           title={zh ? "今日推荐 · 选择标的" : "Today's picks · Select a ticker"}
           meta={
-            <span className="flex flex-wrap items-center gap-3"><span>{picksRun ? `${picksRun.market_date} · RUN #${picksRun.run_id}` : "—"}</span><TmLinkButton href="/picks">{zh ? "全部推荐" : "All picks"}</TmLinkButton></span>
+            <span className="flex flex-wrap items-center gap-3"><span>{picksRun ? `${picksRun.market_date} · RUN #${picksRun.run_id}` : "—"}</span><TmLinkButton href={picksHref}>{zh ? "全部推荐" : "All picks"}</TmLinkButton></span>
           }
         >
           {resourceErrors.picks ? <SectionError detail={resourceErrors.picks} onRetry={() => void loadAll(false)} /> : null}
-          {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedTicker ?? null} actionable={!picksFrozen && !refreshing && !resourceErrors.picks} onSelect={(pick) => setSelectedTicker(pick.ticker)} />}
+          {loading && picks.length === 0 ? <Loading /> : <PaperRecommendations picks={picks} selectedTicker={selectedPick?.ticker ?? null} actionable={!picksFrozen && !refreshing && !resourceErrors.picks} onSelect={(pick) => setSelection(pick.ticker)} />}
         </TmPane>
-        <TmPane className="min-w-0" title={t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelectedTicker(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
+        <TmPane className="min-w-0" title={t(locale, "sim.workspace.order_title")} meta={selectedPick ? <TmButton variant="ghost" onClick={() => setSelection(null)}>{t(locale, "sim.workspace.clear")}</TmButton> : undefined}>
           <div ref={orderTicket} tabIndex={-1} aria-label={zh ? "模拟下单区" : "Paper order ticket"} className="px-4 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-tm-accent">
-            {loading ? <Loading /> : picksFrozen ? <OrderingPaused market={picksRun?.market_date ?? null} /> : authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} /> : paperError ? <PaperError detail={paperError} /> : selectedPick && account ? (
-              <SimOrderForm
-                key={selectedPick.ticker}
-                layout="ticket"
-                disabled={refreshing || !!resourceErrors.picks}
-                fixedTicker={selectedPick.ticker}
-                locale={locale}
-                onPlaced={() => { void loadAll(false); }}
-                pickDate={selectedPick.market_date ?? picksRun?.market_date}
-                pickTicker={selectedPick.ticker}
-                pickRunId={selectedPick.run_id ?? picksRun?.run_id}
-                latestPrice={selectedPick.latest_price}
-                priceDate={selectedPick.price_date}
-                availableCash={account.available_cash}
-                portfolioValue={account.portfolio_value ?? undefined}
-                targetWeight={0.02}
-                initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
-              />
-            ) : <p className="py-6 text-sm leading-6 text-tm-muted">{requestedTicker && !picks.some(p => p.ticker === requestedTicker) ? (zh ? `${requestedTicker} 不在当前推荐列表中，请从左侧重新选择。` : `${requestedTicker} is not in this shortlist. Choose a ticker on the left.`) : (zh ? "从左侧选择一个标的，核对数量后再提交模拟单。" : "Choose a ticker on the left, then review the quantity before submitting.")}</p>}
+            {loading ? <Loading />
+              : resourceErrors.picks ? <p className="py-6 text-sm text-tm-muted">{zh ? "请先重试读取来源推荐。" : "Retry the recommendation panel to load the source snapshot."}</p>
+              : ticket?.status === "frozen" ? <OrderingPaused market={picksRun?.market_date ?? null} picksHref={picksHref} />
+              : ticket && ticket.status !== "ready" && ticket.status !== "unselected" ? (
+                <PickTicketStatus status={ticket.status} ticker={ticker} />
+              ) : authRequired ? <AuthPrompt hint={t(locale, "sim.workspace.order_auth")} cta={t(locale, "sim.auth.cta")} returnUrl={returnUrl} />
+              : paperError ? <PaperError detail={paperError} />
+              : selectedPick && selectedSource && account ? (
+                <SimOrderForm
+                  key={`${selectedSource.runId}:${selectedSource.ticker}`}
+                  layout="ticket"
+                  disabled={refreshing}
+                  fixedTicker={selectedPick.ticker}
+                  locale={locale}
+                  onPlaced={() => { void loadAll(false); }}
+                  pickSource={selectedSource}
+                  latestPrice={selectedPick.latest_price}
+                  priceDate={selectedPick.price_date}
+                  availableCash={account.available_cash}
+                  portfolioValue={account.portfolio_value ?? undefined}
+                  targetWeight={0.02}
+                  initialSide={selectedPick.rating === "SELL" || selectedPick.rating === "UW" ? "sell" : "buy"}
+                />
+              ) : <p className="py-6 text-sm leading-6 text-tm-muted">{zh ? "从左侧选择一个标的，核对数量后再提交模拟单。" : "Choose a ticker on the left, then review the quantity before submitting."}</p>}
           </div>
         </TmPane>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.85fr)]">
         <TmPane className="min-w-0 lg:border-r lg:border-tm-rule" title={t(locale, "sim.workspace.positions")} meta={accountUnavailable ? "—" : `${account.positions.length} ${zh ? "个标的" : "positions"}`}>
-          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.account ? <SectionError detail={resourceErrors.account} onRetry={() => void loadAll(false)} /> : account ? <>
+          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} returnUrl={returnUrl} /> : resourceErrors.account ? <SectionError detail={resourceErrors.account} onRetry={() => void loadAll(false)} /> : account ? <>
             {resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : null}
             <PaperPositionsWithSource positions={account.positions} attribution={attribution} attributionAvailable={!resourceErrors.attribution} pendingOrders={account.pending_orders} onChoose={picksFrozen ? undefined : showOrderTicket} chooseDisabledReason={picksFrozen ? (zh ? "推荐快照暂不可交易，下单区已暂停；见页面顶部的快照状态。" : "The recommendation snapshot is not tradable, so the order ticket is paused; see the snapshot status at the top.") : undefined} />
           </> : null}
         </TmPane>
         <TmPane className="min-w-0" title={zh ? "我的模拟净值" : "My paper equity"} meta={curve?.base_date ?? (zh ? "按日估值" : "Daily marks")}>
-          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.curve ? <SectionError detail={resourceErrors.curve} onRetry={() => void loadAll(false)} /> : shouldChartPaperCurve(account) ? <PaperCurvePane curve={curve} compact showDisclaimer={false} /> : <TmStatePane state="empty" title={zh ? "尚无持仓，暂不比较收益" : "No holdings yet, so no return comparison"} description={zh ? "账户一直是现金，净值固定在起点。产生持仓后才与 SPY 在同一起点比较。" : "The account has only held cash, so its value is flat by construction. SPY is compared once a position exists."} className="!min-h-[148px] rounded-none border-0 !bg-transparent" />}
+          {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} returnUrl={returnUrl} /> : resourceErrors.curve ? <SectionError detail={resourceErrors.curve} onRetry={() => void loadAll(false)} /> : shouldChartPaperCurve(account) ? <PaperCurvePane curve={curve} compact showDisclaimer={false} /> : <TmStatePane state="empty" title={zh ? "尚无持仓，暂不比较收益" : "No holdings yet, so no return comparison"} description={zh ? "账户一直是现金，净值固定在起点。产生持仓后才与 SPY 在同一起点比较。" : "The account has only held cash, so its value is flat by construction. SPY is compared once a position exists."} className="!min-h-[148px] rounded-none border-0 !bg-transparent" />}
           {!loading && !authRequired ? <><TmDisclosureButton expanded={sourceOpen} onClick={() => setSourceOpen(v => !v)} aria-controls="paper-source-details" label={t(locale, "sim.workspace.source_record")} />{sourceOpen ? <div id="paper-source-details">{resourceErrors.attribution ? <SectionError detail={resourceErrors.attribution} onRetry={() => void loadAll(false)} /> : <PaperSourceSummary rows={attribution} />}</div> : null}</> : null}
         </TmPane>
       </div>
 
       <TmPane title={t(locale, "sim.workspace.recent_orders")} meta={zh ? "最近 20 笔 · 市价单下一交易日收盘撮合" : "Latest 20 · Market orders fill at the next session's close"}>
-        {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} /> : resourceErrors.orders ? <SectionError detail={resourceErrors.orders} onRetry={() => void loadAll(false)} /> : <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus={resourceErrors.attribution ? "unavailable" : "ready"} showAttribution={false} showDisclaimer={false} />}
+        {loading ? <Loading /> : authRequired ? <AuthPrompt hint={t(locale, "sim.auth.hint")} cta={t(locale, "sim.auth.cta")} returnUrl={returnUrl} /> : resourceErrors.orders ? <SectionError detail={resourceErrors.orders} onRetry={() => void loadAll(false)} /> : <PaperOrdersPane orders={orders} onCancel={handleCancel} attribution={attribution} attributionStatus={resourceErrors.attribution ? "unavailable" : "ready"} showAttribution={false} showDisclaimer={false} />}
       </TmPane>
       <div>
         <TmDisclosureButton expanded={researchOpen} onClick={() => setResearchOpen(v => !v)} aria-controls="paper-system-evidence" label={zh ? "系统策略验证" : "System policy validation"} meta={zh ? "独立研究账户，不计入我的收益" : "Independent research books, excluded from my returns"} />
@@ -277,8 +294,12 @@ function Loading() {
   return <div className="px-3 py-10 font-tm-mono text-xs text-tm-muted">{t(locale, "common.loading")}</div>;
 }
 
-function AuthPrompt({ hint, cta }: { readonly hint: string; readonly cta: string }) {
-  return <div className="flex flex-col items-start gap-3 px-3 py-8"><p className="font-tm-mono text-xs text-tm-muted">{hint}</p><Link href="/signin?callbackUrl=/paper" className="border border-tm-accent px-3 py-1.5 font-tm-mono text-xs text-tm-accent hover:bg-tm-accent hover:text-tm-bg">{cta}</Link></div>;
+function AuthPrompt({ hint, cta, returnUrl }: {
+  readonly hint: string;
+  readonly cta: string;
+  readonly returnUrl: string;
+}) {
+  return <div className="flex flex-col items-start gap-3 px-3 py-8"><p className="font-tm-mono text-xs text-tm-muted">{hint}</p><Link href={`/signin?${new URLSearchParams({ callbackUrl: returnUrl })}`} className="border border-tm-accent px-3 py-1.5 font-tm-mono text-xs text-tm-accent hover:bg-tm-accent hover:text-tm-bg">{cta}</Link></div>;
 }
 
 function PaperError({ detail }: { readonly detail: string }) {
@@ -301,12 +322,31 @@ function FrozenRecommendations() {
   return <p role="status" className="mx-4 my-3 rounded-[2px] border border-tm-neg/40 bg-tm-neg/10 px-3 py-2 font-tm-mono text-xs leading-5 text-tm-neg">{t(locale, "picks.stale_freeze_banner")}</p>;
 }
 
-function OrderingPaused({ market }: { readonly market: string | null }) {
+function PickTicketStatus({ status, ticker }: {
+  readonly status: "invalid" | "mode_unavailable" | "superseded" | "not_ranked" | "no_close";
+  readonly ticker: string | null;
+}) {
+  const { locale } = useLocale();
+  const zh = locale === "zh";
+  const message = {
+    invalid: zh ? "此推荐链接无效，请从推荐页重新打开。" : "This recommendation link is invalid. Open a new ticket from Picks.",
+    mode_unavailable: zh ? "当前快照没有该推荐模式，暂时无法下单。" : "This recommendation mode is unavailable in the current snapshot.",
+    superseded: zh ? "来源快照已过期或被替换，请核对当前推荐后重新选择。" : "The source snapshot has expired or been superseded. Review the current picks before selecting again.",
+    not_ranked: zh ? `${ticker} 不在来源榜单中，请重新选择。` : `${ticker} is not in the source board. Select a current pick.`,
+    no_close: zh ? `${ticker} 缺少快照交易日的有效收盘价，暂时无法下单。` : `${ticker}'s close is unavailable for the snapshot session.`,
+  }[status];
+  return <p role="status" className="py-6 text-sm leading-6 text-tm-muted">{message}</p>;
+}
+
+function OrderingPaused({ market, picksHref }: {
+  readonly market: string | null;
+  readonly picksHref: string;
+}) {
   const { locale } = useLocale();
   const zh = locale === "zh";
   return <div className="space-y-2 py-4 text-sm leading-6 text-tm-muted">
     <p className="text-tm-fg-2">{zh ? "下单区已暂停" : "Order ticket paused"}</p>
     <p>{zh ? `当前推荐快照（市场日 ${market ?? "—"}）未对齐最近完整交易日或未通过健康门槛，不能据此下单。新的合格快照发布后自动恢复；已有持仓与订单不受影响。` : `The current snapshot (market date ${market ?? "—"}) is not aligned with the latest complete session or failed the health gate, so it cannot be traded. Ordering resumes automatically after the next eligible snapshot; existing positions and orders are unaffected.`}</p>
-    <TmLinkButton href="/picks" variant="secondary" size="sm">{zh ? "查看快照状态" : "View snapshot status"}</TmLinkButton>
+    <TmLinkButton href={picksHref} variant="secondary" size="sm">{zh ? "查看快照状态" : "View snapshot status"}</TmLinkButton>
   </div>;
 }
