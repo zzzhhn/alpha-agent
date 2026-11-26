@@ -67,3 +67,20 @@ async def test_kimi_preserves_truncation_without_retrying_visible_output():
     assert result.finish_reason == 'max_tokens'
     assert result.completion_tokens == 4096
     client._client.post.assert_awaited_once()
+
+
+async def test_queued_worker_does_not_retry_empty_kimi_response():
+    from alpha_agent.llm.base import llm_retries_disabled
+
+    client = KimiClient(api_key="test-only")
+    await client.close()
+    client._client = AsyncMock()
+    client._client.post.return_value = _response([], output_tokens=4096, stop="max_tokens")
+    token = llm_retries_disabled.set(True)
+    try:
+        with pytest.raises(LLMEmptyResponseError, match="without user-visible text"):
+            await client.chat([Message(role="user", content="test")], max_tokens=128)
+    finally:
+        llm_retries_disabled.reset(token)
+        await client.close()
+    client._client.post.assert_awaited_once()

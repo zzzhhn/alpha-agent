@@ -958,10 +958,7 @@ async def cron_methodology_proposer() -> dict[str, Any]:
 
 
 # Wall-clock budget for one runner invocation. Kept under Vercel's function
-# limit so we mark_failed cleanly (a diagnosable terminal state) rather than
-# getting hard-killed mid-run and leaving a job stuck 'running'. Only checked
-# BETWEEN jobs, so a single in-flight job still runs to its natural length;
-# this just stops the runner from starting a fresh job too late.
+# limit so the request can cancel in-flight work and write a terminal state.
 _RUN_PROPOSE_BUDGET_S = 270.0
 
 
@@ -983,43 +980,68 @@ async def cron_run_propose_jobs() -> dict[str, Any]:
 
     Drains queued jobs oldest-first until the queue empties or the budget is
     hit. Each job's failure is persisted onto its row, never swallowed."""
+    import asyncio
+
     from alpha_agent.api.routes.factor_lab import _run_propose_work
     from alpha_agent.config_store import refresh_config
     from alpha_agent.evolution.diagnostics import compute_diagnostic
+    from alpha_agent.evolution.llm_factor_proposer import proposal_generation_checkpoint
+    from alpha_agent.llm.base import llm_retries_disabled
     from alpha_agent.storage import propose_jobs
+
+    class ClaimLost(Exception):
+        pass
 
     pool = await get_pool(os.environ["DATABASE_URL"])
     deadline = time.monotonic() + _RUN_PROPOSE_BUDGET_S
+    interrupted = await propose_jobs.expire_interrupted(pool)
+
+    async def checkpoint(job_id, started_at, progress):
+        if not await propose_jobs.save_progress(pool, job_id, started_at, progress):
+            raise ClaimLost
+
     drained: list[dict[str, Any]] = []
     while time.monotonic() < deadline - 90:
         job = await propose_jobs.claim_oldest_queued(pool)
         if job is None:
             break
-        job_id = job["id"]
+        job_id, started_at = job["id"], job["started_at"]
+        receipt = {"job_id": job_id}
+
+        async def generated(count, *, claimed_id=job_id, claim_started_at=started_at):
+            await checkpoint(claimed_id, claim_started_at, {"stage": "evaluating", "generated": count})
+
+        result = None
+        retry_token = llm_retries_disabled.set(True)
+        progress_token = proposal_generation_checkpoint.set(generated)
         try:
-            # Mirror post_propose's pre-work so the LLM sees the live baseline.
-            await refresh_config(pool)
-            diagnostic = await compute_diagnostic(pool)
-            result = await _run_propose_work(
-                pool, job["user_id"], job["n"], diagnostic, deadline=deadline,
-            )
-            if result.get("ok") is False:
-                raise RuntimeError(f"invalid_evaluation: {result.get('_diag')}")
-            await propose_jobs.mark_done(pool, job_id, result)
-            drained.append(
-                {
-                    "job_id": job_id,
-                    "status": "done",
-                    "proposed": result.get("proposed", 0),
-                    "evaluated": result.get("evaluated", 0),
-                }
-            )
+            async with asyncio.timeout(max(0.0, deadline - time.monotonic())):
+                await refresh_config(pool)
+                diagnostic = await compute_diagnostic(pool)
+                await checkpoint(job_id, started_at, {"stage": "generating"})
+                result = await _run_propose_work(
+                    pool, job["user_id"], job["n"], diagnostic, deadline=deadline,
+                )
+                if result.get("ok") is False:
+                    raise RuntimeError(f"invalid_evaluation: {result.get('_diag')}")
+        except ClaimLost:
+            updated = False
         except Exception as exc:  # noqa: BLE001 — terminal failure must be observable
-            err = f"{type(exc).__name__}: {exc}"
-            await propose_jobs.mark_failed(pool, job_id, err)
-            drained.append({"job_id": job_id, "status": "failed", "error": err})
+            error = (
+                propose_jobs.WORKER_INTERRUPTED if isinstance(exc, TimeoutError)
+                else f"{type(exc).__name__}: {exc}"
+            )
+            updated = await propose_jobs.mark_failed(pool, job_id, started_at, error, result=result)
+            receipt.update(status="failed", error=error)
+        else:
+            updated = await propose_jobs.mark_done(pool, job_id, started_at, result)
+            receipt.update(status="done", proposed=result.get("proposed", 0), evaluated=result.get("evaluated", 0))
+        finally:
+            proposal_generation_checkpoint.reset(progress_token)
+            llm_retries_disabled.reset(retry_token)
+        drained.append(receipt if updated else {"job_id": job_id, "status": "claim_lost"})
     return {"ok": all(j["status"] == "done" for j in drained),
-            "drained": len(drained), "jobs": drained}
+            "drained": len(drained), "interrupted": interrupted, "jobs": drained}
 
 
 # GA search wall-clock inside the daily loop, under the Vercel function budget.
