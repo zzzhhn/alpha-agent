@@ -44,6 +44,16 @@ interface Props {
   readonly disabled?: boolean;
 }
 
+// sim_order.qty is a PostgreSQL int.
+const MAX_ORDER_QTY = 2_147_483_647;
+
+export function parseOrderQuantity(value: string): number | null {
+  const quantity = Number(value);
+  return Number.isSafeInteger(quantity) && quantity > 0 && quantity <= MAX_ORDER_QTY
+    ? quantity
+    : null;
+}
+
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 const FIELD_LABEL =
@@ -119,11 +129,11 @@ export default function SimOrderForm({
     setQty(String(suggested));
   }, [availableCash, fixedTicker, latestPrice, portfolioValue, targetWeight]);
 
-  const qtyNum = parseInt(qty, 10);
+  const qtyNum = parseOrderQuantity(qty);
   const limitNum = parseFloat(limitPrice);
   const referencePrice = orderType === "limit" ? limitNum : latestPrice;
   const estimatedCost =
-    !isNaN(qtyNum) && typeof referencePrice === "number" && isFinite(referencePrice)
+    qtyNum !== null && typeof referencePrice === "number" && isFinite(referencePrice)
       ? qtyNum * referencePrice
       : null;
 
@@ -134,7 +144,7 @@ export default function SimOrderForm({
     setPlaced(false);
     const effectiveTicker = (fixedTicker ?? ticker).trim().toUpperCase();
     if (!effectiveTicker) { setError(t(locale, "sim.form.ticker_required")); return; }
-    if (isNaN(qtyNum) || qtyNum <= 0) { setError(t(locale, "sim.form.qty_error")); return; }
+    if (qtyNum === null) { setError(t(locale, "sim.form.qty_error")); return; }
     if (orderType === "limit" && (isNaN(limitNum) || limitNum <= 0)) {
       setError(t(locale, "sim.form.limit_error")); return;
     }
@@ -216,7 +226,9 @@ export default function SimOrderForm({
             label={t(locale, "sim.form.qty_label")}
             type="number"
             min={1}
+            max={MAX_ORDER_QTY}
             step={1}
+            required
             value={qty}
             onChange={setQty}
             fieldSize="sm"
