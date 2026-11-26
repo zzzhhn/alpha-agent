@@ -32,7 +32,7 @@ async def test_paper_fill_market_order_fills_at_t1(applied_db):
         )
 
         from alpha_agent.api.routes.cron_routes import _run_paper_fill
-        result = await _run_paper_fill(applied_db)
+        result = await _run_paper_fill(applied_db, today=fill_date)
         assert result["filled"] >= 1
 
         order = await conn.fetchrow("SELECT * FROM sim_order WHERE id = $1", order_id)
@@ -82,7 +82,7 @@ async def test_paper_fill_limit_order_expires(applied_db):
             )
 
         from alpha_agent.api.routes.cron_routes import _run_paper_fill
-        result = await _run_paper_fill(applied_db)
+        result = await _run_paper_fill(applied_db, today=signal_date + timedelta(days=3))
         assert result["expired"] >= 1
 
         order = await conn.fetchrow(
@@ -182,8 +182,8 @@ async def test_no_quote_expiry_and_cross_are_not_starved_by_missing_market_quote
                 ],
             )
         result = await _run_paper_fill_locked(pool, date(2026, 7, 8))
-        assert (result["filled"], result["expired"], result["remaining_pending"]) == (1, 2, 205)
-        assert result["market_pending_policy"] == "await_exact_t1_close"
+        assert (result["filled"], result["expired"], result["remaining_pending"]) == (1, 199, 8)
+        assert result["market_pending_policy"] == "exact_t1_close_one_session_review"
         rows = await pool.fetch(
             "SELECT ticker,status,fill_date,fill_price FROM sim_order WHERE order_type='limit' ORDER BY ticker"
         )

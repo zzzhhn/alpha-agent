@@ -65,6 +65,7 @@ def test_account_auto_creates_and_returns(client, monkeypatch):
 
 def test_place_market_order_returns_201(client, monkeypatch):
     import datetime
+    from alpha_agent.market_session import latest_completed_xnys_session
     account_row = {
         "id": 1, "user_id": 7, "initial_cash": 1000000.0,
         "cash": 1000000.0, "reset_count": 0,
@@ -73,9 +74,10 @@ def test_place_market_order_returns_201(client, monkeypatch):
     pool = _mock_pool(
         monkeypatch,
         fetchrow_val=account_row,
-        fetch_val=[{"ticker": "AAPL", "close": 100.0}],
+        fetch_val=[{"ticker": "AAPL", "close": 100.0, "date": latest_completed_xnys_session()}],
         fetchval_val=42,
     )
+    pool.fetchrow.side_effect = [account_row, account_row, {"id": 5, "identity_status": "supported_universe"}]
     r = client.post(
         "/api/paper/order",
         headers=_auth(),

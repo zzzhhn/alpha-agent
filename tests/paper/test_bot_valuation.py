@@ -334,7 +334,7 @@ async def test_bot_api_never_reads_adjusted_daily_prices_and_exposes_nulls(monke
         'id': 22, 'kind': 'bot', 'cash': 1000, 'initial_cash': 1000, 'reset_count': 0,
     }))
     closes = AsyncMock()
-    monkeypatch.setattr(paper, '_current_closes', closes)
+    monkeypatch.setattr(paper, 'read_daily_closes', closes)
     result = await paper._read_account(pool, 7, 22)
     closes.assert_not_awaited()
     assert result.portfolio_value is None and result.total_return_pct is None

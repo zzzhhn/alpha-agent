@@ -18,7 +18,11 @@ from pydantic import BaseModel, Field
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_user
+from alpha_agent.market_session import latest_completed_xnys_session, xnys_close
 from alpha_agent.paper.accounts import create_bot_account, resolve_account
+from alpha_agent.paper.daily_valuation import read_daily_closes
+from alpha_agent.paper.fill_engine import market_order_window
+from alpha_agent.paper.market_order_identity import market_identity_verified, read_market_instrument
 
 router = APIRouter(prefix="/api/paper", tags=["paper"])
 PAPER_FEE_BPS = 10.0
@@ -203,22 +207,6 @@ def _require_human(account: dict[str, Any]) -> None:
         raise HTTPException(status_code=403, detail="manual changes require a human account")
 
 
-async def _current_closes(pool: Any, tickers: list[str]) -> dict[str, float]:
-    """Latest daily close for each ticker from daily_prices."""
-    if not tickers:
-        return {}
-    rows = await pool.fetch(
-        """
-        SELECT DISTINCT ON (ticker) ticker, close
-        FROM daily_prices
-        WHERE ticker = ANY($1::text[])
-        ORDER BY ticker, date DESC
-        """,
-        tickers,
-    )
-    return {r["ticker"]: r["close"] for r in rows}
-
-
 def _is_en_locale() -> bool:
     return os.environ.get("LOCALE", "zh") == "en"
 
@@ -246,6 +234,34 @@ def _price_unavailable_message(ticker: str) -> str:
         if _is_en_locale()
         else f"{ticker} 暂无可信收盘价，无法预留资金，订单未提交"
     )
+
+
+def _market_identity_unavailable(ticker: str) -> HTTPException:
+    detail = (f"Security identity could not be verified for {ticker}" if _is_en_locale()
+              else f"{ticker} 的证券身份待核验")
+    return HTTPException(status_code=400, detail=detail)
+
+
+async def _market_order_admission(
+    conn: Any, ticker: str, signal: date, now: datetime,
+) -> tuple[int, float, datetime, dict]:
+    target, deadline = market_order_window(signal)
+    instrument = await read_market_instrument(conn, ticker)
+    if not market_identity_verified(ticker, target, instrument):
+        raise _market_identity_unavailable(ticker)
+    session = latest_completed_xnys_session(now)
+    quote = (await read_daily_closes(conn, [ticker], session)).get(ticker)
+    if quote is None:
+        raise HTTPException(status_code=400, detail=_price_unavailable_message(ticker))
+    if instrument is None:
+        await conn.execute("INSERT INTO sim_instrument(ticker) VALUES($1) ON CONFLICT(ticker) DO NOTHING", ticker)
+        instrument = await read_market_instrument(conn, ticker)
+        if instrument is None or not market_identity_verified(ticker, target, instrument):
+            raise _market_identity_unavailable(ticker)
+    return instrument['id'], quote['close'], xnys_close(deadline), {
+        'execution_model': 'daily_close_v1', 'reference_date': session.isoformat(),
+        'target_session_date': target.isoformat(), 'quote_deadline_session_date': deadline.isoformat(),
+    }
 
 
 def _canonical_payload_hash(payload: Any) -> str:
@@ -401,8 +417,7 @@ async def _read_account(
         valuation = summarize_marks([dict(row) for row in positions], account['cash'], now)
         display = display_valuation([dict(row) for row in positions], dict(account), valuation, now)
     else:
-        from alpha_agent.market_session import latest_completed_xnys_session
-        from alpha_agent.paper.daily_valuation import read_daily_closes, summarize_daily_closes
+        from alpha_agent.paper.daily_valuation import summarize_daily_closes
 
         session = latest_completed_xnys_session(now)
         closes = await read_daily_closes(pool, tickers, session, include_reference=True)
@@ -496,7 +511,8 @@ async def place_order(
         raise HTTPException(status_code=400, detail="limit_price must be positive")
 
     pool = await get_db_pool()
-    signal_session = _paper_signal_session()
+    now = datetime.now(UTC)
+    signal_session = _paper_signal_session(now)
     ticker = body.ticker.strip().upper()
 
     async with pool.acquire() as conn:
@@ -514,39 +530,7 @@ async def place_order(
                 await _resolve_pick_provenance(conn, body)
             )
 
-            reserved_notional = 0.0
-            if body.side == "buy":
-                closes = await _current_closes(conn, [ticker])
-                reference_price = (
-                    body.limit_price
-                    if body.order_type == "limit"
-                    else closes.get(ticker)
-                )
-                if reference_price is None:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=_price_unavailable_message(ticker),
-                    )
-                est_notional = float(reference_price) * body.qty
-                reserved_notional = est_notional * (1.0 + PAPER_FEE_BPS / 10000.0)
-                already_reserved = await conn.fetchval(
-                    "SELECT COALESCE(SUM(reserved_notional), 0) FROM sim_order "
-                    "WHERE account_id=$1 AND cohort_id=$2 AND side='buy' "
-                    "AND status='pending'",
-                    account_id,
-                    cohort_id,
-                ) or 0.0
-                available_cash = float(account["cash"]) - float(already_reserved)
-                if reserved_notional > available_cash:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=_insufficient_cash_message(
-                            ticker,
-                            reserved_notional,
-                            available_cash,
-                        ),
-                    )
-            else:
+            if body.side == "sell":
                 position = await conn.fetchrow(
                     "SELECT qty FROM sim_position "
                     "WHERE account_id=$1 AND cohort_id=$2 AND ticker=$3 FOR UPDATE",
@@ -574,15 +558,41 @@ async def place_order(
                         ),
                     )
 
+            instrument_id = reference_price = expires_at = execution_evidence = None
+            if body.order_type == "market":
+                instrument_id, reference_price, expires_at, execution_evidence = (
+                    await _market_order_admission(conn, ticker, signal_session, now)
+                )
+            reserved_notional = 0.0
+            if body.side == "buy":
+                estimate = body.limit_price if body.order_type == "limit" else reference_price
+                est_notional = float(estimate) * body.qty
+                reserved_notional = est_notional * (1.0 + PAPER_FEE_BPS / 10000.0)
+                already_reserved = await conn.fetchval(
+                    "SELECT COALESCE(SUM(reserved_notional), 0) FROM sim_order "
+                    "WHERE account_id=$1 AND cohort_id=$2 AND side='buy' "
+                    "AND status='pending'",
+                    account_id,
+                    cohort_id,
+                ) or 0.0
+                available_cash = float(account["cash"]) - float(already_reserved)
+                if reserved_notional > available_cash:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=_insufficient_cash_message(
+                            ticker,
+                            reserved_notional,
+                            available_cash,
+                        ),
+                    )
             order_id: int = await conn.fetchval(
                 """
                 INSERT INTO sim_order
                     (account_id, ticker, side, order_type, qty, limit_price,
                      signal_date, pick_date, pick_ticker, source_run_id,
                      source_policy_id, source_payload_hash, reserved_notional,
-                     fee_bps, cohort_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                        $12, $13, $14, $15)
+                     fee_bps, cohort_id, instrument_id, reference_price, expires_at, execution_evidence)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb)
                 RETURNING id
                 """,
                 account_id,
@@ -600,6 +610,10 @@ async def place_order(
                 reserved_notional,
                 PAPER_FEE_BPS,
                 cohort_id,
+                instrument_id,
+                reference_price if body.order_type == "market" else None,
+                expires_at,
+                json.dumps(execution_evidence) if execution_evidence else None,
             )
 
     if body.order_type == "limit" and body.limit_price is not None:
@@ -609,8 +623,9 @@ async def place_order(
             else f"Limit order submitted; fills when close crosses ${body.limit_price:.2f} (up to 5 trading days)"
         )
     else:
-        message = "市价单已提交，将于下一交易日收盘后成交" if os.environ.get("LOCALE", "zh") != "en" \
-            else "Market order submitted; fills at next trading day close"
+        message = ("市价单已提交，按下一交易日收盘价撮合。缺报价时可撤销，最多待核一交易日。"
+                   if not _is_en_locale() else
+                   "Market order submitted for the next session close. Missing quotes allow one review session or cancellation.")
 
     return OrderResponse(
         order_id=order_id,
@@ -654,6 +669,7 @@ def _small_execution_evidence(value: Any) -> dict | None:
     output = {key: value[key] for key in (
         'execution_model', 'session_date', 'status', 'reason', 'reference_price',
         'fill_price', 'slippage_bps', 'filled_at', 'confirmed_at',
+        'reference_date', 'target_session_date', 'quote_deadline_session_date',
     ) if key in value and isinstance(value[key], (str, int, float, bool, type(None)))}
     dates = value.get('missing_quote_dates')
     if isinstance(dates, list):
@@ -755,7 +771,10 @@ async def cancel_order(
     cohort_id = int(account["reset_count"] or 0)
 
     cancelled = await pool.fetchrow(
-        "UPDATE sim_order SET status = 'cancelled' "
+        "UPDATE sim_order SET status='cancelled',fail_reason=NULL,"
+        "execution_evidence=CASE WHEN order_type='market' AND execution_evidence IS NOT NULL "
+        "THEN execution_evidence || '{\"status\":\"cancelled\",\"reason\":\"cancelled_by_user\"}'::jsonb "
+        "ELSE execution_evidence END "
         "WHERE id=$1 AND account_id=$2 AND cohort_id=$3 "
         "AND status='pending' RETURNING id",
         order_id,
@@ -930,7 +949,8 @@ async def _read_attribution(
         closes = {ticker: effective_mark(dict(pos_by_ticker[ticker]), datetime.now(UTC))['price']
                   for ticker in live_tickers}
     else:
-        closes = await _current_closes(pool, live_tickers)
+        quotes = await read_daily_closes(pool, live_tickers, latest_completed_xnys_session())
+        closes = {ticker: quote['close'] for ticker, quote in quotes.items()}
 
     rows: list[TickerAttribution] = []
     for ticker in sorted(all_tickers):
@@ -941,7 +961,7 @@ async def _read_attribution(
             current = closes.get(ticker)
             if current is not None:
                 unrealized = (current - pos["avg_cost"]) * pos["qty"]
-            elif is_bot:
+            else:
                 unrealized = None
         counts = counts_by_ticker.get(ticker)
         pick_linked = int(counts["pick_linked"]) if counts else 0

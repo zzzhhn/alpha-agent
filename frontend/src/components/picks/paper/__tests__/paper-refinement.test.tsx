@@ -61,9 +61,22 @@ describe("paper workspace refinement", () => {
   it("explains a pending human market order without showing a later price or a fill", () => {
     const order: OrderOut = {id:1,ticker:"STALE",side:"buy",order_type:"market",qty:1,limit_price:null,signal_date:"2026-07-02",fill_date:null,fill_price:null,status:"pending"};
     const html = renderToStaticMarkup(<PaperOrdersPane orders={[order]} onCancel={async()=>{}} attribution={[]} attributionStatus="ready" showAttribution={false} showDisclaimer={false} />);
-    expect(html).toContain("缺价则继续待成交");
+    expect(html).toContain("最多待核一交易日");
     expect(html).toContain("STALE");
     expect(html).not.toContain("$99");
+  });
+  it("shows the missing-close reason, review deadline, and cash still reserved", () => {
+    const order: OrderOut = {
+      id:1,ticker:"STALE",side:"buy",order_type:"market",qty:1,limit_price:null,
+      signal_date:"2026-07-13",fill_date:null,fill_price:null,status:"pending",
+      fail_reason:"market_awaiting_exact_t1_close",reserved_notional:100.10,
+      execution_evidence:{target_session_date:"2026-07-14",quote_deadline_session_date:"2026-07-15"},
+    };
+    const html = renderToStaticMarkup(<PaperOrdersPane orders={[order]} onCancel={async()=>{}} attribution={[]} attributionStatus="ready" showAttribution={false} showDisclaimer={false} />);
+    expect(html).toContain("缺少目标收盘价");
+    expect(html).toContain("待核至 2026-07-15");
+    expect(html).toContain("预留 $100.10");
+    expect(html).toContain("撤销");
   });
   it("disables submission while account context is refreshing", () => {
     const html = renderToStaticMarkup(<SimOrderForm fixedTicker="TEST" locale="zh" layout="ticket" disabled availableCash={1000} onPlaced={() => {}} />);
