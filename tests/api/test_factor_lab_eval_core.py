@@ -196,3 +196,18 @@ async def test_factor_lab_mean_gate_and_evidence(applied_db, monkeypatch, base_m
             assert evidence["base_threshold"] == pytest.approx(threshold)
     finally:
         await pool.close()
+
+
+async def test_oldest_pending_candidate_deduplicates_across_the_full_queue(applied_db):
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        assert await factor_lab._insert_pending_if_new(pool, "rank( close )", [], {}, {})
+        await pool.execute(
+            "INSERT INTO factor_proposals (expression, evidence, diagnostic) "
+            "SELECT 'other_' || i, '{}'::jsonb, '{}'::jsonb FROM generate_series(1, 500) i"
+        )
+        assert not await factor_lab._insert_pending_if_new(pool, "rank(close)", [], {}, {})
+        await pool.execute("UPDATE factor_proposals SET status='rejected' WHERE expression='rank( close )'")
+        assert await factor_lab._insert_pending_if_new(pool, "rank(close)", [], {}, {})
+    finally:
+        await pool.close()

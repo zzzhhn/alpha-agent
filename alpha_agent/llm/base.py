@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Literal
 
 from alpha_agent.core.exceptions import LLMEmptyResponseError
+
+
+# Request-scoped policy for paid jobs that must never replay a failed attempt.
+llm_retries_disabled: ContextVar[bool] = ContextVar("llm_retries_disabled", default=False)
 
 
 @dataclass(frozen=True)

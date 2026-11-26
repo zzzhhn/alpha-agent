@@ -211,3 +211,17 @@ async def test_sol_failure_is_not_retried_by_adapter() -> None:
         with pytest.raises(RuntimeError, match="upstream rejected"):
             await client.chat([Message("user", "hi")])
     request.assert_awaited_once()
+
+
+def test_queued_worker_disables_litellm_and_sdk_retry_budgets():
+    from alpha_agent.llm.base import llm_retries_disabled
+
+    client = LiteLLMClient(model="openai/gpt-4o", api_key="test-only")
+    token = llm_retries_disabled.set(True)
+    try:
+        kwargs = client._kwargs()
+    finally:
+        llm_retries_disabled.reset(token)
+    assert kwargs["num_retries"] == 0
+    assert kwargs["max_retries"] == 0
+    assert "max_retries" not in client._kwargs()

@@ -71,13 +71,40 @@ async def test_get_job_decodes_jsonb_result_to_dict(applied_db):
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     try:
         job_id = await pj.create_job(pool, user_id=1, n=5)
-        await pj.mark_done(
-            pool, job_id, {"evaluated": 5, "proposed": 2, "dormant": False}
+        claim = await pj.claim_oldest_queued(pool)
+        assert await pj.mark_done(
+            pool, job_id, claim["started_at"], {"evaluated": 5, "proposed": 2, "dormant": False}
         )
         job = await pj.get_job(pool, job_id)
         assert isinstance(job["result"], dict)  # decoded, not a JSON string
         assert job["result"]["proposed"] == 2
         assert job["result"]["evaluated"] == 5
         assert job["status"] == "done"
+    finally:
+        await pool.close()
+
+
+
+async def test_stale_claim_cannot_write_progress_failure_or_result(applied_db):
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        job_id = await pj.create_job(pool, user_id=1, n=5)
+        claim = await pj.claim_oldest_queued(pool)
+        current_fence = await pool.fetchval(
+            "UPDATE factor_propose_jobs SET started_at = started_at + interval '1 microsecond' "
+            "WHERE id=$1 RETURNING started_at", job_id,
+        )
+        old_fence = claim["started_at"]
+        assert not await pj.save_progress(pool, job_id, old_fence, {"stage": "generating"})
+        assert not await pj.mark_failed(pool, job_id, old_fence, "old error")
+        assert not await pj.mark_done(pool, job_id, old_fence, {"proposed": 9})
+        assert (await pj.get_job(pool, job_id))["progress"] == {"stage": "preparing"}
+
+        assert await pj.save_progress(pool, job_id, current_fence, {"stage": "evaluating", "generated": 2})
+        assert await pj.mark_failed(pool, job_id, current_fence, "current error", result={"evaluated": 1})
+        job = await pj.get_job(pool, job_id)
+        assert (job["status"], job["error"]) == ("failed", "current error")
+        assert job["progress"] == {"stage": "evaluating", "generated": 2}
+        assert job["result"] == {"evaluated": 1}
     finally:
         await pool.close()

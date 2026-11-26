@@ -83,6 +83,7 @@ def _alert(alert_id, ticker, to, minutes):
 
 
 def test_attention_matches_inbox_needs_action(user_client, monkeypatch):
+    monkeypatch.setenv("NEXTAUTH_SECRET", "alert-group-fixture-secret")
     rows = [_alert(1, "SLB", "UW", 5), _alert(2, "AAPL", "BUY", 30), _alert(3, "ZZZ", "OW", 4000)]
     states = [{"alert_id": 2, "status": "resolved", "snooze_until": None,
                "resolved_at": datetime.now(UTC), "note": None, "updated_at": datetime.now(UTC)}]

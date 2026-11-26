@@ -8,9 +8,10 @@ from alpha_agent.auth.dependencies import require_user
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
     from api.index import app
 
+    monkeypatch.setenv("NEXTAUTH_SECRET", "alert-group-fixture-secret")
     app.dependency_overrides[require_user] = lambda: 7
     try:
         yield TestClient(app)
@@ -59,6 +60,7 @@ def test_inbox_enriches_alert_with_user_decision_context(client, monkeypatch):
 def test_state_endpoint_persists_resolved_decision(client, monkeypatch):
     now = datetime.now(UTC)
     pool = MagicMock()
+    pool.acquire.return_value.__aenter__.return_value = pool
     pool.fetchval = AsyncMock(return_value=True)
     pool.fetchrow = AsyncMock(return_value={
         "status": "resolved",

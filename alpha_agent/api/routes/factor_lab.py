@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field, StrictInt, field_validator
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_admin, require_user
-from alpha_agent.config_store import refresh_config, set_config
+from alpha_agent.config_store import config_transaction, refresh_config, set_config, write_config
 from alpha_agent.core.factor_ast import refresh_allowed_ops
 from alpha_agent.evolution.correlation_gate import (
     SELF_CORR_THRESHOLD,
@@ -245,24 +245,21 @@ async def _run_propose_work(
             await close()
 
 
-async def _insert_pending_if_new(pool, expression, new_operators, evidence, diagnostic) -> bool:
-    """Serialize propose writers, then compare at most 500 pending expressions.
+async def _lock_proposal_writers(conn) -> None:
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtext('factor_lab_pending_proposals'))")
 
-    This is a bounded application-level guard, not a database uniqueness rule.
-    The transaction lock also covers concurrent LLM/GA runs using this path.
-    """
+
+async def _insert_pending_if_new(pool, expression, new_operators, evidence, diagnostic) -> bool:
+    """Stream distinct pending expressions under the proposal writer lock."""
     canonical = canonical_expression(expression)
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.execute(
-                "SELECT pg_advisory_xact_lock(hashtext('factor_lab_pending_proposals'))"
-            )
-            pending = await conn.fetch(
-                "SELECT id, expression FROM factor_proposals WHERE status='pending' "
-                "ORDER BY id DESC LIMIT 500"
-            )
-            if any(canonical_expression(row["expression"]) == canonical for row in pending):
-                return False
+            await _lock_proposal_writers(conn)
+            async for row in conn.cursor(
+                "SELECT DISTINCT expression FROM factor_proposals WHERE status='pending'"
+            ):
+                if canonical_expression(row["expression"]) == canonical:
+                    return False
             await conn.execute(
                 "INSERT INTO factor_proposals "
                 "(status, expression, new_operators, evidence, diagnostic) "
@@ -636,8 +633,7 @@ async def post_propose(
     if history_n < _MIN_HISTORY_ROWS:
         dormant_result = {"evaluated": 0, "proposed": 0, "dormant": True,
                           "duplicates_skipped": 0, "_diag": {"duplicates_skipped": 0}}
-        job_id = await propose_jobs.create_job(pool, user_id, n)
-        await propose_jobs.mark_done(pool, job_id, dormant_result)
+        job_id = await propose_jobs.create_completed_job(pool, user_id, n, dormant_result)
         return {"job_id": job_id, "status": "done", "inline_result": dormant_result}
 
     job_id = await propose_jobs.create_job(pool, user_id, n)
@@ -658,6 +654,7 @@ async def get_propose_job(
     Polled by the frontend every 3s for up to 5min. Each call is short
     (<100ms typical) so even an unstable connection has 100 chances to
     succeed before the client gives up."""
+    await propose_jobs.expire_interrupted(pool, job_id=job_id, user_id=user_id)
     job = await propose_jobs.get_job(pool, job_id)
     if job is None:
         raise HTTPException(404, "job not found")
@@ -786,6 +783,18 @@ async def post_restore_preset_expression(
     }
 
 
+async def _require_empty_demo_queue(conn) -> None:
+    existing = await conn.fetchval(
+        "SELECT count(*) FROM factor_proposals WHERE status='pending'"
+    )
+    if existing and existing > 0:
+        raise HTTPException(
+            400,
+            f"refusing to seed: {existing} pending row(s) already exist; "
+            "approve or reject them first",
+        )
+
+
 @router.post("/_demo_seed")
 async def post_demo_seed(
     user_id: int = Depends(require_admin),
@@ -798,15 +807,7 @@ async def post_demo_seed(
     This is a temporary admin tool. Safe to call repeatedly: idempotent
     against existing pending state.
     """
-    existing = await pool.fetchval(
-        "SELECT count(*) FROM factor_proposals WHERE status='pending'"
-    )
-    if existing and existing > 0:
-        raise HTTPException(
-            400,
-            f"refusing to seed: {existing} pending row(s) already exist; "
-            "approve or reject them first",
-        )
+    await _require_empty_demo_queue(pool)
 
     # Read current diagnostic so each seeded row carries a realistic snapshot
     await refresh_config(pool)
@@ -896,18 +897,21 @@ async def post_demo_seed(
     ]
 
     inserted_ids = []
-    for d in demos:
-        row = await pool.fetchrow(
-            "INSERT INTO factor_proposals "
-            "(status, expression, new_operators, evidence, diagnostic) "
-            "VALUES ('pending', $1, $2::jsonb, $3::jsonb, $4::jsonb) "
-            "RETURNING id",
-            d["expression"],
-            json.dumps(d["new_operators"]),
-            json.dumps(d["evidence"]),
-            json.dumps(diag_jsonb),
-        )
-        inserted_ids.append(row["id"])
+    async with pool.acquire() as conn, conn.transaction():
+        await _lock_proposal_writers(conn)
+        await _require_empty_demo_queue(conn)
+        for d in demos:
+            row = await conn.fetchrow(
+                "INSERT INTO factor_proposals "
+                "(status, expression, new_operators, evidence, diagnostic) "
+                "VALUES ('pending', $1, $2::jsonb, $3::jsonb, $4::jsonb) "
+                "RETURNING id",
+                d["expression"],
+                json.dumps(d["new_operators"]),
+                json.dumps(d["evidence"]),
+                json.dumps(diag_jsonb),
+            )
+            inserted_ids.append(row["id"])
 
     return {
         "seeded": len(inserted_ids),
@@ -1068,29 +1072,30 @@ async def approve_proposal(
       4. refresh_allowed_ops so the AST validator accepts the new operator
          names from the next request; failure surfaces in response.refresh_error
          (anti-silent: do not log + pretend success)."""
-    row = await pool.fetchrow(
-        "SELECT expression, new_operators FROM factor_proposals "
-        "WHERE id=$1 AND status='pending'",
-        proposal_id,
-    )
-    if row is None:
-        raise HTTPException(404, "proposal not found or not pending")
-    new_ops = _decode_jsonb(row["new_operators"]) or []
-    for op in new_ops:
-        await pool.execute(
-            "INSERT INTO extended_operators "
-            "(name, signature, python_impl, doc, registered_by, source_proposal_id) "
-            "VALUES ($1, $2, $3, $4, $5, $6) "
-            "ON CONFLICT (name) DO NOTHING",
-            op["name"], op.get("signature", ""), op["python_impl"],
-            op.get("doc", ""), user_id, proposal_id,
+    async with config_transaction(pool) as (conn, writes):
+        row = await conn.fetchrow(
+            "SELECT expression, new_operators FROM factor_proposals "
+            "WHERE id=$1 AND status='pending' FOR UPDATE",
+            proposal_id,
         )
-    await set_config(pool, "factor.custom_expression",
-                     row["expression"], user_id=user_id, source="approved")
-    await pool.execute(
-        "UPDATE factor_proposals SET status='approved', decided_at=now(), decided_by=$1 "
-        "WHERE id=$2", user_id, proposal_id,
-    )
+        if row is None:
+            raise HTTPException(404, "proposal not found or not pending")
+        new_ops = _decode_jsonb(row["new_operators"]) or []
+        for op in new_ops:
+            await conn.execute(
+                "INSERT INTO extended_operators "
+                "(name, signature, python_impl, doc, registered_by, source_proposal_id) "
+                "VALUES ($1, $2, $3, $4, $5, $6) "
+                "ON CONFLICT (name) DO NOTHING",
+                op["name"], op.get("signature", ""), op["python_impl"],
+                op.get("doc", ""), user_id, proposal_id,
+            )
+        await write_config(conn, writes, "factor.custom_expression",
+                         row["expression"], user_id=user_id, source="approved")
+        await conn.execute(
+            "UPDATE factor_proposals SET status='approved', decided_at=clock_timestamp(), decided_by=$1 "
+            "WHERE id=$2 AND status='pending'", user_id, proposal_id,
+        )
     try:
         await refresh_allowed_ops(pool)
         refresh_error: str | None = None

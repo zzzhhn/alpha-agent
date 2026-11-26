@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 # Base inter-request delay; actual sleep adds 0.5-2.0s jitter.
 _REQUEST_INTERVAL: float = 0.3
 
+_US_MARKET = "US"
+_US_PRICE_BASIS = "adjusted"
+
 # Network-level transient errors worth retrying. Crucially, generic HTTPError
 # (4xx auth / 422 schema) is excluded — retrying those just burns quota.
 _TRANSIENT_NETWORK_EXCEPTIONS: tuple[type[BaseException], ...] = (
@@ -66,6 +69,10 @@ def _jittered_sleep() -> None:
     time.sleep(_REQUEST_INTERVAL + random.uniform(0.5, 2.0))
 
 
+def _format_iso_day(ymd: str) -> str:
+    return pd.Timestamp(ymd).strftime("%Y-%m-%d")
+
+
 class AkshareUSFetcher:
     """AKShare's stock_us_daily — Sina Finance backed, works from mainland China.
 
@@ -88,7 +95,8 @@ class AkshareUSFetcher:
 
         @_retry_network
         def _call() -> "pd.DataFrame":
-            return ak.stock_us_daily(symbol=ticker, adjust="qfq")
+            fetch_history = getattr(ak, "stock_us_hist_sina", None) or ak.stock_us_daily
+            return fetch_history(symbol=ticker, adjust="qfq")
 
         try:
             raw = _call()
@@ -119,10 +127,13 @@ class YFinanceFetcher:
             logger.debug("yfinance not installed, %s skipped", self.name)
             return None
 
+        # yfinance treats `end` as exclusive, whereas provider ranges are inclusive.
+        yf_end = (pd.Timestamp(end) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+
         @_retry_network
         def _call() -> "pd.DataFrame":
             return yf.download(
-                ticker, start=start, end=end,
+                ticker, start=start, end=yf_end,
                 progress=False, auto_adjust=True, threads=False,
             )
 
@@ -137,7 +148,7 @@ class YFinanceFetcher:
 
         if data is None or data.empty:
             return None
-        return _normalize_yfinance(data, ticker)
+        return _normalize_yfinance(data, ticker, start, end)
 
 
 def build_default_us_manager() -> DataFetcherManager:
@@ -185,37 +196,117 @@ class YFinanceProvider(DataProvider):
             "YYYYMMDD" format (provider contract).
         """
         frames: list[pd.DataFrame] = []
-        start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
-        end_fmt = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
+        upstream_calls = 0
 
-        for i, ticker in enumerate(stock_codes):
+        for ticker in stock_codes:
             if self._cache is not None:
-                cached = self._cache.get(ticker, start_date, end_date)
-                if cached is not None and not cached.empty:
+                cached = self._cache.get(
+                    ticker,
+                    start_date,
+                    end_date,
+                    market=_US_MARKET,
+                    price_basis=_US_PRICE_BASIS,
+                    allow_empty=True,
+                )
+                if cached is not None:
                     logger.debug("Cache hit for %s (%d rows).", ticker, len(cached))
-                    frames.append(cached)
+                    if not cached.empty:
+                        frames.append(cached)
                     continue
 
-            if i > 0:
-                _jittered_sleep()
+                missing = self._cache.missing_ranges(
+                    ticker,
+                    start_date,
+                    end_date,
+                    market=_US_MARKET,
+                    price_basis=_US_PRICE_BASIS,
+                )
+            else:
+                missing = [(start_date, end_date)]
 
-            df = self._manager.fetch_ohlcv(ticker, start_fmt, end_fmt)
+            all_segments_ok = True
+            fetched_segments: list[pd.DataFrame] = []
+            for seg_start, seg_end in missing:
+                if upstream_calls > 0:
+                    _jittered_sleep()
+                upstream_calls += 1
 
-            if df is None or df.empty:
-                logger.warning("No data for %s from any source (%s)", ticker, self._manager.names())
+                seg_start_fmt = _format_iso_day(seg_start)
+                seg_end_fmt = _format_iso_day(seg_end)
+                df = self._manager.fetch_ohlcv(ticker, seg_start_fmt, seg_end_fmt)
+
+                if df is None:
+                    logger.warning(
+                        "No data for %s [%s..%s] from any source (%s)",
+                        ticker,
+                        seg_start_fmt,
+                        seg_end_fmt,
+                        self._manager.names(),
+                    )
+                    all_segments_ok = False
+                    break
+
+                if df.empty:
+                    logger.info(
+                        "Empty segment for %s [%s..%s] (closed or halted).",
+                        ticker,
+                        seg_start_fmt,
+                        seg_end_fmt,
+                    )
+                    if self._cache is not None:
+                        self._cache.put(
+                            ticker,
+                            _empty_ohlcv_frame(),
+                            start_date=seg_start,
+                            end_date=seg_end,
+                            market=_US_MARKET,
+                            price_basis=_US_PRICE_BASIS,
+                            record_empty_range=True,
+                        )
+                    continue
+
+                fetched_segments.append(df)
+                if self._cache is not None:
+                    self._cache.put(
+                        ticker,
+                        df,
+                        start_date=seg_start,
+                        end_date=seg_end,
+                        market=_US_MARKET,
+                        price_basis=_US_PRICE_BASIS,
+                        record_empty_range=True,
+                    )
+
+            if not all_segments_ok:
                 continue
-
-            frames.append(df)
-
             if self._cache is not None:
-                self._cache.put(ticker, df)
+                merged = self._cache.peek_slice(
+                    ticker,
+                    start_date,
+                    end_date,
+                    market=_US_MARKET,
+                    price_basis=_US_PRICE_BASIS,
+                )
+                if merged is not None:
+                    if not merged.empty:
+                        frames.append(merged)
+                    continue
+            if fetched_segments:
+                combined = pd.concat(fetched_segments)
+                combined = combined[~combined.index.duplicated(keep="last")].sort_index()
+                frames.append(combined)
 
         if not frames:
             return _empty_ohlcv_frame()
         return pd.concat(frames).sort_index()
 
 
-def _normalize_yfinance(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
+def _normalize_yfinance(
+    raw: pd.DataFrame,
+    ticker: str,
+    start: str | None = None,
+    end: str | None = None,
+) -> pd.DataFrame:
     """Transform yfinance output into canonical MultiIndex format."""
     df = raw.reset_index()
     # Handle multi-level columns from yfinance
@@ -229,9 +320,13 @@ def _normalize_yfinance(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
     keep = ["date"] + [c for c in OHLCV_COLUMNS if c in df.columns]
     df = df[keep]
     df = df.assign(
-        date=pd.to_datetime(df["date"]),
+        date=pd.to_datetime(df["date"]).dt.tz_localize(None),
         stock_code=ticker,
     )
+    if start is not None and end is not None:
+        start_ts = pd.Timestamp(start)
+        end_ts = pd.Timestamp(end)
+        df = df[(df["date"] >= start_ts) & (df["date"] <= end_ts)]
     df = df.set_index(["date", "stock_code"])
     return df
 

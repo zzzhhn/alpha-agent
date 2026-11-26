@@ -22,10 +22,12 @@ import logging
 import re
 import sys
 import time
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from alpha_agent.evolution.diagnostics import Diagnostic
-from alpha_agent.llm.base import LLMClient, Message
+from alpha_agent.llm.base import LLMClient, Message, llm_retries_disabled
 
 # Vercel surfaces logger output to runtime logs only when written to stderr.
 # Use both a logger and direct stderr print for the failure path so the raw
@@ -182,6 +184,12 @@ def _parse_response(text: str, n: int) -> list[RawProposal]:
     return out
 
 
+# The queued worker can persist generation counts before validation begins.
+proposal_generation_checkpoint: ContextVar[Callable[[int], Awaitable[None]] | None] = ContextVar(
+    "proposal_generation_checkpoint", default=None,
+)
+
+
 async def propose_factors(
     llm_client: LLMClient,
     diagnostic: Diagnostic,
@@ -190,9 +198,9 @@ async def propose_factors(
     tried_expressions: list[str] | None = None,
     deadline: float | None = None,
 ) -> list[RawProposal]:
-    """Run one LLM round-trip with at most one structured retry on JSON parse
-    failure. Raises ValueError on the second failure so the caller can return
-    a structured 502.
+    """Generate proposals with the caller's paid-retry policy.
+
+    Callers that allow retries get one extra attempt on malformed JSON.
 
     `lessons` + `tried_expressions` are the Phase A memory injected by the
     caller (loaded from factor_lessons); both default to None → the pre-memory
@@ -205,7 +213,8 @@ async def propose_factors(
     last_err: Exception | None = None
     last_preview: str = ""
     deadline = deadline or time.monotonic() + _WALL_CLOCK_S
-    for attempt in range(2):
+    attempts = 1 if llm_retries_disabled.get() else 2
+    for attempt in range(attempts):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("LLM generation exhausted its shared request budget")
@@ -229,7 +238,7 @@ async def propose_factors(
                 )
                 last_err = ValueError("LLM returned empty content")
                 continue
-            return _parse_response(raw, n)
+            proposals = _parse_response(raw, n)
         except (json.JSONDecodeError, ValueError) as e:
             last_err = e
             _emit_diag(
@@ -237,9 +246,13 @@ async def propose_factors(
                 f"raw_preview={last_preview!r}"
             )
             continue
+        checkpoint = proposal_generation_checkpoint.get()
+        if checkpoint is not None:
+            await checkpoint(len(proposals))
+        return proposals
     # Final detail carries the upstream evidence so the 502 detail field tells
     # the user what actually happened, not just the parser symptom.
     raise ValueError(
-        f"could not parse LLM response after retry: {last_err}; "
+        f"could not parse LLM response{' after retry' if attempts > 1 else ''}: {last_err}; "
         f"raw_preview={last_preview[:200]!r}"
     )
