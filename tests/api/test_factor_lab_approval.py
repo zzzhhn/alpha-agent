@@ -185,6 +185,7 @@ def test_rollback_reverts_custom_expression(authed_client, applied_db):
 
     r = authed_client.post(f"/api/factor-lab/proposals/{pid}/rollback", headers=_auth())
     assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "reverted_to": None}
 
     async def _verify(db_url):
         conn = await asyncpg.connect(db_url)

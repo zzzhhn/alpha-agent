@@ -27,7 +27,14 @@ from pydantic import BaseModel, Field, StrictInt, field_validator
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_admin, require_user
-from alpha_agent.config_store import config_transaction, refresh_config, set_config, write_config
+from alpha_agent.config_store import (
+    ConfigRollbackConflict,
+    config_transaction,
+    refresh_config,
+    rollback_config,
+    set_config,
+    write_config,
+)
 from alpha_agent.core.factor_ast import refresh_allowed_ops
 from alpha_agent.evolution.correlation_gate import (
     SELF_CORR_THRESHOLD,
@@ -1090,11 +1097,13 @@ async def approve_proposal(
                 op["name"], op.get("signature", ""), op["python_impl"],
                 op.get("doc", ""), user_id, proposal_id,
             )
-        await write_config(conn, writes, "factor.custom_expression",
-                         row["expression"], user_id=user_id, source="approved")
+        change_id = await write_config(
+            conn, writes, "factor.custom_expression", row["expression"], user_id=user_id, source="approved",
+        )
         await conn.execute(
-            "UPDATE factor_proposals SET status='approved', decided_at=clock_timestamp(), decided_by=$1 "
-            "WHERE id=$2 AND status='pending'", user_id, proposal_id,
+            "UPDATE factor_proposals SET status='approved',decided_at=clock_timestamp(),"
+            "decided_by=$1,applied_change_id=$3 WHERE id=$2 AND status='pending'",
+            user_id, proposal_id, change_id,
         )
     try:
         await refresh_allowed_ops(pool)
@@ -1132,23 +1141,22 @@ async def rollback_proposal(
     user_id: int = Depends(require_admin),
     pool=Depends(get_db_pool),
 ) -> dict:
-    """Revert factor.custom_expression to its pre-approval value, sourced from
-    the config_change_log row that the approve handler wrote (source='approved',
-    changed_at <= proposal.decided_at, most recent). Operators stay registered
-    in extended_operators (audit + reproducibility, per the Phase 3 spec)."""
-    row = await pool.fetchrow(
-        "SELECT decided_at FROM factor_proposals "
-        "WHERE id=$1 AND status='approved'", proposal_id,
-    )
-    if row is None:
-        raise HTTPException(404, "approved proposal not found")
-    prior = await pool.fetchrow(
-        "SELECT old_value FROM config_change_log "
-        "WHERE field='factor.custom_expression' AND source='approved' "
-        "AND changed_at <= $1 ORDER BY changed_at DESC LIMIT 1",
-        row["decided_at"],
-    )
-    old_value = _decode_jsonb(prior["old_value"]) if prior and prior["old_value"] else None
-    await set_config(pool, "factor.custom_expression",
-                     old_value, user_id=user_id, source="rollback")
+    """Undo this proposal's exact expression version. Registered operators remain available."""
+    async with config_transaction(pool) as (conn, writes):
+        row = await conn.fetchrow(
+            "SELECT applied_change_id,rollback_change_id FROM factor_proposals "
+            "WHERE id=$1 AND status='approved' FOR UPDATE", proposal_id,
+        )
+        if row is None:
+            raise HTTPException(404, "approved proposal not found")
+        try:
+            change_id, old_value = await rollback_config(
+                conn, writes, "factor.custom_expression", user_id,
+                applied_change_id=row["applied_change_id"], rollback_change_id=row["rollback_change_id"],
+            )
+        except ConfigRollbackConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        await conn.execute(
+            "UPDATE factor_proposals SET rollback_change_id=$2 WHERE id=$1", proposal_id, change_id,
+        )
     return {"ok": True, "reverted_to": old_value}
