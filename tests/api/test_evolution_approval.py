@@ -28,9 +28,14 @@ def authed_client(client_with_db, monkeypatch):
     return client_with_db
 
 
-async def _seed_pending(applied_db):
+async def _seed_pending(applied_db, *, configured_value=None):
     conn = await asyncpg.connect(applied_db)
     try:
+        if configured_value is not None:
+            await conn.execute(
+                "INSERT INTO engine_config(key,value) VALUES('rating.no_trade_band',$1::jsonb)",
+                json.dumps(configured_value),
+            )
         return await conn.fetchval(
             "INSERT INTO config_change_log (user_id, field, old_value, new_value, source, status, evidence) "
             "VALUES (0, 'rating.no_trade_band', '0.15', '0.2', 'proposer', 'pending', $1::jsonb) RETURNING id",
@@ -100,7 +105,7 @@ def test_rollback_reverts_applied_change(authed_client, applied_db):
 
     import alpha_agent.storage.postgres as _pg
 
-    pid = asyncio.run(_seed_pending(applied_db))
+    pid = asyncio.run(_seed_pending(applied_db, configured_value=0.15))
 
     # Step 1: approve - pool is created here for the first time.
     r = authed_client.post(f"/api/evolution/proposals/{pid}/approve", headers=_auth())
@@ -114,6 +119,7 @@ def test_rollback_reverts_applied_change(authed_client, applied_db):
     # Step 2: rollback - fresh pool, no stale-loop conflict.
     r2 = authed_client.post(f"/api/evolution/proposals/{pid}/rollback", headers=_auth())
     assert r2.status_code == 200, r2.text
+    assert r2.json() == {"ok": True, "reverted": {"rating.no_trade_band": 0.15}}
 
     async def _verify(db_url):
         conn = await asyncpg.connect(db_url)

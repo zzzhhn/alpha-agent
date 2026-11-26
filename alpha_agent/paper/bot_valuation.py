@@ -12,6 +12,7 @@ from math import isfinite
 from typing import Any
 
 from alpha_agent.market_session import _xnys_calendar, latest_completed_xnys_session
+from alpha_agent.paper.bot_valuation_jobs import DailyValuationClaim, run_daily_valuation_jobs
 from alpha_agent.paper.intraday import fetch_bars
 from alpha_agent.paper.market_clock import as_utc, market_session
 
@@ -167,6 +168,7 @@ def _latest_mark(bars: list[dict], now: datetime, session: dict) -> dict:
 async def refresh_marks(
     pool: Any, account_id: int, now: datetime | str | None = None, *,
     _cache: dict | None = None,
+    _daily_claim: DailyValuationClaim | None = None,
 ) -> dict:
     """Refresh one bot book and upsert its NY-session sample, even without orders.
 
@@ -178,6 +180,13 @@ async def refresh_marks(
     instant = as_utc(now) if now is not None else datetime.now(UTC)
     session = valuation_session(instant)
     account = await pool.fetchrow("SELECT * FROM sim_account WHERE id=$1 AND kind='bot'", account_id)
+    if _daily_claim is not None:
+        if account is None or account['reset_count'] != _daily_claim.cohort_id:
+            return {'job_status': 'skipped', 'reason': 'cohort_changed'}
+        if account['status'] == 'disabled':
+            return {'job_status': 'skipped', 'reason': 'account_disabled'}
+        if session['is_open'] or date.fromisoformat(session['session_date']) != _daily_claim.session_date:
+            return {'job_status': 'skipped', 'reason': 'session_advanced'}
     if account is None:
         raise ValueError('bot account not found')
     cohort = account['reset_count']
@@ -189,6 +198,10 @@ async def refresh_marks(
     errors = {}
     symbols = list(dict.fromkeys(['SPY'] + [row['ticker'] for row in positions]))
     quote_asof = instant if session['is_open'] else as_utc(session['close_at'])
+    if _daily_claim is not None:
+        missing = sum((session['session_date'], ticker) not in cache for ticker in symbols)
+        if len(cache) + missing > MAX_SYMBOLS:
+            return {'job_status': 'deferred', 'reason': 'symbol_budget_exceeded'}
     scheduled = []
     for ticker in symbols:
         key = (session['session_date'], ticker)
@@ -232,11 +245,27 @@ async def refresh_marks(
                 "SELECT * FROM sim_account WHERE id=$1 AND kind='bot' FOR UPDATE", account_id,
             )
             if account is None or account['reset_count'] != cohort:
+                if _daily_claim is not None:
+                    return {'job_status': 'skipped', 'reason': 'cohort_changed'}
                 return {'account_id': account_id, 'valuation_quality': 'cohort_changed', 'errors': errors}
+            if _daily_claim is not None:
+                if now is None:
+                    instant = datetime.now(UTC)
+                if instant >= _daily_claim.next_open:
+                    return {'job_status': 'skipped', 'reason': 'session_advanced'}
+                if account['status'] == 'disabled':
+                    return {'job_status': 'skipped', 'reason': 'account_disabled'}
+                if not await _daily_claim.lock(conn, instant):
+                    return {'job_status': 'superseded', 'reason': 'claim_lost'}
             current = await conn.fetch(
                 'SELECT * FROM sim_position WHERE account_id=$1 AND cohort_id=$2 ORDER BY ticker',
                 account_id, cohort,
             )
+            if _daily_claim is not None:
+                if 'fetch_budget_exceeded' in errors.values():
+                    return {'job_status': 'deferred', 'reason': 'batch_budget_exceeded'}
+                if any(row['qty'] > 0 and (session['session_date'], row['ticker']) not in cache for row in current):
+                    return {'job_status': 'deferred', 'reason': 'positions_changed'}
             updated = []
             for row in current:
                 position = dict(row)
@@ -273,6 +302,8 @@ async def refresh_marks(
             if created_at is not None and as_utc(created_at) > closing:
                 # Before this account's first market session, an older SPY
                 # close cannot date a portfolio history that did not exist.
+                if _daily_claim is not None:
+                    return {'job_status': 'skipped', 'reason': 'before_account_creation'}
                 return {'account_id': account_id, 'session_date': session['session_date'],
                         'portfolio_value': summary['portfolio_value'],
                         'valuation_quality': summary['valuation_quality'],
@@ -318,6 +349,8 @@ async def refresh_marks(
                     'AND (benchmark_close IS DISTINCT FROM $4 OR benchmark_close_at IS DISTINCT FROM $5)',
                     account_id, cohort, session_date, benchmark_close, benchmark_close_at,
                 )
+            if _daily_claim is not None:
+                await _daily_claim.finish(conn, 'completed', quality=summary['valuation_quality'])
     summary['valued_at'] = summary['valued_at'].isoformat() if summary['valued_at'] else None
     summary['marks'] = {ticker: {**mark, 'as_of': mark['as_of'].isoformat() if mark['as_of'] else None}
                         for ticker, mark in summary['marks'].items()}
@@ -326,28 +359,6 @@ async def refresh_marks(
 
 
 async def refresh_daily_valuations(
-    pool: Any, now: datetime | str | None = None, limit: int = 10, offset: int = 0,
+    pool: Any, now: datetime | str | None = None, limit: int = 10,
 ) -> dict:
-    """Bounded daily hook; does not depend on any pending order being present."""
-    batch_limit = min(max(limit, 1), 10)
-    rows = await pool.fetch(
-        "SELECT id FROM sim_account WHERE kind='bot' ORDER BY id LIMIT $1 OFFSET $2",
-        batch_limit + 1, max(offset, 0),
-    )
-    has_more = len(rows) > batch_limit
-    rows = rows[:batch_limit]
-    cache, results = {}, []
-    try:
-        async with asyncio.timeout(FETCH_BUDGET_SECONDS):
-            for row in rows:
-                try:
-                    result = await refresh_marks(pool, row['id'], now, _cache=cache)
-                    results.append({key: result.get(key) for key in ('account_id', 'session_date', 'valuation_quality', 'errors')})
-                except Exception as exc:
-                    results.append({'account_id': row['id'], 'valuation_quality': 'failed', 'error': type(exc).__name__})
-    except TimeoutError:
-        done = {result['account_id'] for result in results}
-        results.extend({'account_id': row['id'], 'valuation_quality': 'failed', 'error': 'batch_budget_exceeded'}
-                       for row in rows if row['id'] not in done)
-    return {'accounts': results, 'symbols_read': len(cache), 'symbol_limit': MAX_SYMBOLS,
-            'has_more_accounts': has_more, 'next_offset': offset + batch_limit if has_more else None}
+    return await run_daily_valuation_jobs(pool, now, limit)

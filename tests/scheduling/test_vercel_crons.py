@@ -66,3 +66,9 @@ def test_existing_crons_and_requested_single_shots_preserved():
         (h, m) for hours, minutes in [((14, 15), range(1, 26)),
                                      ((16, 17, 19, 20), range(31, 56))]
         for h in hours for m in minutes}
+
+
+
+def test_paper_fill_retries_later_in_the_same_post_close_window():
+    schedules = {c["schedule"] for c in CONFIG["crons"] if c["path"] == "/api/cron/paper_fill"}
+    assert schedules == {"0 1 * * *", "15,30,45 1 * * 2-6"}

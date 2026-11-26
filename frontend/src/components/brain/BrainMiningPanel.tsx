@@ -627,6 +627,8 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
   const [pnlErr, setPnlErr] = useState<string | null>(null);
   const [chartKind, setChartKind] = useState<ChartKind>("pnl");
   const verdict = candidateVerdict(alpha);
+  const commonIntervals = alpha.diversity_evidence?.reconciled_adjusted_correlation?.n
+    ?? alpha.diversity_evidence?.decision?.adjusted_correlation?.n;
 
   useEffect(() => {
     let alive = true;
@@ -745,6 +747,11 @@ function RowDetail({ alpha, onDone }: { alpha: BrainAlpha; onDone: () => void })
           <span className="tabular-nums">
             <SCorrValue value={alpha.self_correlation_adj} />
           </span>
+          {commonIntervals != null && (
+            <span className="text-xs text-tm-muted">
+              {zh ? "共同收益区间" : "Shared return intervals"} · {commonIntervals}
+            </span>
+          )}
         </div>
       </div>
 
