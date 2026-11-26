@@ -55,6 +55,14 @@ _SPECULATION = re.compile(r'\b(?:rumou?rs?|speculation|responds to reports|media
 _CORRECTION = re.compile(r'^\s*(?:correction|corrected|correcting and replacing)\b', re.I)
 _WITHDRAWAL = re.compile(r'^\s*(?:withdrawn|retracted|withdrawal notice|retraction)\b', re.I)
 
+# An additive migration must preserve the result type of pooled prepared statements.
+_SOURCE_STATE_SQL = """
+    SELECT ticker, source, cik, cik_checked_at, last_attempt_at, last_success_at,
+           last_error, etag, last_modified
+    FROM official_event_source
+    WHERE ticker = ANY($1::text[])
+"""
+
 _CANDIDATES = """
     SELECT ticker FROM rating_snapshot
     WHERE run_id = (SELECT id FROM research_run WHERE run_type='daily_close' AND status='complete'
@@ -322,8 +330,8 @@ async def collect_official_events(pool, *, now: datetime | None = None, transpor
     await pool.execute('''INSERT INTO official_event_watch_state (id,tickers,selected_at) VALUES (1,$1,$2)
         ON CONFLICT (id) DO UPDATE SET tickers=EXCLUDED.tickers,selected_at=EXCLUDED.selected_at
         WHERE official_event_watch_state.tickers IS DISTINCT FROM EXCLUDED.tickers''', roster, now)
-    sources = {(r['ticker'], r['source']): dict(r) for r in await pool.fetch(
-        'SELECT * FROM official_event_source WHERE ticker=ANY($1::text[])', roster)}
+    rows = await pool.fetch(_SOURCE_STATE_SQL, roster)
+    sources = {(r['ticker'], r['source']): dict(r) for r in rows}
     floor = datetime.min.replace(tzinfo=UTC)
     sec_order = sorted(roster, key=lambda t: sources.get((t, SEC), {}).get('last_attempt_at') or floor)
     active = [(ticker, IR) for ticker in roster if ticker in IR_FEEDS] + [(ticker, SEC) for ticker in sec_order]
@@ -425,7 +433,7 @@ async def read_event_evidence(pool, user_id: int, ticker: str | None, limit: int
     visible = set(FIXED) | {r['ticker'] for r in [*public, *private]}
     roster = await pool.fetchval('SELECT tickers FROM official_event_watch_state WHERE id=1')
     tracked = [t for t in (roster or FIXED) if t in visible and (ticker is None or ticker == t)]
-    source_rows = await pool.fetch('SELECT * FROM official_event_source WHERE ticker=ANY($1::text[])', tracked) if tracked else []
+    source_rows = await pool.fetch(_SOURCE_STATE_SQL, tracked) if tracked else []
     found = {(r['ticker'], r['source']): dict(r) for r in source_rows}
     sources = []
     for symbol in tracked:

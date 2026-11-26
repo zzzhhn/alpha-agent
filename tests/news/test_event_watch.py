@@ -258,3 +258,25 @@ def test_scheduler_weekends_daytime_overnight_and_once_per_slot():
     assert next_unit('events_watch', **kwargs, receipts=[]).unit.name == 'events_watch'
     receipt = {'research_day': day, 'slot': slot, 'unit': 'events_watch', 'ok': False}
     assert next_unit('events_watch', **kwargs, receipts=[receipt]).reason == 'complete'
+
+
+@pytest.mark.asyncio
+async def test_prepared_source_read_survives_an_additive_migration(applied_db):
+    conn = await asyncpg.connect(applied_db)
+    try:
+        async with conn.transaction():
+            await conn.execute(
+                "CREATE TEMP TABLE official_event_source (LIKE public.official_event_source INCLUDING ALL)"
+            )
+            await conn.execute(
+                "INSERT INTO official_event_source (ticker,source,etag) VALUES ('NVDA','sec_edgar','initial')"
+            )
+            read = await conn.prepare(watch._SOURCE_STATE_SQL)
+            before, = await read.fetch(['NVDA'])
+            assert before['etag'] == 'initial'
+
+            await conn.execute("ALTER TABLE official_event_source ADD COLUMN future_observation timestamptz")
+            after, = await read.fetch(['NVDA'])
+            assert dict(after) == dict(before)
+    finally:
+        await conn.close()
