@@ -28,6 +28,8 @@ def order_fixture(monkeypatch):
     account = {"id": 1, "cash": 100_000, "reset_count": 0}
     conn = AsyncMock()
     conn.fetchrow.return_value = account
+    instrument = {"id": 17, "identity_status": "supported_universe"}
+    conn.fetchrow.side_effect = [account, instrument]
     conn.fetchval.side_effect = [0, 123]
 
     @asynccontextmanager
@@ -46,8 +48,9 @@ def order_fixture(monkeypatch):
     monkeypatch.setattr(picks, "latest_completed_xnys_session", lambda: MARKET_DATE)
     monkeypatch.setattr(paper, "get_db_pool", AsyncMock(return_value=pool))
     monkeypatch.setattr(paper, "_get_or_create_account", AsyncMock(return_value=account))
-    monkeypatch.setattr(paper, "_current_closes", AsyncMock(return_value={r["ticker"]: 100 for r in rows}))
-    monkeypatch.setattr(paper, "_paper_signal_session", lambda: MARKET_DATE)
+    monkeypatch.setattr(paper, "latest_completed_xnys_session", lambda now: MARKET_DATE)
+    monkeypatch.setattr(paper, "_paper_signal_session", lambda now: MARKET_DATE)
+    conn.fetch.return_value = [{"ticker": r["ticker"], "date": MARKET_DATE, "close": 100.0} for r in rows]
 
     app = FastAPI()
     app.include_router(paper.router)
@@ -94,6 +97,10 @@ def test_ranked_board_order_persists_exact_mode_payload(
         policy = get_policy("strategic").policy_id
     assert args[7:12] == [MARKET_DATE, expected_ticker, RUN_ID, policy, paper._canonical_payload_hash(payload)]
     assert board["run"]["policy_id"] == policy
+    assert args[12] == pytest.approx(10010)
+    assert args[15:17] == [17, 100.0]
+    conn.fetch.assert_awaited_once()
+    assert conn.fetch.await_args.args[1:] == ([expected_ticker], [MARKET_DATE])
 
 
 @pytest.mark.parametrize(("case", "detail"), [
@@ -133,6 +140,7 @@ def test_legacy_attribution_keeps_original_policy_and_hash(order_fixture):
     conn.fetchrow.side_effect = [
         conn.fetchrow.return_value,
         {**run, "user_visible_payload_json": payload},
+        {"id": 17, "identity_status": "supported_universe"},
     ]
     body = order_body("T01")
     del body["pick_mode"], body["pick_side"]

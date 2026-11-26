@@ -558,6 +558,7 @@ async def _run_paper_fill_locked(pool: Any, today: date) -> dict[str, Any]:
                              WHEN so.order_type='limit' THEN 1 ELSE 2 END AS priority
                     FROM sim_order so
                     JOIN sim_account sa ON sa.id=so.account_id
+                    LEFT JOIN sim_instrument instrument ON so.order_type='market' AND instrument.ticker=so.ticker
                     CROSS JOIN LATERAL (
                         SELECT ($3::int[])[so.signal_date-$4::date+1] AS session_index
                     ) first
@@ -583,7 +584,9 @@ async def _run_paper_fill_locked(pool: Any, today: date) -> dict[str, Any]:
                           first.session_index + GREATEST(so.expire_after_days,1)-1 <= cardinality($2::date[]))
                           OR (so.order_type='market' AND first.session_index <= cardinality($2::date[])
                               AND (first.session_index + $5 <= cardinality($2::date[])
-                                   OR so.fail_reason IS DISTINCT FROM $6)))
+                                   OR so.fail_reason IS DISTINCT FROM $6
+                                   OR instrument.identity_status <> 'supported_universe'
+                                   OR (so.instrument_id IS NOT NULL AND so.instrument_id IS DISTINCT FROM instrument.id))))
                     ORDER BY priority, so.created_at, so.id
                     LIMIT $1
                 )

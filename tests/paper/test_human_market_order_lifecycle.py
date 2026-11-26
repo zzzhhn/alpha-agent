@@ -85,11 +85,16 @@ async def test_market_review_waits_for_exact_close_then_releases_reservations(ap
         assert (await paper.cancel_order(orders['CANCEL'].id, uid)).status_code == 204
 
         await pool.execute("INSERT INTO sim_instrument(ticker,identity_status) VALUES('MOVE','renamed')")
+        counts = await _run_paper_fill_locked(pool, TARGET)
+        assert (counts['filled'], counts['failed'], counts['remaining_pending']) == (0, 1, 2)
+        account = await paper._read_account(pool, uid, aid, now=now)
+        assert account.cash == 1000 and account.reserved_cash == pytest.approx(200.20)
+
         await pool.execute(
             "INSERT INTO daily_prices(ticker,date,close) VALUES('LATE',$1,110),('MOVE',$1,100)", TARGET,
         )
         counts = await _run_paper_fill_locked(pool, DEADLINE)
-        assert (counts['filled'], counts['expired'], counts['failed'], counts['remaining_pending']) == (1, 1, 1, 0)
+        assert (counts['filled'], counts['expired'], counts['failed'], counts['remaining_pending']) == (1, 1, 0, 0)
         orders = {row.ticker: row for row in (await paper._read_orders(pool, uid, account_id=aid)).orders}
         assert (orders['LATE'].status, orders['LATE'].fill_date, orders['LATE'].fill_price) == (
             'filled', TARGET.isoformat(), 110,
