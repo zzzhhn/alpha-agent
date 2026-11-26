@@ -9,6 +9,7 @@ page renders correctly without pandas/numpy/scikit-learn.
 from __future__ import annotations
 
 import logging
+import math
 import platform
 import sys
 import time
@@ -58,14 +59,24 @@ def _iso_or_none(value: Any) -> str | None:
     if isinstance(value, datetime):
         dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).isoformat()
-    text = str(value).strip()
-    return text or None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or "T" not in text.upper() and " " not in text:
+        return None
+    normalized = f"{text[:-1]}+00:00" if text.endswith(("Z", "z")) else text
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    dt = dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
 
 
 def _non_negative_float(value: Any) -> float | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         number = float(value)
-        if number >= 0:
+        if math.isfinite(number) and number >= 0:
             return number
     return None
 
@@ -73,7 +84,7 @@ def _non_negative_float(value: Any) -> float | None:
 def _non_negative_int(value: Any) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
         return value
-    if isinstance(value, float) and value.is_integer() and value >= 0:
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer() and value >= 0:
         return int(value)
     return None
 
@@ -108,10 +119,21 @@ def _telemetry_provenance(
     raw: Mapping[str, Any] | None,
     *,
     default_source: str,
+    unavailable_source: str = "untracked_serverless_compat",
 ) -> tuple[TelemetryAvailability, str, str | None]:
-    availability_raw = str((raw or {}).get("availability") or "measured").lower()
-    availability: TelemetryAvailability = "demo" if availability_raw == "demo" else "measured"
-    source = str((raw or {}).get("source") or ("demo_fixture" if availability == "demo" else default_source))
+    raw_avail = (raw or {}).get("availability")
+    if raw_avail is None:
+        availability: TelemetryAvailability = "measured"
+    elif isinstance(raw_avail, str) and raw_avail.strip().lower() in {"measured", "demo", "unavailable"}:
+        availability = raw_avail.strip().lower()  # type: ignore[assignment]
+    else:
+        availability = "unavailable"
+    raw_source = (raw or {}).get("source")
+    explicit_source = raw_source.strip() if isinstance(raw_source, str) and raw_source.strip() else None
+    if availability == "unavailable":
+        return "unavailable", explicit_source or unavailable_source, None
+    fallback_source = "demo_fixture" if availability == "demo" else default_source
+    source = explicit_source or fallback_source
     return availability, source, _iso_or_none((raw or {}).get("sampled_at"))
 
 
@@ -193,7 +215,8 @@ async def system_config(request: Request, response: Response) -> dict:
         raw_alerts = raw.get("alerts")
         alerts = list(raw_alerts) if isinstance(raw_alerts, (list, tuple)) else default_alerts
         if (
-            sampled_at is not None
+            availability != "unavailable"
+            and sampled_at is not None
             and api_calls_24h is not None
             and cache_hit_rate is not None
             and avg_latency_ms is not None
@@ -212,7 +235,11 @@ async def system_config(request: Request, response: Response) -> dict:
 
     return {
         "availability": "unavailable",
-        "source": "untracked_serverless_compat",
+        "source": (
+            raw["source"].strip()
+            if raw is not None and isinstance(raw.get("source"), str) and raw["source"].strip()
+            else "untracked_serverless_compat"
+        ),
         "sampled_at": None,
         "api_calls_24h": None,
         "cache_hit_rate": None,
@@ -248,6 +275,10 @@ async def services_health(request: Request, response: Response) -> dict:
     ml_ok = _check_ml()
 
     raw = _telemetry_section(request, "services_health")
+    top_avail_raw = raw.get("availability") if raw is not None else None
+    force_top_unavailable = top_avail_raw is not None and not (
+        isinstance(top_avail_raw, str) and top_avail_raw.strip().lower() in {"measured", "demo"}
+    )
     raw_services = raw.get("services") if raw is not None else None
     by_service: dict[str, Mapping[str, Any]] = {}
     if isinstance(raw_services, Mapping):
@@ -275,13 +306,21 @@ async def services_health(request: Request, response: Response) -> dict:
         override = by_service.get(service_id)
         latency_p95_ms = _non_negative_float(override.get("latency_p95_ms")) if override else None
         uptime_pct_24h = _percent_float(override.get("uptime_pct_24h")) if override else None
-        sampled_at = _iso_or_none(override.get("sampled_at")) if override else None
-        if override is not None and sampled_at is not None and (
-            latency_p95_ms is not None or uptime_pct_24h is not None
-        ):
-            svc_availability, svc_source, _ = _telemetry_provenance(
-                override, default_source="service_telemetry",
+        svc_availability, svc_source, sampled_at = (
+            _telemetry_provenance(
+                override,
+                default_source="service_telemetry",
+                unavailable_source="runtime_probe_only",
             )
+            if override is not None
+            else ("unavailable", "runtime_probe_only", None)
+        )
+        if (
+            not force_top_unavailable
+            and svc_availability != "unavailable"
+            and sampled_at is not None
+            and (latency_p95_ms is not None or uptime_pct_24h is not None)
+        ):
             if svc_availability == "demo":
                 any_demo = True
             else:
@@ -291,7 +330,11 @@ async def services_health(request: Request, response: Response) -> dict:
             uptime_pct_24h = None
             sampled_at = None
             svc_availability = "unavailable"
-            svc_source = "runtime_probe_only"
+            svc_source = (
+                override["source"].strip()
+                if override is not None and isinstance(override.get("source"), str) and override["source"].strip()
+                else "runtime_probe_only"
+            )
 
         status = str(override.get("status")) if override and override.get("status") in {"green", "yellow", "red"} else default_status
         item: dict[str, Any] = {
@@ -302,7 +345,7 @@ async def services_health(request: Request, response: Response) -> dict:
             "sampled_at": sampled_at,
             "latency_p95_ms": round(latency_p95_ms, 2) if latency_p95_ms is not None else None,
             "uptime_pct_24h": round(uptime_pct_24h, 2) if uptime_pct_24h is not None else None,
-            "last_check_at": _iso_or_none(override.get("last_check_at")) if override and override.get("last_check_at") else default_checked_at,
+            "last_check_at": (_iso_or_none(override.get("last_check_at")) or default_checked_at) if override and override.get("last_check_at") else default_checked_at,
             "last_error_at": _iso_or_none(override.get("last_error_at")) if override and "last_error_at" in override else default_error_at,
         }
         if service_id == "llm_kimi" and llm_probe_ms is not None:
@@ -310,17 +353,37 @@ async def services_health(request: Request, response: Response) -> dict:
         services.append(item)
 
     overall_availability: TelemetryAvailability = (
-        "demo" if (any_demo or (raw is not None and str(raw.get("availability") or "").lower() == "demo"))
-        else "measured" if any_measured
-        else "unavailable"
+        "unavailable" if force_top_unavailable or (not any_measured and not any_demo)
+        else "demo" if (
+            any_demo
+            or (
+                raw is not None
+                and isinstance(raw.get("availability"), str)
+                and raw["availability"].strip().lower() == "demo"
+            )
+        )
+        else "measured"
     )
-    overall_sampled_at = _iso_or_none(raw.get("sampled_at")) if raw is not None else None
-    if overall_sampled_at is None:
-        sampled_values = [svc["sampled_at"] for svc in services if svc["sampled_at"]]
-        overall_sampled_at = max(sampled_values) if sampled_values else None
+    overall_sampled_at: str | None = None
+    if overall_availability != "unavailable":
+        overall_sampled_at = _iso_or_none(raw.get("sampled_at")) if raw is not None else None
+        if overall_sampled_at is None:
+            sampled_values = [
+                datetime.fromisoformat(svc["sampled_at"])
+                for svc in services
+                if svc["sampled_at"]
+            ]
+            overall_sampled_at = max(sampled_values).isoformat() if sampled_values else None
+        if overall_sampled_at is None:
+            overall_availability = "unavailable"
+    explicit_top_source = (
+        raw["source"].strip()
+        if raw is not None and isinstance(raw.get("source"), str) and raw["source"].strip()
+        else None
+    )
     return {
         "availability": overall_availability,
-        "source": str(raw.get("source")) if raw and raw.get("source") else (
+        "source": explicit_top_source or (
             "demo_fixture" if overall_availability == "demo"
             else "service_telemetry" if overall_availability == "measured"
             else "runtime_probe_only"
@@ -353,9 +416,10 @@ async def pipeline_latency(request: Request, response: Response) -> dict:
                     valid = False
                     break
                 parsed_segments.append((str(item["stage"]), latency_ms))
-            if valid and sampled_at is not None:
+            explicit_total = _non_negative_float(raw.get("total_ms")) if "total_ms" in raw and raw.get("total_ms") is not None else None
+            total_valid = ("total_ms" not in raw or raw.get("total_ms") is None or explicit_total is not None)
+            if availability != "unavailable" and valid and total_valid and sampled_at is not None:
                 stage_sum = sum(ms for _, ms in parsed_segments)
-                explicit_total = _non_negative_float(raw.get("total_ms"))
                 total_ms = explicit_total if explicit_total is not None else stage_sum
                 denom = total_ms if total_ms > 0 else stage_sum
                 segments = [
@@ -377,7 +441,11 @@ async def pipeline_latency(request: Request, response: Response) -> dict:
 
     return {
         "availability": "unavailable",
-        "source": "untracked_serverless_compat",
+        "source": (
+            raw["source"].strip()
+            if raw is not None and isinstance(raw.get("source"), str) and raw["source"].strip()
+            else "untracked_serverless_compat"
+        ),
         "sampled_at": None,
         "segments": [],
         "total_ms": None,
@@ -398,7 +466,8 @@ async def throughput(request: Request, response: Response) -> dict:
         trades_per_sec = _non_negative_float(raw.get("trades_per_sec"))
         features_per_sec = _non_negative_float(raw.get("features_per_sec"))
         if (
-            sampled_at is not None
+            availability != "unavailable"
+            and sampled_at is not None
             and tickers_per_sec is not None
             and trades_per_sec is not None
             and features_per_sec is not None
@@ -415,7 +484,11 @@ async def throughput(request: Request, response: Response) -> dict:
 
     return {
         "availability": "unavailable",
-        "source": "untracked_serverless_compat",
+        "source": (
+            raw["source"].strip()
+            if raw is not None and isinstance(raw.get("source"), str) and raw["source"].strip()
+            else "untracked_serverless_compat"
+        ),
         "sampled_at": None,
         "tickers_per_sec": None,
         "trades_per_sec": None,

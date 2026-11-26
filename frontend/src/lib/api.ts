@@ -167,14 +167,26 @@ function _telemetryAvailability(
   raw: unknown,
   hasMeasurements: boolean,
 ): TelemetryAvailability {
-  if (raw === "demo" || raw === "unavailable" || raw === "measured") {
-    return raw;
+  if (raw === undefined || raw === null) {
+    return hasMeasurements ? "measured" : "unavailable";
   }
-  return hasMeasurements ? "measured" : "unavailable";
+  if (raw === "demo" || raw === "measured") {
+    return hasMeasurements ? raw : "unavailable";
+  }
+  return "unavailable";
 }
 
 function _nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function _isoTimestamp(value: unknown): string | null {
+  const text = _nonEmptyString(value);
+  if (!text || (!text.includes("T") && !text.includes("t") && !text.includes(" "))) {
+    return null;
+  }
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? text : null;
 }
 
 export function normalizeServiceHealthResponse(
@@ -196,16 +208,23 @@ export function normalizeServiceHealthResponse(
     : raw && typeof raw.service_id === "string"
       ? [raw]
       : [];
+  const forceTopUnavailable =
+    raw?.availability !== undefined &&
+    raw?.availability !== null &&
+    raw.availability !== "measured" &&
+    raw.availability !== "demo";
   const services = rawServices
         .filter((svc): svc is NonNullable<typeof svc> => Boolean(svc && typeof svc.service_id === "string"))
         .map((svc) => {
           const latency = _nonNegativeFinite(svc.latency_p95_ms);
           const uptime = _nonNegativeFinite(svc.uptime_pct_24h);
-          const sampledAt = _nonEmptyString(svc.sampled_at);
-          const availability = _telemetryAvailability(
-            svc.availability,
-            latency !== null || uptime !== null,
-          );
+          const sampledAt = _isoTimestamp(svc.sampled_at);
+          const availability = forceTopUnavailable
+            ? "unavailable"
+            : _telemetryAvailability(
+                svc.availability,
+                latency !== null || uptime !== null,
+              );
           return {
             service_id: svc.service_id,
             status: svc.status === "green" || svc.status === "yellow" || svc.status === "red"
@@ -213,12 +232,12 @@ export function normalizeServiceHealthResponse(
               : "yellow",
             availability,
             source: _nonEmptyString(svc.source),
-            sampled_at: sampledAt,
+            sampled_at: availability === "unavailable" ? null : sampledAt,
             latency_p95_ms: availability === "unavailable" ? null : latency,
             uptime_pct_24h: availability === "unavailable" ? null : uptime,
             probe_latency_ms: _nonNegativeFinite(svc.probe_latency_ms),
-            last_check_at: _nonEmptyString(svc.last_check_at),
-            last_error_at: _nonEmptyString(svc.last_error_at),
+            last_check_at: _isoTimestamp(svc.last_check_at),
+            last_error_at: _isoTimestamp(svc.last_error_at),
           };
         });
   const hasMeasuredService = services.some((svc) => svc.availability === "measured");
@@ -227,13 +246,13 @@ export function normalizeServiceHealthResponse(
     raw?.availability ?? (hasDemoService ? "demo" : undefined),
     hasMeasuredService || hasDemoService,
   );
-  const sampledAt = _nonEmptyString(raw?.sampled_at) ?? _nonEmptyString(raw?.timestamp);
+  const sampledAt = _isoTimestamp(raw?.sampled_at) ?? _isoTimestamp(raw?.timestamp);
   return {
     availability,
     source: _nonEmptyString(raw?.source),
     sampled_at: availability === "unavailable" ? null : sampledAt,
     services,
-    timestamp: availability === "unavailable" ? null : (_nonEmptyString(raw?.timestamp) ?? sampledAt),
+    timestamp: availability === "unavailable" ? null : (_isoTimestamp(raw?.timestamp) ?? sampledAt),
   };
 }
 
@@ -255,11 +274,11 @@ export function normalizePipelineLatency(
         })
     : [];
   const totalMs = _nonNegativeFinite(raw?.total_ms);
+  const sampledAt = _isoTimestamp(raw?.sampled_at) ?? _isoTimestamp(raw?.timestamp);
   const availability = _telemetryAvailability(
     raw?.availability,
-    segments.length > 0 && totalMs !== null,
+    segments.length > 0 && totalMs !== null && sampledAt !== null,
   );
-  const sampledAt = _nonEmptyString(raw?.sampled_at) ?? _nonEmptyString(raw?.timestamp);
   if (availability === "unavailable") {
     return {
       availability: "unavailable",
@@ -276,7 +295,7 @@ export function normalizePipelineLatency(
     sampled_at: sampledAt,
     segments,
     total_ms: totalMs,
-    timestamp: _nonEmptyString(raw?.timestamp) ?? sampledAt,
+    timestamp: _isoTimestamp(raw?.timestamp) ?? sampledAt,
   };
 }
 
@@ -286,11 +305,11 @@ export function normalizeThroughputMetrics(
   const tickers = _nonNegativeFinite(raw?.tickers_per_sec);
   const trades = _nonNegativeFinite(raw?.trades_per_sec);
   const features = _nonNegativeFinite(raw?.features_per_sec);
+  const sampledAt = _isoTimestamp(raw?.sampled_at) ?? _isoTimestamp(raw?.timestamp);
   const availability = _telemetryAvailability(
     raw?.availability,
-    tickers !== null && trades !== null && features !== null,
+    tickers !== null && trades !== null && features !== null && sampledAt !== null,
   );
-  const sampledAt = _nonEmptyString(raw?.sampled_at) ?? _nonEmptyString(raw?.timestamp);
   if (availability === "unavailable") {
     return {
       availability: "unavailable",
@@ -309,7 +328,7 @@ export function normalizeThroughputMetrics(
     tickers_per_sec: tickers,
     trades_per_sec: trades,
     features_per_sec: features,
-    timestamp: _nonEmptyString(raw?.timestamp) ?? sampledAt,
+    timestamp: _isoTimestamp(raw?.timestamp) ?? sampledAt,
   };
 }
 
@@ -321,11 +340,11 @@ export function normalizeSystemConfig(
   const avgLatency = _nonNegativeFinite(raw?.avg_latency_ms);
   const errorCount = _nonNegativeFinite(raw?.error_count_24h);
   const alerts = Array.isArray(raw?.alerts) ? raw.alerts : [];
+  const sampledAt = _isoTimestamp(raw?.sampled_at);
   const availability = _telemetryAvailability(
     raw?.availability,
-    apiCalls !== null && hitRate !== null && avgLatency !== null && errorCount !== null,
+    apiCalls !== null && hitRate !== null && avgLatency !== null && errorCount !== null && sampledAt !== null,
   );
-  const sampledAt = _nonEmptyString(raw?.sampled_at);
   if (availability === "unavailable") {
     return {
       availability: "unavailable",

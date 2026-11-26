@@ -137,6 +137,45 @@ describe("serverless telemetry client compatibility (U05)", () => {
     expect(singleSvc.services).toHaveLength(1);
     expect(singleSvc.services[0].latency_p95_ms).toBeNull();
     expect(singleSvc.services[0].uptime_pct_24h).toBeNull();
+
+    // Unknown availability, non-ISO sampled_at, and +Infinity degrade to unavailable/null.
+    expect(
+      normalizePipelineLatency({
+        availability: "bogus" as never,
+        sampled_at: "2026-11-26T14:00:00+00:00",
+        segments: [{ stage: "llm_decision", latency_ms: 410, percentage: 100 }],
+        total_ms: 410,
+      }).availability,
+    ).toBe("unavailable");
+
+    expect(
+      normalizeThroughputMetrics({
+        sampled_at: "not-a-timestamp",
+        tickers_per_sec: 3.2,
+        trades_per_sec: 0.8,
+        features_per_sec: 15.6,
+      }).availability,
+    ).toBe("unavailable");
+
+    const badSvc = normalizeServiceHealthResponse({
+      availability: "unavailable",
+      sampled_at: "2026-11-26T14:00:00+00:00",
+      services: [
+        {
+          service_id: "fastapi",
+          status: "green",
+          availability: "measured",
+          sampled_at: "2026-11-26T14:00:00+00:00",
+          latency_p95_ms: Number.POSITIVE_INFINITY,
+          uptime_pct_24h: 99.9,
+        },
+      ],
+    });
+    expect(badSvc.availability).toBe("unavailable");
+    expect(badSvc.sampled_at).toBeNull();
+    expect(badSvc.services[0].availability).toBe("unavailable");
+    expect(badSvc.services[0].latency_p95_ms).toBeNull();
+    expect(badSvc.services[0].uptime_pct_24h).toBeNull();
   });
 
   it("normalizes fetch responses across measured, demo, and unavailable endpoints", async () => {
