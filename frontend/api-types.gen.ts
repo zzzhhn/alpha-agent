@@ -11966,6 +11966,9 @@ export interface operations {
             /** @description Successful Response */
             200: {
                 headers: {
+                    "X-BYOK-Account"?: string;
+                    "X-BYOK-Provider"?: string;
+                    "X-BYOK-Revision"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12001,6 +12004,9 @@ export interface operations {
             /** @description Successful Response */
             200: {
                 headers: {
+                    "X-BYOK-Account"?: string;
+                    "X-BYOK-Provider"?: string;
+                    "X-BYOK-Revision"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12051,6 +12057,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                "X-BYOK-Account"?: string | null;
+                "X-BYOK-Provider"?: string | null;
+                "X-BYOK-Revision"?: string | null;
                 authorization?: string | null;
             };
             path?: never;
@@ -12061,6 +12070,9 @@ export interface operations {
             /** @description Successful Response */
             200: {
                 headers: {
+                    "X-BYOK-Account"?: string;
+                    "X-BYOK-Provider"?: string;
+                    "X-BYOK-Revision"?: string;
                     [name: string]: unknown;
                 };
                 content: {

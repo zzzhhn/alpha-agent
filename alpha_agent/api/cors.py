@@ -7,6 +7,7 @@ def install_cors(app: FastAPI) -> None:
         CORSMiddleware,
         allow_origins=["*"],
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        expose_headers=["X-BYOK-Account", "X-BYOK-Provider", "X-BYOK-Revision"],
         allow_headers=[
             "*", "Authorization", "X-LLM-Provider", "X-LLM-API-Key",
             "X-LLM-Base-URL", "X-LLM-Model",

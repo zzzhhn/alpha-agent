@@ -13,7 +13,7 @@ import re
 import time
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
@@ -106,6 +106,9 @@ _BYOK_ACCOUNT = "X-BYOK-Account"
 _BYOK_PROVIDER = "X-BYOK-Provider"
 _BYOK_REVISION = "X-BYOK-Revision"
 _PRIVATE = {"Cache-Control": "private, no-store"}
+_BINDING_RESPONSE = {200: {"headers": {
+    name: {"schema": {"type": "string"}} for name in (_BYOK_ACCOUNT, _BYOK_PROVIDER, _BYOK_REVISION)
+}}}
 
 
 def _byok_headers(user_id: int, provider: str, revision: str) -> dict[str, str]:
@@ -122,7 +125,7 @@ async def _lock_credential_owner(conn, user_id: int) -> None:
         raise HTTPException(404, "user not found")
 
 
-@router.post("/byok", response_model=ByokSaveResponse)
+@router.post("/byok", response_model=ByokSaveResponse, responses=_BINDING_RESPONSE)
 async def save_byok(
     body: ByokSaveRequest, response: Response, user_id: int = Depends(require_user),
 ) -> ByokSaveResponse:
@@ -184,7 +187,7 @@ async def save_byok(
     return ByokSaveResponse(provider=body.provider, last4=last4, encrypted_at=revision.isoformat())
 
 
-@router.get("/byok", response_model=ByokGetResponse)
+@router.get("/byok", response_model=ByokGetResponse, responses=_BINDING_RESPONSE)
 async def get_byok(response: Response, user_id: int = Depends(require_user)) -> ByokGetResponse:
     pool = await get_db_pool()
     row = await fetch_user_llm_credential(pool, user_id)
@@ -213,17 +216,19 @@ def _probe_failure(exc: Exception) -> str:
     return f"LLM request failed ({type(exc).__name__})"
 
 
-@router.post("/byok/test", response_model=ByokTestResponse)
+@router.post("/byok/test", response_model=ByokTestResponse, responses=_BINDING_RESPONSE)
 async def test_byok(
-    request: Request, response: Response, user_id: int = Depends(require_user),
+    response: Response, user_id: int = Depends(require_user),
+    account: str | None = Header(None, alias=_BYOK_ACCOUNT),
+    provider: str | None = Header(None, alias=_BYOK_PROVIDER),
+    revision: str | None = Header(None, alias=_BYOK_REVISION),
 ) -> ByokTestResponse:
     """Exercise the configured provider without coupling health to factor JSON."""
     # Bind the probe to its saved revision. Older clients can omit the headers.
     pool = await get_db_pool()
     credential = await fetch_user_llm_credential(pool, user_id)
-    expected = {key: request.headers[key] for key in (
-        _BYOK_ACCOUNT, _BYOK_PROVIDER, _BYOK_REVISION,
-    ) if key in request.headers}
+    binding = {_BYOK_ACCOUNT: account, _BYOK_PROVIDER: provider, _BYOK_REVISION: revision}
+    expected = {key: value for key, value in binding.items() if value is not None}
     changed = "Saved connection changed. Reload it before testing."
     if credential is None:
         raise HTTPException(409 if expected else 400,
