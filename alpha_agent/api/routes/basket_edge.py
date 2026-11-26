@@ -40,6 +40,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from alpha_agent.api.dependencies import get_db_pool
+from alpha_agent.api.diagnostics import record_failure
 from alpha_agent.backtest.ic_engine import _spearman_rho
 from alpha_agent.backtest.scoreboard import _newey_west_se, _nw_lag
 
@@ -299,8 +300,6 @@ async def picks_edge() -> BasketEdgeResponse:
 
     Pure read, no auth (same as /api/picks/lean). Memoized ~600s process-local.
     """
-    import traceback
-
     now = time.monotonic()
     cached = _cache["val"]
     cached_ts = _cache["ts"]
@@ -310,16 +309,13 @@ async def picks_edge() -> BasketEdgeResponse:
 
     try:
         result = await _compute_edge()
-    except Exception as e:
-        # Surface the real exception (Silent Exception Anti-Pattern): a generic
-        # 500 turns one root cause into N derived symptoms.
+    except Exception as exc:
+        code = "PICKS_EDGE_UNAVAILABLE"
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"picks_edge failed: {type(e).__name__}: {e}\n"
-                f"{traceback.format_exc()[:1500]}"
-            ),
-        ) from e
+            detail={"code": code, "reference": record_failure(code, exc)},
+            headers={"Cache-Control": "no-store"},
+        ) from exc
 
     _cache["val"] = result
     _cache["ts"] = now

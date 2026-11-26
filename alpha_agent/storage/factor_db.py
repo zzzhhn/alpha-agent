@@ -380,6 +380,12 @@ def list_factors(limit: int = 50) -> list[dict[str, Any]]:
         return [_factor_to_dict(f) for f in rows]
 
 
+def get_factor(factor_id: str) -> dict[str, Any] | None:
+    with Session(get_engine()) as session:
+        factor = session.get(Factor, factor_id)
+        return _factor_to_dict(factor) if factor is not None else None
+
+
 def get_factor_runs(factor_id: str, limit: int = 100) -> list[dict[str, Any]]:
     """Run history for a factor, newest first."""
     with Session(get_engine()) as s:

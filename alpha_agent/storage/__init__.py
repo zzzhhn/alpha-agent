@@ -32,6 +32,7 @@ __all__ = [
     "upsert_factor",
     "record_run",
     "list_factors",
+    "get_factor",
     "get_factor_runs",
     "delete_factor",
     "decay_alerts",
