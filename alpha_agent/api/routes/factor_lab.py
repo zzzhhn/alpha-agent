@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field, StrictInt, field_validator
 from alpha_agent.api.byok import get_llm_client
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_admin, require_user
-from alpha_agent.config_store import refresh_config, set_config
+from alpha_agent.config_store import config_transaction, refresh_config, set_config, write_config
 from alpha_agent.core.factor_ast import refresh_allowed_ops
 from alpha_agent.evolution.correlation_gate import (
     SELF_CORR_THRESHOLD,
@@ -1072,29 +1072,30 @@ async def approve_proposal(
       4. refresh_allowed_ops so the AST validator accepts the new operator
          names from the next request; failure surfaces in response.refresh_error
          (anti-silent: do not log + pretend success)."""
-    row = await pool.fetchrow(
-        "SELECT expression, new_operators FROM factor_proposals "
-        "WHERE id=$1 AND status='pending'",
-        proposal_id,
-    )
-    if row is None:
-        raise HTTPException(404, "proposal not found or not pending")
-    new_ops = _decode_jsonb(row["new_operators"]) or []
-    for op in new_ops:
-        await pool.execute(
-            "INSERT INTO extended_operators "
-            "(name, signature, python_impl, doc, registered_by, source_proposal_id) "
-            "VALUES ($1, $2, $3, $4, $5, $6) "
-            "ON CONFLICT (name) DO NOTHING",
-            op["name"], op.get("signature", ""), op["python_impl"],
-            op.get("doc", ""), user_id, proposal_id,
+    async with config_transaction(pool) as (conn, writes):
+        row = await conn.fetchrow(
+            "SELECT expression, new_operators FROM factor_proposals "
+            "WHERE id=$1 AND status='pending' FOR UPDATE",
+            proposal_id,
         )
-    await set_config(pool, "factor.custom_expression",
-                     row["expression"], user_id=user_id, source="approved")
-    await pool.execute(
-        "UPDATE factor_proposals SET status='approved', decided_at=now(), decided_by=$1 "
-        "WHERE id=$2", user_id, proposal_id,
-    )
+        if row is None:
+            raise HTTPException(404, "proposal not found or not pending")
+        new_ops = _decode_jsonb(row["new_operators"]) or []
+        for op in new_ops:
+            await conn.execute(
+                "INSERT INTO extended_operators "
+                "(name, signature, python_impl, doc, registered_by, source_proposal_id) "
+                "VALUES ($1, $2, $3, $4, $5, $6) "
+                "ON CONFLICT (name) DO NOTHING",
+                op["name"], op.get("signature", ""), op["python_impl"],
+                op.get("doc", ""), user_id, proposal_id,
+            )
+        await write_config(conn, writes, "factor.custom_expression",
+                         row["expression"], user_id=user_id, source="approved")
+        await conn.execute(
+            "UPDATE factor_proposals SET status='approved', decided_at=clock_timestamp(), decided_by=$1 "
+            "WHERE id=$2 AND status='pending'", user_id, proposal_id,
+        )
     try:
         await refresh_allowed_ops(pool)
         refresh_error: str | None = None
