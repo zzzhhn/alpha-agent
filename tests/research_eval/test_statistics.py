@@ -82,3 +82,29 @@ def test_holm_order_monotonicity_ties_and_invalid():
     assert holm([]) == ()
     with pytest.raises(ValueError):
         holm([1.1])
+
+
+@pytest.mark.parametrize("returns", [
+    [value + .00263 for value in [-.01, .01] * 20],
+    [-.008, -.005, .002, .030] * 10,
+])
+def test_factor_and_protocol_use_same_single_trial_moments(returns):
+    import numpy as np
+
+    from alpha_agent.scan.significance import deflated_sharpe as factor_probability
+
+    probability, annual_sharpe = factor_probability(np.array(returns), n_trials=1)
+    protocol = deflated_sharpe(returns, trial_sharpes=[0])
+    assert annual_sharpe == pytest.approx(protocol["sharpe"] * sqrt(252))
+    assert probability == pytest.approx(protocol["probability"], abs=1e-12)
+    if len(set(returns)) == 2:
+        assert probability == pytest.approx(.947574, abs=1e-6)
+
+
+def test_factor_psr_preserves_short_and_constant_sentinels():
+    import numpy as np
+
+    from alpha_agent.scan.significance import deflated_sharpe as factor_probability
+
+    assert factor_probability(np.ones(40), n_trials=1) == (.5, 0.)
+    assert factor_probability(np.arange(20), n_trials=1) == (.5, 0.)

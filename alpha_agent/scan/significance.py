@@ -14,11 +14,11 @@ once the multiple-comparison and non-normality corrections are applied:
     PSR(SR0) = Φ((SR̂ - SR0) * sqrt((T-1) / (1 - γ3·SR̂ + (γ4-1)/4·SR̂²)))
 
 where:
-    SR̂  : realized (sample) Sharpe (annualized)
+    SR̂  : realized sample Sharpe per observation
     SR0 : benchmark / null Sharpe to test against
     T   : sample length (trading days)
     γ3  : skewness of returns
-    γ4  : kurtosis of returns (NOT excess; γ4-1 in the formula = excess)
+    γ4  : Pearson kurtosis of returns (normal = 3)
     Φ   : standard normal CDF
 
 For DSR specifically, SR0 is set to E[max SR_M] under N independent null
@@ -44,6 +44,7 @@ import math
 import numpy as np
 
 from alpha_agent.core.statistics import pearson_corr
+from alpha_agent.research_eval.statistics import sharpe_moment_variance
 
 
 _EULER_MASCHERONI = 0.5772156649015329
@@ -173,10 +174,9 @@ def deflated_sharpe(
         return (0.5, sr_hat)
     skew = m3 / (m2**1.5)
     kurt = m4 / (m2**2)  # NOT excess; raw kurtosis
-    excess_kurt = kurt - 3.0
 
     # Variance of the sample Sharpe estimate (Bailey-LdP eq. 5)
-    sr_var_daily = (1.0 - skew * sr_daily + (excess_kurt / 4.0) * sr_daily**2) / (n - 1)
+    sr_var_daily = sharpe_moment_variance(sr_daily, skew, kurt) / (n - 1)
     if sr_var_daily <= 0:
         # Pathological; fall back to raw normal-approximation t-test
         sr_var_daily = max(1.0 / (n - 1), 1e-12)
