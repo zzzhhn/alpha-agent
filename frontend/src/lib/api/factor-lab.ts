@@ -115,6 +115,11 @@ export interface ProposeJobAcceptedResponse {
   inline_result?: ProposeResult;
 }
 
+export interface ProposeJobProgress {
+  stage: "preparing" | "generating" | "evaluating";
+  generated?: number;
+}
+
 export interface ProposeJobRow {
   id: string;
   user_id: number;
@@ -124,7 +129,9 @@ export interface ProposeJobRow {
   started_at: string | null;
   finished_at: string | null;
   result: ProposeResult | null;
+  progress?: ProposeJobProgress | null;
   error: string | null;
+  error_code?: "worker_interrupted" | null;
 }
 
 export interface ApproveResult {
@@ -214,7 +221,7 @@ export class ProposeJobTimeout extends Error {
 
 /**
  * Poll a propose job until terminal state. Returns the final row; throws
- * ProposeJobTimeout if the budget is exhausted (UI offers retry).
+ * ProposeJobTimeout if the budget is exhausted (the UI can check the same job).
  * Cancellable via AbortSignal so component unmount stops polling.
  */
 export async function pollProposeJob(
@@ -229,22 +236,24 @@ export async function pollProposeJob(
       throw new DOMException("polling aborted", "AbortError");
     }
     const row = await getProposeJob(jobId);
+    if (opts.signal?.aborted) throw new DOMException("polling aborted", "AbortError");
     lastRow = row;
     opts.onUpdate?.(row);
     if (row.status === "done" || row.status === "failed") {
       return row;
     }
-    // Backoff sleeper that's interruptable by abort signal.
+    if (i === maxAttempts - 1) break;
     await new Promise<void>((resolve, reject) => {
-      const t = setTimeout(resolve, intervalMs);
-      opts.signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(t);
-          reject(new DOMException("polling aborted", "AbortError"));
-        },
-        { once: true },
-      );
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new DOMException("polling aborted", "AbortError"));
+      };
+      const timer = setTimeout(() => {
+        opts.signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, intervalMs);
+      opts.signal?.addEventListener("abort", onAbort, { once: true });
+      if (opts.signal?.aborted) onAbort();
     });
   }
   throw new ProposeJobTimeout(lastRow);

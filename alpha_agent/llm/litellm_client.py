@@ -37,7 +37,7 @@ from collections.abc import AsyncIterator
 
 import litellm
 
-from alpha_agent.llm.base import LLMClient, LLMResponse, Message
+from alpha_agent.llm.base import LLMClient, LLMResponse, Message, llm_retries_disabled
 from alpha_agent.llm.model_profiles import generation_parameters, model_profile
 
 logger = logging.getLogger(__name__)
@@ -88,8 +88,10 @@ class LiteLLMClient(LLMClient):
             kw["api_base"] = self._api_base
         if self._extra_headers is not None:
             kw["extra_headers"] = self._extra_headers
-        if model_profile(self._model):
+        if llm_retries_disabled.get() or model_profile(self._model):
             kw["num_retries"] = 0
+        if llm_retries_disabled.get():
+            kw["max_retries"] = 0
         return kw
 
     def _generation_kwargs(self, temperature: float, max_tokens: int) -> dict[str, object]:
