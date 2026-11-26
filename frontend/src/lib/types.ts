@@ -1,19 +1,27 @@
 /* ═══════════════════ Service Health ═══════════════════ */
 
 export type ServiceStatus = "green" | "yellow" | "red";
+export type TelemetryAvailability = "measured" | "unavailable" | "demo";
 
 export interface ServiceHealth {
   readonly service_id: string;
   readonly status: ServiceStatus;
-  readonly latency_p95_ms: number;
-  readonly uptime_pct_24h: number;
-  readonly last_check_at: string;
-  readonly last_error_at: string | null;
+  readonly availability?: TelemetryAvailability;
+  readonly source?: string | null;
+  readonly sampled_at?: string | null;
+  readonly latency_p95_ms?: number | null;
+  readonly uptime_pct_24h?: number | null;
+  readonly probe_latency_ms?: number | null;
+  readonly last_check_at?: string | null;
+  readonly last_error_at?: string | null;
 }
 
 export interface ServiceHealthResponse {
+  readonly availability?: TelemetryAvailability;
+  readonly source?: string | null;
+  readonly sampled_at?: string | null;
   readonly services: readonly ServiceHealth[];
-  readonly timestamp: string;
+  readonly timestamp?: string | null;
 }
 
 /* ═══════════════════ Pipeline Latency ═══════════════════ */
@@ -25,9 +33,12 @@ export interface LatencySegment {
 }
 
 export interface PipelineLatency {
+  readonly availability?: TelemetryAvailability;
+  readonly source?: string | null;
+  readonly sampled_at?: string | null;
   readonly segments: readonly LatencySegment[];
-  readonly total_ms: number;
-  readonly timestamp: string;
+  readonly total_ms?: number | null;
+  readonly timestamp?: string | null;
 }
 
 /* ═══════════════════ Gateway / Risk Gate ═══════════════════ */
@@ -52,10 +63,13 @@ export interface GatewayStatus {
 /* ═══════════════════ System Health ═══════════════════ */
 
 export interface SystemConfig {
-  readonly api_calls_24h: number;
-  readonly cache_hit_rate: number;
-  readonly avg_latency_ms: number;
-  readonly error_count_24h: number;
+  readonly availability?: TelemetryAvailability;
+  readonly source?: string | null;
+  readonly sampled_at?: string | null;
+  readonly api_calls_24h?: number | null;
+  readonly cache_hit_rate?: number | null;
+  readonly avg_latency_ms?: number | null;
+  readonly error_count_24h?: number | null;
   readonly alerts: readonly Alert[];
 }
 
@@ -74,10 +88,13 @@ export interface Alert {
 /* ═══════════════════ Throughput ═══════════════════ */
 
 export interface ThroughputMetrics {
-  readonly tickers_per_sec: number;
-  readonly trades_per_sec: number;
-  readonly features_per_sec: number;
-  readonly timestamp: string;
+  readonly availability?: TelemetryAvailability;
+  readonly source?: string | null;
+  readonly sampled_at?: string | null;
+  readonly tickers_per_sec?: number | null;
+  readonly trades_per_sec?: number | null;
+  readonly features_per_sec?: number | null;
+  readonly timestamp?: string | null;
 }
 
 /* ═══════════════════ Audit Event ═══════════════════ */
