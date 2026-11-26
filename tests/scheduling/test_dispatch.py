@@ -45,3 +45,43 @@ async def test_missing_token_and_unknown_workflow(pool, monkeypatch):
     assert result["reason"] == "gh_pat_missing"
     with pytest.raises(HTTPException):
         await dispatch.dispatch_workflow(pool, "daily-factor-loop", now=NOW)
+
+
+async def test_dispatch_claim_committed_before_remote_call(pool, monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv("GH_PAT", "fixture")
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def post(workflow, payload):
+        calls.append(workflow)
+        if len(calls) == 1:
+            started.set()
+            await release.wait()
+        return 204
+
+    first = asyncio.create_task(dispatch.dispatch_workflow(pool, "insider-form4", now=NOW, post=post))
+    try:
+        await asyncio.wait_for(started.wait(), 3)
+        second = await asyncio.wait_for(
+            dispatch.dispatch_workflow(pool, "insider-form4", now=NOW, post=post), 3,
+        )
+    finally:
+        release.set()
+        result = await first
+    assert calls == ["insider-form4"]
+    assert result["ok"] and second["skipped"] == "already_dispatched_today"
+    assert await pool.fetchval("SELECT count(*) FROM cron_runs WHERE cron_name='dispatch_insider-form4'") == 1
+
+
+async def test_ambiguous_transport_outcome_never_dispatches_again(pool, monkeypatch):
+    import httpx
+
+    monkeypatch.setenv("GH_PAT", "fixture")
+    post = AsyncMock(side_effect=httpx.ReadTimeout("fixture"))
+    first = await dispatch.dispatch_workflow(pool, "insider-form4", now=NOW, post=post)
+    again = await dispatch.dispatch_workflow(pool, "insider-form4", now=NOW, post=post)
+    assert first["status"] == "unconfirmed" and not first["ok"]
+    assert again["skipped"] == "already_dispatched_today"
+    post.assert_awaited_once()

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import asyncpg
@@ -159,3 +159,19 @@ async def test_scheduler_reaches_account_23_after_first_bounded_batch(monkeypatc
     finally:
         await conn.close()
 
+
+
+async def test_expiring_blocked_slot_keeps_last_observed_cause(applied_db):
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=1) as pool:
+        user = await pool.fetchval("INSERT INTO users(email) VALUES('slots@example.test') RETURNING id")
+        account = await pool.fetchval("INSERT INTO sim_account(user_id,kind) VALUES($1,'bot') RETURNING id", user)
+        row = {"id": account, "config_version": 1}
+        slots = {"session_date": "2026-11-09"}
+        stamp = datetime(2026, 11, 9, 15, tzinfo=UTC)
+        args = (pool, row, slots, "open_after", stamp)
+        await bot_schedule.record_slot(*args, stamp, "blocked", "credential_missing", None)
+        end = stamp + timedelta(minutes=20)
+        await bot_schedule.record_slot(*args, end, "missed", "slot_expired", None)
+        await bot_schedule.record_slot(*args, end + timedelta(minutes=1), "missed", "slot_expired", None)
+        record = await pool.fetchrow("SELECT status,reason,observed_at FROM sim_bot_schedule_slot WHERE account_id=$1", account)
+        assert tuple(record) == ("missed", "credential_missing", end)
