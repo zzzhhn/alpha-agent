@@ -6,6 +6,7 @@ Provider reads happen before the short account-locked write transaction.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from math import isfinite
 from typing import Any
@@ -17,6 +18,13 @@ from alpha_agent.paper.market_clock import as_utc, market_session
 MAX_SYMBOLS = 21  # Up to 20 held instruments plus raw-price SPY.
 FETCH_CONCURRENCY = 2
 FETCH_BUDGET_SECONDS = 240
+CORPORATE_ACTION_BLOCKED = 'corporate_action_blocked'
+CORPORATE_ACTION_REASON = 'corporate_action_requires_reconciliation'
+
+
+def corporate_action_blocked(position: Mapping[str, Any] | None) -> bool:
+    """A stored position freeze survives newer market quotes."""
+    return position is not None and position.get('price_quality') == CORPORATE_ACTION_BLOCKED
 
 
 def valuation_session(now: datetime) -> dict:
@@ -37,7 +45,7 @@ def effective_mark(position: dict, now: datetime) -> dict:
     """Recheck stored marks for freshness without inventing a replacement price."""
     price, at = position.get('mark_price'), position.get('mark_at')
     quality = position.get('price_quality') or 'missing'
-    if quality == 'corporate_action_blocked':
+    if corporate_action_blocked(position):
         try:
             at = as_utc(at) if at is not None else None
         except ValueError:
@@ -65,8 +73,8 @@ def summarize_marks(positions: list[dict], cash: float, now: datetime) -> dict:
     marks = {row['ticker']: effective_mark(row, now) for row in live}
     qualities = {mark['quality'] for mark in marks.values()}
     complete = qualities.issubset({'fresh', 'session_close'})
-    quality = ('cash_only' if not live else 'corporate_action_blocked'
-               if 'corporate_action_blocked' in qualities else 'partial'
+    quality = ('cash_only' if not live else CORPORATE_ACTION_BLOCKED
+               if CORPORATE_ACTION_BLOCKED in qualities else 'partial'
                if not complete else 'fresh' if 'fresh' in qualities else 'session_close')
     value = float(cash) + sum(marks[row['ticker']]['price'] * row['qty'] for row in live) if complete else None
     unrealized = sum((marks[row['ticker']]['price'] - row['avg_cost']) * row['qty'] for row in live) if complete else None
@@ -150,7 +158,7 @@ def _latest_mark(bars: list[dict], now: datetime, session: dict) -> dict:
             or bar.get('corporate_actions_known') is not True
             or bar.get('corporate_actions') or bar.get('dividends') not in (0, 0.0)
             or bar.get('stock_splits') not in (0, 0.0)):
-        return {'mark_price': None, 'mark_at': end, 'price_quality': 'corporate_action_blocked'}
+        return {'mark_price': None, 'mark_at': end, 'price_quality': CORPORATE_ACTION_BLOCKED}
     return {'mark_price': price, 'mark_at': end,
             'price_quality': 'fresh' if session['is_open'] and now - end <= timedelta(minutes=5)
             else 'session_close' if end == closing else 'stale'}
@@ -238,10 +246,10 @@ async def refresh_marks(
                     })
                     # Unknown corporate action freezes this instrument until
                     # an explicit reconciliation clears the persisted flag.
-                    if position.get('price_quality') == 'corporate_action_blocked':
+                    if corporate_action_blocked(position):
                         mark = {'mark_price': None, 'mark_at': position.get('mark_at'),
-                                'price_quality': 'corporate_action_blocked'}
-                    elif mark['price_quality'] != 'corporate_action_blocked':
+                                'price_quality': CORPORATE_ACTION_BLOCKED}
+                    elif not corporate_action_blocked(mark):
                         previous = effective_mark(position, instant)
                         # A slower refresh must not replace a newer mark from
                         # a concurrent fill/refresh with older or absent data.

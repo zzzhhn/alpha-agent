@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from alpha_agent.paper.bot_models import BotConfig, BotDecision
+from alpha_agent.paper.bot_valuation import CORPORATE_ACTION_REASON, corporate_action_blocked
 from alpha_agent.paper.intraday import EXECUTION_MODEL, fetch_bars, select_fill
 from alpha_agent.paper.market_clock import as_utc, market_session
 
@@ -127,6 +128,7 @@ async def submit_targets(
             )
             by_action = {row['action_id']: row for row in previous}
             held = {row['ticker']: int(row['qty']) for row in positions}
+            frozen = any(corporate_action_blocked(row) for row in positions)
             pending_tickers = {row['ticker'] for row in pending}
             reserved = sum(float(row['reserved_notional'] or 0) for row in pending if row['side'] == 'buy')
             available = max(0.0, float(account['cash']) - reserved)
@@ -176,6 +178,8 @@ async def submit_targets(
                         raise ValueError('unknown_evidence')
                     if action.target_weight > config.max_position_weight:
                         raise ValueError('max_position_weight_exceeded')
+                    if frozen:
+                        raise ValueError(CORPORATE_ACTION_REASON)
                     if mark_error or not math.isfinite(nav) or nav <= 0:
                         raise ValueError('portfolio_mark_unavailable')
                     price = _quote(context, ticker, instant, session)
@@ -297,6 +301,20 @@ async def _settle_one(
                 cancel_requested_at=order['cancel_requested_at'], slippage_bps=order['slippage_bps'],
             )
             status = result['status']
+            position = None
+            if status in ('pending', 'filled'):
+                position = await conn.fetchrow(
+                    "SELECT * FROM sim_position WHERE account_id=$1 AND cohort_id=$2 AND ticker=$3 FOR UPDATE",
+                    account['id'], order['cohort_id'], order['ticker'],
+                )
+                if corporate_action_blocked(position):
+                    # A quantity accepted before reconciliation must never be
+                    # replayed against the reconciled book.
+                    status = 'failed'
+                    result = {
+                        'status': status, 'reason': CORPORATE_ACTION_REASON,
+                        'execution_model': EXECUTION_MODEL, 'session_date': result['session_date'],
+                    }
             if status != 'filled':
                 await conn.execute(
                     "UPDATE sim_order SET status=$1,fail_reason=$2,execution_evidence=$3::jsonb WHERE id=$4",
@@ -306,10 +324,6 @@ async def _settle_one(
             qty = int(order['qty'])
             price = float(result['fill_price'])
             fee = price * qty * float(order['fee_bps']) / 10000
-            position = await conn.fetchrow(
-                "SELECT * FROM sim_position WHERE account_id=$1 AND cohort_id=$2 AND ticker=$3 FOR UPDATE",
-                account['id'], order['cohort_id'], order['ticker'],
-            )
             old_qty = int(position['qty']) if position else 0
             old_cost = float(position['avg_cost']) if position else 0.0
             realized = float(position['realized_pnl'] or 0) if position else 0.0

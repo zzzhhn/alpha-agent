@@ -9,6 +9,7 @@ from alpha_agent.data.security_identity import valid_research_symbol
 from alpha_agent.paper.bot_store import unpack
 from alpha_agent.paper.bot_models import BotConfig
 from alpha_agent.paper.bot_policy import research_age
+from alpha_agent.paper.bot_valuation import CORPORATE_ACTION_REASON, corporate_action_blocked
 from alpha_agent.paper.intraday import fetch_bars
 from alpha_agent.paper.market_clock import as_utc, market_session
 from alpha_agent.storage.product_ledger import get_latest_canonical_run
@@ -84,7 +85,7 @@ async def quotes_for(tickers, now=None):
                 bar = completed[-1]
                 price = bar['close']
                 if bar.get('corporate_actions') or not bar.get('corporate_actions_known'):
-                    return ticker, {**result, 'reason': 'corporate_action_requires_reconciliation'}
+                    return ticker, {**result, 'reason': CORPORATE_ACTION_REASON}
                 if price and math.isfinite(price) and price > 0:
                     result.update(price=price, as_of=bar['end'], source=bar['source'],
                                   quality='fresh' if now-as_utc(bar['end']) <= timedelta(minutes=5) else 'stale',
@@ -98,6 +99,19 @@ async def quotes_for(tickers, now=None):
     if len(symbols) > 40:
         raise ValueError('本轮行情标的超过 40 个查询上限')
     return dict(await asyncio.gather(*(one(t) for t in symbols)))
+
+
+async def _planning_quotes(tickers, positions):
+    frozen = {
+        position['ticker']: {
+            'price': None, 'as_of': position.get('mark_at'), 'source': None,
+            'quality': 'unavailable', 'price_basis': 'raw_unadjusted',
+            'reason': CORPORATE_ACTION_REASON,
+        }
+        for position in positions if corporate_action_blocked(position)
+    }
+    quotes = await quotes_for([ticker for ticker in tickers if ticker not in frozen])
+    return quotes | frozen
 
 
 async def build_context(pool, run, research_tickers=None):
@@ -150,7 +164,7 @@ async def build_context(pool, run, research_tickers=None):
             'previous_rank': previous[row['ticker']]['rank'] if row['ticker'] in previous else None,
             **recommendation_evidence(payload)})
     quote_symbols = held + [t for t in requested if t in symbols] + [r['ticker'] for r in rows[:8]]
-    quotes = await quotes_for(quote_symbols)
+    quotes = await _planning_quotes(quote_symbols, book['positions'])
     evidence = {r['evidence_id']: {'ticker': r['ticker'], 'kind': 'research', 'usable_for_new_buy': research_usable}
                 for r in recommendations}
     evidence.update({f"position:{p['ticker']}": {'ticker': p['ticker'], 'kind': 'position', 'usable_for_new_buy': False} for p in book['positions']})
@@ -183,11 +197,9 @@ async def execution_context(pool, run, context, decision):
     book = (await _read_account(pool, account['user_id'], run['account_id'])).model_dump()
     ids = {a.instrument_id for a in decision.actions if a.instrument_id}
     tickers = [p['ticker'] for p in book['positions']] + [i['ticker'] for i in context['instruments'] if i['instrument_id'] in ids]
-    quotes = await quotes_for(tickers)
     held = book['positions']
-    # Missing marks are an execution precondition, not a crashed worker.
-    # submit_targets checks every held raw quote again under the ledger lock
-    # and records portfolio_mark_unavailable without accepting target orders.
+    quotes = await _planning_quotes(tickers, held)
+    # Acceptance rechecks stored freezes and raw quotes under the account lock.
     complete = all(quotes.get(p['ticker'], {}).get('quality') == 'fresh' for p in held)
     book['portfolio_value'] = (
         book['cash'] + sum(quotes[p['ticker']]['price'] * p['qty'] for p in held)

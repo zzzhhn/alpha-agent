@@ -630,6 +630,11 @@ def _small_execution_evidence(value: Any) -> dict | None:
         'execution_model', 'session_date', 'status', 'reason', 'reference_price',
         'fill_price', 'slippage_bps', 'filled_at', 'confirmed_at',
     ) if key in value and isinstance(value[key], (str, int, float, bool, type(None)))}
+    dates = value.get('missing_quote_dates')
+    if isinstance(dates, list):
+        output['missing_quote_dates'] = [
+            day for day in dates if isinstance(day, str) and len(day) == 10
+        ]
     if isinstance(value.get('bar'), dict):
         output['bar'] = {key: value['bar'][key] for key in (
             'start', 'end', 'source', 'fetched_at', 'open', 'close', 'price_basis',

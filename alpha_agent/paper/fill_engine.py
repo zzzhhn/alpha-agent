@@ -5,6 +5,7 @@ The cron handler and API layer call these and own the DB mutations.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, timedelta
 from math import isfinite
 
@@ -27,21 +28,26 @@ def compute_market_fill(
     return fill_date, price
 
 
+@dataclass(frozen=True)
+class LimitExpiry:
+    missing_quote_dates: tuple[date, ...]
+
+
 def compute_limit_fill(
     side: str,
     limit_price: float,
     signal_date: date,
-    prices: dict[date, float],
+    prices: dict[date, float | None],
     expire_after_days: int,
     *,
     as_of: date,
-) -> tuple[date, float] | None | str:
+) -> tuple[date, float] | LimitExpiry | None:
     """Evaluate a limit order over completed XNYS sessions after the signal.
 
     Returns:
         (fill_date, limit_price)  — if the close strictly crossed limit_price
         None                      — fewer than expire_after_days sessions elapsed
-        "expired"                 — the window elapsed without a verified cross
+        LimitExpiry                — the window elapsed, with missing sessions listed
 
     Cross rule (not touch):
         buy:  daily_prices.close < limit_price  (strictly below)
@@ -55,16 +61,18 @@ def compute_limit_fill(
         return None
     window = max(expire_after_days, 1)
     sessions = xnys_sessions(first_calendar_day, as_of)[:window]
+    missing = []
     for d in sessions:
         close = prices.get(d)
         if close is None or not isfinite(close) or close <= 0:
+            missing.append(d)
             continue
         crossed = (
             close < limit_price if side == "buy" else close > limit_price
         )
         if crossed:
             return d, limit_price
-    return "expired" if len(sessions) >= window else None
+    return LimitExpiry(tuple(missing)) if len(sessions) >= window else None
 
 
 def new_avg_cost(

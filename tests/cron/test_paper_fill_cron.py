@@ -93,6 +93,64 @@ async def test_paper_fill_limit_order_expires(applied_db):
 
 
 @pytest.mark.asyncio
+async def test_three_session_limit_outcomes_and_reservations(applied_db):
+    from alpha_agent.api.routes.cron_routes import _run_paper_fill_locked
+    from alpha_agent.api.routes.paper import _read_account, _read_orders
+
+    signal = date(2026, 7, 13)
+    first, second, last = (signal + timedelta(days=i) for i in (1, 2, 3))
+    pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
+    try:
+        async with pool.acquire() as conn:
+            uid = await conn.fetchval("INSERT INTO users(email) VALUES ('limit-window@example.test') RETURNING id")
+            aid = await conn.fetchval(
+                "INSERT INTO sim_account(user_id,initial_cash,cash) VALUES ($1,1000,1000) RETURNING id",
+                uid,
+            )
+            await conn.execute(
+                "INSERT INTO sim_order(account_id,ticker,side,order_type,qty,signal_date,"
+                "limit_price,expire_after_days,reserved_notional) "
+                "SELECT $1,ticker,'buy','limit',1,$2,100,3,100.10 "
+                "FROM unnest(ARRAY['GAP','NO_CROSS','CROSS']) AS ticker",
+                aid, signal,
+            )
+            await conn.executemany(
+                "INSERT INTO daily_prices(ticker,date,close) VALUES ($1,$2,$3)",
+                [("GAP", first, 101), ("GAP", last, 100),
+                 ("GAP", last + timedelta(days=1), 99),  # Outside the window.
+                 ("NO_CROSS", first, 101), ("NO_CROSS", second, 102), ("NO_CROSS", last, 100),
+                 ("CROSS", first, 101), ("CROSS", last, 99)],
+            )
+        before = await _run_paper_fill_locked(pool, second)
+        assert (before["filled"], before["expired"], before["remaining_pending"]) == (0, 0, 3)
+        account = await _read_account(pool, uid, aid)
+        assert account.cash == 1000
+        assert account.reserved_cash == pytest.approx(300.30)
+
+        result = await _run_paper_fill_locked(pool, last)
+        assert (result["filled"], result["expired"], result["remaining_pending"]) == (1, 2, 0)
+        orders = {order.ticker: order for order in (await _read_orders(pool, uid, account_id=aid)).orders}
+        assert (orders["CROSS"].status, orders["CROSS"].fill_date, orders["CROSS"].fill_price) == (
+            "filled", last.isoformat(), 100,
+        )
+        assert orders["CROSS"].transaction_cost == pytest.approx(0.10)
+        assert (orders["NO_CROSS"].status, orders["NO_CROSS"].fail_reason) == (
+            "expired", "limit_expired_no_cross",
+        )
+        assert (orders["GAP"].status, orders["GAP"].fail_reason) == (
+            "expired", "limit_expired_missing_quotes",
+        )
+        assert orders["GAP"].execution_evidence["missing_quote_dates"] == [second.isoformat()]
+        assert orders["NO_CROSS"].execution_evidence["missing_quote_dates"] == []
+        account = await _read_account(pool, uid, aid)
+        assert account.reserved_cash == 0
+        assert account.available_cash == account.cash == pytest.approx(899.90)
+        assert [(row.ticker, row.qty, row.avg_cost) for row in account.positions] == [("CROSS", 1, 100.10)]
+    finally:
+        await pool.close()
+
+
+@pytest.mark.asyncio
 async def test_no_quote_expiry_and_cross_are_not_starved_by_missing_market_quotes(applied_db):
     from alpha_agent.api.routes.cron_routes import _run_paper_fill_locked
 
