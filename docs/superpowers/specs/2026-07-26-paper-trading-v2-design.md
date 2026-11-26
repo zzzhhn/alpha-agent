@@ -1,7 +1,7 @@
 # 模拟交易 V2 重做设计（2026-07-26）
 
 三路 agent team（市场调研 6 家券商、UI 十原则审计、产品差距分析）合成，用户已拍板。
-V1 spec：2026-07-12-paper-trading-moni-cang-design.md（成交引擎语义不变，本次不动）。
+V1 spec：[模拟仓初版设计规格](2026-07-12-paper-trading-moni-cang-design.md)（成交引擎语义不变，本次不动）。
 
 ## 用户三点不满 → 根因
 
