@@ -67,6 +67,10 @@ async def test_forward_receipts_and_late_event(applied_db, monkeypatch):
     pool = await asyncpg.create_pool(applied_db, min_size=1, max_size=2)
     now = as_utc("2026-11-25T14:20:01Z")
     try:
+        await pool.execute(
+            "UPDATE schema_migrations SET applied_at=$1 WHERE version='V065__official_source_coverage'",
+            now - timedelta(days=2),
+        )
         owner = await pool.fetchval(
             "INSERT INTO users(email) VALUES ('premarket@test.invalid') RETURNING id"
         )
@@ -81,9 +85,15 @@ async def test_forward_receipts_and_late_event(applied_db, monkeypatch):
             run,
         )
         await pool.execute(
-            """INSERT INTO official_event_source(ticker,source,last_success_at)
-            VALUES ('S1','investor_relations',$1)""",
+            """INSERT INTO official_event_source(ticker,source,last_success_at,tracked_since)
+            VALUES ('S1','investor_relations',$1,$1)""",
             now - p.MIN,
+        )
+        # Seed the two already-completed polls at this historical fixture's clock.
+        await pool.execute(
+            """INSERT INTO official_source_coverage(ticker,source,first_success_at,last_success_at)
+               VALUES ('S1','investor_relations',$1,$1),('S1','investor_relations',$2,$2)""",
+            now - p.MIN, now + 39 * p.MIN,
         )
         for t, offset in [("S1", -1), ("S51", 1)]:
             await pool.execute(
@@ -103,7 +113,6 @@ async def test_forward_receipts_and_late_event(applied_db, monkeypatch):
         monkeypatch.setattr(p, "fetch_bars", no_bars)
         assert (await p.tick(pool, owner, lambda: now))["status"] == "recorded"
         assert (await p.tick(pool, owner, lambda: now))["status"] == "already_recorded"
-        await pool.execute("UPDATE official_event_source SET last_success_at=$1", now + 39 * p.MIN)
         assert (await p.tick(pool, owner, lambda: now + 40 * p.MIN))["status"] == "recorded"
         assert (await p.tick(pool, owner, lambda: as_utc("2026-11-25T21:05Z")))[
             "status"
@@ -155,3 +164,49 @@ async def test_forward_receipts_and_late_event(applied_db, monkeypatch):
         assert await pool.fetchval("SELECT count(*) FROM sim_order") == 0
     finally:
         await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_source_coverage_reads_the_same_cutoff_after_later_polls(applied_db):
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=1) as db:
+        now = await db.fetchval("SELECT clock_timestamp()")
+        cutoff = now - 5 * p.MIN
+        insert = """INSERT INTO official_event_source(ticker,source,last_success_at,tracked_since)
+                    VALUES($1,'sec_edgar',$2,$2)"""
+        await db.execute(insert, "S1", cutoff - 2 * p.MIN)
+        await db.execute("""UPDATE official_source_coverage SET first_success_at=$1,last_success_at=$1
+                            WHERE ticker='S1'""", cutoff - 2 * p.MIN)
+        original = await p.source_coverage(db, cutoff, ["S1"])
+        assert tuple(original) == (1, 1, 1)
+        await db.execute("UPDATE official_event_source SET last_success_at=$1", cutoff + 2 * p.MIN)
+        await db.execute(insert, "LATE", cutoff + 3 * p.MIN)
+        assert await p.source_coverage(db, cutoff, ["S1"]) == original
+        await db.execute("UPDATE official_event_source SET last_error='fixture' WHERE ticker='S1'")
+        assert await p.source_coverage(db, cutoff, ["S1"]) == original
+        after_error = await db.fetchval("SELECT clock_timestamp()")
+        assert tuple(await p.source_coverage(db, after_error, ["S1"])) == (2, 1, 0)
+        await db.execute("UPDATE official_event_source SET last_success_at=clock_timestamp(), last_error=NULL WHERE ticker='S1'")
+        assert tuple(await p.source_coverage(db, after_error, ["S1"])) == (2, 1, 0)
+        assert await db.fetchval("SELECT count(*) FROM official_source_coverage WHERE ticker='S1'") == 2
+
+
+@pytest.mark.asyncio
+async def test_stale_poll_gap_remains_unknown_after_recovery(applied_db):
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=1) as db:
+        cutoff = await db.fetchval("SELECT clock_timestamp()")
+        await db.execute("""INSERT INTO official_event_source(ticker,source,last_success_at,tracked_since)
+                            VALUES('S1','sec_edgar',$1,$1)""", cutoff-21*p.MIN)
+        await db.execute("""UPDATE official_source_coverage SET first_success_at=$1,last_success_at=$1
+                            WHERE ticker='S1'""", cutoff - 21 * p.MIN)
+        await db.execute("UPDATE official_event_source SET last_success_at=$1", cutoff+p.MIN)
+        assert tuple(await p.source_coverage(db, cutoff, ["S1"])) == (1, 0, 0)
+
+
+@pytest.mark.asyncio
+async def test_rollout_waits_for_full_forward_poll_window(applied_db):
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=2) as pool:
+        now = as_utc("2026-11-25T14:20:01Z")
+        await pool.execute("UPDATE schema_migrations SET applied_at=$1 WHERE version='V065__official_source_coverage'",
+                           now-timedelta(minutes=10))
+        assert await p.tick(pool, 1, lambda: now) == {"status": "source_history_warming", "stage": "premarket"}
+        assert await pool.fetchval("SELECT count(*) FROM premarket_review") == 0
