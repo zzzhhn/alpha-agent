@@ -6,6 +6,7 @@ import { getSignalDisplayLabel } from "@/lib/signal-labels";
 import { useLocale } from "@/components/layout/LocaleProvider";
 import { t } from "@/lib/i18n";
 import { TmButton } from "@/components/tm/TmButton";
+import { hasSessionClose } from "../paper-order-source";
 import { HoverTip } from "@/components/ui/HoverTip";
 import {
   TmTable,
@@ -93,7 +94,7 @@ export default function PaperRecommendations({
                 {typeof rankScore === "number" ? rankScore : "—"}
               </div>
               <div className="min-w-0 truncate text-xs text-tm-muted">{rationale || "—"}</div>
-              <TmButton variant="secondary" className="px-2 py-1" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
+              <TmButton variant="secondary" className="px-2 py-1" disabled={!actionable || !hasSessionClose(pick)} onClick={() => onSelect(pick)} aria-pressed={selected}>
                 {selected ? (locale === "zh" ? "已选择" : "Selected") : (locale === "zh" ? "选择" : "Select")}
               </TmButton>
             </article>
@@ -148,7 +149,7 @@ export default function PaperRecommendations({
                 </TmTableCell>
                 <TmTableCell className="max-w-48 text-xs leading-4 text-tm-muted">{rationale || "—"}</TmTableCell>
                 <TmTableCell className="sticky right-0 border-l border-tm-rule bg-tm-bg-2 text-right">
-                  <TmButton variant="secondary" disabled={!actionable} onClick={() => onSelect(pick)} aria-pressed={selected}>
+                  <TmButton variant="secondary" disabled={!actionable || !hasSessionClose(pick)} onClick={() => onSelect(pick)} aria-pressed={selected}>
                     {selected ? (locale === "zh" ? "已选择" : "Selected") : (locale === "zh" ? "选择" : "Select")}
                   </TmButton>
                 </TmTableCell>

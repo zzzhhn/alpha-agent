@@ -4894,6 +4894,21 @@
             ],
             "title": "Pick Date"
           },
+          "pick_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "short",
+                  "long"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Mode"
+          },
           "pick_run_id": {
             "anyOf": [
               {
@@ -4905,6 +4920,21 @@
               }
             ],
             "title": "Pick Run Id"
+          },
+          "pick_side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "short",
+                  "long"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Side"
           },
           "pick_ticker": {
             "anyOf": [
@@ -5603,6 +5633,16 @@
                 "type": "null"
               }
             ]
+          },
+          "executable_status": {
+            "default": "insufficient_history",
+            "enum": [
+              "available",
+              "insufficient_history",
+              "unavailable"
+            ],
+            "title": "Executable Status",
+            "type": "string"
           },
           "long_cum": {
             "title": "Long Cum",

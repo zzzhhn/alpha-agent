@@ -98,11 +98,13 @@ class PlaceOrderRequest(BaseModel):
     order_type: str = Field(..., pattern="^(market|limit)$")
     qty: int = Field(..., gt=0)
     limit_price: float | None = None
-    # Pick attribution: set automatically when placed from a pick's inline
-    # drawer; left null for manual /paper orders. Both null or both set.
+    # Pick attribution is supplied together for a recommendation order.
+    # Legacy clients supplied only the date, ticker and run.
     pick_date: date | None = None
     pick_ticker: str | None = Field(default=None, max_length=10)
     pick_run_id: int | None = Field(default=None, gt=0)
+    pick_mode: Literal["short", "long"] | None = None
+    pick_side: Literal["long", "short"] | None = None
 
 
 class OrderResponse(BaseModel):
@@ -271,7 +273,7 @@ async def _resolve_pick_provenance(
     from the ledger so neither can be forged by a browser request.
     """
     supplied = (body.pick_date, body.pick_ticker, body.pick_run_id)
-    if not any(value is not None for value in supplied):
+    if not any(value is not None for value in (*supplied, body.pick_mode, body.pick_side)):
         return None, None, None
     if not all(value is not None for value in supplied):
         raise HTTPException(
@@ -280,6 +282,16 @@ async def _resolve_pick_provenance(
         )
     if body.pick_ticker.upper() != body.ticker.upper():
         raise HTTPException(status_code=400, detail="pick_ticker must match ticker")
+    if body.pick_side is not None and body.pick_mode is None:
+        raise HTTPException(status_code=400, detail="pick_side requires pick_mode")
+    if body.pick_mode is not None:
+        from alpha_agent.api.routes.picks import resolve_canonical_order_source
+
+        policy_id, payload = await resolve_canonical_order_source(
+            conn, run_id=body.pick_run_id, market_date=body.pick_date,
+            ticker=body.ticker.upper(), mode=body.pick_mode, side=body.pick_side or "long",
+        )
+        return body.pick_run_id, policy_id, _canonical_payload_hash(payload)
     row = await conn.fetchrow(
         """
         SELECT rr.id, rr.scheduled_for_date, rr.weight_policy_id,

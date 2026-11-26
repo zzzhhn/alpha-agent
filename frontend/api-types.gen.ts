@@ -5915,8 +5915,12 @@ export interface components {
             order_type: string;
             /** Pick Date */
             pick_date?: string | null;
+            /** Pick Mode */
+            pick_mode?: ("short" | "long") | null;
             /** Pick Run Id */
             pick_run_id?: number | null;
+            /** Pick Side */
+            pick_side?: ("short" | "long") | null;
             /** Pick Ticker */
             pick_ticker?: string | null;
             /** Qty */
@@ -6166,6 +6170,12 @@ export interface components {
             /** Days */
             days: number;
             executable?: components["schemas"]["ExecutableScoreboardResponse"] | null;
+            /**
+             * Executable Status
+             * @default insufficient_history
+             * @enum {string}
+             */
+            executable_status: "available" | "insufficient_history" | "unavailable";
             /** Long Cum */
             long_cum: number;
             /** Long Hit Rate */

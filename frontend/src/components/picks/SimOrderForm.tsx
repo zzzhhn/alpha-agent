@@ -22,6 +22,7 @@ import { CheckCircle } from "lucide-react";
 import { TmButton } from "@/components/tm/TmButton";
 import { TmInput } from "@/components/tm/TmField";
 import { TmToggleGroup } from "@/components/tm/TmToggleGroup";
+import type { PickOrderSource } from "./paper-order-source";
 
 interface Props {
   /** When provided the ticker input is hidden and this value is used. */
@@ -31,9 +32,7 @@ interface Props {
   /** Attribution (V038): set together by SimOrderDrawer when the order
    *  originates from a picks-row quick action. Omitted from the /paper trade
    *  tab, where orders are manual by definition. */
-  readonly pickDate?: string;
-  readonly pickTicker?: string;
-  readonly pickRunId?: number;
+  readonly pickSource?: PickOrderSource;
   readonly latestPrice?: number | null;
   readonly priceDate?: string | null;
   readonly availableCash?: number | null;
@@ -42,6 +41,16 @@ interface Props {
   readonly initialSide?: "buy" | "sell";
   readonly layout?: "compact" | "ticket";
   readonly disabled?: boolean;
+}
+
+// sim_order.qty is a PostgreSQL int.
+const MAX_ORDER_QTY = 2_147_483_647;
+
+export function parseOrderQuantity(value: string): number | null {
+  const quantity = Number(value);
+  return Number.isSafeInteger(quantity) && quantity > 0 && quantity <= MAX_ORDER_QTY
+    ? quantity
+    : null;
 }
 
 const FMT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -77,9 +86,7 @@ export default function SimOrderForm({
   fixedTicker,
   locale,
   onPlaced,
-  pickDate,
-  pickTicker,
-  pickRunId,
+  pickSource,
   latestPrice,
   priceDate,
   availableCash,
@@ -119,11 +126,11 @@ export default function SimOrderForm({
     setQty(String(suggested));
   }, [availableCash, fixedTicker, latestPrice, portfolioValue, targetWeight]);
 
-  const qtyNum = parseInt(qty, 10);
+  const qtyNum = parseOrderQuantity(qty);
   const limitNum = parseFloat(limitPrice);
   const referencePrice = orderType === "limit" ? limitNum : latestPrice;
   const estimatedCost =
-    !isNaN(qtyNum) && typeof referencePrice === "number" && isFinite(referencePrice)
+    qtyNum !== null && typeof referencePrice === "number" && isFinite(referencePrice)
       ? qtyNum * referencePrice
       : null;
 
@@ -134,7 +141,7 @@ export default function SimOrderForm({
     setPlaced(false);
     const effectiveTicker = (fixedTicker ?? ticker).trim().toUpperCase();
     if (!effectiveTicker) { setError(t(locale, "sim.form.ticker_required")); return; }
-    if (isNaN(qtyNum) || qtyNum <= 0) { setError(t(locale, "sim.form.qty_error")); return; }
+    if (qtyNum === null) { setError(t(locale, "sim.form.qty_error")); return; }
     if (orderType === "limit" && (isNaN(limitNum) || limitNum <= 0)) {
       setError(t(locale, "sim.form.limit_error")); return;
     }
@@ -143,12 +150,18 @@ export default function SimOrderForm({
       await placeOrder({
         ticker: effectiveTicker, side, order_type: orderType, qty: qtyNum,
         ...(orderType === "limit" ? { limit_price: limitNum } : {}),
-        ...(pickDate ? { pick_date: pickDate } : {}),
-        ...(pickTicker ? { pick_ticker: pickTicker } : {}),
-        ...(pickRunId ? { pick_run_id: pickRunId } : {}),
+        ...(pickSource ? {
+          pick_date: pickSource.marketDate,
+          pick_ticker: pickSource.ticker,
+          pick_run_id: pickSource.runId,
+          pick_mode: pickSource.mode,
+          pick_side: pickSource.side,
+        } : {}),
       });
       setPlaced(true);
-      fetchPaperAccount().then((a) => setCash(a.available_cash)).catch(() => {});
+      if (availableCash === undefined) {
+        fetchPaperAccount().then((a) => setCash(a.available_cash)).catch(() => {});
+      }
       onPlaced();
       setTimeout(() => setPlaced(false), 2000);
     } catch (err) {
@@ -216,7 +229,9 @@ export default function SimOrderForm({
             label={t(locale, "sim.form.qty_label")}
             type="number"
             min={1}
+            max={MAX_ORDER_QTY}
             step={1}
+            required
             value={qty}
             onChange={setQty}
             fieldSize="sm"
