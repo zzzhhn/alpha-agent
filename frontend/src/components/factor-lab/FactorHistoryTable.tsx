@@ -1,4 +1,5 @@
 "use client";
+import { rollbackMessage } from "./rollback-message";
 import { useAdminAccess } from "@/components/layout/SystemHealth";
 
 import { useState } from "react";
@@ -139,7 +140,7 @@ export function FactorHistoryTable({
       router.refresh();
     } catch (e) {
       const msg =
-        e instanceof Error ? e.message : (zh ? "回滚失败，请重试。" : "Rollback failed. Please retry.");
+        rollbackMessage(e, zh, zh ? "回滚失败，请重试。" : "Rollback failed. Please retry.");
       setRowErrors((prev) => ({ ...prev, [id]: msg }));
     } finally {
       setPendingId(null);

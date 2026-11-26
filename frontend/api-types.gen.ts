@@ -1693,7 +1693,7 @@ export interface paths {
         put?: never;
         /**
          * Rollback
-         * @description Re-apply the old_value of an approved proposal, journaling a rollback row.
+         * @description Undo this methodology proposal's applied version.
          */
         post: operations["rollback_api_evolution_proposals__proposal_id__rollback_post"];
         delete?: never;
@@ -2025,10 +2025,7 @@ export interface paths {
         put?: never;
         /**
          * Rollback Proposal
-         * @description Revert factor.custom_expression to its pre-approval value, sourced from
-         *     the config_change_log row that the approve handler wrote (source='approved',
-         *     changed_at <= proposal.decided_at, most recent). Operators stay registered
-         *     in extended_operators (audit + reproducibility, per the Phase 3 spec).
+         * @description Undo this proposal's exact expression version. Registered operators remain available.
          */
         post: operations["rollback_proposal_api_factor_lab_proposals__proposal_id__rollback_post"];
         delete?: never;

@@ -24,6 +24,7 @@ def _restore_environ():
         from alpha_agent import config_store
 
         config_store._CACHE.clear()
+        config_store._CACHE_REVISIONS.clear()
     except Exception:
         config_store = None
 
@@ -46,6 +47,7 @@ def _restore_environ():
     os.environ.update(snapshot)
     if config_store is not None:
         config_store._CACHE.clear()
+        config_store._CACHE_REVISIONS.clear()
     _reset_cal_cache()
 
 

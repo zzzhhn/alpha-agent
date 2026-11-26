@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_admin
-from alpha_agent.config_store import config_transaction, set_config, write_config
+from alpha_agent.config_store import ConfigRollbackConflict, config_transaction, rollback_config, write_config
 
 router = APIRouter(prefix="/api/evolution", tags=["evolution"])
 
@@ -303,10 +303,10 @@ async def approve(
         if row is None:
             raise HTTPException(status_code=404, detail="proposal not found or not pending")
         new_value = _decode_jsonb(row["new_value"])
-        await write_config(conn, writes, row["field"], new_value, user_id=user_id, source="approved")
+        change_id = await write_config(conn, writes, row["field"], new_value, user_id=user_id, source="approved")
         await conn.execute(
-            "UPDATE config_change_log SET status='approved' WHERE id=$1 AND status='pending'",
-            proposal_id,
+            "UPDATE config_change_log SET status='approved',applied_change_id=$2 WHERE id=$1 AND status='pending'",
+            proposal_id, change_id,
         )
     return {"ok": True, "applied": {row["field"]: new_value}}
 
@@ -335,21 +335,23 @@ async def rollback(
     proposal_id: int,
     user_id: int = Depends(require_admin),
 ) -> dict[str, Any]:
-    """Re-apply the old_value of an approved proposal, journaling a rollback row."""
+    """Undo this methodology proposal's applied version."""
     pool = await get_db_pool()
-    row = await pool.fetchrow(
-        "SELECT field, old_value FROM config_change_log WHERE id=$1 AND status='approved'",
-        proposal_id,
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="approved change not found")
-    old_value = _decode_jsonb(row["old_value"]) if row["old_value"] else None
-    await set_config(pool, row["field"], old_value, user_id=user_id, source="rollback")
-    # Tag the new rollback row with rollback_of pointing at the original proposal.
-    await pool.execute(
-        "UPDATE config_change_log SET rollback_of=$1 "
-        "WHERE id=(SELECT max(id) FROM config_change_log WHERE field=$2 AND source='rollback')",
-        proposal_id,
-        row["field"],
-    )
+    async with config_transaction(pool) as (conn, writes):
+        row = await conn.fetchrow(
+            "SELECT field,applied_change_id,rollback_change_id FROM config_change_log "
+            "WHERE id=$1 AND status='approved' FOR UPDATE", proposal_id,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="approved change not found")
+        try:
+            change_id, old_value = await rollback_config(
+                conn, writes, row["field"], user_id, applied_change_id=row["applied_change_id"],
+                rollback_change_id=row["rollback_change_id"], rollback_of=proposal_id,
+            )
+        except ConfigRollbackConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        await conn.execute(
+            "UPDATE config_change_log SET rollback_change_id=$2 WHERE id=$1", proposal_id, change_id,
+        )
     return {"ok": True, "reverted": {row["field"]: old_value}}
