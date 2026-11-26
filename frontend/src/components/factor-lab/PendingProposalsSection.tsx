@@ -1,4 +1,5 @@
 "use client";
+import { rollbackMessage } from "./rollback-message";
 import { useAdminAccess } from "@/components/layout/SystemHealth";
 
 import { useEffect, useState } from "react";
@@ -154,8 +155,8 @@ export function PendingProposalsSection({
                 try {
                   await rollbackFactorProposal(p.id);
                   router.refresh();
-                } catch {
-                  toast.error(t(locale, "factorLab.toast.rollbackFailed"));
+                } catch (error) {
+                  toast.error(rollbackMessage(error, locale === "zh", t(locale, "factorLab.toast.rollbackFailed")));
                 }
               })();
             },
@@ -176,22 +177,7 @@ export function PendingProposalsSection({
     try {
       await rejectFactorProposal(p.id);
       router.refresh();
-      toast.success(t(locale, "factorLab.toast.rejected"), {
-        action: {
-          label: t(locale, "factorLab.toast.undoRejected"),
-          onClick: () => {
-            void (async () => {
-              try {
-                await rollbackFactorProposal(p.id);
-                router.refresh();
-              } catch {
-                toast.error(t(locale, "factorLab.toast.rollbackFailed"));
-              }
-            })();
-          },
-        },
-        duration: 8000,
-      });
+      toast.success(t(locale, "factorLab.toast.rejected"));
     } catch {
       toast.error(t(locale, "factorLab.toast.rejectFailed"));
       router.refresh();
