@@ -245,24 +245,21 @@ async def _run_propose_work(
             await close()
 
 
-async def _insert_pending_if_new(pool, expression, new_operators, evidence, diagnostic) -> bool:
-    """Serialize propose writers, then compare at most 500 pending expressions.
+async def _lock_proposal_writers(conn) -> None:
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtext('factor_lab_pending_proposals'))")
 
-    This is a bounded application-level guard, not a database uniqueness rule.
-    The transaction lock also covers concurrent LLM/GA runs using this path.
-    """
+
+async def _insert_pending_if_new(pool, expression, new_operators, evidence, diagnostic) -> bool:
+    """Stream distinct pending expressions under the proposal writer lock."""
     canonical = canonical_expression(expression)
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.execute(
-                "SELECT pg_advisory_xact_lock(hashtext('factor_lab_pending_proposals'))"
-            )
-            pending = await conn.fetch(
-                "SELECT id, expression FROM factor_proposals WHERE status='pending' "
-                "ORDER BY id DESC LIMIT 500"
-            )
-            if any(canonical_expression(row["expression"]) == canonical for row in pending):
-                return False
+            await _lock_proposal_writers(conn)
+            async for row in conn.cursor(
+                "SELECT DISTINCT expression FROM factor_proposals WHERE status='pending'"
+            ):
+                if canonical_expression(row["expression"]) == canonical:
+                    return False
             await conn.execute(
                 "INSERT INTO factor_proposals "
                 "(status, expression, new_operators, evidence, diagnostic) "
@@ -786,6 +783,18 @@ async def post_restore_preset_expression(
     }
 
 
+async def _require_empty_demo_queue(conn) -> None:
+    existing = await conn.fetchval(
+        "SELECT count(*) FROM factor_proposals WHERE status='pending'"
+    )
+    if existing and existing > 0:
+        raise HTTPException(
+            400,
+            f"refusing to seed: {existing} pending row(s) already exist; "
+            "approve or reject them first",
+        )
+
+
 @router.post("/_demo_seed")
 async def post_demo_seed(
     user_id: int = Depends(require_admin),
@@ -798,15 +807,7 @@ async def post_demo_seed(
     This is a temporary admin tool. Safe to call repeatedly: idempotent
     against existing pending state.
     """
-    existing = await pool.fetchval(
-        "SELECT count(*) FROM factor_proposals WHERE status='pending'"
-    )
-    if existing and existing > 0:
-        raise HTTPException(
-            400,
-            f"refusing to seed: {existing} pending row(s) already exist; "
-            "approve or reject them first",
-        )
+    await _require_empty_demo_queue(pool)
 
     # Read current diagnostic so each seeded row carries a realistic snapshot
     await refresh_config(pool)
@@ -896,18 +897,21 @@ async def post_demo_seed(
     ]
 
     inserted_ids = []
-    for d in demos:
-        row = await pool.fetchrow(
-            "INSERT INTO factor_proposals "
-            "(status, expression, new_operators, evidence, diagnostic) "
-            "VALUES ('pending', $1, $2::jsonb, $3::jsonb, $4::jsonb) "
-            "RETURNING id",
-            d["expression"],
-            json.dumps(d["new_operators"]),
-            json.dumps(d["evidence"]),
-            json.dumps(diag_jsonb),
-        )
-        inserted_ids.append(row["id"])
+    async with pool.acquire() as conn, conn.transaction():
+        await _lock_proposal_writers(conn)
+        await _require_empty_demo_queue(conn)
+        for d in demos:
+            row = await conn.fetchrow(
+                "INSERT INTO factor_proposals "
+                "(status, expression, new_operators, evidence, diagnostic) "
+                "VALUES ('pending', $1, $2::jsonb, $3::jsonb, $4::jsonb) "
+                "RETURNING id",
+                d["expression"],
+                json.dumps(d["new_operators"]),
+                json.dumps(d["evidence"]),
+                json.dumps(diag_jsonb),
+            )
+            inserted_ids.append(row["id"])
 
     return {
         "seeded": len(inserted_ids),
