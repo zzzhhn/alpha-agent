@@ -18,12 +18,15 @@ import zlib
 from datetime import UTC, datetime
 from typing import Optional
 
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
 from alpha_agent.brain import store
 from alpha_agent.brain.client import BrainClient, BrainSimulationError
+from alpha_agent.brain.diversity import (
+    METHOD as DIVERSITY_METHOD,
+    adjusted_correlation,
+    compare_returns,
+)
 from alpha_agent.brain.fastexpr import (
     blend_expressions,
     build_field_hints,
@@ -39,6 +42,7 @@ from alpha_agent.brain.logic_screen import (
     select_options_research_portfolio,
 )
 from alpha_agent.brain.hypotheses import hypothesis_payload
+from alpha_agent.brain.pnl import ReturnIntervals, pnl_to_return_intervals
 from alpha_agent.brain.surrogate import OptionsSurrogate, fit_options_surrogate
 from alpha_agent.brain.tuning import (
     base_settings_for,
@@ -46,10 +50,6 @@ from alpha_agent.brain.tuning import (
     options_settings_for,
     retry_variant,
     vary_settings,
-)
-from alpha_agent.evolution.correlation_gate import (
-    incremental_contribution,
-    max_corr_against,
 )
 
 
@@ -137,30 +137,12 @@ async def _enrich_priority_official_self_corr(
     return ready, unavailable
 
 
-def pnl_to_daily_returns(pnl: dict) -> Optional[np.ndarray]:
-    """BRAIN PnL recordset (cumulative) → daily-return series. Defensive about
-    the exact schema: take the last numeric column of each record and diff it
-    (per the SKILL: correlate DAILY returns, never cumulative PnL which inflates
-    every correlation > 0.9). None if unparseable, too short, or flat."""
-    records = pnl.get("records") if isinstance(pnl, dict) else None
-    if not records or len(records) < 4:
-        return None
-    try:
-        cum = np.array([float(r[-1]) for r in records], dtype=np.float64)
-    except (TypeError, ValueError, IndexError):
-        return None
-    daily = np.diff(cum)
-    if daily.size < 3 or float(np.nanstd(daily)) < 1e-12:
-        return None
-    return daily
-
-
 async def _return_series_by_id(
     client: BrainClient,
     alpha_ids: list[str],
     *,
     max_concurrency: int = 4,
-) -> dict[str, np.ndarray]:
+) -> dict[str, ReturnIntervals]:
     """Load PnL-derived returns with a small concurrency cap.
 
     This removes the long serial warm-up for an established BRAIN account while
@@ -169,18 +151,18 @@ async def _return_series_by_id(
     """
     semaphore = asyncio.Semaphore(max(1, max_concurrency))
 
-    async def load(alpha_id: str) -> tuple[str, np.ndarray | None]:
+    async def load(alpha_id: str) -> tuple[str, ReturnIntervals]:
         async with semaphore:
             try:
-                return alpha_id, pnl_to_daily_returns(await client.get_pnl(alpha_id))
+                return alpha_id, pnl_to_return_intervals(await client.get_pnl(alpha_id))
             except Exception:  # noqa: BLE001 — one alpha must not abort the round
-                return alpha_id, None
+                return alpha_id, {}
 
     pairs = await asyncio.gather(*(load(alpha_id) for alpha_id in dict.fromkeys(alpha_ids)))
-    return {alpha_id: returns for alpha_id, returns in pairs if returns is not None}
+    return {alpha_id: returns for alpha_id, returns in pairs if returns}
 
 
-async def _existing_active_returns(client: BrainClient) -> dict[str, np.ndarray]:
+async def _existing_active_returns(client: BrainClient) -> dict[str, ReturnIntervals]:
     """Daily returns of every ACTIVE alpha, keyed by id."""
     alpha_ids = [
         str(alpha["id"])
@@ -740,19 +722,19 @@ async def _run_mining_round_impl(
     # submitting one pushes the rest over the 0.7 bar. We compute the intra-set
     # correlation locally (on daily returns) to keep the passed set genuinely
     # diverse. Best-effort: any load failure just means fewer references.
-    accepted_returns: dict[str, np.ndarray] = dict(existing)
+    accepted_returns: dict[str, ReturnIntervals] = dict(existing)
     # `our_passed` is the subset that is OURS (mined, passed, not yet submitted) —
     # these are the rows whose self-correlation we reconcile at round end. `existing`
     # (active alphas) are references only; we never rewrite their rows.
-    our_passed: dict[str, np.ndarray] = {}
+    our_passed: dict[str, ReturnIntervals] = {}
     try:
-        prior = await store.recent_passed_unsubmitted_alpha_ids(pool, user_id, limit=40)
+        parent_exclusions = await store.recent_passed_return_references(pool, user_id, limit=40)
     except Exception:  # noqa: BLE001 — empty/absent history is fine
-        prior = []
-    for aid, returns in (await _return_series_by_id(client, prior)).items():
+        parent_exclusions = {}
+    for aid, returns in (await _return_series_by_id(client, list(parent_exclusions))).items():
         accepted_returns[aid] = returns
         our_passed[aid] = returns
-    if prior:
+    if parent_exclusions:
         print(f"[diversity] {len(accepted_returns)} reference series (active + prior passed)", flush=True)
 
     # One timestamp for the whole round, from the DB clock (same anchor the
@@ -885,57 +867,32 @@ async def _run_mining_round_impl(
         official = metrics.brain_self_correlation()
         if official is None:
             official = await client.get_self_correlation(alpha_id)
-        official_with = "BRAIN" if official is not None else None
 
-        cand_rets = None
         try:
-            cand_rets = pnl_to_daily_returns(await client.get_pnl(alpha_id))
-        except Exception:  # noqa: BLE001 — no PnL just means no local diversity signal
-            cand_rets = None
-        # A blend ALWAYS correlates with its own (unsubmitted) parents — that
-        # comparison is meaningless for a replacement candidate; official corr
-        # (vs ACTIVE alphas) still applies in full.
-        _parents = blend_parents.get(expr, frozenset())
-        _ref = ({k: v for k, v in accepted_returns.items() if k not in _parents}
-                if _parents else accepted_returns)
-        adj, adj_with = 0.0, None
-        if cand_rets is not None and _ref:
-            adj, adj_with = max_corr_against(cand_rets, _ref)
+            cand_rets = pnl_to_return_intervals(await client.get_pnl(alpha_id))
+        except Exception:  # noqa: BLE001 — no PnL means no local diversity estimate
+            cand_rets = {}
+        # Blend parents are BRAIN alpha IDs and excluded from both local measures.
+        parents = blend_parents.get(expr, frozenset())
+        references = {aid: rets for aid, rets in accepted_returns.items() if aid not in parents}
+        local = compare_returns(cand_rets, references)
 
-        corr_kw = dict(
-            self_correlation=official, self_correlation_with=official_with,
-            self_correlation_adj=adj, self_correlation_adj_with=adj_with,
+        # Blend decisions use the official check alone. Local estimates remain
+        # useful evidence, including for comparisons to non-parent alphas.
+        is_blend = expr in blend_parents
+        gate_corr = official or 0.0
+        if not is_blend:
+            gate_corr = max(gate_corr, local.adjusted.value or 0.0)
+        too_correlated = gate_corr >= _SELF_CORR_THRESHOLD
+        too_redundant = (
+            not is_blend and local.marginal.value is not None and local.marginal.value < _MARGINAL_MIN
         )
-
-        # G1 basket-orthogonality gate. Pairwise self-corr passes a batch that is
-        # collectively low-rank (each member <0.7 yet the set jointly spans a tiny
-        # subspace — the real homogenization escape). Require the candidate to add
-        # genuine variance ON TOP of the accepted basket: 1 - R^2 of its daily
-        # returns regressed on its 8 nearest basket neighbours. Best-effort → 1.0
-        # (fully novel) when unmeasurable, so it can only ever flag MORE, never
-        # fewer, than the pairwise gate.
-        marginal, marginal_with = (
-            incremental_contribution(cand_rets, _ref, k=8)
-            if cand_rets is not None and _ref
-            else (1.0, None)
-        )
-
-        # Blend candidates (user rule, 2026-07-11): the OFFICIAL self-corr test is
-        # the ONLY correlation gate — parents are unsubmitted, so the local
-        # adjusted/marginal comparisons against our own book do not reflect what
-        # BRAIN checks at submission. adj/marginal are still recorded for display.
-        _is_blend = expr in blend_parents
-        if _is_blend:
-            too_correlated = (official or 0.0) >= _SELF_CORR_THRESHOLD
-            too_redundant = False
-        else:
-            too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
-            too_redundant = marginal < _MARGINAL_MIN
 
         # Escape hatch (BRAIN's own submit rule): a candidate correlated >=0.7
         # with an existing alpha is still submittable if its Sharpe beats that
         # alpha's by >=10%. Apply the same logic locally when the culprit is one
         # of OUR mined alphas with a known Sharpe — an upgrade-in-place.
+        adj_with = local.adjusted.against
         if (too_correlated and not too_redundant and adj_with and metrics.sharpe
                 and (official or 0.0) < _SELF_CORR_THRESHOLD):
             # Hatch applies only when the ADJUSTED corr is the binding side — an
@@ -944,7 +901,7 @@ async def _run_mining_round_impl(
             # clearing official-0.79 blends using the unrelated adjusted culprit).
             culprit_sharpe = await store.sharpe_of_alpha_id(pool, user_id, adj_with)
             if culprit_sharpe and metrics.sharpe > 1.10 * float(culprit_sharpe):
-                print(f"[hatch] {expr[:44]!r} corr={adj:.2f} vs {adj_with} but "
+                print(f"[hatch] {expr[:44]!r} corr={local.adjusted.value:.2f} vs {adj_with} but "
                       f"sharpe {metrics.sharpe:.2f} > 1.1x{float(culprit_sharpe):.2f}",
                       flush=True)
                 too_correlated = False
@@ -954,7 +911,7 @@ async def _run_mining_round_impl(
         # clear self-corr): one near-miss (corr in [thr, 0.90)) per retry budget
         # gets ONE resim on a rotated axis before being flagged.
         if (too_correlated and not too_redundant and retry_budget > 0
-                and max(official or 0.0, adj) < 0.90):
+                and gate_corr < 0.90):
             retry_budget -= 1
             alt = dict(settings)
             alt["universe"] = "TOP1000" if settings.get("universe") == "TOP3000" else "TOP500"
@@ -962,48 +919,54 @@ async def _run_mining_round_impl(
             alt["decay"] = 15
             try:
                 aid3, m3 = await _simulate_one(client, expr, alt, sim_timeout_s)
-                r3 = pnl_to_daily_returns(await client.get_pnl(aid3))
-                adj3, adj3_with = (max_corr_against(r3, accepted_returns)
-                                   if r3 is not None and accepted_returns else (0.0, None))
-                if m3.passes_gates() and adj3 < _SELF_CORR_THRESHOLD:
-                    print(f"[axis] {expr[:44]!r} rescued: {alt['universe']}/"
-                          f"{alt['neutralization']} corr {adj:.2f}->{adj3:.2f}", flush=True)
-                    alpha_id, metrics, settings = aid3, m3, alt
-                    cand_rets, adj, adj_with = r3, adj3, adj3_with
-                    official = m3.brain_self_correlation()
-                    if official is None:
-                        official = await client.get_self_correlation(aid3)
-                    official_with = "BRAIN" if official is not None else None
-                    marginal, marginal_with = (
-                        incremental_contribution(cand_rets, accepted_returns, k=8)
-                        if cand_rets is not None and accepted_returns else (1.0, None)
-                    )
-                    corr_kw = dict(
-                        self_correlation=official, self_correlation_with=official_with,
-                        self_correlation_adj=adj, self_correlation_adj_with=adj_with,
-                    )
+                r3 = pnl_to_return_intervals(await client.get_pnl(aid3))
+                local3 = compare_returns(r3, references)
+                if m3.passes_gates() and (is_blend or (local3.adjusted.value or 0.0) < _SELF_CORR_THRESHOLD):
+                    official3 = m3.brain_self_correlation()
+                    if official3 is None:
+                        official3 = await client.get_self_correlation(aid3)
+                    next_gate_corr = official3 or 0.0
+                    if not is_blend:
+                        next_gate_corr = max(next_gate_corr, local3.adjusted.value or 0.0)
+                    print(f"[axis] {expr[:44]!r} {alt['universe']}/"
+                          f"{alt['neutralization']} corr {gate_corr:.2f}->{next_gate_corr:.2f}", flush=True)
+                    alpha_id, metrics = aid3, m3
+                    cand_rets, local, official, gate_corr = r3, local3, official3, next_gate_corr
                     common = dict(common, settings=alt, alpha_id=aid3,
                                   sharpe=m3.sharpe, fitness=m3.fitness,
                                   turnover=m3.turnover, drawdown=m3.drawdown,
                                   returns=m3.returns, margin=m3.margin,
                                   grade=m3.grade, retried=True)
-                    too_correlated = max(official or 0.0, adj) >= _SELF_CORR_THRESHOLD
-                    too_redundant = marginal < _MARGINAL_MIN
+                    too_correlated = gate_corr >= _SELF_CORR_THRESHOLD
+                    too_redundant = (
+                        not is_blend and local.marginal.value is not None and local.marginal.value < _MARGINAL_MIN
+                    )
             except Exception:  # noqa: BLE001 — a failed rescue keeps the flag
                 pass
 
+        corr_kw = dict(
+            self_correlation=official,
+            self_correlation_with="BRAIN" if official is not None else None,
+            self_correlation_adj=local.adjusted.value,
+            self_correlation_adj_with=local.adjusted.against,
+            diversity_evidence={"method": DIVERSITY_METHOD, "decision": local.decision_evidence()},
+        )
         if too_correlated or too_redundant:
+            adj = local.adjusted.value
+            marginal = local.marginal.value
+            adj_text = f"{adj:.2f} vs {local.adjusted.against}" if adj is not None else "unavailable"
+            marginal_text = f"{marginal:.2f}" if marginal is not None else "unavailable"
             reason = (
                 f"high-quality-but-redundant; mechanism={fam}; "
-                f"self-corr official={official} adj={adj:.2f} vs {adj_with}; "
-                f"marginal={marginal:.2f} vs {marginal_with}"
+                f"self-corr official={official} adj={adj_text}; "
+                f"marginal={marginal_text}"
                 if too_correlated
                 else f"high-quality-but-redundant; mechanism={fam}; "
-                f"low marginal contribution {marginal:.2f} "
-                f"(<{_MARGINAL_MIN}); spanned by basket ({marginal_with})"
+                f"low marginal contribution {marginal_text} "
+                f"(<{_MARGINAL_MIN}); spanned by basket ({', '.join(local.marginal.references)})"
             )
             print(
-                f"[flag] {expr[:44]!r} corr={adj:.2f} marginal={marginal:.2f} "
+                f"[flag] {expr[:44]!r} corr={adj_text} marginal={marginal_text} "
                 f"({'corr' if too_correlated else 'redundant'})",
                 flush=True,
             )
@@ -1032,18 +995,18 @@ async def _run_mining_round_impl(
 
         # Passed → joins the accepted diverse set, so later candidates in the round
         # (and future rounds, via the DB) must stay decorrelated from it too.
-        if cand_rets is not None:
+        if cand_rets:
             accepted_returns[alpha_id] = cand_rets
             our_passed[alpha_id] = cand_rets
+            parent_exclusions[alpha_id] = parents
         _warns = metrics.warning_checks()
-        _max_corr = max(official or 0.0, adj)
-        _near_corr = _SELF_CORR_WARNING <= _max_corr < _SELF_CORR_THRESHOLD
+        _near_corr = _SELF_CORR_WARNING <= gate_corr < _SELF_CORR_THRESHOLD
         _detail_parts = []
         if _warns:
             _detail_parts.append("warnings: " + ",".join(_warns))
         if _near_corr:
             _detail_parts.append(
-                f"self-correlation near official limit: {_max_corr:.4f} "
+                f"self-correlation near official limit: {gate_corr:.4f} "
                 f"(warning {_SELF_CORR_WARNING:.2f}, hard {_SELF_CORR_THRESHOLD:.2f})"
             )
         await _persist_brain_alpha(
@@ -1057,13 +1020,16 @@ async def _run_mining_round_impl(
     # frozen at mining time). Returns are already in memory — no extra BRAIN calls.
     # The OFFICIAL column is left as BRAIN reported it.
     for aid, rets in our_passed.items():
-        others = {k: v for k, v in accepted_returns.items() if k != aid}
+        others = {
+            name: ref for name, ref in accepted_returns.items()
+            if name != aid and name not in parent_exclusions[aid]
+        }
         if not others:
             continue
-        corr, corr_with = max_corr_against(rets, others)
+        corr = adjusted_correlation(rets, others)
         try:
             await store.update_adjusted_self_correlation(
-                pool, user_id, aid, value=corr, corr_with=corr_with
+                pool, user_id, aid, value=corr.value, corr_with=corr.against, n=corr.n, method=DIVERSITY_METHOD,
             )
         except Exception:  # noqa: BLE001 — reconciliation is best-effort
             pass

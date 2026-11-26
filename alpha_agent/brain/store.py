@@ -34,6 +34,7 @@ async def record_brain_alpha(
     run_id: int | None = None,
     blend_parents: list[str] | None = None,
     research_evidence: dict | None = None,
+    diversity_evidence: dict | None = None,
 ) -> int:
     """Insert one mining outcome. Returns the new row id.
 
@@ -41,7 +42,7 @@ async def record_brain_alpha(
     alphas); `self_correlation_adj` also counts our passed-but-unsubmitted factors.
     `fail_checks` (rejected only) + `retried` explain the outcome for the UI.
     `batch_started_at` tags the mining round for the batch-divider UI.
-    `blend_parents` is the list of parent expressions when this candidate was
+    `blend_parents` is the list of parent BRAIN alpha IDs when this candidate was
     stitched by a blend round (family_focus == "blend"); None for every other
     candidate. NULL, not the string "null", is written when absent."""
     if self_correlation_status is None:
@@ -59,9 +60,9 @@ async def record_brain_alpha(
         " drawdown, returns, margin, self_correlation, self_correlation_with, "
         " self_correlation_adj, self_correlation_adj_with, outcome, detail, grade, "
         " fail_checks, retried, batch_started_at, run_id, blend_parents, "
-        " self_correlation_status, research_evidence) "
+        " self_correlation_status, research_evidence, diversity_evidence) "
         "VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,"
-        " $18,$19,$20,$21,$22::jsonb,$23,$24::jsonb) RETURNING id",
+        " $18,$19,$20,$21,$22::jsonb,$23,$24::jsonb,$25::jsonb) RETURNING id",
         user_id, expression, json.dumps(settings or {}), alpha_id,
         sharpe, fitness, turnover, drawdown, returns, margin,
         self_correlation, self_correlation_with,
@@ -70,6 +71,7 @@ async def record_brain_alpha(
         json.dumps(blend_parents) if blend_parents is not None else None,
         self_correlation_status,
         json.dumps(research_evidence) if research_evidence is not None else None,
+        json.dumps(diversity_evidence) if diversity_evidence is not None else None,
     )
     return row["id"]
 
@@ -95,9 +97,9 @@ async def list_brain_alphas(pool, user_id: int, *, limit: int = 100) -> list[dic
             bp = json.loads(bp)
         d["blend_parents"] = bp
         d["is_blend"] = bool(bp)
-        evidence = d.get("research_evidence")
-        if isinstance(evidence, str):
-            d["research_evidence"] = json.loads(evidence)
+        for key in ("research_evidence", "diversity_evidence"):
+            if isinstance(d.get(key), str):
+                d[key] = json.loads(d[key])
         out.append(d)
     return out
 
@@ -108,7 +110,7 @@ _ROW_COLS = (
     "self_correlation_adj, self_correlation_adj_with, self_correlation_status, "
     "outcome, detail, "
     "grade, fail_checks, retried, batch_started_at, created_at, submitted_at, "
-    "brain_status, submit_retry_at, blend_parents, research_evidence"
+    "brain_status, submit_retry_at, blend_parents, research_evidence, diversity_evidence"
 )
 
 _SUBMISSION_CONFIRMED = (
@@ -137,9 +139,9 @@ def _decode_row(r) -> dict:
         bp = json.loads(bp)
     d["blend_parents"] = bp
     d["is_blend"] = bool(bp)
-    evidence = d.get("research_evidence")
-    if isinstance(evidence, str):
-        d["research_evidence"] = json.loads(evidence)
+    for key in ("research_evidence", "diversity_evidence"):
+        if isinstance(d.get(key), str):
+            d[key] = json.loads(d[key])
     return d
 
 
@@ -249,20 +251,27 @@ async def count_brain_alphas_since(pool, user_id: int, *, since: datetime) -> in
     return int(n or 0)
 
 
-async def recent_passed_unsubmitted_alpha_ids(
-    pool, user_id: int, *, limit: int = 40
-) -> list[str]:
-    """alpha_ids of the user's recent PASSED, not-yet-submitted mined alphas — the
-    set a new round must also stay decorrelated from, so we don't re-pass this
-    round's near-duplicates in a later round. Newest first."""
+async def recent_passed_return_references(
+    pool, user_id: int, *, limit: int = 40,
+) -> dict[str, frozenset[str]]:
+    """Recent passed, unsubmitted alpha IDs and their own excluded blend parents."""
     rows = await pool.fetch(
-        "SELECT alpha_id FROM brain_alphas "
+        "SELECT alpha_id, blend_parents FROM brain_alphas "
         "WHERE user_id=$1 AND outcome='passed' AND submitted_at IS NULL "
-        "AND alpha_id IS NOT NULL "
-        "ORDER BY created_at DESC LIMIT $2",
+        "AND alpha_id IS NOT NULL ORDER BY created_at DESC LIMIT $2",
         user_id, min(max(int(limit), 1), 200),
     )
-    return [r["alpha_id"] for r in rows]
+    references: dict[str, frozenset[str]] = {}
+    for row in rows:
+        parents = row["blend_parents"]
+        if isinstance(parents, str):
+            parents = json.loads(parents)
+        parent_ids = (
+            frozenset(parent for parent in parents if isinstance(parent, str))
+            if isinstance(parents, list) else frozenset()
+        )
+        references.setdefault(row["alpha_id"], parent_ids)
+    return references
 
 
 async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
@@ -285,14 +294,14 @@ async def get_brain_alpha(pool, user_id: int, row_id: int) -> dict | None:
         bp = json.loads(bp)
     d["blend_parents"] = bp
     d["is_blend"] = bool(bp)
-    evidence = d.get("research_evidence")
-    if isinstance(evidence, str):
-        d["research_evidence"] = json.loads(evidence)
+    for key in ("research_evidence", "diversity_evidence"):
+        if isinstance(d.get(key), str):
+            d[key] = json.loads(d[key])
     return d
 
 
 async def update_adjusted_self_correlation(
-    pool, user_id: int, alpha_id: str, *, value: float, corr_with: str | None
+    pool, user_id: int, alpha_id: str, *, value: float | None, corr_with: str | None, n: int, method: str,
 ) -> None:
     """Rewrite a mined alpha's ADJUSTED self-correlation (keyed by BRAIN alpha_id,
     scoped to owner). The official `self_correlation` (BRAIN's value) is left
@@ -301,9 +310,14 @@ async def update_adjusted_self_correlation(
     not-yet-submitted rows."""
     await pool.execute(
         "UPDATE brain_alphas "
-        "SET self_correlation_adj=$3, self_correlation_adj_with=$4 "
+        "SET self_correlation_adj=$3, self_correlation_adj_with=$4, "
+        "diversity_evidence=COALESCE(diversity_evidence, '{}'::jsonb) || $5::jsonb "
         "WHERE user_id=$1 AND alpha_id=$2 AND submitted_at IS NULL",
         user_id, alpha_id, value, corr_with,
+        json.dumps({
+            "method": method,
+            "reconciled_adjusted_correlation": {"value": value, "against": corr_with, "n": n},
+        }),
     )
 
 

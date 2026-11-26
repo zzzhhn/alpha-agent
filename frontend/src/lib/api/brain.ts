@@ -57,6 +57,11 @@ export interface BrainAlpha {
     | null;
   self_correlation_adj: number | null;
   self_correlation_adj_with: string | null;
+  diversity_evidence?: {
+    method: string;
+    decision?: { adjusted_correlation: { n: number } };
+    reconciled_adjusted_correlation?: { n: number };
+  } | null;
   grade: string | null;
   fail_checks: string | null;
   retried: boolean;
