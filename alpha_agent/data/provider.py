@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Column schema returned by all providers
 OHLCV_COLUMNS = ("open", "close", "high", "low", "volume", "amount")
 
+_CN_MARKET = "CN"
+_CN_PRICE_BASIS = "qfq"
+
 # AKShare column mapping: Chinese column names -> English
 _AKSHARE_COL_MAP: dict[str, str] = {
     "日期": "date",
@@ -61,7 +64,8 @@ class AKShareProvider(DataProvider):
     """Fetches forward-adjusted daily data from AKShare (one stock at a time).
 
     Accepts an optional ``ParquetCache`` — when provided, each stock is
-    looked up in cache first and API results are written back after fetch.
+    checked for full interval coverage first; partial coverage fetches only
+    missing sub-ranges and atomically merges them back into cache.
     """
 
     def __init__(self, cache: "ParquetCache | None" = None) -> None:  # noqa: F821
@@ -77,41 +81,108 @@ class AKShareProvider(DataProvider):
         import akshare as ak  # lazy import to keep module importable without akshare
 
         frames: list[pd.DataFrame] = []
+        upstream_calls = 0
 
-        for i, code in enumerate(stock_codes):
-            # Try cache first
+        for code in stock_codes:
             if self._cache is not None:
-                cached = self._cache.get(code, start_date, end_date)
-                if cached is not None and not cached.empty:
+                cached = self._cache.get(
+                    code,
+                    start_date,
+                    end_date,
+                    market=_CN_MARKET,
+                    price_basis=_CN_PRICE_BASIS,
+                    allow_empty=True,
+                )
+                if cached is not None:
                     logger.debug("Cache hit for %s (%d rows).", code, len(cached))
-                    frames.append(cached)
+                    if not cached.empty:
+                        frames.append(cached)
                     continue
 
-            if i > 0:
-                time.sleep(_REQUEST_INTERVAL)
-
-            try:
-                raw = ak.stock_zh_a_hist(
-                    symbol=code,
-                    period="daily",
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust="qfq",
+                missing = self._cache.missing_ranges(
+                    code,
+                    start_date,
+                    end_date,
+                    market=_CN_MARKET,
+                    price_basis=_CN_PRICE_BASIS,
                 )
-            except Exception:
-                logger.warning("Failed to fetch data for %s, skipping.", code, exc_info=True)
-                continue
+            else:
+                missing = [(start_date, end_date)]
 
-            if raw is None or raw.empty:
-                logger.warning("No data returned for %s, skipping.", code)
-                continue
+            all_segments_ok = True
+            fetched_segments: list[pd.DataFrame] = []
+            for seg_start, seg_end in missing:
+                if upstream_calls > 0:
+                    time.sleep(_REQUEST_INTERVAL)
+                upstream_calls += 1
 
-            df = _normalize_akshare_df(raw, code)
-            frames.append(df)
+                try:
+                    raw = ak.stock_zh_a_hist(
+                        symbol=code,
+                        period="daily",
+                        start_date=seg_start,
+                        end_date=seg_end,
+                        adjust=_CN_PRICE_BASIS,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to fetch data for %s [%s..%s], skipping.",
+                        code,
+                        seg_start,
+                        seg_end,
+                        exc_info=True,
+                    )
+                    all_segments_ok = False
+                    break
 
-            # Write back to cache
+                if raw is None or raw.empty:
+                    logger.info(
+                        "No rows returned for %s [%s..%s] (closed or halted).",
+                        code,
+                        seg_start,
+                        seg_end,
+                    )
+                    if self._cache is not None:
+                        self._cache.put(
+                            code,
+                            _empty_ohlcv_frame(),
+                            start_date=seg_start,
+                            end_date=seg_end,
+                            market=_CN_MARKET,
+                            price_basis=_CN_PRICE_BASIS,
+                            record_empty_range=True,
+                        )
+                    continue
+
+                seg_df = _normalize_akshare_df(raw, code)
+                fetched_segments.append(seg_df)
+                if self._cache is not None:
+                    self._cache.put(
+                        code,
+                        seg_df,
+                        start_date=seg_start,
+                        end_date=seg_end,
+                        market=_CN_MARKET,
+                        price_basis=_CN_PRICE_BASIS,
+                        record_empty_range=True,
+                    )
+
             if self._cache is not None:
-                self._cache.put(code, df)
+                if not all_segments_ok:
+                    continue
+                merged = self._cache.peek_slice(
+                    code,
+                    start_date,
+                    end_date,
+                    market=_CN_MARKET,
+                    price_basis=_CN_PRICE_BASIS,
+                )
+                if merged is not None and not merged.empty:
+                    frames.append(merged)
+            elif all_segments_ok and fetched_segments:
+                combined = pd.concat(fetched_segments)
+                combined = combined[~combined.index.duplicated(keep="last")].sort_index()
+                frames.append(combined)
 
         if not frames:
             return _empty_ohlcv_frame()
