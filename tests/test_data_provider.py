@@ -590,8 +590,9 @@ class TestProviderCacheCoverage:
         assert cn_provider.fetch(["600000"], "20261012", "20261016").empty
         assert cn_calls == [("600000", "20261012", "20261016")]
 
+    @pytest.mark.parametrize("api_name", ["stock_zh_a_hist", "stock_zh_a_hist_em"])
     def test_akshare_provider_narrow_then_wide_and_holiday(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_name: str,
     ) -> None:
         """AKShareProvider (CN / XSHG, qfq) must fetch missing wings and skip CN holidays."""
         monkeypatch.setattr("alpha_agent.data.provider._REQUEST_INTERVAL", 0.0)
@@ -636,7 +637,7 @@ class TestProviderCacheCoverage:
             )
 
         fake_ak = types.ModuleType("akshare")
-        fake_ak.stock_zh_a_hist = _fake_stock_zh_a_hist  # type: ignore[attr-defined]
+        setattr(fake_ak, api_name, _fake_stock_zh_a_hist)
         monkeypatch.setitem(sys.modules, "akshare", fake_ak)
 
         provider = AKShareProvider(cache=cache)

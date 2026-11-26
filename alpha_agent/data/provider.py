@@ -117,7 +117,8 @@ class AKShareProvider(DataProvider):
                 upstream_calls += 1
 
                 try:
-                    raw = ak.stock_zh_a_hist(
+                    fetch_history = getattr(ak, "stock_zh_a_hist_em", None) or ak.stock_zh_a_hist
+                    raw = fetch_history(
                         symbol=code,
                         period="daily",
                         start_date=seg_start,

@@ -95,7 +95,8 @@ class AkshareUSFetcher:
 
         @_retry_network
         def _call() -> "pd.DataFrame":
-            return ak.stock_us_daily(symbol=ticker, adjust="qfq")
+            fetch_history = getattr(ak, "stock_us_hist_sina", None) or ak.stock_us_daily
+            return fetch_history(symbol=ticker, adjust="qfq")
 
         try:
             raw = _call()
