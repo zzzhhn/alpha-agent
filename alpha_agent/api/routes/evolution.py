@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from alpha_agent.api.dependencies import get_db_pool
 from alpha_agent.auth.dependencies import require_admin
-from alpha_agent.config_store import set_config
+from alpha_agent.config_store import config_transaction, set_config, write_config
 
 router = APIRouter(prefix="/api/evolution", tags=["evolution"])
 
@@ -295,18 +295,19 @@ async def approve(
 ) -> dict[str, Any]:
     """Apply the proposed knob change and mark the proposal approved."""
     pool = await get_db_pool()
-    row = await pool.fetchrow(
-        "SELECT field, new_value FROM config_change_log WHERE id=$1 AND status='pending'",
-        proposal_id,
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="proposal not found or not pending")
-    new_value = _decode_jsonb(row["new_value"])
-    await set_config(pool, row["field"], new_value, user_id=user_id, source="approved")
-    await pool.execute(
-        "UPDATE config_change_log SET status='approved' WHERE id=$1",
-        proposal_id,
-    )
+    async with config_transaction(pool) as (conn, writes):
+        row = await conn.fetchrow(
+            "SELECT field, new_value FROM config_change_log WHERE id=$1 AND status='pending' FOR UPDATE",
+            proposal_id,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="proposal not found or not pending")
+        new_value = _decode_jsonb(row["new_value"])
+        await write_config(conn, writes, row["field"], new_value, user_id=user_id, source="approved")
+        await conn.execute(
+            "UPDATE config_change_log SET status='approved' WHERE id=$1 AND status='pending'",
+            proposal_id,
+        )
     return {"ok": True, "applied": {row["field"]: new_value}}
 
 
