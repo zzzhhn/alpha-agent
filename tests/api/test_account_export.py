@@ -183,3 +183,41 @@ async def test_export_optional_brain_table_and_missing_user(client_with_db, appl
     finally:
         app.dependency_overrides.clear()
         await conn.close()
+
+
+async def test_export_cannot_mix_commits_across_sections(applied_db, monkeypatch):
+    from contextlib import asynccontextmanager
+    from fastapi import Response
+
+    async with asyncpg.create_pool(applied_db, min_size=2, max_size=2) as db:
+        uid = await db.fetchval("INSERT INTO users(email) VALUES('before@example.test') RETURNING id")
+        await db.execute("INSERT INTO user_watchlist(user_id,ticker) VALUES($1,'BEFORE')", uid)
+
+        class ReadWithConcurrentEdit:
+            def __init__(self, reader):
+                self.reader = reader
+
+            def __getattr__(self, name):
+                return getattr(self.reader, name)
+
+            async def fetchrow(self, sql, *args):
+                row = await self.reader.fetchrow(sql, *args)
+                if "FROM users WHERE id" in sql:
+                    async with db.acquire() as writer, writer.transaction():
+                        await writer.execute("UPDATE users SET email='after@example.test' WHERE id=$1", uid)
+                        await writer.execute("UPDATE user_watchlist SET ticker='AFTER' WHERE user_id=$1", uid)
+                return row
+
+            @asynccontextmanager
+            async def acquire(self):
+                async with db.acquire() as reader:
+                    yield ReadWithConcurrentEdit(reader)
+
+        async def get_pool():
+            return ReadWithConcurrentEdit(db)
+
+        monkeypatch.setattr(user, "get_db_pool", get_pool)
+        result = await user.export_account(Response(), uid)
+        assert (result["user"]["email"], result["watchlist"]) == ("before@example.test", ["BEFORE"])
+        assert result["snapshot_at"]
+        assert await db.fetchval("SELECT ticker FROM user_watchlist WHERE user_id=$1", uid) == "AFTER"

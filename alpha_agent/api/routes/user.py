@@ -274,21 +274,27 @@ async def export_account(
 ) -> dict:
     response.headers["Cache-Control"] = "private, no-store"
     pool = await get_db_pool()
-    user = await pool.fetchrow(
+    async with pool.acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+        return await _export_account_snapshot(conn, user_id)
+
+
+async def _export_account_snapshot(conn, user_id: int) -> dict:
+    snapshot_at = await conn.fetchval("SELECT transaction_timestamp()")
+    user = await conn.fetchrow(
         "SELECT email, created_at, last_login_at FROM users WHERE id = $1", user_id
     )
     if user is None:
         raise HTTPException(status_code=404, detail="user not found")
-    prefs = await pool.fetchrow(
+    prefs = await conn.fetchrow(
         "SELECT locale, theme, extras->'investment_profile' AS investment_profile "
         "FROM user_preferences WHERE user_id = $1", user_id
     )
     limit = _EXPORT_LIMIT
-    watch = await pool.fetch(
+    watch = await conn.fetch(
         "SELECT ticker, added_at FROM user_watchlist WHERE user_id = $1 "
         "ORDER BY id LIMIT $2", user_id, limit + 1,
     )
-    byok = await pool.fetch(
+    byok = await conn.fetch(
         "SELECT provider, last4, model, encrypted_at, last_used_at "
         "FROM user_byok WHERE user_id = $1 "
         "AND provider = ANY($2::text[]) ORDER BY provider LIMIT $3",
@@ -299,7 +305,7 @@ async def export_account(
     truncated = {"watchlist": len(watch) > limit, "byok_metadata": len(byok) > limit}
 
     async def section(name, sql, json_fields=()):
-        rows = await pool.fetch(sql, user_id, limit + 1)
+        rows = await conn.fetch(sql, user_id, limit + 1)
         truncated[name] = len(rows) > limit
         items = []
         for row in rows[:limit]:
@@ -363,7 +369,7 @@ async def export_account(
     )
     sections["brain_runs"] = []
     truncated["brain_runs"] = False
-    sections["brain_runs_available"] = await pool.fetchval("SELECT to_regclass('brain_runs') IS NOT NULL")
+    sections["brain_runs_available"] = await conn.fetchval("SELECT to_regclass('brain_runs') IS NOT NULL")
     if sections["brain_runs_available"]:
         sections["brain_runs"] = await section(
             "brain_runs", """SELECT id, source, family_focus, requested_n, generated_n,
@@ -374,6 +380,7 @@ async def export_account(
         )
     return jsonable_encoder({
         "schema_version": 2,
+        "snapshot_at": snapshot_at,
         "excluded": [
             "llm_credentials_encrypted", "brain_credentials", "authentication_material",
             "bot_run_context", "bot_run_config_snapshots", "bot_run_leases",
