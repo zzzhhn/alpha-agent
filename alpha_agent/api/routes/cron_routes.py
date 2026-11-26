@@ -490,17 +490,36 @@ async def _write_paper_equity_snapshots(conn: Any, today: date) -> None:
         )
 
 
-async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
+async def _record_daily_order_outcome(
+    conn: Any, order_id: int, status: str, reason: str | None,
+    evidence: dict | None = None, review_deadline: datetime | None = None,
+) -> None:
+    await conn.execute(
+        "UPDATE sim_order SET status=$1,fail_reason=$2,"
+        "execution_evidence=CASE WHEN $3::jsonb IS NULL THEN execution_evidence "
+        "ELSE COALESCE(execution_evidence,'{}'::jsonb) || $3::jsonb END,"
+        "expires_at=COALESCE(expires_at,$4) WHERE id=$5",
+        status, reason, json.dumps(evidence) if evidence is not None else None,
+        review_deadline, order_id,
+    )
+
+
+async def _run_paper_fill_locked(pool: Any, today: date) -> dict[str, Any]:
     """Process one bounded fill batch while the job advisory lock is held."""
-    from alpha_agent.market_session import xnys_sessions
+    from alpha_agent.market_session import xnys_close, xnys_sessions
     from alpha_agent.paper.fill_engine import (
+        MARKET_AWAITING_QUOTE,
+        MARKET_QUOTE_GRACE_SESSIONS,
         LimitExpiry,
+        MarketReview,
         compute_limit_fill,
-        compute_market_fill,
         has_sufficient_cash,
+        market_order_window,
         new_avg_cost,
         realized_pnl_delta,
+        review_market_fill,
     )
+    from alpha_agent.paper.market_order_identity import market_identity_verified, read_market_instrument
 
     filled_count = 0
     expired_count = 0
@@ -527,16 +546,19 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                 bisect_right(completed, first_signal + timedelta(days=offset)) + 1
                 for offset in range((today - first_signal).days)
             ]
-            # Select only actionable orders before the batch cap. Missing T+1
-            # quotes and unchecked limits must not crowd out expiry or fills.
-            # Load full quote coverage only for selected expiries.
+            # Prioritize verifiable fills and limits ahead of market quote
+            # reviews. A pending notice is actionable only once per order.
             pending_orders = await conn.fetch(
                 f"""
                 WITH actionable AS (
                     SELECT so.*, quote.date AS quote_date, quote.close AS quote_close,
-                        eligible.sessions AS quote_sessions
+                        eligible.sessions AS quote_sessions,
+                        CASE WHEN so.order_type='market' AND quote.date IS NOT NULL
+                                  AND first.session_index + $5 >= cardinality($2::date[]) THEN 0
+                             WHEN so.order_type='limit' THEN 1 ELSE 2 END AS priority
                     FROM sim_order so
                     JOIN sim_account sa ON sa.id=so.account_id
+                    LEFT JOIN sim_instrument instrument ON so.order_type='market' AND instrument.ticker=so.ticker
                     CROSS JOIN LATERAL (
                         SELECT ($3::int[])[so.signal_date-$4::date+1] AS session_index
                     ) first
@@ -559,21 +581,26 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                     ) quote ON TRUE
                     WHERE {pending_filter}
                       AND (quote.date IS NOT NULL OR (so.order_type='limit' AND
-                          first.session_index + GREATEST(so.expire_after_days,1)-1 <= cardinality($2::date[])))
-                    ORDER BY CASE WHEN so.order_type='market' THEN 0 ELSE 1 END,
-                        so.created_at, so.id
+                          first.session_index + GREATEST(so.expire_after_days,1)-1 <= cardinality($2::date[]))
+                          OR (so.order_type='market' AND first.session_index <= cardinality($2::date[])
+                              AND (first.session_index + $5 <= cardinality($2::date[])
+                                   OR so.fail_reason IS DISTINCT FROM $6
+                                   OR instrument.identity_status <> 'supported_universe'
+                                   OR (so.instrument_id IS NOT NULL AND so.instrument_id IS DISTINCT FROM instrument.id))))
+                    ORDER BY priority, so.created_at, so.id
                     LIMIT $1
                 )
-                SELECT a.*, CASE WHEN a.quote_date IS NULL THEN (
+                SELECT a.*, CASE WHEN a.order_type='limit' AND a.quote_date IS NULL THEN (
                     SELECT jsonb_object_agg(to_char(dp.date, 'YYYY-MM-DD'), dp.close)
                     FROM daily_prices dp
                     WHERE dp.ticker=a.ticker AND dp.date=ANY(a.quote_sessions)
                       AND dp.close>0 AND dp.close<'Infinity'::double precision
                 ) END AS window_quotes
                 FROM actionable a
-                ORDER BY CASE WHEN a.order_type='market' THEN 0 ELSE 1 END, a.created_at, a.id
+                ORDER BY a.priority, a.created_at, a.id
                 """,
                 _PAPER_FILL_BATCH_SIZE, completed, next_indices, first_signal,
+                MARKET_QUOTE_GRACE_SESSIONS, MARKET_AWAITING_QUOTE,
             )
 
     if not pending_orders:
@@ -590,7 +617,7 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
             "failed": 0,
             "skipped_locked": 0,
             "remaining_pending": int(remaining_pending or 0),
-            "market_pending_policy": "await_exact_t1_close",
+            "market_pending_policy": "exact_t1_close_one_session_review",
             "batch_limit": _PAPER_FILL_BATCH_SIZE,
             "batch_full": False,
         }
@@ -603,9 +630,9 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                       for day, close in json.loads(order["window_quotes"]).items()}
         signal_date = order["signal_date"]
 
-        if order["order_type"] == "market":
-            result = compute_market_fill(signal_date, prices, as_of=today)
-        else:
+        market_order = order["order_type"] == "market"
+        result = None
+        if not market_order:
             result = compute_limit_fill(
                 order["side"],
                 order["limit_price"],
@@ -615,8 +642,8 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                 as_of=today,
             )
 
-        if result is None:
-            continue  # still pending
+        if result is None and not market_order:
+            continue
 
         async with pool.acquire() as conn:
             async with conn.transaction():
@@ -631,23 +658,6 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                     skipped_locked += 1
                     continue
 
-                if isinstance(result, LimitExpiry):
-                    reason = ("limit_expired_missing_quotes" if result.missing_quote_dates
-                              else "limit_expired_no_cross")
-                    evidence = {
-                        "execution_model": "daily_close_v1", "status": "expired", "reason": reason,
-                        "missing_quote_dates": [day.isoformat() for day in result.missing_quote_dates],
-                    }
-                    await conn.execute(
-                        "UPDATE sim_order SET status='expired', fail_reason=$1, "
-                        "execution_evidence=$2::jsonb WHERE id=$3",
-                        reason, json.dumps(evidence), locked_order["id"],
-                    )
-                    expired_count += 1
-                    continue
-
-                fill_date, fill_price = result
-                qty = locked_order["qty"]
                 account_id = locked_order["account_id"]
                 account = await conn.fetchrow(
                     "SELECT cash, reset_count FROM sim_account WHERE id=$1 AND kind='human' FOR UPDATE",
@@ -661,6 +671,46 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                         locked_order["id"],
                     )
                     continue
+
+                market_evidence = None
+                if market_order:
+                    target, deadline = market_order_window(signal_date)
+                    instrument = await read_market_instrument(conn, ticker)
+                    result = review_market_fill(
+                        signal_date, prices, as_of=today, identity_verified=market_identity_verified(
+                            ticker, target, instrument, locked_order['instrument_id'],
+                        ),
+                    )
+                    if result is None:
+                        continue
+                    market_evidence = {
+                        'execution_model': 'daily_close_v1',
+                        'target_session_date': target.isoformat(),
+                        'quote_deadline_session_date': deadline.isoformat(),
+                    }
+                    if isinstance(result, MarketReview):
+                        market_evidence.update(status=result.status, reason=result.reason)
+                        await _record_daily_order_outcome(
+                            conn, locked_order['id'], result.status, result.reason,
+                            market_evidence, xnys_close(deadline),
+                        )
+                        expired_count += int(result.status == 'expired')
+                        failed_count += int(result.status == 'failed')
+                        continue
+
+                if isinstance(result, LimitExpiry):
+                    reason = ("limit_expired_missing_quotes" if result.missing_quote_dates
+                              else "limit_expired_no_cross")
+                    evidence = {
+                        "execution_model": "daily_close_v1", "status": "expired", "reason": reason,
+                        "missing_quote_dates": [day.isoformat() for day in result.missing_quote_dates],
+                    }
+                    await _record_daily_order_outcome(conn, locked_order['id'], 'expired', reason, evidence)
+                    expired_count += 1
+                    continue
+
+                fill_date, fill_price = result
+                qty = locked_order["qty"]
                 current_cash = float(account["cash"])
                 cohort_id = int(locked_order["cohort_id"] or 0)
                 fee_bps = float(locked_order["fee_bps"] or 0.0)
@@ -673,20 +723,15 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                     # serializes cash updates for buys and sells.
                     total_cost = float(fill_price) * int(qty) + fee
                     if not has_sufficient_cash(current_cash, total_cost, 1):
-                        await conn.execute(
-                            "UPDATE sim_order SET status='failed', fail_reason=$1 WHERE id=$2",
-                            _insufficient_cash_fail_reason(total_cost, current_cash),
-                            locked_order["id"],
+                        if market_evidence is not None:
+                            market_evidence.update(status='failed', reason='insufficient_cash_at_fill')
+                        await _record_daily_order_outcome(
+                            conn, locked_order['id'], 'failed',
+                            _insufficient_cash_fail_reason(total_cost, current_cash), market_evidence,
                         )
                         failed_count += 1
                         continue
 
-                    # Update order
-                    await conn.execute(
-                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, "
-                        "transaction_cost=$3, filled_at=now() WHERE id=$4",
-                        fill_date, fill_price, fee, locked_order["id"],
-                    )
                     # Upsert position with new avg_cost
                     existing = await conn.fetchrow(
                         "SELECT qty, avg_cost FROM sim_position "
@@ -727,18 +772,16 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                     )
                     if existing is None or existing["qty"] < qty:
                         # Oversell guard: expire the order, do not process
-                        await conn.execute(
-                            "UPDATE sim_order SET status='expired' WHERE id=$1", order["id"]
+                        failure = None
+                        if market_evidence is not None:
+                            failure = 'insufficient_position_at_fill'
+                            market_evidence.update(status='expired', reason=failure)
+                        await _record_daily_order_outcome(
+                            conn, locked_order['id'], 'expired', failure, market_evidence,
                         )
                         expired_count += 1
                         continue
 
-                    # Update order
-                    await conn.execute(
-                        "UPDATE sim_order SET status='filled', fill_date=$1, fill_price=$2, "
-                        "transaction_cost=$3, filled_at=now() WHERE id=$4",
-                        fill_date, fill_price, fee, locked_order["id"],
-                    )
                     pnl_delta = (
                         realized_pnl_delta(existing["avg_cost"], fill_price, qty)
                         - fee
@@ -756,6 +799,16 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
                         float(fill_price) * int(qty) - fee, account_id,
                     )
 
+                if market_evidence is not None:
+                    market_evidence.update(status='filled', reason='exact_t1_close')
+                await conn.execute(
+                    "UPDATE sim_order SET status='filled',fill_date=$1,fill_price=$2,transaction_cost=$3,"
+                    "filled_at=now(),fail_reason=NULL,execution_evidence=CASE WHEN $5::jsonb IS NULL "
+                    "THEN execution_evidence ELSE COALESCE(execution_evidence,'{}'::jsonb) || $5::jsonb END "
+                    "WHERE id=$4",
+                    fill_date, fill_price, fee, locked_order['id'],
+                    json.dumps(market_evidence) if market_evidence is not None else None,
+                )
                 filled_count += 1
 
     async with pool.acquire() as conn:
@@ -772,18 +825,18 @@ async def _run_paper_fill_locked(pool: Any, today: Any) -> dict[str, Any]:
         "failed": failed_count,
         "skipped_locked": skipped_locked,
         "remaining_pending": int(remaining_pending or 0),
-        "market_pending_policy": "await_exact_t1_close",
+        "market_pending_policy": "exact_t1_close_one_session_review",
         "batch_limit": _PAPER_FILL_BATCH_SIZE,
         "batch_full": len(pending_orders) == _PAPER_FILL_BATCH_SIZE,
     }
 
 
-async def _run_paper_fill(dsn: str) -> dict[str, Any]:
+async def _run_paper_fill(dsn: str, *, today: date | None = None) -> dict[str, Any]:
     """Run one non-blocking, bounded fill batch with a database-owned lease."""
     pool = await get_pool(dsn)
     from alpha_agent.market_session import latest_completed_xnys_session
 
-    today = latest_completed_xnys_session(datetime.now(UTC))
+    today = today or latest_completed_xnys_session(datetime.now(UTC))
     async with pool.acquire() as lock_conn, lock_conn.transaction():
         acquired = await lock_conn.fetchval(
             "SELECT pg_try_advisory_xact_lock(hashtext($1))",

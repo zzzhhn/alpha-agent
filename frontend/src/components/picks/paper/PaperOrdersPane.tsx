@@ -94,6 +94,24 @@ export default function PaperOrdersPane({
   );
 }
 
+function marketOrderNote(order: OrderOut, locale: Locale): string | null {
+  if (order.order_type !== "market") return null;
+  const zh = locale === "zh";
+  if (order.fail_reason === "market_identity_unresolved") {
+    return zh ? "证券身份待核验" : "Security identity unverified";
+  }
+  if (order.status === "expired" && order.fail_reason === "market_expired_missing_t1_close") {
+    return zh ? "待核期结束，缺少目标收盘价" : "Review ended without the target close";
+  }
+  if (order.status !== "pending" || order.fail_reason !== "market_awaiting_exact_t1_close") return null;
+
+  const deadline = order.execution_evidence?.quote_deadline_session_date;
+  const due = typeof deadline === "string" ? (zh ? " · 待核至 " : " · review through ") + deadline : "";
+  const cash = order.reserved_notional ?? 0;
+  const reserved = cash > 0 ? (zh ? " · 预留 $" : " · reserved $") + cash.toFixed(2) : "";
+  return (zh ? "缺少目标收盘价" : "Awaiting the target close") + due + reserved;
+}
+
 function OrderRow({
   order: o,
   locale,
@@ -123,6 +141,8 @@ function OrderRow({
       expiryDetail = t(locale, "sim.expiry.no_cross");
     }
   }
+  const note = botMode ? null : marketOrderNote(o, locale);
+  const detail = note ?? expiryDetail ?? (o.status === "failed" ? o.fail_reason : null);
   return (
     <TmTableRow>
       <TmTableCell className="text-xs text-tm-muted">{o.signal_date}</TmTableCell>
@@ -153,10 +173,9 @@ function OrderRow({
       <TmTableCell className="text-xs">
         <div className="flex items-center gap-2">
           <StatusChip status={o.status} label={statusLabel} />
-          {expiryDetail ? <span className="text-xs text-tm-muted">{expiryDetail}</span> : null}
-          {o.status === "failed" && o.fail_reason ? (
-            <span className="font-tm-mono text-xs text-tm-muted" title={o.fail_reason}>
-              {o.fail_reason}
+          {detail ? (
+            <span className="font-tm-mono text-xs text-tm-muted">
+              {detail}
             </span>
           ) : null}
           {!botMode && o.status === "pending" ? (

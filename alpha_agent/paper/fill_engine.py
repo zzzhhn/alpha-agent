@@ -12,6 +12,41 @@ from math import isfinite
 from alpha_agent.market_session import next_xnys_session, xnys_sessions
 
 
+MARKET_QUOTE_GRACE_SESSIONS = 1
+MARKET_AWAITING_QUOTE = 'market_awaiting_exact_t1_close'
+
+
+def market_order_window(signal_date: date) -> tuple[date, date]:
+    target = next_xnys_session(signal_date)
+    deadline = target
+    for _ in range(MARKET_QUOTE_GRACE_SESSIONS):
+        deadline = next_xnys_session(deadline)
+    return target, deadline
+
+
+@dataclass(frozen=True)
+class MarketReview:
+    status: str
+    reason: str
+
+
+def review_market_fill(
+    signal_date: date, prices: dict[date, float], *, as_of: date, identity_verified: bool,
+) -> tuple[date, float] | MarketReview | None:
+    target, deadline = market_order_window(signal_date)
+    if as_of < target:
+        return None
+    if not identity_verified:
+        return MarketReview('failed', 'market_identity_unresolved')
+    if as_of <= deadline:
+        fill = compute_market_fill(signal_date, prices, as_of=as_of)
+        if fill is not None:
+            return fill
+    if as_of >= deadline:
+        return MarketReview('expired', 'market_expired_missing_t1_close')
+    return MarketReview('pending', MARKET_AWAITING_QUOTE)
+
+
 def compute_market_fill(
     signal_date: date,
     prices: dict[date, float],

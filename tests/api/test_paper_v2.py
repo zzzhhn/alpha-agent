@@ -14,6 +14,7 @@ import pytest
 from jose import jwt
 
 from alpha_agent.api.routes.paper import _paper_signal_session
+from alpha_agent.market_session import latest_completed_xnys_session
 
 _SECRET = "test-secret-not-real-0123456789"
 
@@ -65,7 +66,7 @@ async def _seed_close(applied_db, ticker: str, price: float, d: date | None = No
         await conn.execute(
             "INSERT INTO daily_prices (ticker, date, close) VALUES ($1, $2, $3) "
             "ON CONFLICT DO NOTHING",
-            ticker, d or date.today(), price,
+            ticker, d or latest_completed_xnys_session(), price,
         )
     finally:
         await conn.close()
@@ -176,6 +177,7 @@ async def test_sell_rejected_when_no_position_at_all(client_with_db, applied_db)
 
 async def test_sell_allowed_at_exact_position_qty(client_with_db, applied_db):
     user_id, account_id = await _seed_user_and_account(applied_db)
+    await _seed_close(applied_db, "AAPL", 150.0)
     conn = await asyncpg.connect(applied_db)
     try:
         await conn.execute(
@@ -475,7 +477,7 @@ async def test_fill_marks_order_failed_when_batch_exhausts_cash(applied_db):
         )
 
         from alpha_agent.api.routes.cron_routes import _run_paper_fill
-        result = await _run_paper_fill(applied_db)
+        result = await _run_paper_fill(applied_db, today=fill_date)
         assert result["filled"] == 1
         assert result["failed"] == 1
 
