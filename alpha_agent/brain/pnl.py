@@ -6,7 +6,41 @@ the last numeric cell as the cumulative PnL, producing [{date, pnl}] for a
 line chart. Defensive: skips malformed rows rather than raising."""
 from __future__ import annotations
 
+from datetime import date
+from itertools import pairwise
+from math import isfinite
 from typing import Any
+
+
+ReturnIntervals = dict[tuple[date, date], float]
+
+
+def pnl_to_return_intervals(recordset: Any) -> ReturnIntervals:
+    """Difference consecutive valid observations, keeping both endpoint dates."""
+    records = recordset.get("records") if isinstance(recordset, dict) else None
+    if not isinstance(records, list):
+        return {}
+    values: dict[date, float | None] = {}
+    for row in records:
+        if (
+            not isinstance(row, (list, tuple)) or len(row) < 2
+            or not isinstance(row[0], str) or isinstance(row[-1], bool)
+        ):
+            continue
+        try:
+            day, cumulative = date.fromisoformat(row[0]), float(row[-1])
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if isfinite(cumulative):
+            # Identical repetitions are harmless. A conflicting date is missing.
+            values[day] = cumulative if values.get(day, cumulative) == cumulative else None
+    points = sorted((day, value) for day, value in values.items() if value is not None)
+    returns: ReturnIntervals = {}
+    for (start, before), (end, after) in pairwise(points):
+        delta = after - before
+        if isfinite(delta):
+            returns[start, end] = delta
+    return returns
 
 
 def pnl_to_points(recordset: Any) -> list[dict]:
