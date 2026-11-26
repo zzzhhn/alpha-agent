@@ -29,6 +29,7 @@ def _pool(monkeypatch, rows, states=()):
         def now(cls, tz=None):
             return datetime(2026, 11, 11, 18, tzinfo=UTC)
 
+    monkeypatch.setenv("NEXTAUTH_SECRET", "alert-group-fixture-secret")
     monkeypatch.setattr(alerts, "datetime", Clock)
     monkeypatch.setattr(alerts, "_decision_context", AsyncMock(return_value=({"AAPL"}, set(), {})))
     pool = MagicMock()
