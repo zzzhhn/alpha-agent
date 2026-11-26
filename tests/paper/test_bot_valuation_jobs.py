@@ -1,4 +1,5 @@
 """Synthetic daily valuation jobs on isolated PostgreSQL."""
+import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -99,3 +100,76 @@ async def test_daily_bot_symbol_budget_defers_whole_book_and_quote_gap_is_partia
         assert await pool.fetchval(
             "SELECT valuation_quality FROM sim_equity_daily WHERE account_id=$1", third,
         ) == 'partial'
+
+
+async def test_concurrent_daily_trigger_cannot_publish_a_superseded_claim(applied_db, monkeypatch):
+    first_fetch_started, release_first = asyncio.Event(), asyncio.Event()
+    fetches = 0
+
+    async def fetch(ticker, now):
+        nonlocal fetches
+        fetches += 1
+        if fetches == 1:
+            first_fetch_started.set()
+            await release_first.wait()
+            return bars(now, close=95)
+        return bars(now, close=105)
+
+    monkeypatch.setattr(valuation, 'fetch_bars', fetch)
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=1) as pool:
+        account_id = await seed_account(pool, 1)
+        first = asyncio.create_task(valuation.refresh_daily_valuations(pool, ROUND))
+        try:
+            await asyncio.wait_for(first_fetch_started.wait(), timeout=2)
+            duplicate = await valuation.refresh_daily_valuations(pool, ROUND + timedelta(minutes=1))
+            assert duplicate['accounts'] == [] and duplicate['has_more_accounts']
+            assert fetches == 1
+            recovered = await valuation.refresh_daily_valuations(pool, ROUND + timedelta(minutes=6))
+            assert recovered['accounts'][0]['status'] == 'completed'
+        finally:
+            release_first.set()
+            stale = await first
+
+        assert stale['accounts'][0]['status'] == 'superseded'
+        assert fetches == 2
+        assert await pool.fetchval(
+            "SELECT benchmark_close FROM sim_equity_daily WHERE account_id=$1", account_id,
+        ) == 105
+        job = await pool.fetchrow(
+            "SELECT status,attempts FROM sim_bot_valuation_job WHERE account_id=$1", account_id,
+        )
+        assert tuple(job) == ('completed', 2)
+
+
+async def test_never_attempted_books_are_not_starved_by_ten_permanent_deferrals(applied_db, monkeypatch):
+    calls = []
+
+    async def fetch(ticker, now):
+        calls.append(ticker)
+        return bars(now)
+
+    monkeypatch.setattr(valuation, 'MAX_SYMBOLS', 1)
+    monkeypatch.setattr(valuation, 'fetch_bars', fetch)
+    async with asyncpg.create_pool(applied_db, min_size=1, max_size=1) as pool:
+        deferred = [await seed_account(pool, i, tickers=('AA',)) for i in range(10)]
+        cash_only = [await seed_account(pool, i) for i in range(10, 12)]
+        first = await valuation.refresh_daily_valuations(pool, ROUND)
+        assert [(row['account_id'], row['status']) for row in first['accounts']] == [
+            (aid, 'deferred') for aid in deferred
+        ]
+        assert calls == []
+
+        second = await valuation.refresh_daily_valuations(pool, ROUND + timedelta(minutes=15))
+        assert [(row['account_id'], row['status']) for row in second['accounts'][:2]] == [
+            (aid, 'completed') for aid in cash_only
+        ]
+        assert [row['account_id'] for row in second['accounts'][2:]] == deferred[:8]
+        assert calls == ['SPY']
+        assert [row['account_id'] for row in await pool.fetch(
+            "SELECT account_id FROM sim_equity_daily ORDER BY account_id",
+        )] == cash_only
+
+        third = await valuation.refresh_daily_valuations(pool, ROUND + timedelta(minutes=30), limit=2)
+        assert [(row['account_id'], row['status']) for row in third['accounts']] == [
+            (aid, 'deferred') for aid in deferred[-2:]
+        ]

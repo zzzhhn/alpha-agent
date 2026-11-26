@@ -64,7 +64,7 @@ async def _claim_job(
         "SELECT account_id,cohort_id FROM sim_bot_valuation_job WHERE session_date=$1 "
         "AND account_id<>ALL($2::bigint[]) AND status IN ('pending','deferred','running') "
         "AND (status<>'running' OR lease_until<=$3) "
-        "ORDER BY account_id,cohort_id LIMIT 1 FOR UPDATE SKIP LOCKED"
+        "ORDER BY attempts,updated_at,account_id,cohort_id LIMIT 1 FOR UPDATE SKIP LOCKED"
         ") UPDATE sim_bot_valuation_job job SET status='running',claim_token=$4,"
         "lease_until=$5,attempts=job.attempts+1,updated_at=now() FROM next_job "
         "WHERE job.session_date=$1 AND job.account_id=next_job.account_id "
